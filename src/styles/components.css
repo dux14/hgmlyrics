@@ -369,7 +369,10 @@
   border: none;
   cursor: pointer;
   font-size: 1.1rem;
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .view-btn:hover {

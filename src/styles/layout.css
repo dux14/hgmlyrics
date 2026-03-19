@@ -319,7 +319,7 @@
     margin-left: auto;
   }
 
-  .main {
+  .main, .sidebar {
     padding-top: calc(var(--header-height) + 56px);
   }
 }

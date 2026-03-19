@@ -17,7 +17,7 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icons/*.png', 'covers/*.webp'],
+      includeAssets: ['favicon.ico', 'favicon.svg', 'icons/*.png', 'covers/*.webp'],
       manifest: false, // Using public/manifest.json
       workbox: {
         globPatterns: ['**/*.{js,css,html,json,webp,png,svg,woff2}'],

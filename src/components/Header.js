@@ -30,7 +30,11 @@ export function renderHeader(container, { onMenuToggle }) {
       </svg>
     </button>
 
-    <a href="#/" class="header__logo" id="header-logo">HKN <span>Lyrics</span></a>
+    <a href="#/" class="header__logo" id="header-logo" aria-label="HKN Lyrics Inicio">
+      <svg width="23" height="29" viewBox="0 0 23 29" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M5.8 0H0V29H5.8V23.2002H16.5195V29H22.3195V0H16.5195V5.79997L5.8 5.79998V0ZM16.5195 11.6L5.8 11.6V17.4002L16.5195 17.4002V11.6Z" fill="currentColor"/>
+      </svg>
+    </a>
 
     <div class="header__search" id="search-container">
       <svg class="header__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">

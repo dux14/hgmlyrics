@@ -1,0 +1,343 @@
+/* ============================================
+   HKN Lyrics — Admin Styles
+   ============================================ */
+
+/* === Admin Gate === */
+.admin-gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - var(--header-height));
+  padding: var(--space-xl);
+}
+
+.admin-gate__card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-2xl);
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+  box-shadow: 0 4px 24px var(--color-shadow);
+}
+
+.admin-gate__icon {
+  font-size: 48px;
+  margin-bottom: var(--space-md);
+}
+
+.admin-gate__title {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--space-sm);
+}
+
+.admin-gate__subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xl);
+}
+
+.admin-gate__input {
+  width: 100%;
+  height: 48px;
+  padding: 0 var(--space-md);
+  background: var(--color-bg);
+  border: 2px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-lg);
+  text-align: center;
+  letter-spacing: 4px;
+  transition: border-color var(--transition-fast);
+}
+
+.admin-gate__input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.admin-gate__input--error {
+  border-color: var(--color-error);
+  animation: shake 0.4s ease;
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-8px);
+  }
+  75% {
+    transform: translateX(8px);
+  }
+}
+
+.admin-gate__submit {
+  width: 100%;
+  height: 48px;
+  margin-top: var(--space-md);
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  transition:
+    background-color var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.admin-gate__submit:hover {
+  background: var(--color-primary-dark);
+  transform: translateY(-1px);
+}
+
+.admin-gate__error {
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-sm);
+  min-height: 20px;
+}
+
+/* === Song Editor === */
+.editor {
+  max-width: var(--max-content-width);
+  margin: 0 auto;
+  padding: var(--space-lg);
+}
+
+.editor__title {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--space-xl);
+}
+
+.editor__section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+}
+
+.editor__section-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--space-md);
+  color: var(--color-primary);
+}
+
+/* === Form Fields === */
+.form-group {
+  margin-bottom: var(--space-md);
+}
+
+.form-group__label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+.form-group__input,
+.form-group__select {
+  width: 100%;
+  height: 44px;
+  padding: 0 var(--space-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  transition: border-color var(--transition-fast);
+}
+
+.form-group__input:focus,
+.form-group__select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.form-group__textarea {
+  width: 100%;
+  min-height: 300px;
+  padding: var(--space-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-lyrics);
+  resize: vertical;
+  transition: border-color var(--transition-fast);
+}
+
+.form-group__textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+/* === Voice Slider === */
+.voice-slider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.voice-slider__track {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--color-border);
+  position: relative;
+  overflow: hidden;
+}
+
+.voice-slider input[type='range'] {
+  width: 100%;
+  cursor: pointer;
+}
+
+.voice-slider__label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  min-width: 60px;
+  text-align: center;
+}
+
+/* === Section Buttons === */
+.editor__section-btns {
+  display: flex;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.editor__section-btn {
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.editor__section-btn:hover {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+/* === Color Picker === */
+.color-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.color-picker__swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--border-radius-sm);
+  border: 2px solid var(--color-border);
+  cursor: pointer;
+}
+
+.color-picker__input {
+  opacity: 0;
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+/* === Image Upload === */
+.image-upload {
+  border: 2px dashed var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-xl);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.image-upload:hover {
+  border-color: var(--color-primary);
+  background: rgba(0, 151, 167, 0.05);
+}
+
+.image-upload__preview {
+  max-width: 200px;
+  max-height: 200px;
+  margin: 0 auto var(--space-md);
+  border-radius: var(--border-radius-md);
+}
+
+.image-upload__text {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+/* === Editor Actions === */
+.editor__actions {
+  display: flex;
+  gap: var(--space-md);
+  justify-content: flex-end;
+  margin-top: var(--space-xl);
+}
+
+.btn {
+  padding: var(--space-sm) var(--space-xl);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  transition:
+    background-color var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn--primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.btn--primary:hover {
+  background: var(--color-primary-dark);
+}
+
+.btn--secondary {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.btn--secondary:hover {
+  background: var(--color-surface-hover);
+}
+
+/* === Lyrics Preview === */
+.editor__preview {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-lg);
+  margin-top: var(--space-md);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.editor__preview-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--space-md);
+}

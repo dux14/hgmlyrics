@@ -1,0 +1,112 @@
+/* ============================================
+   HKN Lyrics — Design Tokens
+   ============================================ */
+
+:root {
+  /* === Color Palette — Light Mode (Hakuna identity) === */
+  --color-bg: #ffffff;
+  --color-surface: #f8f9fa;
+  --color-surface-hover: #f0f1f3;
+  --color-text: #1a1a1a;
+  --color-text-secondary: #6b7280;
+  --color-primary: #0097a7;
+  --color-primary-light: #4fc3f7;
+  --color-primary-dark: #00796b;
+  --color-accent: #ff8f00;
+  --color-accent-light: #ffb74d;
+  --color-border: #e5e7eb;
+  --color-shadow: rgba(0, 0, 0, 0.08);
+
+  /* Voice highlight colors */
+  --color-voice-high: #4fc3f7;
+  --color-voice-low: #ff7043;
+  --color-voice-chorus: #ab47bc;
+
+  /* Semantic */
+  --color-success: #4caf50;
+  --color-warning: #ff9800;
+  --color-error: #f44336;
+
+  /* === Typography === */
+  --font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 2rem;
+  --font-size-lyrics: 1.25rem;
+  --font-size-min: 0.875rem;
+  --font-size-max: 2.5rem;
+  --line-height-tight: 1.25;
+  --line-height-base: 1.5;
+  --line-height-lyrics: 1.8;
+  --font-weight-light: 300;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+
+  /* === Spacing === */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4rem;
+
+  /* === Layout === */
+  --sidebar-width: 280px;
+  --header-height: 64px;
+  --max-content-width: 900px;
+  --border-radius-sm: 6px;
+  --border-radius-md: 10px;
+  --border-radius-lg: 16px;
+  --border-radius-full: 9999px;
+
+  /* === Transitions === */
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+  --transition-slow: 400ms ease;
+  --transition-spring: 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* === Z-Index === */
+  --z-sidebar: 100;
+  --z-header: 200;
+  --z-overlay: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+
+  /* === Scrollbar === */
+  --scrollbar-width: 6px;
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: var(--color-border);
+}
+
+/* ============================================
+   Dark Mode
+   ============================================ */
+[data-theme='dark'] {
+  --color-bg: #0f0f0f;
+  --color-surface: #1a1a1a;
+  --color-surface-hover: #242424;
+  --color-text: #f0f0f0;
+  --color-text-secondary: #9ca3af;
+  --color-primary: #4fc3f7;
+  --color-primary-light: #81d4fa;
+  --color-primary-dark: #0097a7;
+  --color-accent: #ffb74d;
+  --color-accent-light: #ffcc80;
+  --color-border: #2d2d2d;
+  --color-shadow: rgba(0, 0, 0, 0.4);
+
+  /* Voice colors — brighter in dark mode */
+  --color-voice-high: #81d4fa;
+  --color-voice-low: #ff8a65;
+  --color-voice-chorus: #ce93d8;
+
+  --scrollbar-thumb: #3a3a3a;
+}

@@ -1,0 +1,223 @@
+/**
+ * store.js — State management & IndexedDB cache
+ *
+ * Manages song data, filtering, sorting, and persistent offline cache.
+ */
+
+import { get, set } from 'idb-keyval';
+
+const CACHE_KEY = 'hkn-songs-cache';
+const CACHE_VERSION_KEY = 'hkn-songs-version';
+const API_URL = '/api';
+
+/** @type {{ songs: Array, filtered: Array, activeAlbum: string|null, sortMode: string, voiceFilter: string|null }} */
+const state = {
+  songs: [],
+  filtered: [],
+  activeAlbum: null,
+  sortMode: 'a-z',
+  voiceFilter: null,
+  listeners: new Set(),
+};
+
+/**
+ * Subscribe to state changes
+ * @param {Function} fn - Callback invoked on state change
+ * @returns {Function} Unsubscribe function
+ */
+export function subscribe(fn) {
+  state.listeners.add(fn);
+  return () => state.listeners.delete(fn);
+}
+
+function notify() {
+  state.listeners.forEach((fn) => fn(getState()));
+}
+
+/**
+ * Get current state snapshot
+ */
+export function getState() {
+  return {
+    songs: state.songs,
+    filtered: state.filtered,
+    activeAlbum: state.activeAlbum,
+    sortMode: state.sortMode,
+    voiceFilter: state.voiceFilter,
+  };
+}
+
+/**
+ * Initialize the store — tries API first, then cache
+ */
+export async function initStore() {
+  let loaded = false;
+  
+  try {
+    const res = await fetch(`${API_URL}/songs`);
+    if (res.ok) {
+      const data = await res.json();
+      state.songs = data.songs;
+      await set(CACHE_KEY, state.songs);
+      loaded = true;
+    }
+  } catch (e) {
+    console.warn('Network offline or backend down, loading from IndexedDB');
+  }
+
+  if (!loaded) {
+    try {
+      const cached = await get(CACHE_KEY);
+      if (cached && Array.isArray(cached)) {
+        state.songs = cached;
+      }
+    } catch (_e) {
+      // IndexedDB unavailable
+    }
+  }
+
+  applyFilters();
+  notify();
+}
+
+/**
+ * Refresh data from API and update cache
+ */
+export async function refreshData() {
+  try {
+    const res = await fetch(`${API_URL}/songs`);
+    if (res.ok) {
+      const data = await res.json();
+      state.songs = data.songs;
+      await set(CACHE_KEY, state.songs);
+    }
+  } catch (e) {
+    console.warn('Could not refresh data from network');
+  }
+  applyFilters();
+  notify();
+}
+
+/**
+ * Get unique albums from all songs
+ * @returns {Array<{slug: string, name: string, coverImage: string}>}
+ */
+export function getAlbums() {
+  const albumMap = new Map();
+  state.songs.forEach((song) => {
+    if (!albumMap.has(song.albumSlug)) {
+      albumMap.set(song.albumSlug, {
+        slug: song.albumSlug,
+        name: song.album,
+        coverImage: song.coverImage,
+      });
+    }
+  });
+  return Array.from(albumMap.values());
+}
+
+/**
+ * Get unique voice types from all songs
+ * @returns {Array<string>}
+ */
+export function getVoiceTypes() {
+  const types = new Set();
+  state.songs.forEach((song) => {
+    if (song.voiceType) types.add(song.voiceType);
+  });
+  return Array.from(types).sort();
+}
+
+/**
+ * Get a song by ID
+ * @param {string} id
+ * @returns {object|undefined}
+ */
+export function getSongById(id) {
+  return state.songs.find((s) => s.id === id);
+}
+
+/**
+ * Filter by album
+ * @param {string|null} albumSlug - null to clear filter
+ */
+export function filterByAlbum(albumSlug) {
+  state.activeAlbum = albumSlug;
+  if (albumSlug) {
+    state.sortMode = 'album-order';
+  } else if (state.sortMode === 'album-order') {
+    state.sortMode = 'a-z';
+  }
+  applyFilters();
+  notify();
+}
+
+/**
+ * Set sort mode
+ * @param {'a-z'|'z-a'|'recent'|'album'} mode
+ */
+export function setSortMode(mode) {
+  state.sortMode = mode;
+  applyFilters();
+  notify();
+}
+
+/**
+ * Filter by voice type
+ * @param {string|null} voiceType - 'male', 'female', 'mixed', or null
+ */
+export function filterByVoice(voiceType) {
+  state.voiceFilter = voiceType;
+  applyFilters();
+  notify();
+}
+
+/**
+ * Apply all active filters and sorting
+ */
+function applyFilters() {
+  let result = [...state.songs];
+
+  // Album filter
+  if (state.activeAlbum) {
+    result = result.filter((s) => s.albumSlug === state.activeAlbum);
+  }
+
+  // Voice filter
+  if (state.voiceFilter) {
+    result = result.filter((s) => s.voiceType === state.voiceFilter);
+  }
+
+  // Sorting
+  switch (state.sortMode) {
+    case 'a-z':
+      result.sort((a, b) => a.title.localeCompare(b.title, 'es'));
+      break;
+    case 'z-a':
+      result.sort((a, b) => b.title.localeCompare(a.title, 'es'));
+      break;
+    case 'recent':
+      result.sort((a, b) => (b.year || 0) - (a.year || 0) || (b.albumOrder || 0) - (a.albumOrder || 0));
+      break;
+    case 'album':
+      result.sort((a, b) => a.album.localeCompare(b.album, 'es') || (a.albumOrder || 0) - (b.albumOrder || 0) || a.title.localeCompare(b.title, 'es'));
+      break;
+    case 'album-order':
+      result.sort((a, b) => (a.albumOrder || 0) - (b.albumOrder || 0));
+      break;
+  }
+
+  state.filtered = result;
+}
+
+/**
+ * Clear IndexedDB cache
+ */
+export async function clearCache() {
+  try {
+    await set(CACHE_KEY, null);
+    await set(CACHE_VERSION_KEY, null);
+  } catch (_e) {
+    // Ignore
+  }
+}

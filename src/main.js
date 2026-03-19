@@ -55,9 +55,10 @@ async function boot() {
   // Initialize store (loads data + cache)
   await initStore();
 
-  // Build search index
+  // Build search index & update sidebar with initial fetched data
   const { songs } = getState();
   buildIndex(songs);
+  updateSidebarContent();
 
   // Subscribe to state changes — re-render song list when on home page
   subscribe((state) => {

@@ -143,16 +143,9 @@ export function getAlbums() {
   return Array.from(albumMap.values());
 }
 
-/**
- * Get unique voice types from all songs
- * @returns {Array<string>}
- */
 export function getVoiceTypes() {
-  const types = new Set();
-  state.songs.forEach((song) => {
-    if (song.voiceType) types.add(song.voiceType);
-  });
-  return Array.from(types).sort();
+  // Always return the main voice types regardless of whether songs currently use them
+  return ['male', 'female', 'mixed'];
 }
 
 /**

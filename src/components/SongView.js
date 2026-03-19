@@ -5,7 +5,7 @@
  * font size controls, and breadcrumb navigation.
  */
 
-import { getSongById, filterByAlbum } from '../lib/store.js';
+import { getSongById, filterByAlbum, fetchSongDetail } from '../lib/store.js';
 import { navigate } from '../router.js';
 
 const FONT_SIZE_KEY = 'hkn-lyrics-font-size';
@@ -49,8 +49,22 @@ function saveFontSize(size) {
  * @param {HTMLElement} container
  * @param {string} songId
  */
-export function renderSongView(container, songId) {
-  const song = getSongById(songId);
+export async function renderSongView(container, songId) {
+  let song = getSongById(songId);
+
+  // If no sections cached, fetch full detail from API
+  if (!song || !song.sections || song.sections.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state fade-in">
+        <div class="empty-state__icon">⏳</div>
+        <h2 class="empty-state__title">Cargando...</h2>
+      </div>
+    `;
+    const detail = await fetchSongDetail(songId);
+    if (detail) {
+      song = detail;
+    }
+  }
 
   if (!song) {
     container.innerHTML = `

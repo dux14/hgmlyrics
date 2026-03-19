@@ -6,6 +6,7 @@
  */
 
 import { getAlbums, filterByAlbum, setSortMode, filterByVoice, getState, getVoiceTypes } from '../lib/store.js';
+import { navigate } from '../router.js';
 
 const VOICE_LABELS = {
   male: '♂ Masculina',
@@ -148,6 +149,7 @@ function bindSidebarEvents() {
       const album = item.dataset.album || null;
       filterByAlbum(album);
       updateSidebarContent();
+      navigate('/');
 
       // Close sidebar on mobile after selecting
       if (window.innerWidth < 768) {
@@ -161,6 +163,7 @@ function bindSidebarEvents() {
     btn.addEventListener('click', () => {
       setSortMode(btn.dataset.sort);
       updateSidebarContent();
+      navigate('/');
     });
   });
 
@@ -169,6 +172,7 @@ function bindSidebarEvents() {
     btn.addEventListener('click', () => {
       filterByVoice(btn.dataset.voice || null);
       updateSidebarContent();
+      navigate('/');
     });
   });
 }

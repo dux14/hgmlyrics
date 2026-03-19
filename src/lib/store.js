@@ -54,10 +54,24 @@ export async function initStore() {
   let loaded = false;
   
   try {
-    const res = await fetch(`${API_URL}/songs`);
-    if (res.ok) {
-      const data = await res.json();
-      state.songs = data.songs;
+    // Fetch all pages of songs (lightweight, no sections)
+    let allSongs = [];
+    let page = 1;
+    let totalPages = 1;
+    do {
+      const res = await fetch(`${API_URL}/songs?page=${page}&limit=200`);
+      if (res.ok) {
+        const data = await res.json();
+        allSongs = allSongs.concat(data.songs);
+        totalPages = data.totalPages;
+        page++;
+      } else {
+        break;
+      }
+    } while (page <= totalPages);
+    
+    if (allSongs.length > 0) {
+      state.songs = allSongs;
       await set(CACHE_KEY, state.songs);
       loaded = true;
     }
@@ -85,10 +99,23 @@ export async function initStore() {
  */
 export async function refreshData() {
   try {
-    const res = await fetch(`${API_URL}/songs`);
-    if (res.ok) {
-      const data = await res.json();
-      state.songs = data.songs;
+    let allSongs = [];
+    let page = 1;
+    let totalPages = 1;
+    do {
+      const res = await fetch(`${API_URL}/songs?page=${page}&limit=200`);
+      if (res.ok) {
+        const data = await res.json();
+        allSongs = allSongs.concat(data.songs);
+        totalPages = data.totalPages;
+        page++;
+      } else {
+        break;
+      }
+    } while (page <= totalPages);
+    
+    if (allSongs.length > 0) {
+      state.songs = allSongs;
       await set(CACHE_KEY, state.songs);
     }
   } catch (e) {
@@ -135,6 +162,29 @@ export function getVoiceTypes() {
  */
 export function getSongById(id) {
   return state.songs.find((s) => s.id === id);
+}
+
+/**
+ * Fetch full song detail (with sections) from the API
+ * @param {string} id
+ * @returns {Promise<object|null>}
+ */
+export async function fetchSongDetail(id) {
+  try {
+    const res = await fetch(`${API_URL}/songs/${id}`);
+    if (res.ok) {
+      const song = await res.json();
+      // Update the song in the local state with sections
+      const idx = state.songs.findIndex((s) => s.id === id);
+      if (idx !== -1) {
+        state.songs[idx] = { ...state.songs[idx], ...song };
+      }
+      return song;
+    }
+  } catch (e) {
+    console.warn('Could not fetch song detail:', e);
+  }
+  return null;
 }
 
 /**

@@ -61,23 +61,74 @@ app.post('/api/upload', authMiddleware, upload.single('cover'), (req, res) => {
   res.json({ url: fileUrl });
 });
 
+// --- Helper: strip accents for comparison --- //
+function removeAccents(str) {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 // --- SONGS ROUTES --- //
 app.get('/api/songs', async (req, res) => {
   try {
-    const rows = await all('SELECT * FROM songs');
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
+    const offset = (page - 1) * limit;
+
+    const countRow = await get('SELECT COUNT(*) as total FROM songs');
+    const total = countRow.total;
+
+    const rows = await all(
+      `SELECT id, title, artist, album, albumSlug, year, genre,
+              voiceType, voicePercentMale, voicePercentFemale,
+              coverImage, albumOrder, createdAt, updatedAt
+       FROM songs ORDER BY album, albumOrder LIMIT ? OFFSET ?`,
+      [limit, offset]
+    );
+
     const songs = rows.map(r => ({
       ...r,
       voicePercent: { male: r.voicePercentMale, female: r.voicePercentFemale },
-      sections: JSON.parse(r.sections || '[]')
     }));
-    
-    // Cleanup temporary columns for exact match with previous json
     songs.forEach(s => {
       delete s.voicePercentMale;
       delete s.voicePercentFemale;
     });
-    
-    res.json({ songs });
+
+    res.json({ songs, total, page, limit, totalPages: Math.ceil(total / limit) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- SEARCH SONGS --- //
+app.get('/api/songs/search', async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (!q) return res.json({ results: [] });
+
+    const normalizedQ = removeAccents(q).toLowerCase();
+    const rows = await all(
+      `SELECT id, title, artist, album, albumSlug, year, genre,
+              voiceType, voicePercentMale, voicePercentFemale,
+              coverImage, albumOrder
+       FROM songs`
+    );
+
+    const results = rows
+      .filter(r => {
+        const haystack = removeAccents(`${r.title} ${r.album} ${r.artist}`).toLowerCase();
+        return haystack.includes(normalizedQ);
+      })
+      .slice(0, 15)
+      .map(r => ({
+        ...r,
+        voicePercent: { male: r.voicePercentMale, female: r.voicePercentFemale },
+      }));
+    results.forEach(s => {
+      delete s.voicePercentMale;
+      delete s.voicePercentFemale;
+    });
+
+    res.json({ results });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

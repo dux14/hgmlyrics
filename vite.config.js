@@ -8,6 +8,12 @@ export default defineConfig({
       '/uploads': 'http://localhost:3000'
     }
   },
+  preview: {
+    proxy: {
+      '/api': 'http://localhost:3000',
+      '/uploads': 'http://localhost:3000'
+    }
+  },
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',

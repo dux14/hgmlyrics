@@ -121,11 +121,15 @@ function handleSearch(query, resultsEl) {
 
   resultsEl.innerHTML = results
     .map(
-      (song) => `
+      (song) => {
+        const coverUrl = song.coverImage.startsWith('/') || song.coverImage.startsWith('http')
+          ? song.coverImage
+          : `/covers/${song.coverImage}`;
+        return `
     <div class="search-results__item" data-song-id="${song.id}">
       <img
         class="sidebar__album-thumb"
-        src="/covers/${song.coverImage}"
+        src="${coverUrl}"
         alt="${escapeHtml(song.album)}"
         loading="lazy"
         onerror="this.style.display='none'"
@@ -135,7 +139,8 @@ function handleSearch(query, resultsEl) {
         <div style="font-size: 0.75rem; color: var(--color-text-secondary);">${escapeHtml(song.album)}</div>
       </div>
     </div>
-  `,
+  `;
+      },
     )
     .join('');
 

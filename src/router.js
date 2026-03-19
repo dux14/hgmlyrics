@@ -34,7 +34,16 @@ export function onNotFound(handler) {
  * @param {string} path - e.g., '/song/my-song-id'
  */
 export function navigate(path) {
-  window.location.hash = path;
+  const currentHash = window.location.hash;
+  const targetHash = path.startsWith('#') ? path : `#${path}`;
+  
+  if (currentHash === targetHash) {
+    // Hash is already set, hashchange won't fire — force re-resolve
+    currentRoute = null;
+    resolve();
+  } else {
+    window.location.hash = path;
+  }
 }
 
 /**

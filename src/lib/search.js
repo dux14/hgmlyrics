@@ -1,57 +1,28 @@
 /**
- * search.js — FlexSearch wrapper for full-text song search
+ * search.js — Accent & case insensitive song search
  *
- * Indexes song titles, albums, artists, and lyrics content.
- * Supports Spanish tokenization and relevance ranking.
+ * Uses normalized substring matching on title, album, artist.
+ * Precise results with Spanish accent support.
  */
 
-import FlexSearch from 'flexsearch';
+/** @type {Array} */
+let songList = [];
 
-/** @type {FlexSearch.Index} */
-let titleIndex;
-/** @type {FlexSearch.Index} */
-let lyricsIndex;
-/** @type {Map<number, object>} */
-const songMap = new Map();
-
-let nextId = 0;
-const idToSong = new Map();
+/**
+ * Normalize text: strip accents + lowercase for accent-insensitive comparison
+ * @param {string} str
+ * @returns {string}
+ */
+function normalize(str) {
+  return str.normalize('NFD').replaceAll(/[\u0300-\u036f]/g, '').toLowerCase();
+}
 
 /**
  * Build the search index from a song array
  * @param {Array} songs
  */
 export function buildIndex(songs) {
-  titleIndex = new FlexSearch.Index({
-    tokenize: 'forward',
-    resolution: 9,
-    cache: true,
-  });
-
-  lyricsIndex = new FlexSearch.Index({
-    tokenize: 'forward',
-    resolution: 5,
-    cache: true,
-  });
-
-  songMap.clear();
-  idToSong.clear();
-  nextId = 0;
-
-  songs.forEach((song) => {
-    const id = nextId++;
-    idToSong.set(id, song);
-
-    // Index title + album + artist with high priority
-    const titleText = `${song.title} ${song.album} ${song.artist}`;
-    titleIndex.add(id, titleText);
-
-    // Index lyrics content
-    const lyricsText = song.sections
-      .map((section) => section.lines.map((line) => line.text).join(' '))
-      .join(' ');
-    lyricsIndex.add(id, lyricsText);
-  });
+  songList = songs;
 }
 
 /**
@@ -61,42 +32,55 @@ export function buildIndex(songs) {
  * @returns {Array} Matched songs ranked by relevance
  */
 export function searchSongs(query, limit = 10) {
-  if (!query || !query.trim()) {
+  if (!query?.trim()) {
     return [];
   }
 
-  const trimmed = query.trim();
+  const normalizedQuery = normalize(query.trim());
 
-  // Search both indexes
-  const titleResults = titleIndex ? titleIndex.search(trimmed, limit) : [];
-  const lyricsResults = lyricsIndex ? lyricsIndex.search(trimmed, limit) : [];
+  // Score each song based on where the match is found
+  const scored = [];
 
-  // Merge results — title matches get higher priority
-  const scoreMap = new Map();
+  for (const song of songList) {
+    const normalizedTitle = normalize(song.title || '');
+    const normalizedAlbum = normalize(song.album || '');
+    const normalizedArtist = normalize(song.artist || '');
 
-  titleResults.forEach((id, idx) => {
-    scoreMap.set(id, (scoreMap.get(id) || 0) + (limit - idx) * 2);
-  });
+    let score = 0;
 
-  lyricsResults.forEach((id, idx) => {
-    scoreMap.set(id, (scoreMap.get(id) || 0) + (limit - idx));
-  });
+    // Title match (highest priority)
+    if (normalizedTitle.includes(normalizedQuery)) {
+      score += 100;
+      // Bonus for starts-with match
+      if (normalizedTitle.startsWith(normalizedQuery)) {
+        score += 50;
+      }
+    }
 
-  // Sort by score descending
-  const sorted = Array.from(scoreMap.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, limit);
+    // Album match
+    if (normalizedAlbum.includes(normalizedQuery)) {
+      score += 30;
+    }
 
-  return sorted.map(([id]) => idToSong.get(id)).filter(Boolean);
+    // Artist match
+    if (normalizedArtist.includes(normalizedQuery)) {
+      score += 10;
+    }
+
+    if (score > 0) {
+      scored.push({ song, score });
+    }
+  }
+
+  // Sort by score descending, then alphabetically by title
+  scored.sort((a, b) => b.score - a.score || a.song.title.localeCompare(b.song.title, 'es'));
+
+  return scored.slice(0, limit).map((s) => s.song);
 }
 
 /**
  * Clear the search index
  */
 export function clearIndex() {
-  titleIndex = null;
-  lyricsIndex = null;
-  songMap.clear();
-  idToSong.clear();
-  nextId = 0;
+  songList = [];
 }

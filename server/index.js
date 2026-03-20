@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const jwt = require('jsonwebtoken');
 
 const { all, get, run } = require('./db');
@@ -205,8 +206,28 @@ app.delete('/api/songs/:id', authMiddleware, async (req, res) => {
   }
 });
 
+// --- SERVE FRONTEND IN PRODUCTION --- //
+const distPath = path.resolve(__dirname, '..', 'dist');
+const coversPath = path.resolve(__dirname, '..', 'public', 'covers');
+
+// Serve album cover images
+app.use('/covers', express.static(coversPath));
+
+// Serve Vite-built frontend
+app.use(express.static(distPath));
+
+// SPA catch-all: any non-API route returns index.html
+app.get('{*path}', (req, res) => {
+  const indexPath = path.join(distPath, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).send('Frontend not built. Run "npm run build" first.');
+  }
+});
+
 // START SERVER
 app.listen(PORT, () => {
-  console.log(`Backend server running on http://localhost:${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });
 module.exports = { app, authMiddleware };

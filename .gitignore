@@ -17,6 +17,9 @@ coverage
 .env
 .env.*
 
+# Database
+*.db
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

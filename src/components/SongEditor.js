@@ -5,7 +5,7 @@
  * image upload, and live preview. Downloads updated songs.json on save.
  */
 
-import { getState, getSongById, refreshData } from '../lib/store.js';
+import { getState, getSongById, fetchSongDetail, refreshData } from '../lib/store.js';
 import { renderLogoutButton } from './AdminGate.js';
 import { navigate } from '../router.js';
 import { getToken } from '../lib/auth.js';
@@ -26,8 +26,28 @@ const SECTION_TYPES = [
  * @param {HTMLElement} container
  * @param {string} [editId] - Song ID to edit (null for new song)
  */
-export function renderSongEditor(container, editId) {
-  const existingSong = editId ? getSongById(editId) : null;
+export async function renderSongEditor(container, editId) {
+  let existingSong = null;
+
+  if (editId) {
+    // Show loading state while fetching full song detail (with sections)
+    container.innerHTML = `
+      <div class="editor fade-in" style="display: flex; justify-content: center; align-items: center; min-height: 50vh;">
+        <p style="color: var(--color-text-secondary); font-size: 1.1rem;">⏳ Cargando canción...</p>
+      </div>
+    `;
+    existingSong = await fetchSongDetail(editId);
+    if (!existingSong) {
+      container.innerHTML = `
+        <div class="editor fade-in" style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 50vh; gap: 1rem;">
+          <p style="color: var(--color-text-secondary); font-size: 1.1rem;">❌ No se encontró la canción.</p>
+          <button class="btn btn--secondary" id="editor-back-home">← Volver</button>
+        </div>
+      `;
+      container.querySelector('#editor-back-home')?.addEventListener('click', () => navigate('/admin/edit'));
+      return;
+    }
+  }
 
   container.innerHTML = `
     <div class="editor fade-in">
@@ -100,6 +120,7 @@ export function renderSongEditor(container, editId) {
               `<button class="editor__section-btn" data-section-type="${s.type}" data-section-label="${s.label}">[${s.label}]</button>`,
           ).join('')}
           <span style="border-left: 1px solid var(--color-border); margin: 0 0.25rem;"></span>
+          <button class="editor__section-btn" data-color="#ff0002" style="color: #ff0002;">🎨 Rojo</button>
           <button class="editor__section-btn" data-color="#4FC3F7" style="color: #4FC3F7;">🎨 Cyan</button>
           <button class="editor__section-btn" data-color="#FF7043" style="color: #FF7043;">🎨 Coral</button>
           <button class="editor__section-btn" data-color="#AB47BC" style="color: #AB47BC;">🎨 Púrpura</button>
@@ -222,6 +243,7 @@ export function renderSongEditor(container, editId) {
  * Convert song object to editable text format
  */
 function songToLyricsText(song) {
+  if (!song.sections || !Array.isArray(song.sections)) return '';
   return song.sections
     .map((section) => {
       const lines = section.lines
@@ -250,7 +272,7 @@ function parseLyricsText(text) {
       const label = sectionMatch[1];
       const type = guessType(label);
       currentSection = { type, label, lines: [] };
-    } else if (currentSection && line.trim()) {
+    } else if (currentSection) {
       // Parse optional color prefix: {#RRGGBB}text
       const colorMatch = line.match(/^\{(#[A-Fa-f0-9]{3,8})\}(.*)$/);
       if (colorMatch) {
@@ -264,6 +286,13 @@ function parseLyricsText(text) {
   if (currentSection) {
     sections.push(currentSection);
   }
+
+  // Clean up trailing empty lines from each section so they don't multiply on repeated saves
+  sections.forEach(section => {
+    while (section.lines.length > 0 && section.lines[section.lines.length - 1].text.trim() === '') {
+      section.lines.pop();
+    }
+  });
 
   return sections;
 }
@@ -309,7 +338,7 @@ function updatePreview(text, previewEl) {
       (section) => `
     <div class="lyrics__section lyrics__section--${section.type}" style="margin-bottom: 1.25rem;">
       <div class="lyrics__section-label">${escapeHtml(section.label)}</div>
-      ${section.lines.map((l) => `<p class="lyrics__line" style="font-size: 1rem; line-height: 1.6;${l.color ? ` color: ${l.color};` : ''}">${escapeHtml(l.text)}</p>`).join('')}
+      ${section.lines.map((l) => `<p class="lyrics__line" style="font-size: 1rem; line-height: 1.6;${l.color ? ` color: ${l.color};` : ''}">${l.text.trim() === '' ? '&nbsp;' : escapeHtml(l.text)}</p>`).join('')}
     </div>
   `,
     )

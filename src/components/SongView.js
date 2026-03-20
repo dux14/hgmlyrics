@@ -190,7 +190,7 @@ function renderSections(sections) {
         .map(
           (line) => `
         <p class="lyrics__line" ${line.color ? `style="color: ${line.color}"` : ''}>
-          ${escapeHtml(line.text)}
+          ${line.text.trim() === '' ? '&nbsp;' : escapeHtml(line.text)}
         </p>
       `,
         )

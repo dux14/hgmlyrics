@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const path = require('path');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
@@ -11,6 +12,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
+app.use(compression());
 app.use(express.json());
 // Serve the uploads folder statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -70,19 +72,12 @@ function removeAccents(str) {
 // --- SONGS ROUTES --- //
 app.get('/api/songs', async (req, res) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50));
-    const offset = (page - 1) * limit;
-
-    const countRow = await get('SELECT COUNT(*) as total FROM songs');
-    const total = countRow.total;
-
+    // Single query — no pagination needed for ~100 songs
     const rows = await all(
       `SELECT id, title, artist, album, albumSlug, year, genre,
               voiceType, voicePercentMale, voicePercentFemale,
               coverImage, albumOrder, createdAt, updatedAt
-       FROM songs ORDER BY album, albumOrder LIMIT ? OFFSET ?`,
-      [limit, offset]
+       FROM songs ORDER BY album, albumOrder`
     );
 
     const songs = rows.map(r => ({
@@ -94,7 +89,7 @@ app.get('/api/songs', async (req, res) => {
       delete s.voicePercentFemale;
     });
 
-    res.json({ songs, total, page, limit, totalPages: Math.ceil(total / limit) });
+    res.json({ songs, total: songs.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

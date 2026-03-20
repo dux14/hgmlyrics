@@ -54,26 +54,14 @@ export async function initStore() {
   let loaded = false;
   
   try {
-    // Fetch all pages of songs (lightweight, no sections)
-    let allSongs = [];
-    let page = 1;
-    let totalPages = 1;
-    do {
-      const res = await fetch(`${API_URL}/songs?page=${page}&limit=200`);
-      if (res.ok) {
-        const data = await res.json();
-        allSongs = allSongs.concat(data.songs);
-        totalPages = data.totalPages;
-        page++;
-      } else {
-        break;
+    const res = await fetch(`${API_URL}/songs`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.songs.length > 0) {
+        state.songs = data.songs;
+        await set(CACHE_KEY, state.songs);
+        loaded = true;
       }
-    } while (page <= totalPages);
-    
-    if (allSongs.length > 0) {
-      state.songs = allSongs;
-      await set(CACHE_KEY, state.songs);
-      loaded = true;
     }
   } catch (e) {
     console.warn('Network offline or backend down, loading from IndexedDB');
@@ -99,24 +87,13 @@ export async function initStore() {
  */
 export async function refreshData() {
   try {
-    let allSongs = [];
-    let page = 1;
-    let totalPages = 1;
-    do {
-      const res = await fetch(`${API_URL}/songs?page=${page}&limit=200`);
-      if (res.ok) {
-        const data = await res.json();
-        allSongs = allSongs.concat(data.songs);
-        totalPages = data.totalPages;
-        page++;
-      } else {
-        break;
+    const res = await fetch(`${API_URL}/songs`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.songs.length > 0) {
+        state.songs = data.songs;
+        await set(CACHE_KEY, state.songs);
       }
-    } while (page <= totalPages);
-    
-    if (allSongs.length > 0) {
-      state.songs = allSongs;
-      await set(CACHE_KEY, state.songs);
     }
   } catch (e) {
     console.warn('Could not refresh data from network');

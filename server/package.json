@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "build": "cd .. && HUSKY=0 npm install && npm run build",
+    "build": "cd .. && npm install --ignore-scripts && npm run build",
     "migrate": "node migrate-to-turso.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

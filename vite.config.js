@@ -23,13 +23,43 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,json,webp,png,svg,woff2}'],
         runtimeCaching: [
           {
+            // Cache song list API — serve cached instantly, update in background
+            urlPattern: /\/api\/songs(\?.*)?$/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'api-songs-list',
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60 * 24, // 24 hours
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+          {
+            // Cache individual song detail API
+            urlPattern: /\/api\/songs\/[^/]+$/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'api-songs-detail',
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+          {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: 'CacheFirst',
             options: {
               cacheName: 'google-fonts-cache',
               expiration: {
                 maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+                maxAgeSeconds: 60 * 60 * 24 * 365,
               },
               cacheableResponse: {
                 statuses: [0, 200],

@@ -122,14 +122,14 @@ export async function renderSongView(container, songId) {
           <h1 class="song-view__title">${escapeHtml(song.title)}</h1>
           <p class="song-view__album">${escapeHtml(song.artist)} — ${escapeHtml(song.album)}</p>
           <p class="song-view__year">${song.year || ''} · ${song.genre || ''}</p>
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
             <span class="voice-badge ${voiceBadgeClass}">${voiceLabel}</span>
             <div class="voice-bar" style="width: 80px;">
               <div class="voice-bar__male" style="width: ${song.voicePercent?.male || 50}%"></div>
-              <div class="voice-bar__female" style="width: ${song.voicePercent?.female || 50}%"></div>
+              <div class="voice-bar__female" style="width: ${100 - (song.voicePercent?.male || 50)}%"></div>
             </div>
             <span style="font-size: 0.75rem; color: var(--color-text-secondary);">
-              ${song.voicePercent?.male || 0}% / ${song.voicePercent?.female || 0}%
+              ♂ ${song.voicePercent?.male || 0}% / ♀ ${100 - (song.voicePercent?.male || 0)}%
             </span>
           </div>
         </div>

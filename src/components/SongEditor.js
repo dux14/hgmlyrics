@@ -88,7 +88,7 @@ export async function renderSongEditor(container, editId) {
       <div class="editor__section">
         <h2 class="editor__section-title">Tipo de voz</h2>
         <div class="form-group">
-          <label class="form-group__label">Porcentaje masculino: <span id="voice-value">${existingSong?.voicePercent?.male || 50}%</span></label>
+          <label class="form-group__label">Porcentaje: <span id="voice-value">♂ ${existingSong?.voicePercent?.male || 50}% / ♀ ${100 - (existingSong?.voicePercent?.male || 50)}%</span></label>
           <div class="voice-slider">
             <span style="font-size: 0.8rem;">♂</span>
             <input type="range" id="voice-range" min="0" max="100" value="${existingSong?.voicePercent?.male || 50}" />
@@ -151,7 +151,8 @@ export async function renderSongEditor(container, editId) {
   const voiceRange = container.querySelector('#voice-range');
   const voiceValue = container.querySelector('#voice-value');
   voiceRange.addEventListener('input', () => {
-    voiceValue.textContent = `${voiceRange.value}%`;
+    const male = voiceRange.value;
+    voiceValue.textContent = `♂ ${male}% / ♀ ${100 - male}%`;
   });
 
   // Image upload

@@ -3,7 +3,8 @@ services:
     name: hgmlyrics
     runtime: node
     region: oregon
-    plan: free
+    plan: starter
+    healthCheckPath: /health
     rootDir: server
     buildCommand: npm install && npm run build
     startCommand: npm start

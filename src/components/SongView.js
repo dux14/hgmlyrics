@@ -90,10 +90,10 @@ export async function renderSongView(container, songId) {
 
   const voiceLabel =
     song.voiceType === 'male'
-      ? '♂\uFE0E Masculina'
+      ? 'Masculina'
       : song.voiceType === 'female'
-        ? '♀\uFE0E Femenina'
-        : '⚥\uFE0E Mixta';
+        ? 'Femenina'
+        : 'Mixta';
 
   const coverUrl = song.coverImage.startsWith('/') || song.coverImage.startsWith('http')
     ? song.coverImage
@@ -129,7 +129,7 @@ export async function renderSongView(container, songId) {
               <div class="voice-bar__female" style="width: ${100 - (song.voicePercent?.male || 50)}%"></div>
             </div>
             <span style="font-size: 0.75rem; color: var(--color-text-secondary);">
-              ♂ ${song.voicePercent?.male || 0}% / ♀ ${100 - (song.voicePercent?.male || 0)}%
+              H ${song.voicePercent?.male || 0}% / M ${100 - (song.voicePercent?.male || 0)}%
             </span>
           </div>
         </div>

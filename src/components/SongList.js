@@ -109,10 +109,10 @@ function createSongCard(song, index) {
 
   const voiceLabel =
     song.voiceType === 'male'
-      ? '♂ Masculina'
+      ? '♂\uFE0E Masculina'
       : song.voiceType === 'female'
-        ? '♀ Femenina'
-        : '⚥ Mixta';
+        ? '♀\uFE0E Femenina'
+        : '⚥\uFE0E Mixta';
 
   const coverUrl = song.coverImage.startsWith('/') || song.coverImage.startsWith('http')
     ? song.coverImage
@@ -182,7 +182,7 @@ function createSongTable(songs) {
           : `/covers/${song.coverImage}`;
 
         const voiceBadgeClass = song.voiceType === 'male' ? 'voice-badge--male' : song.voiceType === 'female' ? 'voice-badge--female' : 'voice-badge--mixed';
-        const voiceLabel = song.voiceType === 'male' ? '♂ Masculina' : song.voiceType === 'female' ? '♀ Femenina' : '⚥ Mixta';
+        const voiceLabel = song.voiceType === 'male' ? '♂\uFE0E Masculina' : song.voiceType === 'female' ? '♀\uFE0E Femenina' : '⚥\uFE0E Mixta';
 
         return `
           <tr class="song-table__row fade-in" style="animation-delay: ${i * 30}ms" data-id="${song.id}" tabindex="0">

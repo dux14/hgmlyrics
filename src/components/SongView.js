@@ -90,10 +90,10 @@ export async function renderSongView(container, songId) {
 
   const voiceLabel =
     song.voiceType === 'male'
-      ? '♂ Masculina'
+      ? '♂\uFE0E Masculina'
       : song.voiceType === 'female'
-        ? '♀ Femenina'
-        : '⚥ Mixta';
+        ? '♀\uFE0E Femenina'
+        : '⚥\uFE0E Mixta';
 
   const coverUrl = song.coverImage.startsWith('/') || song.coverImage.startsWith('http')
     ? song.coverImage

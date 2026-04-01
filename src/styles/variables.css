@@ -22,6 +22,18 @@
   --color-voice-low: #ff7043;
   --color-voice-chorus: #ab47bc;
 
+  /* Voice part colors (F5+F7) */
+  --color-voice-soprano: #0097A7;
+  --color-voice-contralto: #7B1FA2;
+  --color-voice-tenor: #E65100;
+  --color-voice-bass: #2E7D32;
+
+  /* Voice background highlights */
+  --color-voice-soprano-bg: rgba(0, 151, 167, 0.12);
+  --color-voice-contralto-bg: rgba(123, 31, 162, 0.12);
+  --color-voice-tenor-bg: rgba(230, 81, 0, 0.12);
+  --color-voice-bass-bg: rgba(46, 125, 50, 0.12);
+
   /* Semantic */
   --color-success: #4caf50;
   --color-warning: #ff9800;
@@ -107,6 +119,18 @@
   --color-voice-high: #81d4fa;
   --color-voice-low: #ff8a65;
   --color-voice-chorus: #ce93d8;
+
+  /* Voice part colors — dark mode (F5+F7) */
+  --color-voice-soprano: #4FC3F7;
+  --color-voice-contralto: #CE93D8;
+  --color-voice-tenor: #FF8A65;
+  --color-voice-bass: #81C784;
+
+  /* Voice background highlights — dark mode */
+  --color-voice-soprano-bg: rgba(79, 195, 247, 0.15);
+  --color-voice-contralto-bg: rgba(206, 147, 216, 0.15);
+  --color-voice-tenor-bg: rgba(255, 138, 101, 0.15);
+  --color-voice-bass-bg: rgba(129, 199, 132, 0.15);
 
   --scrollbar-thumb: #3a3a3a;
 }

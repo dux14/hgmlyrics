@@ -16,7 +16,7 @@ export default defineConfig({
   },
   plugins: [
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['favicon.ico', 'favicon.svg', 'icons/*.png', 'covers/*.webp'],
       manifest: false, // Using public/manifest.json
       workbox: {
@@ -81,8 +81,7 @@ export default defineConfig({
             },
           },
         ],
-        skipWaiting: true,
-        clientsClaim: true,
+        // skipWaiting and clientsClaim removed — now controlled by prompt registration
       },
     }),
   ],

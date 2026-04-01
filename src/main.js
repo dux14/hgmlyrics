@@ -18,11 +18,13 @@ import { buildIndex } from './lib/search.js';
 import { route, initRouter, onNotFound, navigate } from './router.js';
 import { renderHeader } from './components/Header.js';
 import { renderSidebar, toggleSidebar, updateSidebarContent } from './components/Sidebar.js';
+import { renderFilterBar, updateFilterBar, showFilterBar, hideFilterBar } from './components/FilterBar.js';
 import { renderSongList, renderSongListSkeleton } from './components/SongList.js';
 import { renderSongView } from './components/SongView.js';
 import { renderAdminGate } from './components/AdminGate.js';
 import { renderSongEditor } from './components/SongEditor.js';
 import { renderAdminDashboard, renderAdminEditList } from './components/AdminDashboard.js';
+import { initUpdateNotifier } from './components/UpdateNotifier.js';
 
 // Initialize theme immediately to avoid flash
 initTheme();
@@ -49,6 +51,9 @@ async function boot() {
   // Render sidebar
   renderSidebar(app);
 
+  // Render filter bar (F4)
+  renderFilterBar(app);
+
   // Show skeleton while loading
   renderSongListSkeleton(mainContent);
 
@@ -59,13 +64,15 @@ async function boot() {
   const { songs } = getState();
   buildIndex(songs);
   updateSidebarContent();
+  updateFilterBar();
 
   // Subscribe to state changes — re-render song list when on home page
   subscribe((state) => {
     buildIndex(state.songs);
     updateSidebarContent();
+    updateFilterBar();
 
-    const currentHash = window.location.hash.slice(1) || '/';
+    const currentHash = globalThis.location.hash.slice(1) || '/';
     if (currentHash === '/' || currentHash === '') {
       renderSongList(mainContent, state.filtered);
     }
@@ -73,39 +80,46 @@ async function boot() {
 
   // Setup routes
   route('/', () => {
+    showFilterBar();
     const { filtered } = getState();
     renderSongList(mainContent, filtered);
   });
 
   route('/song/:id', ({ params }) => {
+    hideFilterBar();
     renderSongView(mainContent, params.id);
   });
 
   route('/admin', () => {
+    hideFilterBar();
     renderAdminGate(mainContent, () => {
       renderAdminDashboard(mainContent);
     });
   });
 
   route('/admin/create', () => {
+    hideFilterBar();
     renderAdminGate(mainContent, () => {
       renderSongEditor(mainContent);
     });
   });
 
   route('/admin/edit', () => {
+    hideFilterBar();
     renderAdminGate(mainContent, () => {
       renderAdminEditList(mainContent);
     });
   });
 
   route('/admin/edit/:id', ({ params }) => {
+    hideFilterBar();
     renderAdminGate(mainContent, () => {
       renderSongEditor(mainContent, params.id);
     });
   });
 
   onNotFound(() => {
+    hideFilterBar();
     mainContent.innerHTML = `
       <div class="empty-state fade-in">
         <div class="empty-state__icon">🤷</div>
@@ -119,6 +133,19 @@ async function boot() {
 
   // Start router
   initRouter();
+
+  // F1: Initialize update notifier
+  initUpdateNotifier();
+
+  // F8: Start background caching for PWA
+  try {
+    const { startBackgroundCache, isPWA } = await import('./lib/offlineCache.js');
+    if (isPWA()) {
+      startBackgroundCache();
+    }
+  } catch (_) {
+    // offlineCache module not critical
+  }
 }
 
 // Boot on DOMContentLoaded
@@ -126,13 +153,4 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', boot);
 } else {
   boot();
-}
-
-// Register service worker
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      // SW registration failed — app still works
-    });
-  });
 }

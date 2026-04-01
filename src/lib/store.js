@@ -153,6 +153,14 @@ export async function fetchSongDetail(id) {
     }
   } catch (e) {
     console.warn('Could not fetch song detail:', e);
+    // F8: Fallback — try offline cache
+    try {
+      const { getOfflineSong } = await import('./offlineCache.js');
+      const cached = await getOfflineSong(id);
+      if (cached) return cached;
+    } catch (_) {
+      // offlineCache not available
+    }
   }
   return null;
 }
@@ -228,6 +236,34 @@ function applyFilters() {
   }
 
   state.filtered = result;
+}
+
+/**
+ * Get previous and next songs in the same album (circular navigation)
+ * @param {string} songId
+ * @returns {{ prev: object|null, next: object|null, currentIndex: number, total: number }}
+ */
+export function getAdjacentSongs(songId) {
+  const song = state.songs.find(s => s.id === songId);
+  if (!song || !song.albumSlug) return { prev: null, next: null, currentIndex: -1, total: 0 };
+
+  const albumSongs = state.songs
+    .filter(s => s.albumSlug === song.albumSlug)
+    .sort((a, b) => (a.albumOrder || 0) - (b.albumOrder || 0));
+
+  if (albumSongs.length <= 1) return { prev: null, next: null, currentIndex: 0, total: albumSongs.length };
+
+  const idx = albumSongs.findIndex(s => s.id === songId);
+  // Circular: wrap around
+  const prevIdx = (idx - 1 + albumSongs.length) % albumSongs.length;
+  const nextIdx = (idx + 1) % albumSongs.length;
+
+  return {
+    prev: albumSongs[prevIdx],
+    next: albumSongs[nextIdx],
+    currentIndex: idx,
+    total: albumSongs.length,
+  };
 }
 
 /**

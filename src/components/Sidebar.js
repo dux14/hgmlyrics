@@ -1,18 +1,12 @@
 /**
  * Sidebar.js — Sidebar component
  *
- * Album filters, sorting options, voice type filters.
+ * Album filters only (sort and voice moved to FilterBar).
  * Overlay on mobile, fixed panel on desktop.
  */
 
-import { getAlbums, filterByAlbum, setSortMode, filterByVoice, getState, getVoiceTypes } from '../lib/store.js';
+import { getAlbums, filterByAlbum, getState } from '../lib/store.js';
 import { navigate } from '../router.js';
-
-const VOICE_LABELS = {
-  male: '♂ Masculina',
-  female: '♀ Femenina',
-  mixed: '⚥ Mixta'
-};
 
 let sidebarEl = null;
 let overlayEl = null;
@@ -48,7 +42,7 @@ export function updateSidebarContent() {
   }
 
   const albums = getAlbums();
-  const { activeAlbum, sortMode, voiceFilter } = getState();
+  const { activeAlbum } = getState();
 
   sidebarEl.innerHTML = `
     <!-- Albums Section -->
@@ -87,40 +81,6 @@ export function updateSidebarContent() {
           .join('')}
       </div>
     </div>
-
-    <!-- Sort Section -->
-    <div class="sidebar__section" id="sidebar-sort">
-      <div class="sidebar__section-title" data-section="sort">
-        Ordenar por
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
-      </div>
-      <div class="sidebar__section-content">
-        <button class="sidebar__sort-btn ${sortMode === 'a-z' ? 'active' : ''}" data-sort="a-z">A → Z</button>
-        <button class="sidebar__sort-btn ${sortMode === 'z-a' ? 'active' : ''}" data-sort="z-a">Z → A</button>
-        <button class="sidebar__sort-btn ${sortMode === 'recent' ? 'active' : ''}" data-sort="recent">Más recientes</button>
-        <button class="sidebar__sort-btn ${sortMode === 'album' ? 'active' : ''}" data-sort="album">Por álbum</button>
-      </div>
-    </div>
-
-    <!-- Voice Filter Section -->
-    <div class="sidebar__section" id="sidebar-voice">
-      <div class="sidebar__section-title" data-section="voice">
-        Tipo de voz
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
-      </div>
-      <div class="sidebar__section-content">
-        <button class="sidebar__sort-btn ${!voiceFilter ? 'active' : ''}" data-voice="">Todas</button>
-        ${getVoiceTypes().map((type) => `
-          <button class="sidebar__sort-btn ${voiceFilter === type ? 'active' : ''}" data-voice="${type}">
-            ${VOICE_LABELS[type] || type.charAt(0).toUpperCase() + type.slice(1)}
-          </button>
-        `).join('')}
-      </div>
-    </div>
   `;
 
   // Attach event listeners
@@ -155,24 +115,6 @@ function bindSidebarEvents() {
       if (window.innerWidth < 768) {
         closeSidebar();
       }
-    });
-  });
-
-  // Sort mode
-  sidebarEl.querySelectorAll('[data-sort]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      setSortMode(btn.dataset.sort);
-      updateSidebarContent();
-      navigate('/');
-    });
-  });
-
-  // Voice filter
-  sidebarEl.querySelectorAll('[data-voice]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      filterByVoice(btn.dataset.voice || null);
-      updateSidebarContent();
-      navigate('/');
     });
   });
 }

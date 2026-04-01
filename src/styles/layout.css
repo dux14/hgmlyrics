@@ -297,6 +297,70 @@
   gap: var(--space-md);
 }
 
+/* === Filter Bar (F4) === */
+.filter-bar {
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  right: 0;
+  z-index: calc(var(--z-header) - 1);
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-sm) var(--space-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.filter-bar::-webkit-scrollbar { display: none; }
+
+.filter-chip {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-radius: var(--border-radius-full);
+  border: 1px solid var(--color-border);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+  min-height: 32px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--color-text);
+}
+
+.filter-chip:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-primary);
+}
+
+.filter-chip--active {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+.filter-chip--clear {
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+.filter-chip--clear:hover {
+  background: rgba(244, 67, 54, 0.1);
+}
+
+.filter-separator {
+  width: 1px;
+  height: 20px;
+  background: var(--color-border);
+  flex-shrink: 0;
+}
+
 /* === Responsive === */
 
 /* Mobile Header Adjustment */
@@ -320,7 +384,13 @@
   }
 
   .main, .sidebar {
-    padding-top: calc(var(--header-height) + 56px);
+    padding-top: calc(var(--header-height) + 56px + 48px); /* +48px for filter bar */
+  }
+
+  .filter-bar {
+    top: calc(var(--header-height) + 56px);
+    left: 0;
+    right: 0;
   }
 }
 
@@ -342,6 +412,12 @@
 
   .main {
     margin-left: var(--sidebar-width);
+    padding-top: calc(var(--header-height) + 48px); /* +48px for filter bar */
+  }
+
+  .filter-bar {
+    left: var(--sidebar-width); /* Start after sidebar */
+    right: 0;
   }
 
   .song-grid {
@@ -358,6 +434,10 @@
   .header__search {
     max-width: 560px;
   }
+
+  .filter-bar {
+    padding-left: var(--space-lg);
+  }
 }
 
 @media (min-width: 1280px) {
@@ -365,3 +445,4 @@
     grid-template-columns: repeat(4, 1fr);
   }
 }
+

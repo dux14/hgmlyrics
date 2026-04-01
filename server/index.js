@@ -16,6 +16,13 @@ let songsCache = null;
 let songsCacheTime = 0;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+// ── Data version tracking (F1) ──
+let dataVersion = Date.now();
+
+function bumpDataVersion() {
+  dataVersion = Date.now();
+}
+
 function invalidateSongsCache() {
   songsCache = null;
   songsCacheTime = 0;
@@ -43,6 +50,11 @@ const authMiddleware = (req, res, next) => {
 
 // --- HEALTH CHECK --- //
 app.get('/health', (req, res) => res.send('ok'));
+
+// --- VERSION ENDPOINT (F1) --- //
+app.get('/api/version', (req, res) => {
+  res.json({ dataVersion });
+});
 
 // --- AUTH ROUTE --- //
 app.post('/api/auth/login', (req, res) => {
@@ -152,6 +164,27 @@ app.get('/api/songs/search', async (req, res) => {
   }
 });
 
+// --- ALL SONGS WITH SECTIONS (F8: pre-caching) --- //
+app.get('/api/songs/all', async (req, res) => {
+  try {
+    const rows = await all('SELECT * FROM songs ORDER BY album, albumOrder');
+    const songs = rows.map(r => ({
+      ...r,
+      voicePercent: { male: r.voicePercentMale, female: r.voicePercentFemale },
+      sections: JSON.parse(r.sections || '[]'),
+    }));
+    songs.forEach(s => {
+      delete s.voicePercentMale;
+      delete s.voicePercentFemale;
+    });
+
+    res.set('Cache-Control', 'no-store');
+    res.json({ songs, version: dataVersion });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/songs/:id', async (req, res) => {
   try {
     const row = await get('SELECT * FROM songs WHERE id = ?', [req.params.id]);
@@ -183,10 +216,11 @@ app.post('/api/songs', authMiddleware, async (req, res) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       s.id, s.title, s.artist, s.album, s.albumSlug, s.year, s.genre,
-      s.voiceType, s.voicePercent?.male || 50, s.voicePercent?.female || 50,
+      s.voiceType, s.voicePercent?.male ?? 50, s.voicePercent?.female ?? 50,
       s.coverImage, sectionsJson, s.albumOrder || 0, new Date().toISOString(), new Date().toISOString()
     ]);
     invalidateSongsCache();
+    bumpDataVersion();
     res.status(201).json({ success: true, id: s.id });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -206,10 +240,11 @@ app.put('/api/songs/:id', authMiddleware, async (req, res) => {
       WHERE id = ?
     `, [
       s.title, s.artist, s.album, s.albumSlug, s.year, s.genre,
-      s.voiceType, s.voicePercent?.male || 50, s.voicePercent?.female || 50,
+      s.voiceType, s.voicePercent?.male ?? 50, s.voicePercent?.female ?? 50,
       s.coverImage, sectionsJson, s.albumOrder || 0, new Date().toISOString(), id
     ]);
     invalidateSongsCache();
+    bumpDataVersion();
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -220,6 +255,7 @@ app.delete('/api/songs/:id', authMiddleware, async (req, res) => {
   try {
     await run('DELETE FROM songs WHERE id = ?', [req.params.id]);
     invalidateSongsCache();
+    bumpDataVersion();
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: e.message });

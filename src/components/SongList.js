@@ -5,6 +5,7 @@
  */
 
 import { navigate } from '../router.js';
+import { isPWA, isSongCached } from '../lib/offlineCache.js';
 
 let currentViewMode = localStorage.getItem('hkn-view-mode') || 'grid';
 
@@ -152,6 +153,18 @@ function createSongCard(song, index) {
       navigate(`/song/${song.id}`);
     }
   });
+
+  // F8: Offline badge in PWA mode
+  if (isPWA()) {
+    isSongCached(song.id).then(cached => {
+      if (cached) {
+        const badge = document.createElement('span');
+        badge.className = 'offline-badge';
+        badge.textContent = '✓ Offline';
+        card.querySelector('.song-card__meta')?.appendChild(badge);
+      }
+    });
+  }
 
   return card;
 }

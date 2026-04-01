@@ -1,59 +1,91 @@
 /**
- * SongView.js — Lyrics reader component
+ * SongView.js — Lyrics reader component (Upgraded)
  *
- * Displays song lyrics with section labels, color highlights,
- * font size controls, and breadcrumb navigation.
+ * Displays song lyrics with section labels, voice-colored highlights,
+ * word-level voice spans, font size controls, breadcrumb navigation,
+ * album navigation bar, voice part filter with premium chips,
+ * chord display with transposition, and swipe gestures.
  */
 
-import { getSongById, filterByAlbum, fetchSongDetail } from '../lib/store.js';
+import { getSongById, filterByAlbum, fetchSongDetail, getAdjacentSongs } from '../lib/store.js';
 import { navigate } from '../router.js';
+import {
+  VOICE_TYPES,
+  getVoiceColor,
+  getVoiceBgColor,
+  buildHighlightedHTML,
+} from '../lib/voiceSystem.js';
 
 const FONT_SIZE_KEY = 'hkn-lyrics-font-size';
 const FONT_STEP = 0.125; // rem
 const FONT_MIN = 0.875;
 const FONT_MAX = 2.5;
 
-/**
- * Get persisted font size
- * @returns {number}
- */
+// F6: Transposition
+const NOTES_SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const NOTES_FLAT  = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+const NORMALIZE = { 'Db':'C#','Eb':'D#','Fb':'E','Gb':'F#','Ab':'G#','Bb':'A#','Cb':'B' };
+
 function getFontSize() {
   try {
     const stored = localStorage.getItem(FONT_SIZE_KEY);
     if (stored) {
-      const val = parseFloat(stored);
-      if (val >= FONT_MIN && val <= FONT_MAX) {
-        return val;
-      }
+      const val = Number.parseFloat(stored);
+      if (val >= FONT_MIN && val <= FONT_MAX) return val;
     }
-  } catch (_e) {
-    // Ignore
-  }
-  return 1.25; // default
+  } catch (_e) { /* ignore */ }
+  return 1.25;
+}
+
+function saveFontSize(size) {
+  try { localStorage.setItem(FONT_SIZE_KEY, size.toString()); }
+  catch (_e) { /* ignore */ }
+}
+
+function songHasChords(song) {
+  if (!song.sections) return false;
+  return song.sections.some(s => s.lines.some(l => l.chords && l.chords.length > 0));
+}
+
+function getVoiceBadgeClass(voiceType) {
+  if (voiceType === 'male') return 'voice-badge--male';
+  if (voiceType === 'female') return 'voice-badge--female';
+  return 'voice-badge--mixed';
+}
+
+function getVoiceTypeLabel(voiceType) {
+  if (voiceType === 'male') return 'Masculina';
+  if (voiceType === 'female') return 'Femenina';
+  return 'Mixta';
 }
 
 /**
- * Save font size
- * @param {number} size
+ * Detect which voices are used in the song
  */
-function saveFontSize(size) {
-  try {
-    localStorage.setItem(FONT_SIZE_KEY, size.toString());
-  } catch (_e) {
-    // Ignore
+function detectUsedVoices(sections) {
+  const used = new Set();
+  for (const section of sections) {
+    if (section.voices) section.voices.forEach(v => used.add(v));
+    for (const line of section.lines) {
+      if (line.voices) line.voices.forEach(v => used.add(v));
+      if (line.voiceRanges) {
+        line.voiceRanges.forEach(r => {
+          if (r.voices) r.voices.forEach(v => used.add(v));
+        });
+      }
+    }
   }
+  return used;
 }
 
 /**
  * Render the song view
- * @param {HTMLElement} container
- * @param {string} songId
  */
 export async function renderSongView(container, songId) {
   let song = getSongById(songId);
 
   // If no sections cached, fetch full detail from API
-  if (!song || !song.sections || song.sections.length === 0) {
+  if (!song?.sections?.length) {
     container.innerHTML = `
       <div class="empty-state fade-in">
         <div class="empty-state__icon">⏳</div>
@@ -61,9 +93,7 @@ export async function renderSongView(container, songId) {
       </div>
     `;
     const detail = await fetchSongDetail(songId);
-    if (detail) {
-      song = detail;
-    }
+    if (detail) song = detail;
   }
 
   if (!song) {
@@ -80,24 +110,32 @@ export async function renderSongView(container, songId) {
   }
 
   let fontSize = getFontSize();
+  let activeVoice = 'all';
+  let showChords = false;
+  let transposeSemitones = 0;
+  let useFlats = false;
 
-  const voiceBadgeClass =
-    song.voiceType === 'male'
-      ? 'voice-badge--male'
-      : song.voiceType === 'female'
-        ? 'voice-badge--female'
-        : 'voice-badge--mixed';
-
-  const voiceLabel =
-    song.voiceType === 'male'
-      ? 'Masculina'
-      : song.voiceType === 'female'
-        ? 'Femenina'
-        : 'Mixta';
+  const voiceBadgeClass = getVoiceBadgeClass(song.voiceType);
+  const voiceLabel = getVoiceTypeLabel(song.voiceType);
 
   const coverUrl = song.coverImage.startsWith('/') || song.coverImage.startsWith('http')
     ? song.coverImage
     : `/covers/${song.coverImage}`;
+
+  const adjacent = getAdjacentSongs(songId);
+  const hasNav = adjacent.prev || adjacent.next;
+  const hasChords = songHasChords(song);
+  const usedVoices = detectUsedVoices(song.sections);
+
+  // Build voice filter chips — only show voices that exist in the song
+  const voiceChipsHtml = VOICE_TYPES
+    .filter(v => usedVoices.has(v.id))
+    .map(v => `
+      <button class="voice-filter__chip" data-voice="${v.id}">
+        <span class="voice-filter__dot" style="background: var(${v.cssColor})"></span>
+        <span class="voice-filter__label-text">${v.label}</span>
+      </button>
+    `).join('');
 
   container.innerHTML = `
     <div class="song-view fade-in">
@@ -125,31 +163,89 @@ export async function renderSongView(container, songId) {
           <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
             <span class="voice-badge ${voiceBadgeClass}">${voiceLabel}</span>
             <div class="voice-bar" style="width: 80px;">
-              <div class="voice-bar__male" style="width: ${song.voicePercent?.male || 50}%"></div>
-              <div class="voice-bar__female" style="width: ${100 - (song.voicePercent?.male || 50)}%"></div>
+              <div class="voice-bar__male" style="width: ${song.voicePercent?.male ?? 50}%"></div>
+              <div class="voice-bar__female" style="width: ${100 - (song.voicePercent?.male ?? 50)}%"></div>
             </div>
             <span style="font-size: 0.75rem; color: var(--color-text-secondary);">
-              H ${song.voicePercent?.male || 0}% / M ${100 - (song.voicePercent?.male || 0)}%
+              H ${song.voicePercent?.male ?? 0}% / M ${100 - (song.voicePercent?.male ?? 0)}%
             </span>
           </div>
         </div>
       </div>
 
-      <!-- Font Controls -->
-      <div class="font-controls">
-        <button class="font-controls__btn" id="font-decrease" aria-label="Reducir tamaño de letra">A−</button>
-        <span class="font-controls__label" id="font-size-label">${fontSize.toFixed(2)}</span>
-        <button class="font-controls__btn" id="font-increase" aria-label="Aumentar tamaño de letra">A+</button>
+      <!-- Controls row -->
+      <div class="song-view__controls" style="display: flex; align-items: center; gap: var(--space-md); flex-wrap: wrap; margin-bottom: var(--space-md);">
+        <!-- Font Controls -->
+        <div class="font-controls" style="margin-bottom: 0;">
+          <button class="font-controls__btn" id="font-decrease" aria-label="Reducir tamaño de letra">A−</button>
+          <span class="font-controls__label" id="font-size-label">${fontSize.toFixed(2)}</span>
+          <button class="font-controls__btn" id="font-increase" aria-label="Aumentar tamaño de letra">A+</button>
+        </div>
+
+        ${hasChords ? `
+        <!-- Chord Toggle -->
+        <div class="chord-toggle" id="chord-toggle" style="margin-bottom: 0;">
+          <button class="chord-toggle__btn chord-toggle__btn--active" data-mode="lyrics">Letra</button>
+          <button class="chord-toggle__btn" data-mode="chords">Acordes</button>
+        </div>
+        ` : ''}
       </div>
+
+      ${hasChords ? `
+      <!-- Transpose Controls — hidden until chords mode -->
+      <div class="transpose-controls" id="transpose-controls" style="display: none;">
+        <span class="transpose-label">🧪 Transposición (Beta)</span>
+        <button class="transpose-btn" id="transpose-down">−½</button>
+        <span class="transpose-value" id="transpose-value">0</span>
+        <button class="transpose-btn" id="transpose-up">+½</button>
+        <span class="filter-separator"></span>
+        <button class="transpose-notation-toggle" id="notation-toggle">♯ / ♭</button>
+      </div>
+      ` : ''}
+
+      <!-- Voice Part Filter — show only if there are voice-assigned lines -->
+      ${usedVoices.size > 0 ? `
+      <div class="voice-filter" id="voice-part-filter">
+        <button class="voice-filter__chip voice-filter__chip--active" data-voice="all">
+          <span class="voice-filter__label-text">Todos</span>
+        </button>
+        ${voiceChipsHtml}
+      </div>
+      ` : ''}
 
       <!-- Lyrics -->
       <div class="lyrics" id="lyrics-content">
-        ${renderSections(song.sections)}
+        ${renderSections(song.sections, activeVoice, showChords, transposeSemitones, useFlats)}
       </div>
+
+      ${hasNav ? `
+      <!-- Album Navigation -->
+      <nav class="song-nav" id="song-nav" aria-label="Navegación del álbum">
+        <button class="song-nav__btn song-nav__btn--prev" id="nav-prev" aria-label="Canción anterior">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+        <span class="song-nav__info">${adjacent.currentIndex + 1} / ${adjacent.total}</span>
+        <button class="song-nav__btn song-nav__btn--next" id="nav-next" aria-label="Canción siguiente">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 6 15 12 9 18"></polyline>
+          </svg>
+        </button>
+      </nav>
+      ` : ''}
     </div>
   `;
 
-  // Apply initial font size
+  // Helper to re-render lyrics
+  function reRenderLyrics() {
+    const lyricsEl = container.querySelector('#lyrics-content');
+    if (lyricsEl) {
+      lyricsEl.innerHTML = renderSections(song.sections, activeVoice, showChords, transposeSemitones, useFlats);
+      applyFontSize(fontSize);
+    }
+  }
+
   applyFontSize(fontSize);
 
   // Font controls
@@ -167,43 +263,196 @@ export async function renderSongView(container, songId) {
     container.querySelector('#font-size-label').textContent = fontSize.toFixed(2);
   });
 
-  // Breadcrumb album link — navigate home and filter by album
+  // Breadcrumb
   container.querySelector('#breadcrumb-album').addEventListener('click', (e) => {
     e.preventDefault();
     filterByAlbum(song.albumSlug);
     navigate('/');
   });
+
+  // Voice part filter
+  container.querySelectorAll('.voice-filter__chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeVoice = btn.dataset.voice;
+      container.querySelectorAll('.voice-filter__chip').forEach(c => {
+        const isActive = c === btn;
+        c.classList.toggle('voice-filter__chip--active', isActive);
+        // Apply voice-specific color to the active chip
+        if (isActive && btn.dataset.voice !== 'all') {
+          const voiceData = VOICE_TYPES.find(v => v.id === btn.dataset.voice);
+          if (voiceData) {
+            c.style.background = getVoiceBgColor(voiceData.id);
+            c.style.color = getVoiceColor(voiceData.id);
+            c.style.borderColor = getVoiceColor(voiceData.id);
+          }
+        } else {
+          c.style.background = '';
+          c.style.color = '';
+          c.style.borderColor = '';
+        }
+      });
+      reRenderLyrics();
+    });
+  });
+
+  // Chord toggle
+  if (hasChords) {
+    container.querySelectorAll('[data-mode]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        showChords = btn.dataset.mode === 'chords';
+        container.querySelectorAll('.chord-toggle__btn').forEach(c =>
+          c.classList.toggle('chord-toggle__btn--active', c === btn));
+        const transposeEl = container.querySelector('#transpose-controls');
+        if (transposeEl) transposeEl.style.display = showChords ? 'flex' : 'none';
+        reRenderLyrics();
+      });
+    });
+
+    container.querySelector('#transpose-down')?.addEventListener('click', () => {
+      transposeSemitones--;
+      container.querySelector('#transpose-value').textContent = transposeSemitones;
+      reRenderLyrics();
+    });
+
+    container.querySelector('#transpose-up')?.addEventListener('click', () => {
+      transposeSemitones++;
+      container.querySelector('#transpose-value').textContent = transposeSemitones;
+      reRenderLyrics();
+    });
+
+    container.querySelector('#notation-toggle')?.addEventListener('click', () => {
+      useFlats = !useFlats;
+      container.querySelector('#notation-toggle').textContent = useFlats ? '♭ → ♯' : '♯ / ♭';
+      reRenderLyrics();
+    });
+  }
+
+  // Album navigation
+  if (hasNav) {
+    container.querySelector('#nav-prev')?.addEventListener('click', () => {
+      if (adjacent.prev) navigate(`/song/${adjacent.prev.id}`);
+    });
+    container.querySelector('#nav-next')?.addEventListener('click', () => {
+      if (adjacent.next) navigate(`/song/${adjacent.next.id}`);
+    });
+
+    // Swipe detection
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    container.addEventListener('touchstart', (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+      touchStartY = e.changedTouches[0].screenY;
+    }, { passive: true });
+
+    container.addEventListener('touchend', (e) => {
+      const deltaX = e.changedTouches[0].screenX - touchStartX;
+      const deltaY = e.changedTouches[0].screenY - touchStartY;
+      if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+        if (deltaX < 0 && adjacent.next) navigate(`/song/${adjacent.next.id}`);
+        if (deltaX > 0 && adjacent.prev) navigate(`/song/${adjacent.prev.id}`);
+      }
+    }, { passive: true });
+  }
 }
 
 /**
- * Render lyrics sections
- * @param {Array} sections
- * @returns {string}
+ * Render lyrics sections with voice filter, highlighting, and optional chords
  */
-function renderSections(sections) {
-  return sections
-    .map(
-      (section) => `
+function renderSections(sections, activeVoice = 'all', showChords = false, transposeSemitones = 0, useFlats = false) {
+  return sections.map(section => `
     <div class="lyrics__section lyrics__section--${section.type}">
       <div class="lyrics__section-label">${escapeHtml(section.label)}</div>
-      ${section.lines
-        .map(
-          (line) => `
-        <p class="lyrics__line" ${line.color ? `style="color: ${line.color}"` : ''}>
-          ${line.text.trim() === '' ? '&nbsp;' : escapeHtml(line.text)}
-        </p>
-      `,
-        )
-        .join('')}
+      ${section.lines.map(line => {
+        const voices = line.voices || [];
+        const isForAll = voices.length === 0;
+        const matchesFilter = activeVoice === 'all' || isForAll || voices.includes(activeVoice);
+
+        // Check word-level ranges for filter match too
+        const hasMatchingRange = line.voiceRanges?.some(r =>
+          r.voices?.includes(activeVoice)
+        );
+        const effectiveMatch = matchesFilter || hasMatchingRange;
+
+        // Determine color strategy
+        let lineColor = '';
+        let lineHighlightBg = '';
+
+        if (effectiveMatch && activeVoice !== 'all') {
+          lineHighlightBg = isForAll ? '' : getVoiceBgColor(activeVoice);
+        }
+
+        if (line.color) {
+          // Legacy color support
+          lineColor = line.color;
+        } else if (voices.length === 1) {
+          lineColor = getVoiceColor(voices[0]);
+        } else if (voices.length > 1) {
+          // Multi-voice: use first voice color
+          lineColor = getVoiceColor(voices[0]);
+        }
+
+        const dimmedClass = effectiveMatch ? '' : 'lyrics__line--dimmed';
+        const highlightClass = (effectiveMatch && activeVoice !== 'all' && !isForAll) ? 'lyrics__line--highlighted' : '';
+
+        // Build line content — with word-level highlighting if present
+        let lineContent;
+        if (line.voiceRanges && line.voiceRanges.length > 0) {
+          lineContent = buildHighlightedHTML(line.text, line.voiceRanges, voices);
+        } else {
+          lineContent = line.text.trim() === '' ? '&nbsp;' : escapeHtml(line.text);
+        }
+
+        const styleAttrs = [];
+        if (lineColor && !(line.voiceRanges?.length > 0)) styleAttrs.push(`color: ${lineColor}`);
+        if (lineHighlightBg) styleAttrs.push(`background: ${lineHighlightBg}`);
+        const styleStr = styleAttrs.length > 0 ? ` style="${styleAttrs.join('; ')}"` : '';
+
+        // Chord rendering
+        if (showChords && line.chords?.length > 0) {
+          const chordLine = buildChordPositionString(line.text, line.chords, transposeSemitones, useFlats);
+          return `
+            <div class="lyrics__chord-line ${dimmedClass} ${highlightClass}">
+              <pre class="lyrics__chords">${escapeHtml(chordLine)}</pre>
+              <p class="lyrics__line"${styleStr}>${lineContent}</p>
+            </div>`;
+        }
+
+        return `<p class="lyrics__line ${dimmedClass} ${highlightClass}"${styleStr}>${lineContent}</p>`;
+      }).join('')}
     </div>
-  `,
-    )
-    .join('');
+  `).join('');
+}
+
+/**
+ * Build chord position string
+ */
+function buildChordPositionString(text, chords, transposeSemitones = 0, useFlats = false) {
+  const sorted = [...chords].sort((a, b) => a.pos - b.pos);
+  let result = '';
+  for (const { ch, pos } of sorted) {
+    const transposed = transposeSemitones !== 0 ? transposeChord(ch, transposeSemitones, useFlats) : ch;
+    while (result.length < pos) result += ' ';
+    result += transposed;
+  }
+  return result;
+}
+
+/**
+ * Transpose a chord by semitones
+ */
+function transposeChord(chord, semitones, useFlats) {
+  return chord.replace(/^([A-G][#b]?)/, (_, root) => {
+    const normalized = NORMALIZE[root] || root;
+    const idx = NOTES_SHARP.indexOf(normalized);
+    if (idx === -1) return root;
+    const newIdx = ((idx + semitones) % 12 + 12) % 12;
+    return useFlats ? NOTES_FLAT[newIdx] : NOTES_SHARP[newIdx];
+  });
 }
 
 /**
  * Apply font size to lyrics lines
- * @param {number} size - Font size in rem
  */
 function applyFontSize(size) {
   const lyricsEl = document.querySelector('#lyrics-content');

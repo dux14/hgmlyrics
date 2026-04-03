@@ -4,7 +4,7 @@
  * Displays song lyrics with section labels, voice-colored highlights,
  * word-level voice spans, font size controls, breadcrumb navigation,
  * album navigation bar, voice part filter with premium chips,
- * chord display with transposition, and swipe gestures.
+ * chord display with transposition, and album navigation.
  */
 
 import { getSongById, filterByAlbum, fetchSongDetail, getAdjacentSongs } from '../lib/store.js';
@@ -335,24 +335,6 @@ export async function renderSongView(container, songId) {
     container.querySelector('#nav-next')?.addEventListener('click', () => {
       if (adjacent.next) navigate(`/song/${adjacent.next.id}`);
     });
-
-    // Swipe detection
-    let touchStartX = 0;
-    let touchStartY = 0;
-
-    container.addEventListener('touchstart', (e) => {
-      touchStartX = e.changedTouches[0].screenX;
-      touchStartY = e.changedTouches[0].screenY;
-    }, { passive: true });
-
-    container.addEventListener('touchend', (e) => {
-      const deltaX = e.changedTouches[0].screenX - touchStartX;
-      const deltaY = e.changedTouches[0].screenY - touchStartY;
-      if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
-        if (deltaX < 0 && adjacent.next) navigate(`/song/${adjacent.next.id}`);
-        if (deltaX > 0 && adjacent.prev) navigate(`/song/${adjacent.prev.id}`);
-      }
-    }, { passive: true });
   }
 }
 

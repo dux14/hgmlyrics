@@ -44,7 +44,8 @@ async function initDB() {
       sections TEXT,
       albumOrder INTEGER DEFAULT 0,
       createdAt TEXT,
-      updatedAt TEXT
+      updatedAt TEXT,
+      cejilla INTEGER
     )
   `);
 }

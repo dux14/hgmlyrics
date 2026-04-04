@@ -50,6 +50,7 @@ function sectionsToBlocks(sections) {
       voiceRanges: line.voiceRanges || [],
       chords: line.chords || [],
       color: line.color || null,
+      annotation: line.annotation || false,
       showChords: (line.chords && line.chords.length > 0),
     })),
   }));
@@ -64,13 +65,14 @@ function blocksToSections(blocks) {
       type: block.type,
       label: block.label,
       lines: block.lines
-        .filter(l => l.text.trim() !== '' || l.chords.length > 0)
+        .filter(l => l.text.trim() !== '' || l.chords.length > 0 || l.annotation)
         .map(l => {
           const line = { text: l.text };
           if (l.voices && l.voices.length > 0) line.voices = l.voices;
           if (l.voiceRanges && l.voiceRanges.length > 0) line.voiceRanges = l.voiceRanges;
           if (l.chords && l.chords.length > 0) line.chords = l.chords;
           if (l.color) line.color = l.color;
+          if (l.annotation) line.annotation = true;
           return line;
         }),
     };
@@ -248,9 +250,15 @@ export async function renderSongEditor(container, editId) {
             <input class="form-group__input" id="song-year" type="number" placeholder="2024" value="${existingSong?.year || ''}" />
           </div>
         </div>
-        <div class="form-group">
-          <label class="form-group__label" for="song-genre">Género</label>
-          <input class="form-group__input" id="song-genre" type="text" placeholder="Pop/Worship" value="${escapeHtml(existingSong?.genre || '')}" />
+        <div class="editor__row-3">
+          <div class="form-group" style="flex: 2;">
+            <label class="form-group__label" for="song-genre">Género</label>
+            <input class="form-group__input" id="song-genre" type="text" placeholder="Pop/Worship" value="${escapeHtml(existingSong?.genre || '')}" />
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-group__label" for="song-cejilla">Cejilla</label>
+            <input class="form-group__input" id="song-cejilla" type="number" min="0" max="12" placeholder="0" value="${existingSong?.cejilla || ''}" />
+          </div>
         </div>
       </div>
 
@@ -829,7 +837,7 @@ async function handleSave(container, existingSong, blocks) {
     const genre = container.querySelector('#song-genre').value.trim() || '';
     const malePercent = Number.parseInt(container.querySelector('#voice-range').value);
 
-    const songId = existingSong?.id || generateSlug(title, album);
+    const songId = existingSong?.id || crypto.randomUUID();
     const albumSlug = generateSlug(album);
     let voiceType;
     if (malePercent >= 70) voiceType = 'male';
@@ -855,6 +863,8 @@ async function handleSave(container, existingSong, blocks) {
     }
 
     // 2. Save song data
+    const cejilla = Number.parseInt(container.querySelector('#song-cejilla').value) || null;
+
     const newSong = {
       id: songId,
       title,
@@ -867,6 +877,7 @@ async function handleSave(container, existingSong, blocks) {
       voicePercent: { male: malePercent, female: 100 - malePercent },
       coverImage,
       albumOrder,
+      cejilla,
       sections: blocksToSections(blocks),
     };
 

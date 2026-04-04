@@ -47,6 +47,37 @@ function songHasChords(song) {
   return song.sections.some(s => s.lines.some(l => l.chords && l.chords.length > 0));
 }
 
+/**
+ * Detect if a line is a timing/performance guide (e.g. "4 TIEMPOS", "4 VUELTAS 🎸", "🎻")
+ * These are visual cues for performers, not actual lyrics
+ */
+function isTimingGuide(text) {
+  if (!text || text.trim() === '') return false;
+  const t = text.trim();
+  // Pattern: number + time unit (with optional emojis)
+  if (/^\d+\s*(TIEMPOS?|VUELTAS?|COMPAS(ES)?|BEATS?)/iu.test(t)) return true;
+  // Pattern: solo instrument emoji or negated instrument
+  if (/^[(\s]*[🎸🎻🥁🎹🎺🎷🪘🎶🎵⚡🔥❌🚫\s)]+$/u.test(t)) return true;
+  // Pattern: word "HOMBRES" or "MUJERES" as voice guide
+  if (/^(HOMBRES|MUJERES|TODOS|TODAS)$/iu.test(t)) return true;
+  return false;
+}
+
+/**
+ * Parse a timing guide line into a structured label
+ * Returns { count, unit, instruments } or null
+ */
+function parseTimingGuide(text) {
+  const trimmed = text.trim();
+  // Match patterns like "4 TIEMPOS", "3 VUELTAS 🎸"
+  const match = trimmed.match(/^(\d+)\s*(TIEMPOS?|VUELTAS?|COMPAS(?:ES)?|BEATS?)\s*(.*)$/i);
+  if (match) {
+    return { count: match[1], unit: match[2].toUpperCase(), extra: match[3].trim() };
+  }
+  // Pure instrument/emoji markers: "🎻", "(🚫🎻)"
+  return { count: null, unit: null, extra: trimmed };
+}
+
 function getVoiceBadgeClass(voiceType) {
   if (voiceType === 'male') return 'voice-badge--male';
   if (voiceType === 'female') return 'voice-badge--female';
@@ -187,6 +218,13 @@ export async function renderSongView(container, songId) {
         <div class="chord-toggle" id="chord-toggle" style="margin-bottom: 0;">
           <button class="chord-toggle__btn chord-toggle__btn--active" data-mode="lyrics">Letra</button>
           <button class="chord-toggle__btn" data-mode="chords">Acordes</button>
+        </div>
+        ` : ''}
+
+        ${(song.cejilla && song.cejilla > 0) ? `
+        <div class="cejilla-badge" title="Colocar cejilla en el traste ${song.cejilla}">
+          <span class="cejilla-badge__icon">🎸</span>
+          <span class="cejilla-badge__text">Cejilla: ${song.cejilla}</span>
         </div>
         ` : ''}
       </div>
@@ -346,6 +384,22 @@ function renderSections(sections, activeVoice = 'all', showChords = false, trans
     <div class="lyrics__section lyrics__section--${section.type}">
       <div class="lyrics__section-label">${escapeHtml(section.label)}</div>
       ${section.lines.map(line => {
+        const text = line.text || '';
+
+        // ── Annotation / Timing guide detection ──
+        if (line.annotation || isTimingGuide(text)) {
+          const guide = parseTimingGuide(text);
+          const guideContent = guide.count
+            ? `<span class="timing-guide__count">${guide.count}</span><span class="timing-guide__unit">${guide.unit}</span>${guide.extra ? `<span class="timing-guide__extra">${escapeHtml(guide.extra)}</span>` : ''}`
+            : `<span class="timing-guide__extra">${escapeHtml(guide.extra)}</span>`;
+          return `<div class="timing-guide">${guideContent}</div>`;
+        }
+
+        // ── Empty lines ──
+        if (text.trim() === '') {
+          return showChords ? '' : `<p class="lyrics__line">&nbsp;</p>`;
+        }
+
         const voices = line.voices || [];
         const isForAll = voices.length === 0;
         const matchesFilter = activeVoice === 'all' || isForAll || voices.includes(activeVoice);
@@ -365,24 +419,34 @@ function renderSections(sections, activeVoice = 'all', showChords = false, trans
         }
 
         if (line.color) {
-          // Legacy color support
           lineColor = line.color;
         } else if (voices.length === 1) {
           lineColor = getVoiceColor(voices[0]);
         } else if (voices.length > 1) {
-          // Multi-voice: use first voice color
           lineColor = getVoiceColor(voices[0]);
         }
 
         const dimmedClass = effectiveMatch ? '' : 'lyrics__line--dimmed';
         const highlightClass = (effectiveMatch && activeVoice !== 'all' && !isForAll) ? 'lyrics__line--highlighted' : '';
 
-        // Build line content — with word-level highlighting if present
+        // ── Chord rendering: Inline Anchored (Propuesta A+B) ──
+        if (showChords && line.chords?.length > 0) {
+          const inlineHtml = buildInlineChordHTML(text, line.chords, transposeSemitones, useFlats);
+          const styleAttrs = [];
+          if (lineHighlightBg) styleAttrs.push(`background: ${lineHighlightBg}`);
+          const styleStr = styleAttrs.length > 0 ? ` style="${styleAttrs.join('; ')}"` : '';
+          return `
+            <div class="chord-line ${dimmedClass} ${highlightClass}"${styleStr}>
+              ${inlineHtml}
+            </div>`;
+        }
+
+        // ── Regular lyrics line (no chords) ──
         let lineContent;
         if (line.voiceRanges && line.voiceRanges.length > 0) {
-          lineContent = buildHighlightedHTML(line.text, line.voiceRanges, voices);
+          lineContent = buildHighlightedHTML(text, line.voiceRanges, voices);
         } else {
-          lineContent = line.text.trim() === '' ? '&nbsp;' : escapeHtml(line.text);
+          lineContent = escapeHtml(text);
         }
 
         const styleAttrs = [];
@@ -390,14 +454,9 @@ function renderSections(sections, activeVoice = 'all', showChords = false, trans
         if (lineHighlightBg) styleAttrs.push(`background: ${lineHighlightBg}`);
         const styleStr = styleAttrs.length > 0 ? ` style="${styleAttrs.join('; ')}"` : '';
 
-        // Chord rendering
-        if (showChords && line.chords?.length > 0) {
-          const chordLine = buildChordPositionString(line.text, line.chords, transposeSemitones, useFlats);
-          return `
-            <div class="lyrics__chord-line ${dimmedClass} ${highlightClass}">
-              <pre class="lyrics__chords">${escapeHtml(chordLine)}</pre>
-              <p class="lyrics__line"${styleStr}>${lineContent}</p>
-            </div>`;
+        // In chord mode, render lines without chords more subtly
+        if (showChords) {
+          return `<p class="lyrics__line lyrics__line--no-chord ${dimmedClass} ${highlightClass}"${styleStr}>${lineContent}</p>`;
         }
 
         return `<p class="lyrics__line ${dimmedClass} ${highlightClass}"${styleStr}>${lineContent}</p>`;
@@ -407,17 +466,49 @@ function renderSections(sections, activeVoice = 'all', showChords = false, trans
 }
 
 /**
- * Build chord position string
+ * Build inline chord HTML — each chord is anchored to its text segment
+ * Creates chord-lyric pairs that are immune to font-size changes
  */
-function buildChordPositionString(text, chords, transposeSemitones = 0, useFlats = false) {
-  const sorted = [...chords].sort((a, b) => a.pos - b.pos);
-  let result = '';
+function buildInlineChordHTML(text, chords, transposeSemitones = 0, useFlats = false) {
+  const sorted = [...chords].sort((a, b) => (a.pos || 0) - (b.pos || 0));
+  const segments = [];
+  let lastPos = 0;
+
   for (const { ch, pos } of sorted) {
+    const chordPos = Math.min(pos || 0, text.length);
     const transposed = transposeSemitones !== 0 ? transposeChord(ch, transposeSemitones, useFlats) : ch;
-    while (result.length < pos) result += ' ';
-    result += transposed;
+
+    // Text before this chord (no chord above it)
+    if (chordPos > lastPos) {
+      const beforeText = text.slice(lastPos, chordPos);
+      segments.push({ chord: null, text: beforeText });
+    }
+
+    // This chord's segment — find the end (next chord pos or end of text)
+    const nextIdx = sorted.findIndex(c => (c.pos || 0) > chordPos);
+    const nextChordPos = nextIdx !== -1 ? (sorted[nextIdx].pos || text.length) : text.length;
+    const segmentText = text.slice(chordPos, nextChordPos);
+    segments.push({ chord: transposed, text: segmentText });
+    lastPos = nextChordPos;
   }
-  return result;
+
+  // Remaining text after last chord
+  if (lastPos < text.length) {
+    segments.push({ chord: null, text: text.slice(lastPos) });
+  }
+
+  return segments.map(seg => {
+    if (seg.chord) {
+      return `<span class="chord-pair">
+        <span class="chord-badge">${escapeHtml(seg.chord)}</span>
+        <span class="chord-text">${escapeHtml(seg.text)}</span>
+      </span>`;
+    }
+    return `<span class="chord-pair chord-pair--empty">
+      <span class="chord-badge">&nbsp;</span>
+      <span class="chord-text">${escapeHtml(seg.text)}</span>
+    </span>`;
+  }).join('');
 }
 
 /**
@@ -434,12 +525,16 @@ function transposeChord(chord, semitones, useFlats) {
 }
 
 /**
- * Apply font size to lyrics lines
+ * Apply font size to lyrics lines and chord pairs
  */
 function applyFontSize(size) {
   const lyricsEl = document.querySelector('#lyrics-content');
   if (lyricsEl) {
     lyricsEl.querySelectorAll('.lyrics__line').forEach((line) => {
+      line.style.fontSize = `${size}rem`;
+    });
+    // Scale chord lines too — the inline pair approach means chords scale with text
+    lyricsEl.querySelectorAll('.chord-line').forEach((line) => {
       line.style.fontSize = `${size}rem`;
     });
   }

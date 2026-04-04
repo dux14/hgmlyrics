@@ -212,12 +212,12 @@ app.post('/api/songs', authMiddleware, async (req, res) => {
       INSERT INTO songs (
         id, title, artist, album, albumSlug, year, genre, 
         voiceType, voicePercentMale, voicePercentFemale, coverImage, 
-        sections, albumOrder, createdAt, updatedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        sections, albumOrder, cejilla, createdAt, updatedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       s.id, s.title, s.artist, s.album, s.albumSlug, s.year, s.genre,
       s.voiceType, s.voicePercent?.male ?? 50, s.voicePercent?.female ?? 50,
-      s.coverImage, sectionsJson, s.albumOrder || 0, new Date().toISOString(), new Date().toISOString()
+      s.coverImage, sectionsJson, s.albumOrder || 0, s.cejilla ?? null, new Date().toISOString(), new Date().toISOString()
     ]);
     invalidateSongsCache();
     bumpDataVersion();
@@ -236,12 +236,12 @@ app.put('/api/songs/:id', authMiddleware, async (req, res) => {
       UPDATE songs SET
         title = ?, artist = ?, album = ?, albumSlug = ?, year = ?, genre = ?,
         voiceType = ?, voicePercentMale = ?, voicePercentFemale = ?, coverImage = ?,
-        sections = ?, albumOrder = ?, updatedAt = ?
+        sections = ?, albumOrder = ?, cejilla = ?, updatedAt = ?
       WHERE id = ?
     `, [
       s.title, s.artist, s.album, s.albumSlug, s.year, s.genre,
       s.voiceType, s.voicePercent?.male ?? 50, s.voicePercent?.female ?? 50,
-      s.coverImage, sectionsJson, s.albumOrder || 0, new Date().toISOString(), id
+      s.coverImage, sectionsJson, s.albumOrder || 0, s.cejilla ?? null, new Date().toISOString(), id
     ]);
     invalidateSongsCache();
     bumpDataVersion();

@@ -709,24 +709,157 @@
   color: #fff;
 }
 
-/* === Chord Display (F6) === */
-.lyrics__chord-line {
-  margin-bottom: 2px;
-  padding: 2px 4px;
-  border-radius: 4px;
+/* === Cejilla Badge === */
+.cejilla-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.45em 0.85em;
+  border-radius: var(--border-radius-full);
+  background: rgba(255, 143, 0, 0.10);
+  border: 1px solid rgba(255, 143, 0, 0.25);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+  white-space: nowrap;
+  transition: all 200ms ease;
+}
+
+.cejilla-badge__icon {
+  font-size: 1em;
+}
+
+.cejilla-badge__text {
+  letter-spacing: 0.02em;
+}
+
+/* === Chord Display — Inline Anchored (A+B Hybrid) === */
+
+/* Container for a line that has chords */
+.chord-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  padding: 0.15em 0.25em;
+  margin: 0.1em 0;
+  border-radius: 6px;
   transition: opacity 300ms ease, background 300ms ease;
+  line-height: 1;
 }
 
-.lyrics__chord-line.lyrics__line--highlighted {
-  padding: 2px 6px;
+.chord-line.lyrics__line--highlighted {
+  padding: 0.15em 0.4em;
 }
 
-.lyrics__chord-line .lyrics__line {
-  font-size: 0.85em;
-  opacity: 0.75;
-  line-height: 1.4;
+.chord-line.lyrics__line--dimmed {
+  opacity: 0.15;
 }
 
+/* Each chord-lyric unit: chord on top, text below */
+.chord-pair {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  position: relative;
+  vertical-align: bottom;
+}
+
+/* The chord badge above the text */
+.chord-badge {
+  display: block;
+  font-weight: 700;
+  color: var(--color-primary);
+  font-size: 0.78em;
+  line-height: 1.3;
+  padding: 0.1em 0.3em;
+  margin-bottom: 0.1em;
+  border-radius: 4px;
+  background: rgba(0, 151, 167, 0.08);
+  white-space: nowrap;
+  user-select: text;
+  letter-spacing: 0.02em;
+  min-height: 1.3em;
+  transition: background 200ms ease, color 200ms ease;
+}
+
+/* Empty chord slot (no chord, just spacing) */
+.chord-pair--empty .chord-badge {
+  background: transparent;
+  color: transparent;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Hover effect on chord badge */
+.chord-pair:not(.chord-pair--empty):hover .chord-badge {
+  background: rgba(0, 151, 167, 0.18);
+  color: var(--color-primary-light);
+}
+
+/* The lyric text below the chord */
+.chord-text {
+  display: block;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  transition: color 200ms ease;
+}
+
+/* Hover text highlight */
+.chord-pair:not(.chord-pair--empty):hover .chord-text {
+  color: var(--color-text);
+}
+
+/* Lines without chords in chord mode — more subtle */
+.lyrics__line--no-chord {
+  opacity: 0.65;
+  padding-left: 0.25em;
+}
+
+/* === Timing Guide Labels === */
+.timing-guide {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.35em 0.9em;
+  margin: 0.6em 0 0.3em;
+  border-radius: 100px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+  user-select: none;
+  transition: all 200ms ease;
+}
+
+.timing-guide__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 700;
+  width: 1.6em;
+  height: 1.6em;
+  border-radius: 50%;
+  font-size: 0.95em;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.timing-guide__unit {
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.timing-guide__extra {
+  font-size: 1.1em;
+}
+
+/* === Legacy chord styles (kept for editor preview compat) === */
 .lyrics__chords {
   font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
   font-size: 1.4em;
@@ -739,6 +872,19 @@
   user-select: text;
   background: rgba(0, 151, 167, 0.05);
   border-radius: 3px;
+}
+
+.lyrics__chord-line {
+  margin-bottom: 2px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: opacity 300ms ease, background 300ms ease;
+}
+
+.lyrics__chord-line .lyrics__line {
+  font-size: 0.85em;
+  opacity: 0.75;
+  line-height: 1.4;
 }
 
 /* === Transpose Controls (F6) === */

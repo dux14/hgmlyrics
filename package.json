@@ -34,6 +34,7 @@
     "vitest": "^4.1.0"
   },
   "dependencies": {
+    "dotenv": "^17.4.0",
     "flexsearch": "^0.8.212",
     "idb-keyval": "^6.2.2"
   }

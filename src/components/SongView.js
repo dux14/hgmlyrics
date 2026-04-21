@@ -23,11 +23,11 @@ const FONT_MAX = 2.5;
 
 // Autoscroll config
 const AUTOSCROLL_SPEED_KEY = 'hkn-autoscroll-speed';
-const AUTOSCROLL_SPEED_MIN = 0.5;
+const AUTOSCROLL_SPEED_MIN = 0.3;
 const AUTOSCROLL_SPEED_MAX = 8.0;
-const AUTOSCROLL_SPEED_STEP = 0.5;
-const AUTOSCROLL_SPEED_DEFAULT = 1.5;
-const AUTOSCROLL_BASE_PX_PER_FRAME = 1.2;
+const AUTOSCROLL_SPEED_STEP = 0.3;
+const AUTOSCROLL_SPEED_DEFAULT = 1.0;
+const AUTOSCROLL_BASE_PX_PER_FRAME = 0.6;
 
 // F6: Transposition
 const NOTES_SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];

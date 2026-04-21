@@ -1022,10 +1022,19 @@
 
 .autoscroll-fab__btn--active {
   background: var(--color-accent);
+  opacity: 0.4;
   box-shadow:
     0 4px 14px rgba(255, 143, 0, 0.35),
     0 2px 6px rgba(0, 0, 0, 0.15);
   animation: fabPulse 2s ease-in-out infinite;
+  transition:
+    opacity 300ms ease,
+    transform 250ms ease;
+}
+
+.autoscroll-fab__btn--active:hover,
+.autoscroll-fab__btn--active:active {
+  opacity: 1;
 }
 
 @keyframes fabPulse {
@@ -1064,9 +1073,16 @@
 }
 
 .autoscroll-fab__controls--visible {
-  opacity: 1;
+  opacity: 0.4;
   transform: translateY(0) scale(1);
   pointer-events: auto;
+  transition:
+    all 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 300ms ease;
+}
+
+.autoscroll-fab__controls--visible:hover {
+  opacity: 1;
 }
 
 .autoscroll-fab__btn--speed {

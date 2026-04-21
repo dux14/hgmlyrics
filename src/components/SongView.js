@@ -719,10 +719,6 @@ function setupAutoscroll(_container) {
     speedLabel.textContent = `${scrollSpeed.toFixed(1)}x`;
   }
 
-  function getScrollEl() {
-    return document.scrollingElement || document.documentElement;
-  }
-
   function startScroll() {
     isScrolling = true;
     // Ignore touch/wheel events for 500ms after starting to prevent false-positive pause
@@ -731,18 +727,33 @@ function setupAutoscroll(_container) {
     toggleBtn.classList.add('autoscroll-fab__btn--active');
     controlsEl.classList.add('autoscroll-fab__controls--visible');
 
+    // Disable CSS smooth scroll — Safari iOS ignores programmatic scroll when it’s active
+    document.documentElement.style.scrollBehavior = 'auto';
+
     let lastTime = performance.now();
+    let accumulated = 0; // Sub-pixel accumulator (Safari truncates fractional scrollTop)
+
     function step(now) {
       if (!isScrolling) return;
       const delta = now - lastTime;
       lastTime = now;
       // 60fps baseline: pixels = basePx * speed * (delta / 16.67)
-      const px = AUTOSCROLL_BASE_PX_PER_FRAME * scrollSpeed * (delta / 16.67);
-      const el = getScrollEl();
-      el.scrollTop += px;
+      accumulated += AUTOSCROLL_BASE_PX_PER_FRAME * scrollSpeed * (delta / 16.67);
+
+      // Only scroll whole pixels (Safari ignores fractional values)
+      if (accumulated >= 1) {
+        const px = Math.floor(accumulated);
+        accumulated -= px;
+        window.scrollTo({
+          top: (window.pageYOffset || 0) + px,
+          behavior: 'instant',
+        });
+      }
 
       // Stop if at the bottom
-      if (el.scrollTop + window.innerHeight >= el.scrollHeight - 2) {
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      const docHeight = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+      if (scrollTop + window.innerHeight >= docHeight - 2) {
         stopScroll();
         return;
       }
@@ -759,6 +770,8 @@ function setupAutoscroll(_container) {
     }
     iconEl.textContent = '▶';
     toggleBtn.classList.remove('autoscroll-fab__btn--active');
+    // Restore CSS smooth scroll
+    document.documentElement.style.scrollBehavior = '';
   }
 
   // Toggle play/pause

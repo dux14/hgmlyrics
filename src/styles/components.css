@@ -457,7 +457,8 @@
   transition: background-color var(--transition-fast);
 }
 
-.song-table__row:hover, .song-table__row:focus {
+.song-table__row:hover,
+.song-table__row:focus {
   background-color: var(--color-surface-hover);
   outline: none;
 }
@@ -716,7 +717,7 @@
   gap: 0.35em;
   padding: 0.45em 0.85em;
   border-radius: var(--border-radius-full);
-  background: rgba(255, 143, 0, 0.10);
+  background: rgba(255, 143, 0, 0.1);
   border: 1px solid rgba(255, 143, 0, 0.25);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
@@ -743,7 +744,9 @@
   padding: 0.15em 0.25em;
   margin: 0.1em 0;
   border-radius: 6px;
-  transition: opacity 300ms ease, background 300ms ease;
+  transition:
+    opacity 300ms ease,
+    background 300ms ease;
   line-height: 1;
 }
 
@@ -779,7 +782,9 @@
   user-select: text;
   letter-spacing: 0.02em;
   min-height: 1.3em;
-  transition: background 200ms ease, color 200ms ease;
+  transition:
+    background 200ms ease,
+    color 200ms ease;
 }
 
 /* Empty chord slot (no chord, just spacing) */
@@ -878,7 +883,9 @@
   margin-bottom: 2px;
   padding: 2px 4px;
   border-radius: 4px;
-  transition: opacity 300ms ease, background 300ms ease;
+  transition:
+    opacity 300ms ease,
+    background 300ms ease;
 }
 
 .lyrics__chord-line .lyrics__line {
@@ -954,4 +961,143 @@
   padding: 2px 8px;
   border-radius: var(--border-radius-full);
   background: rgba(76, 175, 80, 0.1);
+}
+
+/* === Autoscroll FAB === */
+.autoscroll-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 20px;
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  animation: fabIn 400ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes fabIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.autoscroll-fab__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  transition: all 250ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.autoscroll-fab__btn--main {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  box-shadow:
+    0 4px 14px rgba(0, 151, 167, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.15);
+  font-size: 1.2rem;
+}
+
+.autoscroll-fab__btn--main:hover {
+  transform: scale(1.08);
+  box-shadow:
+    0 6px 20px rgba(0, 151, 167, 0.45),
+    0 3px 8px rgba(0, 0, 0, 0.2);
+}
+
+.autoscroll-fab__btn--main:active {
+  transform: scale(0.95);
+}
+
+.autoscroll-fab__btn--active {
+  background: var(--color-accent);
+  box-shadow:
+    0 4px 14px rgba(255, 143, 0, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.15);
+  animation: fabPulse 2s ease-in-out infinite;
+}
+
+@keyframes fabPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 4px 14px rgba(255, 143, 0, 0.35),
+      0 2px 6px rgba(0, 0, 0, 0.15);
+  }
+  50% {
+    box-shadow:
+      0 4px 22px rgba(255, 143, 0, 0.55),
+      0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+}
+
+.autoscroll-fab__icon {
+  line-height: 1;
+  pointer-events: none;
+}
+
+.autoscroll-fab__controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--border-radius-full);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 4px 16px var(--color-shadow);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  transform: translateY(8px) scale(0.9);
+  pointer-events: none;
+  transition: all 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.autoscroll-fab__controls--visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.autoscroll-fab__btn--speed {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+}
+
+.autoscroll-fab__btn--speed:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-primary);
+}
+
+.autoscroll-fab__btn--speed:active {
+  transform: scale(0.9);
+}
+
+.autoscroll-fab__speed {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  min-width: 32px;
+  text-align: center;
+  user-select: none;
+}
+
+/* Adjust FAB position when toast is visible */
+.toast.visible ~ .autoscroll-fab {
+  bottom: 80px;
 }

@@ -339,7 +339,9 @@
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
   overflow: hidden;
-  transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    box-shadow var(--transition-fast),
+    border-color var(--transition-fast);
   border-left: 4px solid var(--color-primary);
 }
 
@@ -393,7 +395,9 @@
   font-weight: var(--font-weight-semibold);
   color: var(--color-text);
   min-width: 100px;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
 }
 
 .section-block__label-input:hover {
@@ -590,6 +594,17 @@
   color: var(--color-error);
 }
 
+.line-row__btn--annotation.line-row__btn--active {
+  color: var(--color-accent);
+  background: rgba(255, 143, 0, 0.12);
+  border-radius: var(--border-radius-sm);
+  opacity: 1;
+}
+
+.line-row__btn--annotation:hover {
+  color: var(--color-accent);
+}
+
 /* === Voice Popover === */
 .voice-popover {
   background: var(--color-surface);
@@ -603,8 +618,14 @@
 }
 
 @keyframes popoverIn {
-  from { opacity: 0; transform: translateY(-4px) scale(0.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .voice-popover__title {
@@ -696,8 +717,12 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .import-modal {
@@ -714,8 +739,14 @@
 }
 
 @keyframes modalIn {
-  from { opacity: 0; transform: translateY(20px) scale(0.95); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .import-modal__header {

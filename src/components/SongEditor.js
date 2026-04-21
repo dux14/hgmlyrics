@@ -10,14 +10,13 @@ import { fetchSongDetail, refreshData } from '../lib/store.js';
 import { renderLogoutButton } from './AdminGate.js';
 import { navigate } from '../router.js';
 import { getToken } from '../lib/auth.js';
+import { renderSongView } from './SongView.js';
 import {
   VOICE_GROUPS,
-  VOICE_TYPES,
   VALID_VOICE_IDS,
   getVoiceColor,
   getVoiceBgColor,
   getVoiceLabel,
-  buildHighlightedHTML,
 } from '../lib/voiceSystem.js';
 
 const API_URL = '/api';
@@ -51,7 +50,7 @@ function sectionsToBlocks(sections) {
       chords: line.chords || [],
       color: line.color || null,
       annotation: line.annotation || false,
-      showChords: (line.chords && line.chords.length > 0),
+      showChords: line.chords && line.chords.length > 0,
     })),
   }));
 }
@@ -60,13 +59,13 @@ function sectionsToBlocks(sections) {
  * Convert editable blocks back to sections JSON for saving
  */
 function blocksToSections(blocks) {
-  return blocks.map(block => {
+  return blocks.map((block) => {
     const section = {
       type: block.type,
       label: block.label,
       lines: block.lines
-        .filter(l => l.text.trim() !== '' || l.chords.length > 0 || l.annotation)
-        .map(l => {
+        .filter((l) => l.text.trim() !== '' || l.chords.length > 0 || l.annotation)
+        .map((l) => {
           const line = { text: l.text };
           if (l.voices && l.voices.length > 0) line.voices = l.voices;
           if (l.voiceRanges && l.voiceRanges.length > 0) line.voiceRanges = l.voiceRanges;
@@ -124,7 +123,7 @@ function parseImportText(text) {
       let voices = [];
       const voiceMatch = line.match(/^\{@([a-z,]+)\}/);
       if (voiceMatch) {
-        voices = voiceMatch[1].split(',').filter(v => VALID_VOICE_IDS.includes(v));
+        voices = voiceMatch[1].split(',').filter((v) => VALID_VOICE_IDS.includes(v));
         line = line.slice(voiceMatch[0].length);
       }
 
@@ -146,7 +145,7 @@ function parseImportText(text) {
         voiceRanges: [],
         chords: chords || [],
         color,
-        showChords: (chords && chords.length > 0),
+        showChords: chords && chords.length > 0,
       });
     }
   }
@@ -186,7 +185,9 @@ function guessType(label) {
 
 /* ─── Unique ID generator ─── */
 let _idCounter = 0;
-function uid() { return `uid-${Date.now()}-${_idCounter++}`; }
+function uid() {
+  return `uid-${Date.now()}-${_idCounter++}`;
+}
 
 /* ─── Main Render ─── */
 
@@ -212,13 +213,15 @@ export async function renderSongEditor(container, editId) {
           <button class="btn btn--secondary" id="editor-back-home">← Volver</button>
         </div>
       `;
-      container.querySelector('#editor-back-home')?.addEventListener('click', () => navigate('/admin/edit'));
+      container
+        .querySelector('#editor-back-home')
+        ?.addEventListener('click', () => navigate('/admin/edit'));
       return;
     }
   }
 
   // Editable state
-  let blocks = existingSong ? sectionsToBlocks(existingSong.sections) : [];
+  const blocks = existingSong ? sectionsToBlocks(existingSong.sections) : [];
 
   // Build the editor HTML
   container.innerHTML = `
@@ -330,10 +333,16 @@ export async function renderSongEditor(container, editId) {
   const coverInput = container.querySelector('#cover-input');
   const imagePreview = container.querySelector('#image-preview');
   uploadArea.addEventListener('click', () => coverInput.click());
-  uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.style.borderColor = 'var(--color-primary)'; });
-  uploadArea.addEventListener('dragleave', () => { uploadArea.style.borderColor = ''; });
+  uploadArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadArea.style.borderColor = 'var(--color-primary)';
+  });
+  uploadArea.addEventListener('dragleave', () => {
+    uploadArea.style.borderColor = '';
+  });
   uploadArea.addEventListener('drop', (e) => {
-    e.preventDefault(); uploadArea.style.borderColor = '';
+    e.preventDefault();
+    uploadArea.style.borderColor = '';
     if (e.dataTransfer.files.length > 0) handleImageFile(e.dataTransfer.files[0], imagePreview);
   });
   coverInput.addEventListener('change', () => {
@@ -344,16 +353,21 @@ export async function renderSongEditor(container, editId) {
   const editorRoot = container.querySelector('#block-editor');
 
   function renderBlocks() {
-    editorRoot.innerHTML = blocks.map((block, bi) => renderSectionBlock(block, bi, blocks.length)).join('');
+    editorRoot.innerHTML = blocks
+      .map((block, bi) => renderSectionBlock(block, bi, blocks.length))
+      .join('');
     updatePreview();
   }
 
   function renderSectionBlock(block, index, total) {
-    const typeOptions = SECTION_TYPES.map(s =>
-      `<option value="${s.type}" ${s.type === block.type ? 'selected' : ''}>${s.label}</option>`
+    const typeOptions = SECTION_TYPES.map(
+      (s) =>
+        `<option value="${s.type}" ${s.type === block.type ? 'selected' : ''}>${s.label}</option>`,
     ).join('');
 
-    const linesHtml = block.lines.map((line, li) => renderLineRow(line, li, block.lines.length, block.id)).join('');
+    const linesHtml = block.lines
+      .map((line, li) => renderLineRow(line, li, block.lines.length, block.id))
+      .join('');
 
     return `
       <div class="section-block" data-section-id="${block.id}" data-section-index="${index}">
@@ -378,10 +392,13 @@ export async function renderSongEditor(container, editId) {
     `;
   }
 
-  function renderLineRow(line, lineIndex, totalLines, sectionId) {
-    const voiceChips = line.voices.map(v =>
-      `<span class="line-row__voice-chip" style="background: ${getVoiceBgColor(v)}; color: ${getVoiceColor(v)};">${getVoiceLabel(v)}</span>`
-    ).join('');
+  function renderLineRow(line, _lineIndex, _totalLines, _sectionId) {
+    const voiceChips = line.voices
+      .map(
+        (v) =>
+          `<span class="line-row__voice-chip" style="background: ${getVoiceBgColor(v)}; color: ${getVoiceColor(v)};">${getVoiceLabel(v)}</span>`,
+      )
+      .join('');
 
     const chordRowHtml = line.showChords
       ? `<input class="line-row__chord-input" type="text" value="${escapeHtml(buildChordString(line.text, line.chords))}" data-action="edit-chords" data-line-id="${line.id}" placeholder="Ej: Am    F    C    G" />`
@@ -396,6 +413,7 @@ export async function renderSongEditor(container, editId) {
             ${voiceChips}
             <button class="line-row__btn line-row__btn--voice" data-action="toggle-voice" data-line-id="${line.id}" title="Asignar voces">🎤</button>
             <button class="line-row__btn ${line.showChords ? 'line-row__btn--active' : ''}" data-action="toggle-chords" data-line-id="${line.id}" title="Acordes">🎸</button>
+            <button class="line-row__btn ${line.annotation ? 'line-row__btn--active line-row__btn--annotation' : ''}" data-action="toggle-annotation" data-line-id="${line.id}" title="Marcar como anotación/guía">🏷️</button>
             <button class="line-row__btn line-row__btn--delete" data-action="delete-line" data-line-id="${line.id}" title="Eliminar">✕</button>
           </div>
         </div>
@@ -433,7 +451,7 @@ export async function renderSongEditor(container, editId) {
   // Find line/section by IDs
   function findLine(lineId) {
     for (const block of blocks) {
-      const line = block.lines.find(l => l.id === lineId);
+      const line = block.lines.find((l) => l.id === lineId);
       if (line) return { block, line };
     }
     return null;
@@ -444,20 +462,32 @@ export async function renderSongEditor(container, editId) {
     const action = e.target.dataset.action;
     if (action === 'edit-text') {
       const found = findLine(e.target.dataset.lineId);
-      if (found) { found.line.text = e.target.value; updatePreview(); }
+      if (found) {
+        found.line.text = e.target.value;
+        updatePreview();
+      }
     } else if (action === 'edit-chords') {
       const found = findLine(e.target.dataset.lineId);
-      if (found) { found.line.chords = parseChordsFromInput(e.target.value); updatePreview(); }
+      if (found) {
+        found.line.chords = parseChordsFromInput(e.target.value);
+        updatePreview();
+      }
     } else if (action === 'change-label') {
       const si = parseInt(e.target.dataset.section);
-      if (blocks[si]) { blocks[si].label = e.target.value; updatePreview(); }
+      if (blocks[si]) {
+        blocks[si].label = e.target.value;
+        updatePreview();
+      }
     }
   });
 
   editorRoot.addEventListener('change', (e) => {
     if (e.target.dataset.action === 'change-type') {
       const si = parseInt(e.target.dataset.section);
-      if (blocks[si]) { blocks[si].type = e.target.value; renderBlocks(); }
+      if (blocks[si]) {
+        blocks[si].type = e.target.value;
+        renderBlocks();
+      }
     }
   });
 
@@ -479,42 +509,44 @@ export async function renderSongEditor(container, editId) {
       });
       renderBlocks();
       // Focus the new line input
-      const lastInput = editorRoot.querySelector(`[data-section-index="${si}"] .line-row:last-child .line-row__input`);
+      const lastInput = editorRoot.querySelector(
+        `[data-section-index="${si}"] .line-row:last-child .line-row__input`,
+      );
       lastInput?.focus();
-    }
-
-    else if (action === 'delete-line') {
+    } else if (action === 'delete-line') {
       const found = findLine(btn.dataset.lineId);
       if (found) {
-        found.block.lines = found.block.lines.filter(l => l.id !== btn.dataset.lineId);
+        found.block.lines = found.block.lines.filter((l) => l.id !== btn.dataset.lineId);
         renderBlocks();
       }
-    }
-
-    else if (action === 'toggle-chords') {
+    } else if (action === 'toggle-chords') {
       const found = findLine(btn.dataset.lineId);
       if (found) {
         found.line.showChords = !found.line.showChords;
         renderBlocks();
       }
-    }
-
-    else if (action === 'toggle-voice') {
+    } else if (action === 'toggle-annotation') {
+      const found = findLine(btn.dataset.lineId);
+      if (found) {
+        found.line.annotation = !found.line.annotation;
+        renderBlocks();
+      }
+    } else if (action === 'toggle-voice') {
       const lineId = btn.dataset.lineId;
       showVoicePopover(btn, lineId);
-    }
-
-    else if (action === 'move-section-up') {
+    } else if (action === 'move-section-up') {
       const si = parseInt(btn.dataset.section);
-      if (si > 0) { [blocks[si - 1], blocks[si]] = [blocks[si], blocks[si - 1]]; renderBlocks(); }
-    }
-
-    else if (action === 'move-section-down') {
+      if (si > 0) {
+        [blocks[si - 1], blocks[si]] = [blocks[si], blocks[si - 1]];
+        renderBlocks();
+      }
+    } else if (action === 'move-section-down') {
       const si = parseInt(btn.dataset.section);
-      if (si < blocks.length - 1) { [blocks[si], blocks[si + 1]] = [blocks[si + 1], blocks[si]]; renderBlocks(); }
-    }
-
-    else if (action === 'delete-section') {
+      if (si < blocks.length - 1) {
+        [blocks[si], blocks[si + 1]] = [blocks[si + 1], blocks[si]];
+        renderBlocks();
+      }
+    } else if (action === 'delete-section') {
       const si = parseInt(btn.dataset.section);
       if (confirm(`¿Eliminar la sección "${blocks[si].label}"?`)) {
         blocks.splice(si, 1);
@@ -525,21 +557,23 @@ export async function renderSongEditor(container, editId) {
 
   // Add section button
   container.querySelector('#add-section-btn').addEventListener('click', () => {
-    const verseCount = blocks.filter(b => b.type === 'verse').length;
+    const verseCount = blocks.filter((b) => b.type === 'verse').length;
     blocks.push({
       id: uid(),
       type: 'verse',
       label: `Verso ${verseCount + 1}`,
       voices: [],
-      lines: [{
-        id: uid(),
-        text: '',
-        voices: [],
-        voiceRanges: [],
-        chords: [],
-        color: null,
-        showChords: false,
-      }],
+      lines: [
+        {
+          id: uid(),
+          text: '',
+          voices: [],
+          voiceRanges: [],
+          chords: [],
+          color: null,
+          showChords: false,
+        },
+      ],
     });
     renderBlocks();
     // Focus the new section's first input
@@ -559,12 +593,14 @@ export async function renderSongEditor(container, editId) {
     popover.className = 'voice-popover';
     popover.innerHTML = `
       <div class="voice-popover__title">Asignar voces</div>
-      ${VOICE_GROUPS.map(group => `
+      ${VOICE_GROUPS.map(
+        (group) => `
         <div class="voice-popover__group">
           <div class="voice-popover__group-label">${group.label}</div>
-          ${group.voices.map(v => {
-            const isActive = found.line.voices.includes(v.id);
-            return `
+          ${group.voices
+            .map((v) => {
+              const isActive = found.line.voices.includes(v.id);
+              return `
               <button class="voice-popover__chip ${isActive ? 'voice-popover__chip--active' : ''}"
                 data-voice-id="${v.id}"
                 style="${isActive ? `background: ${getVoiceBgColor(v.id)}; color: ${getVoiceColor(v.id)}; border-color: ${getVoiceColor(v.id)};` : ''}">
@@ -572,9 +608,11 @@ export async function renderSongEditor(container, editId) {
                 ${v.label} <span class="voice-popover__sublabel">(${v.sublabel})</span>
               </button>
             `;
-          }).join('')}
+            })
+            .join('')}
         </div>
-      `).join('')}
+      `,
+      ).join('')}
       <button class="voice-popover__clear" data-voice-clear="true">Quitar todas</button>
     `;
 
@@ -594,13 +632,15 @@ export async function renderSongEditor(container, editId) {
       if (chip) {
         const vid = chip.dataset.voiceId;
         if (found.line.voices.includes(vid)) {
-          found.line.voices = found.line.voices.filter(v => v !== vid);
+          found.line.voices = found.line.voices.filter((v) => v !== vid);
         } else {
           found.line.voices.push(vid);
         }
         renderBlocks();
         // Reopen popover if still relevant
-        const newAnchor = editorRoot.querySelector(`[data-line-id="${lineId}"][data-action="toggle-voice"]`);
+        const newAnchor = editorRoot.querySelector(
+          `[data-line-id="${lineId}"][data-action="toggle-voice"]`,
+        );
         if (newAnchor) showVoicePopover(newAnchor, lineId);
         return;
       }
@@ -621,7 +661,11 @@ export async function renderSongEditor(container, editId) {
   }
 
   function handleOutsideClick(e) {
-    if (activePopover && !activePopover.contains(e.target) && !e.target.closest('[data-action="toggle-voice"]')) {
+    if (
+      activePopover &&
+      !activePopover.contains(e.target) &&
+      !e.target.closest('[data-action="toggle-voice"]')
+    ) {
       closePopover();
     }
   }
@@ -671,15 +715,19 @@ export async function renderSongEditor(container, editId) {
     textarea.addEventListener('input', () => {
       const parsed = parseImportText(textarea.value);
       if (parsed.length === 0) {
-        previewEl.innerHTML = '<p style="color: var(--color-text-secondary); font-size: 0.85rem;">La vista previa aparecerá aquí...</p>';
+        previewEl.innerHTML =
+          '<p style="color: var(--color-text-secondary); font-size: 0.85rem;">La vista previa aparecerá aquí...</p>';
         return;
       }
-      previewEl.innerHTML = parsed.map(block =>
-        `<div style="margin-bottom: 0.75rem;">
+      previewEl.innerHTML = parsed
+        .map(
+          (block) =>
+            `<div style="margin-bottom: 0.75rem;">
           <div style="font-size: 0.75rem; font-weight: 600; color: var(--color-primary); margin-bottom: 0.25rem; text-transform: uppercase;">${escapeHtml(block.label)}</div>
-          ${block.lines.map(l => `<div style="font-size: 0.85rem; padding: 1px 0;">${escapeHtml(l.text)}</div>`).join('')}
-        </div>`
-      ).join('');
+          ${block.lines.map((l) => `<div style="font-size: 0.85rem; padding: 1px 0;">${escapeHtml(l.text)}</div>`).join('')}
+        </div>`,
+        )
+        .join('');
     });
 
     overlay.querySelector('#import-close').addEventListener('click', () => overlay.remove());
@@ -705,60 +753,38 @@ export async function renderSongEditor(container, editId) {
   function updatePreview() {
     const previewEl = container.querySelector('#preview-content');
     const sections = blocksToSections(blocks);
-    if (sections.length === 0 || sections.every(s => s.lines.length === 0)) {
-      previewEl.innerHTML = '<p style="color: var(--color-text-secondary); font-size: 0.875rem;">Agrega secciones y letras para ver la vista previa.</p>';
+    if (sections.length === 0 || sections.every((s) => s.lines.length === 0)) {
+      previewEl.innerHTML =
+        '<p style="color: var(--color-text-secondary); font-size: 0.875rem;">Agrega secciones y letras para ver la vista previa.</p>';
       return;
     }
 
-    previewEl.innerHTML = sections.map(section => {
-      const linesHtml = section.lines.map(l => {
-        const voices = l.voices || [];
-        let lineColor = '';
-        if (l.color) {
-          lineColor = l.color;
-        } else if (voices.length === 1) {
-          lineColor = getVoiceColor(voices[0]);
-        }
+    // Build a draft song object for renderSongView
+    const title = container.querySelector('#song-title')?.value?.trim() || 'Sin título';
+    const artist = container.querySelector('#song-artist')?.value?.trim() || 'Hakuna Group Music';
+    const album = container.querySelector('#song-album')?.value?.trim() || '';
+    const year = container.querySelector('#song-year')?.value || '';
+    const genre = container.querySelector('#song-genre')?.value?.trim() || '';
+    const malePercent = Number.parseInt(container.querySelector('#voice-range')?.value) || 50;
+    let voiceType;
+    if (malePercent >= 70) voiceType = 'male';
+    else if (malePercent <= 30) voiceType = 'female';
+    else voiceType = 'mixed';
 
-        const displayText = l.voiceRanges?.length > 0
-          ? buildHighlightedHTML(l.text, l.voiceRanges, voices)
-          : (l.text.trim() === '' ? '&nbsp;' : escapeHtml(l.text));
+    const draftSong = {
+      isPreview: true,
+      title,
+      artist,
+      album,
+      year,
+      genre,
+      voiceType,
+      voicePercent: { male: malePercent, female: 100 - malePercent },
+      coverImage: '',
+      sections,
+    };
 
-        const styleStr = lineColor && !l.voiceRanges?.length ? ` color: ${lineColor};` : '';
-
-        const voiceLabel = voices.length > 0 ? `<span style="font-size: 0.65rem; opacity: 0.6;"> [${voices.map(v => getVoiceLabel(v)).join(', ')}]</span>` : '';
-
-        // Chord display
-        if (l.chords?.length > 0) {
-          const chordLine = buildChordPositionStringPreview(l.text, l.chords);
-          return `
-            <div class="lyrics__chord-line">
-              <pre class="lyrics__chords" style="${styleStr}">${escapeHtml(chordLine)}</pre>
-              <p class="lyrics__line" style="font-size: 1rem; line-height: 1.6;${styleStr}">${displayText}${voiceLabel}</p>
-            </div>`;
-        }
-
-        return `<p class="lyrics__line" style="font-size: 1rem; line-height: 1.6;${styleStr}">${displayText}${voiceLabel}</p>`;
-      }).join('');
-
-      return `
-        <div class="lyrics__section lyrics__section--${section.type}" style="margin-bottom: 1.25rem;">
-          <div class="lyrics__section-label">${escapeHtml(section.label)}</div>
-          ${linesHtml}
-        </div>
-      `;
-    }).join('');
-  }
-
-  function buildChordPositionStringPreview(text, chords) {
-    if (!chords || chords.length === 0) return '';
-    const sorted = [...chords].sort((a, b) => a.pos - b.pos);
-    let result = '';
-    for (const { ch, pos } of sorted) {
-      while (result.length < pos) result += ' ';
-      result += ch;
-    }
-    return result;
+    renderSongView(previewEl, draftSong);
   }
 
   // ─── Initial render ───
@@ -769,11 +795,15 @@ export async function renderSongEditor(container, editId) {
 
   // ─── Delete ───
   if (existingSong) {
-    container.querySelector('#editor-delete')?.addEventListener('click', () => handleDelete(existingSong));
+    container
+      .querySelector('#editor-delete')
+      ?.addEventListener('click', () => handleDelete(existingSong));
   }
 
   // ─── Save ───
-  container.querySelector('#editor-save').addEventListener('click', () => handleSave(container, existingSong, blocks));
+  container
+    .querySelector('#editor-save')
+    .addEventListener('click', () => handleSave(container, existingSong, blocks));
 }
 
 /* ─── Image handling ─── */
@@ -833,7 +863,8 @@ async function handleSave(container, existingSong, blocks) {
     const artist = container.querySelector('#song-artist').value.trim() || 'Hakuna Group Music';
     const album = container.querySelector('#song-album').value.trim() || 'Sin álbum';
     const albumOrder = Number.parseInt(container.querySelector('#song-order').value) || 0;
-    const year = Number.parseInt(container.querySelector('#song-year').value) || new Date().getFullYear();
+    const year =
+      Number.parseInt(container.querySelector('#song-year').value) || new Date().getFullYear();
     const genre = container.querySelector('#song-genre').value.trim() || '';
     const malePercent = Number.parseInt(container.querySelector('#voice-range').value);
 
@@ -853,8 +884,8 @@ async function handleSave(container, existingSong, blocks) {
       fd.append('cover', compressedCoverBlob, `${albumSlug}.webp`);
       const imgRes = await fetch(`${API_URL}/upload`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: fd
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
       });
       if (imgRes.ok) {
         const imgData = await imgRes.json();
@@ -888,7 +919,7 @@ async function handleSave(container, existingSong, blocks) {
       method,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(newSong),
     });
@@ -896,7 +927,7 @@ async function handleSave(container, existingSong, blocks) {
     if (!res.ok) throw new Error('Error guardando la canción');
 
     await refreshData();
-    navigate('/');
+    navigate(existingSong ? '/admin/edit' : '/admin');
     showToast('✅ Canción guardada correctamente');
   } catch (err) {
     console.error(err);
@@ -915,7 +946,7 @@ async function handleDelete(song) {
   try {
     const res = await fetch(`${API_URL}/songs/${song.id}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) throw new Error('Error al eliminar');
     await refreshData();

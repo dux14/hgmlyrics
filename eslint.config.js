@@ -28,6 +28,13 @@ export default [
         FileReader: 'readonly',
         Image: 'readonly',
         TextEncoder: 'readonly',
+        globalThis: 'readonly',
+        performance: 'readonly',
+        requestAnimationFrame: 'readonly',
+        cancelAnimationFrame: 'readonly',
+        FormData: 'readonly',
+        confirm: 'readonly',
+        alert: 'readonly',
       },
     },
     rules: {

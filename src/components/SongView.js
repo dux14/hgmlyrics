@@ -726,6 +726,7 @@ function setupAutoscroll(_container) {
     iconEl.textContent = '⏸';
     toggleBtn.classList.add('autoscroll-fab__btn--active');
     controlsEl.classList.add('autoscroll-fab__controls--visible');
+    fab.classList.add('autoscroll-fab--playing');
 
     // Disable CSS smooth scroll — Safari iOS ignores programmatic scroll when it’s active
     document.documentElement.style.scrollBehavior = 'auto';
@@ -770,6 +771,7 @@ function setupAutoscroll(_container) {
     }
     iconEl.textContent = '▶';
     toggleBtn.classList.remove('autoscroll-fab__btn--active');
+    fab.classList.remove('autoscroll-fab--playing');
     // Restore CSS smooth scroll
     document.documentElement.style.scrollBehavior = '';
   }
@@ -811,6 +813,8 @@ function setupAutoscroll(_container) {
   }
   window.addEventListener('wheel', onUserScroll, { passive: true });
   window.addEventListener('touchmove', onUserScroll, { passive: true });
+  window.addEventListener('touchstart', onUserScroll, { passive: true });
+  window.addEventListener('mousedown', onUserScroll, { passive: true });
 
   // Cleanup when navigating away (hashchange)
   function cleanup() {
@@ -818,6 +822,8 @@ function setupAutoscroll(_container) {
     fab.remove();
     window.removeEventListener('wheel', onUserScroll);
     window.removeEventListener('touchmove', onUserScroll);
+    window.removeEventListener('touchstart', onUserScroll);
+    window.removeEventListener('mousedown', onUserScroll);
     window.removeEventListener('hashchange', cleanup);
   }
   window.addEventListener('hashchange', cleanup);

@@ -23,11 +23,11 @@ const FONT_MAX = 2.5;
 
 // Autoscroll config
 const AUTOSCROLL_SPEED_KEY = 'hkn-autoscroll-speed';
-const AUTOSCROLL_SPEED_MIN = 0.3;
-const AUTOSCROLL_SPEED_MAX = 5.0;
-const AUTOSCROLL_SPEED_STEP = 0.3;
-const AUTOSCROLL_SPEED_DEFAULT = 1.0;
-const AUTOSCROLL_BASE_PX_PER_FRAME = 0.6;
+const AUTOSCROLL_SPEED_MIN = 0.5;
+const AUTOSCROLL_SPEED_MAX = 8.0;
+const AUTOSCROLL_SPEED_STEP = 0.5;
+const AUTOSCROLL_SPEED_DEFAULT = 1.5;
+const AUTOSCROLL_BASE_PX_PER_FRAME = 1.2;
 
 // F6: Transposition
 const NOTES_SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -693,6 +693,7 @@ function setupAutoscroll(_container) {
   let scrollSpeed = getAutoscrollSpeed();
   let isScrolling = false;
   let rafId = null;
+  let ignoreScrollUntil = 0; // Debounce: ignore scroll events briefly after starting
 
   // Inject FAB
   const fab = document.createElement('div');
@@ -718,8 +719,14 @@ function setupAutoscroll(_container) {
     speedLabel.textContent = `${scrollSpeed.toFixed(1)}x`;
   }
 
+  function getScrollEl() {
+    return document.scrollingElement || document.documentElement;
+  }
+
   function startScroll() {
     isScrolling = true;
+    // Ignore touch/wheel events for 500ms after starting to prevent false-positive pause
+    ignoreScrollUntil = Date.now() + 500;
     iconEl.textContent = '⏸';
     toggleBtn.classList.add('autoscroll-fab__btn--active');
     controlsEl.classList.add('autoscroll-fab__controls--visible');
@@ -731,10 +738,11 @@ function setupAutoscroll(_container) {
       lastTime = now;
       // 60fps baseline: pixels = basePx * speed * (delta / 16.67)
       const px = AUTOSCROLL_BASE_PX_PER_FRAME * scrollSpeed * (delta / 16.67);
-      window.scrollBy(0, px);
+      const el = getScrollEl();
+      el.scrollTop += px;
 
       // Stop if at the bottom
-      if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 2) {
+      if (el.scrollTop + window.innerHeight >= el.scrollHeight - 2) {
         stopScroll();
         return;
       }
@@ -779,9 +787,14 @@ function setupAutoscroll(_container) {
     updateSpeedLabel();
   });
 
-  // Pause on user manual scroll (touch or wheel)
-  function onUserScroll() {
-    if (isScrolling) stopScroll();
+  // Pause on user manual scroll (touch or wheel) — but ignore touches on the FAB itself
+  function onUserScroll(e) {
+    if (!isScrolling) return;
+    // Debounce: ignore events right after starting scroll
+    if (Date.now() < ignoreScrollUntil) return;
+    // Ignore touches/clicks on the FAB itself
+    if (e.target && fab.contains(e.target)) return;
+    stopScroll();
   }
   window.addEventListener('wheel', onUserScroll, { passive: true });
   window.addEventListener('touchmove', onUserScroll, { passive: true });

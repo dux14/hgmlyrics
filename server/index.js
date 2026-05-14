@@ -8,6 +8,17 @@ const jwt = require('jsonwebtoken');
 
 const { all, get, run } = require('./db');
 
+// Fail-fast: rechazar arranque sin secrets críticos definidos.
+const REQUIRED_ENV = ['ADMIN_PIN', 'JWT_SECRET'];
+const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
+if (missing.length > 0) {
+  console.error(
+    `❌ Missing required env vars: ${missing.join(', ')}.\n` +
+      `   Copy server/.env.example → server/.env and fill the values.`
+  );
+  process.exit(1);
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -61,8 +72,8 @@ app.post('/api/auth/login', (req, res) => {
   const { pin } = req.body;
   if (!pin) return res.status(400).json({ error: 'PIN is required' });
   
-  if (pin === (process.env.ADMIN_PIN || '1234')) {
-    const token = jwt.sign({ admin: true }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
+  if (pin === process.env.ADMIN_PIN) {
+    const token = jwt.sign({ admin: true }, process.env.JWT_SECRET, { expiresIn: '7d' });
     return res.json({ token });
   }
   

@@ -1,22 +1,25 @@
 const { createClient } = require('@libsql/client');
 const path = require('path');
 
-// Embedded Replica mode:
-// - In production: local replica file syncs with Turso cloud.
-//   Reads are instant (local file), writes go to remote then sync back.
-// - In development: uses local sqlite.db directly (no remote).
-const isProduction = !!process.env.TURSO_DATABASE_URL;
+// Client modes (resolved at module load):
+// 1. DB_URL set        → use it directly (tests use ':memory:').
+// 2. TURSO_DATABASE_URL → embedded replica mode (production).
+// 3. fallback           → local sqlite.db (development).
+const isTest = !!process.env.DB_URL;
+const isProduction = !isTest && !!process.env.TURSO_DATABASE_URL;
 
-const client = isProduction
-  ? createClient({
-      url: `file:${path.resolve(__dirname, 'local-replica.db')}`,
-      syncUrl: process.env.TURSO_DATABASE_URL,
-      authToken: process.env.TURSO_AUTH_TOKEN,
-      syncInterval: 60, // auto-sync every 60 seconds
-    })
-  : createClient({
-      url: `file:${path.resolve(__dirname, 'sqlite.db')}`,
-    });
+const client = isTest
+  ? createClient({ url: process.env.DB_URL })
+  : isProduction
+    ? createClient({
+        url: `file:${path.resolve(__dirname, 'local-replica.db')}`,
+        syncUrl: process.env.TURSO_DATABASE_URL,
+        authToken: process.env.TURSO_AUTH_TOKEN,
+        syncInterval: 60, // auto-sync every 60 seconds
+      })
+    : createClient({
+        url: `file:${path.resolve(__dirname, 'sqlite.db')}`,
+      });
 
 /**
  * Initialize the database: sync replica + create schema
@@ -93,4 +96,17 @@ const get = async (sql, params = []) => {
   return result.rows[0] || null;
 };
 
-module.exports = { client, run, all, get };
+/**
+ * Drop and recreate the songs table. ONLY for tests with DB_URL=:memory:.
+ * Throws if invoked in production.
+ */
+async function resetDb() {
+  if (!process.env.DB_URL) {
+    throw new Error('resetDb() only allowed when DB_URL is set (test mode)');
+  }
+  await dbReady;
+  await client.execute('DROP TABLE IF EXISTS songs');
+  await initDB();
+}
+
+module.exports = { client, run, all, get, resetDb };

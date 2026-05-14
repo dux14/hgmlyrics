@@ -47,6 +47,41 @@ export default [
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**'],
+    // Server (Node, CommonJS) overrides
+    files: ['server/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'commonjs',
+      globals: {
+        require: 'readonly',
+        module: 'readonly',
+        exports: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+        console: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        URL: 'readonly',
+        global: 'readonly',
+      },
+    },
+    rules: {
+      // Server may log freely (operational logging).
+      'no-console': 'off',
+    },
+  },
+  {
+    // Vitest config is ESM (uses `import` / `export default`).
+    files: ['server/vitest.config.js'],
+    languageOptions: {
+      sourceType: 'module',
+    },
+  },
+  {
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'server/node_modules/**'],
   },
 ];

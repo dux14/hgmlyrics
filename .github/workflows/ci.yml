@@ -50,10 +50,7 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Install Lighthouse CI
-        run: pnpm add -g @lhci/cli@^0.14.0
-
       - name: Lighthouse CI
-        run: lhci autorun
+        run: pnpm exec lhci autorun
         env:
           LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}

@@ -1,5 +1,16 @@
 const jwt = require('jsonwebtoken');
-const { run, resetDb } = require('../db');
+const { run, resetDb: resetDbRaw } = require('../db');
+const { invalidateSongsCache } = require('../index');
+
+/**
+ * Reset the DB AND the in-memory songs cache from index.js.
+ * Tests share module-level state (songsCache, dataVersion) — without this
+ * a previous test's empty result can persist across `beforeEach`.
+ */
+async function resetDb() {
+  await resetDbRaw();
+  invalidateSongsCache();
+}
 
 /**
  * Sign a JWT as admin using the test JWT_SECRET.

@@ -82,6 +82,24 @@ export default [
     },
   },
   {
+    // Vitest test files use globals (`describe`, `it`, `expect`, `beforeEach`, …)
+    // because `test.globals: true` is set in server/vitest.config.js.
+    files: ['server/tests/**/*.js', 'tests/**/*.js'],
+    languageOptions: {
+      globals: {
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        vi: 'readonly',
+      },
+    },
+  },
+  {
     ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'server/node_modules/**'],
   },
 ];

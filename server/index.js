@@ -324,7 +324,7 @@ app.get('{*path}', (req, res) => {
   }
 });
 
-module.exports = { app, authMiddleware };
+module.exports = { app, authMiddleware, invalidateSongsCache };
 
 // START SERVER (only when run as CLI, never on require/import).
 if (require.main === module) {

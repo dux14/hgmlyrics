@@ -34,3 +34,6 @@ coverage
 
 # claude
 CLAUDE.md
+
+# docs
+docs/*

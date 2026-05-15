@@ -22,11 +22,9 @@ jobs:
         with:
           node-version: '24'
           cache: 'pnpm'
-          cache-dependency-path: |
-            pnpm-lock.yaml
-            server/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
-      - name: Install root deps
+      - name: Install deps
         run: pnpm install --frozen-lockfile
 
       - name: Lint
@@ -39,10 +37,6 @@ jobs:
         # are repaired or removed.
         continue-on-error: true
         run: pnpm test:ci
-
-      - name: Install server deps
-        working-directory: server
-        run: pnpm install --frozen-lockfile
 
       - name: Backend tests
         working-directory: server

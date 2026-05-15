@@ -13,6 +13,9 @@
     transform var(--transition-fast),
     box-shadow var(--transition-fast),
     border-color var(--transition-fast);
+  /* Skip layout/paint for off-screen cards. Saves ~40ms layout on 100+ grid. */
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 420px;
 }
 
 .song-card:hover {
@@ -966,7 +969,7 @@
 /* === Autoscroll FAB === */
 .autoscroll-fab {
   position: fixed;
-  bottom: 24px;
+  bottom: calc(120px + env(safe-area-inset-bottom, 0px));
   right: 20px;
   z-index: var(--z-toast);
   display: flex;
@@ -974,6 +977,12 @@
   align-items: center;
   gap: 8px;
   animation: fabIn 400ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@media (min-width: 768px) {
+  .autoscroll-fab {
+    bottom: 24px;
+  }
 }
 
 @keyframes fabIn {

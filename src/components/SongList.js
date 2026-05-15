@@ -39,7 +39,7 @@ export function renderSongList(container, songs) {
   `;
   container.appendChild(toolbar);
 
-  toolbar.querySelectorAll('.view-btn').forEach(btn => {
+  toolbar.querySelectorAll('.view-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       currentViewMode = btn.dataset.view;
       localStorage.setItem('hkn-view-mode', currentViewMode);
@@ -109,23 +109,26 @@ function createSongCard(song, index) {
         : 'voice-badge--mixed';
 
   const voiceLabel =
-    song.voiceType === 'male'
-      ? 'Masculina'
-      : song.voiceType === 'female'
-        ? 'Femenina'
-        : 'Mixta';
+    song.voiceType === 'male' ? 'Masculina' : song.voiceType === 'female' ? 'Femenina' : 'Mixta';
 
-  const coverUrl = song.coverImage.startsWith('/') || song.coverImage.startsWith('http')
-    ? song.coverImage
-    : `/covers/${song.coverImage}`;
+  const coverUrl =
+    song.coverImage.startsWith('/') || song.coverImage.startsWith('http')
+      ? song.coverImage
+      : `/covers/${song.coverImage}`;
+
+  // First card above the fold is the LCP candidate: load eagerly + high priority.
+  const isLCP = index === 0;
+  const imgLoading = isLCP ? 'eager' : 'lazy';
+  const imgFetchPriority = isLCP ? 'high' : 'auto';
 
   card.innerHTML = `
     <img
       class="song-card__cover"
       src="${coverUrl}"
       alt="Portada de ${escapeHtml(song.album)}"
-      loading="lazy"
+      loading="${imgLoading}"
       decoding="async"
+      fetchpriority="${imgFetchPriority}"
       onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22><rect fill=%22%231a1a1a%22 width=%221%22 height=%221%22/><text x=%22.5%22 y=%22.6%22 text-anchor=%22middle%22 font-size=%22.4%22>🎵</text></svg>'"
     />
     <div class="song-card__info">
@@ -156,7 +159,7 @@ function createSongCard(song, index) {
 
   // F8: Offline badge in PWA mode
   if (isPWA()) {
-    isSongCached(song.id).then(cached => {
+    isSongCached(song.id).then((cached) => {
       if (cached) {
         const badge = document.createElement('span');
         badge.className = 'offline-badge';
@@ -189,15 +192,27 @@ function createSongTable(songs) {
       </tr>
     </thead>
     <tbody>
-      ${songs.map((song, i) => {
-        const coverUrl = song.coverImage.startsWith('/') || song.coverImage.startsWith('http')
-          ? song.coverImage
-          : `/covers/${song.coverImage}`;
+      ${songs
+        .map((song, i) => {
+          const coverUrl =
+            song.coverImage.startsWith('/') || song.coverImage.startsWith('http')
+              ? song.coverImage
+              : `/covers/${song.coverImage}`;
 
-        const voiceBadgeClass = song.voiceType === 'male' ? 'voice-badge--male' : song.voiceType === 'female' ? 'voice-badge--female' : 'voice-badge--mixed';
-        const voiceLabel = song.voiceType === 'male' ? 'Masculina' : song.voiceType === 'female' ? 'Femenina' : 'Mixta';
+          const voiceBadgeClass =
+            song.voiceType === 'male'
+              ? 'voice-badge--male'
+              : song.voiceType === 'female'
+                ? 'voice-badge--female'
+                : 'voice-badge--mixed';
+          const voiceLabel =
+            song.voiceType === 'male'
+              ? 'Masculina'
+              : song.voiceType === 'female'
+                ? 'Femenina'
+                : 'Mixta';
 
-        return `
+          return `
           <tr class="song-table__row fade-in" style="animation-delay: ${i * 30}ms" data-id="${song.id}" tabindex="0">
             <td>
               <img src="${coverUrl}" class="song-table__thumb" width="40" height="40" loading="lazy" decoding="async" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22><rect fill=%22%231a1a1a%22 width=%221%22 height=%221%22/><text x=%22.5%22 y=%22.6%22 text-anchor=%22middle%22 font-size=%22.4%22>🎵</text></svg>'" />
@@ -209,11 +224,12 @@ function createSongTable(songs) {
             <td><span class="voice-badge ${voiceBadgeClass}">${voiceLabel}</span></td>
           </tr>
         `;
-      }).join('')}
+        })
+        .join('')}
     </tbody>
   `;
 
-  table.querySelectorAll('.song-table__row').forEach(row => {
+  table.querySelectorAll('.song-table__row').forEach((row) => {
     row.addEventListener('click', () => navigate(`/song/${row.dataset.id}`));
     row.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {

@@ -13,6 +13,7 @@
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write 'src/**/*.{js,css,html,json}'",
     "format:check": "prettier --check 'src/**/*.{js,css,html,json}'",
+    "optimize:covers": "node scripts/optimize-covers.mjs",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -30,6 +31,7 @@
     "jsdom": "^29.0.0",
     "lint-staged": "^16.4.0",
     "prettier": "^3.8.1",
+    "sharp": "^0.34.5",
     "vite": "^7.3.1",
     "vite-plugin-pwa": "^1.2.0",
     "vitest": "^4.1.0"

@@ -37,3 +37,6 @@ CLAUDE.md
 
 # docs
 docs/*
+
+# Local backup of original covers (created by scripts/optimize-covers.mjs)
+public/covers.backup/

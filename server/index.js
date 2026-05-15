@@ -308,10 +308,26 @@ app.delete('/api/songs/:id', authMiddleware, async (req, res) => {
 const distPath = path.resolve(__dirname, '..', 'dist');
 const coversPath = path.resolve(__dirname, '..', 'public', 'covers');
 
-// Serve album cover images
-app.use('/covers', express.static(coversPath));
+// Serve album cover images with long cache (covers are versioned by filename).
+// 31 days aligns with Vercel's images.minimumCacheTTL recommendation.
+const COVERS_MAX_AGE = 60 * 60 * 24 * 31;
+app.use(
+  '/covers',
+  express.static(coversPath, {
+    maxAge: COVERS_MAX_AGE * 1000,
+    immutable: true,
+  }),
+);
 
-// Serve Vite-built frontend
+// Serve Vite-built frontend. Assets in /assets/* are content-hashed by Vite,
+// so they can be cached for 1 year. index.html stays short-lived.
+app.use(
+  '/assets',
+  express.static(path.join(distPath, 'assets'), {
+    maxAge: 60 * 60 * 24 * 365 * 1000,
+    immutable: true,
+  }),
+);
 app.use(express.static(distPath));
 
 // SPA catch-all: any non-API route returns index.html

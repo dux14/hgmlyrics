@@ -2,18 +2,18 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    environment: 'jsdom',
+    environment: 'node',
     globals: true,
+    setupFiles: ['./tests/setup.js'],
     include: ['tests/**/*.test.js'],
-    exclude: ['node_modules/**', 'server/**', 'dist/**'],
     coverage: {
       provider: 'v8',
-      include: ['src/lib/**'],
+      include: ['index.js', 'db.js'],
       thresholds: {
-        statements: 80,
-        branches: 80,
-        functions: 80,
-        lines: 80,
+        statements: 70,
+        branches: 60,
+        functions: 70,
+        lines: 70,
       },
     },
   },

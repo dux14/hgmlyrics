@@ -8,6 +8,17 @@ const jwt = require('jsonwebtoken');
 
 const { all, get, run } = require('./db');
 
+// Fail-fast: rechazar arranque sin secrets críticos definidos.
+const REQUIRED_ENV = ['ADMIN_PIN', 'JWT_SECRET'];
+const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
+if (missing.length > 0) {
+  console.error(
+    `❌ Missing required env vars: ${missing.join(', ')}.\n` +
+      `   Copy server/.env.example → server/.env and fill the values.`,
+  );
+  process.exit(1);
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -60,12 +71,12 @@ app.get('/api/version', (req, res) => {
 app.post('/api/auth/login', (req, res) => {
   const { pin } = req.body;
   if (!pin) return res.status(400).json({ error: 'PIN is required' });
-  
-  if (pin === (process.env.ADMIN_PIN || '1234')) {
-    const token = jwt.sign({ admin: true }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
+
+  if (pin === process.env.ADMIN_PIN) {
+    const token = jwt.sign({ admin: true }, process.env.JWT_SECRET, { expiresIn: '7d' });
     return res.json({ token });
   }
-  
+
   res.status(401).json({ error: 'Invalid PIN' });
 });
 
@@ -73,18 +84,18 @@ app.post('/api/auth/login', (req, res) => {
 const multer = require('multer');
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, path.join(__dirname, 'uploads'))
+    cb(null, path.join(__dirname, 'uploads'));
   },
   filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     cb(null, uniqueSuffix + '-' + file.originalname);
-  }
+  },
 });
 const upload = multer({ storage: storage });
 
 app.post('/api/upload', authMiddleware, upload.single('cover'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-  
+
   const fileUrl = `/uploads/${req.file.filename}`;
   res.json({ url: fileUrl });
 });
@@ -107,14 +118,14 @@ app.get('/api/songs', async (req, res) => {
       `SELECT id, title, artist, album, albumSlug, year, genre,
               voiceType, voicePercentMale, voicePercentFemale,
               coverImage, albumOrder, createdAt, updatedAt
-       FROM songs ORDER BY album, albumOrder`
+       FROM songs ORDER BY album, albumOrder`,
     );
 
-    const songs = rows.map(r => ({
+    const songs = rows.map((r) => ({
       ...r,
       voicePercent: { male: r.voicePercentMale, female: r.voicePercentFemale },
     }));
-    songs.forEach(s => {
+    songs.forEach((s) => {
       delete s.voicePercentMale;
       delete s.voicePercentFemale;
     });
@@ -140,20 +151,20 @@ app.get('/api/songs/search', async (req, res) => {
       `SELECT id, title, artist, album, albumSlug, year, genre,
               voiceType, voicePercentMale, voicePercentFemale,
               coverImage, albumOrder
-       FROM songs`
+       FROM songs`,
     );
 
     const results = rows
-      .filter(r => {
+      .filter((r) => {
         const haystack = removeAccents(`${r.title} ${r.album} ${r.artist}`).toLowerCase();
         return haystack.includes(normalizedQ);
       })
       .slice(0, 15)
-      .map(r => ({
+      .map((r) => ({
         ...r,
         voicePercent: { male: r.voicePercentMale, female: r.voicePercentFemale },
       }));
-    results.forEach(s => {
+    results.forEach((s) => {
       delete s.voicePercentMale;
       delete s.voicePercentFemale;
     });
@@ -168,12 +179,12 @@ app.get('/api/songs/search', async (req, res) => {
 app.get('/api/songs/all', async (req, res) => {
   try {
     const rows = await all('SELECT * FROM songs ORDER BY album, albumOrder');
-    const songs = rows.map(r => ({
+    const songs = rows.map((r) => ({
       ...r,
       voicePercent: { male: r.voicePercentMale, female: r.voicePercentFemale },
       sections: JSON.parse(r.sections || '[]'),
     }));
-    songs.forEach(s => {
+    songs.forEach((s) => {
       delete s.voicePercentMale;
       delete s.voicePercentFemale;
     });
@@ -189,15 +200,15 @@ app.get('/api/songs/:id', async (req, res) => {
   try {
     const row = await get('SELECT * FROM songs WHERE id = ?', [req.params.id]);
     if (!row) return res.status(404).json({ error: 'Song not found' });
-    
+
     const song = {
       ...row,
       voicePercent: { male: row.voicePercentMale, female: row.voicePercentFemale },
-      sections: JSON.parse(row.sections || '[]')
+      sections: JSON.parse(row.sections || '[]'),
     };
     delete song.voicePercentMale;
     delete song.voicePercentFemale;
-    
+
     res.json(song);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -208,17 +219,33 @@ app.post('/api/songs', authMiddleware, async (req, res) => {
   const s = req.body;
   try {
     const sectionsJson = JSON.stringify(s.sections || []);
-    await run(`
+    await run(
+      `
       INSERT INTO songs (
         id, title, artist, album, albumSlug, year, genre, 
         voiceType, voicePercentMale, voicePercentFemale, coverImage, 
         sections, albumOrder, cejilla, createdAt, updatedAt
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      s.id, s.title, s.artist, s.album, s.albumSlug, s.year, s.genre,
-      s.voiceType, s.voicePercent?.male ?? 50, s.voicePercent?.female ?? 50,
-      s.coverImage, sectionsJson, s.albumOrder || 0, s.cejilla ?? null, new Date().toISOString(), new Date().toISOString()
-    ]);
+    `,
+      [
+        s.id,
+        s.title,
+        s.artist,
+        s.album,
+        s.albumSlug,
+        s.year,
+        s.genre,
+        s.voiceType,
+        s.voicePercent?.male ?? 50,
+        s.voicePercent?.female ?? 50,
+        s.coverImage,
+        sectionsJson,
+        s.albumOrder || 0,
+        s.cejilla ?? null,
+        new Date().toISOString(),
+        new Date().toISOString(),
+      ],
+    );
     invalidateSongsCache();
     bumpDataVersion();
     res.status(201).json({ success: true, id: s.id });
@@ -232,17 +259,32 @@ app.put('/api/songs/:id', authMiddleware, async (req, res) => {
   const id = req.params.id;
   try {
     const sectionsJson = JSON.stringify(s.sections || []);
-    await run(`
+    await run(
+      `
       UPDATE songs SET
         title = ?, artist = ?, album = ?, albumSlug = ?, year = ?, genre = ?,
         voiceType = ?, voicePercentMale = ?, voicePercentFemale = ?, coverImage = ?,
         sections = ?, albumOrder = ?, cejilla = ?, updatedAt = ?
       WHERE id = ?
-    `, [
-      s.title, s.artist, s.album, s.albumSlug, s.year, s.genre,
-      s.voiceType, s.voicePercent?.male ?? 50, s.voicePercent?.female ?? 50,
-      s.coverImage, sectionsJson, s.albumOrder || 0, s.cejilla ?? null, new Date().toISOString(), id
-    ]);
+    `,
+      [
+        s.title,
+        s.artist,
+        s.album,
+        s.albumSlug,
+        s.year,
+        s.genre,
+        s.voiceType,
+        s.voicePercent?.male ?? 50,
+        s.voicePercent?.female ?? 50,
+        s.coverImage,
+        sectionsJson,
+        s.albumOrder || 0,
+        s.cejilla ?? null,
+        new Date().toISOString(),
+        id,
+      ],
+    );
     invalidateSongsCache();
     bumpDataVersion();
     res.json({ success: true });
@@ -282,8 +324,11 @@ app.get('{*path}', (req, res) => {
   }
 });
 
-// START SERVER
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
-module.exports = { app, authMiddleware };
+module.exports = { app, authMiddleware, invalidateSongsCache };
+
+// START SERVER (only when run as CLI, never on require/import).
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}

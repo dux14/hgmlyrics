@@ -32,13 +32,15 @@ export default [
         performance: 'readonly',
         requestAnimationFrame: 'readonly',
         cancelAnimationFrame: 'readonly',
+        requestIdleCallback: 'readonly',
+        cancelIdleCallback: 'readonly',
         FormData: 'readonly',
         confirm: 'readonly',
         alert: 'readonly',
       },
     },
     rules: {
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       'prefer-const': 'error',
       'no-var': 'error',
@@ -47,6 +49,59 @@ export default [
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**'],
+    // Server (Node, CommonJS) overrides
+    files: ['server/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'commonjs',
+      globals: {
+        require: 'readonly',
+        module: 'readonly',
+        exports: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+        console: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        URL: 'readonly',
+        global: 'readonly',
+      },
+    },
+    rules: {
+      // Server may log freely (operational logging).
+      'no-console': 'off',
+    },
+  },
+  {
+    // Vitest config is ESM (uses `import` / `export default`).
+    files: ['server/vitest.config.js'],
+    languageOptions: {
+      sourceType: 'module',
+    },
+  },
+  {
+    // Vitest test files use globals (`describe`, `it`, `expect`, `beforeEach`, …)
+    // because `test.globals: true` is set in server/vitest.config.js.
+    files: ['server/tests/**/*.js', 'tests/**/*.js'],
+    languageOptions: {
+      globals: {
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        vi: 'readonly',
+      },
+    },
+  },
+  {
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'server/node_modules/**'],
   },
 ];

@@ -16,6 +16,7 @@ coverage
 # Environment
 .env
 .env.*
+!.env.example
 
 # Database
 *.db
@@ -30,3 +31,9 @@ coverage
 *.njsproj
 *.sln
 *.sw?
+
+# claude
+CLAUDE.md
+
+# docs
+docs/*

@@ -5,14 +5,14 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://localhost:3000',
-      '/uploads': 'http://localhost:3000'
-    }
+      '/uploads': 'http://localhost:3000',
+    },
   },
   preview: {
     proxy: {
       '/api': 'http://localhost:3000',
-      '/uploads': 'http://localhost:3000'
-    }
+      '/uploads': 'http://localhost:3000',
+    },
   },
   plugins: [
     VitePWA({
@@ -38,11 +38,15 @@ export default defineConfig({
             },
           },
           {
-            // Cache individual song detail API
-            urlPattern: /\/api\/songs\/[^/]+$/i,
+            // Cache individual song detail API.
+            // Exclude /api/songs/all explicitly: it's prefetched into IndexedDB
+            // by src/lib/offlineCache.js and must always reflect server `version`.
+            // cacheName bumped to v2 to evict caches contaminated by previous
+            // regex that captured /api/songs/all.
+            urlPattern: /\/api\/songs\/(?!all$)[^/]+$/i,
             handler: 'StaleWhileRevalidate',
             options: {
-              cacheName: 'api-songs-detail',
+              cacheName: 'api-songs-detail-v2',
               expiration: {
                 maxEntries: 100,
                 maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
@@ -88,6 +92,7 @@ export default defineConfig({
   build: {
     target: 'es2020',
     minify: 'terser',
+    chunkSizeWarningLimit: 250,
     rollupOptions: {
       output: {
         manualChunks: {

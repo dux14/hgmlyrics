@@ -117,14 +117,16 @@
 
 .song-view__header {
   display: flex;
+  flex-direction: column;
   gap: var(--space-lg);
   margin-bottom: var(--space-xl);
-  align-items: flex-start;
+  align-items: center;
+  text-align: center;
 }
 
 .song-view__cover {
-  width: 160px;
-  height: 160px;
+  width: 200px;
+  height: 200px;
   border-radius: var(--border-radius-md);
   object-fit: cover;
   flex-shrink: 0;
@@ -134,6 +136,7 @@
 .song-view__meta {
   flex: 1;
   min-width: 0;
+  align-items: center;
 }
 
 .song-view__title {
@@ -158,6 +161,7 @@
 .breadcrumb {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-xs);
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
@@ -485,52 +489,62 @@
   color: var(--color-text-secondary);
 }
 
-/* === Mobile Song View === */
-@media (max-width: 767px) {
+/* === Song View — auxiliary alignment === */
+.song-view__meta > div {
+  justify-content: center;
+}
+
+.song-view .font-controls,
+.song-view .chord-toggle {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.song-view__controls {
+  justify-content: center;
+}
+
+/* === Tablet/Desktop Song View === */
+@media (min-width: 768px) {
   .song-view__header {
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
+    flex-direction: row;
+    align-items: flex-start;
+    text-align: initial;
   }
 
   .song-view__cover {
-    width: 200px;
-    height: 200px;
+    width: 160px;
+    height: 160px;
   }
 
   .song-view__meta {
-    align-items: center;
+    align-items: initial;
   }
 
-  /* Center voice badge row */
   .song-view__meta > div {
-    justify-content: center;
+    justify-content: flex-start;
   }
 
   .breadcrumb {
-    justify-content: center;
+    justify-content: flex-start;
   }
 
-  /* Center controls row (font + chord toggle) */
   .song-view .font-controls,
   .song-view .chord-toggle {
-    margin-left: auto;
-    margin-right: auto;
+    margin-left: 0;
+    margin-right: 0;
   }
 
-  /* Center controls row */
   .song-view__controls {
-    justify-content: center;
+    justify-content: flex-start;
   }
 
-  /* Center voice filter chips */
   .voice-filter {
-    justify-content: center;
+    justify-content: flex-start;
   }
 
-  /* Center transpose controls */
   .transpose-controls {
-    justify-content: center;
+    justify-content: flex-start;
   }
 }
 
@@ -624,6 +638,7 @@
 /* === Voice Part Filter (F5+F7) === */
 .voice-filter {
   display: flex;
+  justify-content: center;
   gap: var(--space-sm);
   margin-bottom: var(--space-lg);
   flex-wrap: wrap;
@@ -901,6 +916,7 @@
 .transpose-controls {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
   background: var(--color-surface);

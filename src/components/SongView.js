@@ -507,33 +507,17 @@ function renderSections(
             return showChords ? '' : `<p class="lyrics__line">&nbsp;</p>`;
           }
 
-          const voices = line.voices || [];
-          const isForAll = voices.length === 0;
-          const matchesFilter = activeVoice === 'all' || isForAll || voices.includes(activeVoice);
+          const ranges = line.voiceRanges || [];
+          const isForAll = ranges.length === 0;
 
-          // Check word-level ranges for filter match too
-          const hasMatchingRange = line.voiceRanges?.some((r) => r.voices?.includes(activeVoice));
-          const effectiveMatch = matchesFilter || hasMatchingRange;
-
-          // Determine color strategy
-          let lineColor = '';
-          let lineHighlightBg = '';
-
-          if (effectiveMatch && activeVoice !== 'all') {
-            lineHighlightBg = isForAll ? '' : getVoiceBgColor(activeVoice);
+          // Line-level dimming only applies when a filter is active AND the line is fully assigned with NO matching range
+          let lineMatchesFilter = true;
+          if (activeVoice !== 'all' && !isForAll) {
+            lineMatchesFilter = ranges.some((r) => r.voices?.includes(activeVoice));
           }
-
-          if (line.color) {
-            lineColor = line.color;
-          } else if (voices.length === 1) {
-            lineColor = getVoiceColor(voices[0]);
-          } else if (voices.length > 1) {
-            lineColor = getVoiceColor(voices[0]);
-          }
-
-          const dimmedClass = effectiveMatch ? '' : 'lyrics__line--dimmed';
-          const highlightClass =
-            effectiveMatch && activeVoice !== 'all' && !isForAll ? 'lyrics__line--highlighted' : '';
+          const dimmedClass = lineMatchesFilter ? '' : 'lyrics__line--dimmed';
+          const highlightClass = '';
+          const lineHighlightBg = '';
 
           // ── Chord rendering: Inline Anchored (Propuesta A+B) ──
           if (showChords && line.chords?.length > 0) {
@@ -553,23 +537,15 @@ function renderSections(
           }
 
           // ── Regular lyrics line (no chords) ──
-          let lineContent;
-          if (line.voiceRanges && line.voiceRanges.length > 0) {
-            lineContent = buildHighlightedHTML(text, line.voiceRanges, voices);
-          } else {
-            lineContent = escapeHtml(text);
-          }
+          const lineContent = buildHighlightedHTML(text, line.voiceRanges || []);
 
           const styleAttrs = [];
-          if (lineColor && !(line.voiceRanges?.length > 0)) styleAttrs.push(`color: ${lineColor}`);
           if (lineHighlightBg) styleAttrs.push(`background: ${lineHighlightBg}`);
           const styleStr = styleAttrs.length > 0 ? ` style="${styleAttrs.join('; ')}"` : '';
 
-          // In chord mode, render lines without chords more subtly
           if (showChords) {
             return `<p class="lyrics__line lyrics__line--no-chord ${dimmedClass} ${highlightClass}"${styleStr}>${lineContent}</p>`;
           }
-
           return `<p class="lyrics__line ${dimmedClass} ${highlightClass}"${styleStr}>${lineContent}</p>`;
         })
         .join('')}

@@ -390,7 +390,7 @@ export async function renderSongEditor(container, editId) {
 
     const mainContent =
       mode === 'voices'
-        ? `<div class="line-row__voice-display" data-action="voice-display" data-line-id="${line.id}">${buildHighlightedHTML(line.text || ' ', line.voiceRanges || [])}</div>`
+        ? `<div class="line-row__voice-display" data-action="voice-display" data-line-id="${line.id}">${buildHighlightedHTML(line.text || ' ', line.voiceRanges || [], 'all')}</div>`
         : `<input class="line-row__input" type="text" value="${escapeHtml(line.text)}" data-action="edit-text" data-line-id="${line.id}" placeholder="Escribe la línea aquí..." />`;
 
     const voiceModeActive = mode === 'voices' ? 'line-row__btn--active' : '';

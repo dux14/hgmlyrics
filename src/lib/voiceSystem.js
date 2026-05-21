@@ -141,6 +141,28 @@ export function buildVoiceUnderlines(voices) {
 }
 
 /**
+ * Validate and normalize voice ranges against a given text length.
+ * - Trims `end` to textLength
+ * - Drops ranges with empty voices or start >= end after trim
+ * - Drops invalid voice IDs (filters to VALID_VOICE_IDS only)
+ * - Sorts ascending by start
+ * @param {Array} ranges
+ * @param {number} textLength
+ * @returns {Array<{start:number,end:number,voices:string[]}>}
+ */
+export function validateVoiceRanges(ranges, textLength) {
+  if (!Array.isArray(ranges)) return [];
+  return ranges
+    .map((r) => ({
+      start: r.start | 0,
+      end: Math.min(r.end | 0, textLength),
+      voices: Array.isArray(r.voices) ? r.voices.filter((v) => VALID_VOICE_IDS.includes(v)) : [],
+    }))
+    .filter((r) => r.start < r.end && r.voices.length > 0)
+    .sort((a, b) => a.start - b.start);
+}
+
+/**
  * Build highlighted HTML for a line of text with sub-line voice ranges.
  * Ranges that fall outside text length are ignored; caller should validate first.
  * Returns escaped text wrapped in spans per slice (range or gap).

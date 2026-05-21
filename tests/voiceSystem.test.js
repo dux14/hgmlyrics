@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildHighlightedHTML } from '../src/lib/voiceSystem.js';
+import { buildHighlightedHTML, validateVoiceRanges } from '../src/lib/voiceSystem.js';
 
 describe('buildHighlightedHTML — new signature (no defaultVoices)', () => {
   it('returns escaped text when voiceRanges is empty', () => {
@@ -70,5 +70,44 @@ describe('buildHighlightedHTML — contiguous + gap slices', () => {
     expect(html).toContain('&lt;');
     expect(html).toContain('&amp;');
     expect(html).toContain('&quot;');
+  });
+});
+
+describe('validateVoiceRanges', () => {
+  it('trims ranges that exceed text length', () => {
+    expect(validateVoiceRanges([{ start: 0, end: 10, voices: ['soprano'] }], 5)).toEqual([
+      { start: 0, end: 5, voices: ['soprano'] },
+    ]);
+  });
+
+  it('drops ranges entirely outside text length', () => {
+    expect(validateVoiceRanges([{ start: 10, end: 20, voices: ['soprano'] }], 5)).toEqual([]);
+  });
+
+  it('drops ranges with empty voices array', () => {
+    expect(validateVoiceRanges([{ start: 0, end: 3, voices: [] }], 100)).toEqual([]);
+  });
+
+  it('reorders by start ascending', () => {
+    const out = validateVoiceRanges(
+      [
+        { start: 5, end: 10, voices: ['bass'] },
+        { start: 0, end: 3, voices: ['soprano'] },
+      ],
+      100,
+    );
+    expect(out).toEqual([
+      { start: 0, end: 3, voices: ['soprano'] },
+      { start: 5, end: 10, voices: ['bass'] },
+    ]);
+  });
+
+  it('returns [] for null/undefined input', () => {
+    expect(validateVoiceRanges(null, 10)).toEqual([]);
+    expect(validateVoiceRanges(undefined, 10)).toEqual([]);
+  });
+
+  it('drops ranges where start >= end after trimming', () => {
+    expect(validateVoiceRanges([{ start: 5, end: 10, voices: ['soprano'] }], 5)).toEqual([]);
   });
 });

@@ -8,7 +8,6 @@
   "ignoreCommand": "git diff --quiet HEAD^ HEAD -- ':!docs' ':!*.md' ':!tests' ':!.lighthouserc.json' ':!.github' ':!CLAUDE.md' ':!MIGRATION_PLAN.md'",
   "functions": {
     "api/**/*.js": {
-      "memory": 256,
       "maxDuration": 10
     }
   }

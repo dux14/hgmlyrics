@@ -5,6 +5,7 @@
  * Stores full song data (with sections) in IndexedDB.
  */
 import { get, set } from 'idb-keyval';
+import { fetchWithRetry } from './fetchWithRetry.js';
 
 const OFFLINE_CACHE_KEY = 'hkn-offline-songs';
 const OFFLINE_VERSION_KEY = 'hkn-offline-version';
@@ -15,8 +16,10 @@ let isCaching = false;
  * Check if running as installed PWA
  */
 export function isPWA() {
-  return globalThis.matchMedia('(display-mode: standalone)').matches
-    || globalThis.navigator.standalone === true;
+  return (
+    globalThis.matchMedia('(display-mode: standalone)').matches ||
+    globalThis.navigator.standalone === true
+  );
 }
 
 /**
@@ -38,7 +41,16 @@ async function prefetchAllSongs() {
   isCaching = true;
 
   try {
-    const res = await fetch('/api/songs/all');
+    const res = await fetchWithRetry(
+      '/api/songs/all',
+      {},
+      {
+        maxAttempts: 3,
+        baseMs: 500,
+        maxMs: 4000,
+        jitter: 0.2,
+      },
+    );
     if (!res.ok) return;
 
     const data = await res.json();
@@ -46,11 +58,13 @@ async function prefetchAllSongs() {
     await set(OFFLINE_VERSION_KEY, data.version);
 
     // Notify that caching is complete
-    globalThis.dispatchEvent(new CustomEvent('offline-cache-ready', {
-      detail: { count: data.songs.length }
-    }));
+    globalThis.dispatchEvent(
+      new CustomEvent('offline-cache-ready', {
+        detail: { count: data.songs.length },
+      }),
+    );
   } catch (_) {
-    // Offline or failed — will retry on next idle
+    // Retries exhausted (3 attempts with exponential backoff). Next idle will retry.
   } finally {
     isCaching = false;
   }
@@ -61,7 +75,7 @@ async function prefetchAllSongs() {
  */
 export async function getOfflineSong(id) {
   const songs = await get(OFFLINE_CACHE_KEY);
-  return songs?.find(s => s.id === id) || null;
+  return songs?.find((s) => s.id === id) || null;
 }
 
 /**
@@ -69,7 +83,7 @@ export async function getOfflineSong(id) {
  */
 export async function isSongCached(id) {
   const songs = await get(OFFLINE_CACHE_KEY);
-  return songs?.some(s => s.id === id) || false;
+  return songs?.some((s) => s.id === id) || false;
 }
 
 /**

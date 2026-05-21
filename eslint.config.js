@@ -77,6 +77,28 @@ export default [
     },
   },
   {
+    // Vercel Functions (Node, ESM) overrides
+    files: ['api/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: {
+        process: 'readonly',
+        Buffer: 'readonly',
+        console: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        URL: 'readonly',
+        global: 'readonly',
+      },
+    },
+    rules: {
+      'no-console': 'off',
+    },
+  },
+  {
     // Vitest config is ESM (uses `import` / `export default`).
     files: ['server/vitest.config.js'],
     languageOptions: {

@@ -526,6 +526,7 @@ function renderSections(
               line.chords,
               transposeSemitones,
               useFlats,
+              line.voiceRanges || [],
             );
             const styleAttrs = [];
             if (lineHighlightBg) styleAttrs.push(`background: ${lineHighlightBg}`);
@@ -556,10 +557,17 @@ function renderSections(
 }
 
 /**
- * Build inline chord HTML — each chord is anchored to its text segment
- * Creates chord-lyric pairs that are immune to font-size changes
+ * Build inline chord HTML — each chord is anchored to its text segment.
+ * If voiceRanges provided, each segment text is re-wrapped via buildHighlightedHTML
+ * which adds absolute-positioned underlines without affecting chord grid alignment.
  */
-function buildInlineChordHTML(text, chords, transposeSemitones = 0, useFlats = false) {
+function buildInlineChordHTML(
+  text,
+  chords,
+  transposeSemitones = 0,
+  useFlats = false,
+  voiceRanges = [],
+) {
   const sorted = [...chords].sort((a, b) => (a.pos || 0) - (b.pos || 0));
   const segments = [];
   let lastPos = 0;
@@ -569,39 +577,55 @@ function buildInlineChordHTML(text, chords, transposeSemitones = 0, useFlats = f
     const transposed =
       transposeSemitones !== 0 ? transposeChord(ch, transposeSemitones, useFlats) : ch;
 
-    // Text before this chord (no chord above it)
     if (chordPos > lastPos) {
-      const beforeText = text.slice(lastPos, chordPos);
-      segments.push({ chord: null, text: beforeText });
+      segments.push({ chord: null, start: lastPos, end: chordPos });
     }
-
-    // This chord's segment — find the end (next chord pos or end of text)
     const nextIdx = sorted.findIndex((c) => (c.pos || 0) > chordPos);
     const nextChordPos = nextIdx !== -1 ? sorted[nextIdx].pos || text.length : text.length;
-    const segmentText = text.slice(chordPos, nextChordPos);
-    segments.push({ chord: transposed, text: segmentText });
+    segments.push({ chord: transposed, start: chordPos, end: nextChordPos });
     lastPos = nextChordPos;
   }
 
-  // Remaining text after last chord
   if (lastPos < text.length) {
-    segments.push({ chord: null, text: text.slice(lastPos) });
+    segments.push({ chord: null, start: lastPos, end: text.length });
   }
 
   return segments
     .map((seg) => {
+      const segText = text.slice(seg.start, seg.end);
+      const segRanges = sliceRangesForSegment(voiceRanges, seg.start, seg.end);
+      const innerHtml =
+        segRanges.length > 0 ? buildHighlightedHTML(segText, segRanges) : escapeHtml(segText);
+      const extraClass = segRanges.length > 0 ? ' has-voice-ranges' : '';
       if (seg.chord) {
-        return `<span class="chord-pair">
+        return `<span class="chord-pair${extraClass}">
         <span class="chord-badge">${escapeHtml(seg.chord)}</span>
-        <span class="chord-text">${escapeHtml(seg.text)}</span>
+        <span class="chord-text">${innerHtml}</span>
       </span>`;
       }
-      return `<span class="chord-pair chord-pair--empty">
+      return `<span class="chord-pair chord-pair--empty${extraClass}">
       <span class="chord-badge">&nbsp;</span>
-      <span class="chord-text">${escapeHtml(seg.text)}</span>
+      <span class="chord-text">${innerHtml}</span>
     </span>`;
     })
     .join('');
+}
+
+/**
+ * Extract the subset of voiceRanges that intersect [segStart, segEnd),
+ * rebased to local offsets (0..segEnd-segStart).
+ */
+function sliceRangesForSegment(voiceRanges, segStart, segEnd) {
+  if (!voiceRanges || voiceRanges.length === 0) return [];
+  const out = [];
+  for (const r of voiceRanges) {
+    const start = Math.max(r.start, segStart);
+    const end = Math.min(r.end, segEnd);
+    if (start < end) {
+      out.push({ start: start - segStart, end: end - segStart, voices: r.voices });
+    }
+  }
+  return out;
 }
 
 /**

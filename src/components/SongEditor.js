@@ -20,6 +20,8 @@ import {
   buildHighlightedHTML,
   validateVoiceRanges,
 } from '../lib/voiceSystem.js';
+import { getDragRange, getCaretOffsetAtPoint } from '../lib/caretSelection.js';
+import { openVoiceBottomSheet } from './VoiceBottomSheet.js';
 
 const API_URL = '/api';
 
@@ -590,6 +592,94 @@ export async function renderSongEditor(container, editId) {
       }
     }
   });
+
+  // ─── Drag-select on voice display ───
+  let dragState = null; // { lineId, display, startPt }
+
+  editorRoot.addEventListener('pointerdown', (e) => {
+    const display = e.target.closest('[data-action="voice-display"]');
+    if (!display) return;
+    e.preventDefault();
+    display.setPointerCapture?.(e.pointerId);
+    dragState = {
+      lineId: display.dataset.lineId,
+      display,
+      startPt: { x: e.clientX, y: e.clientY },
+    };
+  });
+
+  editorRoot.addEventListener('pointerup', (e) => {
+    if (!dragState) return;
+    const { lineId, display, startPt } = dragState;
+    dragState = null;
+    const found = findLine(lineId);
+    if (!found) return;
+
+    const endPt = { x: e.clientX, y: e.clientY };
+    const dist = Math.hypot(endPt.x - startPt.x, endPt.y - startPt.y);
+
+    if (dist < 4) {
+      // Tap — open sheet for the tapped range if any, else do nothing
+      const offset = getCaretOffsetAtPoint(display, endPt.x, endPt.y);
+      if (offset === null) return;
+      const range = (found.line.voiceRanges || []).find((r) => offset >= r.start && offset < r.end);
+      if (range) {
+        openSheetForRange(found, range, range.start, range.end);
+      }
+      return;
+    }
+
+    // Drag — resolve [start, end] in character offsets
+    const dragRange = getDragRange(display, startPt, endPt);
+    if (!dragRange) return;
+    const [start, end] = dragRange;
+    if (start >= end) return;
+    openSheetForRange(found, null, start, end);
+  });
+
+  function openSheetForRange(found, existingRange, start, end) {
+    const text = found.line.text || '';
+    const selectedText = text.slice(start, end);
+    const initialVoices = existingRange ? [...existingRange.voices] : [];
+
+    openVoiceBottomSheet({
+      selectedText,
+      initialVoices,
+      onApply: (voices) => {
+        applyRangeMutation(found.line, start, end, voices);
+        renderBlocks();
+        updatePreview();
+      },
+      onRemove: () => {
+        applyRangeMutation(found.line, start, end, []);
+        renderBlocks();
+        updatePreview();
+      },
+    });
+  }
+
+  /**
+   * Apply the REPLACE rule:
+   * - Trim/drop existing ranges that overlap [start, end)
+   * - If `voices` non-empty, insert the new range
+   * - Re-validate
+   */
+  function applyRangeMutation(line, start, end, voices) {
+    const next = [];
+    for (const r of line.voiceRanges || []) {
+      if (r.end <= start || r.start >= end) {
+        next.push(r); // no overlap
+      } else {
+        // overlap — trim/split
+        if (r.start < start) next.push({ start: r.start, end: start, voices: r.voices });
+        if (r.end > end) next.push({ start: end, end: r.end, voices: r.voices });
+      }
+    }
+    if (voices.length > 0) {
+      next.push({ start, end, voices });
+    }
+    line.voiceRanges = validateVoiceRanges(next, (line.text || '').length);
+  }
 
   // Add section button
   container.querySelector('#add-section-btn').addEventListener('click', () => {

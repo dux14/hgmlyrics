@@ -109,9 +109,7 @@ function getVoiceTypeLabel(voiceType) {
 function detectUsedVoices(sections) {
   const used = new Set();
   for (const section of sections) {
-    if (section.voices) section.voices.forEach((v) => used.add(v));
     for (const line of section.lines) {
-      if (line.voices) line.voices.forEach((v) => used.add(v));
       if (line.voiceRanges) {
         line.voiceRanges.forEach((r) => {
           if (r.voices) r.voices.forEach((v) => used.add(v));

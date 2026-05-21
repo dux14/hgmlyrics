@@ -1142,3 +1142,43 @@
 .toast.visible ~ .autoscroll-fab {
   bottom: 80px;
 }
+
+/* ─── Sub-line voice ranges ─── */
+
+.voice-range {
+  position: relative;
+  display: inline;
+}
+
+.has-voice-ranges {
+  padding-bottom: 12px;
+}
+
+.voice-underline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  pointer-events: none;
+}
+
+.voice-underline--soprano {
+  background: var(--color-voice-soprano);
+  bottom: 9px;
+}
+.voice-underline--contralto {
+  background: var(--color-voice-contralto);
+  bottom: 6px;
+}
+.voice-underline--tenor {
+  background: var(--color-voice-tenor);
+  bottom: 3px;
+}
+.voice-underline--bass {
+  background: var(--color-voice-bass);
+  bottom: 0px;
+}
+
+.lyrics__slice--dimmed {
+  opacity: 0.25;
+}

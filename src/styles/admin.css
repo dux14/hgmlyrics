@@ -257,6 +257,7 @@
 
   .editor__actions .btn {
     width: auto;
+    text-align: initial;
   }
 }
 

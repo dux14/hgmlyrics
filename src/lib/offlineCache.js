@@ -5,7 +5,6 @@
  * Stores full song data (with sections) in IndexedDB.
  */
 import { get, set } from 'idb-keyval';
-import { fetchWithRetry } from './fetchWithRetry.js';
 
 const OFFLINE_CACHE_KEY = 'hkn-offline-songs';
 const OFFLINE_VERSION_KEY = 'hkn-offline-version';
@@ -41,16 +40,8 @@ async function prefetchAllSongs() {
   isCaching = true;
 
   try {
-    const res = await fetchWithRetry(
-      '/api/songs/all',
-      {},
-      {
-        maxAttempts: 3,
-        baseMs: 500,
-        maxMs: 4000,
-        jitter: 0.2,
-      },
-    );
+    const { fetchWithRetry } = await import('./fetchWithRetry.js');
+    const res = await fetchWithRetry('/api/songs/all');
     if (!res.ok) return;
 
     const data = await res.json();

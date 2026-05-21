@@ -25,7 +25,6 @@ export async function fetchWithRetry(url, init = {}, retry = {}) {
       lastResponse = res;
       if (res.ok) return res;
       if (res.status >= 400 && res.status < 500) return res;
-      lastError = new Error(`HTTP ${res.status}`);
     } catch (err) {
       if (err && err.name === 'AbortError') throw err;
       lastError = err;

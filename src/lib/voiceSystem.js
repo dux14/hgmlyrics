@@ -137,7 +137,7 @@ export function buildVoiceUnderlines(voices) {
   if (!voices || voices.length === 0) return '';
   const valid = CANONICAL_VOICE_ORDER.filter((v) => voices.includes(v));
   if (valid.length === 0) return '';
-  return valid.map((v) => `<span class="voice-underline--${v}"></span>`).join('');
+  return valid.map((v) => `<span class="voice-underline voice-underline--${v}"></span>`).join('');
 }
 
 /**

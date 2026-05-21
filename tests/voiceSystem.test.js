@@ -16,7 +16,7 @@ describe('buildHighlightedHTML — single voice range', () => {
     const html = buildHighlightedHTML('hola', [{ start: 0, end: 4, voices: ['soprano'] }]);
     expect(html).toContain('voice-underline--soprano');
     expect(html).toContain('hola');
-    expect(html.match(/voice-underline/g) || []).toHaveLength(1);
+    expect(html.match(/voice-underline--/g) || []).toHaveLength(1);
   });
 
   it('wraps only the range, leaves gap text plain', () => {

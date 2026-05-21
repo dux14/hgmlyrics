@@ -108,19 +108,6 @@ export function getVoiceGender(voiceId) {
 }
 
 /**
- * Resolve the effective voices for a line, considering section-level defaults
- * Priority: line.voices > sectionVoices > [] (all)
- * @param {Object} line - Line object with optional voices array
- * @param {string[]} [sectionVoices] - Default voices from the section
- * @returns {string[]}
- */
-export function resolveLineVoices(line, sectionVoices = []) {
-  if (line.voices && line.voices.length > 0) return line.voices;
-  if (sectionVoices.length > 0) return sectionVoices;
-  return [];
-}
-
-/**
  * Canonical voice order for stacked underlines (top-to-bottom visual).
  * Index 0 = closest to the text baseline; higher indices = lower on screen.
  */

@@ -687,22 +687,6 @@
   white-space: nowrap;
 }
 
-/* Dimmed state for non-matching voice lines */
-.lyrics__line--dimmed {
-  opacity: 0.15;
-  transition: opacity 300ms ease;
-}
-
-/* Chord line dimming */
-.lyrics__chord-line.lyrics__line--dimmed {
-  opacity: 0.15;
-}
-
-.lyrics__chord-line.lyrics__line--dimmed .lyrics__chords,
-.lyrics__chord-line.lyrics__line--dimmed .lyrics__line {
-  opacity: 0.15;
-}
-
 /* === Chord Toggle (F6) === */
 .chord-toggle {
   display: inline-flex;
@@ -770,10 +754,6 @@
 
 .chord-line.lyrics__line--highlighted {
   padding: 0.15em 0.4em;
-}
-
-.chord-line.lyrics__line--dimmed {
-  opacity: 0.15;
 }
 
 /* Each chord-lyric unit: chord on top, text below */

@@ -124,12 +124,12 @@ function handleSearch(query, resultsEl) {
   }
 
   resultsEl.innerHTML = results
-    .map(
-      (song) => {
-        const coverUrl = song.coverImage.startsWith('/') || song.coverImage.startsWith('http')
+    .map((song) => {
+      const coverUrl =
+        song.coverImage.startsWith('/') || song.coverImage.startsWith('http')
           ? song.coverImage
           : `/covers/${song.coverImage}`;
-        return `
+      return `
     <div class="search-results__item" data-song-id="${song.id}">
       <img
         class="sidebar__album-thumb"
@@ -144,8 +144,7 @@ function handleSearch(query, resultsEl) {
       </div>
     </div>
   `;
-      },
-    )
+    })
     .join('');
 
   resultsEl.style.display = 'block';

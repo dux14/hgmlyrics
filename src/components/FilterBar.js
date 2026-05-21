@@ -54,19 +54,27 @@ export function updateFilterBar() {
   const hasNonDefaultFilters = sortMode !== 'a-z' || voiceFilter;
 
   filterBarEl.innerHTML = `
-    ${SORT_OPTIONS.map(opt => `
+    ${SORT_OPTIONS.map(
+      (opt) => `
       <button class="filter-chip ${sortMode === opt.value ? 'filter-chip--active' : ''}"
               data-sort="${opt.value}">${opt.label}</button>
-    `).join('')}
+    `,
+    ).join('')}
     <span class="filter-separator"></span>
-    ${VOICE_OPTIONS.map(opt => `
+    ${VOICE_OPTIONS.map(
+      (opt) => `
       <button class="filter-chip ${(voiceFilter || '') === opt.value ? 'filter-chip--active' : ''}"
               data-voice="${opt.value}">${opt.label}</button>
-    `).join('')}
-    ${hasNonDefaultFilters ? `
+    `,
+    ).join('')}
+    ${
+      hasNonDefaultFilters
+        ? `
       <span class="filter-separator"></span>
       <button class="filter-chip filter-chip--clear" id="filter-clear">✕ Limpiar</button>
-    ` : ''}
+    `
+        : ''
+    }
   `;
 
   bindFilterBarEvents();
@@ -79,14 +87,14 @@ function bindFilterBarEvents() {
   if (!filterBarEl) return;
 
   // Sort chips
-  filterBarEl.querySelectorAll('[data-sort]').forEach(btn => {
+  filterBarEl.querySelectorAll('[data-sort]').forEach((btn) => {
     btn.addEventListener('click', () => {
       setSortMode(btn.dataset.sort);
     });
   });
 
   // Voice chips
-  filterBarEl.querySelectorAll('[data-voice]').forEach(btn => {
+  filterBarEl.querySelectorAll('[data-voice]').forEach((btn) => {
     btn.addEventListener('click', () => {
       filterByVoice(btn.dataset.voice || null);
     });

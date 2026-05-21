@@ -36,7 +36,7 @@ export function onNotFound(handler) {
 export function navigate(path) {
   const currentHash = window.location.hash;
   const targetHash = path.startsWith('#') ? path : `#${path}`;
-  
+
   if (currentHash === targetHash) {
     // Hash is already set, hashchange won't fire — force re-resolve
     currentRoute = null;

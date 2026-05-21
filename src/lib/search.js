@@ -14,7 +14,10 @@ let songList = [];
  * @returns {string}
  */
 function normalize(str) {
-  return str.normalize('NFD').replaceAll(/[\u0300-\u036f]/g, '').toLowerCase();
+  return str
+    .normalize('NFD')
+    .replaceAll(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 }
 
 /**

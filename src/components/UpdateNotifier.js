@@ -8,7 +8,7 @@
  * Debug: Call `window.__showUpdateBanner()` in console to test the banner.
  */
 
-const DATA_POLL_INTERVAL = 60_000; // Check every 60s
+const DATA_POLL_INTERVAL = 10 * 60_000; // Check every 10 min while tab is visible
 const FORCE_UPDATE_MS = 24 * 60 * 60 * 1000; // 24 hours
 let lastDataVersion = null;
 let updateAvailableSince = null;
@@ -31,27 +31,33 @@ export function initUpdateNotifier() {
 function listenForSWUpdate() {
   if (!('serviceWorker' in navigator)) return;
 
-  navigator.serviceWorker.ready.then(reg => {
-    swRegistration = reg;
-    if (reg.waiting) {
-      showUpdateBanner();
-      return;
-    }
-    reg.addEventListener('updatefound', () => {
-      const newSW = reg.installing;
-      if (!newSW) return;
-      newSW.addEventListener('statechange', () => {
-        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-          showUpdateBanner();
-        }
+  navigator.serviceWorker.ready
+    .then((reg) => {
+      swRegistration = reg;
+      if (reg.waiting) {
+        showUpdateBanner();
+        return;
+      }
+      reg.addEventListener('updatefound', () => {
+        const newSW = reg.installing;
+        if (!newSW) return;
+        newSW.addEventListener('statechange', () => {
+          if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+            showUpdateBanner();
+          }
+        });
       });
+    })
+    .catch(() => {
+      // SW not available
     });
-  }).catch(() => {
-    // SW not available
-  });
 }
 
 async function pollDataVersion() {
+  if (document.visibilityState === 'hidden') {
+    setTimeout(pollDataVersion, DATA_POLL_INTERVAL);
+    return;
+  }
   try {
     const res = await fetch('/api/version');
     if (res.ok) {

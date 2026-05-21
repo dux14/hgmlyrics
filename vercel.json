@@ -5,6 +5,7 @@
   "outputDirectory": "dist",
   "installCommand": "pnpm install --frozen-lockfile",
   "regions": ["pdx1"],
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- ':!docs' ':!*.md' ':!tests' ':!.lighthouserc.json' ':!.github' ':!CLAUDE.md' ':!MIGRATION_PLAN.md'",
   "functions": {
     "api/**/*.js": {
       "memory": 256,

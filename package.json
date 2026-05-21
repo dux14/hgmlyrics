@@ -14,6 +14,7 @@
     "format": "prettier --write 'src/**/*.{js,css,html,json}'",
     "format:check": "prettier --check 'src/**/*.{js,css,html,json}'",
     "optimize:covers": "node scripts/optimize-covers.mjs",
+    "db:migrate-data": "node scripts/turso-to-pg.mjs",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -37,8 +38,10 @@
     "vitest": "^4.1.0"
   },
   "dependencies": {
+    "@libsql/client": "^0.15.15",
     "dotenv": "^17.4.0",
     "flexsearch": "^0.8.212",
-    "idb-keyval": "^6.2.2"
+    "idb-keyval": "^6.2.2",
+    "postgres": "^3.4.9"
   }
 }

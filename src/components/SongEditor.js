@@ -11,13 +11,9 @@ import { renderLogoutButton } from './AdminGate.js';
 import { navigate } from '../router.js';
 import { getToken } from '../lib/auth.js';
 import { renderSongView } from './SongView.js';
-import {
-  VOICE_GROUPS,
-  VALID_VOICE_IDS,
-  getVoiceColor,
-  getVoiceBgColor,
-  getVoiceLabel,
-} from '../lib/voiceSystem.js';
+import { VALID_VOICE_IDS, buildHighlightedHTML, validateVoiceRanges } from '../lib/voiceSystem.js';
+import { getDragRange, getCaretOffsetAtPoint } from '../lib/caretSelection.js';
+import { openVoiceBottomSheet } from './VoiceBottomSheet.js';
 
 const API_URL = '/api';
 
@@ -41,14 +37,11 @@ function sectionsToBlocks(sections) {
     id: `section-${si}-${Date.now()}`,
     type: section.type || 'verse',
     label: section.label || 'Verso',
-    voices: section.voices || [],
     lines: section.lines.map((line, li) => ({
       id: `line-${si}-${li}-${Date.now()}`,
       text: line.text || '',
-      voices: line.voices || [],
       voiceRanges: line.voiceRanges || [],
       chords: line.chords || [],
-      color: line.color || null,
       annotation: line.annotation || false,
       showChords: line.chords && line.chords.length > 0,
     })),
@@ -67,15 +60,12 @@ function blocksToSections(blocks) {
         .filter((l) => l.text.trim() !== '' || l.chords.length > 0 || l.annotation)
         .map((l) => {
           const line = { text: l.text };
-          if (l.voices && l.voices.length > 0) line.voices = l.voices;
           if (l.voiceRanges && l.voiceRanges.length > 0) line.voiceRanges = l.voiceRanges;
           if (l.chords && l.chords.length > 0) line.chords = l.chords;
-          if (l.color) line.color = l.color;
           if (l.annotation) line.annotation = true;
           return line;
         }),
     };
-    if (block.voices && block.voices.length > 0) section.voices = block.voices;
     return section;
   });
 }
@@ -98,7 +88,6 @@ function parseImportText(text) {
         id: `section-imp-${sectionCounter++}-${Date.now()}`,
         type: guessType(label),
         label,
-        voices: [],
         lines: [],
       };
     } else if (rawLine.trim() === '') {
@@ -113,7 +102,6 @@ function parseImportText(text) {
           id: `section-imp-${sectionCounter++}-${Date.now()}`,
           type: 'verse',
           label: `Verso ${sectionCounter}`,
-          voices: [],
           lines: [],
         };
       }
@@ -127,24 +115,14 @@ function parseImportText(text) {
         line = line.slice(voiceMatch[0].length);
       }
 
-      // Parse color prefix
-      let color = null;
-      const colorMatch = line.match(/^\{(#[A-Fa-f0-9]{3,8})\}(.*)$/);
-      if (colorMatch) {
-        color = colorMatch[1];
-        line = colorMatch[2];
-      }
-
       // Parse inline chords
       const { text: cleanText, chords } = parseLineChords(line);
 
       current.lines.push({
         id: `line-imp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         text: cleanText,
-        voices,
-        voiceRanges: [],
+        voiceRanges: voices.length > 0 ? [{ start: 0, end: cleanText.length, voices }] : [],
         chords: chords || [],
-        color,
         showChords: chords && chords.length > 0,
       });
     }
@@ -222,6 +200,16 @@ export async function renderSongEditor(container, editId) {
 
   // Editable state
   const blocks = existingSong ? sectionsToBlocks(existingSong.sections) : [];
+
+  // Per-line UI mode: 'text' (default <input>) or 'voices' (display + drag-select)
+  const lineModes = new Map(); // lineId -> 'text' | 'voices'
+  function getLineMode(id) {
+    return lineModes.get(id) || 'text';
+  }
+  function setLineMode(id, mode) {
+    lineModes.set(id, mode);
+    renderBlocks();
+  }
 
   // Build the editor HTML
   container.innerHTML = `
@@ -393,25 +381,32 @@ export async function renderSongEditor(container, editId) {
   }
 
   function renderLineRow(line, _lineIndex, _totalLines, _sectionId) {
-    const voiceChips = line.voices
-      .map(
-        (v) =>
-          `<span class="line-row__voice-chip" style="background: ${getVoiceBgColor(v)}; color: ${getVoiceColor(v)};">${getVoiceLabel(v)}</span>`,
-      )
-      .join('');
+    const mode = getLineMode(line.id);
+    const rangeCount = (line.voiceRanges || []).length;
 
     const chordRowHtml = line.showChords
       ? `<input class="line-row__chord-input" type="text" value="${escapeHtml(buildChordString(line.text, line.chords))}" data-action="edit-chords" data-line-id="${line.id}" placeholder="Ej: Am    F    C    G" />`
       : '';
 
+    const mainContent =
+      mode === 'voices'
+        ? `<div class="line-row__voice-display" data-action="voice-display" data-line-id="${line.id}">${buildHighlightedHTML(line.text || ' ', line.voiceRanges || [])}</div>`
+        : `<input class="line-row__input" type="text" value="${escapeHtml(line.text)}" data-action="edit-text" data-line-id="${line.id}" placeholder="Escribe la línea aquí..." />`;
+
+    const voiceModeActive = mode === 'voices' ? 'line-row__btn--active' : '';
+    const rangeCountHtml =
+      rangeCount > 0
+        ? `<span class="line-row__range-count" title="${rangeCount} rango(s) asignado(s)">${rangeCount}</span>`
+        : '';
+
     return `
       <div class="line-row" data-line-id="${line.id}">
         ${chordRowHtml}
         <div class="line-row__main">
-          <input class="line-row__input" type="text" value="${escapeHtml(line.text)}" data-action="edit-text" data-line-id="${line.id}" placeholder="Escribe la línea aquí..." />
+          ${mainContent}
           <div class="line-row__actions">
-            ${voiceChips}
-            <button class="line-row__btn line-row__btn--voice" data-action="toggle-voice" data-line-id="${line.id}" title="Asignar voces">🎤</button>
+            ${rangeCountHtml}
+            <button class="line-row__btn line-row__btn--voice-mode ${voiceModeActive}" data-action="toggle-voice-mode" data-line-id="${line.id}" title="${mode === 'voices' ? 'Volver a editar texto' : 'Asignar voces'}">🎨</button>
             <button class="line-row__btn ${line.showChords ? 'line-row__btn--active' : ''}" data-action="toggle-chords" data-line-id="${line.id}" title="Acordes">🎸</button>
             <button class="line-row__btn ${line.annotation ? 'line-row__btn--active line-row__btn--annotation' : ''}" data-action="toggle-annotation" data-line-id="${line.id}" title="Marcar como anotación/guía">🏷️</button>
             <button class="line-row__btn line-row__btn--delete" data-action="delete-line" data-line-id="${line.id}" title="Eliminar">✕</button>
@@ -501,10 +496,8 @@ export async function renderSongEditor(container, editId) {
       blocks[si].lines.push({
         id: uid(),
         text: '',
-        voices: [],
         voiceRanges: [],
         chords: [],
-        color: null,
         showChords: false,
       });
       renderBlocks();
@@ -531,9 +524,23 @@ export async function renderSongEditor(container, editId) {
         found.line.annotation = !found.line.annotation;
         renderBlocks();
       }
-    } else if (action === 'toggle-voice') {
-      const lineId = btn.dataset.lineId;
-      showVoicePopover(btn, lineId);
+    } else if (action === 'toggle-voice-mode') {
+      const lineId = e.target.dataset.lineId;
+      const found = findLine(lineId);
+      if (!found) return;
+      const current = getLineMode(lineId);
+      if (current === 'voices') {
+        // Leaving voice mode → no validation needed; ranges unchanged
+        setLineMode(lineId, 'text');
+      } else {
+        // Entering voice mode from text mode → validate ranges against current text length
+        found.line.voiceRanges = validateVoiceRanges(
+          found.line.voiceRanges || [],
+          (found.line.text || '').length,
+        );
+        setLineMode(lineId, 'voices');
+      }
+      return;
     } else if (action === 'move-section-up') {
       const si = parseInt(btn.dataset.section);
       if (si > 0) {
@@ -555,6 +562,94 @@ export async function renderSongEditor(container, editId) {
     }
   });
 
+  // ─── Drag-select on voice display ───
+  let dragState = null; // { lineId, display, startPt }
+
+  editorRoot.addEventListener('pointerdown', (e) => {
+    const display = e.target.closest('[data-action="voice-display"]');
+    if (!display) return;
+    e.preventDefault();
+    display.setPointerCapture?.(e.pointerId);
+    dragState = {
+      lineId: display.dataset.lineId,
+      display,
+      startPt: { x: e.clientX, y: e.clientY },
+    };
+  });
+
+  editorRoot.addEventListener('pointerup', (e) => {
+    if (!dragState) return;
+    const { lineId, display, startPt } = dragState;
+    dragState = null;
+    const found = findLine(lineId);
+    if (!found) return;
+
+    const endPt = { x: e.clientX, y: e.clientY };
+    const dist = Math.hypot(endPt.x - startPt.x, endPt.y - startPt.y);
+
+    if (dist < 4) {
+      // Tap — open sheet for the tapped range if any, else do nothing
+      const offset = getCaretOffsetAtPoint(display, endPt.x, endPt.y);
+      if (offset === null) return;
+      const range = (found.line.voiceRanges || []).find((r) => offset >= r.start && offset < r.end);
+      if (range) {
+        openSheetForRange(found, range, range.start, range.end);
+      }
+      return;
+    }
+
+    // Drag — resolve [start, end] in character offsets
+    const dragRange = getDragRange(display, startPt, endPt);
+    if (!dragRange) return;
+    const [start, end] = dragRange;
+    if (start >= end) return;
+    openSheetForRange(found, null, start, end);
+  });
+
+  function openSheetForRange(found, existingRange, start, end) {
+    const text = found.line.text || '';
+    const selectedText = text.slice(start, end);
+    const initialVoices = existingRange ? [...existingRange.voices] : [];
+
+    openVoiceBottomSheet({
+      selectedText,
+      initialVoices,
+      onApply: (voices) => {
+        applyRangeMutation(found.line, start, end, voices);
+        renderBlocks();
+        updatePreview();
+      },
+      onRemove: () => {
+        applyRangeMutation(found.line, start, end, []);
+        renderBlocks();
+        updatePreview();
+      },
+    });
+  }
+
+  /**
+   * Apply the REPLACE rule:
+   * - Trim/drop existing ranges that overlap [start, end)
+   * - If `voices` non-empty, insert the new range
+   * - Re-validate
+   */
+  function applyRangeMutation(line, start, end, voices) {
+    const next = [];
+    for (const r of line.voiceRanges || []) {
+      if (r.end <= start || r.start >= end) {
+        next.push(r); // no overlap
+      } else {
+        // overlap — trim/split
+        if (r.start < start) next.push({ start: r.start, end: start, voices: r.voices });
+        if (r.end > end) next.push({ start: end, end: r.end, voices: r.voices });
+      }
+    }
+    if (voices.length > 0) {
+      next.push({ start, end, voices });
+    }
+    line.voiceRanges = validateVoiceRanges(next, (line.text || '').length);
+  }
+
   // Add section button
   container.querySelector('#add-section-btn').addEventListener('click', () => {
     const verseCount = blocks.filter((b) => b.type === 'verse').length;
@@ -562,15 +657,12 @@ export async function renderSongEditor(container, editId) {
       id: uid(),
       type: 'verse',
       label: `Verso ${verseCount + 1}`,
-      voices: [],
       lines: [
         {
           id: uid(),
           text: '',
-          voices: [],
           voiceRanges: [],
           chords: [],
-          color: null,
           showChords: false,
         },
       ],
@@ -580,103 +672,6 @@ export async function renderSongEditor(container, editId) {
     const lastSection = editorRoot.querySelector('.section-block:last-child .line-row__input');
     lastSection?.focus();
   });
-
-  // ─── Voice Popover ───
-  let activePopover = null;
-
-  function showVoicePopover(anchorBtn, lineId) {
-    closePopover();
-    const found = findLine(lineId);
-    if (!found) return;
-
-    const popover = document.createElement('div');
-    popover.className = 'voice-popover';
-    popover.innerHTML = `
-      <div class="voice-popover__title">Asignar voces</div>
-      ${VOICE_GROUPS.map(
-        (group) => `
-        <div class="voice-popover__group">
-          <div class="voice-popover__group-label">${group.label}</div>
-          ${group.voices
-            .map((v) => {
-              const isActive = found.line.voices.includes(v.id);
-              return `
-              <button class="voice-popover__chip ${isActive ? 'voice-popover__chip--active' : ''}"
-                data-voice-id="${v.id}"
-                style="${isActive ? `background: ${getVoiceBgColor(v.id)}; color: ${getVoiceColor(v.id)}; border-color: ${getVoiceColor(v.id)};` : ''}">
-                <span class="voice-popover__dot" style="background: ${getVoiceColor(v.id)};"></span>
-                ${v.label} <span class="voice-popover__sublabel">(${v.sublabel})</span>
-              </button>
-            `;
-            })
-            .join('')}
-        </div>
-      `,
-      ).join('')}
-      <button class="voice-popover__clear" data-voice-clear="true">Quitar todas</button>
-    `;
-
-    // Position: below the anchor button
-    const rect = anchorBtn.getBoundingClientRect();
-    popover.style.position = 'fixed';
-    popover.style.top = `${rect.bottom + 6}px`;
-    popover.style.left = `${Math.max(8, rect.left - 80)}px`;
-    popover.style.zIndex = '500';
-
-    document.body.appendChild(popover);
-    activePopover = popover;
-
-    // Voice toggle clicks
-    popover.addEventListener('click', (e) => {
-      const chip = e.target.closest('[data-voice-id]');
-      if (chip) {
-        const vid = chip.dataset.voiceId;
-        if (found.line.voices.includes(vid)) {
-          found.line.voices = found.line.voices.filter((v) => v !== vid);
-        } else {
-          found.line.voices.push(vid);
-        }
-        renderBlocks();
-        // Reopen popover if still relevant
-        const newAnchor = editorRoot.querySelector(
-          `[data-line-id="${lineId}"][data-action="toggle-voice"]`,
-        );
-        if (newAnchor) showVoicePopover(newAnchor, lineId);
-        return;
-      }
-
-      const clearBtn = e.target.closest('[data-voice-clear]');
-      if (clearBtn) {
-        found.line.voices = [];
-        found.line.voiceRanges = [];
-        renderBlocks();
-        closePopover();
-      }
-    });
-
-    // Close on outside click
-    setTimeout(() => {
-      document.addEventListener('click', handleOutsideClick);
-    }, 10);
-  }
-
-  function handleOutsideClick(e) {
-    if (
-      activePopover &&
-      !activePopover.contains(e.target) &&
-      !e.target.closest('[data-action="toggle-voice"]')
-    ) {
-      closePopover();
-    }
-  }
-
-  function closePopover() {
-    if (activePopover) {
-      activePopover.remove();
-      activePopover = null;
-      document.removeEventListener('click', handleOutsideClick);
-    }
-  }
 
   // ─── Import Modal ───
   container.querySelector('#import-btn').addEventListener('click', () => {

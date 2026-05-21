@@ -109,9 +109,7 @@ function getVoiceTypeLabel(voiceType) {
 function detectUsedVoices(sections) {
   const used = new Set();
   for (const section of sections) {
-    if (section.voices) section.voices.forEach((v) => used.add(v));
     for (const line of section.lines) {
-      if (line.voices) line.voices.forEach((v) => used.add(v));
       if (line.voiceRanges) {
         line.voiceRanges.forEach((r) => {
           if (r.voices) r.voices.forEach((v) => used.add(v));
@@ -507,33 +505,17 @@ function renderSections(
             return showChords ? '' : `<p class="lyrics__line">&nbsp;</p>`;
           }
 
-          const voices = line.voices || [];
-          const isForAll = voices.length === 0;
-          const matchesFilter = activeVoice === 'all' || isForAll || voices.includes(activeVoice);
+          const ranges = line.voiceRanges || [];
+          const isForAll = ranges.length === 0;
 
-          // Check word-level ranges for filter match too
-          const hasMatchingRange = line.voiceRanges?.some((r) => r.voices?.includes(activeVoice));
-          const effectiveMatch = matchesFilter || hasMatchingRange;
-
-          // Determine color strategy
-          let lineColor = '';
-          let lineHighlightBg = '';
-
-          if (effectiveMatch && activeVoice !== 'all') {
-            lineHighlightBg = isForAll ? '' : getVoiceBgColor(activeVoice);
+          // Line-level dimming only applies when a filter is active AND the line is fully assigned with NO matching range
+          let lineMatchesFilter = true;
+          if (activeVoice !== 'all' && !isForAll) {
+            lineMatchesFilter = ranges.some((r) => r.voices?.includes(activeVoice));
           }
-
-          if (line.color) {
-            lineColor = line.color;
-          } else if (voices.length === 1) {
-            lineColor = getVoiceColor(voices[0]);
-          } else if (voices.length > 1) {
-            lineColor = getVoiceColor(voices[0]);
-          }
-
-          const dimmedClass = effectiveMatch ? '' : 'lyrics__line--dimmed';
-          const highlightClass =
-            effectiveMatch && activeVoice !== 'all' && !isForAll ? 'lyrics__line--highlighted' : '';
+          const dimmedClass = lineMatchesFilter ? '' : 'lyrics__line--dimmed';
+          const highlightClass = '';
+          const lineHighlightBg = '';
 
           // ── Chord rendering: Inline Anchored (Propuesta A+B) ──
           if (showChords && line.chords?.length > 0) {
@@ -542,34 +524,29 @@ function renderSections(
               line.chords,
               transposeSemitones,
               useFlats,
+              line.voiceRanges || [],
             );
+            const hasRanges = (line.voiceRanges || []).length > 0;
+            const rangesClass = hasRanges ? ' has-voice-ranges' : '';
             const styleAttrs = [];
             if (lineHighlightBg) styleAttrs.push(`background: ${lineHighlightBg}`);
             const styleStr = styleAttrs.length > 0 ? ` style="${styleAttrs.join('; ')}"` : '';
             return `
-            <div class="chord-line ${dimmedClass} ${highlightClass}"${styleStr}>
+            <div class="chord-line ${dimmedClass} ${highlightClass}${rangesClass}"${styleStr}>
               ${inlineHtml}
             </div>`;
           }
 
           // ── Regular lyrics line (no chords) ──
-          let lineContent;
-          if (line.voiceRanges && line.voiceRanges.length > 0) {
-            lineContent = buildHighlightedHTML(text, line.voiceRanges, voices);
-          } else {
-            lineContent = escapeHtml(text);
-          }
+          const lineContent = buildHighlightedHTML(text, line.voiceRanges || []);
 
           const styleAttrs = [];
-          if (lineColor && !(line.voiceRanges?.length > 0)) styleAttrs.push(`color: ${lineColor}`);
           if (lineHighlightBg) styleAttrs.push(`background: ${lineHighlightBg}`);
           const styleStr = styleAttrs.length > 0 ? ` style="${styleAttrs.join('; ')}"` : '';
 
-          // In chord mode, render lines without chords more subtly
           if (showChords) {
             return `<p class="lyrics__line lyrics__line--no-chord ${dimmedClass} ${highlightClass}"${styleStr}>${lineContent}</p>`;
           }
-
           return `<p class="lyrics__line ${dimmedClass} ${highlightClass}"${styleStr}>${lineContent}</p>`;
         })
         .join('')}
@@ -580,10 +557,17 @@ function renderSections(
 }
 
 /**
- * Build inline chord HTML — each chord is anchored to its text segment
- * Creates chord-lyric pairs that are immune to font-size changes
+ * Build inline chord HTML — each chord is anchored to its text segment.
+ * If voiceRanges provided, each segment text is re-wrapped via buildHighlightedHTML
+ * which adds absolute-positioned underlines without affecting chord grid alignment.
  */
-function buildInlineChordHTML(text, chords, transposeSemitones = 0, useFlats = false) {
+function buildInlineChordHTML(
+  text,
+  chords,
+  transposeSemitones = 0,
+  useFlats = false,
+  voiceRanges = [],
+) {
   const sorted = [...chords].sort((a, b) => (a.pos || 0) - (b.pos || 0));
   const segments = [];
   let lastPos = 0;
@@ -593,39 +577,54 @@ function buildInlineChordHTML(text, chords, transposeSemitones = 0, useFlats = f
     const transposed =
       transposeSemitones !== 0 ? transposeChord(ch, transposeSemitones, useFlats) : ch;
 
-    // Text before this chord (no chord above it)
     if (chordPos > lastPos) {
-      const beforeText = text.slice(lastPos, chordPos);
-      segments.push({ chord: null, text: beforeText });
+      segments.push({ chord: null, start: lastPos, end: chordPos });
     }
-
-    // This chord's segment — find the end (next chord pos or end of text)
     const nextIdx = sorted.findIndex((c) => (c.pos || 0) > chordPos);
     const nextChordPos = nextIdx !== -1 ? sorted[nextIdx].pos || text.length : text.length;
-    const segmentText = text.slice(chordPos, nextChordPos);
-    segments.push({ chord: transposed, text: segmentText });
+    segments.push({ chord: transposed, start: chordPos, end: nextChordPos });
     lastPos = nextChordPos;
   }
 
-  // Remaining text after last chord
   if (lastPos < text.length) {
-    segments.push({ chord: null, text: text.slice(lastPos) });
+    segments.push({ chord: null, start: lastPos, end: text.length });
   }
 
   return segments
     .map((seg) => {
+      const segText = text.slice(seg.start, seg.end);
+      const segRanges = sliceRangesForSegment(voiceRanges, seg.start, seg.end);
+      const innerHtml =
+        segRanges.length > 0 ? buildHighlightedHTML(segText, segRanges) : escapeHtml(segText);
       if (seg.chord) {
         return `<span class="chord-pair">
         <span class="chord-badge">${escapeHtml(seg.chord)}</span>
-        <span class="chord-text">${escapeHtml(seg.text)}</span>
+        <span class="chord-text">${innerHtml}</span>
       </span>`;
       }
       return `<span class="chord-pair chord-pair--empty">
       <span class="chord-badge">&nbsp;</span>
-      <span class="chord-text">${escapeHtml(seg.text)}</span>
+      <span class="chord-text">${innerHtml}</span>
     </span>`;
     })
     .join('');
+}
+
+/**
+ * Extract the subset of voiceRanges that intersect [segStart, segEnd),
+ * rebased to local offsets (0..segEnd-segStart).
+ */
+function sliceRangesForSegment(voiceRanges, segStart, segEnd) {
+  if (!voiceRanges || voiceRanges.length === 0) return [];
+  const out = [];
+  for (const r of voiceRanges) {
+    const start = Math.max(r.start, segStart);
+    const end = Math.min(r.end, segEnd);
+    if (start < end) {
+      out.push({ start: start - segStart, end: end - segStart, voices: r.voices });
+    }
+  }
+  return out;
 }
 
 /**

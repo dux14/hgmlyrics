@@ -38,14 +38,6 @@ jobs:
         continue-on-error: true
         run: pnpm test:ci
 
-      - name: Backend tests
-        working-directory: server
-        env:
-          ADMIN_PIN: ci-pin
-          JWT_SECRET: ci-secret-do-not-use-in-prod
-          DB_URL: ':memory:'
-        run: pnpm test
-
       - name: Build
         run: pnpm build
 

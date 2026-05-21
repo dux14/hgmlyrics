@@ -49,34 +49,6 @@ export default [
     },
   },
   {
-    // Server (Node, CommonJS) overrides
-    files: ['server/**/*.js'],
-    languageOptions: {
-      ecmaVersion: 2022,
-      sourceType: 'commonjs',
-      globals: {
-        require: 'readonly',
-        module: 'readonly',
-        exports: 'readonly',
-        __dirname: 'readonly',
-        __filename: 'readonly',
-        process: 'readonly',
-        Buffer: 'readonly',
-        console: 'readonly',
-        setTimeout: 'readonly',
-        clearTimeout: 'readonly',
-        setInterval: 'readonly',
-        clearInterval: 'readonly',
-        URL: 'readonly',
-        global: 'readonly',
-      },
-    },
-    rules: {
-      // Server may log freely (operational logging).
-      'no-console': 'off',
-    },
-  },
-  {
     // Vercel Functions (Node, ESM) overrides
     files: ['api/**/*.js'],
     languageOptions: {
@@ -99,16 +71,9 @@ export default [
     },
   },
   {
-    // Vitest config is ESM (uses `import` / `export default`).
-    files: ['server/vitest.config.js'],
-    languageOptions: {
-      sourceType: 'module',
-    },
-  },
-  {
     // Vitest test files use globals (`describe`, `it`, `expect`, `beforeEach`, …)
-    // because `test.globals: true` is set in server/vitest.config.js.
-    files: ['server/tests/**/*.js', 'tests/**/*.js'],
+    // because `globals: true` is set in vitest.config.js.
+    files: ['tests/**/*.js'],
     languageOptions: {
       globals: {
         describe: 'readonly',
@@ -124,6 +89,6 @@ export default [
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'server/node_modules/**'],
+    ignores: ['dist/**', 'node_modules/**', 'coverage/**'],
   },
 ];

@@ -1,10 +1,7 @@
 {
   "ci": {
     "collect": {
-      "url": ["http://localhost:3000/"],
-      "startServerCommand": "cd server && ADMIN_PIN=ci-pin JWT_SECRET=ci-secret-do-not-use DB_URL=:memory: node index.js",
-      "startServerReadyPattern": "Server running on",
-      "startServerReadyTimeout": 30000,
+      "staticDistDir": "dist",
       "numberOfRuns": 3,
       "settings": {
         "preset": "desktop",

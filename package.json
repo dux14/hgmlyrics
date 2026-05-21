@@ -14,7 +14,6 @@
     "format": "prettier --write 'src/**/*.{js,css,html,json}'",
     "format:check": "prettier --check 'src/**/*.{js,css,html,json}'",
     "optimize:covers": "node scripts/optimize-covers.mjs",
-    "db:migrate-data": "node scripts/turso-to-pg.mjs",
     "dev:vercel": "vercel dev --listen 3000",
     "prepare": "husky"
   },
@@ -39,9 +38,7 @@
     "vitest": "^4.1.0"
   },
   "dependencies": {
-    "@libsql/client": "^0.15.15",
     "@supabase/supabase-js": "^2.106.0",
-    "dotenv": "^17.4.0",
     "flexsearch": "^0.8.212",
     "formidable": "^3.5.4",
     "idb-keyval": "^6.2.2",

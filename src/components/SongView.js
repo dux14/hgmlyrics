@@ -528,11 +528,13 @@ function renderSections(
               useFlats,
               line.voiceRanges || [],
             );
+            const hasRanges = (line.voiceRanges || []).length > 0;
+            const rangesClass = hasRanges ? ' has-voice-ranges' : '';
             const styleAttrs = [];
             if (lineHighlightBg) styleAttrs.push(`background: ${lineHighlightBg}`);
             const styleStr = styleAttrs.length > 0 ? ` style="${styleAttrs.join('; ')}"` : '';
             return `
-            <div class="chord-line ${dimmedClass} ${highlightClass}"${styleStr}>
+            <div class="chord-line ${dimmedClass} ${highlightClass}${rangesClass}"${styleStr}>
               ${inlineHtml}
             </div>`;
           }
@@ -596,14 +598,13 @@ function buildInlineChordHTML(
       const segRanges = sliceRangesForSegment(voiceRanges, seg.start, seg.end);
       const innerHtml =
         segRanges.length > 0 ? buildHighlightedHTML(segText, segRanges) : escapeHtml(segText);
-      const extraClass = segRanges.length > 0 ? ' has-voice-ranges' : '';
       if (seg.chord) {
-        return `<span class="chord-pair${extraClass}">
+        return `<span class="chord-pair">
         <span class="chord-badge">${escapeHtml(seg.chord)}</span>
         <span class="chord-text">${innerHtml}</span>
       </span>`;
       }
-      return `<span class="chord-pair chord-pair--empty${extraClass}">
+      return `<span class="chord-pair chord-pair--empty">
       <span class="chord-badge">&nbsp;</span>
       <span class="chord-text">${innerHtml}</span>
     </span>`;

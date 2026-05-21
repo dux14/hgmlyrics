@@ -14,16 +14,40 @@ export const VOICE_GROUPS = [
     gender: 'female',
     label: '♀ Femeninas',
     voices: [
-      { id: 'soprano', label: 'Soprano', sublabel: 'Alta', cssColor: '--color-voice-soprano', cssBg: '--color-voice-soprano-bg' },
-      { id: 'contralto', label: 'Contralto', sublabel: 'Baja', cssColor: '--color-voice-contralto', cssBg: '--color-voice-contralto-bg' },
+      {
+        id: 'soprano',
+        label: 'Soprano',
+        sublabel: 'Alta',
+        cssColor: '--color-voice-soprano',
+        cssBg: '--color-voice-soprano-bg',
+      },
+      {
+        id: 'contralto',
+        label: 'Contralto',
+        sublabel: 'Baja',
+        cssColor: '--color-voice-contralto',
+        cssBg: '--color-voice-contralto-bg',
+      },
     ],
   },
   {
     gender: 'male',
     label: '♂ Masculinas',
     voices: [
-      { id: 'tenor', label: 'Tenor', sublabel: 'Alto', cssColor: '--color-voice-tenor', cssBg: '--color-voice-tenor-bg' },
-      { id: 'bass', label: 'Bajo', sublabel: 'Bajo', cssColor: '--color-voice-bass', cssBg: '--color-voice-bass-bg' },
+      {
+        id: 'tenor',
+        label: 'Tenor',
+        sublabel: 'Alto',
+        cssColor: '--color-voice-tenor',
+        cssBg: '--color-voice-tenor-bg',
+      },
+      {
+        id: 'bass',
+        label: 'Bajo',
+        sublabel: 'Bajo',
+        cssColor: '--color-voice-bass',
+        cssBg: '--color-voice-bass-bg',
+      },
     ],
   },
 ];
@@ -31,17 +55,17 @@ export const VOICE_GROUPS = [
 /**
  * Flat array of all voice types with metadata
  */
-export const VOICE_TYPES = VOICE_GROUPS.flatMap(group =>
-  group.voices.map(v => ({
+export const VOICE_TYPES = VOICE_GROUPS.flatMap((group) =>
+  group.voices.map((v) => ({
     ...v,
     gender: group.gender,
-  }))
+  })),
 );
 
 /**
  * Valid voice IDs
  */
-export const VALID_VOICE_IDS = VOICE_TYPES.map(v => v.id);
+export const VALID_VOICE_IDS = VOICE_TYPES.map((v) => v.id);
 
 /**
  * Get the CSS custom property for a voice color
@@ -49,7 +73,7 @@ export const VALID_VOICE_IDS = VOICE_TYPES.map(v => v.id);
  * @returns {string} CSS var() value
  */
 export function getVoiceColor(voiceId) {
-  const voice = VOICE_TYPES.find(v => v.id === voiceId);
+  const voice = VOICE_TYPES.find((v) => v.id === voiceId);
   return voice ? `var(${voice.cssColor})` : 'inherit';
 }
 
@@ -59,7 +83,7 @@ export function getVoiceColor(voiceId) {
  * @returns {string} CSS var() value
  */
 export function getVoiceBgColor(voiceId) {
-  const voice = VOICE_TYPES.find(v => v.id === voiceId);
+  const voice = VOICE_TYPES.find((v) => v.id === voiceId);
   return voice ? `var(${voice.cssBg})` : 'transparent';
 }
 
@@ -69,7 +93,7 @@ export function getVoiceBgColor(voiceId) {
  * @returns {string}
  */
 export function getVoiceLabel(voiceId) {
-  const voice = VOICE_TYPES.find(v => v.id === voiceId);
+  const voice = VOICE_TYPES.find((v) => v.id === voiceId);
   return voice ? voice.label : voiceId;
 }
 
@@ -79,7 +103,7 @@ export function getVoiceLabel(voiceId) {
  * @returns {string}
  */
 export function getVoiceGender(voiceId) {
-  const voice = VOICE_TYPES.find(v => v.id === voiceId);
+  const voice = VOICE_TYPES.find((v) => v.id === voiceId);
   return voice ? voice.gender : 'unknown';
 }
 
@@ -97,72 +121,66 @@ export function resolveLineVoices(line, sectionVoices = []) {
 }
 
 /**
- * Build highlighted HTML with <span> colored for word-level voice assignments.
- * 
- * @param {string} text - The line text
- * @param {Array} [voiceRanges] - Array of { start, end, voices } for word-level overrides
- * @param {string[]} [defaultVoices] - Default voices for the whole line
- * @returns {string} HTML string with colored spans
+ * Canonical voice order for stacked underlines (top-to-bottom visual).
+ * Index 0 = closest to the text baseline; higher indices = lower on screen.
  */
-export function buildHighlightedHTML(text, voiceRanges = [], defaultVoices = []) {
-  if (!voiceRanges || voiceRanges.length === 0) {
-    // No word-level overrides — return text with line-level color
-    if (defaultVoices.length === 1) {
-      return `<span style="color: ${getVoiceColor(defaultVoices[0])}">${escapeHtml(text)}</span>`;
-    }
-    if (defaultVoices.length > 1) {
-      // Multi-voice: use first voice color with a subtle indicator
-      return `<span style="color: ${getVoiceColor(defaultVoices[0])}">${escapeHtml(text)}</span>`;
-    }
-    return escapeHtml(text);
-  }
+export const CANONICAL_VOICE_ORDER = ['soprano', 'contralto', 'tenor', 'bass'];
 
-  // Sort ranges by start position
+/**
+ * Build stacked underline spans for a range slice.
+ * Filters out invalid IDs; renders in CANONICAL_VOICE_ORDER (stable).
+ * Returns empty string if no valid voices.
+ * @param {string[]} voices
+ * @returns {string} HTML fragment
+ */
+export function buildVoiceUnderlines(voices) {
+  if (!voices || voices.length === 0) return '';
+  const valid = CANONICAL_VOICE_ORDER.filter((v) => voices.includes(v));
+  if (valid.length === 0) return '';
+  return valid.map((v) => `<span class="voice-underline--${v}"></span>`).join('');
+}
+
+/**
+ * Build highlighted HTML for a line of text with sub-line voice ranges.
+ * Ranges that fall outside text length are ignored; caller should validate first.
+ * Returns escaped text wrapped in spans per slice (range or gap).
+ * @param {string} text
+ * @param {Array<{start:number,end:number,voices:string[]}>} voiceRanges
+ * @returns {string} HTML
+ */
+export function buildHighlightedHTML(text, voiceRanges) {
+  if (!voiceRanges || voiceRanges.length === 0) return escapeHtml(text);
+
   const sorted = [...voiceRanges].sort((a, b) => a.start - b.start);
   let result = '';
   let cursor = 0;
 
   for (const range of sorted) {
-    // Text before this range — default voice color
     if (cursor < range.start) {
-      const beforeText = text.slice(cursor, range.start);
-      if (defaultVoices.length === 1) {
-        result += `<span style="color: ${getVoiceColor(defaultVoices[0])}">${escapeHtml(beforeText)}</span>`;
-      } else {
-        result += escapeHtml(beforeText);
-      }
+      result += escapeHtml(text.slice(cursor, range.start));
     }
-
-    // The range itself
     const rangeText = text.slice(range.start, range.end);
-    const rangeVoice = range.voices?.[0];
-    if (rangeVoice) {
-      result += `<span style="color: ${getVoiceColor(rangeVoice)}; background: ${getVoiceBgColor(rangeVoice)}; border-radius: 3px; padding: 0 2px;">${escapeHtml(rangeText)}</span>`;
+    const underlines = buildVoiceUnderlines(range.voices || []);
+    if (underlines) {
+      result += `<span class="voice-range has-voice-ranges">${escapeHtml(rangeText)}${underlines}</span>`;
     } else {
       result += escapeHtml(rangeText);
     }
-
     cursor = range.end;
   }
 
-  // Remaining text after last range
   if (cursor < text.length) {
-    const afterText = text.slice(cursor);
-    if (defaultVoices.length === 1) {
-      result += `<span style="color: ${getVoiceColor(defaultVoices[0])}">${escapeHtml(afterText)}</span>`;
-    } else {
-      result += escapeHtml(afterText);
-    }
+    result += escapeHtml(text.slice(cursor));
   }
-
   return result;
 }
 
-/**
- * Escape HTML special characters
- */
 function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+  if (str === '' || str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

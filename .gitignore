@@ -18,6 +18,11 @@ coverage
 .env.*
 !.env.example
 
+# Vercel / Supabase CLI artifacts
+.vercel/
+supabase/.temp/
+supabase/.branches/
+
 # Database
 *.db
 
@@ -34,9 +39,11 @@ coverage
 
 # claude
 CLAUDE.md
+MIGRATION_PLAN.md
 
 # docs
 docs/*
 
 # Local backup of original covers (created by scripts/optimize-covers.mjs)
 public/covers.backup/
+.vercel

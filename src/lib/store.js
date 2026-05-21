@@ -52,7 +52,7 @@ export function getState() {
  */
 export async function initStore() {
   let loaded = false;
-  
+
   try {
     const res = await fetch(`${API_URL}/songs`);
     if (res.ok) {
@@ -225,10 +225,17 @@ function applyFilters() {
       result.sort((a, b) => b.title.localeCompare(a.title, 'es'));
       break;
     case 'recent':
-      result.sort((a, b) => (b.year || 0) - (a.year || 0) || (b.albumOrder || 0) - (a.albumOrder || 0));
+      result.sort(
+        (a, b) => (b.year || 0) - (a.year || 0) || (b.albumOrder || 0) - (a.albumOrder || 0),
+      );
       break;
     case 'album':
-      result.sort((a, b) => a.album.localeCompare(b.album, 'es') || (a.albumOrder || 0) - (b.albumOrder || 0) || a.title.localeCompare(b.title, 'es'));
+      result.sort(
+        (a, b) =>
+          a.album.localeCompare(b.album, 'es') ||
+          (a.albumOrder || 0) - (b.albumOrder || 0) ||
+          a.title.localeCompare(b.title, 'es'),
+      );
       break;
     case 'album-order':
       result.sort((a, b) => (a.albumOrder || 0) - (b.albumOrder || 0));
@@ -244,16 +251,18 @@ function applyFilters() {
  * @returns {{ prev: object|null, next: object|null, currentIndex: number, total: number }}
  */
 export function getAdjacentSongs(songId) {
-  const song = state.songs.find(s => s.id === songId);
+  const song = state.songs.find((s) => s.id === songId);
   if (!song || !song.albumSlug) return { prev: null, next: null, currentIndex: -1, total: 0 };
 
   const albumSongs = state.songs
-    .filter(s => s.albumSlug === song.albumSlug)
+    .filter((s) => s.albumSlug === song.albumSlug)
     .sort((a, b) => (a.albumOrder || 0) - (b.albumOrder || 0));
 
-  if (albumSongs.length <= 1) return { prev: null, next: null, currentIndex: 0, total: albumSongs.length };
+  if (albumSongs.length <= 1) {
+    return { prev: null, next: null, currentIndex: 0, total: albumSongs.length };
+  }
 
-  const idx = albumSongs.findIndex(s => s.id === songId);
+  const idx = albumSongs.findIndex((s) => s.id === songId);
   // Circular: wrap around
   const prevIdx = (idx - 1 + albumSongs.length) % albumSongs.length;
   const nextIdx = (idx + 1) % albumSongs.length;

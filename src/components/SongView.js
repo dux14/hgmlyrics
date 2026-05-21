@@ -505,15 +505,6 @@ function renderSections(
             return showChords ? '' : `<p class="lyrics__line">&nbsp;</p>`;
           }
 
-          const ranges = line.voiceRanges || [];
-          const isForAll = ranges.length === 0;
-
-          // Line-level dimming only applies when a filter is active AND the line is fully assigned with NO matching range
-          let lineMatchesFilter = true;
-          if (activeVoice !== 'all' && !isForAll) {
-            lineMatchesFilter = ranges.some((r) => r.voices?.includes(activeVoice));
-          }
-          const dimmedClass = lineMatchesFilter ? '' : 'lyrics__line--dimmed';
           const highlightClass = '';
           const lineHighlightBg = '';
 
@@ -525,29 +516,28 @@ function renderSections(
               transposeSemitones,
               useFlats,
               line.voiceRanges || [],
+              activeVoice,
             );
-            const hasRanges = (line.voiceRanges || []).length > 0;
-            const rangesClass = hasRanges ? ' has-voice-ranges' : '';
             const styleAttrs = [];
             if (lineHighlightBg) styleAttrs.push(`background: ${lineHighlightBg}`);
             const styleStr = styleAttrs.length > 0 ? ` style="${styleAttrs.join('; ')}"` : '';
             return `
-            <div class="chord-line ${dimmedClass} ${highlightClass}${rangesClass}"${styleStr}>
+            <div class="chord-line ${highlightClass}"${styleStr}>
               ${inlineHtml}
             </div>`;
           }
 
           // ── Regular lyrics line (no chords) ──
-          const lineContent = buildHighlightedHTML(text, line.voiceRanges || []);
+          const lineContent = buildHighlightedHTML(text, line.voiceRanges || [], activeVoice);
 
           const styleAttrs = [];
           if (lineHighlightBg) styleAttrs.push(`background: ${lineHighlightBg}`);
           const styleStr = styleAttrs.length > 0 ? ` style="${styleAttrs.join('; ')}"` : '';
 
           if (showChords) {
-            return `<p class="lyrics__line lyrics__line--no-chord ${dimmedClass} ${highlightClass}"${styleStr}>${lineContent}</p>`;
+            return `<p class="lyrics__line lyrics__line--no-chord ${highlightClass}"${styleStr}>${lineContent}</p>`;
           }
-          return `<p class="lyrics__line ${dimmedClass} ${highlightClass}"${styleStr}>${lineContent}</p>`;
+          return `<p class="lyrics__line ${highlightClass}"${styleStr}>${lineContent}</p>`;
         })
         .join('')}
     </div>
@@ -567,6 +557,7 @@ function buildInlineChordHTML(
   transposeSemitones = 0,
   useFlats = false,
   voiceRanges = [],
+  activeVoice = 'all',
 ) {
   const sorted = [...chords].sort((a, b) => (a.pos || 0) - (b.pos || 0));
   const segments = [];
@@ -595,7 +586,9 @@ function buildInlineChordHTML(
       const segText = text.slice(seg.start, seg.end);
       const segRanges = sliceRangesForSegment(voiceRanges, seg.start, seg.end);
       const innerHtml =
-        segRanges.length > 0 ? buildHighlightedHTML(segText, segRanges) : escapeHtml(segText);
+        segRanges.length > 0 || activeVoice !== 'all'
+          ? buildHighlightedHTML(segText, segRanges, activeVoice)
+          : escapeHtml(segText);
       if (seg.chord) {
         return `<span class="chord-pair">
         <span class="chord-badge">${escapeHtml(seg.chord)}</span>

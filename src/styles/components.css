@@ -1251,3 +1251,38 @@
 .voice-bottom-sheet__btn--icon {
   padding: 10px 12px;
 }
+
+.line-row__voice-display {
+  flex: 1;
+  min-height: 36px;
+  padding: 8px 12px;
+  background: var(--color-surface, #1a1a1a);
+  border: 1px solid var(--color-border, #333);
+  border-radius: 4px;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: text;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.9;
+  white-space: pre-wrap;
+}
+
+.line-row__btn--voice-mode.line-row__btn--active {
+  background: var(--color-accent, #0097a7);
+  color: white;
+}
+
+.line-row__range-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: var(--color-accent, #0097a7);
+  color: white;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 600;
+}

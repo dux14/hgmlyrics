@@ -17,6 +17,8 @@ import {
   getVoiceColor,
   getVoiceBgColor,
   getVoiceLabel,
+  buildHighlightedHTML,
+  validateVoiceRanges,
 } from '../lib/voiceSystem.js';
 
 const API_URL = '/api';
@@ -223,6 +225,16 @@ export async function renderSongEditor(container, editId) {
   // Editable state
   const blocks = existingSong ? sectionsToBlocks(existingSong.sections) : [];
 
+  // Per-line UI mode: 'text' (default <input>) or 'voices' (display + drag-select)
+  const lineModes = new Map(); // lineId -> 'text' | 'voices'
+  function getLineMode(id) {
+    return lineModes.get(id) || 'text';
+  }
+  function setLineMode(id, mode) {
+    lineModes.set(id, mode);
+    renderBlocks();
+  }
+
   // Build the editor HTML
   container.innerHTML = `
     <div class="editor fade-in">
@@ -393,25 +405,32 @@ export async function renderSongEditor(container, editId) {
   }
 
   function renderLineRow(line, _lineIndex, _totalLines, _sectionId) {
-    const voiceChips = line.voices
-      .map(
-        (v) =>
-          `<span class="line-row__voice-chip" style="background: ${getVoiceBgColor(v)}; color: ${getVoiceColor(v)};">${getVoiceLabel(v)}</span>`,
-      )
-      .join('');
+    const mode = getLineMode(line.id);
+    const rangeCount = (line.voiceRanges || []).length;
 
     const chordRowHtml = line.showChords
       ? `<input class="line-row__chord-input" type="text" value="${escapeHtml(buildChordString(line.text, line.chords))}" data-action="edit-chords" data-line-id="${line.id}" placeholder="Ej: Am    F    C    G" />`
       : '';
 
+    const mainContent =
+      mode === 'voices'
+        ? `<div class="line-row__voice-display" data-action="voice-display" data-line-id="${line.id}">${buildHighlightedHTML(line.text || ' ', line.voiceRanges || [])}</div>`
+        : `<input class="line-row__input" type="text" value="${escapeHtml(line.text)}" data-action="edit-text" data-line-id="${line.id}" placeholder="Escribe la línea aquí..." />`;
+
+    const voiceModeActive = mode === 'voices' ? 'line-row__btn--active' : '';
+    const rangeCountHtml =
+      rangeCount > 0
+        ? `<span class="line-row__range-count" title="${rangeCount} rango(s) asignado(s)">${rangeCount}</span>`
+        : '';
+
     return `
       <div class="line-row" data-line-id="${line.id}">
         ${chordRowHtml}
         <div class="line-row__main">
-          <input class="line-row__input" type="text" value="${escapeHtml(line.text)}" data-action="edit-text" data-line-id="${line.id}" placeholder="Escribe la línea aquí..." />
+          ${mainContent}
           <div class="line-row__actions">
-            ${voiceChips}
-            <button class="line-row__btn line-row__btn--voice" data-action="toggle-voice" data-line-id="${line.id}" title="Asignar voces">🎤</button>
+            ${rangeCountHtml}
+            <button class="line-row__btn line-row__btn--voice-mode ${voiceModeActive}" data-action="toggle-voice-mode" data-line-id="${line.id}" title="${mode === 'voices' ? 'Volver a editar texto' : 'Asignar voces'}">🎨</button>
             <button class="line-row__btn ${line.showChords ? 'line-row__btn--active' : ''}" data-action="toggle-chords" data-line-id="${line.id}" title="Acordes">🎸</button>
             <button class="line-row__btn ${line.annotation ? 'line-row__btn--active line-row__btn--annotation' : ''}" data-action="toggle-annotation" data-line-id="${line.id}" title="Marcar como anotación/guía">🏷️</button>
             <button class="line-row__btn line-row__btn--delete" data-action="delete-line" data-line-id="${line.id}" title="Eliminar">✕</button>
@@ -531,6 +550,23 @@ export async function renderSongEditor(container, editId) {
         found.line.annotation = !found.line.annotation;
         renderBlocks();
       }
+    } else if (action === 'toggle-voice-mode') {
+      const lineId = e.target.dataset.lineId;
+      const found = findLine(lineId);
+      if (!found) return;
+      const current = getLineMode(lineId);
+      if (current === 'voices') {
+        // Leaving voice mode → no validation needed; ranges unchanged
+        setLineMode(lineId, 'text');
+      } else {
+        // Entering voice mode from text mode → validate ranges against current text length
+        found.line.voiceRanges = validateVoiceRanges(
+          found.line.voiceRanges || [],
+          (found.line.text || '').length,
+        );
+        setLineMode(lineId, 'voices');
+      }
+      return;
     } else if (action === 'toggle-voice') {
       const lineId = btn.dataset.lineId;
       showVoicePopover(btn, lineId);

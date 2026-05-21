@@ -59,12 +59,12 @@ export function updateSidebarContent() {
           <span>Todas las canciones</span>
         </div>
         ${albums
-          .map(
-            (album) => {
-              const coverUrl = album.coverImage.startsWith('/') || album.coverImage.startsWith('http')
+          .map((album) => {
+            const coverUrl =
+              album.coverImage.startsWith('/') || album.coverImage.startsWith('http')
                 ? album.coverImage
                 : `/covers/${album.coverImage}`;
-              return `
+            return `
           <div class="sidebar__album-item ${activeAlbum === album.slug ? 'active' : ''}" data-album="${album.slug}">
             <img
               class="sidebar__album-thumb"
@@ -76,8 +76,7 @@ export function updateSidebarContent() {
             <span>${escapeHtml(album.name)}</span>
           </div>
         `;
-            }
-          )
+          })
           .join('')}
       </div>
     </div>

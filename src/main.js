@@ -18,7 +18,12 @@ import { buildIndex } from './lib/search.js';
 import { route, initRouter, onNotFound, navigate } from './router.js';
 import { renderHeader } from './components/Header.js';
 import { renderSidebar, toggleSidebar, updateSidebarContent } from './components/Sidebar.js';
-import { renderFilterBar, updateFilterBar, showFilterBar, hideFilterBar } from './components/FilterBar.js';
+import {
+  renderFilterBar,
+  updateFilterBar,
+  showFilterBar,
+  hideFilterBar,
+} from './components/FilterBar.js';
 import { renderSongList, renderSongListSkeleton } from './components/SongList.js';
 import { renderSongView } from './components/SongView.js';
 import { renderAdminGate } from './components/AdminGate.js';

@@ -60,18 +60,22 @@ export function renderAdminEditList(container) {
 
   function renderList(query = '') {
     const q = query.toLowerCase().trim();
-    const filtered = songs.filter(s => 
-      s.title.toLowerCase().includes(q) || 
-      (s.album && s.album.toLowerCase().includes(q)) ||
-      (s.artist && s.artist.toLowerCase().includes(q))
+    const filtered = songs.filter(
+      (s) =>
+        s.title.toLowerCase().includes(q) ||
+        (s.album && s.album.toLowerCase().includes(q)) ||
+        (s.artist && s.artist.toLowerCase().includes(q)),
     );
 
     if (filtered.length === 0) {
-      listContainer.innerHTML = '<p style="text-align:center; color: var(--color-text-secondary); padding: 2rem 0;">No se encontraron canciones.</p>';
+      listContainer.innerHTML =
+        '<p style="text-align:center; color: var(--color-text-secondary); padding: 2rem 0;">No se encontraron canciones.</p>';
       return;
     }
 
-    listContainer.innerHTML = filtered.map(s => `
+    listContainer.innerHTML = filtered
+      .map(
+        (s) => `
       <div class="admin-song-item" data-id="${s.id}" style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--border-radius-md); cursor: pointer; transition: border-color var(--transition-fast);">
         <div>
           <div style="font-weight: 600; font-size: 1rem;">${escapeHtmlLocal(s.title)}</div>
@@ -79,9 +83,11 @@ export function renderAdminEditList(container) {
         </div>
         <button class="btn btn--primary" style="padding: 0.5rem 1rem;">Editar</button>
       </div>
-    `).join('');
+    `,
+      )
+      .join('');
 
-    listContainer.querySelectorAll('.admin-song-item').forEach(item => {
+    listContainer.querySelectorAll('.admin-song-item').forEach((item) => {
       item.addEventListener('click', () => {
         navigate('/admin/edit/' + item.dataset.id);
       });

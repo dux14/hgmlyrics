@@ -23,10 +23,10 @@
   --color-voice-chorus: #ab47bc;
 
   /* Voice part colors (F5+F7) */
-  --color-voice-soprano: #0097A7;
-  --color-voice-contralto: #7B1FA2;
-  --color-voice-tenor: #E65100;
-  --color-voice-bass: #2E7D32;
+  --color-voice-soprano: #0097a7;
+  --color-voice-contralto: #7b1fa2;
+  --color-voice-tenor: #e65100;
+  --color-voice-bass: #2e7d32;
 
   /* Voice background highlights */
   --color-voice-soprano-bg: rgba(0, 151, 167, 0.12);
@@ -121,10 +121,10 @@
   --color-voice-chorus: #ce93d8;
 
   /* Voice part colors — dark mode (F5+F7) */
-  --color-voice-soprano: #4FC3F7;
-  --color-voice-contralto: #CE93D8;
-  --color-voice-tenor: #FF8A65;
-  --color-voice-bass: #81C784;
+  --color-voice-soprano: #4fc3f7;
+  --color-voice-contralto: #ce93d8;
+  --color-voice-tenor: #ff8a65;
+  --color-voice-bass: #81c784;
 
   /* Voice background highlights — dark mode */
   --color-voice-soprano-bg: rgba(79, 195, 247, 0.15);

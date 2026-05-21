@@ -108,24 +108,10 @@ export function getVoiceGender(voiceId) {
 }
 
 /**
- * Canonical voice order for stacked underlines (top-to-bottom visual).
- * Index 0 = closest to the text baseline; higher indices = lower on screen.
+ * Canonical voice order for rendering (highest pitch first).
+ * Index 0 = soprano (highest); index 3 = bass (lowest).
  */
 export const CANONICAL_VOICE_ORDER = ['soprano', 'contralto', 'tenor', 'bass'];
-
-/**
- * Build stacked underline spans for a range slice.
- * Filters out invalid IDs; renders in CANONICAL_VOICE_ORDER (stable).
- * Returns empty string if no valid voices.
- * @param {string[]} voices
- * @returns {string} HTML fragment
- */
-export function buildVoiceUnderlines(voices) {
-  if (!voices || voices.length === 0) return '';
-  const valid = CANONICAL_VOICE_ORDER.filter((v) => voices.includes(v));
-  if (valid.length === 0) return '';
-  return valid.map((v) => `<span class="voice-underline voice-underline--${v}"></span>`).join('');
-}
 
 /**
  * Validate and normalize voice ranges against a given text length.
@@ -150,36 +136,80 @@ export function validateVoiceRanges(ranges, textLength) {
 }
 
 /**
- * Build highlighted HTML for a line of text with sub-line voice ranges.
- * Ranges that fall outside text length are ignored; caller should validate first.
- * Returns escaped text wrapped in spans per slice (range or gap).
+ * Return voices from `voices` array re-ordered by CANONICAL_VOICE_ORDER,
+ * with invalid IDs filtered out.
+ * @param {string[]} voices
+ * @returns {string[]}
+ */
+function canonicalize(voices) {
+  if (!Array.isArray(voices)) return [];
+  return CANONICAL_VOICE_ORDER.filter((v) => voices.includes(v));
+}
+
+/**
+ * Build highlighted HTML for a line of text with sub-line voice ranges,
+ * filtered by the currently active voice.
+ *
+ * Render rules:
+ * - activeVoice === 'all': color every range with its FIRST canonical voice;
+ *   plain gap text is bare (no span). Multi-voice ranges get a +N superscript
+ *   badge colored with the SECOND canonical voice.
+ * - activeVoice === a specific voice: ranges containing it are colored with
+ *   that voice (full opacity). Ranges without it and plain gap text are
+ *   wrapped in voice-text--dimmed. No badge in this mode.
+ *
  * @param {string} text
  * @param {Array<{start:number,end:number,voices:string[]}>} voiceRanges
+ * @param {string} [activeVoice='all']
  * @returns {string} HTML
  */
-export function buildHighlightedHTML(text, voiceRanges) {
-  if (!voiceRanges || voiceRanges.length === 0) return escapeHtml(text);
+export function buildHighlightedHTML(text, voiceRanges, activeVoice = 'all') {
+  const ranges = Array.isArray(voiceRanges) ? voiceRanges : [];
 
-  const sorted = [...voiceRanges].sort((a, b) => a.start - b.start);
+  if (ranges.length === 0) {
+    if (activeVoice === 'all' || !text) return escapeHtml(text);
+    return `<span class="voice-text voice-text--dimmed">${escapeHtml(text)}</span>`;
+  }
+
+  const sorted = [...ranges].sort((a, b) => a.start - b.start);
   let result = '';
   let cursor = 0;
 
   for (const range of sorted) {
     if (cursor < range.start) {
-      result += escapeHtml(text.slice(cursor, range.start));
+      const gap = text.slice(cursor, range.start);
+      result +=
+        activeVoice === 'all'
+          ? escapeHtml(gap)
+          : `<span class="voice-text voice-text--dimmed">${escapeHtml(gap)}</span>`;
     }
     const rangeText = text.slice(range.start, range.end);
-    const underlines = buildVoiceUnderlines(range.voices || []);
-    if (underlines) {
-      result += `<span class="voice-range has-voice-ranges">${escapeHtml(rangeText)}${underlines}</span>`;
-    } else {
+    const canonical = canonicalize(range.voices || []);
+
+    if (canonical.length === 0) {
       result += escapeHtml(rangeText);
+    } else if (activeVoice === 'all') {
+      const firstVoice = canonical[0];
+      result += `<span class="voice-text voice-text--${firstVoice}">${escapeHtml(rangeText)}</span>`;
+      if (canonical.length > 1) {
+        const badgeVoice = canonical[1];
+        const extras = canonical.length - 1;
+        result += `<sup class="voice-badge-extra voice-badge-extra--${badgeVoice}">+${extras}</sup>`;
+      }
+    } else if (canonical.includes(activeVoice)) {
+      result += `<span class="voice-text voice-text--${activeVoice}">${escapeHtml(rangeText)}</span>`;
+    } else {
+      result += `<span class="voice-text voice-text--dimmed">${escapeHtml(rangeText)}</span>`;
     }
     cursor = range.end;
   }
 
   if (cursor < text.length) {
-    result += escapeHtml(text.slice(cursor));
+    const tail = text.slice(cursor);
+    result +=
+      activeVoice === 'all'
+        ? escapeHtml(tail)
+        : `<span class="voice-text voice-text--dimmed">${escapeHtml(tail)}</span>`;
   }
   return result;
 }

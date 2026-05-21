@@ -10,12 +10,12 @@ import { describe, it, expect } from 'vitest';
 import { buildHighlightedHTML } from '../src/lib/voiceSystem.js';
 
 describe('chord-line + voiceRanges contract', () => {
-  it('buildHighlightedHTML on a chord segment substring produces underline spans for matching ranges', () => {
+  it('buildHighlightedHTML on a chord segment substring produces colored-text spans for matching ranges', () => {
     // Simulates what sliceRangesForSegment + buildHighlightedHTML produces inside one chord segment
     const segText = 'mun';
     const segRanges = [{ start: 0, end: 3, voices: ['soprano'] }];
-    const html = buildHighlightedHTML(segText, segRanges);
-    expect(html).toContain('voice-underline--soprano');
+    const html = buildHighlightedHTML(segText, segRanges, 'all');
+    expect(html).toContain('voice-text--soprano');
     expect(html).toContain('mun');
   });
 

@@ -19,7 +19,7 @@ export async function login(pin) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pin }),
     });
-    
+
     if (res.ok) {
       const data = await res.json();
       sessionStorage.setItem(SESSION_KEY, data.token);

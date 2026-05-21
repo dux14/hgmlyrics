@@ -687,22 +687,6 @@
   white-space: nowrap;
 }
 
-/* Dimmed state for non-matching voice lines */
-.lyrics__line--dimmed {
-  opacity: 0.15;
-  transition: opacity 300ms ease;
-}
-
-/* Chord line dimming */
-.lyrics__chord-line.lyrics__line--dimmed {
-  opacity: 0.15;
-}
-
-.lyrics__chord-line.lyrics__line--dimmed .lyrics__chords,
-.lyrics__chord-line.lyrics__line--dimmed .lyrics__line {
-  opacity: 0.15;
-}
-
 /* === Chord Toggle (F6) === */
 .chord-toggle {
   display: inline-flex;
@@ -770,10 +754,6 @@
 
 .chord-line.lyrics__line--highlighted {
   padding: 0.15em 0.4em;
-}
-
-.chord-line.lyrics__line--dimmed {
-  opacity: 0.15;
 }
 
 /* Each chord-lyric unit: chord on top, text below */
@@ -1143,44 +1123,49 @@
   bottom: 80px;
 }
 
-/* ─── Sub-line voice ranges ─── */
+/* ─── Sub-line voice text coloring ─── */
 
-.voice-range {
-  position: relative;
+.voice-text {
   display: inline;
 }
 
-.has-voice-ranges {
-  padding-bottom: 12px;
+.voice-text--soprano {
+  color: var(--color-voice-soprano);
+}
+.voice-text--contralto {
+  color: var(--color-voice-contralto);
+}
+.voice-text--tenor {
+  color: var(--color-voice-tenor);
+}
+.voice-text--bass {
+  color: var(--color-voice-bass);
 }
 
-.voice-underline {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 2px;
-  pointer-events: none;
+.voice-text--dimmed {
+  opacity: 0.35;
 }
 
-.voice-underline--soprano {
-  background: var(--color-voice-soprano);
-  bottom: 9px;
-}
-.voice-underline--contralto {
-  background: var(--color-voice-contralto);
-  bottom: 6px;
-}
-.voice-underline--tenor {
-  background: var(--color-voice-tenor);
-  bottom: 3px;
-}
-.voice-underline--bass {
-  background: var(--color-voice-bass);
-  bottom: 0px;
+.voice-badge-extra {
+  font-size: 0.65em;
+  margin-left: 0.15em;
+  opacity: 0.7;
+  font-weight: 600;
+  vertical-align: super;
+  line-height: 0;
 }
 
-.lyrics__slice--dimmed {
-  opacity: 0.25;
+.voice-badge-extra--soprano {
+  color: var(--color-voice-soprano);
+}
+.voice-badge-extra--contralto {
+  color: var(--color-voice-contralto);
+}
+.voice-badge-extra--tenor {
+  color: var(--color-voice-tenor);
+}
+.voice-badge-extra--bass {
+  color: var(--color-voice-bass);
 }
 
 /* ─── Voice bottom sheet ─── */

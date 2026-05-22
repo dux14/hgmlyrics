@@ -965,7 +965,7 @@
 /* === Autoscroll FAB === */
 .autoscroll-fab {
   position: fixed;
-  top: calc(80px + env(safe-area-inset-top, 0px));
+  top: calc(140px + env(safe-area-inset-top, 0px));
   right: 12px;
   z-index: var(--z-toast);
   display: flex;
@@ -980,14 +980,14 @@
 
 @media (min-width: 768px) {
   .autoscroll-fab {
-    top: 24px;
+    top: 84px;
     right: 24px;
   }
 }
 
 /* Collapsed state: shrink to a small dim pill while playing */
 .autoscroll-fab--collapsed {
-  opacity: 0.45;
+  opacity: 0.2;
   transform: scale(0.7);
   transform-origin: top right;
 }

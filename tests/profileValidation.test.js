@@ -52,7 +52,12 @@ describe('validateAndNormalize', () => {
 
   it('rejects invalid vocal range', () => {
     const { errs } = validateAndNormalize({ vocalRangeLow: 'Z9' });
-    expect(errs.some((e) => e.startsWith('vocalRangeLow'))).toBe(true);
+    expect(errs.some((e) => e.toLowerCase().includes('grave'))).toBe(true);
+  });
+
+  it('rejects display name over 32 chars', () => {
+    const { errs } = validateAndNormalize({ displayName: 'x'.repeat(33) });
+    expect(errs.some((e) => e.includes('32'))).toBe(true);
   });
 
   it('accepts vocal range with sharp/flat', () => {

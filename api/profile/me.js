@@ -35,8 +35,8 @@ export function validateAndNormalize(input) {
   }
   if ('displayName' in input) {
     const v = String(input.displayName || '').trim();
-    if (!v) errs.push('displayName: required');
-    else if (v.length > 80) errs.push('displayName: max 80 chars');
+    if (!v) errs.push('Falta el nombre a mostrar.');
+    else if (v.length > 32) errs.push('El nombre a mostrar no puede tener más de 32 caracteres.');
     else out.display_name = v;
   }
   if ('bio' in input) {
@@ -62,12 +62,14 @@ export function validateAndNormalize(input) {
   if ('vocalRangeLow' in input) {
     const v = input.vocalRangeLow;
     const invalid = v !== null && v !== undefined && !RANGE_RE.test(v);
-    if (invalid) errs.push('vocalRangeLow: invalid (use scientific notation A2/F#4)');
+    if (invalid)
+      {errs.push('Nota grave inválida. Usa notación científica: C3, F#4, Bb5 (octava 0-7).');}
     else out.vocal_range_low = v ?? null;
   }
   if ('vocalRangeHigh' in input) {
     const v = input.vocalRangeHigh;
-    if (v !== null && v !== undefined && !RANGE_RE.test(v)) errs.push('vocalRangeHigh: invalid');
+    if (v !== null && v !== undefined && !RANGE_RE.test(v))
+      {errs.push('Nota aguda inválida. Usa notación científica: C3, F#4, Bb5 (octava 0-7).');}
     else out.vocal_range_high = v ?? null;
   }
   if ('instrumentRoles' in input) {

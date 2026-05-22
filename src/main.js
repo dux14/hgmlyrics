@@ -18,6 +18,7 @@ import { initStore, subscribe, getState } from './lib/store.js';
 import { buildIndex } from './lib/search.js';
 import { route, initRouter, onNotFound, navigate } from './router.js';
 import { initAuthStore, isAuthenticated, needsOnboarding, isAdmin } from './lib/authStore.js';
+import { initFavorites } from './lib/favorites.js';
 import { configureAuth, guardedRoute } from './router.js';
 import { renderLoginPage, renderRegisterPage } from './components/LoginPage.js';
 import { renderAuthCallback } from './components/AuthCallback.js';
@@ -82,6 +83,9 @@ async function boot() {
     updateSidebarContent();
     updateFilterBar();
   }
+
+  // Favorites cache — loads once, refreshes on sign-in, clears on sign-out.
+  await initFavorites();
 
   // Subscribe to state changes — re-render song list when on home page
   subscribe((state) => {

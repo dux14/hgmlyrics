@@ -57,7 +57,7 @@ export function renderOnboardingPage(container) {
           <div class="auth-success" id="username-success" style="display:none;"></div>
 
           <label class="profile-field__label" for="display-input">Nombre a mostrar</label>
-          <input type="text" class="auth-input" id="display-input" maxlength="80" required />
+          <input type="text" class="auth-input" id="display-input" maxlength="32" required />
 
           <button type="submit" class="auth-btn" id="submit-btn" disabled>Continuar</button>
         </form>

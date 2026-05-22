@@ -66,7 +66,7 @@ export async function renderProfile(container) {
       <form id="profile-form" style="margin-top:var(--space-xl);">
         <div class="profile-field">
           <label class="profile-field__label" for="display-input">Nombre a mostrar</label>
-          <input type="text" class="auth-input" id="display-input" maxlength="80" value="${profile.displayName || ''}" />
+          <input type="text" class="auth-input" id="display-input" maxlength="32" value="${profile.displayName || ''}" />
         </div>
 
         <div class="profile-field">

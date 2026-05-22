@@ -15,15 +15,16 @@ export default withErrors(async (req, res) => {
   }
   const pattern = `%${q.replace(/[%_\\]/g, '\\$&')}%`;
 
-  // Visible profiles only: is_public OR own OR friend.
+  // Friend search must surface other people only — never the viewer's own profile.
+  // Visibility: is_public OR an already-accepted friend.
   const rows = await sql`
     SELECT p.id, p.username, p.display_name AS "displayName", p.avatar_url AS "avatarUrl"
     FROM profiles p
     WHERE p.username IS NOT NULL
+      AND p.id <> ${viewer.id}
       AND (lower(p.username) LIKE ${pattern} OR lower(p.display_name) LIKE ${pattern})
       AND (
-        p.id = ${viewer.id}
-        OR p.is_public = true
+        p.is_public = true
         OR EXISTS (
           SELECT 1 FROM friendships
           WHERE status = 'accepted'

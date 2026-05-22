@@ -6,8 +6,19 @@
 
 import { navigate } from '../router.js';
 import { isPWA, isSongCached } from '../lib/offlineCache.js';
+import { isAuthenticated } from '../lib/authStore.js';
+import { isFavorite, toggleFavorite, subscribe as subscribeFavorites } from '../lib/favorites.js';
 
 let currentViewMode = localStorage.getItem('hkn-view-mode') || 'grid';
+let favUnsubscribe = null;
+
+function paintFavBtn(btn, on) {
+  btn.classList.toggle('is-on', on);
+  btn.setAttribute('aria-pressed', String(on));
+  btn.setAttribute('aria-label', on ? 'Quitar de favoritos' : 'Agregar a favoritos');
+  const path = btn.querySelector('path');
+  if (path) path.setAttribute('fill', on ? 'currentColor' : 'none');
+}
 
 /**
  * Render the song list
@@ -16,6 +27,10 @@ let currentViewMode = localStorage.getItem('hkn-view-mode') || 'grid';
  */
 export function renderSongList(container, songs) {
   container.innerHTML = '';
+  if (favUnsubscribe) {
+    favUnsubscribe();
+    favUnsubscribe = null;
+  }
 
   if (songs.length === 0) {
     container.innerHTML = `
@@ -59,6 +74,15 @@ export function renderSongList(container, songs) {
   }
 
   container.appendChild(listContainer);
+
+  if (isAuthenticated()) {
+    favUnsubscribe = subscribeFavorites((toggledId) => {
+      container.querySelectorAll('.song-card__fav[data-song-id]').forEach((btn) => {
+        if (toggledId && btn.dataset.songId !== toggledId) return;
+        paintFavBtn(btn, isFavorite(btn.dataset.songId));
+      });
+    });
+  }
 }
 
 /**
@@ -121,16 +145,28 @@ function createSongCard(song, index) {
   const imgLoading = isLCP ? 'eager' : 'lazy';
   const imgFetchPriority = isLCP ? 'high' : 'auto';
 
+  const showFavBtn = isAuthenticated();
+  const favOn = showFavBtn && isFavorite(song.id);
+
   card.innerHTML = `
-    <img
-      class="song-card__cover"
-      src="${coverUrl}"
-      alt="Portada de ${escapeHtml(song.album)}"
-      loading="${imgLoading}"
-      decoding="async"
-      fetchpriority="${imgFetchPriority}"
-      onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22><rect fill=%22%231a1a1a%22 width=%221%22 height=%221%22/><text x=%22.5%22 y=%22.6%22 text-anchor=%22middle%22 font-size=%22.4%22>🎵</text></svg>'"
-    />
+    <div class="song-card__cover-wrap">
+      <img
+        class="song-card__cover"
+        src="${coverUrl}"
+        alt="Portada de ${escapeHtml(song.album)}"
+        loading="${imgLoading}"
+        decoding="async"
+        fetchpriority="${imgFetchPriority}"
+        onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22><rect fill=%22%231a1a1a%22 width=%221%22 height=%221%22/><text x=%22.5%22 y=%22.6%22 text-anchor=%22middle%22 font-size=%22.4%22>🎵</text></svg>'"
+      />
+      ${
+        showFavBtn
+          ? `<button class="song-card__fav ${favOn ? 'is-on' : ''}" type="button" aria-label="${favOn ? 'Quitar de favoritos' : 'Agregar a favoritos'}" aria-pressed="${favOn}">
+               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9C1 8.5 3 5 6.5 5c2 0 3.5 1.2 4.5 2.7C12 6.2 13.5 5 15.5 5 19 5 21 8.5 21.5 12c-2 4.4-9.5 9-9.5 9z" fill="${favOn ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+             </button>`
+          : ''
+      }
+    </div>
     <div class="song-card__info">
       <h3 class="song-card__title">${escapeHtml(song.title)}</h3>
       <p class="song-card__album">${escapeHtml(song.album)} · ${song.year || ''}</p>
@@ -156,6 +192,20 @@ function createSongCard(song, index) {
       navigate(`/song/${song.id}`);
     }
   });
+
+  // Favorite toggle (intercept before card click). Cross-card sync handled by
+  // a single list-level subscription registered in renderSongList.
+  const favBtn = card.querySelector('.song-card__fav');
+  if (favBtn) {
+    favBtn.dataset.songId = song.id;
+    favBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      favBtn.disabled = true;
+      const nowFav = await toggleFavorite(song.id);
+      favBtn.disabled = false;
+      paintFavBtn(favBtn, nowFav);
+    });
+  }
 
   // F8: Offline badge in PWA mode
   if (isPWA()) {

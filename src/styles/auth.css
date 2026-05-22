@@ -277,6 +277,12 @@
   border-radius: 50%;
   object-fit: cover;
 }
+.auth-button > span {
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .auth-menu {
   position: fixed;

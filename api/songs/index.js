@@ -43,7 +43,7 @@ async function listSongs(_req, res) {
 }
 
 async function createSong(req, res) {
-  requireAdmin(req);
+  await requireAdmin(req, sql);
   const s = req.body ?? {};
   if (!s.id || !s.title) {
     res.status(400).json({ error: 'id and title are required' });

@@ -15,6 +15,7 @@ import {
   getVoiceBgColor,
   buildHighlightedHTML,
 } from '../lib/voiceSystem.js';
+import { isAdmin } from '../lib/authStore.js';
 
 const FONT_SIZE_KEY = 'hkn-lyrics-font-size';
 const FONT_STEP = 0.125; // rem
@@ -279,6 +280,8 @@ export async function renderSongView(container, songIdOrData) {
         `
             : ''
         }
+
+        ${isAdmin() ? `<a href="#/admin/edit/${song.id}" class="btn btn--secondary">Editar</a>` : ''}
       </div>
 
       ${
@@ -471,6 +474,8 @@ export async function renderSongView(container, songIdOrData) {
 
   // ── Feature 1: Autoscroll FAB ──
   setupAutoscroll(container);
+
+  // Favorita lives on the song card cover in the list view now.
 }
 
 /**

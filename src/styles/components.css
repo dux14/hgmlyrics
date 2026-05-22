@@ -24,11 +24,58 @@
   border-color: var(--color-primary);
 }
 
+.song-card__cover-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+}
+
 .song-card__cover {
   width: 100%;
   aspect-ratio: 1;
   object-fit: cover;
   background: var(--color-surface-hover);
+  display: block;
+}
+
+.song-card__fav {
+  position: absolute;
+  top: var(--space-xs);
+  right: var(--space-xs);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    transform var(--transition-fast);
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.song-card__fav:hover {
+  background: rgba(0, 0, 0, 0.8);
+  transform: scale(1.08);
+}
+
+.song-card__fav:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.song-card__fav.is-on {
+  color: #ff4d6d;
+}
+
+.song-card__fav svg {
+  width: 20px;
+  height: 20px;
 }
 
 .song-card__info {

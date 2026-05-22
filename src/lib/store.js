@@ -5,6 +5,12 @@
  */
 
 import { get, set } from 'idb-keyval';
+import { getSession, subscribe as subscribeAuth } from './authStore.js';
+
+function authHeaders() {
+  const s = getSession();
+  return s ? { Authorization: `Bearer ${s.access_token}` } : {};
+}
 
 const CACHE_KEY = 'hkn-songs-cache';
 const CACHE_VERSION_KEY = 'hkn-songs-version';
@@ -54,7 +60,7 @@ export async function initStore() {
   let loaded = false;
 
   try {
-    const res = await fetch(`${API_URL}/songs`);
+    const res = await fetch(`${API_URL}/songs`, { headers: { ...authHeaders() } });
     if (res.ok) {
       const data = await res.json();
       if (data.songs.length > 0) {
@@ -79,6 +85,23 @@ export async function initStore() {
   }
 
   applyFilters();
+
+  // Listen for sign-out and clear local state + cache.
+  subscribeAuth(async ({ session }) => {
+    if (!session) {
+      state.songs = [];
+      state.filtered = [];
+      state.activeAlbum = null;
+      state.voiceFilter = null;
+      try {
+        await set(CACHE_KEY, null);
+      } catch (_e) {
+        // ignore
+      }
+      notify();
+    }
+  });
+
   notify();
 }
 
@@ -87,7 +110,7 @@ export async function initStore() {
  */
 export async function refreshData() {
   try {
-    const res = await fetch(`${API_URL}/songs`);
+    const res = await fetch(`${API_URL}/songs`, { headers: { ...authHeaders() } });
     if (res.ok) {
       const data = await res.json();
       if (data.songs.length > 0) {
@@ -141,7 +164,7 @@ export function getSongById(id) {
  */
 export async function fetchSongDetail(id) {
   try {
-    const res = await fetch(`${API_URL}/songs/${id}`);
+    const res = await fetch(`${API_URL}/songs/${id}`, { headers: { ...authHeaders() } });
     if (res.ok) {
       const song = await res.json();
       // Update the song in the local state with sections

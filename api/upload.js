@@ -1,5 +1,6 @@
 import { IncomingForm } from 'formidable';
 import { createReadStream } from 'node:fs';
+import sql from './_lib/db.js';
 import { requireAdmin } from './_lib/auth.js';
 import { allowMethods, withErrors } from './_lib/http.js';
 import { uploadCover } from './_lib/storage.js';
@@ -11,7 +12,7 @@ export const config = {
 
 export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['POST'])) return;
-  requireAdmin(req);
+  await requireAdmin(req, sql);
 
   const form = new IncomingForm({
     maxFileSize: 10 * 1024 * 1024, // 10 MiB; covers are usually < 200 KiB

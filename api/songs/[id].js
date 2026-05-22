@@ -29,7 +29,7 @@ async function getOne(req, res, id) {
 }
 
 async function update(req, res, id) {
-  requireAdmin(req);
+  await requireAdmin(req, sql);
   const s = req.body ?? {};
   const result = await sql`
     UPDATE songs SET
@@ -57,7 +57,7 @@ async function update(req, res, id) {
 }
 
 async function remove(req, res, id) {
-  requireAdmin(req);
+  await requireAdmin(req, sql);
   const result = await sql`DELETE FROM songs WHERE id = ${id}`;
   if (result.count === 0) {
     res.status(404).json({ error: 'Song not found' });

@@ -7,6 +7,7 @@ if (!URL || !KEY) {
 }
 
 const BUCKET = 'covers-uploads';
+const AVATARS_BUCKET = 'avatars';
 
 const supabase = createClient(URL, KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -28,4 +29,23 @@ export async function uploadCover({ filename, contentType, body }) {
 
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(key);
   return data.publicUrl;
+}
+
+/**
+ * Upload an avatar at avatars/{userId}/avatar.{ext}. Uses service role so we
+ * sidestep the storage.objects RLS check that mis-reads asymmetric user JWTs
+ * (see GitHub PR #11 notes). Returns the public URL with a cache-busting tag.
+ */
+export async function uploadAvatar({ userId, ext, contentType, body }) {
+  const safeExt = (ext || 'webp').toLowerCase().replace(/[^a-z0-9]/g, '') || 'webp';
+  const key = `${userId}/avatar.${safeExt}`;
+
+  const { error } = await supabase.storage.from(AVATARS_BUCKET).upload(key, body, {
+    contentType: contentType || 'application/octet-stream',
+    upsert: true,
+  });
+  if (error) throw error;
+
+  const { data } = supabase.storage.from(AVATARS_BUCKET).getPublicUrl(key);
+  return `${data.publicUrl}?t=${Date.now()}`;
 }

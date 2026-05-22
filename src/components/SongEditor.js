@@ -36,7 +36,7 @@ function sectionsToBlocks(sections) {
     id: `section-${si}-${Date.now()}`,
     type: section.type || 'verse',
     label: section.label || 'Verso',
-    lines: section.lines.map((line, li) => ({
+    lines: (section.lines || []).map((line, li) => ({
       id: `line-${si}-${li}-${Date.now()}`,
       text: line.text || '',
       voiceRanges: line.voiceRanges || [],

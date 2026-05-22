@@ -59,7 +59,7 @@ function saveFontSize(size) {
 
 function songHasChords(song) {
   if (!song.sections) return false;
-  return song.sections.some((s) => s.lines.some((l) => l.chords && l.chords.length > 0));
+  return song.sections.some((s) => s.lines?.some((l) => l.chords && l.chords.length > 0));
 }
 
 /**
@@ -111,6 +111,7 @@ function getVoiceTypeLabel(voiceType) {
 function detectUsedVoices(sections) {
   const used = new Set();
   for (const section of sections) {
+    if (!section.lines) continue;
     for (const line of section.lines) {
       if (line.voiceRanges) {
         line.voiceRanges.forEach((r) => {
@@ -493,7 +494,7 @@ function renderSections(
       (section) => `
     <div class="lyrics__section lyrics__section--${section.type}">
       <div class="lyrics__section-label">${escapeHtml(section.label)}</div>
-      ${section.lines
+      ${(section.lines || [])
         .map((line) => {
           const text = line.text || '';
 

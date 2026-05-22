@@ -3,7 +3,16 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { route, navigate, getCurrentPath, initRouter, onNotFound, refresh } from '../src/router.js';
+import {
+  route,
+  navigate,
+  getCurrentPath,
+  initRouter,
+  onNotFound,
+  refresh,
+  configureAuth,
+  guardedRoute,
+} from '../src/router.js';
 
 describe('router', () => {
   beforeEach(() => {
@@ -77,5 +86,66 @@ describe('router', () => {
       refresh();
       expect(notFoundHandler).toHaveBeenCalled();
     });
+  });
+});
+
+describe('guardedRoute', () => {
+  beforeEach(() => {
+    globalThis.location.hash = '';
+  });
+
+  it('redirects to /login?next=... when not authenticated', () => {
+    const handler = vi.fn();
+    configureAuth({
+      isAuthenticated: () => false,
+      needsOnboarding: () => false,
+      isAdmin: () => false,
+    });
+    guardedRoute('/secret', handler);
+    globalThis.location.hash = '/secret';
+    refresh();
+    expect(handler).not.toHaveBeenCalled();
+    expect(globalThis.location.hash).toContain('/login?next=');
+  });
+
+  it('redirects to /onboarding when needsOnboarding is true', () => {
+    const handler = vi.fn();
+    configureAuth({
+      isAuthenticated: () => true,
+      needsOnboarding: () => true,
+      isAdmin: () => false,
+    });
+    guardedRoute('/home', handler);
+    globalThis.location.hash = '/home';
+    refresh();
+    expect(handler).not.toHaveBeenCalled();
+    expect(globalThis.location.hash).toBe('#/onboarding');
+  });
+
+  it('redirects to / when adminOnly and not admin', () => {
+    const handler = vi.fn();
+    configureAuth({
+      isAuthenticated: () => true,
+      needsOnboarding: () => false,
+      isAdmin: () => false,
+    });
+    guardedRoute('/admin', handler, { adminOnly: true });
+    globalThis.location.hash = '/admin';
+    refresh();
+    expect(handler).not.toHaveBeenCalled();
+    expect(globalThis.location.hash).toBe('#/');
+  });
+
+  it('invokes handler when authenticated + no onboarding + admin pass', () => {
+    const handler = vi.fn();
+    configureAuth({
+      isAuthenticated: () => true,
+      needsOnboarding: () => false,
+      isAdmin: () => true,
+    });
+    guardedRoute('/admin', handler, { adminOnly: true });
+    globalThis.location.hash = '/admin';
+    refresh();
+    expect(handler).toHaveBeenCalled();
   });
 });

@@ -1,6 +1,17 @@
 import sql from '../_lib/db.js';
 import { requireAdmin } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
+import { isValidKey } from '../../src/lib/musicKeys.js';
+
+function normalizeKey(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (!isValidKey(v)) {
+    const err = new Error('Invalid key');
+    err.status = 400;
+    throw err;
+  }
+  return v;
+}
 
 // Module-scope cache. Fluid Compute reuses the instance across requests.
 // Per-instance, not cross-instance — fine for a low-write wiki.
@@ -26,6 +37,7 @@ async function listSongs(_req, res) {
            voice_percent_female AS "voicePercentFemale",
            cover_image AS "coverImage",
            album_order AS "albumOrder",
+           key,
            created_at AS "createdAt",
            updated_at AS "updatedAt"
     FROM songs
@@ -49,18 +61,19 @@ async function createSong(req, res) {
     res.status(400).json({ error: 'id and title are required' });
     return;
   }
+  const key = normalizeKey(s.key);
   await sql`
     INSERT INTO songs (
       id, title, artist, album, album_slug, year, genre,
       voice_type, voice_percent_male, voice_percent_female,
-      cover_image, sections, album_order, cejilla
+      cover_image, sections, album_order, cejilla, key
     ) VALUES (
       ${s.id}, ${s.title}, ${s.artist ?? null}, ${s.album ?? null},
       ${s.albumSlug ?? null}, ${s.year ?? null}, ${s.genre ?? null},
       ${s.voiceType ?? null},
       ${s.voicePercent?.male ?? 50}, ${s.voicePercent?.female ?? 50},
       ${s.coverImage ?? null}, ${sql.json(s.sections ?? [])},
-      ${s.albumOrder ?? 0}, ${s.cejilla ?? null}
+      ${s.albumOrder ?? 0}, ${s.cejilla ?? null}, ${key}
     )
   `;
   invalidateListCache();

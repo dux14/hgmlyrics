@@ -75,6 +75,22 @@ export async function refreshProfile() {
  * Bootstrap: read current session, fetch profile, subscribe to changes.
  */
 export async function initAuthStore() {
+  // If the URL has ?code= (magic link / OAuth callback), exchange it explicitly
+  // BEFORE getSession so the router resolves with a valid session.
+  const url = new URL(globalThis.location.href);
+  const code = url.searchParams.get('code');
+  if (code) {
+    try {
+      await supabase.auth.exchangeCodeForSession(code);
+      url.searchParams.delete('code');
+      const cleanSearch = url.searchParams.toString();
+      const cleanHref = url.pathname + (cleanSearch ? '?' + cleanSearch : '') + (url.hash || '');
+      globalThis.history.replaceState(null, '', cleanHref);
+    } catch (e) {
+      console.warn('exchangeCodeForSession failed', e);
+    }
+  }
+
   const { data } = await supabase.auth.getSession();
   state.session = data.session;
   if (state.session) await refreshProfile();

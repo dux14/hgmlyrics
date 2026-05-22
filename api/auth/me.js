@@ -10,6 +10,16 @@ function isAdminFromEnv(email) {
   return !!email && list.includes(email.toLowerCase());
 }
 
+function avatarFromMetadata(user) {
+  const m = user?.user_metadata ?? {};
+  return m.avatar_url || m.picture || null;
+}
+
+function displayNameFromMetadata(user) {
+  const m = user?.user_metadata ?? {};
+  return m.full_name || m.name || null;
+}
+
 export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['GET'])) return;
   const user = await requireUser(req);
@@ -21,6 +31,19 @@ export default withErrors(async (req, res) => {
     SET is_admin = ${expectedAdmin}
     WHERE id = ${user.id} AND is_admin IS DISTINCT FROM ${expectedAdmin}
   `;
+
+  // First-load hydration from OAuth provider (Google): backfill avatar_url
+  // and display_name when null, so the user has a sensible default.
+  const providerAvatar = avatarFromMetadata(user);
+  const providerName = displayNameFromMetadata(user);
+  if (providerAvatar || providerName) {
+    await sql`
+      UPDATE profiles
+      SET avatar_url   = COALESCE(avatar_url, ${providerAvatar}),
+          display_name = COALESCE(display_name, ${providerName})
+      WHERE id = ${user.id}
+    `;
+  }
 
   const rows = await sql`
     SELECT id, username, display_name AS "displayName", bio, avatar_url AS "avatarUrl",

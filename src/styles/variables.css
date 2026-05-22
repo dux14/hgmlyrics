@@ -34,6 +34,12 @@
   --color-voice-tenor-bg: rgba(181, 137, 0, 0.12);
   --color-voice-bass-bg: rgba(21, 101, 192, 0.12);
 
+  /* Chord color — verde para diferenciar del Bajo (azul) */
+  --color-chord: #2e7d32;
+  --color-chord-bg: rgba(46, 125, 50, 0.1);
+  --color-chord-hover: #1b5e20;
+  --color-chord-hover-bg: rgba(46, 125, 50, 0.2);
+
   /* Semantic */
   --color-success: #4caf50;
   --color-warning: #ff9800;
@@ -131,6 +137,12 @@
   --color-voice-contralto-bg: rgba(206, 147, 216, 0.15);
   --color-voice-tenor-bg: rgba(255, 224, 130, 0.15);
   --color-voice-bass-bg: rgba(144, 202, 249, 0.15);
+
+  /* Chord color — verde pastel para dark mode */
+  --color-chord: #a5d6a7;
+  --color-chord-bg: rgba(165, 214, 167, 0.12);
+  --color-chord-hover: #c8e6c9;
+  --color-chord-hover-bg: rgba(165, 214, 167, 0.22);
 
   --scrollbar-thumb: #3a3a3a;
 }

@@ -15,6 +15,8 @@ import {
   getVoiceBgColor,
   buildHighlightedHTML,
 } from '../lib/voiceSystem.js';
+import { isAuthenticated, isAdmin, getSession } from '../lib/authStore.js';
+import { supabase } from '../lib/supabase.js';
 
 const FONT_SIZE_KEY = 'hkn-lyrics-font-size';
 const FONT_STEP = 0.125; // rem
@@ -279,6 +281,9 @@ export async function renderSongView(container, songIdOrData) {
         `
             : ''
         }
+
+        ${isAdmin() ? `<a href="#/admin/edit/${song.id}" class="btn btn--secondary">Editar</a>` : ''}
+        ${isAuthenticated() ? `<button id="favorite-btn" class="btn btn--secondary" data-song-id="${song.id}">♥</button>` : ''}
       </div>
 
       ${
@@ -471,6 +476,37 @@ export async function renderSongView(container, songIdOrData) {
 
   // ── Feature 1: Autoscroll FAB ──
   setupAutoscroll(container);
+
+  // ── Favorite button ──
+  const favBtn = container.querySelector('#favorite-btn');
+  if (favBtn) {
+    const userId = getSession()?.user?.id;
+    // Initial state: check if already favorited
+    (async () => {
+      if (!userId) return;
+      const { data } = await supabase
+        .from('favorites')
+        .select('song_id')
+        .eq('user_id', userId)
+        .eq('song_id', song.id)
+        .maybeSingle();
+      if (data) favBtn.classList.add('btn--active');
+    })();
+
+    favBtn.addEventListener('click', async () => {
+      if (!userId) return;
+      favBtn.disabled = true;
+      const isFav = favBtn.classList.contains('btn--active');
+      if (isFav) {
+        await supabase.from('favorites').delete().eq('user_id', userId).eq('song_id', song.id);
+        favBtn.classList.remove('btn--active');
+      } else {
+        await supabase.from('favorites').insert({ user_id: userId, song_id: song.id });
+        favBtn.classList.add('btn--active');
+      }
+      favBtn.disabled = false;
+    });
+  }
 }
 
 /**

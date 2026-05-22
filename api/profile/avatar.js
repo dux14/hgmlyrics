@@ -3,7 +3,7 @@ import { createReadStream } from 'node:fs';
 import sql from '../_lib/db.js';
 import { requireUser } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
-import { uploadAvatar } from '../_lib/storage.js';
+import { uploadAvatar, deleteAvatarObjects } from '../_lib/storage.js';
 
 export const config = {
   api: { bodyParser: false },
@@ -12,9 +12,22 @@ export const config = {
 const ALLOWED = new Set(['image/webp', 'image/png', 'image/jpeg']);
 const MAX_SIZE = 2 * 1024 * 1024;
 
+function providerAvatar(user) {
+  const m = user?.user_metadata ?? {};
+  return m.avatar_url || m.picture || null;
+}
+
 export default withErrors(async (req, res) => {
-  if (allowMethods(req, res, ['POST'])) return;
+  if (allowMethods(req, res, ['POST', 'DELETE'])) return;
   const user = await requireUser(req);
+
+  if (req.method === 'DELETE') {
+    await deleteAvatarObjects(user.id);
+    const fallback = providerAvatar(user);
+    await sql`UPDATE profiles SET avatar_url = ${fallback} WHERE id = ${user.id}`;
+    res.status(200).json({ url: fallback });
+    return;
+  }
 
   const form = new IncomingForm({
     maxFileSize: MAX_SIZE,

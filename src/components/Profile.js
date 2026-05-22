@@ -43,6 +43,24 @@ async function uploadAvatar(file) {
   return data.url;
 }
 
+async function deleteAvatar() {
+  const token = getSession()?.access_token;
+  const res = await fetch('/api/profile/avatar', {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const reason = data?.error || `HTTP ${res.status}`;
+    throw new Error(reason);
+  }
+  return data.url;
+}
+
+function isCustomAvatar(url) {
+  return !!url && /\/storage\/v\d+\/object\/public\/avatars\//.test(url);
+}
+
 /**
  * Render the profile page (own profile editor).
  * @param {HTMLElement} container
@@ -65,7 +83,10 @@ export async function renderProfile(container) {
       </div>
 
       <input type="file" id="avatar-input" accept="image/webp,image/png,image/jpeg" style="display:none;" />
-      <button class="auth-btn" id="avatar-btn" style="max-width:240px;">Cambiar avatar</button>
+      <div style="display:flex; gap:var(--space-sm); flex-wrap:wrap; max-width:480px;">
+        <button class="auth-btn" id="avatar-btn" style="flex:1; min-width:160px;">Cambiar avatar</button>
+        <button class="auth-btn" id="avatar-remove-btn" style="flex:1; min-width:160px; display:${isCustomAvatar(profile.avatarUrl) ? 'flex' : 'none'};">Eliminar avatar</button>
+      </div>
       <div class="auth-error" id="avatar-error" style="display:none;"></div>
 
       <form id="profile-form" style="margin-top:var(--space-xl);">
@@ -123,6 +144,7 @@ export async function renderProfile(container) {
   `;
 
   const avatarBtn = container.querySelector('#avatar-btn');
+  const avatarRemoveBtn = container.querySelector('#avatar-remove-btn');
   const avatarInput = container.querySelector('#avatar-input');
   const avatarPreview = container.querySelector('#avatar-preview');
   const avatarError = container.querySelector('#avatar-error');
@@ -139,13 +161,28 @@ export async function renderProfile(container) {
     }
     try {
       const url = await uploadAvatar(file);
-      // The server endpoint already persisted profiles.avatar_url; just refresh
-      // the cached profile so the header avatar repaints.
       await refreshProfile();
       avatarPreview.src = url;
+      avatarRemoveBtn.style.display = 'flex';
     } catch (e) {
       avatarError.textContent = `Error: ${e.message}`;
       avatarError.style.display = 'block';
+    }
+  });
+
+  avatarRemoveBtn.addEventListener('click', async () => {
+    avatarError.style.display = 'none';
+    avatarRemoveBtn.disabled = true;
+    try {
+      const url = await deleteAvatar();
+      await refreshProfile();
+      avatarPreview.src = url || '';
+      avatarRemoveBtn.style.display = 'none';
+    } catch (e) {
+      avatarError.textContent = `Error: ${e.message}`;
+      avatarError.style.display = 'block';
+    } finally {
+      avatarRemoveBtn.disabled = false;
     }
   });
 

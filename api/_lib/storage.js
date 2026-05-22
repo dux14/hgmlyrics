@@ -49,3 +49,14 @@ export async function uploadAvatar({ userId, ext, contentType, body }) {
   const { data } = supabase.storage.from(AVATARS_BUCKET).getPublicUrl(key);
   return `${data.publicUrl}?t=${Date.now()}`;
 }
+
+/**
+ * Remove any uploaded avatar variants for a user. Best-effort: ignores
+ * "not found" errors so calling DELETE on a user without a custom avatar
+ * still succeeds. Returns nothing.
+ */
+export async function deleteAvatarObjects(userId) {
+  const keys = ['webp', 'png', 'jpg'].map((ext) => `${userId}/avatar.${ext}`);
+  const { error } = await supabase.storage.from(AVATARS_BUCKET).remove(keys);
+  if (error && !/not.*found/i.test(error.message || '')) throw error;
+}

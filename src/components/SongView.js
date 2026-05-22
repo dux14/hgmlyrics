@@ -23,11 +23,12 @@ const FONT_MAX = 2.5;
 
 // Autoscroll config
 const AUTOSCROLL_SPEED_KEY = 'hkn-autoscroll-speed';
-const AUTOSCROLL_SPEED_MIN = 0.3;
-const AUTOSCROLL_SPEED_MAX = 8.0;
-const AUTOSCROLL_SPEED_STEP = 0.3;
-const AUTOSCROLL_SPEED_DEFAULT = 0.3;
-const AUTOSCROLL_BASE_PX_PER_FRAME = 0.6;
+const AUTOSCROLL_SPEED_MIN = 0.1;
+const AUTOSCROLL_SPEED_MAX = 2.0;
+const AUTOSCROLL_SPEED_STEP = 0.1;
+const AUTOSCROLL_SPEED_DEFAULT = 0.5;
+const AUTOSCROLL_BASE_PX_PER_FRAME = 1.8;
+const AUTOSCROLL_COLLAPSE_DELAY = 1500;
 
 // F6: Transposition
 const NOTES_SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -681,22 +682,30 @@ function saveAutoscrollSpeed(speed) {
   }
 }
 
+const PLAY_ICON_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7L8 5z"/></svg>`;
+const PAUSE_ICON_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6V5zm8 0h4v14h-4V5z"/></svg>`;
+
+function speedToPercentLabel(speed) {
+  return `${Math.round(speed * 100)}%`;
+}
+
 function setupAutoscroll(_container) {
   let scrollSpeed = getAutoscrollSpeed();
   let isScrolling = false;
   let rafId = null;
   let ignoreScrollUntil = 0; // Debounce: ignore scroll events briefly after starting
+  let collapseTimer = null;
 
   // Inject FAB
   const fab = document.createElement('div');
   fab.className = 'autoscroll-fab';
   fab.innerHTML = `
     <button class="autoscroll-fab__btn autoscroll-fab__btn--main" id="autoscroll-toggle" aria-label="Autoscroll play/pause" title="Autoscroll">
-      <span class="autoscroll-fab__icon" id="autoscroll-icon">▶</span>
+      <span class="autoscroll-fab__icon" id="autoscroll-icon">${PLAY_ICON_SVG}</span>
     </button>
     <div class="autoscroll-fab__controls" id="autoscroll-controls">
       <button class="autoscroll-fab__btn autoscroll-fab__btn--speed" id="autoscroll-slower" aria-label="Más lento" title="Más lento">−</button>
-      <span class="autoscroll-fab__speed" id="autoscroll-speed-label">${scrollSpeed.toFixed(1)}x</span>
+      <span class="autoscroll-fab__speed" id="autoscroll-speed-label">${speedToPercentLabel(scrollSpeed)}</span>
       <button class="autoscroll-fab__btn autoscroll-fab__btn--speed" id="autoscroll-faster" aria-label="Más rápido" title="Más rápido">+</button>
     </div>
   `;
@@ -708,16 +717,31 @@ function setupAutoscroll(_container) {
   const speedLabel = fab.querySelector('#autoscroll-speed-label');
 
   function updateSpeedLabel() {
-    speedLabel.textContent = `${scrollSpeed.toFixed(1)}x`;
+    speedLabel.textContent = speedToPercentLabel(scrollSpeed);
+  }
+
+  function scheduleCollapse() {
+    clearTimeout(collapseTimer);
+    if (!isScrolling) return;
+    collapseTimer = setTimeout(() => {
+      if (isScrolling) fab.classList.add('autoscroll-fab--collapsed');
+    }, AUTOSCROLL_COLLAPSE_DELAY);
+  }
+
+  function expandFab() {
+    fab.classList.remove('autoscroll-fab--collapsed');
+    scheduleCollapse();
   }
 
   function startScroll() {
     isScrolling = true;
     // Ignore touch/wheel events for 500ms after starting to prevent false-positive pause
     ignoreScrollUntil = Date.now() + 500;
-    iconEl.textContent = '⏸';
+    iconEl.innerHTML = PAUSE_ICON_SVG;
+    toggleBtn.setAttribute('aria-label', 'Pausar autoscroll');
     toggleBtn.classList.add('autoscroll-fab__btn--active');
     controlsEl.classList.add('autoscroll-fab__controls--visible');
+    scheduleCollapse();
 
     // Disable CSS smooth scroll — Safari iOS ignores programmatic scroll when it’s active
     document.documentElement.style.scrollBehavior = 'auto';
@@ -760,14 +784,21 @@ function setupAutoscroll(_container) {
       cancelAnimationFrame(rafId);
       rafId = null;
     }
-    iconEl.textContent = '▶';
+    clearTimeout(collapseTimer);
+    iconEl.innerHTML = PLAY_ICON_SVG;
+    toggleBtn.setAttribute('aria-label', 'Activar autoscroll');
     toggleBtn.classList.remove('autoscroll-fab__btn--active');
+    fab.classList.remove('autoscroll-fab--collapsed');
     // Restore CSS smooth scroll
     document.documentElement.style.scrollBehavior = '';
   }
 
-  // Toggle play/pause
+  // Toggle play/pause — when collapsed, first tap expands; second tap toggles
   toggleBtn.addEventListener('click', () => {
+    if (isScrolling && fab.classList.contains('autoscroll-fab--collapsed')) {
+      expandFab();
+      return;
+    }
     if (isScrolling) {
       stopScroll();
     } else {
@@ -775,13 +806,14 @@ function setupAutoscroll(_container) {
     }
   });
 
-  // Speed controls
+  // Speed controls — interacting also resets the collapse timer
   fab.querySelector('#autoscroll-slower').addEventListener('click', (e) => {
     e.stopPropagation();
     scrollSpeed = Math.max(AUTOSCROLL_SPEED_MIN, scrollSpeed - AUTOSCROLL_SPEED_STEP);
     scrollSpeed = Math.round(scrollSpeed * 10) / 10;
     saveAutoscrollSpeed(scrollSpeed);
     updateSpeedLabel();
+    if (isScrolling) scheduleCollapse();
   });
 
   fab.querySelector('#autoscroll-faster').addEventListener('click', (e) => {
@@ -790,7 +822,19 @@ function setupAutoscroll(_container) {
     scrollSpeed = Math.round(scrollSpeed * 10) / 10;
     saveAutoscrollSpeed(scrollSpeed);
     updateSpeedLabel();
+    if (isScrolling) scheduleCollapse();
   });
+
+  // Any touch on the FAB while collapsed → expand
+  fab.addEventListener(
+    'touchstart',
+    () => {
+      if (isScrolling && fab.classList.contains('autoscroll-fab--collapsed')) {
+        expandFab();
+      }
+    },
+    { passive: true },
+  );
 
   // Pause on user manual scroll (touch or wheel) — but ignore touches on the FAB itself
   function onUserScroll(e) {
@@ -807,6 +851,7 @@ function setupAutoscroll(_container) {
   // Cleanup when navigating away (hashchange)
   function cleanup() {
     stopScroll();
+    clearTimeout(collapseTimer);
     fab.remove();
     window.removeEventListener('wheel', onUserScroll);
     window.removeEventListener('touchmove', onUserScroll);

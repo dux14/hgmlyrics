@@ -965,20 +965,37 @@
 /* === Autoscroll FAB === */
 .autoscroll-fab {
   position: fixed;
-  bottom: calc(120px + env(safe-area-inset-bottom, 0px));
-  right: 20px;
+  top: calc(80px + env(safe-area-inset-top, 0px));
+  right: 12px;
   z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
   animation: fabIn 400ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  transition:
+    opacity 300ms ease,
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @media (min-width: 768px) {
   .autoscroll-fab {
-    bottom: 24px;
+    top: 24px;
+    right: 24px;
   }
+}
+
+/* Collapsed state: shrink to a small dim pill while playing */
+.autoscroll-fab--collapsed {
+  opacity: 0.45;
+  transform: scale(0.7);
+  transform-origin: top right;
+}
+
+.autoscroll-fab--collapsed .autoscroll-fab__controls {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-6px) scale(0.9);
 }
 
 @keyframes fabIn {
@@ -1027,19 +1044,10 @@
 
 .autoscroll-fab__btn--active {
   background: var(--color-accent);
-  opacity: 0.15;
   box-shadow:
     0 4px 14px rgba(255, 143, 0, 0.35),
     0 2px 6px rgba(0, 0, 0, 0.15);
   animation: fabPulse 2s ease-in-out infinite;
-  transition:
-    opacity 300ms ease,
-    transform 250ms ease;
-}
-
-.autoscroll-fab__btn--active:hover,
-.autoscroll-fab__btn--active:active {
-  opacity: 1;
 }
 
 @keyframes fabPulse {
@@ -1059,6 +1067,15 @@
 .autoscroll-fab__icon {
   line-height: 1;
   pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.autoscroll-fab__icon svg {
+  width: 22px;
+  height: 22px;
+  display: block;
 }
 
 .autoscroll-fab__controls {
@@ -1072,22 +1089,15 @@
   box-shadow: 0 4px 16px var(--color-shadow);
   backdrop-filter: blur(8px);
   opacity: 0;
-  transform: translateY(8px) scale(0.9);
+  transform: translateY(-8px) scale(0.9);
   pointer-events: none;
   transition: all 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .autoscroll-fab__controls--visible {
-  opacity: 0.15;
+  opacity: 1;
   transform: translateY(0) scale(1);
   pointer-events: auto;
-  transition:
-    all 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
-    opacity 300ms ease;
-}
-
-.autoscroll-fab__controls--visible:hover {
-  opacity: 1;
 }
 
 .autoscroll-fab__btn--speed {
@@ -1113,14 +1123,9 @@
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
-  min-width: 32px;
+  min-width: 40px;
   text-align: center;
   user-select: none;
-}
-
-/* Adjust FAB position when toast is visible */
-.toast.visible ~ .autoscroll-fab {
-  bottom: 80px;
 }
 
 /* ─── Sub-line voice text coloring ─── */

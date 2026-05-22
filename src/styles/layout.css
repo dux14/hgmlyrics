@@ -385,7 +385,7 @@
   }
 
   .header__actions {
-    margin-left: 0;
+    margin-left: auto;
   }
 
   .header__btn--menu {

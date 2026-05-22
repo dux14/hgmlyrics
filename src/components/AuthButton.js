@@ -18,8 +18,8 @@ function buildButton(profile) {
     profile?.avatarUrl || defaultAvatarUrl(profile?.displayName || profile?.username);
   return `
     <button class="auth-button" id="auth-button" aria-label="Menú de usuario">
-      <img class="auth-button__avatar" src="${avatarUrl}" alt="" />
       <span>${profile?.displayName || profile?.username || ''}</span>
+      <img class="auth-button__avatar" src="${avatarUrl}" alt="" />
     </button>
   `;
 }
@@ -58,22 +58,32 @@ export function renderAuthButton(mount) {
       document.body.insertAdjacentHTML('beforeend', buildMenu());
       menu = document.querySelector('#auth-menu');
 
-      // Position fixed under the button (anchored to viewport, not page scroll).
-      const rect = btn.getBoundingClientRect();
-      const rightOffset = Math.max(8, document.documentElement.clientWidth - rect.right);
-      menu.style.right = `${rightOffset}px`;
-      menu.style.top = `${rect.bottom + 6}px`;
+      const reposition = () => {
+        const rect = btn.getBoundingClientRect();
+        const rightOffset = Math.max(8, document.documentElement.clientWidth - rect.right);
+        menu.style.right = `${rightOffset}px`;
+        menu.style.top = `${rect.bottom + 6}px`;
+      };
+      reposition();
+      window.addEventListener('resize', reposition);
+      window.addEventListener('scroll', reposition, { passive: true });
+
+      const cleanup = () => {
+        window.removeEventListener('resize', reposition);
+        window.removeEventListener('scroll', reposition);
+        menu.remove();
+      };
 
       menu.querySelector('#logout-btn').addEventListener('click', async () => {
         await signOut();
-        menu.remove();
+        cleanup();
         navigate('/login');
       });
       // Close on outside click
       setTimeout(() => {
         const close = (ev) => {
-          if (!menu.contains(ev.target)) {
-            menu.remove();
+          if (!menu.contains(ev.target) && ev.target !== btn) {
+            cleanup();
             document.removeEventListener('click', close);
           }
         };

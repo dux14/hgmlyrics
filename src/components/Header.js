@@ -53,14 +53,14 @@ export function renderHeader(container, { onMenuToggle }) {
     </div>
 
     <div class="header__actions" id="header-actions">
-      <div id="auth-button-mount"></div>
-      <div id="theme-toggle-mount"></div>
       <button class="header__btn" id="cache-btn" aria-label="Limpiar caché" title="Limpiar caché y recargar">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <polyline points="23 4 23 10 17 10"></polyline>
           <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
         </svg>
       </button>
+      <div id="theme-toggle-mount"></div>
+      <div id="auth-button-mount"></div>
     </div>
   `;
 

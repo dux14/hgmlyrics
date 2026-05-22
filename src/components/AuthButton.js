@@ -57,6 +57,13 @@ export function renderAuthButton(mount) {
       }
       document.body.insertAdjacentHTML('beforeend', buildMenu());
       menu = document.querySelector('#auth-menu');
+
+      // Position fixed under the button (anchored to viewport, not page scroll).
+      const rect = btn.getBoundingClientRect();
+      const rightOffset = Math.max(8, document.documentElement.clientWidth - rect.right);
+      menu.style.right = `${rightOffset}px`;
+      menu.style.top = `${rect.bottom + 6}px`;
+
       menu.querySelector('#logout-btn').addEventListener('click', async () => {
         await signOut();
         menu.remove();

@@ -2,6 +2,17 @@ import sql from '../_lib/db.js';
 import { requireAdmin } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { invalidateListCache } from './index.js';
+import { isValidKey } from '../../src/lib/musicKeys.js';
+
+function normalizeKey(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (!isValidKey(v)) {
+    const err = new Error('Invalid key');
+    err.status = 400;
+    throw err;
+  }
+  return v;
+}
 
 async function getOne(req, res, id) {
   const rows = await sql`
@@ -13,6 +24,7 @@ async function getOne(req, res, id) {
            sections,
            album_order AS "albumOrder",
            cejilla,
+           key,
            created_at AS "createdAt",
            updated_at AS "updatedAt"
     FROM songs WHERE id = ${id}
@@ -31,6 +43,7 @@ async function getOne(req, res, id) {
 async function update(req, res, id) {
   await requireAdmin(req, sql);
   const s = req.body ?? {};
+  const key = normalizeKey(s.key);
   const result = await sql`
     UPDATE songs SET
       title = ${s.title},
@@ -45,7 +58,8 @@ async function update(req, res, id) {
       cover_image = ${s.coverImage ?? null},
       sections = ${sql.json(s.sections ?? [])},
       album_order = ${s.albumOrder ?? 0},
-      cejilla = ${s.cejilla ?? null}
+      cejilla = ${s.cejilla ?? null},
+      key = ${key}
     WHERE id = ${id}
   `;
   if (result.count === 0) {

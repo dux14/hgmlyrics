@@ -13,6 +13,7 @@ export default withErrors(async (req, res) => {
            sections,
            album_order AS "albumOrder",
            cejilla,
+           key,
            created_at AS "createdAt",
            updated_at AS "updatedAt"
     FROM songs

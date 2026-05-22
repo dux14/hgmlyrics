@@ -783,6 +783,29 @@
   letter-spacing: 0.02em;
 }
 
+.key-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.45em 0.85em;
+  border-radius: var(--border-radius-full);
+  background: rgba(0, 151, 167, 0.1);
+  border: 1px solid rgba(0, 151, 167, 0.25);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+  white-space: nowrap;
+  transition: all 200ms ease;
+}
+
+.key-badge__icon {
+  font-size: 1em;
+}
+
+.key-badge__text {
+  letter-spacing: 0.02em;
+}
+
 /* === Chord Display — Inline Anchored (A+B Hybrid) === */
 
 /* Container for a line that has chords */

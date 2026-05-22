@@ -282,6 +282,20 @@ export async function renderSongView(container, songIdOrData) {
             : ''
         }
 
+        ${
+          song.key
+            ? `
+        <div class="key-badge" title="Tonalidad de la versión oficial">
+          <span class="key-badge__icon">🎼</span>
+          <span class="key-badge__text">Tono: ${song.key}</span>
+        </div>
+        <a class="btn btn--secondary" href="#/afinador?mode=song&songId=${song.id}" title="Cantá con este tono">
+          🎙️ Afinar
+        </a>
+        `
+            : ''
+        }
+
         ${isAdmin() ? `<a href="#/admin/edit/${song.id}" class="btn btn--secondary">Editar</a>` : ''}
       </div>
 

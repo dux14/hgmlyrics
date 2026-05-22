@@ -13,6 +13,7 @@ import { renderSongView } from './SongView.js';
 import { VALID_VOICE_IDS, buildHighlightedHTML, validateVoiceRanges } from '../lib/voiceSystem.js';
 import { getDragRange, getCaretOffsetAtPoint } from '../lib/caretSelection.js';
 import { openVoiceBottomSheet } from './VoiceBottomSheet.js';
+import { MUSICAL_KEYS } from '../lib/musicKeys.js';
 
 const API_URL = '/api';
 
@@ -248,6 +249,16 @@ export async function renderSongEditor(container, editId) {
           <div class="form-group" style="flex: 1;">
             <label class="form-group__label" for="song-cejilla">Cejilla</label>
             <input class="form-group__input" id="song-cejilla" type="number" min="0" max="12" placeholder="0" value="${existingSong?.cejilla || ''}" />
+          </div>
+          <div class="form-group" style="flex: 2;">
+            <label class="form-group__label" for="song-key">Tonalidad</label>
+            <select class="form-group__input" id="song-key">
+              <option value="">(sin asignar)</option>
+              ${MUSICAL_KEYS.map(
+                (k) =>
+                  `<option value="${k}" ${existingSong?.key === k ? 'selected' : ''}>${k}</option>`,
+              ).join('')}
+            </select>
           </div>
         </div>
       </div>
@@ -886,6 +897,7 @@ async function handleSave(container, existingSong, blocks) {
 
     // 2. Save song data
     const cejilla = Number.parseInt(container.querySelector('#song-cejilla').value) || null;
+    const key = container.querySelector('#song-key').value || null;
 
     const newSong = {
       id: songId,
@@ -900,6 +912,7 @@ async function handleSave(container, existingSong, blocks) {
       coverImage,
       albumOrder,
       cejilla,
+      key,
       sections: blocksToSections(blocks),
     };
 

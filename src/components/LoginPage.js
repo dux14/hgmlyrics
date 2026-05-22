@@ -83,9 +83,16 @@ function render(container, opts = {}) {
     </div>
   `;
 
-  container.querySelector('#google-btn').addEventListener('click', async () => {
+  container.querySelector('#google-btn').addEventListener('click', async (e) => {
+    // Block a second click while the browser is mid-redirect: a second call
+    // would generate a fresh PKCE verifier and overwrite the one tied to
+    // the in-flight OAuth challenge, producing bad_code_verifier on return.
+    const btn = e.currentTarget;
+    if (btn.disabled) return;
+    btn.disabled = true;
     const { error } = await signInWithGoogle();
     if (error) {
+      btn.disabled = false;
       const el = container.querySelector('#email-error');
       el.textContent = `Error de Google: ${error.message}`;
       el.style.display = 'block';

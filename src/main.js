@@ -26,6 +26,7 @@ import { renderOnboardingPage } from './components/OnboardingPage.js';
 import { renderProfile } from './components/Profile.js';
 import { renderPublicProfile } from './components/PublicProfile.js';
 import { renderFriendsPanel } from './components/FriendsPanel.js';
+import { renderFavoritesPage } from './components/FavoritesPage.js';
 import { renderHeader } from './components/Header.js';
 import { renderSidebar, toggleSidebar, updateSidebarContent } from './components/Sidebar.js';
 import {
@@ -181,6 +182,11 @@ async function boot() {
   guardedRoute('/amigos', () => {
     hideFilterBar();
     renderFriendsPanel(mainContent);
+  });
+
+  guardedRoute('/favoritos', () => {
+    hideFilterBar();
+    renderFavoritesPage(mainContent);
   });
 
   onNotFound(() => {

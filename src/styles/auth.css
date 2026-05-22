@@ -8,9 +8,21 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: calc(100vh - var(--header-height, 64px));
-  padding: var(--space-lg);
-  gap: var(--space-lg);
+  /* `.main` reserves space for header + search row + filter bar even when the
+     filter bar is hidden. Pull the auth-page up so the card visually centers
+     against the actual viewport below the fixed search row, not below the
+     reserved 48px filter slot + main__content padding. */
+  min-height: calc(100dvh - var(--header-height, 64px) - 56px);
+  margin-top: calc(-48px - var(--space-lg));
+  padding: var(--space-md) var(--space-lg);
+  gap: var(--space-md);
+}
+
+@media (min-width: 768px) {
+  .auth-page {
+    /* Desktop: search row lives inside the header; only the filter slot pads. */
+    min-height: calc(100dvh - var(--header-height, 64px));
+  }
 }
 
 .auth-card {

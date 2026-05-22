@@ -1,32 +1,67 @@
-import jwt from 'jsonwebtoken';
+import { createClient } from '@supabase/supabase-js';
 
-const SECRET = process.env.JWT_SECRET;
-if (!SECRET) {
-  throw new Error('JWT_SECRET is required');
+const URL = process.env.SUPABASE_URL;
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!URL || !SERVICE_KEY) {
+  throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
+}
+
+// Service-role client. Fluid Compute reuses instances → cache at module scope.
+const supabaseAdmin = createClient(URL, SERVICE_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
+
+function extractToken(req) {
+  const header = req.headers?.authorization;
+  if (!header) return null;
+  return header.startsWith('Bearer ') ? header.slice(7) : (header.split(' ')[1] ?? null);
 }
 
 /**
- * Verify the `Authorization: Bearer <token>` header.
- * Throws an Error with .status = 401 on missing/invalid token.
- * Returns the decoded payload on success.
+ * Validate the Supabase access token from `Authorization: Bearer <jwt>`.
+ * Returns the auth.users row (id, email, ...). Throws { status: 401 } otherwise.
+ * @param {object} req
+ * @returns {Promise<{id: string, email: string, [k: string]: any}>}
  */
-export function requireAdmin(req) {
-  const header = req.headers?.authorization;
-  if (!header) {
+export async function requireUser(req) {
+  const token = extractToken(req);
+  if (!token) {
     const e = new Error('No token provided');
     e.status = 401;
     throw e;
   }
-  const token = header.startsWith('Bearer ') ? header.slice(7) : header.split(' ')[1];
-  try {
-    return jwt.verify(token, SECRET);
-  } catch {
+  const { data, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !data?.user) {
     const e = new Error('Invalid or expired token');
     e.status = 401;
     throw e;
   }
+  return data.user;
 }
 
-export function signAdminToken() {
-  return jwt.sign({ admin: true }, SECRET, { expiresIn: '7d' });
+/**
+ * Require admin: validates user, then checks ADMIN_EMAILS env (re-evaluated each call)
+ * and falls back to profiles.is_admin. Throws { status: 403 } if not admin.
+ * @param {object} req
+ * @param {import('postgres').Sql} sql
+ * @returns {Promise<{id: string, email: string, [k: string]: any}>}
+ */
+export async function requireAdmin(req, sql) {
+  const user = await requireUser(req);
+  const adminEmails = (process.env.ADMIN_EMAILS || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (user.email && adminEmails.includes(user.email.toLowerCase())) return user;
+
+  const rows = await sql`SELECT is_admin FROM profiles WHERE id = ${user.id}`;
+  if (!rows[0]?.is_admin) {
+    const e = new Error('Forbidden');
+    e.status = 403;
+    throw e;
+  }
+  return user;
 }
+
+// Export service-role client for endpoints that need it (e.g. updating is_admin)
+export { supabaseAdmin };

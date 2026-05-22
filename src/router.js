@@ -127,3 +127,55 @@ export function refresh() {
   currentRoute = null;
   resolve();
 }
+
+// ============================================================
+// Auth-aware route guarding (adapter pattern to avoid circular import)
+// ============================================================
+
+/** @type {{ isAuthenticated: () => boolean, needsOnboarding: () => boolean, isAdmin: () => boolean } | null} */
+let authAdapter = null;
+
+/**
+ * Configure the auth adapter used by guardedRoute().
+ * Must be called before registering guarded routes.
+ * @param {object} adapter
+ * @param {() => boolean} adapter.isAuthenticated
+ * @param {() => boolean} adapter.needsOnboarding
+ * @param {() => boolean} adapter.isAdmin
+ */
+export function configureAuth(adapter) {
+  authAdapter = adapter;
+}
+
+/**
+ * Register a route that requires authentication.
+ * Behavior:
+ *  - Not authenticated → navigate to /login?next=<path>
+ *  - Onboarding needed → navigate to /onboarding (unless path === /onboarding)
+ *  - adminOnly + !isAdmin → navigate to /
+ * @param {string} pattern
+ * @param {Function} handler
+ * @param {object} [opts]
+ * @param {boolean} [opts.adminOnly=false]
+ */
+export function guardedRoute(pattern, handler, { adminOnly = false } = {}) {
+  route(pattern, ({ params, path }) => {
+    if (!authAdapter) {
+      console.error('guardedRoute called before configureAuth');
+      return;
+    }
+    if (!authAdapter.isAuthenticated()) {
+      navigate(`/login?next=${encodeURIComponent(path)}`);
+      return;
+    }
+    if (authAdapter.needsOnboarding() && path !== '/onboarding') {
+      navigate('/onboarding');
+      return;
+    }
+    if (adminOnly && !authAdapter.isAdmin()) {
+      navigate('/');
+      return;
+    }
+    handler({ params, path });
+  });
+}

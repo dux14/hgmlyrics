@@ -7,6 +7,7 @@
 import { searchSongs } from '../lib/search.js';
 import { navigate } from '../router.js';
 import { renderThemeToggle } from './ThemeToggle.js';
+import { renderAuthButton } from './AuthButton.js';
 
 let searchTimeout = null;
 
@@ -52,6 +53,7 @@ export function renderHeader(container, { onMenuToggle }) {
     </div>
 
     <div class="header__actions" id="header-actions">
+      <div id="auth-button-mount"></div>
       <div id="theme-toggle-mount"></div>
       <button class="header__btn" id="cache-btn" aria-label="Limpiar caché" title="Limpiar caché y recargar">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -67,6 +69,9 @@ export function renderHeader(container, { onMenuToggle }) {
   // Theme toggle
   const themeMount = header.querySelector('#theme-toggle-mount');
   renderThemeToggle(themeMount);
+
+  const authMount = header.querySelector('#auth-button-mount');
+  renderAuthButton(authMount);
 
   // Event listeners
   const menuBtn = header.querySelector('#menu-btn');

@@ -10,6 +10,7 @@ import './styles/base.css';
 import './styles/layout.css';
 import './styles/components.css';
 import './styles/admin.css';
+import './styles/auth.css';
 
 // Modules
 import { initTheme } from './components/ThemeToggle.js';

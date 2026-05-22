@@ -22,6 +22,9 @@ import { configureAuth, guardedRoute } from './router.js';
 import { renderLoginPage, renderRegisterPage } from './components/LoginPage.js';
 import { renderAuthCallback } from './components/AuthCallback.js';
 import { renderOnboardingPage } from './components/OnboardingPage.js';
+import { renderProfile } from './components/Profile.js';
+import { renderPublicProfile } from './components/PublicProfile.js';
+import { renderFriendsPanel } from './components/FriendsPanel.js';
 import { renderHeader } from './components/Header.js';
 import { renderSidebar, toggleSidebar, updateSidebarContent } from './components/Sidebar.js';
 import {
@@ -160,6 +163,21 @@ async function boot() {
     },
     { adminOnly: true },
   );
+
+  guardedRoute('/perfil', () => {
+    hideFilterBar();
+    renderProfile(mainContent);
+  });
+
+  guardedRoute('/u/:username', ({ params }) => {
+    hideFilterBar();
+    renderPublicProfile(mainContent, params.username);
+  });
+
+  guardedRoute('/amigos', () => {
+    hideFilterBar();
+    renderFriendsPanel(mainContent);
+  });
 
   onNotFound(() => {
     hideFilterBar();

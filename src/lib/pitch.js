@@ -141,7 +141,17 @@ export function createPitchDetector(opts) {
     analyser = ctx.createAnalyser();
     analyser.fftSize = fftSize;
     analyser.smoothingTimeConstant = 0;
+    // iOS Safari quirk: AnalyserNode only processes audio when the graph
+    // terminates at `ctx.destination`. Without this, getFloatTimeDomainData
+    // returns silent buffers on iPhone (Safari, Chrome iOS, PWA standalone).
+    // The silent gain prevents feedback while keeping the graph alive.
+    const silentGain = ctx.createGain();
+    silentGain.gain.value = 0;
     source.connect(analyser);
+    analyser.connect(silentGain);
+    silentGain.connect(ctx.destination);
+    // Some iOS builds keep ctx suspended until after connect(); re-resume.
+    if (ctx.state === 'suspended') await ctx.resume();
     buffer = new Float32Array(analyser.fftSize);
 
     running = true;

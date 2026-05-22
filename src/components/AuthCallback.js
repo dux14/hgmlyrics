@@ -1,16 +1,14 @@
 /**
  * AuthCallback.js — handler de #/auth/callback?code=...
  *
- * Supabase-js (detectSessionInUrl: true) ya intercambia el code en getSession().
- * Esto significa que cuando llegamos aquí, la sesión ya está activa.
- * Solo necesitamos redirigir a next/onboarding/home.
+ * initAuthStore() ya ejecutó exchangeCodeForSession antes de que el router
+ * llegara acá (boot lo awaitea). Si tenemos sesión seguimos al onboarding/home;
+ * si no, regresamos a /login con el motivo del fallo si vino en la URL.
  */
-import { supabase } from '../lib/supabase.js';
-import { refreshProfile, getSession, needsOnboarding } from '../lib/authStore.js';
+import { getSession, needsOnboarding } from '../lib/authStore.js';
 import { navigate } from '../router.js';
 
 function getNextParam() {
-  // Hash routes pueden traer ?next=... después del path: /#/auth/callback?next=/song/x
   const hash = globalThis.location.hash;
   const qIdx = hash.indexOf('?');
   if (qIdx === -1) return null;
@@ -32,31 +30,10 @@ export async function renderAuthCallback(container) {
     </div>
   `;
 
-  // supabase-js handles ?code= automatically via detectSessionInUrl.
-  // Wait for session to be available (poll briefly if not yet).
-  let attempts = 0;
-  while (!getSession() && attempts < 20) {
-    await new Promise((r) => setTimeout(r, 100));
-    attempts++;
-  }
-
-  if (!getSession()) {
-    // Try explicit exchange (covers some edge cases)
-    const url = new URL(globalThis.location.href);
-    const code =
-      url.searchParams.get('code') ||
-      new URLSearchParams(globalThis.location.hash.split('?')[1] || '').get('code');
-    if (code) {
-      await supabase.auth.exchangeCodeForSession(code);
-    }
-  }
-
   if (!getSession()) {
     navigate('/login');
     return;
   }
-
-  await refreshProfile();
 
   if (needsOnboarding()) {
     navigate('/onboarding');

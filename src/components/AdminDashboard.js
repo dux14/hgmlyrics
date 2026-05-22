@@ -1,5 +1,4 @@
 import { navigate } from '../router.js';
-import { renderLogoutButton } from './AdminGate.js';
 import { getState } from '../lib/store.js';
 
 export function renderAdminDashboard(container) {
@@ -17,8 +16,6 @@ export function renderAdminDashboard(container) {
       </div>
     </div>
   `;
-
-  renderLogoutButton(container.querySelector('.admin-dashboard'));
 
   container.querySelector('#btn-create').addEventListener('click', () => {
     navigate('/admin/create');
@@ -48,8 +45,6 @@ export function renderAdminEditList(container) {
       </div>
     </div>
   `;
-
-  renderLogoutButton(container.querySelector('.admin-edit-list'));
 
   container.querySelector('#btn-back').addEventListener('click', () => {
     navigate('/admin');

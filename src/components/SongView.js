@@ -23,9 +23,9 @@ const FONT_MAX = 2.5;
 
 // Autoscroll config
 const AUTOSCROLL_SPEED_KEY = 'hkn-autoscroll-speed';
-const AUTOSCROLL_SPEED_MIN = 0.1;
+const AUTOSCROLL_SPEED_MIN = 0.01;
 const AUTOSCROLL_SPEED_MAX = 2.0;
-const AUTOSCROLL_SPEED_STEP = 0.1;
+const AUTOSCROLL_SPEED_STEP = 0.05;
 const AUTOSCROLL_SPEED_DEFAULT = 0.5;
 const AUTOSCROLL_BASE_PX_PER_FRAME = 1.8;
 const AUTOSCROLL_COLLAPSE_DELAY = 1500;
@@ -810,7 +810,7 @@ function setupAutoscroll(_container) {
   fab.querySelector('#autoscroll-slower').addEventListener('click', (e) => {
     e.stopPropagation();
     scrollSpeed = Math.max(AUTOSCROLL_SPEED_MIN, scrollSpeed - AUTOSCROLL_SPEED_STEP);
-    scrollSpeed = Math.round(scrollSpeed * 10) / 10;
+    scrollSpeed = Math.round(scrollSpeed * 100) / 100;
     saveAutoscrollSpeed(scrollSpeed);
     updateSpeedLabel();
     if (isScrolling) scheduleCollapse();
@@ -819,7 +819,7 @@ function setupAutoscroll(_container) {
   fab.querySelector('#autoscroll-faster').addEventListener('click', (e) => {
     e.stopPropagation();
     scrollSpeed = Math.min(AUTOSCROLL_SPEED_MAX, scrollSpeed + AUTOSCROLL_SPEED_STEP);
-    scrollSpeed = Math.round(scrollSpeed * 10) / 10;
+    scrollSpeed = Math.round(scrollSpeed * 100) / 100;
     saveAutoscrollSpeed(scrollSpeed);
     updateSpeedLabel();
     if (isScrolling) scheduleCollapse();

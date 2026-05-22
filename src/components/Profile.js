@@ -2,7 +2,6 @@
  * Profile.js — Own profile view + edit + avatar upload.
  */
 import { getSession, getProfile, refreshProfile } from '../lib/authStore.js';
-import { supabase } from '../lib/supabase.js';
 
 const VOICE_TYPES = [
   ['', '—'],
@@ -27,15 +26,21 @@ async function patchProfile(payload) {
   return { ok: res.ok, data: await res.json().catch(() => null) };
 }
 
-async function uploadAvatar(userId, file) {
-  const ext = (file.name.split('.').pop() || 'webp').toLowerCase();
-  const path = `${userId}/avatar.${ext}`;
-  const { error } = await supabase.storage
-    .from('avatars')
-    .upload(path, file, { upsert: true, contentType: file.type });
-  if (error) throw error;
-  const { data } = supabase.storage.from('avatars').getPublicUrl(path);
-  return `${data.publicUrl}?t=${Date.now()}`; // cache-bust
+async function uploadAvatar(file) {
+  const token = getSession()?.access_token;
+  const fd = new FormData();
+  fd.append('avatar', file, file.name);
+  const res = await fetch('/api/profile/avatar', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: fd,
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const reason = data?.error || `HTTP ${res.status}`;
+    throw new Error(reason);
+  }
+  return data.url;
 }
 
 /**
@@ -133,8 +138,9 @@ export async function renderProfile(container) {
       return;
     }
     try {
-      const url = await uploadAvatar(profile.id, file);
-      await patchProfile({ avatarUrl: url });
+      const url = await uploadAvatar(file);
+      // The server endpoint already persisted profiles.avatar_url; just refresh
+      // the cached profile so the header avatar repaints.
       await refreshProfile();
       avatarPreview.src = url;
     } catch (e) {

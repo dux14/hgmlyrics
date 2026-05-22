@@ -130,6 +130,12 @@ export async function renderProfile(container) {
         </div>
 
         <div class="profile-field">
+          <a class="auth-btn" href="#/afinador?mode=range" style="display:block; text-decoration:none; text-align:center;">
+            🎙️ Medir mi rango con el afinador
+          </a>
+        </div>
+
+        <div class="profile-field">
           <label class="profile-field__label" for="range-notes-input">Notas del rango (opcional, ≤80 chars)</label>
           <input type="text" class="auth-input" id="range-notes-input" maxlength="80" placeholder="ej. falsete G4-D2, zona segura D2-D4" value="${(profile.vocalRangeNotes || '').replace(/"/g, '&quot;')}" />
         </div>

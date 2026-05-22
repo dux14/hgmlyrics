@@ -189,6 +189,12 @@ async function boot() {
     renderFavoritesPage(mainContent);
   });
 
+  guardedRoute('/afinador', async ({ query }) => {
+    hideFilterBar();
+    const { renderTuner } = await import('./components/Tuner.js');
+    renderTuner(mainContent, { query });
+  });
+
   onNotFound(() => {
     hideFilterBar();
     mainContent.innerHTML = `

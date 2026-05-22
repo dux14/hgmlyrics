@@ -19,6 +19,7 @@ export default withErrors(async (req, res) => {
     SELECT p.id, p.username, p.display_name AS "displayName", p.bio, p.avatar_url AS "avatarUrl",
            p.voice_type AS "voiceType", p.voice_subtype AS "voiceSubtype",
            p.vocal_range_low AS "vocalRangeLow", p.vocal_range_high AS "vocalRangeHigh",
+           p.vocal_range_notes AS "vocalRangeNotes",
            p.instrument_roles AS "instrumentRoles",
            p.is_public AS "isPublic",
            p.created_at AS "createdAt",

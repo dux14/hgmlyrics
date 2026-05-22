@@ -130,6 +130,11 @@ export async function renderProfile(container) {
         </div>
 
         <div class="profile-field">
+          <label class="profile-field__label" for="range-notes-input">Notas del rango (opcional, ≤80 chars)</label>
+          <input type="text" class="auth-input" id="range-notes-input" maxlength="80" placeholder="ej. falsete G4-D2, zona segura D2-D4" value="${(profile.vocalRangeNotes || '').replace(/"/g, '&quot;')}" />
+        </div>
+
+        <div class="profile-field">
           <label class="profile-field__label" for="instruments-input">Instrumentos (separados por coma)</label>
           <input type="text" class="auth-input" id="instruments-input" value="${(profile.instrumentRoles || []).join(', ')}" />
         </div>
@@ -205,6 +210,7 @@ export async function renderProfile(container) {
       voiceSubtype: container.querySelector('#voice-subtype-input').value || null,
       vocalRangeLow: container.querySelector('#range-low-input').value.trim() || null,
       vocalRangeHigh: container.querySelector('#range-high-input').value.trim() || null,
+      vocalRangeNotes: container.querySelector('#range-notes-input').value.trim() || null,
       instrumentRoles: container
         .querySelector('#instruments-input')
         .value.split(',')

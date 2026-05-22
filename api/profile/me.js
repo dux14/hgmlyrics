@@ -62,15 +62,23 @@ export function validateAndNormalize(input) {
   if ('vocalRangeLow' in input) {
     const v = input.vocalRangeLow;
     const invalid = v !== null && v !== undefined && !RANGE_RE.test(v);
-    if (invalid)
-      {errs.push('Nota grave inválida. Usa notación científica: C3, F#4, Bb5 (octava 0-7).');}
-    else out.vocal_range_low = v ?? null;
+    if (invalid) {
+      errs.push('Nota grave inválida. Usa notación científica: C3, F#4, Bb5 (octava 0-7).');
+    } else out.vocal_range_low = v ?? null;
   }
   if ('vocalRangeHigh' in input) {
     const v = input.vocalRangeHigh;
-    if (v !== null && v !== undefined && !RANGE_RE.test(v))
-      {errs.push('Nota aguda inválida. Usa notación científica: C3, F#4, Bb5 (octava 0-7).');}
-    else out.vocal_range_high = v ?? null;
+    if (v !== null && v !== undefined && !RANGE_RE.test(v)) {
+      errs.push('Nota aguda inválida. Usa notación científica: C3, F#4, Bb5 (octava 0-7).');
+    } else out.vocal_range_high = v ?? null;
+  }
+  if ('vocalRangeNotes' in input) {
+    const v =
+      input.vocalRangeNotes === null || input.vocalRangeNotes === undefined
+        ? null
+        : String(input.vocalRangeNotes).trim();
+    if (v && v.length > 80) errs.push('Notas del rango: máximo 80 caracteres.');
+    else out.vocal_range_notes = v || null;
   }
   if ('instrumentRoles' in input) {
     if (!Array.isArray(input.instrumentRoles)) errs.push('instrumentRoles: must be array');
@@ -103,6 +111,7 @@ export default withErrors(async (req, res) => {
       RETURNING id, username, display_name AS "displayName", bio, avatar_url AS "avatarUrl",
                 voice_type AS "voiceType", voice_subtype AS "voiceSubtype",
                 vocal_range_low AS "vocalRangeLow", vocal_range_high AS "vocalRangeHigh",
+                vocal_range_notes AS "vocalRangeNotes",
                 instrument_roles AS "instrumentRoles",
                 is_admin AS "isAdmin", is_public AS "isPublic",
                 created_at AS "createdAt", updated_at AS "updatedAt"

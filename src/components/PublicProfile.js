@@ -57,6 +57,7 @@ export async function renderPublicProfile(container, username) {
         <h2 class="profile-section__title">Voz</h2>
         <p>${escapeHtml(profile.voiceType || '—')}${profile.voiceSubtype ? ` (${escapeHtml(profile.voiceSubtype)})` : ''}</p>
         <p>Rango: ${escapeHtml(profile.vocalRangeLow || '—')} – ${escapeHtml(profile.vocalRangeHigh || '—')}</p>
+        ${profile.vocalRangeNotes ? `<p class="profile-username">${escapeHtml(profile.vocalRangeNotes)}</p>` : ''}
       </div>
 
       ${

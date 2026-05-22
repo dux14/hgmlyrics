@@ -67,6 +67,15 @@ describe('validateAndNormalize', () => {
     expect(out.vocal_range_high).toBe('Bb5');
   });
 
+  it('accepts vocalRangeNotes up to 80 chars and rejects past it', () => {
+    const ok = validateAndNormalize({ vocalRangeNotes: 'falsete G4-D2, zona segura D2-D4' });
+    expect(ok.errs).toEqual([]);
+    expect(ok.out.vocal_range_notes).toBe('falsete G4-D2, zona segura D2-D4');
+
+    const bad = validateAndNormalize({ vocalRangeNotes: 'x'.repeat(81) });
+    expect(bad.errs.some((e) => e.includes('80'))).toBe(true);
+  });
+
   it('rejects invalid voiceType', () => {
     const { errs } = validateAndNormalize({ voiceType: 'mezzo' });
     expect(errs).toContain('voiceType: invalid');

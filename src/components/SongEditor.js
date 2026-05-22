@@ -7,7 +7,6 @@
  */
 
 import { fetchSongDetail, refreshData } from '../lib/store.js';
-import { renderLogoutButton } from './AdminGate.js';
 import { navigate } from '../router.js';
 import { getSession } from '../lib/authStore.js';
 import { renderSongView } from './SongView.js';
@@ -302,9 +301,6 @@ export async function renderSongEditor(container, editId) {
       </div>
     </div>
   `;
-
-  // Logout button
-  renderLogoutButton(container.querySelector('.editor'));
 
   // ─── Setup event listeners ───
 

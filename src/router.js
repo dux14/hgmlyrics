@@ -59,18 +59,21 @@ export function getCurrentPath() {
  * Parse the current hash and match against registered routes
  */
 function resolve() {
-  const path = getCurrentPath();
+  const fullPath = getCurrentPath();
+  const qIdx = fullPath.indexOf('?');
+  const path = qIdx === -1 ? fullPath : fullPath.slice(0, qIdx);
+  const query = qIdx === -1 ? '' : fullPath.slice(qIdx + 1);
 
   // Prevent re-rendering same route
-  if (path === currentRoute) {
+  if (fullPath === currentRoute) {
     return;
   }
-  currentRoute = path;
+  currentRoute = fullPath;
 
   for (const [pattern, handler] of routes) {
     const params = matchRoute(pattern, path);
     if (params !== null) {
-      handler({ params, path });
+      handler({ params, path, query });
       return;
     }
   }

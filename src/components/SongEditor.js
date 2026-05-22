@@ -9,7 +9,7 @@
 import { fetchSongDetail, refreshData } from '../lib/store.js';
 import { renderLogoutButton } from './AdminGate.js';
 import { navigate } from '../router.js';
-import { getToken } from '../lib/auth.js';
+import { getSession } from '../lib/authStore.js';
 import { renderSongView } from './SongView.js';
 import { VALID_VOICE_IDS, buildHighlightedHTML, validateVoiceRanges } from '../lib/voiceSystem.js';
 import { getDragRange, getCaretOffsetAtPoint } from '../lib/caretSelection.js';
@@ -871,7 +871,7 @@ async function handleSave(container, existingSong, blocks) {
     else voiceType = 'mixed';
 
     let coverImage = existingSong?.coverImage || `${albumSlug}.webp`;
-    const token = getToken();
+    const token = getSession()?.access_token;
 
     // 1. Upload new image if present
     if (compressedCoverBlob) {
@@ -937,7 +937,7 @@ async function handleSave(container, existingSong, blocks) {
 
 async function handleDelete(song) {
   if (!confirm(`¿Estás seguro de que deseas eliminar la canción "${song.title}"?`)) return;
-  const token = getToken();
+  const token = getSession()?.access_token;
   try {
     const res = await fetch(`${API_URL}/songs/${song.id}`, {
       method: 'DELETE',

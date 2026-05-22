@@ -5,7 +5,7 @@
  * renders the song editor.
  */
 
-import { login, isAuthenticated, logout } from '../lib/auth.js';
+import { isAuthenticated, signOut } from '../lib/authStore.js';
 import { navigate } from '../router.js';
 
 /**
@@ -57,7 +57,7 @@ export function renderAdminGate(container, onAuthenticated) {
   // Auto-focus
   setTimeout(() => pinInput.focus(), 100);
 
-  form.addEventListener('submit', async (e) => {
+  form.addEventListener('submit', (e) => {
     e.preventDefault();
     const pin = pinInput.value.trim();
 
@@ -70,22 +70,17 @@ export function renderAdminGate(container, onAuthenticated) {
     submitBtn.textContent = 'Verificando...';
     pinError.textContent = '';
 
-    const success = await login(pin);
+    // PIN gate removed — admin auth is now handled by Supabase (Task 33+36)
+    pinError.textContent = 'PIN incorrecto';
+    pinInput.classList.add('admin-gate__input--error');
+    pinInput.value = '';
+    pinInput.focus();
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Acceder';
 
-    if (success) {
-      onAuthenticated();
-    } else {
-      pinError.textContent = 'PIN incorrecto';
-      pinInput.classList.add('admin-gate__input--error');
-      pinInput.value = '';
-      pinInput.focus();
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Acceder';
-
-      setTimeout(() => {
-        pinInput.classList.remove('admin-gate__input--error');
-      }, 400);
-    }
+    setTimeout(() => {
+      pinInput.classList.remove('admin-gate__input--error');
+    }, 400);
   });
 
   container.querySelector('#admin-back').addEventListener('click', () => {
@@ -104,7 +99,7 @@ export function renderLogoutButton(container) {
   btn.style.marginBottom = '1rem';
 
   btn.addEventListener('click', () => {
-    logout();
+    signOut();
     navigate('/admin');
   });
 

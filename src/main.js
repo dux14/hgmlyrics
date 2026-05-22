@@ -17,6 +17,11 @@ import { initTheme } from './components/ThemeToggle.js';
 import { initStore, subscribe, getState } from './lib/store.js';
 import { buildIndex } from './lib/search.js';
 import { route, initRouter, onNotFound, navigate } from './router.js';
+import { initAuthStore, isAuthenticated, needsOnboarding, isAdmin } from './lib/authStore.js';
+import { configureAuth, guardedRoute } from './router.js';
+import { renderLoginPage, renderRegisterPage } from './components/LoginPage.js';
+import { renderAuthCallback } from './components/AuthCallback.js';
+import { renderOnboardingPage } from './components/OnboardingPage.js';
 import { renderHeader } from './components/Header.js';
 import { renderSidebar, toggleSidebar, updateSidebarContent } from './components/Sidebar.js';
 import {
@@ -27,7 +32,6 @@ import {
 } from './components/FilterBar.js';
 import { renderSongList, renderSongListSkeleton } from './components/SongList.js';
 import { renderSongView } from './components/SongView.js';
-import { renderAdminGate } from './components/AdminGate.js';
 import { renderSongEditor } from './components/SongEditor.js';
 import { renderAdminDashboard, renderAdminEditList } from './components/AdminDashboard.js';
 import { initUpdateNotifier } from './components/UpdateNotifier.js';
@@ -63,14 +67,18 @@ async function boot() {
   // Show skeleton while loading
   renderSongListSkeleton(mainContent);
 
-  // Initialize store (loads data + cache)
-  await initStore();
+  // Initialize auth FIRST (before any guarded routes resolve).
+  await initAuthStore();
+  configureAuth({ isAuthenticated, needsOnboarding, isAdmin });
 
-  // Build search index & update sidebar with initial fetched data
-  const { songs } = getState();
-  buildIndex(songs);
-  updateSidebarContent();
-  updateFilterBar();
+  // Initialize store only if authenticated. If signed out, the authStore subscriber added in Task 20 will clear store state on next sign-in.
+  if (isAuthenticated()) {
+    await initStore();
+    const { songs } = getState();
+    buildIndex(songs);
+    updateSidebarContent();
+    updateFilterBar();
+  }
 
   // Subscribe to state changes — re-render song list when on home page
   subscribe((state) => {
@@ -84,45 +92,74 @@ async function boot() {
     }
   });
 
-  // Setup routes
-  route('/', () => {
+  // ============ Public routes ============
+  route('/login', () => {
+    hideFilterBar();
+    renderLoginPage(mainContent);
+  });
+
+  route('/register', () => {
+    hideFilterBar();
+    renderRegisterPage(mainContent);
+  });
+
+  route('/auth/callback', () => {
+    hideFilterBar();
+    renderAuthCallback(mainContent);
+  });
+
+  // ============ Guarded routes ============
+  guardedRoute('/onboarding', () => {
+    hideFilterBar();
+    renderOnboardingPage(mainContent);
+  });
+
+  guardedRoute('/', () => {
     showFilterBar();
     const { filtered } = getState();
     renderSongList(mainContent, filtered);
   });
 
-  route('/song/:id', ({ params }) => {
+  guardedRoute('/song/:id', ({ params }) => {
     hideFilterBar();
     renderSongView(mainContent, params.id);
   });
 
-  route('/admin', () => {
-    hideFilterBar();
-    renderAdminGate(mainContent, () => {
+  guardedRoute(
+    '/admin',
+    () => {
+      hideFilterBar();
       renderAdminDashboard(mainContent);
-    });
-  });
+    },
+    { adminOnly: true },
+  );
 
-  route('/admin/create', () => {
-    hideFilterBar();
-    renderAdminGate(mainContent, () => {
+  guardedRoute(
+    '/admin/create',
+    () => {
+      hideFilterBar();
       renderSongEditor(mainContent);
-    });
-  });
+    },
+    { adminOnly: true },
+  );
 
-  route('/admin/edit', () => {
-    hideFilterBar();
-    renderAdminGate(mainContent, () => {
+  guardedRoute(
+    '/admin/edit',
+    () => {
+      hideFilterBar();
       renderAdminEditList(mainContent);
-    });
-  });
+    },
+    { adminOnly: true },
+  );
 
-  route('/admin/edit/:id', ({ params }) => {
-    hideFilterBar();
-    renderAdminGate(mainContent, () => {
+  guardedRoute(
+    '/admin/edit/:id',
+    ({ params }) => {
+      hideFilterBar();
       renderSongEditor(mainContent, params.id);
-    });
-  });
+    },
+    { adminOnly: true },
+  );
 
   onNotFound(() => {
     hideFilterBar();

@@ -343,3 +343,56 @@
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
 }
+
+/* ─── Debug panel (?debug=1) ─── */
+
+.tuner-debug {
+  margin-top: 16px;
+  padding: 12px;
+  background: #111;
+  color: #0f0;
+  font:
+    12px/1.4 ui-monospace,
+    SFMono-Regular,
+    monospace;
+  border-radius: 6px;
+  border: 1px solid #333;
+}
+.tuner-debug summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.tuner-debug__grid {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 4px 8px;
+  margin-bottom: 12px;
+}
+.tuner-debug__grid > div:nth-child(odd) {
+  color: #888;
+}
+.tuner-debug__actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.tuner-debug__actions button {
+  background: #222;
+  color: #0f0;
+  border: 1px solid #444;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+.tuner-debug__events {
+  max-height: 200px;
+  overflow-y: auto;
+  background: #000;
+  padding: 8px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

@@ -16,10 +16,18 @@ export default defineConfig({
   },
   plugins: [
     VitePWA({
-      registerType: 'prompt',
+      // autoUpdate: el nuevo SW toma control apenas se instala, sin esperar
+      // que el usuario acepte un prompt. Necesario porque iOS Safari es
+      // particularmente lento detectando updates con el patrón 'prompt';
+      // usuarios quedan atascados con chunks viejos cacheados. El combo
+      // skipWaiting + clientsClaim abajo garantiza que un solo refresh
+      // entregue el código nuevo.
+      registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'favicon.svg', 'icons/*.png', 'covers/*.webp'],
       manifest: false, // Using public/manifest.json
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,json,webp,png,svg,woff2}'],
         runtimeCaching: [
           {
@@ -85,7 +93,6 @@ export default defineConfig({
             },
           },
         ],
-        // skipWaiting and clientsClaim removed — now controlled by prompt registration
       },
     }),
   ],

@@ -17,112 +17,6 @@ import { fetchSongDetail } from '../lib/store.js';
 import { getSession, refreshProfile } from '../lib/authStore.js';
 import { navigate } from '../router.js';
 
-/* ─── Debug panel (solo activo con ?debug=1) ─── */
-
-function renderDebugPanel() {
-  const el = document.createElement('details');
-  el.className = 'tuner-debug';
-  el.open = true;
-  el.innerHTML = `
-    <summary>🛠 Debug · iOS mic diagnostics</summary>
-    <div class="tuner-debug__grid">
-      <div>UA</div>             <div id="dbg-ua">—</div>
-      <div>mediaDevices</div>   <div id="dbg-md">—</div>
-      <div>perm.query</div>     <div id="dbg-perm">—</div>
-      <div>getUserMedia</div>   <div id="dbg-gum">pending</div>
-      <div>ctx.state</div>      <div id="dbg-ctx">—</div>
-      <div>sampleRate</div>     <div id="dbg-sr">—</div>
-      <div>stream.active</div>  <div id="dbg-sa">—</div>
-      <div>track.readyState</div><div id="dbg-trs">—</div>
-      <div>track.muted</div>    <div id="dbg-trm">—</div>
-      <div>RMS</div>            <div id="dbg-rms">—</div>
-      <div>Hz</div>             <div id="dbg-hz">—</div>
-    </div>
-    <div class="tuner-debug__actions">
-      <button id="dbg-tone" type="button">▶ Test tone 440Hz</button>
-      <button id="dbg-copy" type="button">📋 Copiar JSON</button>
-    </div>
-    <div class="tuner-debug__events" id="dbg-events">(no events yet)</div>
-  `;
-  return el;
-}
-
-async function initDebugPanel(panelEl, detector) {
-  panelEl.querySelector('#dbg-ua').textContent = navigator.userAgent.slice(0, 80);
-  panelEl.querySelector('#dbg-md').textContent = navigator.mediaDevices ? '✓' : '✗';
-
-  try {
-    if (navigator.permissions?.query) {
-      const p = await navigator.permissions.query({ name: 'microphone' });
-      panelEl.querySelector('#dbg-perm').textContent = p.state;
-      p.onchange = () => {
-        panelEl.querySelector('#dbg-perm').textContent = p.state;
-      };
-    } else {
-      panelEl.querySelector('#dbg-perm').textContent = 'N/A (no permissions API)';
-    }
-  } catch (e) {
-    panelEl.querySelector('#dbg-perm').textContent = `error: ${e.message}`;
-  }
-
-  const eventsEl = panelEl.querySelector('#dbg-events');
-  const visibleEvents = [];
-  const onEventForPanel = (ev) => {
-    visibleEvents.push(ev);
-    if (visibleEvents.length > 20) visibleEvents.shift();
-    eventsEl.textContent = visibleEvents
-      .map((e) => `[${e.t}ms] ${e.type}${e.data ? ': ' + JSON.stringify(e.data) : ''}`)
-      .join('\n');
-    if (ev.type === 'gum-success') panelEl.querySelector('#dbg-gum').textContent = '✓ success';
-    if (ev.type === 'error' && ev.data?.step === 'getUserMedia') {
-      panelEl.querySelector('#dbg-gum').textContent = `✗ ${ev.data.message}`;
-    }
-  };
-  detector._panelOnEvent = onEventForPanel;
-
-  let rafId = null;
-  const repaint = () => {
-    const s = detector.getDebugState();
-    panelEl.querySelector('#dbg-ctx').textContent = s.ctxState ?? '—';
-    panelEl.querySelector('#dbg-sr').textContent = s.sampleRate ?? '—';
-    panelEl.querySelector('#dbg-sa').textContent =
-      s.streamActive === null ? '—' : s.streamActive ? '✓' : '✗';
-    panelEl.querySelector('#dbg-trs').textContent = s.track?.readyState ?? '—';
-    panelEl.querySelector('#dbg-trm').textContent =
-      s.track?.muted === undefined ? '—' : s.track.muted ? '✓ muted' : '✗ unmuted';
-    panelEl.querySelector('#dbg-rms').textContent = s.lastRms === null ? '—' : s.lastRms.toFixed(4);
-    panelEl.querySelector('#dbg-hz').textContent =
-      s.lastHz === null ? '— (no signal)' : `${s.lastHz.toFixed(1)} Hz`;
-    rafId = setTimeout(repaint, 250);
-  };
-  repaint();
-  detector._panelStop = () => {
-    if (rafId !== null) clearTimeout(rafId);
-  };
-
-  let toneOn = false;
-  const toneBtn = panelEl.querySelector('#dbg-tone');
-  toneBtn.addEventListener('click', () => {
-    toneOn = !toneOn;
-    detector.setTestTone(toneOn);
-    toneBtn.textContent = toneOn ? '⏸ Stop tone' : '▶ Test tone 440Hz';
-  });
-
-  panelEl.querySelector('#dbg-copy').addEventListener('click', async () => {
-    const payload = {
-      ts: new Date().toISOString(),
-      ua: navigator.userAgent,
-      ...detector.getDebugState(),
-    };
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-      alert('Copiado al portapapeles.');
-    } catch (e) {
-      alert(`No se pudo copiar: ${e.message}`);
-    }
-  });
-}
-
 const MODES = [
   { id: 'guitar', label: '🎸 Guitarra' },
   { id: 'voice', label: '🎤 Voz' },
@@ -309,7 +203,6 @@ export async function renderTuner(container, opts = {}) {
   const params = parseQuery(opts.query);
   let mode = params.mode && MODES.some((m) => m.id === params.mode) ? params.mode : 'guitar';
   const songId = params.songId || null;
-  const debugMode = params.debug === '1';
   let song = null;
   if (mode === 'song' && songId) {
     song = await fetchSongDetail(songId).catch(() => null);
@@ -541,9 +434,9 @@ export async function renderTuner(container, opts = {}) {
 
   /* ─── mic lifecycle ─── */
 
-  let requestMic = function requestMic() {
+  function requestMic() {
     if (detector) return;
-    const detectorOpts = {
+    detector = createPitchDetector({
       onPitch: dispatchPitch,
       onError: (err) => {
         console.warn('[tuner] mic error:', err);
@@ -555,15 +448,9 @@ export async function renderTuner(container, opts = {}) {
         // Re-paint when transitioning into running (first frame).
         if (s === 'running' || s === 'denied' || s === 'stopped') paintBody();
       },
-    };
-    if (debugMode) {
-      detectorOpts.onEvent = (ev) => {
-        if (detector?._panelOnEvent) detector._panelOnEvent(ev);
-      };
-    }
-    detector = createPitchDetector(detectorOpts);
+    });
     detector.start();
-  };
+  }
 
   /* ─── tab clicks ─── */
 
@@ -587,7 +474,6 @@ export async function renderTuner(container, opts = {}) {
   const cleanupOnHashChange = () => {
     if (!window.location.hash.startsWith('#/afinador')) {
       if (detector) {
-        if (detector._panelStop) detector._panelStop();
         detector.stop();
         detector = null;
       }
@@ -596,16 +482,6 @@ export async function renderTuner(container, opts = {}) {
     }
   };
   window.addEventListener('hashchange', cleanupOnHashChange);
-
-  if (debugMode) {
-    const panel = renderDebugPanel();
-    container.querySelector('.tuner-page').appendChild(panel);
-    const origRequestMic = requestMic;
-    requestMic = function () {
-      origRequestMic();
-      if (detector) initDebugPanel(panel, detector);
-    };
-  }
 
   paintTabs();
   paintBody();

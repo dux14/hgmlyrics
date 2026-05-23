@@ -95,32 +95,64 @@ export function detectPitch(buffer, sampleRate, opts = {}) {
  * - AudioContext is created lazily inside `start()` so it can run in
  *   response to a user gesture (iOS Safari requirement).
  *
+ * Debug mode: opts.onEvent (optional) receives every state transition for
+ * diagnostic UI. Use controller.getDebugState() for current snapshot and
+ * controller.setTestTone(bool) to swap the mic stream for a 440Hz oscillator
+ * (decouples "mic dead" from "detector dead").
+ *
  * @param {{
- *   onPitch: (info: { hz: number, rms: number }) => void,
+ *   onPitch: (info: { hz: number | null, rms: number }) => void,
  *   onError?: (err: Error) => void,
  *   onState?: (state: 'requesting' | 'running' | 'stopped' | 'denied') => void,
+ *   onEvent?: (ev: { type: string, data?: object }) => void,
  *   fftSize?: number,
  *   intervalMs?: number,
  * }} opts
- * @returns {{ start: () => Promise<void>, stop: () => void, isRunning: () => boolean }}
  */
 export function createPitchDetector(opts) {
-  const { onPitch, onError = () => {}, onState = () => {} } = opts;
+  const { onPitch, onError = () => {}, onState = () => {}, onEvent = null } = opts;
   const fftSize = opts.fftSize ?? 2048;
   const intervalMs = opts.intervalMs ?? 33;
 
   let ctx = null;
   let stream = null;
   let analyser = null;
+  let micSource = null;
+  let silentGain = null;
+  let oscNode = null;
   let rafId = null;
   let lastEmit = 0;
   let running = false;
   let buffer = null;
+  let lastRms = null;
+  let lastHz = null;
+  const events = [];
+
+  function emit(type, data) {
+    const ev = { t: Math.round(performance.now()), type, data: data ?? null };
+    events.push(ev);
+    if (events.length > 50) events.shift();
+    if (onEvent) onEvent(ev);
+  }
+
+  function reportErr(step, e) {
+    const msg = e && e.message ? e.message : String(e);
+    const err = new Error(`[${step}] ${msg}`);
+    emit('error', { step, message: msg });
+    onError(err);
+  }
 
   async function start() {
     if (running) return;
     onState('requesting');
+    emit('user-gesture-start');
+
     try {
+      emit('gum-call', {
+        constraints: {
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        },
+      });
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: false,
@@ -128,34 +160,83 @@ export function createPitchDetector(opts) {
           autoGainControl: false,
         },
       });
+      const t0 = stream.getAudioTracks()[0];
+      emit('gum-success', {
+        tracks: stream.getAudioTracks().map((t) => ({
+          label: t.label,
+          kind: t.kind,
+          readyState: t.readyState,
+          muted: t.muted,
+        })),
+      });
+      if (t0) {
+        t0.onmute = () => emit('track-mute', { muted: t0.muted });
+        t0.onunmute = () => emit('track-unmute', { muted: t0.muted });
+        t0.onended = () => emit('track-ended');
+      }
     } catch (e) {
       onState('denied');
-      onError(e instanceof Error ? e : new Error(String(e)));
+      reportErr('getUserMedia', e);
       return;
     }
 
-    const AC = window.AudioContext || window.webkitAudioContext;
-    ctx = new AC();
-    if (ctx.state === 'suspended') await ctx.resume();
-    const source = ctx.createMediaStreamSource(stream);
-    analyser = ctx.createAnalyser();
-    analyser.fftSize = fftSize;
-    analyser.smoothingTimeConstant = 0;
-    // iOS Safari quirk: AnalyserNode only processes audio when the graph
-    // terminates at `ctx.destination`. Without this, getFloatTimeDomainData
-    // returns silent buffers on iPhone (Safari, Chrome iOS, PWA standalone).
-    // The silent gain prevents feedback while keeping the graph alive.
-    const silentGain = ctx.createGain();
-    silentGain.gain.value = 0;
-    source.connect(analyser);
-    analyser.connect(silentGain);
-    silentGain.connect(ctx.destination);
-    // Some iOS builds keep ctx suspended until after connect(); re-resume.
-    if (ctx.state === 'suspended') await ctx.resume();
-    buffer = new Float32Array(analyser.fftSize);
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      ctx = new AC();
+      emit('ctx-created', { state: ctx.state, sampleRate: ctx.sampleRate });
+    } catch (e) {
+      reportErr('AudioContext-ctor', e);
+      return;
+    }
 
+    try {
+      if (ctx.state === 'suspended') {
+        emit('resume-1-call');
+        await ctx.resume();
+        emit('resume-1-result', { state: ctx.state });
+      }
+    } catch (e) {
+      reportErr('resume-1', e);
+      return;
+    }
+
+    try {
+      micSource = ctx.createMediaStreamSource(stream);
+      analyser = ctx.createAnalyser();
+      analyser.fftSize = fftSize;
+      analyser.smoothingTimeConstant = 0;
+      // iOS Safari quirk: AnalyserNode only processes audio when the graph
+      // terminates at `ctx.destination`. Without this, getFloatTimeDomainData
+      // returns silent buffers on iPhone (Safari, Chrome iOS, PWA standalone).
+      // The silent gain prevents feedback while keeping the graph alive.
+      silentGain = ctx.createGain();
+      silentGain.gain.value = 0;
+      micSource.connect(analyser);
+      analyser.connect(silentGain);
+      silentGain.connect(ctx.destination);
+      emit('graph-connected', { ctxState: ctx.state });
+    } catch (e) {
+      reportErr('graph-build', e);
+      return;
+    }
+
+    try {
+      // Some iOS builds keep ctx suspended until after connect(); re-resume.
+      if (ctx.state === 'suspended') {
+        emit('resume-2-call');
+        await ctx.resume();
+        emit('resume-2-result', { state: ctx.state });
+      }
+    } catch (e) {
+      reportErr('resume-2', e);
+      return;
+    }
+
+    buffer = new Float32Array(analyser.fftSize);
     running = true;
     onState('running');
+    emit('tick-loop-start');
+
     const tick = () => {
       if (!running) return;
       const now = performance.now();
@@ -165,7 +246,9 @@ export function createPitchDetector(opts) {
         let sum = 0;
         for (let i = 0; i < buffer.length; i++) sum += buffer[i] * buffer[i];
         const rms = Math.sqrt(sum / buffer.length);
+        lastRms = rms;
         const hz = detectPitch(buffer, ctx.sampleRate);
+        lastHz = hz;
         if (hz !== null) onPitch({ hz, rms });
         else onPitch({ hz: null, rms });
       }
@@ -178,6 +261,15 @@ export function createPitchDetector(opts) {
     running = false;
     if (rafId !== null) cancelAnimationFrame(rafId);
     rafId = null;
+    if (oscNode) {
+      try {
+        oscNode.stop();
+      } catch (_) {
+        /* already stopped */
+      }
+      oscNode.disconnect();
+      oscNode = null;
+    }
     if (stream) {
       stream.getTracks().forEach((t) => t.stop());
       stream = null;
@@ -187,9 +279,63 @@ export function createPitchDetector(opts) {
       ctx = null;
     }
     analyser = null;
+    micSource = null;
+    silentGain = null;
     buffer = null;
+    emit('stopped');
     onState('stopped');
   }
 
-  return { start, stop, isRunning: () => running };
+  function getDebugState() {
+    const track = stream?.getAudioTracks()[0] ?? null;
+    return {
+      ctxState: ctx?.state ?? null,
+      sampleRate: ctx?.sampleRate ?? null,
+      streamActive: stream?.active ?? null,
+      track: track
+        ? { readyState: track.readyState, muted: track.muted, label: track.label }
+        : null,
+      lastRms,
+      lastHz,
+      events: events.slice(),
+    };
+  }
+
+  function setTestTone(enabled) {
+    if (!ctx || !analyser) return;
+    if (enabled && !oscNode) {
+      try {
+        micSource?.disconnect();
+      } catch (_) {
+        /* not connected */
+      }
+      oscNode = ctx.createOscillator();
+      oscNode.frequency.value = 440;
+      oscNode.connect(analyser);
+      oscNode.start();
+      emit('test-tone-on');
+    } else if (!enabled && oscNode) {
+      try {
+        oscNode.stop();
+      } catch (_) {
+        /* already stopped */
+      }
+      oscNode.disconnect();
+      oscNode = null;
+      try {
+        micSource?.connect(analyser);
+      } catch (_) {
+        /* analyser gone */
+      }
+      emit('test-tone-off');
+    }
+  }
+
+  return {
+    start,
+    stop,
+    isRunning: () => running,
+    getDebugState,
+    setTestTone,
+  };
 }

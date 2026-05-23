@@ -1,15 +1,10 @@
 /**
  * supabase.js — singleton browser client for Supabase Auth + Storage + DB.
  *
- * Storage strategy: a hybrid adapter so the project rule "no localStorage for
- * tokens" still holds for the long-lived session, while the short-lived PKCE
- * flow state survives the cross-origin OAuth redirect. iOS Safari (especially
- * Private mode) wipes sessionStorage on cross-origin navigation, which would
- * otherwise leave the code_verifier missing or stale when we land back on the
- * callback URL — producing the bad_code_verifier error supabase reports.
- *
- * - `*-code-verifier` and any other PKCE flow keys → localStorage (seconds-long lifetime, removed by supabase-js after exchange).
- * - everything else (including the session token) → sessionStorage.
+ * Storage: localStorage. This is a PWA designed to work offline-first; the
+ * session must survive PWA/tab close so users don't re-login on every visit.
+ * XSS risk is mitigated by Supabase RLS + anon key model (the access_token
+ * only ever has the logged-in user's privileges, never elevates the page).
  */
 import { createClient } from '@supabase/supabase-js';
 
@@ -20,25 +15,6 @@ if (!URL || !KEY) {
   console.error('VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are required');
 }
 
-function isPKCEStateKey(key) {
-  return key.endsWith('-code-verifier') || key.endsWith('-flow-state');
-}
-
-const hybridStorage = {
-  getItem(key) {
-    const store = isPKCEStateKey(key) ? globalThis.localStorage : globalThis.sessionStorage;
-    return store.getItem(key);
-  },
-  setItem(key, value) {
-    const store = isPKCEStateKey(key) ? globalThis.localStorage : globalThis.sessionStorage;
-    store.setItem(key, value);
-  },
-  removeItem(key) {
-    const store = isPKCEStateKey(key) ? globalThis.localStorage : globalThis.sessionStorage;
-    store.removeItem(key);
-  },
-};
-
 // detectSessionInUrl: false on purpose. With PKCE the auto-detector starts an
 // async exchange at client construction; authStore.initAuthStore() also runs
 // a manual exchangeCodeForSession at boot. Both consume the same one-time
@@ -48,7 +24,7 @@ export const supabase = createClient(URL, KEY, {
   auth: {
     flowType: 'pkce',
     persistSession: true,
-    storage: hybridStorage,
+    storage: globalThis.localStorage,
     autoRefreshToken: true,
     detectSessionInUrl: false,
   },

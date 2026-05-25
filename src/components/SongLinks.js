@@ -78,7 +78,12 @@ export async function renderSongLinks(container, songId) {
   const hasVoices = voices.length > 0;
   const isEmpty = !hasPlatforms && !hasVoices;
 
-  const platformCardsHtml = platforms
+  const platformOrder = { youtube: 0, spotify: 1 };
+  const sorted = [...platforms].sort(
+    (a, b) => (platformOrder[a.platform] ?? 99) - (platformOrder[b.platform] ?? 99),
+  );
+
+  const platformCardsHtml = sorted
     .map((link) => {
       const meta = PLATFORMS.find((p) => p.id === link.platform);
       if (!meta) return '';

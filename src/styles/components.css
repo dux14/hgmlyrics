@@ -192,6 +192,31 @@
   margin-bottom: var(--space-xs);
 }
 
+.song-view__title--linked {
+  text-decoration: underline;
+  text-decoration-color: var(--color-primary);
+  text-underline-offset: 4px;
+  text-decoration-thickness: 2px;
+  cursor: pointer;
+  transition: text-decoration-color var(--transition-fast);
+}
+
+.song-view__title--linked:hover {
+  text-decoration-color: var(--color-accent);
+}
+
+.song-view__link-icon {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 0.5rem;
+  opacity: 0.35;
+  transition: opacity var(--transition-fast);
+}
+
+.song-view__title--linked:hover .song-view__link-icon {
+  opacity: 0.65;
+}
+
 .song-view__album {
   font-size: var(--font-size-lg);
   color: var(--color-text-secondary);

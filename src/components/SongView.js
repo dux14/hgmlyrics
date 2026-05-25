@@ -231,7 +231,7 @@ export async function renderSongView(container, songIdOrData) {
             : ''
         }
         <div class="song-view__meta">
-          <h1 class="song-view__title">${escapeHtml(song.title || 'Sin título')}</h1>
+          <h1 class="song-view__title${!isPreview ? ' song-view__title--linked' : ''}" id="song-title-link">${escapeHtml(song.title || 'Sin título')}</h1>
           <p class="song-view__album">${escapeHtml(song.artist || '')} — ${escapeHtml(song.album || '')}</p>
           <p class="song-view__year">${song.year || ''} · ${song.genre || ''}</p>
           <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
@@ -429,6 +429,11 @@ export async function renderSongView(container, songIdOrData) {
     e.preventDefault();
     filterByAlbum(song.albumSlug);
     navigate('/');
+  });
+
+  // Title → links page
+  container.querySelector('#song-title-link')?.addEventListener('click', () => {
+    navigate(`/song/${songId}/links`);
   });
 
   // Voice part filter

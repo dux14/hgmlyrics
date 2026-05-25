@@ -133,6 +133,12 @@ async function boot() {
     renderSongView(mainContent, params.id);
   });
 
+  route('/song/:id/links', async ({ params }) => {
+    hideFilterBar();
+    const { renderSongLinks } = await import('./components/SongLinks.js');
+    renderSongLinks(mainContent, params.id);
+  });
+
   guardedRoute(
     '/admin',
     () => {

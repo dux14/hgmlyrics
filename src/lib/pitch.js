@@ -125,7 +125,6 @@ export function createPitchDetector(opts) {
         audio: {
           echoCancellation: false,
           noiseSuppression: false,
-          autoGainControl: false,
         },
       });
     } catch (e) {

@@ -1,0 +1,237 @@
+/* ============================================
+   Song Links — Platform & Voice link tracker
+   ============================================ */
+
+.slinks {
+  padding: var(--space-md);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* ─── Header ─── */
+
+.slinks__header {
+  display: flex;
+  gap: var(--space-md);
+  align-items: flex-start;
+  margin-bottom: var(--space-xl);
+}
+
+.slinks__cover {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--border-radius-md);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.slinks__meta {
+  min-width: 0;
+}
+
+.slinks__title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  margin: 0 0 var(--space-xs);
+  line-height: var(--line-height-tight);
+}
+
+.slinks__artist {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-xs);
+}
+
+.slinks__year {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+/* ─── Sections ─── */
+
+.slinks__section {
+  margin-bottom: var(--space-xl);
+}
+
+.slinks__section-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-md);
+}
+
+/* ─── Platform cards ─── */
+
+.slinks-platforms {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-sm);
+}
+
+.slinks-platform-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  text-decoration: none;
+  color: var(--color-text);
+  transition:
+    border-color var(--transition-fast),
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.slinks-platform-card:hover {
+  border-color: var(--platform-color, var(--color-primary));
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px var(--color-shadow);
+}
+
+.slinks-platform-card__icon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  color: var(--platform-color, var(--color-text));
+}
+
+.slinks-platform-card__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.slinks-platform-card__label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Voice cards ─── */
+
+.slinks-voices {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-sm);
+}
+
+.slinks-voice-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--voice-color, var(--color-primary));
+  border-radius: var(--border-radius-md);
+  padding: var(--space-md);
+}
+
+.slinks-voice-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.slinks-voice-card__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--voice-color, var(--color-primary));
+  flex-shrink: 0;
+}
+
+.slinks-voice-card__name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--voice-color, var(--color-text));
+}
+
+.slinks-voice-card__links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.slinks-voice-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--border-radius-sm);
+  text-decoration: none;
+  color: var(--color-text);
+  transition: background var(--transition-fast);
+}
+
+.slinks-voice-link:hover {
+  background: var(--color-surface-hover);
+}
+
+.slinks-voice-link__icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
+.slinks-voice-link__icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.slinks-voice-link__text {
+  font-size: var(--font-size-sm);
+}
+
+/* ─── Empty state ─── */
+
+.slinks__empty {
+  text-align: center;
+  padding: var(--space-2xl) var(--space-md);
+  color: var(--color-text-secondary);
+}
+
+/* ─── Admin link ─── */
+
+.slinks__admin {
+  text-align: center;
+  margin-top: var(--space-lg);
+}
+
+/* ─── Title link affordance (used in SongView) ─── */
+
+.song-view__title--linked {
+  text-decoration: underline;
+  text-decoration-color: var(--color-primary);
+  text-underline-offset: 4px;
+  text-decoration-thickness: 2px;
+  cursor: pointer;
+  transition: text-decoration-color var(--transition-fast);
+}
+
+.song-view__title--linked:hover {
+  text-decoration-color: var(--color-accent);
+}
+
+/* ─── Responsive ─── */
+
+@media (min-width: 480px) {
+  .slinks-voices {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 768px) {
+  .slinks__cover {
+    width: 100px;
+    height: 100px;
+  }
+
+  .slinks__title {
+    font-size: var(--font-size-2xl);
+  }
+}

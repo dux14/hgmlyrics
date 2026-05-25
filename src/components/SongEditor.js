@@ -10,12 +10,27 @@ import { fetchSongDetail, refreshData } from '../lib/store.js';
 import { navigate } from '../router.js';
 import { getSession } from '../lib/authStore.js';
 import { renderSongView } from './SongView.js';
-import { VALID_VOICE_IDS, buildHighlightedHTML, validateVoiceRanges } from '../lib/voiceSystem.js';
+import {
+  VALID_VOICE_IDS,
+  VOICE_TYPES,
+  buildHighlightedHTML,
+  validateVoiceRanges,
+} from '../lib/voiceSystem.js';
 import { getDragRange, getCaretOffsetAtPoint } from '../lib/caretSelection.js';
 import { openVoiceBottomSheet } from './VoiceBottomSheet.js';
 import { MUSICAL_KEYS } from '../lib/musicKeys.js';
 
 const API_URL = '/api';
+
+const LINK_PLATFORMS = [
+  { id: 'youtube', label: 'YouTube' },
+  { id: 'spotify', label: 'Spotify' },
+  { id: 'apple_music', label: 'Apple Music' },
+  { id: 'deezer', label: 'Deezer' },
+  { id: 'amazon_music', label: 'Amazon Music' },
+  { id: 'tidal', label: 'Tidal' },
+  { id: 'soundcloud', label: 'SoundCloud' },
+];
 
 const SECTION_TYPES = [
   { type: 'verse', label: 'Verso' },
@@ -286,6 +301,24 @@ export async function renderSongEditor(container, editId) {
         </div>
       </div>
 
+      <!-- Links -->
+      <div class="editor__section">
+        <h2 class="editor__section-title">Links de plataformas</h2>
+        <div id="editor-platform-links">
+          ${LINK_PLATFORMS.map(
+            (p) => `
+            <div class="form-group">
+              <label class="form-group__label" for="link-${p.id}">${p.label}</label>
+              <input class="form-group__input" id="link-${p.id}" type="url" placeholder="https://..." data-platform="${p.id}" />
+            </div>
+          `,
+          ).join('')}
+        </div>
+        <h2 class="editor__section-title" style="margin-top: var(--space-lg);">Links de voces (Drive)</h2>
+        <div id="editor-voice-links"></div>
+        <button class="btn btn--secondary" id="add-voice-link-btn" type="button" style="margin-top: var(--space-sm);">+ Agregar link de voz</button>
+      </div>
+
       <!-- Block Editor -->
       <div class="editor__section">
         <h2 class="editor__section-title">Letras</h2>
@@ -343,6 +376,81 @@ export async function renderSongEditor(container, editId) {
   coverInput.addEventListener('change', () => {
     if (coverInput.files.length > 0) handleImageFile(coverInput.files[0], imagePreview);
   });
+
+  // ─── Links Editor ───
+  const voiceLinksEl = container.querySelector('#editor-voice-links');
+  let voiceLinkItems = [];
+
+  function renderVoiceLinks() {
+    voiceLinksEl.innerHTML = voiceLinkItems
+      .map(
+        (item, i) => `
+        <div class="editor__row-3" style="align-items: flex-end; margin-bottom: var(--space-sm);" data-vlink="${i}">
+          <div class="form-group" style="flex: 1;">
+            <label class="form-group__label">Voz</label>
+            <select class="form-group__input" data-action="vlink-voice" data-idx="${i}">
+              ${VOICE_TYPES.map((v) => `<option value="${v.id}" ${item.voiceType === v.id ? 'selected' : ''}>${v.label}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group" style="flex: 2;">
+            <label class="form-group__label">URL (Drive)</label>
+            <input class="form-group__input" type="url" placeholder="https://drive.google.com/..." data-action="vlink-url" data-idx="${i}" value="${escapeHtml(item.url || '')}" />
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-group__label">Etiqueta</label>
+            <input class="form-group__input" type="text" placeholder="Partitura" data-action="vlink-label" data-idx="${i}" value="${escapeHtml(item.label || '')}" />
+          </div>
+          <button class="btn btn--secondary" style="color: var(--color-error); border-color: var(--color-error); padding: 0.5rem;" data-action="vlink-delete" data-idx="${i}" type="button">✕</button>
+        </div>
+      `,
+      )
+      .join('');
+  }
+
+  voiceLinksEl.addEventListener('input', (e) => {
+    const idx = parseInt(e.target.dataset.idx);
+    if (Number.isNaN(idx)) return;
+    if (e.target.dataset.action === 'vlink-url') voiceLinkItems[idx].url = e.target.value;
+    if (e.target.dataset.action === 'vlink-label') voiceLinkItems[idx].label = e.target.value;
+  });
+
+  voiceLinksEl.addEventListener('change', (e) => {
+    const idx = parseInt(e.target.dataset.idx);
+    if (Number.isNaN(idx)) return;
+    if (e.target.dataset.action === 'vlink-voice') voiceLinkItems[idx].voiceType = e.target.value;
+  });
+
+  voiceLinksEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action="vlink-delete"]');
+    if (!btn) return;
+    voiceLinkItems.splice(parseInt(btn.dataset.idx), 1);
+    renderVoiceLinks();
+  });
+
+  container.querySelector('#add-voice-link-btn').addEventListener('click', () => {
+    voiceLinkItems.push({ voiceType: 'soprano', url: '', label: '' });
+    renderVoiceLinks();
+  });
+
+  if (editId) {
+    fetch(`${API_URL}/songs/${editId}/links`)
+      .then((r) => (r.ok ? r.json() : { platforms: [], voices: [] }))
+      .then(({ platforms, voices }) => {
+        for (const p of platforms) {
+          const input = container.querySelector(`#link-${p.platform}`);
+          if (input) input.value = p.url;
+        }
+        voiceLinkItems = voices.map((v) => ({
+          voiceType: v.voiceType,
+          url: v.url,
+          label: v.label || '',
+        }));
+        renderVoiceLinks();
+      })
+      .catch(() => {});
+  }
+
+  renderVoiceLinks();
 
   // ─── Block Editor Core ───
   const editorRoot = container.querySelector('#block-editor');
@@ -805,7 +913,7 @@ export async function renderSongEditor(container, editId) {
   // ─── Save ───
   container
     .querySelector('#editor-save')
-    .addEventListener('click', () => handleSave(container, existingSong, blocks));
+    .addEventListener('click', () => handleSave(container, existingSong, blocks, voiceLinkItems));
 }
 
 /* ─── Image handling ─── */
@@ -850,7 +958,21 @@ function handleImageFile(file, previewEl) {
 
 /* ─── Save ─── */
 
-async function handleSave(container, existingSong, blocks) {
+function collectLinks(container, voiceLinkItems) {
+  const platforms = [];
+  for (const p of LINK_PLATFORMS) {
+    const input = container.querySelector(`#link-${p.id}`);
+    if (input?.value?.trim()) {
+      platforms.push({ platform: p.id, url: input.value.trim() });
+    }
+  }
+  const voices = voiceLinkItems
+    .filter((v) => v.url?.trim())
+    .map((v) => ({ voiceType: v.voiceType, url: v.url.trim(), label: v.label?.trim() || null }));
+  return { platforms, voices };
+}
+
+async function handleSave(container, existingSong, blocks, voiceLinkItems) {
   const btn = container.querySelector('#editor-save');
   btn.disabled = true;
   btn.textContent = 'Guardando...';
@@ -929,6 +1051,15 @@ async function handleSave(container, existingSong, blocks) {
     });
 
     if (!res.ok) throw new Error('Error guardando la canción');
+
+    const links = collectLinks(container, voiceLinkItems);
+    if (links.platforms.length > 0 || links.voices.length > 0) {
+      await fetch(`${API_URL}/songs/${songId}/links`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(links),
+      });
+    }
 
     await refreshData();
     navigate(existingSong ? '/admin/edit' : '/admin');

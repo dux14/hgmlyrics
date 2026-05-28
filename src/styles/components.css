@@ -1375,6 +1375,10 @@
   opacity: 0.4;
 }
 
+.line-row__voice-display .char--in-range {
+  background: rgba(0, 151, 167, 0.25);
+}
+
 .line-row__voice-display .char--anchor {
   background: var(--color-accent, #0097a7);
   color: white;
@@ -1461,4 +1465,11 @@
   cursor: pointer;
   min-height: 44px;
   white-space: nowrap;
+}
+
+.voice-anchor-bar__btn--primary {
+  background: var(--color-accent, #0097a7);
+  color: white;
+  border-color: var(--color-accent, #0097a7);
+  font-weight: 600;
 }

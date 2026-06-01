@@ -331,7 +331,7 @@ export async function renderSongView(container, songIdOrData) {
             ? `
         <!-- Zone: Actions -->
         <div class="song-toolbar__group song-toolbar__group--actions">
-          <a href="#/admin/edit/${song.id}" class="btn btn--secondary song-toolbar__btn">${icon('pencil', { size: 16 })} Editar</a>
+          <a href="#/admin/edit/${song.id}?from=${song.id}" class="btn btn--secondary song-toolbar__btn">${icon('pencil', { size: 16 })} Editar</a>
         </div>
         `
             : ''

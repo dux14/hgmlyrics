@@ -365,3 +365,31 @@ export function resolveSyllableNotes(line, rosterId) {
     sung: noteBySyll.has(idx),
   }));
 }
+
+/**
+ * @param {object} song @param {string} category
+ * @returns {Array} entradas del roster de esa categoría (en orden original).
+ */
+export function rosterByCategory(song, category) {
+  return (song?.voiceRoster || []).filter((v) => v.category === category);
+}
+
+/**
+ * Tono de referencia de una voz: su referenceKey explícito, o la primera nota
+ * no nula que canta en la canción, o null.
+ * @param {object} song @param {string} rosterId
+ * @returns {string|null}
+ */
+export function deriveReferenceKey(song, rosterId) {
+  const voice = (song?.voiceRoster || []).find((v) => v.id === rosterId);
+  if (voice?.referenceKey) return voice.referenceKey;
+  for (const section of song?.sections || []) {
+    for (const line of section.lines || []) {
+      const notes = line.voiceLines?.[rosterId]?.notes || [];
+      for (const n of notes) {
+        if (n !== null && n !== undefined) return n;
+      }
+    }
+  }
+  return null;
+}

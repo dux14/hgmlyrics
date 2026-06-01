@@ -452,3 +452,57 @@ describe('resolveSyllableNotes', () => {
     expect(resolveSyllableNotes({ text: 'x' }, 'sop-a')).toEqual([]);
   });
 });
+
+import { deriveReferenceKey, rosterByCategory } from '../src/lib/voiceSystem.js';
+
+describe('rosterByCategory', () => {
+  it('filtra el roster por categoría conservando orden', () => {
+    const song = {
+      voiceRoster: [
+        { id: 'sop-a', name: 'A', category: 'soprano' },
+        { id: 'ten', name: 'T', category: 'tenor' },
+        { id: 'sop-b', name: 'B', category: 'soprano' },
+      ],
+    };
+    expect(rosterByCategory(song, 'soprano').map((v) => v.id)).toEqual(['sop-a', 'sop-b']);
+  });
+});
+
+describe('deriveReferenceKey', () => {
+  it('usa referenceKey explícito si existe', () => {
+    const song = {
+      voiceRoster: [{ id: 'sop-a', name: 'A', category: 'soprano', referenceKey: 'D5' }],
+      sections: [],
+    };
+    expect(deriveReferenceKey(song, 'sop-a')).toBe('D5');
+  });
+
+  it('deriva la primera nota no nula de la voz si no hay referenceKey', () => {
+    const song = {
+      voiceRoster: [{ id: 'sop-a', name: 'A', category: 'soprano' }],
+      sections: [
+        {
+          lines: [
+            {
+              text: 'ab',
+              syllables: [
+                { start: 0, end: 1 },
+                { start: 1, end: 2 },
+              ],
+              voiceLines: { 'sop-a': { sungSyllables: [0, 1], notes: [null, 'F#3'] } },
+            },
+          ],
+        },
+      ],
+    };
+    expect(deriveReferenceKey(song, 'sop-a')).toBe('F#3');
+  });
+
+  it('devuelve null si no hay nota ni referenceKey', () => {
+    const song = {
+      voiceRoster: [{ id: 'sop-a', name: 'A', category: 'soprano' }],
+      sections: [],
+    };
+    expect(deriveReferenceKey(song, 'sop-a')).toBe(null);
+  });
+});

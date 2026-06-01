@@ -321,7 +321,7 @@
 .tuner-scale li[data-target='true'] {
   outline: 2px solid var(--color-primary);
   outline-offset: 1px;
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 /* === Range mode === */

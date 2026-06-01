@@ -6,6 +6,7 @@ import {
   getScaleNotes,
   nearestString,
   GUITAR_STANDARD,
+  parseTunerTarget,
 } from '../src/lib/notes.js';
 
 describe('noteToMidi', () => {
@@ -116,5 +117,23 @@ describe('nearestString', () => {
   it('returns null on invalid input', () => {
     expect(nearestString(0)).toBeNull();
     expect(nearestString(-5)).toBeNull();
+  });
+});
+
+describe('parseTunerTarget', () => {
+  it('extrae nota válida y songId de origen', () => {
+    expect(parseTunerTarget({ ref: 'D5', from: 'santo-santo' })).toEqual({
+      note: 'D5',
+      fromSongId: 'santo-santo',
+    });
+  });
+  it('ignora ref inválida', () => {
+    expect(parseTunerTarget({ ref: 'H9', from: 'x' })).toEqual({ note: null, fromSongId: 'x' });
+  });
+  it('sin from devuelve fromSongId null', () => {
+    expect(parseTunerTarget({ ref: 'A3' })).toEqual({ note: 'A3', fromSongId: null });
+  });
+  it('params vacíos', () => {
+    expect(parseTunerTarget({})).toEqual({ note: null, fromSongId: null });
   });
 });

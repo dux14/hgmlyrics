@@ -88,6 +88,20 @@ export function getScaleNotes(key) {
   return intervals.map((step) => NOTE_NAMES[(tonicIdx + step) % 12]);
 }
 
+const TUNER_NOTE_RE = /^[A-G][#b]?[0-7]$/;
+
+/**
+ * Valida los params del afinador provenientes de la canción.
+ * @param {Record<string,string>} params
+ * @returns {{ note: string|null, fromSongId: string|null }}
+ */
+export function parseTunerTarget(params = {}) {
+  const ref = params.ref;
+  const note = typeof ref === 'string' && TUNER_NOTE_RE.test(ref) ? ref : null;
+  const fromSongId = params.from ? params.from : null;
+  return { note, fromSongId };
+}
+
 /** Standard guitar tuning (E standard), low → high. */
 export const GUITAR_STANDARD = ['E2', 'A2', 'D3', 'G3', 'B3', 'E4'];
 

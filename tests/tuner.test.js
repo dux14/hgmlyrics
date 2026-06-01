@@ -41,6 +41,7 @@ describe('bodySong', () => {
     expect(html).toContain('D3');
     // El <li data-pc="D"> debe quedar marcado como objetivo (pitch-class "D").
     expect(html).toMatch(/<li data-pc="D"[^>]*data-target="true"/);
+    expect(html).toContain('Se pone verde al coincidir');
   });
 
   it('sin key: muestra el estado vacío', () => {

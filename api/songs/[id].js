@@ -22,6 +22,8 @@ async function getOne(req, res, id) {
            voice_percent_female AS "voicePercentFemale",
            cover_image AS "coverImage",
            sections,
+           voice_roster   AS "voiceRoster",
+           schema_version AS "schemaVersion",
            album_order AS "albumOrder",
            cejilla,
            key,
@@ -57,6 +59,8 @@ async function update(req, res, id) {
       voice_percent_female = ${s.voicePercent?.female ?? 50},
       cover_image = ${s.coverImage ?? null},
       sections = ${sql.json(s.sections ?? [])},
+      voice_roster = ${sql.json(s.voiceRoster ?? [])},
+      schema_version = ${s.schemaVersion ?? 1},
       album_order = ${s.albumOrder ?? 0},
       cejilla = ${s.cejilla ?? null},
       key = ${key}

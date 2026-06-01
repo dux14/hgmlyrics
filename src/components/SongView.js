@@ -318,7 +318,7 @@ export async function renderSongView(container, songIdOrData) {
             <span class="key-badge__icon">${icon('music', { size: 15 })}</span>
             <span class="key-badge__text">Tono: ${song.key}</span>
           </div>
-          <a class="btn btn--secondary song-toolbar__btn" href="#/afinador?mode=song&songId=${song.id}" title="Cantá con este tono">
+          <a class="btn btn--secondary song-toolbar__btn" href="#/afinador?mode=song&songId=${song.id}&from=${song.id}" title="Cantá con este tono">
             ${icon('mic', { size: 16 })} Afinar
           </a>
         </div>
@@ -496,7 +496,13 @@ export async function renderSongView(container, songIdOrData) {
     const safeRef = escapeHtml(refNote);
     slot.innerHTML = `<button class="btn btn--sm" id="tune-voice" data-ref="${safeRef}">${icon('mic', { size: 14 })} Afinar · ${safeRef}</button>`;
     slot.querySelector('#tune-voice').addEventListener('click', () => {
-      navigate(`/afinador?ref=${encodeURIComponent(refNote)}&from=${encodeURIComponent(song.id)}`);
+      // Abre el afinador en su sección "Canción" (cargada con esta canción),
+      // llevando la nota de referencia de la voz activa y el origen para poder
+      // volver a la canción ("Volver a la canción").
+      navigate(
+        `/afinador?mode=song&songId=${encodeURIComponent(song.id)}` +
+          `&ref=${encodeURIComponent(refNote)}&from=${encodeURIComponent(song.id)}`,
+      );
     });
   }
 
@@ -508,6 +514,13 @@ export async function renderSongView(container, songIdOrData) {
       return;
     }
     const people = rosterByCategory(song, activeCategory);
+    // Una sola persona en la categoría: el chip de categoría ya la representa,
+    // así que la fila de persona sería un duplicado. selectCategory ya la
+    // autoselecciona; no renderizamos nada aquí.
+    if (people.length <= 1) {
+      rowEl.innerHTML = '';
+      return;
+    }
     rowEl.innerHTML = people
       .map(
         (p) => `

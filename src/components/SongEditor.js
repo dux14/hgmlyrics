@@ -8,17 +8,39 @@
 
 import { fetchSongDetail, refreshData } from '../lib/store.js';
 import { navigate } from '../router.js';
-import { getSession } from '../lib/authStore.js';
+import { getSession, isFeatureEnabled } from '../lib/authStore.js';
 import { renderSongView } from './SongView.js';
 import {
   CANONICAL_VOICE_ORDER,
   VALID_VOICE_IDS,
   VOICE_TYPES,
   validateVoiceRanges,
+  validateSongV2,
+  getVoiceLabel,
+  isValidNote,
 } from '../lib/voiceSystem.js';
+import {
+  boundariesToSyllables,
+  toggleBoundary,
+  syllablesToBoundaries,
+  autoSuggestBoundaries,
+} from '../lib/syllabify.js';
 import { openVoiceBottomSheet } from './VoiceBottomSheet.js';
 import { MUSICAL_KEYS } from '../lib/musicKeys.js';
 import { icon } from '../lib/icons.js';
+
+/**
+ * Notas válidas seleccionables por sílaba (notación científica, octavas 2-6
+ * cubren el rango coral típico). El usuario puede dejar una sílaba sin nota.
+ */
+const NOTE_OPTIONS = (() => {
+  const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const out = [];
+  for (let oct = 2; oct <= 6; oct++) {
+    for (const n of names) out.push(`${n}${oct}`);
+  }
+  return out.filter(isValidNote);
+})();
 
 const API_URL = '/api';
 
@@ -52,6 +74,7 @@ function sectionsToBlocks(sections) {
     id: `section-${si}-${Date.now()}`,
     type: section.type || 'verse',
     label: section.label || 'Verso',
+    speedPreset: typeof section.speedPreset === 'number' ? section.speedPreset : null,
     lines: (section.lines || []).map((line, li) => ({
       id: `line-${si}-${li}-${Date.now()}`,
       text: line.text || '',
@@ -59,6 +82,9 @@ function sectionsToBlocks(sections) {
       chords: line.chords || [],
       annotation: line.annotation || false,
       showChords: line.chords && line.chords.length > 0,
+      // v2 (sólo se serializa si la canción es v2 — ver blocksToSectionsV2):
+      syllables: Array.isArray(line.syllables) ? line.syllables : null,
+      voiceLines: line.voiceLines && typeof line.voiceLines === 'object' ? line.voiceLines : null,
     })),
   }));
 }
@@ -81,6 +107,36 @@ function blocksToSections(blocks) {
           return line;
         }),
     };
+    return section;
+  });
+}
+
+/**
+ * v2: como blocksToSections pero conservando syllables/voiceLines por línea y
+ * speedPreset por sección. Sólo se usa cuando la canción tiene voiceRoster.
+ * @param {Array} blocks
+ * @returns {Array}
+ */
+function blocksToSectionsV2(blocks) {
+  return blocks.map((block) => {
+    const section = {
+      type: block.type,
+      label: block.label,
+      lines: block.lines
+        .filter((l) => l.text.trim() !== '' || l.chords.length > 0 || l.annotation)
+        .map((l) => {
+          const line = { text: l.text };
+          if (l.voiceRanges && l.voiceRanges.length > 0) line.voiceRanges = l.voiceRanges;
+          if (l.chords && l.chords.length > 0) line.chords = l.chords;
+          if (l.annotation) line.annotation = true;
+          if (Array.isArray(l.syllables) && l.syllables.length > 0) line.syllables = l.syllables;
+          if (l.voiceLines && Object.keys(l.voiceLines).length > 0) line.voiceLines = l.voiceLines;
+          return line;
+        }),
+    };
+    if (typeof block.speedPreset === 'number' && !Number.isNaN(block.speedPreset)) {
+      section.speedPreset = block.speedPreset;
+    }
     return section;
   });
 }
@@ -216,6 +272,16 @@ export async function renderSongEditor(container, editId) {
   // Editable state
   const blocks = existingSong ? sectionsToBlocks(existingSong.sections) : [];
 
+  // ─── v2 (Tono) gating ───
+  // When false, EVERYTHING below related to voz_tono is skipped so the v1
+  // render output, event wiring and save payload stay byte-for-byte identical.
+  const v2Enabled = isFeatureEnabled('voz_tono');
+  const voiceRoster = v2Enabled
+    ? Array.isArray(existingSong?.voiceRoster)
+      ? existingSong.voiceRoster.map((v) => ({ ...v }))
+      : []
+    : [];
+
   // Per-line UI mode: 'text' (default <input>) or 'voices' (display + drag-select)
   const lineModes = new Map(); // lineId -> 'text' | 'voices'
   function getLineMode(id) {
@@ -319,6 +385,17 @@ export async function renderSongEditor(container, editId) {
         <button class="btn btn--secondary" id="add-voice-link-btn" type="button" style="margin-top: var(--space-sm);">+ Agregar link de voz</button>
       </div>
 
+      ${
+        v2Enabled
+          ? `<!-- Roster de voces (v2) -->
+      <section class="editor-roster editor__section" id="editor-roster">
+        <h2 class="editor__section-title" style="display: inline-flex; align-items: center; gap: 0.4em;">${icon('users', { size: 18 })} Voces de la canción</h2>
+        <div id="roster-list"></div>
+        <button class="btn btn--secondary" id="add-roster-voice" type="button" style="margin-top: var(--space-sm); display: inline-flex; align-items: center; gap: 0.4em;">${icon('plus', { size: 16 })} Añadir voz</button>
+      </section>`
+          : ''
+      }
+
       <!-- Block Editor -->
       <div class="editor__section">
         <h2 class="editor__section-title">Letras</h2>
@@ -336,6 +413,9 @@ export async function renderSongEditor(container, editId) {
           <div id="preview-content"></div>
         </div>
       </div>
+
+      <!-- Save error (inline, gated visibility) -->
+      <div class="editor__save-error" id="editor-save-error" role="alert" hidden></div>
 
       <!-- Actions -->
       <div class="editor__actions">
@@ -452,6 +532,107 @@ export async function renderSongEditor(container, editId) {
 
   renderVoiceLinks();
 
+  // ─── Roster de voces (v2, gated) ───
+  const rosterListEl = v2Enabled ? container.querySelector('#roster-list') : null;
+
+  function renderRoster() {
+    if (!rosterListEl) return;
+    if (voiceRoster.length === 0) {
+      rosterListEl.innerHTML =
+        '<p style="color: var(--color-text-secondary); font-size: 0.875rem;">Aún no hay voces. Añade al menos una para autorar tono por sílaba.</p>';
+      return;
+    }
+    rosterListEl.innerHTML = voiceRoster
+      .map((v, i) => {
+        const keyInvalid =
+          v.referenceKey !== null &&
+          v.referenceKey !== undefined &&
+          v.referenceKey !== '' &&
+          !isValidNote(v.referenceKey);
+        return `
+        <div class="roster-row" data-roster-idx="${i}">
+          <div class="form-group" style="flex: 2;">
+            <label class="form-group__label">Nombre</label>
+            <input class="form-group__input" type="text" data-action="roster-name" data-idx="${i}" value="${escapeHtml(v.name || '')}" placeholder="Voz ${i + 1}" />
+          </div>
+          <div class="form-group" style="flex: 2;">
+            <label class="form-group__label">Categoría</label>
+            <select class="form-group__input" data-action="roster-category" data-idx="${i}">
+              ${CANONICAL_VOICE_ORDER.map((c) => `<option value="${c}" ${v.category === c ? 'selected' : ''}>${getVoiceLabel(c)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-group__label">Tono ref.</label>
+            <input class="form-group__input ${keyInvalid ? 'form-group__input--invalid' : ''}" type="text" data-action="roster-refkey" data-idx="${i}" value="${escapeHtml(v.referenceKey || '')}" placeholder="Ej: B3" aria-invalid="${keyInvalid}" />
+          </div>
+          <button class="btn btn--secondary roster-row__delete" data-action="roster-delete" data-idx="${i}" type="button" aria-label="Eliminar voz">${icon('trash', { size: 16 })}</button>
+        </div>`;
+      })
+      .join('');
+  }
+
+  /**
+   * Remove all references to a roster id from every line's voiceLines.
+   * @param {string} rosterId
+   */
+  function purgeRosterIdFromLines(rosterId) {
+    for (const block of blocks) {
+      for (const line of block.lines) {
+        if (line.voiceLines && line.voiceLines[rosterId]) {
+          delete line.voiceLines[rosterId];
+        }
+      }
+    }
+  }
+
+  if (v2Enabled) {
+    rosterListEl.addEventListener('input', (e) => {
+      const idx = Number.parseInt(e.target.dataset.idx, 10);
+      if (Number.isNaN(idx) || !voiceRoster[idx]) return;
+      const action = e.target.dataset.action;
+      if (action === 'roster-name') {
+        voiceRoster[idx].name = e.target.value;
+      } else if (action === 'roster-refkey') {
+        const val = e.target.value.trim();
+        voiceRoster[idx].referenceKey = val === '' ? null : val;
+        const invalid = val !== '' && !isValidNote(val);
+        e.target.classList.toggle('form-group__input--invalid', invalid);
+        e.target.setAttribute('aria-invalid', String(invalid));
+      }
+    });
+
+    rosterListEl.addEventListener('change', (e) => {
+      const idx = Number.parseInt(e.target.dataset.idx, 10);
+      if (Number.isNaN(idx) || !voiceRoster[idx]) return;
+      if (e.target.dataset.action === 'roster-category') {
+        voiceRoster[idx].category = e.target.value;
+      }
+    });
+
+    rosterListEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action="roster-delete"]');
+      if (!btn) return;
+      const idx = Number.parseInt(btn.dataset.idx, 10);
+      if (Number.isNaN(idx) || !voiceRoster[idx]) return;
+      const removed = voiceRoster.splice(idx, 1)[0];
+      if (removed) purgeRosterIdFromLines(removed.id);
+      renderRoster();
+      renderBlocks();
+    });
+
+    container.querySelector('#add-roster-voice').addEventListener('click', () => {
+      voiceRoster.push({
+        id: uid(),
+        name: `Voz ${voiceRoster.length + 1}`,
+        category: 'soprano',
+        referenceKey: null,
+      });
+      renderRoster();
+    });
+
+    renderRoster();
+  }
+
   // ─── Block Editor Core ───
   const editorRoot = container.querySelector('#block-editor');
 
@@ -482,6 +663,14 @@ export async function renderSongEditor(container, editId) {
             <input class="section-block__label-input" type="text" value="${escapeHtml(block.label)}" data-action="change-label" data-section="${index}" placeholder="Nombre de la sección" />
           </div>
           <div class="section-block__header-actions">
+            ${
+              v2Enabled
+                ? `<label class="section-block__speed" title="Velocidad de scroll sugerida (F)">
+                    <span class="section-block__speed-label">Vel.</span>
+                    <input class="section-block__speed-input" type="number" min="0" max="100" placeholder="—" value="${typeof block.speedPreset === 'number' ? block.speedPreset : ''}" data-action="change-speed" data-section="${index}" aria-label="Velocidad de scroll sugerida (0-100)" />
+                  </label>`
+                : ''
+            }
             ${index > 0 ? `<button class="section-block__btn" data-action="move-section-up" data-section="${index}" title="Mover arriba" aria-label="Mover arriba">${icon('chevron-up', { size: 18 })}</button>` : ''}
             ${index < total - 1 ? `<button class="section-block__btn" data-action="move-section-down" data-section="${index}" title="Mover abajo" aria-label="Mover abajo">${icon('chevron-down', { size: 18 })}</button>` : ''}
             <button class="section-block__btn section-block__btn--danger" data-action="delete-section" data-section="${index}" title="Eliminar sección" aria-label="Eliminar sección">${icon('trash', { size: 16 })}</button>
@@ -522,6 +711,7 @@ export async function renderSongEditor(container, editId) {
           <div class="line-row__actions">
             ${rangeCountHtml}
             <button class="line-row__btn line-row__btn--voice-mode ${voiceModeActive}" data-action="toggle-voice-mode" data-line-id="${line.id}" title="${mode === 'voices' ? 'Volver a editar texto' : 'Asignar voces'}" aria-label="${mode === 'voices' ? 'Volver a editar texto' : 'Asignar voces'}">${icon('users', { size: 16 })}</button>
+            ${v2Enabled ? `<button class="line-row__btn line-row__btn--tono" data-action="open-tono" data-line-id="${line.id}" title="Tono por sílaba" aria-label="Tono por sílaba">${icon('music', { size: 16 })}</button>` : ''}
             <button class="line-row__btn ${line.showChords ? 'line-row__btn--active' : ''}" data-action="toggle-chords" data-line-id="${line.id}" title="Acordes" aria-label="Acordes">${icon('audio-lines', { size: 16 })}</button>
             <button class="line-row__btn ${line.annotation ? 'line-row__btn--active line-row__btn--annotation' : ''}" data-action="toggle-annotation" data-line-id="${line.id}" title="Marcar como anotación/guía" aria-label="Marcar como anotación/guía">${icon('tag', { size: 16 })}</button>
             <button class="line-row__btn line-row__btn--delete" data-action="delete-line" data-line-id="${line.id}" title="Eliminar" aria-label="Eliminar línea">${icon('close', { size: 16 })}</button>
@@ -587,6 +777,18 @@ export async function renderSongEditor(container, editId) {
       if (blocks[si]) {
         blocks[si].label = e.target.value;
         updatePreview();
+      }
+    } else if (action === 'change-speed') {
+      if (!v2Enabled) return;
+      const si = parseInt(e.target.dataset.section);
+      if (blocks[si]) {
+        const raw = e.target.value.trim();
+        if (raw === '') {
+          blocks[si].speedPreset = null;
+        } else {
+          const n = Number.parseInt(raw, 10);
+          blocks[si].speedPreset = Number.isNaN(n) ? null : Math.max(0, Math.min(100, n));
+        }
       }
     }
   });
@@ -656,6 +858,10 @@ export async function renderSongEditor(container, editId) {
         setLineMode(lineId, 'voices');
       }
       return;
+    } else if (action === 'open-tono') {
+      if (!v2Enabled) return;
+      const found = findLine(btn.dataset.lineId);
+      if (found) openTonoEditor(found.line);
     } else if (action === 'move-section-up') {
       const si = parseInt(btn.dataset.section);
       if (si > 0) {
@@ -676,6 +882,336 @@ export async function renderSongEditor(container, editId) {
       }
     }
   });
+
+  // ─── Tono editor por línea (v2, gated): silabación + voz→sílaba + notas ───
+  //
+  // Modal autocontenido. Muta line.syllables (Task 3) y line.voiceLines (Task 4)
+  // directamente sobre el objeto de la línea en `blocks`. La selección de
+  // sílabas reusa el modelo tap-anchor-extend del editor de voces, pero a nivel
+  // de sílaba en vez de carácter.
+  function openTonoEditor(line) {
+    line.syllables ??= boundariesToSyllables(line.text || '', []);
+    line.voiceLines ??= {};
+
+    // Voz activa (rosterId) + selección de sílabas tap-anchor-extend.
+    let activeRosterId = voiceRoster[0]?.id || null;
+    const sylSel = { anchor: null, focus: null };
+
+    const overlay = document.createElement('div');
+    overlay.className = 'import-modal__overlay';
+    document.body.appendChild(overlay);
+
+    function close() {
+      overlay.remove();
+      renderBlocks();
+      updatePreview();
+    }
+
+    /** Cortes internos actuales derivados de las sílabas. */
+    function currentBoundaries() {
+      return syllablesToBoundaries(line.syllables);
+    }
+
+    /**
+     * Re-deriva las sílabas desde un set de cortes y RE-MAPEA voiceLines:
+     * cambiar la silabación invalida los índices previos, así que se limpia
+     * cualquier asignación de voz para evitar punteros colgantes.
+     * @param {number[]} boundaries
+     */
+    function applyBoundaries(boundaries) {
+      line.syllables = boundariesToSyllables(line.text || '', boundaries);
+      line.voiceLines = {};
+      sylSel.anchor = null;
+      sylSel.focus = null;
+      render();
+    }
+
+    function getVoiceLine(rosterId) {
+      if (!line.voiceLines[rosterId]) line.voiceLines[rosterId] = { sungSyllables: [], notes: [] };
+      return line.voiceLines[rosterId];
+    }
+
+    /** Asigna [start..end] (inclusive) como sílabas cantadas de la voz activa. */
+    function assignSungRange(start, end) {
+      if (!activeRosterId) return;
+      const vl = getVoiceLine(activeRosterId);
+      const byIdx = new Map();
+      vl.sungSyllables.forEach((sIdx, i) => byIdx.set(sIdx, vl.notes[i] ?? null));
+      for (let i = start; i <= end; i++) {
+        if (!byIdx.has(i)) byIdx.set(i, null);
+      }
+      const sorted = [...byIdx.keys()].sort((a, b) => a - b);
+      vl.sungSyllables = sorted;
+      vl.notes = sorted.map((idx) => byIdx.get(idx));
+      if (vl.role === undefined) vl.role = 'primary';
+    }
+
+    /** Quita una sílaba cantada (y su nota) de la voz activa. */
+    function unassignSyllable(sylIdx) {
+      if (!activeRosterId) return;
+      const vl = line.voiceLines[activeRosterId];
+      if (!vl) return;
+      const pos = vl.sungSyllables.indexOf(sylIdx);
+      if (pos === -1) return;
+      vl.sungSyllables.splice(pos, 1);
+      vl.notes.splice(pos, 1);
+      if (vl.sungSyllables.length === 0) delete line.voiceLines[activeRosterId];
+    }
+
+    function noteForSyllable(rosterId, sylIdx) {
+      const vl = line.voiceLines[rosterId];
+      if (!vl) return undefined;
+      const pos = vl.sungSyllables.indexOf(sylIdx);
+      return pos === -1 ? undefined : (vl.notes[pos] ?? null);
+    }
+
+    function setNoteForSyllable(sylIdx, note) {
+      if (!activeRosterId) return;
+      const vl = getVoiceLine(activeRosterId);
+      const pos = vl.sungSyllables.indexOf(sylIdx);
+      if (pos === -1) {
+        // No estaba cantada: márcala cantada con esta nota.
+        assignSungRange(sylIdx, sylIdx);
+        const vl2 = line.voiceLines[activeRosterId];
+        const p2 = vl2.sungSyllables.indexOf(sylIdx);
+        if (p2 !== -1) vl2.notes[p2] = note;
+      } else {
+        vl.notes[pos] = note;
+      }
+    }
+
+    /**
+     * Melisma: inserta una sílaba de ancho cero {start:s.end,end:s.end}
+     * justo después de la sílaba `sylIdx` (texto vacío). Reindexar voiceLines
+     * de TODAS las voces (los índices ≥ insertPos se desplazan +1).
+     */
+    function addMelismaAfter(sylIdx) {
+      const s = line.syllables[sylIdx];
+      if (!s) return;
+      const insertPos = sylIdx + 1;
+      line.syllables.splice(insertPos, 0, { start: s.end, end: s.end });
+      for (const vl of Object.values(line.voiceLines)) {
+        vl.sungSyllables = vl.sungSyllables.map((idx) => (idx >= insertPos ? idx + 1 : idx));
+      }
+      // La sílaba extensora la canta la voz activa (con nota a asignar).
+      assignSungRange(insertPos, insertPos);
+      render();
+    }
+
+    function openNotePicker(sylIdx) {
+      const current = noteForSyllable(activeRosterId, sylIdx);
+      const picker = document.createElement('div');
+      picker.className = 'note-picker__overlay';
+      picker.innerHTML = `
+        <div class="note-picker" role="dialog" aria-label="Elegir nota">
+          <div class="note-picker__header">
+            <span>Nota de la sílaba</span>
+            <button class="note-picker__close" type="button" aria-label="Cerrar">${icon('close', { size: 18 })}</button>
+          </div>
+          <div class="note-picker__grid">
+            <button class="note-picker__note ${current === null || current === undefined ? 'note-picker__note--active' : ''}" data-note="" type="button">Sin nota</button>
+            ${NOTE_OPTIONS.map((n) => `<button class="note-picker__note ${current === n ? 'note-picker__note--active' : ''}" data-note="${n}" type="button">${n}</button>`).join('')}
+          </div>
+        </div>`;
+      document.body.appendChild(picker);
+      picker.addEventListener('click', (e) => {
+        if (e.target === picker || e.target.closest('.note-picker__close')) {
+          picker.remove();
+          return;
+        }
+        const noteBtn = e.target.closest('[data-note]');
+        if (!noteBtn) return;
+        const val = noteBtn.dataset.note;
+        setNoteForSyllable(sylIdx, val === '' ? null : val);
+        picker.remove();
+        render();
+      });
+    }
+
+    function render() {
+      const text = line.text || '';
+      const rosterOpts = voiceRoster
+        .map(
+          (v) =>
+            `<option value="${v.id}" ${v.id === activeRosterId ? 'selected' : ''}>${escapeHtml(v.name || getVoiceLabel(v.category))} · ${getVoiceLabel(v.category)}</option>`,
+        )
+        .join('');
+
+      // Fila de silabación: caracteres con gaps clicables entre ellos.
+      const boundaries = currentBoundaries();
+      let sylChars = '';
+      for (let i = 0; i < text.length; i++) {
+        if (i > 0) {
+          const active = boundaries.includes(i);
+          sylChars += `<button class="syl-gap ${active ? 'syl-gap--active' : ''}" data-gap="${i}" type="button" aria-label="Corte en ${i}">${active ? '|' : ''}</button>`;
+        }
+        sylChars += `<span class="syl-char">${text[i] === ' ' ? '&nbsp;' : escapeHtml(text[i])}</span>`;
+      }
+      if (text.length === 0)
+        {sylChars = '<span class="syl-char syl-char--empty">(línea vacía)</span>';}
+
+      // Tira de sílabas (chips). Estado de selección + nota de la voz activa.
+      const a = sylSel.anchor;
+      const f = sylSel.focus;
+      const rangeStart = a !== null && f !== null ? Math.min(a, f) : a;
+      const rangeEnd = a !== null && f !== null ? Math.max(a, f) : a;
+      const sylChips = line.syllables
+        .map((s, idx) => {
+          const sylText = text.slice(s.start, s.end);
+          const isMelisma = s.start === s.end;
+          const note = activeRosterId ? noteForSyllable(activeRosterId, idx) : undefined;
+          const sung = note !== undefined;
+          const inRange = rangeStart !== null && idx >= rangeStart && idx <= rangeEnd;
+          const cls = [
+            'syl-chip',
+            sung ? 'syl-chip--sung' : '',
+            isMelisma ? 'syl-chip--melisma' : '',
+            inRange ? 'syl-chip--in-range' : '',
+            a === idx ? 'syl-chip--anchor' : '',
+          ]
+            .filter(Boolean)
+            .join(' ');
+          const label = isMelisma ? '~' : escapeHtml(sylText) || '·';
+          const noteLabel = sung
+            ? `<span class="syl-chip__note">${note === null ? '—' : escapeHtml(note)}</span>`
+            : '';
+          const melismaBtn =
+            sung && !isMelisma
+              ? `<button class="syl-chip__melisma" data-melisma="${idx}" type="button" title="Añadir nota sostenida (melisma)" aria-label="Añadir nota sostenida">${icon('plus', { size: 12 })}</button>`
+              : '';
+          return `<span class="syl-chip-wrap"><button class="${cls}" data-syl="${idx}" type="button">${label}${noteLabel}</button>${melismaBtn}</span>`;
+        })
+        .join('');
+
+      overlay.innerHTML = `
+        <div class="import-modal tono-editor">
+          <div class="import-modal__header">
+            <h3 class="import-modal__title" style="display: inline-flex; align-items: center; gap: 0.4em;">${icon('music', { size: 18 })} Tono por sílaba</h3>
+            <button class="import-modal__close" data-tono="close" aria-label="Cerrar">${icon('close', { size: 18 })}</button>
+          </div>
+
+          <div class="tono-editor__step">
+            <div class="tono-editor__step-head">
+              <span>1 · Divide en sílabas (toca entre letras)</span>
+              <button class="btn btn--sm" data-tono="autosuggest" type="button">${icon('plus', { size: 14 })} Auto-sugerir</button>
+            </div>
+            <div class="tono-syllabify">${sylChars}</div>
+          </div>
+
+          <div class="tono-editor__step">
+            <div class="tono-editor__step-head">
+              <span>2 · Voz activa</span>
+            </div>
+            ${
+              voiceRoster.length === 0
+                ? '<p style="color: var(--color-text-secondary); font-size: 0.85rem;">Añade voces en el roster para asignar sílabas.</p>'
+                : `<select class="form-group__input" data-tono="active-voice">${rosterOpts}</select>
+            <label class="tono-editor__role">
+              <input type="checkbox" data-tono="role-primary" ${activeRosterId && line.voiceLines[activeRosterId]?.role !== 'secondary' ? 'checked' : ''} />
+              Voz principal (primary)
+            </label>`
+            }
+          </div>
+
+          <div class="tono-editor__step">
+            <div class="tono-editor__step-head">
+              <span>3 · Marca sílabas cantadas y asigna notas</span>
+            </div>
+            <p class="tono-editor__hint">Toca una sílaba para iniciar/cerrar un rango. Toca una sílaba cantada de nuevo para elegir su nota.</p>
+            <div class="tono-syllables">${sylChips}</div>
+          </div>
+
+          <div class="import-modal__actions">
+            <button class="btn btn--primary" data-tono="done" type="button">Listo</button>
+          </div>
+        </div>`;
+    }
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        close();
+        return;
+      }
+      const tono = e.target.closest('[data-tono]')?.dataset.tono;
+      if (tono === 'close' || tono === 'done') {
+        close();
+        return;
+      }
+      if (tono === 'autosuggest') {
+        applyBoundaries(autoSuggestBoundaries(line.text || ''));
+        return;
+      }
+
+      // Toggle de corte de sílaba.
+      const gapBtn = e.target.closest('.syl-gap');
+      if (gapBtn) {
+        const idx = Number.parseInt(gapBtn.dataset.gap, 10);
+        if (!Number.isNaN(idx)) {
+          applyBoundaries(toggleBoundary(currentBoundaries(), idx, (line.text || '').length));
+        }
+        return;
+      }
+
+      // Selección de sílaba (tap-anchor-extend) + note picker.
+      const sylBtn = e.target.closest('.syl-chip');
+      if (sylBtn) {
+        const idx = Number.parseInt(sylBtn.dataset.syl, 10);
+        if (Number.isNaN(idx) || !activeRosterId) return;
+        const alreadySung = noteForSyllable(activeRosterId, idx) !== undefined;
+
+        if (sylSel.anchor === null) {
+          // Primera pulsación: si ya está cantada, abre el note picker;
+          // si no, inicia un rango (anchor).
+          if (alreadySung) {
+            openNotePicker(idx);
+          } else {
+            sylSel.anchor = idx;
+            sylSel.focus = null;
+            render();
+          }
+          return;
+        }
+
+        // Segunda pulsación: cierra el rango [anchor..idx] y lo asigna.
+        const start = Math.min(sylSel.anchor, idx);
+        const end = Math.max(sylSel.anchor, idx);
+        if (start === end && alreadySung) {
+          // Misma sílaba ya cantada → desasignar.
+          unassignSyllable(idx);
+        } else {
+          assignSungRange(start, end);
+        }
+        sylSel.anchor = null;
+        sylSel.focus = null;
+        render();
+        return;
+      }
+
+      // Botón melisma dentro de una chip (delegado por data-action separado).
+      const melismaBtn = e.target.closest('[data-melisma]');
+      if (melismaBtn) {
+        const idx = Number.parseInt(melismaBtn.dataset.melisma, 10);
+        if (!Number.isNaN(idx)) addMelismaAfter(idx);
+      }
+    });
+
+    overlay.addEventListener('change', (e) => {
+      const tono = e.target.dataset.tono;
+      if (tono === 'active-voice') {
+        activeRosterId = e.target.value;
+        sylSel.anchor = null;
+        sylSel.focus = null;
+        render();
+      } else if (tono === 'role-primary') {
+        if (activeRosterId) {
+          const vl = getVoiceLine(activeRosterId);
+          vl.role = e.target.checked ? 'primary' : 'secondary';
+        }
+      }
+    });
+
+    render();
+  }
 
   // ─── Tap-anchor-extend selection on voice display ───
   // anchor === null               → next tap sets the start of a new range.
@@ -1034,7 +1570,9 @@ export async function renderSongEditor(container, editId) {
   // ─── Save ───
   container
     .querySelector('#editor-save')
-    .addEventListener('click', () => handleSave(container, existingSong, blocks, voiceLinkItems));
+    .addEventListener('click', () =>
+      handleSave(container, existingSong, blocks, voiceLinkItems, { v2Enabled, voiceRoster }),
+    );
 }
 
 /* ─── Image handling ─── */
@@ -1093,10 +1631,12 @@ function collectLinks(container, voiceLinkItems) {
   return { platforms, voices };
 }
 
-async function handleSave(container, existingSong, blocks, voiceLinkItems) {
+async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = {}) {
   const btn = container.querySelector('#editor-save');
+  const roster = v2.v2Enabled ? v2.voiceRoster || [] : [];
   btn.disabled = true;
   btn.textContent = 'Guardando...';
+  clearSaveError(container);
 
   try {
     const title = container.querySelector('#song-title').value.trim();
@@ -1158,6 +1698,19 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems) {
       key,
       sections: blocksToSections(blocks),
     };
+
+    // ─── v2: sólo cuando hay roster. Si no, el payload queda idéntico a v1. ───
+    if (roster.length > 0) {
+      newSong.schemaVersion = 2;
+      newSong.voiceRoster = roster;
+      newSong.sections = blocksToSectionsV2(blocks);
+      try {
+        validateSongV2(newSong);
+      } catch (e) {
+        showSaveError(container, `No se pudo guardar (tono): ${e.message}`);
+        return;
+      }
+    }
 
     const method = existingSong ? 'PUT' : 'POST';
     const url = existingSong ? `${API_URL}/songs/${existingSong.id}` : `${API_URL}/songs`;
@@ -1224,6 +1777,28 @@ function generateSlug(...parts) {
     .replaceAll(/[\u0300-\u036f]/g, '')
     .replaceAll(/[^a-z0-9]+/g, '-')
     .replaceAll(/^-|-$/g, '');
+}
+
+/**
+ * Show an inline, accessible save error next to the save button. Includes an
+ * icon + text (not color-only) and is exposed via role="alert".
+ * @param {HTMLElement} container
+ * @param {string} message
+ */
+function showSaveError(container, message) {
+  const el = container.querySelector('#editor-save-error');
+  if (!el) return;
+  el.innerHTML = `${icon('frown', { size: 16 })}<span>${escapeHtml(message)}</span>`;
+  el.hidden = false;
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/** @param {HTMLElement} container */
+function clearSaveError(container) {
+  const el = container.querySelector('#editor-save-error');
+  if (!el) return;
+  el.hidden = true;
+  el.innerHTML = '';
 }
 
 function showToast(message) {

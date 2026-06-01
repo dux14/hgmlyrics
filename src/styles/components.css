@@ -1485,3 +1485,292 @@
   border-color: var(--color-accent, #0097a7);
   font-weight: 600;
 }
+
+/* ─── Editor v2 (voz_tono): roster, silabación, tono por sílaba ─── */
+
+.btn--sm {
+  min-height: 44px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+/* Roster de voces */
+.roster-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: flex-end;
+  margin-bottom: var(--space-sm);
+}
+
+.roster-row__delete {
+  color: var(--color-error);
+  border-color: var(--color-error);
+  padding: 0.5rem;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.form-group__input--invalid {
+  border-color: var(--color-error);
+  outline: 1px solid var(--color-error);
+}
+
+/* speedPreset por sección */
+.section-block__speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.section-block__speed-input {
+  width: 3.5rem;
+  min-height: 44px;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-align: center;
+}
+
+/* Inline save error junto al botón guardar */
+.editor__save-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin: var(--space-sm) 0;
+  padding: 0.6rem 0.8rem;
+  min-height: 44px;
+  border: 1px solid var(--color-error);
+  border-left-width: 4px;
+  border-radius: var(--border-radius-sm);
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
+  color: var(--color-error);
+  font-size: 0.875rem;
+}
+
+.editor__save-error[hidden] {
+  display: none;
+}
+
+/* Tono editor (modal) */
+.tono-editor {
+  max-width: 560px;
+}
+
+.tono-editor__step {
+  margin-bottom: var(--space-md);
+}
+
+.tono-editor__step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-sm);
+}
+
+.tono-editor__hint {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-sm);
+}
+
+.tono-editor__role {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  margin-top: var(--space-sm);
+  font-size: 0.85rem;
+  min-height: 44px;
+}
+
+/* Fila de silabación: letras + gaps clicables */
+.tono-syllabify {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  font-size: 1.4rem;
+  line-height: 1.8;
+}
+
+.syl-char {
+  white-space: pre;
+}
+
+.syl-char--empty {
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+}
+
+.syl-gap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.7rem;
+  min-height: 44px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-primary);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.syl-gap:hover {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+
+.syl-gap--active {
+  color: var(--color-primary);
+}
+
+/* Tira de sílabas seleccionables */
+.tono-syllables {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.syl-chip-wrap {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.syl-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15em;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.syl-chip--sung {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+
+.syl-chip--melisma {
+  font-style: italic;
+  color: var(--color-text-secondary);
+}
+
+.syl-chip--in-range {
+  outline: 2px solid var(--color-primary);
+}
+
+.syl-chip--anchor {
+  outline: 2px dashed var(--color-accent);
+}
+
+.syl-chip__note {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.syl-chip__melisma {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 28px;
+  margin-left: 2px;
+  border: 1px solid var(--color-border);
+  border-left: none;
+  border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;
+  background: var(--color-surface);
+  color: var(--color-accent);
+  cursor: pointer;
+}
+
+/* Selector de nota */
+.note-picker__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.note-picker {
+  width: 100%;
+  max-width: 480px;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: var(--space-md);
+  border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
+  background: var(--color-surface);
+}
+
+.note-picker__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-sm);
+  font-weight: 600;
+}
+
+.note-picker__close {
+  min-height: 44px;
+  min-width: 44px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.note-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-sm);
+}
+
+.note-picker__note {
+  min-height: 44px;
+  padding: 0.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.note-picker__note--active {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  font-weight: 700;
+}
+
+/* Tono button en la fila de línea */
+.line-row__btn--tono.line-row__btn--active,
+.line-row__btn--tono:hover {
+  color: var(--color-primary);
+}
+
+@media (min-width: 480px) {
+  .note-picker__grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}

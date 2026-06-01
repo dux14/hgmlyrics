@@ -367,6 +367,33 @@ export function resolveSyllableNotes(line, rosterId) {
 }
 
 /**
+ * HTML ruby (nota arriba, sílaba abajo) para una línea en modo Tono/persona.
+ * Sílaba sin texto (extensor) se marca como melisma. Texto escapado.
+ * @param {object} line @param {string} rosterId
+ * @returns {string}
+ */
+export function buildSyllableNotesHTML(line, rosterId) {
+  const units = resolveSyllableNotes(line, rosterId);
+  if (units.length === 0) {
+    // sin silabación: fallback a texto plano atenuado
+    return `<span class="voice-text voice-text--dimmed">${escapeHtml(line?.text || '')}</span>`;
+  }
+  return units
+    .map((u) => {
+      const isMelisma = u.text === '';
+      const cls = ['syll'];
+      if (!u.sung) cls.push('syll--dimmed');
+      if (isMelisma) cls.push('syll--melisma');
+      const noteHtml = u.note
+        ? `<span class="syll__note">${escapeHtml(u.note)}</span>`
+        : `<span class="syll__note"></span>`;
+      const textHtml = `<span class="syll__text">${isMelisma ? '‑' : escapeHtml(u.text)}</span>`;
+      return `<span class="${cls.join(' ')}">${noteHtml}${textHtml}</span>`;
+    })
+    .join('');
+}
+
+/**
  * @param {object} song @param {string} category
  * @returns {Array} entradas del roster de esa categoría (en orden original).
  */

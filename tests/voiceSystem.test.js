@@ -453,6 +453,57 @@ describe('resolveSyllableNotes', () => {
   });
 });
 
+import { buildSyllableNotesHTML } from '../src/lib/voiceSystem.js';
+
+describe('buildSyllableNotesHTML', () => {
+  const line = {
+    text: 'Santo',
+    syllables: [
+      { start: 0, end: 3 },
+      { start: 3, end: 5 },
+    ],
+    voiceLines: { 'sop-a': { sungSyllables: [0], notes: ['B3'] } },
+  };
+
+  it('renderiza una columna por sílaba con su nota arriba', () => {
+    const html = buildSyllableNotesHTML(line, 'sop-a');
+    expect(html).toContain('B3');
+    expect(html).toContain('San');
+    expect(html).toContain('to');
+    expect(html).toContain('syll__note');
+  });
+
+  it('marca como dimmed las sílabas que la voz no canta', () => {
+    const html = buildSyllableNotesHTML(line, 'sop-a');
+    // "to" no la canta sop-a → dimmed
+    expect(html).toMatch(/syll--dimmed[^>]*>.*to/s);
+  });
+
+  it('escapa HTML del texto', () => {
+    const evil = {
+      text: '<b>x',
+      syllables: [{ start: 0, end: 4 }],
+      voiceLines: { 'sop-a': { sungSyllables: [0], notes: ['C4'] } },
+    };
+    const html = buildSyllableNotesHTML(evil, 'sop-a');
+    expect(html).not.toContain('<b>x');
+    expect(html).toContain('&lt;b&gt;');
+  });
+
+  it('sílaba extensora (texto vacío) renderiza glifo de melisma', () => {
+    const mel = {
+      text: 'o',
+      syllables: [
+        { start: 0, end: 1 },
+        { start: 1, end: 1 },
+      ],
+      voiceLines: { 'sop-a': { sungSyllables: [0, 1], notes: ['D4', 'D4'] } },
+    };
+    const html = buildSyllableNotesHTML(mel, 'sop-a');
+    expect(html).toContain('syll--melisma');
+  });
+});
+
 import { deriveReferenceKey, rosterByCategory } from '../src/lib/voiceSystem.js';
 
 describe('rosterByCategory', () => {

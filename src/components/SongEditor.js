@@ -14,7 +14,6 @@ import {
   CANONICAL_VOICE_ORDER,
   VALID_VOICE_IDS,
   VOICE_TYPES,
-  validateVoiceRanges,
   validateSongV2,
   getVoiceLabel,
   isValidNote,
@@ -26,7 +25,6 @@ import {
   syllablesToBoundaries,
   autoSuggestBoundaries,
 } from '../lib/syllabify.js';
-import { openVoiceBottomSheet } from './VoiceBottomSheet.js';
 import { MUSICAL_KEYS } from '../lib/musicKeys.js';
 import { icon } from '../lib/icons.js';
 
@@ -287,16 +285,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       ? existingSong.voiceRoster.map((v) => ({ ...v }))
       : []
     : [];
-
-  // Per-line UI mode: 'text' (default <input>) or 'voices' (display + drag-select)
-  const lineModes = new Map(); // lineId -> 'text' | 'voices'
-  function getLineMode(id) {
-    return lineModes.get(id) || 'text';
-  }
-  function setLineMode(id, mode) {
-    lineModes.set(id, mode);
-    renderBlocks();
-  }
 
   // Build the editor HTML
   container.innerHTML = `
@@ -691,23 +679,11 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   }
 
   function renderLineRow(line, _lineIndex, _totalLines, _sectionId) {
-    const mode = getLineMode(line.id);
-    const rangeCount = (line.voiceRanges || []).length;
-
     const chordRowHtml = line.showChords
       ? `<input class="line-row__chord-input" type="text" value="${escapeHtml(buildChordString(line.text, line.chords))}" data-action="edit-chords" data-line-id="${line.id}" placeholder="Ej: Am    F    C    G" />`
       : '';
 
-    const mainContent =
-      mode === 'voices'
-        ? `<div class="line-row__voice-display" data-line-id="${line.id}">${renderVoiceChars(line, selection)}</div>`
-        : `<input class="line-row__input" type="text" value="${escapeHtml(line.text)}" data-action="edit-text" data-line-id="${line.id}" placeholder="Escribe la línea aquí..." />`;
-
-    const voiceModeActive = mode === 'voices' ? 'line-row__btn--active' : '';
-    const rangeCountHtml =
-      rangeCount > 0
-        ? `<span class="line-row__range-count" title="${rangeCount} rango(s) asignado(s)">${rangeCount}</span>`
-        : '';
+    const mainContent = `<input class="line-row__input" type="text" value="${escapeHtml(line.text)}" data-action="edit-text" data-line-id="${line.id}" placeholder="Escribe la línea aquí..." />`;
 
     return `
       <div class="line-row" data-line-id="${line.id}">
@@ -715,9 +691,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         <div class="line-row__main">
           ${mainContent}
           <div class="line-row__actions">
-            ${rangeCountHtml}
-            <button class="line-row__btn line-row__btn--voice-mode ${voiceModeActive}" data-action="toggle-voice-mode" data-line-id="${line.id}" title="${mode === 'voices' ? 'Volver a editar texto' : 'Asignar voces'}" aria-label="${mode === 'voices' ? 'Volver a editar texto' : 'Asignar voces'}">${icon('users', { size: 16 })}</button>
-            ${v2Enabled ? `<button class="line-row__btn line-row__btn--tono" data-action="open-tono" data-line-id="${line.id}" title="Tono por sílaba" aria-label="Tono por sílaba">${icon('music', { size: 16 })}</button>` : ''}
+            ${v2Enabled ? `<button class="line-row__btn line-row__btn--tono" data-action="open-tono" data-line-id="${line.id}" title="Voces y tono" aria-label="Voces y tono">${icon('music', { size: 16 })}</button>` : ''}
             <button class="line-row__btn ${line.showChords ? 'line-row__btn--active' : ''}" data-action="toggle-chords" data-line-id="${line.id}" title="Acordes" aria-label="Acordes">${icon('audio-lines', { size: 16 })}</button>
             <button class="line-row__btn ${line.annotation ? 'line-row__btn--active line-row__btn--annotation' : ''}" data-action="toggle-annotation" data-line-id="${line.id}" title="Marcar como anotación/guía" aria-label="Marcar como anotación/guía">${icon('tag', { size: 16 })}</button>
             <button class="line-row__btn line-row__btn--delete" data-action="delete-line" data-line-id="${line.id}" title="Eliminar" aria-label="Eliminar línea">${icon('close', { size: 16 })}</button>
@@ -847,23 +821,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         found.line.annotation = !found.line.annotation;
         renderBlocks();
       }
-    } else if (action === 'toggle-voice-mode') {
-      const lineId = e.target.dataset.lineId;
-      const found = findLine(lineId);
-      if (!found) return;
-      const current = getLineMode(lineId);
-      if (current === 'voices') {
-        // Leaving voice mode → no validation needed; ranges unchanged
-        setLineMode(lineId, 'text');
-      } else {
-        // Entering voice mode from text mode → validate ranges against current text length
-        found.line.voiceRanges = validateVoiceRanges(
-          found.line.voiceRanges || [],
-          (found.line.text || '').length,
-        );
-        setLineMode(lineId, 'voices');
-      }
-      return;
     } else if (action === 'open-tono') {
       if (!v2Enabled) return;
       const found = findLine(btn.dataset.lineId);
@@ -1218,215 +1175,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     });
 
     render();
-  }
-
-  // ─── Tap-anchor-extend selection on voice display ───
-  // anchor === null               → next tap sets the start of a new range.
-  // anchor set, focus === null    → "extend" state: next tap sets the focus
-  //                                 (range end). On hover-capable devices,
-  //                                 hoverIdx previews the range live.
-  // anchor set, focus set         → "confirm" state: range [anchor↔focus] is
-  //                                 highlighted; bar shows it + "Asignar voz".
-  //                                 A further tap moves the focus; confirming
-  //                                 opens the voice sheet.
-  const selection = { lineId: null, anchor: null, focus: null, hoverIdx: null };
-
-  function renderSingleLine(lineId) {
-    const found = findLine(lineId);
-    if (!found) return;
-    const displayEl = editorRoot.querySelector(
-      `.line-row[data-line-id="${lineId}"] .line-row__voice-display`,
-    );
-    if (displayEl) {
-      displayEl.innerHTML = renderVoiceChars(found.line, selection);
-    }
-  }
-
-  function clearSelection() {
-    const prev = selection.lineId;
-    selection.lineId = null;
-    selection.anchor = null;
-    selection.focus = null;
-    selection.hoverIdx = null;
-    if (prev) renderSingleLine(prev);
-    hideAnchorBar();
-  }
-
-  // Commit the confirmed [anchor↔focus] range and open the voice sheet.
-  function confirmSelection() {
-    if (selection.lineId === null || selection.anchor === null || selection.focus === null) return;
-    const found = findLine(selection.lineId);
-    if (!found) return;
-    const start = Math.min(selection.anchor, selection.focus);
-    const end = Math.max(selection.anchor, selection.focus) + 1;
-    const existing = (found.line.voiceRanges || []).find((r) => r.start === start && r.end === end);
-    const lineId = selection.lineId;
-    selection.lineId = null;
-    selection.anchor = null;
-    selection.focus = null;
-    selection.hoverIdx = null;
-    hideAnchorBar();
-    renderSingleLine(lineId);
-    openSheetForRange(found, existing || null, start, end);
-  }
-
-  // Slice [start..end] (inclusive) with spaces shown as ␣, for the helper bar.
-  function charSnippet(text, start, end) {
-    return text.slice(start, end + 1).replace(/ /g, '␣');
-  }
-
-  function ensureBar() {
-    let bar = document.querySelector('.voice-anchor-bar');
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.className = 'voice-anchor-bar';
-      bar.addEventListener('click', (e) => {
-        if (e.target.closest('[data-anchor-bar-action="cancel"]')) clearSelection();
-        else if (e.target.closest('[data-anchor-bar-action="confirm"]')) confirmSelection();
-      });
-      document.body.appendChild(bar);
-    }
-    return bar;
-  }
-
-  // "Extend" state bar — between the 1st tap (anchor) and 2nd tap (focus).
-  function showAnchorBar(snippet) {
-    const bar = ensureBar();
-    const safe = snippet.length > 24 ? snippet.slice(0, 24) + '…' : snippet;
-    bar.innerHTML = `
-      <div class="voice-anchor-bar__label">
-        Inicio: <strong>"${escapeHtml(safe)}"</strong> — toca el final del rango
-      </div>
-      <button class="voice-anchor-bar__btn" data-anchor-bar-action="cancel" type="button">Cancelar</button>
-    `;
-  }
-
-  // "Confirm" state bar — range is set; shows the snippet + primary action.
-  function showConfirmBar(snippet, count) {
-    const bar = ensureBar();
-    const safe = snippet.length > 24 ? snippet.slice(0, 24) + '…' : snippet;
-    bar.innerHTML = `
-      <div class="voice-anchor-bar__label">
-        Rango: <strong>"${escapeHtml(safe)}"</strong> (${count} ${count === 1 ? 'letra' : 'letras'})
-      </div>
-      <button class="voice-anchor-bar__btn" data-anchor-bar-action="cancel" type="button">Cancelar</button>
-      <button class="voice-anchor-bar__btn voice-anchor-bar__btn--primary" data-anchor-bar-action="confirm" type="button">Asignar voz</button>
-    `;
-  }
-
-  function hideAnchorBar() {
-    document.querySelector('.voice-anchor-bar')?.remove();
-  }
-
-  editorRoot.addEventListener('click', (e) => {
-    const charEl = e.target.closest('.char');
-    if (!charEl || !charEl.dataset.lineId) return;
-    e.preventDefault();
-
-    const lineId = charEl.dataset.lineId;
-    const idx = Number.parseInt(charEl.dataset.idx, 10);
-    if (Number.isNaN(idx)) return;
-    const found = findLine(lineId);
-    if (!found) return;
-    const text = found.line.text || '';
-
-    // First tap (new line or no anchor) → set anchor
-    if (selection.lineId !== lineId || selection.anchor === null) {
-      // Switching lines mid-selection clears the previous anchor visually
-      const prev = selection.lineId && selection.lineId !== lineId ? selection.lineId : null;
-      selection.lineId = lineId;
-      selection.anchor = idx;
-      selection.focus = null;
-      selection.hoverIdx = null;
-      if (prev) renderSingleLine(prev);
-      renderSingleLine(lineId);
-      showAnchorBar(charSnippet(text, idx, idx));
-      return;
-    }
-
-    // Second (or later) tap on the same line → set/move the focus and preview
-    // the full range. The sheet opens only on "Asignar voz" (confirmSelection).
-    selection.focus = idx;
-    selection.hoverIdx = null;
-    renderSingleLine(lineId);
-    const start = Math.min(selection.anchor, idx);
-    const end = Math.max(selection.anchor, idx);
-    showConfirmBar(charSnippet(text, start, end), end - start + 1);
-  });
-
-  // Desktop bonus: while extending (anchor set, focus not yet), preview the
-  // range live as the pointer moves over chars. Guarded to hover-capable,
-  // fine-pointer devices so touch never triggers it.
-  if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
-    editorRoot.addEventListener('pointerover', (e) => {
-      if (selection.anchor === null || selection.focus !== null) return;
-      const charEl = e.target.closest('.char');
-      if (!charEl || charEl.dataset.lineId !== selection.lineId) return;
-      const idx = Number.parseInt(charEl.dataset.idx, 10);
-      if (Number.isNaN(idx) || idx === selection.hoverIdx) return;
-      selection.hoverIdx = idx;
-      renderSingleLine(selection.lineId);
-    });
-    editorRoot.addEventListener('pointerout', (e) => {
-      if (selection.hoverIdx === null || selection.lineId === null) return;
-      // Re-rendering the line replaces the hovered span; ignore those internal
-      // transitions and only clear when the pointer truly leaves the display.
-      const to = e.relatedTarget;
-      if (
-        to &&
-        to.closest &&
-        to.closest(`.line-row[data-line-id="${selection.lineId}"] .line-row__voice-display`)
-      ) {
-        return;
-      }
-      const lineId = selection.lineId;
-      selection.hoverIdx = null;
-      renderSingleLine(lineId);
-    });
-  }
-
-  function openSheetForRange(found, existingRange, start, end) {
-    const text = found.line.text || '';
-    const selectedText = text.slice(start, end);
-    const initialVoices = existingRange ? [...existingRange.voices] : [];
-
-    openVoiceBottomSheet({
-      selectedText,
-      initialVoices,
-      onApply: (voices) => {
-        applyRangeMutation(found.line, start, end, voices);
-        renderBlocks();
-        updatePreview();
-      },
-      onRemove: () => {
-        applyRangeMutation(found.line, start, end, []);
-        renderBlocks();
-        updatePreview();
-      },
-    });
-  }
-
-  /**
-   * Apply the REPLACE rule:
-   * - Trim/drop existing ranges that overlap [start, end)
-   * - If `voices` non-empty, insert the new range
-   * - Re-validate
-   */
-  function applyRangeMutation(line, start, end, voices) {
-    const next = [];
-    for (const r of line.voiceRanges || []) {
-      if (r.end <= start || r.start >= end) {
-        next.push(r); // no overlap
-      } else {
-        // overlap — trim/split
-        if (r.start < start) next.push({ start: r.start, end: start, voices: r.voices });
-        if (r.end > end) next.push({ start: end, end: r.end, voices: r.voices });
-      }
-    }
-    if (voices.length > 0) {
-      next.push({ start, end, voices });
-    }
-    line.voiceRanges = validateVoiceRanges(next, (line.text || '').length);
   }
 
   // Add section button
@@ -1830,81 +1578,6 @@ function showToast(message) {
   toast.textContent = message;
   toast.classList.add('visible');
   setTimeout(() => toast.classList.remove('visible'), 3000);
-}
-
-/**
- * Render each character of a line's text as a tappable span used for
- * tap-anchor-extend voice assignment. Visual rendering mirrors
- * buildHighlightedHTML(_, _, 'all'): each char is colored with the FIRST
- * canonical voice of any range covering it; a +N badge is appended after
- * the last char of a multi-voice range.
- *
- * The anchor character gets `.char--anchor`. Every char in the previewed
- * range (anchor↔focus when confirming, or anchor↔hoverIdx while extending on
- * desktop) gets `.char--in-range`.
- *
- * @param {{id:string, text:string, voiceRanges:Array}} line
- * @param {{lineId:string|null, anchor:number|null, focus:number|null, hoverIdx:number|null}} selection
- * @returns {string} HTML
- */
-function renderVoiceChars(line, selection) {
-  const text = line.text || '';
-  const ranges = validateVoiceRanges(line.voiceRanges || [], text.length);
-
-  const charClass = new Array(text.length).fill('');
-  const badges = new Map(); // last-char-idx (inclusive) -> {extras, badgeVoice}
-
-  for (const r of ranges) {
-    const canonical = CANONICAL_VOICE_ORDER.filter((v) => r.voices.includes(v));
-    if (canonical.length === 0) continue;
-    const cls = `voice-text--${canonical[0]}`;
-    for (let i = r.start; i < r.end; i++) {
-      charClass[i] = cls;
-    }
-    if (canonical.length > 1) {
-      badges.set(r.end - 1, {
-        extras: canonical.length - 1,
-        badgeVoice: canonical[1],
-      });
-    }
-  }
-
-  const isCurrent = selection && selection.lineId === line.id;
-  const anchor = isCurrent ? selection.anchor : null;
-
-  // Previewed range: anchor↔focus (confirm) or anchor↔hoverIdx (extend hover).
-  let rangeStart = null;
-  let rangeEnd = null;
-  if (anchor !== null) {
-    const other = selection.focus !== null ? selection.focus : selection.hoverIdx;
-    if (other !== null && !Number.isNaN(other)) {
-      rangeStart = Math.min(anchor, other);
-      rangeEnd = Math.max(anchor, other);
-    }
-  }
-
-  if (text.length === 0) {
-    // Empty line: render a single placeholder space so the row stays tappable
-    // (the user can enter voice mode on an empty line but there is nothing to assign).
-    return '<span class="char char--placeholder">&nbsp;</span>';
-  }
-
-  let html = '';
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    const classes = ['char'];
-    if (charClass[i]) classes.push(charClass[i]);
-    if (rangeStart !== null && i >= rangeStart && i <= rangeEnd) classes.push('char--in-range');
-    if (anchor === i) classes.push('char--anchor');
-    const content = ch === ' ' ? '&nbsp;' : escapeHtml(ch);
-    html += `<span class="${classes.join(' ')}" data-line-id="${line.id}" data-idx="${i}">${content}</span>`;
-    const badge = badges.get(i);
-    if (badge) {
-      html += `<sup class="voice-badge-extra voice-badge-extra--${badge.badgeVoice}">+${badge.extras}</sup>`;
-    }
-  }
-
-  return html;
 }
 
 function escapeHtml(str) {

@@ -14,8 +14,12 @@ import {
   getVoiceColor,
   getVoiceBgColor,
   buildHighlightedHTML,
+  upgradeLegacySong,
+  rosterByCategory,
+  buildSyllableNotesHTML,
+  getVoiceLabel,
 } from '../lib/voiceSystem.js';
-import { isAdmin } from '../lib/authStore.js';
+import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 
 const FONT_SIZE_KEY = 'hkn-lyrics-font-size';
@@ -152,6 +156,10 @@ export async function renderSongView(container, songIdOrData) {
       if (detail) song = detail;
     }
   }
+
+  // Lectura dual: normaliza v1 → v2 en memoria (inerte para v2 y para el
+  // render de Letra/Acordes, que sigue leyendo text/chords/voiceRanges).
+  if (song) song = upgradeLegacySong(song);
 
   if (!song) {
     container.innerHTML = `

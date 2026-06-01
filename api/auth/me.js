@@ -46,7 +46,7 @@ export default withErrors(async (req, res) => {
     `;
   }
 
-  const rows = await sql`
+  let rows = await sql`
     SELECT id, username, display_name AS "displayName", bio, avatar_url AS "avatarUrl",
            voice_type AS "voiceType", voice_subtype AS "voiceSubtype",
            vocal_range_low AS "vocalRangeLow", vocal_range_high AS "vocalRangeHigh",
@@ -65,6 +65,7 @@ export default withErrors(async (req, res) => {
       res.status(500).json({ error: 'Could not create or fetch profile' });
       return;
     }
+    rows = retry;
   }
 
   // Feature flags habilitados para este usuario.

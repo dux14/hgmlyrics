@@ -264,3 +264,161 @@ describe('upgradeLegacySong', () => {
     expect(up.sections[0].lines[0].voiceLines).toEqual({});
   });
 });
+
+import { validateSongV2 } from '../src/lib/voiceSystem.js';
+
+describe('validateSongV2', () => {
+  const baseRoster = [{ id: 'sop-a', name: 'Soprano A', category: 'soprano', referenceKey: 'D5' }];
+
+  it('acepta una canción v2 mínima válida', () => {
+    const song = {
+      schemaVersion: 2,
+      voiceRoster: baseRoster,
+      sections: [
+        {
+          type: 'verse',
+          label: 'E1',
+          lines: [
+            {
+              text: 'Santo',
+              syllables: [{ start: 0, end: 5 }],
+              voiceLines: { 'sop-a': { sungSyllables: [0], notes: ['B3'] } },
+            },
+          ],
+        },
+      ],
+    };
+    expect(() => validateSongV2(song)).not.toThrow();
+  });
+
+  it('acepta una sílaba extensora de ancho cero (melisma)', () => {
+    const song = {
+      schemaVersion: 2,
+      voiceRoster: baseRoster,
+      sections: [
+        {
+          type: 'verse',
+          label: 'E1',
+          lines: [
+            {
+              text: 'o',
+              syllables: [
+                { start: 0, end: 1 },
+                { start: 1, end: 1 },
+              ],
+              voiceLines: { 'sop-a': { sungSyllables: [0, 1], notes: ['D4', 'D4'] } },
+            },
+          ],
+        },
+      ],
+    };
+    expect(() => validateSongV2(song)).not.toThrow();
+  });
+
+  it('rechaza roster con category inválida', () => {
+    const song = {
+      schemaVersion: 2,
+      voiceRoster: [{ id: 'x', name: 'X', category: 'alto' }],
+      sections: [],
+    };
+    expect(() => validateSongV2(song)).toThrow(/category/i);
+  });
+
+  it('rechaza ids de roster duplicados', () => {
+    const song = {
+      schemaVersion: 2,
+      voiceRoster: [
+        { id: 'a', name: 'A', category: 'soprano' },
+        { id: 'a', name: 'B', category: 'tenor' },
+      ],
+      sections: [],
+    };
+    expect(() => validateSongV2(song)).toThrow(/id/i);
+  });
+
+  it('rechaza syllables solapadas o fuera de rango', () => {
+    const song = {
+      schemaVersion: 2,
+      voiceRoster: baseRoster,
+      sections: [
+        {
+          type: 'verse',
+          label: 'E',
+          lines: [
+            {
+              text: 'Santo',
+              syllables: [
+                { start: 0, end: 3 },
+                { start: 2, end: 5 },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(() => validateSongV2(song)).toThrow(/solap|overlap/i);
+  });
+
+  it('rechaza voiceLines con notes y sungSyllables desalineados', () => {
+    const song = {
+      schemaVersion: 2,
+      voiceRoster: baseRoster,
+      sections: [
+        {
+          type: 'verse',
+          label: 'E',
+          lines: [
+            {
+              text: 'Santo',
+              syllables: [{ start: 0, end: 5 }],
+              voiceLines: { 'sop-a': { sungSyllables: [0], notes: ['B3', 'A3'] } },
+            },
+          ],
+        },
+      ],
+    };
+    expect(() => validateSongV2(song)).toThrow(/align|alinea|length/i);
+  });
+
+  it('rechaza voiceLines que referencian un rosterId inexistente', () => {
+    const song = {
+      schemaVersion: 2,
+      voiceRoster: baseRoster,
+      sections: [
+        {
+          type: 'verse',
+          label: 'E',
+          lines: [
+            {
+              text: 'Santo',
+              syllables: [{ start: 0, end: 5 }],
+              voiceLines: { ghost: { sungSyllables: [0], notes: ['B3'] } },
+            },
+          ],
+        },
+      ],
+    };
+    expect(() => validateSongV2(song)).toThrow(/roster/i);
+  });
+
+  it('rechaza notas inválidas', () => {
+    const song = {
+      schemaVersion: 2,
+      voiceRoster: baseRoster,
+      sections: [
+        {
+          type: 'verse',
+          label: 'E',
+          lines: [
+            {
+              text: 'Santo',
+              syllables: [{ start: 0, end: 5 }],
+              voiceLines: { 'sop-a': { sungSyllables: [0], notes: ['H9'] } },
+            },
+          ],
+        },
+      ],
+    };
+    expect(() => validateSongV2(song)).toThrow(/nota|note/i);
+  });
+});

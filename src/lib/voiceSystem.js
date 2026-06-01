@@ -282,3 +282,62 @@ export function upgradeLegacySong(song) {
 
   return { ...song, schemaVersion: 2, voiceRoster, sections };
 }
+
+/**
+ * Valida una canción v2. Lanza Error con mensaje claro al primer problema.
+ * No muta. `notes` admite null (sílaba cantada sin nota asignada aún).
+ * @param {object} song
+ * @returns {true}
+ */
+export function validateSongV2(song) {
+  if (!song || song.schemaVersion !== 2) throw new Error('schemaVersion debe ser 2');
+
+  const roster = song.voiceRoster || [];
+  const ids = new Set();
+  for (const v of roster) {
+    if (!CANONICAL_VOICE_ORDER.includes(v.category)) {
+      throw new Error(`category inválida en roster: ${v.category}`);
+    }
+    if (ids.has(v.id)) throw new Error(`id de roster duplicado: ${v.id}`);
+    ids.add(v.id);
+    if (v.referenceKey !== null && v.referenceKey !== undefined && !isValidNote(v.referenceKey)) {
+      throw new Error(`referenceKey (nota) inválida: ${v.referenceKey}`);
+    }
+  }
+
+  for (const section of song.sections || []) {
+    for (const line of section.lines || []) {
+      const text = line.text || '';
+      const syllables = line.syllables || [];
+      let prevEnd = 0;
+      for (const s of syllables) {
+        if (s.start < prevEnd) throw new Error('syllables solapadas (overlap)');
+        // start === end permitido SOLO como extensor de melisma (texto vacío).
+        if (s.start < 0 || s.end > text.length || s.start > s.end) {
+          throw new Error('syllable fuera de rango');
+        }
+        prevEnd = s.end;
+      }
+      const vl = line.voiceLines || {};
+      for (const [rosterId, data] of Object.entries(vl)) {
+        if (!ids.has(rosterId)) {
+          throw new Error(`voiceLines referencia roster inexistente: ${rosterId}`);
+        }
+        const sung = data.sungSyllables || [];
+        const notes = data.notes || [];
+        if (sung.length !== notes.length) {
+          throw new Error('sungSyllables y notes con length distinto (no alineados)');
+        }
+        for (const idx of sung) {
+          if (idx < 0 || idx >= syllables.length) throw new Error('sungSyllables fuera de índice');
+        }
+        for (const n of notes) {
+          if (n !== null && n !== undefined && !isValidNote(n)) {
+            throw new Error(`nota inválida: ${n}`);
+          }
+        }
+      }
+    }
+  }
+  return true;
+}

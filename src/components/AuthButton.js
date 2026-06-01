@@ -3,6 +3,7 @@
  */
 import { getProfile, signOut, subscribe } from '../lib/authStore.js';
 import { navigate } from '../router.js';
+import { icon } from '../lib/icons.js';
 
 function defaultAvatarUrl(displayName) {
   const initial = (displayName || '?').trim().charAt(0).toUpperCase();
@@ -30,7 +31,7 @@ function buildMenu() {
       <a class="auth-menu__item" href="#/perfil">Perfil</a>
       <a class="auth-menu__item" href="#/favoritos">Favoritos</a>
       <a class="auth-menu__item" href="#/amigos">Amigos</a>
-      <a class="auth-menu__item" href="#/afinador">🎸 Afinador <span class="badge--beta">BETA</span></a>
+      <a class="auth-menu__item" href="#/afinador">${icon('audio-lines', { size: 16 })} Afinador <span class="badge--beta">BETA</span></a>
       <button class="auth-menu__item" id="logout-btn">Cerrar sesión</button>
     </div>
   `;

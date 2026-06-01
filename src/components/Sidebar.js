@@ -7,6 +7,7 @@
 
 import { getAlbums, filterByAlbum, getState } from '../lib/store.js';
 import { navigate } from '../router.js';
+import { icon } from '../lib/icons.js';
 
 let sidebarEl = null;
 let overlayEl = null;
@@ -55,7 +56,7 @@ export function updateSidebarContent() {
       </div>
       <div class="sidebar__section-content">
         <div class="sidebar__album-item ${!activeAlbum ? 'active' : ''}" data-album="">
-          <span>🎵</span>
+          <span>${icon('music', { size: 16 })}</span>
           <span>Todas las canciones</span>
         </div>
         ${albums

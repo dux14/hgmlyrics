@@ -11,6 +11,14 @@
   padding: 0;
 }
 
+/* Inline SVG icons (see lib/icons.js): align with adjacent text and never
+   shrink inside flex rows. Color is inherited via currentColor, so they
+   adapt to light/dark automatically. */
+.icon {
+  vertical-align: -0.15em;
+  flex-shrink: 0;
+}
+
 html {
   font-size: 16px;
   scroll-behavior: smooth;

@@ -1,5 +1,6 @@
 import { navigate } from '../router.js';
 import { getState } from '../lib/store.js';
+import { icon } from '../lib/icons.js';
 
 export function renderAdminDashboard(container) {
   container.innerHTML = `
@@ -8,10 +9,10 @@ export function renderAdminDashboard(container) {
       
       <div style="display: grid; gap: 1rem;">
         <button class="btn btn--primary" id="btn-create" style="padding: 1.5rem; font-size: 1.2rem;">
-          ✨ Crear nueva canción
+          ${icon('plus', { size: 20 })} Crear nueva canción
         </button>
         <button class="btn btn--secondary" id="btn-edit" style="padding: 1.5rem; font-size: 1.2rem;">
-          ✏️ Modificar canción existente
+          ${icon('pencil', { size: 20 })} Modificar canción existente
         </button>
       </div>
     </div>

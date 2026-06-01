@@ -8,6 +8,7 @@ import { navigate } from '../router.js';
 import { isPWA, isSongCached } from '../lib/offlineCache.js';
 import { isAuthenticated } from '../lib/authStore.js';
 import { isFavorite, toggleFavorite, subscribe as subscribeFavorites } from '../lib/favorites.js';
+import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 
 let currentViewMode = localStorage.getItem('hkn-view-mode') || 'grid';
 let favUnsubscribe = null;
@@ -35,7 +36,7 @@ export function renderSongList(container, songs) {
   if (songs.length === 0) {
     container.innerHTML = `
       <div class="empty-state fade-in">
-        <div class="empty-state__icon">🎵</div>
+        <div class="empty-state__icon">${icon('music', { size: 48 })}</div>
         <h2 class="empty-state__title">No se encontraron canciones</h2>
         <p class="empty-state__text">Intenta ajustar los filtros o busca por otro término.</p>
       </div>
@@ -48,8 +49,8 @@ export function renderSongList(container, songs) {
   toolbar.innerHTML = `
     <span style="color: var(--color-text-secondary); font-size: 0.875rem;">${songs.length} resultados</span>
     <div class="song-view-toggle">
-      <button class="view-btn ${currentViewMode === 'grid' ? 'active' : ''}" data-view="grid" title="Cuadrícula">▦</button>
-      <button class="view-btn ${currentViewMode === 'list' ? 'active' : ''}" data-view="list" title="Lista">☰</button>
+      <button class="view-btn ${currentViewMode === 'grid' ? 'active' : ''}" data-view="grid" title="Cuadrícula" aria-label="Vista en cuadrícula">${icon('grid', { size: 18 })}</button>
+      <button class="view-btn ${currentViewMode === 'list' ? 'active' : ''}" data-view="list" title="Lista" aria-label="Vista en lista">${icon('list', { size: 18 })}</button>
     </div>
   `;
   container.appendChild(toolbar);
@@ -157,7 +158,7 @@ function createSongCard(song, index) {
         loading="${imgLoading}"
         decoding="async"
         fetchpriority="${imgFetchPriority}"
-        onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22><rect fill=%22%231a1a1a%22 width=%221%22 height=%221%22/><text x=%22.5%22 y=%22.6%22 text-anchor=%22middle%22 font-size=%22.4%22>🎵</text></svg>'"
+        onerror="this.src='${COVER_PLACEHOLDER}'"
       />
       ${
         showFavBtn
@@ -213,7 +214,7 @@ function createSongCard(song, index) {
       if (cached) {
         const badge = document.createElement('span');
         badge.className = 'offline-badge';
-        badge.textContent = '✓ Offline';
+        badge.innerHTML = `${icon('check', { size: 13 })} Offline`;
         card.querySelector('.song-card__meta')?.appendChild(badge);
       }
     });
@@ -265,7 +266,7 @@ function createSongTable(songs) {
           return `
           <tr class="song-table__row fade-in" style="animation-delay: ${i * 30}ms" data-id="${song.id}" tabindex="0">
             <td>
-              <img src="${coverUrl}" class="song-table__thumb" width="40" height="40" loading="lazy" decoding="async" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22><rect fill=%22%231a1a1a%22 width=%221%22 height=%221%22/><text x=%22.5%22 y=%22.6%22 text-anchor=%22middle%22 font-size=%22.4%22>🎵</text></svg>'" />
+              <img src="${coverUrl}" class="song-table__thumb" width="40" height="40" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'" />
             </td>
             <td class="song-table__title">${escapeHtml(song.title)}</td>
             <td>${escapeHtml(song.artist)}</td>

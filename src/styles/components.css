@@ -164,16 +164,16 @@
 
 .song-view__header {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-lg);
-  margin-bottom: var(--space-xl);
+  flex-direction: row;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
   align-items: center;
-  text-align: center;
+  text-align: left;
 }
 
 .song-view__cover {
-  width: 200px;
-  height: 200px;
+  width: 96px;
+  height: 96px;
   border-radius: var(--border-radius-md);
   object-fit: cover;
   flex-shrink: 0;
@@ -183,7 +183,7 @@
 .song-view__meta {
   flex: 1;
   min-width: 0;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .song-view__title {
@@ -233,7 +233,7 @@
 .breadcrumb {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: var(--space-xs);
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
@@ -304,43 +304,26 @@
   transition: opacity var(--transition-base);
 }
 
+/* Labeled divider: neutral, uniform across all section types — decoupled
+   from voice colors so it never competes with the colored lyrics. The label
+   sits left; a hairline rule extends to the right as quiet wayfinding. */
 .lyrics__section-label {
-  display: inline-block;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  margin-bottom: var(--space-sm);
-  padding: 3px 10px;
-  border-radius: var(--border-radius-full);
-  background: rgba(0, 151, 167, 0.08);
-  border-left: 3px solid var(--color-primary);
-}
-
-.lyrics__section--chorus .lyrics__section-label {
-  color: var(--color-voice-contralto);
-  border-left-color: var(--color-voice-contralto);
-  background: rgba(123, 31, 162, 0.08);
-}
-
-.lyrics__section--bridge .lyrics__section-label {
-  color: var(--color-accent);
-  border-left-color: var(--color-accent);
-  background: rgba(255, 143, 0, 0.08);
-}
-
-.lyrics__section--prechorus .lyrics__section-label {
-  color: var(--color-voice-tenor);
-  border-left-color: var(--color-voice-tenor);
-  background: rgba(230, 81, 0, 0.08);
-}
-
-.lyrics__section--intro .lyrics__section-label,
-.lyrics__section--outro .lyrics__section-label {
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
-  border-left-color: var(--color-text-secondary);
-  background: rgba(107, 114, 128, 0.08);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: var(--space-sm);
+}
+
+.lyrics__section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
 }
 
 .lyrics__line {
@@ -561,54 +544,33 @@
   color: var(--color-text-secondary);
 }
 
-/* === Song View — auxiliary alignment === */
-.song-view__meta > div {
-  justify-content: center;
+/* === Song View — controls toolbar (grouped by function) === */
+.song-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
 }
 
-.song-view .font-controls,
-.song-view .chord-toggle {
-  margin-left: auto;
-  margin-right: auto;
+.song-toolbar__group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
 }
 
-.song-view__controls {
-  justify-content: center;
+.song-toolbar__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  min-height: 40px;
 }
 
 /* === Tablet/Desktop Song View === */
 @media (min-width: 768px) {
-  .song-view__header {
-    flex-direction: row;
-    align-items: flex-start;
-    text-align: initial;
-  }
-
   .song-view__cover {
-    width: 160px;
-    height: 160px;
-  }
-
-  .song-view__meta {
-    align-items: initial;
-  }
-
-  .song-view__meta > div {
-    justify-content: flex-start;
-  }
-
-  .breadcrumb {
-    justify-content: flex-start;
-  }
-
-  .song-view .font-controls,
-  .song-view .chord-toggle {
-    margin-left: 0;
-    margin-right: 0;
-  }
-
-  .song-view__controls {
-    justify-content: flex-start;
+    width: 140px;
+    height: 140px;
   }
 
   .voice-filter {
@@ -617,6 +579,49 @@
 
   .transpose-controls {
     justify-content: flex-start;
+  }
+
+  /* Lay the control zones in a single row, separated by quiet dividers. */
+  .song-toolbar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-md);
+  }
+
+  .song-toolbar__group {
+    gap: var(--space-md);
+  }
+
+  .song-toolbar__group + .song-toolbar__group {
+    padding-left: var(--space-md);
+    border-left: 1px solid var(--color-border);
+  }
+
+  .song-toolbar__group--actions {
+    margin-left: auto;
+  }
+}
+
+/* Loading icon — subtle pulse as progressive-loading feedback */
+.loading-pulse {
+  animation: loadingPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes loadingPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-pulse {
+    animation: none;
+    opacity: 0.6;
   }
 }
 
@@ -801,7 +806,8 @@
 }
 
 .cejilla-badge__icon {
-  font-size: 1em;
+  display: inline-flex;
+  align-items: center;
 }
 
 .cejilla-badge__text {
@@ -824,7 +830,8 @@
 }
 
 .key-badge__icon {
-  font-size: 1em;
+  display: inline-flex;
+  align-items: center;
 }
 
 .key-badge__text {

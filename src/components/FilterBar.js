@@ -6,6 +6,7 @@
  */
 
 import { getState, setSortMode, filterByVoice } from '../lib/store.js';
+import { icon } from '../lib/icons.js';
 
 const SORT_OPTIONS = [
   { value: 'a-z', label: 'A → Z' },
@@ -71,7 +72,7 @@ export function updateFilterBar() {
       hasNonDefaultFilters
         ? `
       <span class="filter-separator"></span>
-      <button class="filter-chip filter-chip--clear" id="filter-clear">✕ Limpiar</button>
+      <button class="filter-chip filter-chip--clear" id="filter-clear">${icon('close', { size: 14 })} Limpiar</button>
     `
         : ''
     }

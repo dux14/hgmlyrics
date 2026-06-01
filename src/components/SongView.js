@@ -16,6 +16,7 @@ import {
   buildHighlightedHTML,
 } from '../lib/voiceSystem.js';
 import { isAdmin } from '../lib/authStore.js';
+import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 
 const FONT_SIZE_KEY = 'hkn-lyrics-font-size';
 const FONT_STEP = 0.125; // rem
@@ -143,7 +144,7 @@ export async function renderSongView(container, songIdOrData) {
     if (!song?.sections?.length) {
       container.innerHTML = `
         <div class="empty-state fade-in">
-          <div class="empty-state__icon">⏳</div>
+          <div class="empty-state__icon">${icon('music', { size: 48, className: 'loading-pulse' })}</div>
           <h2 class="empty-state__title">Cargando...</h2>
         </div>
       `;
@@ -155,7 +156,7 @@ export async function renderSongView(container, songIdOrData) {
   if (!song) {
     container.innerHTML = `
       <div class="empty-state fade-in">
-        <div class="empty-state__icon">😕</div>
+        <div class="empty-state__icon">${icon('frown', { size: 48 })}</div>
         <h2 class="empty-state__title">Canción no encontrada</h2>
         <p class="empty-state__text">La canción que buscas no existe o fue eliminada.</p>
         <button class="btn btn--primary" style="margin-top: 1rem;" id="go-home-btn">Volver al inicio</button>
@@ -225,7 +226,7 @@ export async function renderSongView(container, songIdOrData) {
           class="song-view__cover"
           src="${coverUrl}"
           alt="Portada de ${escapeHtml(song.album || '')}"
-          onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 1 1%22><rect fill=%22%231a1a1a%22 width=%221%22 height=%221%22/><text x=%22.5%22 y=%22.6%22 text-anchor=%22middle%22 font-size=%22.3%22>🎵</text></svg>'"
+          onerror="this.src='${COVER_PLACEHOLDER}'"
         />
         `
             : ''
@@ -250,53 +251,70 @@ export async function renderSongView(container, songIdOrData) {
       ${
         !isPreview
           ? `
-      <!-- Controls row -->
-      <div class="song-view__controls" style="display: flex; align-items: center; gap: var(--space-md); flex-wrap: wrap; margin-bottom: var(--space-md);">
-        <!-- Font Controls -->
-        <div class="font-controls" style="margin-bottom: 0;">
-          <button class="font-controls__btn" id="font-decrease" aria-label="Reducir tamaño de letra">A−</button>
-          <span class="font-controls__label" id="font-size-label">${fontSize.toFixed(2)}</span>
-          <button class="font-controls__btn" id="font-increase" aria-label="Aumentar tamaño de letra">A+</button>
+      <!-- Controls toolbar — grouped by function -->
+      <div class="song-toolbar">
+        <!-- Zone: Reading -->
+        <div class="song-toolbar__group">
+          <div class="font-controls" style="margin-bottom: 0;">
+            <button class="font-controls__btn" id="font-decrease" aria-label="Reducir tamaño de letra">A−</button>
+            <span class="font-controls__label" id="font-size-label">${fontSize.toFixed(2)}</span>
+            <button class="font-controls__btn" id="font-increase" aria-label="Aumentar tamaño de letra">A+</button>
+          </div>
+          ${
+            hasChords
+              ? `
+          <div class="chord-toggle" id="chord-toggle" style="margin-bottom: 0;">
+            <button class="chord-toggle__btn chord-toggle__btn--active" data-mode="lyrics">Letra</button>
+            <button class="chord-toggle__btn" data-mode="chords">Acordes</button>
+          </div>
+          `
+              : ''
+          }
         </div>
 
         ${
-          hasChords
+          (song.cejilla && song.cejilla > 0) || song.key
             ? `
-        <!-- Chord Toggle -->
-        <div class="chord-toggle" id="chord-toggle" style="margin-bottom: 0;">
-          <button class="chord-toggle__btn chord-toggle__btn--active" data-mode="lyrics">Letra</button>
-          <button class="chord-toggle__btn" data-mode="chords">Acordes</button>
+        <!-- Zone: Song attributes -->
+        <div class="song-toolbar__group">
+          ${
+            song.cejilla && song.cejilla > 0
+              ? `
+          <div class="cejilla-badge" title="Colocar cejilla en el traste ${song.cejilla}">
+            <span class="cejilla-badge__icon">${icon('audio-lines', { size: 15 })}</span>
+            <span class="cejilla-badge__text">Cejilla: ${song.cejilla}</span>
+          </div>
+          `
+              : ''
+          }
+          ${
+            song.key
+              ? `
+          <div class="key-badge" title="Tonalidad de la versión oficial">
+            <span class="key-badge__icon">${icon('music', { size: 15 })}</span>
+            <span class="key-badge__text">Tono: ${song.key}</span>
+          </div>
+          <a class="btn btn--secondary song-toolbar__btn" href="#/afinador?mode=song&songId=${song.id}" title="Cantá con este tono">
+            ${icon('mic', { size: 16 })} Afinar
+          </a>
+          `
+              : ''
+          }
         </div>
         `
             : ''
         }
 
         ${
-          song.cejilla && song.cejilla > 0
+          isAdmin()
             ? `
-        <div class="cejilla-badge" title="Colocar cejilla en el traste ${song.cejilla}">
-          <span class="cejilla-badge__icon">🎸</span>
-          <span class="cejilla-badge__text">Cejilla: ${song.cejilla}</span>
+        <!-- Zone: Actions -->
+        <div class="song-toolbar__group song-toolbar__group--actions">
+          <a href="#/admin/edit/${song.id}" class="btn btn--secondary song-toolbar__btn">${icon('pencil', { size: 16 })} Editar</a>
         </div>
         `
             : ''
         }
-
-        ${
-          song.key
-            ? `
-        <div class="key-badge" title="Tonalidad de la versión oficial">
-          <span class="key-badge__icon">🎼</span>
-          <span class="key-badge__text">Tono: ${song.key}</span>
-        </div>
-        <a class="btn btn--secondary" href="#/afinador?mode=song&songId=${song.id}" title="Cantá con este tono">
-          🎙️ Afinar
-        </a>
-        `
-            : ''
-        }
-
-        ${isAdmin() ? `<a href="#/admin/edit/${song.id}" class="btn btn--secondary">Editar</a>` : ''}
       </div>
 
       ${
@@ -304,7 +322,7 @@ export async function renderSongView(container, songIdOrData) {
           ? `
       <!-- Transpose Controls — hidden until chords mode -->
       <div class="transpose-controls" id="transpose-controls" style="display: none;">
-        <span class="transpose-label">🧪 Transposición (Beta)</span>
+        <span class="transpose-label">Transposición (Beta)</span>
         <button class="transpose-btn" id="transpose-down">−½</button>
         <span class="transpose-value" id="transpose-value">0</span>
         <button class="transpose-btn" id="transpose-up">+½</button>

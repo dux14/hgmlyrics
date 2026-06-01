@@ -16,12 +16,13 @@ import { frequencyToNote, nearestString, getScaleNotes, GUITAR_STANDARD } from '
 import { fetchSongDetail } from '../lib/store.js';
 import { getSession, refreshProfile } from '../lib/authStore.js';
 import { navigate } from '../router.js';
+import { icon } from '../lib/icons.js';
 
 const MODES = [
-  { id: 'guitar', label: '🎸 Guitarra' },
-  { id: 'voice', label: '🎤 Voz' },
-  { id: 'song', label: '🎼 Canción' },
-  { id: 'range', label: '📏 Rango' },
+  { id: 'guitar', label: `${icon('audio-lines', { size: 15 })} Guitarra` },
+  { id: 'voice', label: `${icon('mic', { size: 15 })} Voz` },
+  { id: 'song', label: `${icon('music', { size: 15 })} Canción` },
+  { id: 'range', label: `${icon('ruler', { size: 15 })} Rango` },
 ];
 
 const RANGE_STEP_MS = 10000;
@@ -180,14 +181,14 @@ function bodyPermissionGate(state) {
   if (state === 'denied') {
     return `
       <div class="tuner-perm">
-        <p>🎙️ Microfono bloqueado.</p>
+        <p>${icon('mic', { size: 16 })} Microfono bloqueado.</p>
         <p>Habilitalo en los permisos del sitio para usar el afinador.</p>
       </div>
     `;
   }
   return `
     <div class="tuner-perm">
-      <p>🎙️ Necesito acceso al micrófono para detectar el tono.</p>
+      <p>${icon('mic', { size: 16 })} Necesito acceso al micrófono para detectar el tono.</p>
       <button class="btn btn--primary" id="tuner-grant">Permitir micrófono</button>
     </div>
   `;
@@ -313,7 +314,9 @@ export async function renderTuner(container, opts = {}) {
       label: `${r.note}${r.octave}`,
       hz,
       cents: r.cents,
-      sub: inScale ? '✓ en escala' : '✗ fuera de escala',
+      sub: inScale
+        ? `${icon('check', { size: 14 })} en escala`
+        : `${icon('close', { size: 14 })} fuera de escala`,
     });
     setNeedle(bodyEl, r.cents, colorFromCents(r.cents));
     const ul = bodyEl.querySelector('#tuner-scale');
@@ -407,7 +410,7 @@ export async function renderTuner(container, opts = {}) {
       await refreshProfile();
       bodyEl.innerHTML = `
         <div class="tuner-empty">
-          <h2>🎉 Listo</h2>
+          <h2>${icon('check-circle', { size: 22 })} Listo</h2>
           <p>Tu rango: <strong>${rangeTempLow}</strong> – <strong>${rangeTempHigh}</strong></p>
           <p>Lo guardé en tu perfil.</p>
           <button class="btn btn--primary" id="range-back">Ir al perfil</button>

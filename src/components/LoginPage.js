@@ -4,6 +4,7 @@
  * Detects offline and shows a fallback message.
  */
 import { signInWithGoogle, signInWithMagicLink } from '../lib/authStore.js';
+import { icon } from '../lib/icons.js';
 
 const GOOGLE_ICON_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -16,7 +17,7 @@ function offlinePane(container) {
   container.innerHTML = `
     <div class="auth-page fade-in">
       <div class="auth-card auth-offline">
-        <div style="font-size:48px;">📡</div>
+        <div style="color: var(--color-text-secondary);">${icon('wifi-off', { size: 48 })}</div>
         <h2 class="auth-title">Sin conexión</h2>
         <p class="auth-subtitle">Necesitas conexión para iniciar sesión.</p>
         <button class="auth-btn" id="retry-btn">Reintentar</button>

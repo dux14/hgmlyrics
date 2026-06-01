@@ -94,7 +94,7 @@ export function renderOnboardingPage(container) {
         usernameOk = true;
         usernameInput.classList.remove('auth-input--error');
         usernameInput.classList.add('auth-input--success');
-        okEl.textContent = 'Disponible ✓';
+        okEl.textContent = 'Disponible';
         okEl.style.display = 'block';
       } else {
         usernameInput.classList.remove('auth-input--success');

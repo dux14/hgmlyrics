@@ -19,6 +19,7 @@ import { buildIndex } from './lib/search.js';
 import { route, initRouter, onNotFound, navigate } from './router.js';
 import { initAuthStore, isAuthenticated, needsOnboarding, isAdmin } from './lib/authStore.js';
 import { initFavorites } from './lib/favorites.js';
+import { icon } from './lib/icons.js';
 import { configureAuth, guardedRoute } from './router.js';
 import { renderLoginPage, renderRegisterPage } from './components/LoginPage.js';
 import { renderAuthCallback } from './components/AuthCallback.js';
@@ -205,7 +206,7 @@ async function boot() {
     hideFilterBar();
     mainContent.innerHTML = `
       <div class="empty-state fade-in">
-        <div class="empty-state__icon">🤷</div>
+        <div class="empty-state__icon">${icon('frown', { size: 48 })}</div>
         <h2 class="empty-state__title">Página no encontrada</h2>
         <p class="empty-state__text">La ruta que buscas no existe.</p>
         <button class="btn btn--primary" style="margin-top: 1rem;" id="not-found-home">Ir al inicio</button>

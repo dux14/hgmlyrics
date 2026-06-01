@@ -2,6 +2,7 @@
  * Profile.js — Own profile view + edit + avatar upload.
  */
 import { getSession, getProfile, refreshProfile } from '../lib/authStore.js';
+import { icon } from '../lib/icons.js';
 
 const VOICE_TYPES = [
   ['', '—'],
@@ -83,7 +84,7 @@ export async function renderProfile(container) {
       </div>
 
       <div style="display:flex; gap:var(--space-sm); flex-wrap:wrap; margin-bottom:var(--space-lg);">
-        <a class="auth-btn" href="#/favoritos" style="flex:1; min-width:160px; text-decoration:none; text-align:center;">❤ Mis favoritos</a>
+        <a class="auth-btn" href="#/favoritos" style="flex:1; min-width:160px; text-decoration:none; text-align:center;">${icon('heart', { size: 16, fill: true })} Mis favoritos</a>
         <a class="auth-btn" href="#/amigos" style="flex:1; min-width:160px; text-decoration:none; text-align:center;">Amigos</a>
       </div>
 
@@ -131,7 +132,7 @@ export async function renderProfile(container) {
 
         <div class="profile-field">
           <a class="auth-btn" href="#/afinador?mode=range" style="display:block; text-decoration:none; text-align:center;">
-            🎙️ Medir mi rango con el afinador
+            ${icon('mic', { size: 16 })} Medir mi rango con el afinador
           </a>
         </div>
 
@@ -232,7 +233,7 @@ export async function renderProfile(container) {
       return;
     }
     await refreshProfile();
-    okEl.textContent = 'Guardado ✓';
+    okEl.textContent = 'Guardado';
     okEl.style.display = 'block';
   });
 }

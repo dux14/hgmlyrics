@@ -7,6 +7,7 @@
  */
 import { getSession, needsOnboarding } from '../lib/authStore.js';
 import { navigate } from '../router.js';
+import { icon } from '../lib/icons.js';
 
 function getNextParam() {
   const hash = globalThis.location.hash;
@@ -24,7 +25,7 @@ export async function renderAuthCallback(container) {
   container.innerHTML = `
     <div class="auth-page fade-in">
       <div class="auth-card auth-offline">
-        <div style="font-size:48px;">⏳</div>
+        <div style="color: var(--color-text-secondary);">${icon('music', { size: 48, className: 'loading-pulse' })}</div>
         <p class="auth-subtitle">Iniciando sesión...</p>
       </div>
     </div>

@@ -18,6 +18,7 @@ import {
 } from '../lib/voiceSystem.js';
 import { openVoiceBottomSheet } from './VoiceBottomSheet.js';
 import { MUSICAL_KEYS } from '../lib/musicKeys.js';
+import { icon } from '../lib/icons.js';
 
 const API_URL = '/api';
 
@@ -194,14 +195,14 @@ export async function renderSongEditor(container, editId) {
   if (editId) {
     container.innerHTML = `
       <div class="editor fade-in" style="display: flex; justify-content: center; align-items: center; min-height: 50vh;">
-        <p style="color: var(--color-text-secondary); font-size: 1.1rem;">⏳ Cargando canción...</p>
+        <p style="color: var(--color-text-secondary); font-size: 1.1rem;">${icon('music', { size: 18, className: 'loading-pulse' })} Cargando canción...</p>
       </div>
     `;
     existingSong = await fetchSongDetail(editId);
     if (!existingSong) {
       container.innerHTML = `
         <div class="editor fade-in" style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 50vh; gap: 1rem;">
-          <p style="color: var(--color-text-secondary); font-size: 1.1rem;">❌ No se encontró la canción.</p>
+          <p style="color: var(--color-text-secondary); font-size: 1.1rem; display: inline-flex; align-items: center; gap: 0.4em;">${icon('frown', { size: 18 })} No se encontró la canción.</p>
           <button class="btn btn--secondary" id="editor-back-home">← Volver</button>
         </div>
       `;
@@ -295,7 +296,7 @@ export async function renderSongEditor(container, editId) {
         <h2 class="editor__section-title">Portada del álbum</h2>
         <div class="image-upload" id="image-upload-area">
           <div id="image-preview"></div>
-          <p class="image-upload__text">📷 Haz clic o arrastra una imagen aquí</p>
+          <p class="image-upload__text" style="display: inline-flex; align-items: center; gap: 0.4em;">${icon('camera', { size: 18 })} Haz clic o arrastra una imagen aquí</p>
           <input type="file" id="cover-input" accept="image/*" style="display: none;" />
         </div>
       </div>
@@ -324,7 +325,7 @@ export async function renderSongEditor(container, editId) {
         <div class="block-editor" id="block-editor"></div>
         <div class="block-editor__controls">
           <button class="btn btn--secondary block-editor__add-section" id="add-section-btn">+ Agregar sección</button>
-          <button class="btn btn--secondary block-editor__import-btn" id="import-btn">📥 Importar texto</button>
+          <button class="btn btn--secondary block-editor__import-btn" id="import-btn" style="display: inline-flex; align-items: center; gap: 0.4em;">${icon('download', { size: 16 })} Importar texto</button>
         </div>
       </div>
 
@@ -339,8 +340,8 @@ export async function renderSongEditor(container, editId) {
       <!-- Actions -->
       <div class="editor__actions">
         <button class="btn btn--secondary" id="editor-cancel">Cancelar</button>
-        ${existingSong ? `<button class="btn btn--secondary" id="editor-delete" style="color: var(--color-error); border-color: var(--color-error); margin-right: auto;">🗑️ Eliminar</button>` : ''}
-        <button class="btn btn--primary" id="editor-save">💾 Guardar canción</button>
+        ${existingSong ? `<button class="btn btn--secondary" id="editor-delete" style="color: var(--color-error); border-color: var(--color-error); margin-right: auto; display: inline-flex; align-items: center; gap: 0.4em;">${icon('trash', { size: 16 })} Eliminar</button>` : ''}
+        <button class="btn btn--primary" id="editor-save" style="display: inline-flex; align-items: center; gap: 0.4em;">${icon('save', { size: 16 })} Guardar canción</button>
       </div>
     </div>
   `;
@@ -399,7 +400,7 @@ export async function renderSongEditor(container, editId) {
             <label class="form-group__label">Etiqueta</label>
             <input class="form-group__input" type="text" placeholder="Partitura" data-action="vlink-label" data-idx="${i}" value="${escapeHtml(item.label || '')}" />
           </div>
-          <button class="btn btn--secondary" style="color: var(--color-error); border-color: var(--color-error); padding: 0.5rem;" data-action="vlink-delete" data-idx="${i}" type="button">✕</button>
+          <button class="btn btn--secondary" style="color: var(--color-error); border-color: var(--color-error); padding: 0.5rem;" data-action="vlink-delete" data-idx="${i}" type="button" aria-label="Eliminar enlace">${icon('close', { size: 16 })}</button>
         </div>
       `,
       )
@@ -481,9 +482,9 @@ export async function renderSongEditor(container, editId) {
             <input class="section-block__label-input" type="text" value="${escapeHtml(block.label)}" data-action="change-label" data-section="${index}" placeholder="Nombre de la sección" />
           </div>
           <div class="section-block__header-actions">
-            ${index > 0 ? `<button class="section-block__btn" data-action="move-section-up" data-section="${index}" title="Mover arriba">↑</button>` : ''}
-            ${index < total - 1 ? `<button class="section-block__btn" data-action="move-section-down" data-section="${index}" title="Mover abajo">↓</button>` : ''}
-            <button class="section-block__btn section-block__btn--danger" data-action="delete-section" data-section="${index}" title="Eliminar sección">🗑</button>
+            ${index > 0 ? `<button class="section-block__btn" data-action="move-section-up" data-section="${index}" title="Mover arriba" aria-label="Mover arriba">${icon('chevron-up', { size: 18 })}</button>` : ''}
+            ${index < total - 1 ? `<button class="section-block__btn" data-action="move-section-down" data-section="${index}" title="Mover abajo" aria-label="Mover abajo">${icon('chevron-down', { size: 18 })}</button>` : ''}
+            <button class="section-block__btn section-block__btn--danger" data-action="delete-section" data-section="${index}" title="Eliminar sección" aria-label="Eliminar sección">${icon('trash', { size: 16 })}</button>
           </div>
         </div>
         <div class="section-block__lines">
@@ -520,10 +521,10 @@ export async function renderSongEditor(container, editId) {
           ${mainContent}
           <div class="line-row__actions">
             ${rangeCountHtml}
-            <button class="line-row__btn line-row__btn--voice-mode ${voiceModeActive}" data-action="toggle-voice-mode" data-line-id="${line.id}" title="${mode === 'voices' ? 'Volver a editar texto' : 'Asignar voces'}">🎨</button>
-            <button class="line-row__btn ${line.showChords ? 'line-row__btn--active' : ''}" data-action="toggle-chords" data-line-id="${line.id}" title="Acordes">🎸</button>
-            <button class="line-row__btn ${line.annotation ? 'line-row__btn--active line-row__btn--annotation' : ''}" data-action="toggle-annotation" data-line-id="${line.id}" title="Marcar como anotación/guía">🏷️</button>
-            <button class="line-row__btn line-row__btn--delete" data-action="delete-line" data-line-id="${line.id}" title="Eliminar">✕</button>
+            <button class="line-row__btn line-row__btn--voice-mode ${voiceModeActive}" data-action="toggle-voice-mode" data-line-id="${line.id}" title="${mode === 'voices' ? 'Volver a editar texto' : 'Asignar voces'}" aria-label="${mode === 'voices' ? 'Volver a editar texto' : 'Asignar voces'}">${icon('users', { size: 16 })}</button>
+            <button class="line-row__btn ${line.showChords ? 'line-row__btn--active' : ''}" data-action="toggle-chords" data-line-id="${line.id}" title="Acordes" aria-label="Acordes">${icon('audio-lines', { size: 16 })}</button>
+            <button class="line-row__btn ${line.annotation ? 'line-row__btn--active line-row__btn--annotation' : ''}" data-action="toggle-annotation" data-line-id="${line.id}" title="Marcar como anotación/guía" aria-label="Marcar como anotación/guía">${icon('tag', { size: 16 })}</button>
+            <button class="line-row__btn line-row__btn--delete" data-action="delete-line" data-line-id="${line.id}" title="Eliminar" aria-label="Eliminar línea">${icon('close', { size: 16 })}</button>
           </div>
         </div>
       </div>
@@ -919,8 +920,8 @@ export async function renderSongEditor(container, editId) {
     overlay.innerHTML = `
       <div class="import-modal">
         <div class="import-modal__header">
-          <h3 class="import-modal__title">📥 Importar texto</h3>
-          <button class="import-modal__close" id="import-close">✕</button>
+          <h3 class="import-modal__title" style="display: inline-flex; align-items: center; gap: 0.4em;">${icon('download', { size: 18 })} Importar texto</h3>
+          <button class="import-modal__close" id="import-close" aria-label="Cerrar">${icon('close', { size: 18 })}</button>
         </div>
         <p class="import-modal__hint">
           Pega las letras. Las secciones se detectan con <code>[Verso 1]</code>, <code>[Coro]</code>, etc.
@@ -1183,13 +1184,13 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems) {
 
     await refreshData();
     navigate(existingSong ? '/admin/edit' : '/admin');
-    showToast('✅ Canción guardada correctamente');
+    showToast('Canción guardada correctamente');
   } catch (err) {
     console.error(err);
-    showToast('❌ Error: ' + err.message);
+    showToast('Error: ' + err.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = '💾 Guardar canción';
+    btn.innerHTML = `${icon('save', { size: 16 })} Guardar canción`;
   }
 }
 
@@ -1206,10 +1207,10 @@ async function handleDelete(song) {
     if (!res.ok) throw new Error('Error al eliminar');
     await refreshData();
     navigate('/admin/edit');
-    showToast('🗑️ Canción eliminada');
+    showToast('Canción eliminada');
   } catch (e) {
     console.error(e);
-    showToast('❌ Error: ' + e.message);
+    showToast('Error: ' + e.message);
   }
 }
 

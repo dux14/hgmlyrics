@@ -8,6 +8,7 @@ import { getState, subscribe as subscribeStore } from '../lib/store.js';
 import { subscribe as subscribeFavorites, isFavorite } from '../lib/favorites.js';
 import { renderSongList } from './SongList.js';
 import { navigate } from '../router.js';
+import { icon } from '../lib/icons.js';
 
 let unsubFav = null;
 let unsubStore = null;
@@ -48,7 +49,7 @@ export function renderFavoritesPage(container) {
     if (favs.length === 0) {
       listMount.innerHTML = `
         <div class="empty-state">
-          <div class="empty-state__icon">💔</div>
+          <div class="empty-state__icon">${icon('heart', { size: 48 })}</div>
           <h2 class="empty-state__title">Aún no tienes favoritos</h2>
           <p class="empty-state__text">Toca el corazón en cualquier canción para guardarla aquí.</p>
         </div>

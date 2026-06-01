@@ -10,6 +10,7 @@ import { fetchSongDetail } from '../lib/store.js';
 import { navigate } from '../router.js';
 import { VOICE_TYPES, getVoiceColor } from '../lib/voiceSystem.js';
 import { isAdmin } from '../lib/authStore.js';
+import { icon } from '../lib/icons.js';
 
 const API_URL = '/api';
 
@@ -42,7 +43,7 @@ const DRIVE_ICON = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7.71 
 export async function renderSongLinks(container, songId) {
   container.innerHTML = `
     <div class="empty-state fade-in">
-      <div class="empty-state__icon">⏳</div>
+      <div class="empty-state__icon">${icon('music', { size: 48, className: 'loading-pulse' })}</div>
       <h2 class="empty-state__title">Cargando...</h2>
     </div>
   `;
@@ -57,7 +58,7 @@ export async function renderSongLinks(container, songId) {
   if (!song) {
     container.innerHTML = `
       <div class="empty-state fade-in">
-        <div class="empty-state__icon">😕</div>
+        <div class="empty-state__icon">${icon('frown', { size: 48 })}</div>
         <h2 class="empty-state__title">Canción no encontrada</h2>
         <button class="btn btn--primary" style="margin-top:1rem" id="links-go-home">Volver</button>
       </div>

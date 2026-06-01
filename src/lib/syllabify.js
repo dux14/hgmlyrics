@@ -35,6 +35,28 @@ export function toggleBoundary(boundaries, index, textLength = Infinity) {
 }
 
 /**
+ * Divide una línea en tokens con offsets de carácter para colocar acordes.
+ * Usa line.syllables (ignorando extensores de ancho cero) si existen;
+ * si no, tokeniza por palabras. Cada token: {text, start, end}.
+ * @param {{text?:string, syllables?:Array<{start:number,end:number}>}} line
+ * @returns {Array<{text:string,start:number,end:number}>}
+ */
+export function tokenizeLineForChords(line) {
+  const text = line?.text || '';
+  const syllables = (line?.syllables || []).filter((s) => s.end > s.start);
+  if (syllables.length > 0) {
+    return syllables.map((s) => ({ text: text.slice(s.start, s.end), start: s.start, end: s.end }));
+  }
+  const tokens = [];
+  const re = /\S+/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    tokens.push({ text: m[0], start: m.index, end: m.index + m[0].length });
+  }
+  return tokens;
+}
+
+/**
  * Heurística de silabación para español (editable por el usuario):
  * sugiere un corte antes de la consonante que abre la siguiente sílaba.
  * Regla simple: si una consonante va seguida de vocal y viene precedida de

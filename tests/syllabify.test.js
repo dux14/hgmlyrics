@@ -4,6 +4,7 @@ import {
   boundariesToSyllables,
   syllablesToBoundaries,
   autoSuggestBoundaries,
+  tokenizeLineForChords,
 } from '../src/lib/syllabify.js';
 
 describe('boundariesToSyllables', () => {
@@ -45,5 +46,35 @@ describe('autoSuggestBoundaries', () => {
   it('sugiere cortes tras grupos vocálicos (heurística simple, editable)', () => {
     // "Santo" → "San" "to": corte en 3
     expect(autoSuggestBoundaries('Santo')).toContain(3);
+  });
+});
+
+describe('tokenizeLineForChords', () => {
+  it('usa las sílabas (con offsets) cuando existen, ignorando extensores', () => {
+    const line = {
+      text: 'Santo',
+      syllables: [
+        { start: 0, end: 3 },
+        { start: 3, end: 5 },
+        { start: 5, end: 5 },
+      ],
+    };
+    expect(tokenizeLineForChords(line)).toEqual([
+      { text: 'San', start: 0, end: 3 },
+      { text: 'to', start: 3, end: 5 },
+    ]);
+  });
+
+  it('sin sílabas: tokeniza por palabras preservando offsets', () => {
+    const line = { text: 'en el nombre' };
+    expect(tokenizeLineForChords(line)).toEqual([
+      { text: 'en', start: 0, end: 2 },
+      { text: 'el', start: 3, end: 5 },
+      { text: 'nombre', start: 6, end: 12 },
+    ]);
+  });
+
+  it('texto vacío → []', () => {
+    expect(tokenizeLineForChords({ text: '' })).toEqual([]);
   });
 });

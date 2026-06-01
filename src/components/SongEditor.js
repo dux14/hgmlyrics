@@ -1147,6 +1147,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     const close = () => {
       overlay.remove();
       renderBlocks();
+      updatePreview();
     };
     const chordAt = (pos) => (line.chords || []).find((c) => c.pos === pos);
     const setChord = (pos, ch) => {

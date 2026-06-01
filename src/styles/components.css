@@ -167,13 +167,13 @@
   flex-direction: row;
   gap: var(--space-md);
   margin-bottom: var(--space-lg);
-  align-items: center;
+  align-items: flex-start;
   text-align: left;
 }
 
 .song-view__cover {
-  width: 96px;
-  height: 96px;
+  width: 80px;
+  height: 80px;
   border-radius: var(--border-radius-md);
   object-fit: cover;
   flex-shrink: 0;
@@ -570,8 +570,8 @@
 /* === Tablet/Desktop Song View === */
 @media (min-width: 768px) {
   .song-view__cover {
-    width: 140px;
-    height: 140px;
+    width: 100px;
+    height: 100px;
   }
 
   .song-view__title {

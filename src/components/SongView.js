@@ -241,9 +241,6 @@ export async function renderSongView(container, songIdOrData) {
               <div class="voice-bar__male" style="width: ${song.voicePercent?.male ?? 50}%"></div>
               <div class="voice-bar__female" style="width: ${100 - (song.voicePercent?.male ?? 50)}%"></div>
             </div>
-            <span style="font-size: 0.75rem; color: var(--color-text-secondary);">
-              H ${song.voicePercent?.male ?? 0}% / M ${100 - (song.voicePercent?.male ?? 0)}%
-            </span>
           </div>
         </div>
       </div>

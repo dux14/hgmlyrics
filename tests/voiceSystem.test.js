@@ -3,6 +3,7 @@ import {
   buildHighlightedHTML,
   validateVoiceRanges,
   CANONICAL_VOICE_ORDER,
+  deriveVoiceRanges,
 } from '../src/lib/voiceSystem.js';
 
 describe('CANONICAL_VOICE_ORDER', () => {
@@ -555,5 +556,68 @@ describe('deriveReferenceKey', () => {
       sections: [],
     };
     expect(deriveReferenceKey(song, 'sop-a')).toBe(null);
+  });
+});
+
+describe('deriveVoiceRanges', () => {
+  const roster = [
+    { id: 'sop', category: 'soprano' },
+    { id: 'ten', category: 'tenor' },
+  ];
+
+  it('homofónico: todas las voces cantan todas las sílabas → un rango con ambas (orden canónico)', () => {
+    const line = {
+      text: 'abcd',
+      syllables: [
+        { start: 0, end: 2 },
+        { start: 2, end: 4 },
+      ],
+      voiceLines: {
+        sop: { sungSyllables: [0, 1], notes: ['C4', 'D4'] },
+        ten: { sungSyllables: [0, 1], notes: ['C3', 'D3'] },
+      },
+    };
+    expect(deriveVoiceRanges(line, roster)).toEqual([
+      { start: 0, end: 4, voices: ['soprano', 'tenor'] },
+    ]);
+  });
+
+  it('parcial: cada voz una sílaba distinta → dos rangos', () => {
+    const line = {
+      text: 'abcd',
+      syllables: [
+        { start: 0, end: 2 },
+        { start: 2, end: 4 },
+      ],
+      voiceLines: {
+        sop: { sungSyllables: [0], notes: ['C4'] },
+        ten: { sungSyllables: [1], notes: ['C3'] },
+      },
+    };
+    expect(deriveVoiceRanges(line, roster)).toEqual([
+      { start: 0, end: 2, voices: ['soprano'] },
+      { start: 2, end: 4, voices: ['tenor'] },
+    ]);
+  });
+
+  it('ignora extensores de melisma (ancho cero)', () => {
+    const line = {
+      text: 'ab',
+      syllables: [
+        { start: 0, end: 2 },
+        { start: 2, end: 2 },
+      ],
+      voiceLines: { sop: { sungSyllables: [0, 1], notes: ['C4', 'D4'] } },
+    };
+    expect(deriveVoiceRanges(line, roster)).toEqual([{ start: 0, end: 2, voices: ['soprano'] }]);
+  });
+
+  it('sin voiceLines: devuelve los voiceRanges existentes sin tocar', () => {
+    const existing = [{ start: 0, end: 3, voices: ['bass'] }];
+    expect(deriveVoiceRanges({ text: 'abc', voiceRanges: existing }, roster)).toBe(existing);
+  });
+
+  it('sin voiceLines ni voiceRanges: devuelve []', () => {
+    expect(deriveVoiceRanges({ text: 'abc' }, roster)).toEqual([]);
   });
 });

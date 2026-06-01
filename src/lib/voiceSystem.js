@@ -343,6 +343,56 @@ export function validateSongV2(song) {
 }
 
 /**
+ * Deriva los voiceRanges (rangos de carácter por categoría) para el coloreado
+ * del modo Letra, a partir de syllables + voiceLines. Agrupa sílabas contiguas
+ * con el mismo conjunto de categorías; ignora extensores de melisma (ancho cero).
+ * Si la línea no tiene voiceLines, devuelve sus voiceRanges existentes sin tocar.
+ * @param {object} line @param {Array<{id:string,category:string}>} roster
+ * @returns {Array<{start:number,end:number,voices:string[]}>}
+ */
+export function deriveVoiceRanges(line, roster = []) {
+  const syllables = line?.syllables || [];
+  const voiceLines = line?.voiceLines || {};
+  if (syllables.length === 0 || Object.keys(voiceLines).length === 0) {
+    return Array.isArray(line?.voiceRanges) ? line.voiceRanges : [];
+  }
+  const catById = new Map(roster.map((v) => [v.id, v.category]));
+  const categoriesForSyllable = (idx) => {
+    const cats = new Set();
+    for (const [rosterId, data] of Object.entries(voiceLines)) {
+      if ((data.sungSyllables || []).includes(idx)) {
+        const cat = catById.get(rosterId);
+        if (cat) cats.add(cat);
+      }
+    }
+    return CANONICAL_VOICE_ORDER.filter((c) => cats.has(c));
+  };
+
+  const ranges = [];
+  let current = null; // { key, range }
+  syllables.forEach((s, idx) => {
+    if (s.start >= s.end) return; // extensor de melisma: sin caracteres
+    const voices = categoriesForSyllable(idx);
+    if (voices.length === 0) {
+      if (current) {
+        ranges.push(current.range);
+        current = null;
+      }
+      return;
+    }
+    const key = voices.join(',');
+    if (current && current.key === key && current.range.end === s.start) {
+      current.range.end = s.end;
+    } else {
+      if (current) ranges.push(current.range);
+      current = { key, range: { start: s.start, end: s.end, voices } };
+    }
+  });
+  if (current) ranges.push(current.range);
+  return ranges;
+}
+
+/**
  * Para el modo Tono/persona: devuelve, por sílaba de la línea, el texto, la
  * nota de la voz activa (o null) y si esa voz la canta.
  * @param {object} line

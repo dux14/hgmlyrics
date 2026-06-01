@@ -250,6 +250,31 @@
   margin: 0;
 }
 
+/* === Target note (shortcut from a song) === */
+.tuner-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  min-height: 44px;
+  margin-bottom: var(--space-sm);
+}
+
+.tuner-objective {
+  text-align: center;
+  font-size: var(--font-size-md);
+  margin: 0 0 var(--space-sm);
+  color: var(--color-text-secondary);
+}
+
+.tuner-objective[data-match='ok'] {
+  color: var(--color-success, #2e7d32);
+  font-weight: var(--font-weight-bold);
+}
+
+.tuner-objective[data-match='ok'] strong {
+  color: inherit;
+}
+
 /* === Song mode === */
 .tuner-song {
   text-align: center;

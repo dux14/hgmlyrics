@@ -46,6 +46,7 @@ export default [
         confirm: 'readonly',
         alert: 'readonly',
         NodeFilter: 'readonly',
+        IntersectionObserver: 'readonly',
       },
     },
     rules: {

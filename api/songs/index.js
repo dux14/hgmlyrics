@@ -2,6 +2,7 @@ import sql from '../_lib/db.js';
 import { requireAdmin } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { isValidKey } from '../../src/lib/musicKeys.js';
+import { validateSongV2 } from '../../src/lib/voiceSystem.js';
 
 function normalizeKey(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -62,18 +63,30 @@ async function createSong(req, res) {
     return;
   }
   const key = normalizeKey(s.key);
+  // Validación server-side de canciones v2 también en create (paridad con
+  // update); v1 (schemaVersion !== 2) conserva su comportamiento.
+  if (s.schemaVersion === 2) {
+    try {
+      validateSongV2(s);
+    } catch (e) {
+      res.status(400).json({ error: e.message });
+      return;
+    }
+  }
   await sql`
     INSERT INTO songs (
       id, title, artist, album, album_slug, year, genre,
       voice_type, voice_percent_male, voice_percent_female,
-      cover_image, sections, album_order, cejilla, key
+      cover_image, sections, album_order, cejilla, key,
+      voice_roster, schema_version
     ) VALUES (
       ${s.id}, ${s.title}, ${s.artist ?? null}, ${s.album ?? null},
       ${s.albumSlug ?? null}, ${s.year ?? null}, ${s.genre ?? null},
       ${s.voiceType ?? null},
       ${s.voicePercent?.male ?? 50}, ${s.voicePercent?.female ?? 50},
       ${s.coverImage ?? null}, ${sql.json(s.sections ?? [])},
-      ${s.albumOrder ?? 0}, ${s.cejilla ?? null}, ${key}
+      ${s.albumOrder ?? 0}, ${s.cejilla ?? null}, ${key},
+      ${sql.json(s.voiceRoster ?? [])}, ${s.schemaVersion ?? 1}
     )
   `;
   invalidateListCache();

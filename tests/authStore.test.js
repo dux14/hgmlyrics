@@ -32,6 +32,8 @@ const {
   signInWithGoogle,
   signInWithMagicLink,
   signOut,
+  isFeatureEnabled,
+  __setFlagsForTest,
 } = await import('../src/lib/authStore.js');
 
 describe('authStore', () => {
@@ -116,5 +118,17 @@ describe('authStore', () => {
     mockSignOut.mockResolvedValueOnce({ error: null });
     await signOut();
     expect(mockSignOut).toHaveBeenCalled();
+  });
+});
+
+describe('isFeatureEnabled', () => {
+  it('devuelve false cuando no hay flags', () => {
+    __setFlagsForTest([]);
+    expect(isFeatureEnabled('voz_tono')).toBe(false);
+  });
+  it('devuelve true cuando el flag está presente', () => {
+    __setFlagsForTest(['voz_tono']);
+    expect(isFeatureEnabled('voz_tono')).toBe(true);
+    expect(isFeatureEnabled('afinador_shortcut')).toBe(false);
   });
 });

@@ -3,6 +3,7 @@ import { requireAdmin } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { invalidateListCache } from './index.js';
 import { isValidKey } from '../../src/lib/musicKeys.js';
+import { validateSongV2 } from '../../src/lib/voiceSystem.js';
 
 function normalizeKey(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -22,6 +23,8 @@ async function getOne(req, res, id) {
            voice_percent_female AS "voicePercentFemale",
            cover_image AS "coverImage",
            sections,
+           voice_roster   AS "voiceRoster",
+           schema_version AS "schemaVersion",
            album_order AS "albumOrder",
            cejilla,
            key,
@@ -44,6 +47,16 @@ async function update(req, res, id) {
   await requireAdmin(req, sql);
   const s = req.body ?? {};
   const key = normalizeKey(s.key);
+  // Validación server-side de canciones v2 (la validación del editor en cliente
+  // no es un control de seguridad). v1 (schemaVersion !== 2) conserva su comportamiento.
+  if (s.schemaVersion === 2) {
+    try {
+      validateSongV2(s);
+    } catch (e) {
+      res.status(400).json({ error: e.message });
+      return;
+    }
+  }
   const result = await sql`
     UPDATE songs SET
       title = ${s.title},
@@ -57,6 +70,8 @@ async function update(req, res, id) {
       voice_percent_female = ${s.voicePercent?.female ?? 50},
       cover_image = ${s.coverImage ?? null},
       sections = ${sql.json(s.sections ?? [])},
+      voice_roster = ${sql.json(s.voiceRoster ?? [])},
+      schema_version = ${s.schemaVersion ?? 1},
       album_order = ${s.albumOrder ?? 0},
       cejilla = ${s.cejilla ?? null},
       key = ${key}

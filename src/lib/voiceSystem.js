@@ -223,3 +223,200 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+const NOTE_RE = /^[A-G][#b]?[0-7]$/;
+
+/**
+ * @param {unknown} value
+ * @returns {boolean} true si es notación científica válida (octavas 0-7, p.ej. B3, F#3, Eb5).
+ */
+export function isValidNote(value) {
+  return typeof value === 'string' && NOTE_RE.test(value);
+}
+
+/**
+ * Adaptador de lectura: convierte una canción v1 (4 voces fijas, voiceRanges)
+ * en estructura v2 EN MEMORIA. No persiste. Idempotente para v2.
+ * @param {object} song
+ * @returns {object} canción v2
+ */
+export function upgradeLegacySong(song) {
+  if (!song || song.schemaVersion === 2) return song;
+
+  const usedCategories = new Set();
+  for (const section of song.sections || []) {
+    for (const line of section.lines || []) {
+      for (const r of line.voiceRanges || []) {
+        for (const v of r.voices || []) {
+          if (VALID_VOICE_IDS.includes(v)) usedCategories.add(v);
+        }
+      }
+    }
+  }
+
+  const voiceRoster = CANONICAL_VOICE_ORDER.filter((c) => usedCategories.has(c)).map(
+    (category) => ({
+      id: category, // una persona por categoría → id = category
+      name: getVoiceLabel(category),
+      category,
+    }),
+  );
+
+  const sections = (song.sections || []).map((section) => ({
+    ...section,
+    lines: (section.lines || []).map((line) => {
+      const ranges = line.voiceRanges || [];
+      const syllables = ranges.map((r) => ({ start: r.start, end: r.end }));
+      const voiceLines = {};
+      ranges.forEach((r, i) => {
+        for (const v of r.voices || []) {
+          if (!VALID_VOICE_IDS.includes(v)) continue;
+          if (!voiceLines[v]) voiceLines[v] = { sungSyllables: [], notes: [] };
+          voiceLines[v].sungSyllables.push(i);
+          voiceLines[v].notes.push(null);
+        }
+      });
+      return { ...line, syllables, voiceLines };
+    }),
+  }));
+
+  return { ...song, schemaVersion: 2, voiceRoster, sections };
+}
+
+/**
+ * Valida una canción v2. Lanza Error con mensaje claro al primer problema.
+ * No muta. `notes` admite null (sílaba cantada sin nota asignada aún).
+ * @param {object} song
+ * @returns {true}
+ */
+export function validateSongV2(song) {
+  if (!song || song.schemaVersion !== 2) throw new Error('schemaVersion debe ser 2');
+
+  const roster = song.voiceRoster || [];
+  const ids = new Set();
+  for (const v of roster) {
+    if (!CANONICAL_VOICE_ORDER.includes(v.category)) {
+      throw new Error(`category inválida en roster: ${v.category}`);
+    }
+    if (ids.has(v.id)) throw new Error(`id de roster duplicado: ${v.id}`);
+    ids.add(v.id);
+    if (v.referenceKey !== null && v.referenceKey !== undefined && !isValidNote(v.referenceKey)) {
+      throw new Error(`referenceKey (nota) inválida: ${v.referenceKey}`);
+    }
+  }
+
+  for (const section of song.sections || []) {
+    for (const line of section.lines || []) {
+      const text = line.text || '';
+      const syllables = line.syllables || [];
+      let prevEnd = 0;
+      for (const s of syllables) {
+        if (s.start < prevEnd) throw new Error('syllables solapadas (overlap)');
+        // start === end permitido SOLO como extensor de melisma (texto vacío).
+        if (s.start < 0 || s.end > text.length || s.start > s.end) {
+          throw new Error('syllable fuera de rango');
+        }
+        prevEnd = s.end;
+      }
+      const vl = line.voiceLines || {};
+      for (const [rosterId, data] of Object.entries(vl)) {
+        if (!ids.has(rosterId)) {
+          throw new Error(`voiceLines referencia roster inexistente: ${rosterId}`);
+        }
+        const sung = data.sungSyllables || [];
+        const notes = data.notes || [];
+        if (sung.length !== notes.length) {
+          throw new Error('sungSyllables y notes con length distinto (no alineados)');
+        }
+        for (const idx of sung) {
+          if (idx < 0 || idx >= syllables.length) throw new Error('sungSyllables fuera de índice');
+        }
+        for (const n of notes) {
+          if (n !== null && n !== undefined && !isValidNote(n)) {
+            throw new Error(`nota inválida: ${n}`);
+          }
+        }
+      }
+    }
+  }
+  return true;
+}
+
+/**
+ * Para el modo Tono/persona: devuelve, por sílaba de la línea, el texto, la
+ * nota de la voz activa (o null) y si esa voz la canta.
+ * @param {object} line
+ * @param {string} rosterId
+ * @returns {Array<{text:string, note:string|null, sung:boolean}>}
+ */
+export function resolveSyllableNotes(line, rosterId) {
+  const text = line?.text || '';
+  const syllables = line?.syllables || [];
+  const vl = line?.voiceLines?.[rosterId];
+  const noteBySyll = new Map();
+  if (vl) {
+    (vl.sungSyllables || []).forEach((sIdx, i) => {
+      noteBySyll.set(sIdx, vl.notes?.[i] ?? null);
+    });
+  }
+  return syllables.map((s, idx) => ({
+    text: text.slice(s.start, s.end),
+    note: noteBySyll.has(idx) ? noteBySyll.get(idx) : null,
+    sung: noteBySyll.has(idx),
+  }));
+}
+
+/**
+ * HTML ruby (nota arriba, sílaba abajo) para una línea en modo Tono/persona.
+ * Sílaba sin texto (extensor) se marca como melisma. Texto escapado.
+ * @param {object} line @param {string} rosterId
+ * @returns {string}
+ */
+export function buildSyllableNotesHTML(line, rosterId) {
+  const units = resolveSyllableNotes(line, rosterId);
+  if (units.length === 0) {
+    // sin silabación: fallback a texto plano atenuado
+    return `<span class="voice-text voice-text--dimmed">${escapeHtml(line?.text || '')}</span>`;
+  }
+  return units
+    .map((u) => {
+      const isMelisma = u.text === '';
+      const cls = ['syll'];
+      if (!u.sung) cls.push('syll--dimmed');
+      if (isMelisma) cls.push('syll--melisma');
+      const noteHtml = u.note
+        ? `<span class="syll__note">${escapeHtml(u.note)}</span>`
+        : `<span class="syll__note"></span>`;
+      const textHtml = `<span class="syll__text">${isMelisma ? '‑' : escapeHtml(u.text)}</span>`;
+      return `<span class="${cls.join(' ')}">${noteHtml}${textHtml}</span>`;
+    })
+    .join('');
+}
+
+/**
+ * @param {object} song @param {string} category
+ * @returns {Array} entradas del roster de esa categoría (en orden original).
+ */
+export function rosterByCategory(song, category) {
+  return (song?.voiceRoster || []).filter((v) => v.category === category);
+}
+
+/**
+ * Tono de referencia de una voz: su referenceKey explícito, o la primera nota
+ * no nula que canta en la canción, o null.
+ * @param {object} song @param {string} rosterId
+ * @returns {string|null}
+ */
+export function deriveReferenceKey(song, rosterId) {
+  const voice = (song?.voiceRoster || []).find((v) => v.id === rosterId);
+  if (voice?.referenceKey) return voice.referenceKey;
+  for (const section of song?.sections || []) {
+    for (const line of section.lines || []) {
+      const notes = line.voiceLines?.[rosterId]?.notes || [];
+      for (const n of notes) {
+        if (n !== null && n !== undefined) return n;
+      }
+    }
+  }
+  return null;
+}

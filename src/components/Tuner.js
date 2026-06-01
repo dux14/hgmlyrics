@@ -12,7 +12,14 @@
 
 import '../styles/tuner.css';
 import { createPitchDetector } from '../lib/pitch.js';
-import { frequencyToNote, nearestString, getScaleNotes, GUITAR_STANDARD } from '../lib/notes.js';
+import {
+  frequencyToNote,
+  noteToFrequency,
+  nearestString,
+  getScaleNotes,
+  GUITAR_STANDARD,
+  parseTunerTarget,
+} from '../lib/notes.js';
 import { fetchSongDetail } from '../lib/store.js';
 import { getSession, refreshProfile } from '../lib/authStore.js';
 import { navigate } from '../router.js';
@@ -95,7 +102,7 @@ function renderReadout(container, { label, hz, cents, sub }) {
 
 /* ─── Mode body renderers ─── */
 
-function bodyGuitarOrVoice(mode) {
+function bodyGuitarOrVoice(mode, targetNote) {
   const list =
     mode === 'guitar'
       ? `<ul class="tuner-strings" id="tuner-strings">
@@ -104,7 +111,12 @@ function bodyGuitarOrVoice(mode) {
            ).join('')}
          </ul>`
       : '';
+  const objective =
+    mode === 'voice' && targetNote
+      ? `<p class="tuner-objective" id="tuner-objective">Objetivo: <strong>${targetNote}</strong></p>`
+      : '';
   return `
+    ${objective}
     ${list}
     <div class="tuner-readout" id="tuner-readout" data-status="">
       <div class="tuner-readout__note">—</div>
@@ -114,7 +126,9 @@ function bodyGuitarOrVoice(mode) {
     <p class="tuner-hint">${
       mode === 'guitar'
         ? 'Tocá una cuerda. Se resalta la nota objetivo más cercana.'
-        : 'Cantá una nota sostenida.'
+        : targetNote
+          ? `Cantá ${targetNote} sostenida. Se pone en verde cuando coincide.`
+          : 'Cantá una nota sostenida.'
     }</p>
   `;
 }
@@ -202,8 +216,15 @@ function bodyPermissionGate(state) {
  */
 export async function renderTuner(container, opts = {}) {
   const params = parseQuery(opts.query);
-  let mode = params.mode && MODES.some((m) => m.id === params.mode) ? params.mode : 'guitar';
+  const target = parseTunerTarget(params);
+  const defaultMode = target.note ? 'voice' : 'guitar';
+  let mode = params.mode && MODES.some((m) => m.id === params.mode) ? params.mode : defaultMode;
   const songId = params.songId || null;
+
+  // Canonical (sharp-spelled) target so it matches frequencyToNote output,
+  // e.g. an incoming "Bb5" becomes { note: 'A#', octave: 5 }.
+  const targetCanonical = target.note ? frequencyToNote(noteToFrequency(target.note)) : null;
+  const targetLabel = targetCanonical ? `${targetCanonical.note}${targetCanonical.octave}` : null;
   let song = null;
   if (mode === 'song' && songId) {
     song = await fetchSongDetail(songId).catch(() => null);
@@ -223,6 +244,11 @@ export async function renderTuner(container, opts = {}) {
   container.innerHTML = `
     <div class="tuner-page fade-in">
       <header class="tuner-header">
+        ${
+          target.fromSongId
+            ? `<button class="btn btn--sm tuner-back" id="tuner-back">${icon('arrow-left', { size: 14 })} Volver a la canción</button>`
+            : ''
+        }
         <h1>Afinador <span class="badge--beta">BETA</span></h1>
         <p class="tuner-header__sub">El audio se procesa en tu dispositivo. No lo guardamos.</p>
       </header>
@@ -241,6 +267,11 @@ export async function renderTuner(container, opts = {}) {
   const tabsEl = container.querySelector('#tuner-tabs');
   const bodyEl = container.querySelector('#tuner-body');
 
+  const backBtn = container.querySelector('#tuner-back');
+  if (backBtn && target.fromSongId) {
+    backBtn.addEventListener('click', () => navigate('/song/' + target.fromSongId));
+  }
+
   function paintTabs() {
     for (const btn of tabsEl.querySelectorAll('button')) {
       btn.setAttribute('aria-selected', btn.dataset.mode === mode ? 'true' : 'false');
@@ -255,8 +286,9 @@ export async function renderTuner(container, opts = {}) {
       return;
     }
 
-    if (mode === 'guitar' || mode === 'voice') bodyEl.innerHTML = bodyGuitarOrVoice(mode);
-    else if (mode === 'song') bodyEl.innerHTML = bodySong(song);
+    if (mode === 'guitar' || mode === 'voice') {
+      bodyEl.innerHTML = bodyGuitarOrVoice(mode, mode === 'voice' ? targetLabel : null);
+    } else if (mode === 'song') bodyEl.innerHTML = bodySong(song);
     else if (mode === 'range') bodyEl.innerHTML = bodyRange(rangeStep, '');
 
     if (mode === 'range') {
@@ -291,12 +323,24 @@ export async function renderTuner(container, opts = {}) {
     if (hz === null) {
       renderReadout(bodyEl, { label: '—', hz: null, cents: null });
       setNeedle(bodyEl, 0, '');
+      const objEl = bodyEl.querySelector('#tuner-objective');
+      if (objEl) objEl.dataset.match = '';
       return;
     }
     const r = frequencyToNote(hz);
     if (!r) return;
     renderReadout(bodyEl, { label: `${r.note}${r.octave}`, hz, cents: r.cents });
     setNeedle(bodyEl, r.cents, colorFromCents(r.cents));
+    // When aiming for a target note, flag the objective as "ok" once the
+    // detected note matches name+octave and is within 10 cents.
+    if (targetCanonical) {
+      const matched =
+        r.note === targetCanonical.note &&
+        r.octave === targetCanonical.octave &&
+        Math.abs(r.cents) < 10;
+      const objEl = bodyEl.querySelector('#tuner-objective');
+      if (objEl) objEl.dataset.match = matched ? 'ok' : '';
+    }
   }
 
   function handlePitchSong({ hz }) {

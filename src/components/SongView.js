@@ -14,9 +14,15 @@ import {
   getVoiceColor,
   getVoiceBgColor,
   buildHighlightedHTML,
+  upgradeLegacySong,
+  rosterByCategory,
+  buildSyllableNotesHTML,
+  getVoiceLabel,
+  deriveReferenceKey,
 } from '../lib/voiceSystem.js';
-import { isAdmin } from '../lib/authStore.js';
+import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
+import { presetToSpeed, stepToward } from '../lib/autoscroll.js';
 
 const FONT_SIZE_KEY = 'hkn-lyrics-font-size';
 const FONT_STEP = 0.125; // rem
@@ -31,6 +37,9 @@ const AUTOSCROLL_SPEED_STEP = 0.05;
 const AUTOSCROLL_SPEED_DEFAULT = 0.5;
 const AUTOSCROLL_BASE_PX_PER_FRAME = 1.8;
 const AUTOSCROLL_COLLAPSE_DELAY = 1500;
+// Fracción del paso manual aplicada por frame al converger hacia el preset de
+// sección (más bajo = transición más suave). Ver Plan F.
+const AUTOSCROLL_CONVERGENCE_RATE = 0.5;
 
 // F6: Transposition
 const NOTES_SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -153,6 +162,10 @@ export async function renderSongView(container, songIdOrData) {
     }
   }
 
+  // Lectura dual: normaliza v1 → v2 en memoria (inerte para v2 y para el
+  // render de Letra/Acordes, que sigue leyendo text/chords/voiceRanges).
+  if (song) song = upgradeLegacySong(song);
+
   if (!song) {
     container.innerHTML = `
       <div class="empty-state fade-in">
@@ -168,9 +181,17 @@ export async function renderSongView(container, songIdOrData) {
 
   let fontSize = getFontSize();
   let activeVoice = 'all';
+  // viewMode: 'lyrics' | 'chords' | 'tono'. showChords se deriva para no tocar
+  // la rama de acordes existente.
+  let viewMode = 'lyrics';
   let showChords = false;
   let transposeSemitones = 0;
   let useFlats = false;
+  // Modo Tono: solo con el flag voz_tono. activeRosterId/activeCategory dirigen
+  // el disclosure categoría→persona del modo notas.
+  const tonoEnabled = isFeatureEnabled('voz_tono');
+  let activeCategory = null;
+  let activeRosterId = null;
 
   const voiceBadgeClass = getVoiceBadgeClass(song.voiceType);
   const voiceLabel = getVoiceTypeLabel(song.voiceType);
@@ -187,6 +208,10 @@ export async function renderSongView(container, songIdOrData) {
   const hasNav = !isPreview && (adjacent.prev || adjacent.next);
   const hasChords = songHasChords(song);
   const usedVoices = detectUsedVoices(song.sections || []);
+  // El modo Tono está disponible si el flag está activo y la canción tiene
+  // roster de voces. La fila toggle aparece si hay acordes o si hay Tono.
+  const tonoAvailable = tonoEnabled && (song.voiceRoster || []).length > 0;
+  const showToggle = hasChords || tonoAvailable;
 
   // Build voice filter chips — only show voices that exist in the song
   const voiceChipsHtml = VOICE_TYPES.filter((v) => usedVoices.has(v.id))
@@ -258,11 +283,12 @@ export async function renderSongView(container, songIdOrData) {
             <button class="font-controls__btn" id="font-increase" aria-label="Aumentar tamaño de letra">A+</button>
           </div>
           ${
-            hasChords
+            showToggle
               ? `
           <div class="chord-toggle" id="chord-toggle" style="margin-bottom: 0;">
             <button class="chord-toggle__btn chord-toggle__btn--active" data-mode="lyrics">Letra</button>
-            <button class="chord-toggle__btn" data-mode="chords">Acordes</button>
+            ${hasChords ? `<button class="chord-toggle__btn" data-mode="chords">Acordes</button>` : ''}
+            ${tonoAvailable ? `<button class="chord-toggle__btn" data-mode="tono">Tono</button>` : ''}
           </div>
           `
               : ''
@@ -341,16 +367,19 @@ export async function renderSongView(container, songIdOrData) {
       `
           : ''
       }
+
+      ${tonoAvailable ? renderTonoFilters(song) : ''}
       `
           : `
       ${
-        hasChords
+        showToggle
           ? `
       <!-- Chord Toggle (Preview mode) -->
       <div style="margin-bottom: var(--space-md);">
         <div class="chord-toggle" id="chord-toggle" style="margin-bottom: 0;">
           <button class="chord-toggle__btn chord-toggle__btn--active" data-mode="lyrics">Letra</button>
-          <button class="chord-toggle__btn" data-mode="chords">Acordes</button>
+          ${hasChords ? `<button class="chord-toggle__btn" data-mode="chords">Acordes</button>` : ''}
+          ${tonoAvailable ? `<button class="chord-toggle__btn" data-mode="tono">Tono</button>` : ''}
         </div>
       </div>
       `
@@ -361,7 +390,7 @@ export async function renderSongView(container, songIdOrData) {
 
       <!-- Lyrics -->
       <div class="lyrics" id="lyrics-content">
-        ${renderSections(song.sections || [], activeVoice, showChords, transposeSemitones, useFlats)}
+        ${renderSections(song.sections || [], activeVoice, showChords, transposeSemitones, useFlats, viewMode, activeRosterId, activeCategory)}
       </div>
 
       ${
@@ -397,6 +426,9 @@ export async function renderSongView(container, songIdOrData) {
         showChords,
         transposeSemitones,
         useFlats,
+        viewMode,
+        activeRosterId,
+        activeCategory,
       );
       if (!isPreview) applyFontSize(fontSize);
     }
@@ -406,14 +438,18 @@ export async function renderSongView(container, songIdOrData) {
   // lyrics reading; cejilla + transposition belong to chords. Cejilla stays
   // visible on chord-less songs since there is no chords mode to gate it.
   function applyModeVisibility() {
+    const isTono = viewMode === 'tono';
+    // El filtro por voz (Letra) y la fila de Tono se excluyen mutuamente.
     const voiceFilterEl = container.querySelector('#voice-part-filter');
-    if (voiceFilterEl) voiceFilterEl.style.display = showChords ? 'none' : '';
+    if (voiceFilterEl) voiceFilterEl.style.display = showChords || isTono ? 'none' : '';
     const lyricsExtrasEl = container.querySelector('#lyrics-extras');
     if (lyricsExtrasEl) lyricsExtrasEl.style.display = showChords ? 'none' : '';
     const cejillaEl = container.querySelector('#cejilla-control');
     if (cejillaEl) cejillaEl.style.display = showChords || !hasChords ? '' : 'none';
     const transposeEl = container.querySelector('#transpose-controls');
     if (transposeEl) transposeEl.style.display = showChords ? 'flex' : 'none';
+    const tonoFiltersEl = container.querySelector('#tono-filters');
+    if (tonoFiltersEl) tonoFiltersEl.style.display = isTono ? '' : 'none';
   }
 
   // Reset the voice filter to "Todos" so lyrics aren't left dimmed by a filter
@@ -428,19 +464,126 @@ export async function renderSongView(container, songIdOrData) {
     });
   }
 
+  // ── Tono mode: disclosure categoría → persona ──
+  function updateActiveVoiceHeading() {
+    const headingEl = container.querySelector('#tono-active-voice');
+    if (!headingEl) return;
+    if (!activeRosterId) {
+      headingEl.textContent = activeCategory ? 'Elegí una voz' : 'Elegí una categoría';
+      updateTuneAction();
+      return;
+    }
+    const voice = (song.voiceRoster || []).find((v) => v.id === activeRosterId);
+    headingEl.textContent = voice ? `Voz activa: ${voice.name}` : '';
+    updateTuneAction();
+  }
+
+  // Botón "Afinar · {nota}" — solo con activeRosterId, flag afinador_shortcut y
+  // un tono de referencia derivable. Degrada a nada si falta cualquiera de esos.
+  function updateTuneAction() {
+    const slot = container.querySelector('#tono-tune-action');
+    if (!slot) return;
+    const refNote =
+      activeRosterId && isFeatureEnabled('afinador_shortcut')
+        ? deriveReferenceKey(song, activeRosterId)
+        : null;
+    if (!refNote) {
+      slot.innerHTML = '';
+      return;
+    }
+    // refNote ya viene validado por isValidNote (sin caracteres HTML), pero
+    // escapamos por defensa en profundidad, consistente con el resto del render.
+    const safeRef = escapeHtml(refNote);
+    slot.innerHTML = `<button class="btn btn--sm" id="tune-voice" data-ref="${safeRef}">${icon('mic', { size: 14 })} Afinar · ${safeRef}</button>`;
+    slot.querySelector('#tune-voice').addEventListener('click', () => {
+      navigate(`/afinador?ref=${encodeURIComponent(refNote)}&from=${encodeURIComponent(song.id)}`);
+    });
+  }
+
+  function renderPersonRow() {
+    const rowEl = container.querySelector('#tono-person-row');
+    if (!rowEl) return;
+    if (!activeCategory) {
+      rowEl.innerHTML = '';
+      return;
+    }
+    const people = rosterByCategory(song, activeCategory);
+    rowEl.innerHTML = people
+      .map(
+        (p) => `
+        <button class="tono-chip tono-chip--person${p.id === activeRosterId ? ' tono-chip--active' : ''}" data-roster-id="${p.id}" aria-pressed="${p.id === activeRosterId}">
+          <span class="voice-filter__label-text">${escapeHtml(p.name)}</span>
+        </button>`,
+      )
+      .join('');
+    rowEl.querySelectorAll('[data-roster-id]').forEach((btn) => {
+      btn.addEventListener('click', () => selectPerson(btn.dataset.rosterId));
+    });
+  }
+
+  function selectPerson(rosterId) {
+    activeRosterId = rosterId;
+    container.querySelectorAll('#tono-person-row .tono-chip').forEach((c) => {
+      const isActive = c.dataset.rosterId === rosterId;
+      c.classList.toggle('tono-chip--active', isActive);
+      c.setAttribute('aria-pressed', String(isActive));
+    });
+    updateActiveVoiceHeading();
+    reRenderLyrics();
+  }
+
+  function selectCategory(category) {
+    activeCategory = category;
+    activeRosterId = null;
+    container.querySelectorAll('#tono-category-row .tono-chip').forEach((c) => {
+      const isActive = c.dataset.category === category;
+      c.classList.toggle('tono-chip--active', isActive);
+      c.setAttribute('aria-pressed', String(isActive));
+    });
+    renderPersonRow();
+    // Autoselección si la categoría tiene una sola persona.
+    const people = rosterByCategory(song, category);
+    if (people.length === 1) {
+      selectPerson(people[0].id);
+    } else {
+      updateActiveVoiceHeading();
+      reRenderLyrics();
+    }
+  }
+
+  // Al entrar a Tono sin selección previa, preseleccionar la primera categoría
+  // (y su persona si es única) para que el modo muestre algo de inmediato.
+  function ensureTonoSelection() {
+    if (activeCategory) {
+      updateActiveVoiceHeading();
+      return;
+    }
+    const categories = rosterCategories(song);
+    if (categories.length > 0) selectCategory(categories[0]);
+  }
+
+  if (tonoAvailable) {
+    container.querySelectorAll('#tono-category-row [data-category]').forEach((btn) => {
+      btn.addEventListener('click', () => selectCategory(btn.dataset.category));
+    });
+    updateActiveVoiceHeading();
+  }
+
   if (!isPreview) applyFontSize(fontSize);
   applyModeVisibility();
 
-  // Chord toggle — works in both normal and preview mode
-  if (hasChords) {
+  // Mode toggle (Letra / Acordes / Tono) — works in both normal and preview mode
+  if (showToggle) {
     container.querySelectorAll('[data-mode]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        showChords = btn.dataset.mode === 'chords';
+        viewMode = btn.dataset.mode;
+        showChords = viewMode === 'chords';
         container
           .querySelectorAll('.chord-toggle__btn')
           .forEach((c) => c.classList.toggle('chord-toggle__btn--active', c === btn));
         if (showChords) resetVoiceFilter();
         applyModeVisibility();
+        if (viewMode === 'tono') ensureTonoSelection();
         reRenderLyrics();
       });
     });
@@ -533,9 +676,49 @@ export async function renderSongView(container, songIdOrData) {
   }
 
   // ── Feature 1: Autoscroll FAB ──
-  setupAutoscroll(container);
+  setupAutoscroll(container, song.id);
 
   // Favorita lives on the song card cover in the list view now.
+}
+
+/**
+ * Categorías de voz presentes en el roster, en orden canónico.
+ * @param {object} song
+ * @returns {string[]}
+ */
+function rosterCategories(song) {
+  const order = ['soprano', 'contralto', 'tenor', 'bass'];
+  const present = new Set((song.voiceRoster || []).map((v) => v.category));
+  return order.filter((c) => present.has(c));
+}
+
+/**
+ * Render del modo Tono: fila de categorías + fila de personas (disclosure) +
+ * encabezado aria-live con la voz activa. Oculto hasta que el toggle entra en
+ * modo Tono (lo gestiona applyModeVisibility).
+ * @param {object} song
+ * @returns {string}
+ */
+function renderTonoFilters(song) {
+  const categories = rosterCategories(song);
+  const catChips = categories
+    .map(
+      (c) => `
+      <button class="tono-chip tono-chip--category" data-category="${c}" aria-pressed="false">
+        <span class="voice-filter__dot" style="background: var(--color-voice-${c})"></span>
+        <span class="voice-filter__label-text">${escapeHtml(getVoiceLabel(c))}</span>
+      </button>`,
+    )
+    .join('');
+  return `
+    <div class="lyrics__tono-filters" id="tono-filters" style="display: none;">
+      <div class="lyrics__filter-row" id="tono-category-row" role="group" aria-label="Categoría de voz">
+        ${catChips}
+      </div>
+      <div class="lyrics__filter-row" id="tono-person-row" role="group" aria-label="Voz"></div>
+      <p class="lyrics__tono-active" id="tono-active-voice" aria-live="polite"></p>
+      <div class="lyrics__tono-tune" id="tono-tune-action"></div>
+    </div>`;
 }
 
 /**
@@ -547,11 +730,16 @@ function renderSections(
   showChords = false,
   transposeSemitones = 0,
   useFlats = false,
+  viewMode = 'lyrics',
+  activeRosterId = null,
+  activeCategory = null,
 ) {
   return sections
     .map(
       (section) => `
-    <div class="lyrics__section lyrics__section--${section.type}">
+    <div class="lyrics__section lyrics__section--${section.type}"${
+      typeof section.speedPreset === 'number' ? ` data-speed-preset="${section.speedPreset}"` : ''
+    }>
       <div class="lyrics__section-label">${escapeHtml(section.label)}</div>
       ${(section.lines || [])
         .map((line) => {
@@ -564,6 +752,14 @@ function renderSections(
               ? `<span class="timing-guide__count">${guide.count}</span><span class="timing-guide__unit">${guide.unit}</span>${guide.extra ? `<span class="timing-guide__extra">${escapeHtml(guide.extra)}</span>` : ''}`
               : `<span class="timing-guide__extra">${escapeHtml(guide.extra)}</span>`;
             return `<div class="timing-guide">${guideContent}</div>`;
+          }
+
+          // ── Tono mode: notas por sílaba (ruby), excluyente de acordes ──
+          if (viewMode === 'tono' && activeRosterId) {
+            if (text.trim() === '') return `<p class="lyrics__line">&nbsp;</p>`;
+            const inner = buildSyllableNotesHTML(line, activeRosterId);
+            const catClass = activeCategory ? ` voice-text--${activeCategory}` : '';
+            return `<div class="lyrics__line lyrics__line--tono${catClass}">${inner}</div>`;
           }
 
           // ── Empty lines ──
@@ -726,9 +922,10 @@ function escapeHtml(str) {
 
 /* ─── Feature 1: Autoscroll ─── */
 
-function getAutoscrollSpeed() {
+function getAutoscrollSpeed(songId) {
   try {
-    const stored = localStorage.getItem(AUTOSCROLL_SPEED_KEY);
+    const perSong = songId && localStorage.getItem(`${AUTOSCROLL_SPEED_KEY}:${songId}`);
+    const stored = perSong ?? localStorage.getItem(AUTOSCROLL_SPEED_KEY);
     if (stored) {
       const val = Number.parseFloat(stored);
       if (val >= AUTOSCROLL_SPEED_MIN && val <= AUTOSCROLL_SPEED_MAX) return val;
@@ -739,9 +936,10 @@ function getAutoscrollSpeed() {
   return AUTOSCROLL_SPEED_DEFAULT;
 }
 
-function saveAutoscrollSpeed(speed) {
+function saveAutoscrollSpeed(speed, songId) {
   try {
-    localStorage.setItem(AUTOSCROLL_SPEED_KEY, speed.toString());
+    const key = songId ? `${AUTOSCROLL_SPEED_KEY}:${songId}` : AUTOSCROLL_SPEED_KEY;
+    localStorage.setItem(key, speed.toString());
   } catch (_e) {
     /* ignore */
   }
@@ -754,8 +952,10 @@ function speedToPercentLabel(speed) {
   return `${Math.round(speed * 100)}%`;
 }
 
-function setupAutoscroll(_container) {
-  let scrollSpeed = getAutoscrollSpeed();
+function setupAutoscroll(_container, songId) {
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let scrollSpeed = getAutoscrollSpeed(songId);
+  let targetSpeed = scrollSpeed;
   let isScrolling = false;
   let rafId = null;
   let ignoreScrollUntil = 0; // Debounce: ignore scroll events briefly after starting
@@ -775,6 +975,30 @@ function setupAutoscroll(_container) {
     </div>
   `;
   document.body.appendChild(fab);
+
+  // ── Velocidad objetivo por sección (speedPreset → targetSpeed) ──
+  // Las secciones sin data-speed-preset no se observan, así que targetSpeed
+  // permanece igual a scrollSpeed y la interpolación es un no-op (backward-compat).
+  const speedRange = { min: AUTOSCROLL_SPEED_MIN, max: AUTOSCROLL_SPEED_MAX };
+  const io = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const preset = Number.parseFloat(entry.target.getAttribute('data-speed-preset'));
+        const mapped = presetToSpeed(preset, speedRange);
+        if (mapped !== null) {
+          targetSpeed = mapped;
+          // Sin transición suave bajo reduced-motion: salto directo.
+          if (reducedMotion) {
+            scrollSpeed = targetSpeed;
+            updateSpeedLabel();
+          }
+        }
+      }
+    },
+    { threshold: 0.5 },
+  );
+  document.querySelectorAll('.lyrics__section[data-speed-preset]').forEach((el) => io.observe(el));
 
   const toggleBtn = fab.querySelector('#autoscroll-toggle');
   const iconEl = fab.querySelector('#autoscroll-icon');
@@ -818,6 +1042,21 @@ function setupAutoscroll(_container) {
       if (!isScrolling) return;
       const delta = now - lastTime;
       lastTime = now;
+      // Acercar suavemente scrollSpeed a la velocidad objetivo del preset de
+      // sección. Bajo reduced-motion no se interpola (el salto ya ocurrió al
+      // entrar la sección). Sin presets, targetSpeed === scrollSpeed → no-op.
+      if (!reducedMotion && scrollSpeed !== targetSpeed) {
+        const next = stepToward(
+          scrollSpeed,
+          targetSpeed,
+          AUTOSCROLL_SPEED_STEP * (delta / 16.67) * AUTOSCROLL_CONVERGENCE_RATE,
+        );
+        // Solo reescribir el label si el valor mostrado cambia (evita escritura
+        // de DOM por frame durante la convergencia).
+        const labelChanged = speedToPercentLabel(next) !== speedToPercentLabel(scrollSpeed);
+        scrollSpeed = next;
+        if (labelChanged) updateSpeedLabel();
+      }
       // 60fps baseline: pixels = basePx * speed * (delta / 16.67)
       accumulated += AUTOSCROLL_BASE_PX_PER_FRAME * scrollSpeed * (delta / 16.67);
 
@@ -876,7 +1115,9 @@ function setupAutoscroll(_container) {
     e.stopPropagation();
     scrollSpeed = Math.max(AUTOSCROLL_SPEED_MIN, scrollSpeed - AUTOSCROLL_SPEED_STEP);
     scrollSpeed = Math.round(scrollSpeed * 100) / 100;
-    saveAutoscrollSpeed(scrollSpeed);
+    // El ajuste manual gana sobre el preset hasta la próxima sección.
+    targetSpeed = scrollSpeed;
+    saveAutoscrollSpeed(scrollSpeed, songId);
     updateSpeedLabel();
     if (isScrolling) scheduleCollapse();
   });
@@ -885,7 +1126,9 @@ function setupAutoscroll(_container) {
     e.stopPropagation();
     scrollSpeed = Math.min(AUTOSCROLL_SPEED_MAX, scrollSpeed + AUTOSCROLL_SPEED_STEP);
     scrollSpeed = Math.round(scrollSpeed * 100) / 100;
-    saveAutoscrollSpeed(scrollSpeed);
+    // El ajuste manual gana sobre el preset hasta la próxima sección.
+    targetSpeed = scrollSpeed;
+    saveAutoscrollSpeed(scrollSpeed, songId);
     updateSpeedLabel();
     if (isScrolling) scheduleCollapse();
   });
@@ -917,6 +1160,7 @@ function setupAutoscroll(_container) {
   function cleanup() {
     stopScroll();
     clearTimeout(collapseTimer);
+    io.disconnect();
     fab.remove();
     window.removeEventListener('wheel', onUserScroll);
     window.removeEventListener('touchmove', onUserScroll);

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { resolveEnabledFlags } from '../../src/lib/featureFlags.js';
 
 const URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -57,6 +58,34 @@ export async function requireAdmin(req, sql) {
   const rows = await sql`SELECT is_admin FROM profiles WHERE id = ${user.id}`;
   if (!rows[0]?.is_admin) {
     const e = new Error('Forbidden');
+    e.status = 403;
+    throw e;
+  }
+  return user;
+}
+
+/**
+ * Require que el usuario tenga habilitado el feature flag `key`.
+ * Defensa en profundidad: no confiar solo en el gating de UI.
+ * @param {object} req
+ * @param {import('postgres').Sql} sql
+ * @param {string} key
+ * @returns {Promise<{id:string, email:string, [k:string]:any}>}
+ */
+export async function requireFlag(req, sql, key) {
+  const user = await requireUser(req);
+  const profileRows = await sql`SELECT username FROM profiles WHERE id = ${user.id}`;
+  const username = profileRows[0]?.username ?? null;
+  const catalog = await sql`SELECT key, enabled_global AS "enabledGlobal" FROM feature_flags`;
+  const assignments = await sql`
+    SELECT flag_key AS "flagKey", email, username
+    FROM feature_flag_users
+    WHERE lower(email) = lower(${user.email ?? ''})
+       OR lower(username) = lower(${username ?? ''})
+  `;
+  const enabled = resolveEnabledFlags(catalog, assignments, { email: user.email, username });
+  if (!enabled.includes(key)) {
+    const e = new Error('Feature not enabled');
     e.status = 403;
     throw e;
   }

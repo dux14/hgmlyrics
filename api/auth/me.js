@@ -1,6 +1,7 @@
 import sql from '../_lib/db.js';
 import { requireUser } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
+import { resolveEnabledFlags } from '../../src/lib/featureFlags.js';
 
 function isAdminFromEnv(email) {
   const list = (process.env.ADMIN_EMAILS || '')
@@ -45,7 +46,7 @@ export default withErrors(async (req, res) => {
     `;
   }
 
-  const rows = await sql`
+  let rows = await sql`
     SELECT id, username, display_name AS "displayName", bio, avatar_url AS "avatarUrl",
            voice_type AS "voiceType", voice_subtype AS "voiceSubtype",
            vocal_range_low AS "vocalRangeLow", vocal_range_high AS "vocalRangeHigh",
@@ -64,10 +65,28 @@ export default withErrors(async (req, res) => {
       res.status(500).json({ error: 'Could not create or fetch profile' });
       return;
     }
+    rows = retry;
   }
+
+  // Feature flags habilitados para este usuario.
+  const profile = rows[0];
+  const [flagCatalog, flagAssignments] = await Promise.all([
+    sql`SELECT key, enabled_global AS "enabledGlobal" FROM feature_flags`,
+    sql`
+      SELECT flag_key AS "flagKey", email, username
+      FROM feature_flag_users
+      WHERE lower(email) = lower(${user.email ?? ''})
+         OR lower(username) = lower(${profile?.username ?? ''})
+    `,
+  ]);
+  const flags = resolveEnabledFlags(flagCatalog, flagAssignments, {
+    email: user.email,
+    username: profile?.username,
+  });
 
   res.status(200).json({
     user: { id: user.id, email: user.email },
-    profile: rows[0],
+    profile,
+    flags,
   });
 });

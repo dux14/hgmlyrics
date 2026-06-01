@@ -444,6 +444,19 @@ export function buildSyllableNotesHTML(line, rosterId) {
 }
 
 /**
+ * Grupos (rango+nota) de una voz en una línea, ordenados por start.
+ * @param {object} line @param {string} voiceId
+ * @returns {Array<{start:number,end:number,note:string|null}>}
+ */
+export function groupsForVoice(line, voiceId) {
+  const groups = Array.isArray(line?.groups) ? line.groups : [];
+  return groups
+    .filter((g) => g.voiceId === voiceId)
+    .map((g) => ({ start: g.start, end: g.end, note: g.note ?? null }))
+    .sort((a, b) => a.start - b.start);
+}
+
+/**
  * @param {object} song @param {string} category
  * @returns {Array} entradas del roster de esa categoría (en orden original).
  */

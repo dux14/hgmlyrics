@@ -506,6 +506,7 @@ describe('buildSyllableNotesHTML', () => {
 });
 
 import { deriveReferenceKey, rosterByCategory } from '../src/lib/voiceSystem.js';
+import { groupsForVoice } from '../src/lib/voiceSystem.js';
 
 describe('rosterByCategory', () => {
   it('filtra el roster por categoría conservando orden', () => {
@@ -619,5 +620,37 @@ describe('deriveVoiceRanges', () => {
 
   it('sin voiceLines ni voiceRanges: devuelve []', () => {
     expect(deriveVoiceRanges({ text: 'abc' }, roster)).toEqual([]);
+  });
+});
+
+describe('groupsForVoice', () => {
+  const line = {
+    text: 'Santo, Santo es el Señor',
+    groups: [
+      { start: 9, end: 14, voiceId: 'sop1', note: 'A3' },
+      { start: 0, end: 5, voiceId: 'sop1', note: 'B3' },
+      { start: 0, end: 5, voiceId: 'ten1', note: 'D3' },
+    ],
+  };
+
+  it('filtra por voz y ordena por start', () => {
+    expect(groupsForVoice(line, 'sop1')).toEqual([
+      { start: 0, end: 5, note: 'B3' },
+      { start: 9, end: 14, note: 'A3' },
+    ]);
+  });
+
+  it('devuelve [] si la voz no canta en la línea', () => {
+    expect(groupsForVoice(line, 'baj1')).toEqual([]);
+  });
+
+  it('tolera línea sin groups', () => {
+    expect(groupsForVoice({ text: 'x' }, 'sop1')).toEqual([]);
+    expect(groupsForVoice(null, 'sop1')).toEqual([]);
+  });
+
+  it('normaliza note ausente a null', () => {
+    const l = { groups: [{ start: 0, end: 2, voiceId: 'sop1' }] };
+    expect(groupsForVoice(l, 'sop1')).toEqual([{ start: 0, end: 2, note: null }]);
   });
 });

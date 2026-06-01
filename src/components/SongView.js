@@ -915,9 +915,10 @@ function escapeHtml(str) {
 
 /* ─── Feature 1: Autoscroll ─── */
 
-function getAutoscrollSpeed() {
+function getAutoscrollSpeed(songId) {
   try {
-    const stored = localStorage.getItem(AUTOSCROLL_SPEED_KEY);
+    const perSong = songId && localStorage.getItem(`${AUTOSCROLL_SPEED_KEY}:${songId}`);
+    const stored = perSong ?? localStorage.getItem(AUTOSCROLL_SPEED_KEY);
     if (stored) {
       const val = Number.parseFloat(stored);
       if (val >= AUTOSCROLL_SPEED_MIN && val <= AUTOSCROLL_SPEED_MAX) return val;
@@ -928,9 +929,10 @@ function getAutoscrollSpeed() {
   return AUTOSCROLL_SPEED_DEFAULT;
 }
 
-function saveAutoscrollSpeed(speed) {
+function saveAutoscrollSpeed(speed, songId) {
   try {
-    localStorage.setItem(AUTOSCROLL_SPEED_KEY, speed.toString());
+    const key = songId ? `${AUTOSCROLL_SPEED_KEY}:${songId}` : AUTOSCROLL_SPEED_KEY;
+    localStorage.setItem(key, speed.toString());
   } catch (_e) {
     /* ignore */
   }

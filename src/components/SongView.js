@@ -22,6 +22,7 @@ import {
 } from '../lib/voiceSystem.js';
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
+import { presetToSpeed, stepToward } from '../lib/autoscroll.js';
 
 const FONT_SIZE_KEY = 'hkn-lyrics-font-size';
 const FONT_STEP = 0.125; // rem
@@ -668,7 +669,7 @@ export async function renderSongView(container, songIdOrData) {
   }
 
   // ── Feature 1: Autoscroll FAB ──
-  setupAutoscroll(container);
+  setupAutoscroll(container, song.id);
 
   // Favorita lives on the song card cover in the list view now.
 }
@@ -942,8 +943,10 @@ function speedToPercentLabel(speed) {
   return `${Math.round(speed * 100)}%`;
 }
 
-function setupAutoscroll(_container) {
-  let scrollSpeed = getAutoscrollSpeed();
+function setupAutoscroll(_container, songId) {
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let scrollSpeed = getAutoscrollSpeed(songId);
+  let targetSpeed = scrollSpeed;
   let isScrolling = false;
   let rafId = null;
   let ignoreScrollUntil = 0; // Debounce: ignore scroll events briefly after starting
@@ -963,6 +966,30 @@ function setupAutoscroll(_container) {
     </div>
   `;
   document.body.appendChild(fab);
+
+  // ── Velocidad objetivo por sección (speedPreset → targetSpeed) ──
+  // Las secciones sin data-speed-preset no se observan, así que targetSpeed
+  // permanece igual a scrollSpeed y la interpolación es un no-op (backward-compat).
+  const speedRange = { min: AUTOSCROLL_SPEED_MIN, max: AUTOSCROLL_SPEED_MAX };
+  const io = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const preset = Number.parseFloat(entry.target.getAttribute('data-speed-preset'));
+        const mapped = presetToSpeed(preset, speedRange);
+        if (mapped !== null) {
+          targetSpeed = mapped;
+          // Sin transición suave bajo reduced-motion: salto directo.
+          if (reducedMotion) {
+            scrollSpeed = targetSpeed;
+            updateSpeedLabel();
+          }
+        }
+      }
+    },
+    { threshold: 0.5 },
+  );
+  document.querySelectorAll('.lyrics__section[data-speed-preset]').forEach((el) => io.observe(el));
 
   const toggleBtn = fab.querySelector('#autoscroll-toggle');
   const iconEl = fab.querySelector('#autoscroll-icon');
@@ -1006,6 +1033,17 @@ function setupAutoscroll(_container) {
       if (!isScrolling) return;
       const delta = now - lastTime;
       lastTime = now;
+      // Acercar suavemente scrollSpeed a la velocidad objetivo del preset de
+      // sección. Bajo reduced-motion no se interpola (el salto ya ocurrió al
+      // entrar la sección). Sin presets, targetSpeed === scrollSpeed → no-op.
+      if (!reducedMotion && scrollSpeed !== targetSpeed) {
+        scrollSpeed = stepToward(
+          scrollSpeed,
+          targetSpeed,
+          AUTOSCROLL_SPEED_STEP * (delta / 16.67) * 0.5,
+        );
+        updateSpeedLabel();
+      }
       // 60fps baseline: pixels = basePx * speed * (delta / 16.67)
       accumulated += AUTOSCROLL_BASE_PX_PER_FRAME * scrollSpeed * (delta / 16.67);
 
@@ -1064,7 +1102,9 @@ function setupAutoscroll(_container) {
     e.stopPropagation();
     scrollSpeed = Math.max(AUTOSCROLL_SPEED_MIN, scrollSpeed - AUTOSCROLL_SPEED_STEP);
     scrollSpeed = Math.round(scrollSpeed * 100) / 100;
-    saveAutoscrollSpeed(scrollSpeed);
+    // El ajuste manual gana sobre el preset hasta la próxima sección.
+    targetSpeed = scrollSpeed;
+    saveAutoscrollSpeed(scrollSpeed, songId);
     updateSpeedLabel();
     if (isScrolling) scheduleCollapse();
   });
@@ -1073,7 +1113,9 @@ function setupAutoscroll(_container) {
     e.stopPropagation();
     scrollSpeed = Math.min(AUTOSCROLL_SPEED_MAX, scrollSpeed + AUTOSCROLL_SPEED_STEP);
     scrollSpeed = Math.round(scrollSpeed * 100) / 100;
-    saveAutoscrollSpeed(scrollSpeed);
+    // El ajuste manual gana sobre el preset hasta la próxima sección.
+    targetSpeed = scrollSpeed;
+    saveAutoscrollSpeed(scrollSpeed, songId);
     updateSpeedLabel();
     if (isScrolling) scheduleCollapse();
   });
@@ -1105,6 +1147,7 @@ function setupAutoscroll(_container) {
   function cleanup() {
     stopScroll();
     clearTimeout(collapseTimer);
+    io.disconnect();
     fab.remove();
     window.removeEventListener('wheel', onUserScroll);
     window.removeEventListener('touchmove', onUserScroll);

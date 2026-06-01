@@ -133,7 +133,14 @@ function bodyGuitarOrVoice(mode, targetNote) {
   `;
 }
 
-function bodySong(song) {
+/**
+ * Render the "Canción" tab body.
+ * @param {{ title: string, key?: string }} song - Song data.
+ * @param {string|null} [targetLabel] - Optional target note label (e.g. "D3"). When provided,
+ *   shows an "Objetivo" callout and marks the matching scale `<li>` with `data-target="true"`.
+ * @returns {string} HTML string.
+ */
+export function bodySong(song, targetLabel = null) {
   if (!song?.key) {
     return `
       <div class="tuner-empty">
@@ -143,12 +150,20 @@ function bodySong(song) {
     `;
   }
   const scale = getScaleNotes(song.key);
+  // pitch-class del objetivo = label sin la octava final (D3 -> D, F#3 -> F#).
+  const targetPc = targetLabel ? targetLabel.replace(/\d+$/, '') : null;
+  const objective = targetLabel
+    ? `<p class="tuner-objective" id="tuner-objective">Objetivo de tu voz: <strong>${targetLabel}</strong></p>`
+    : '';
   return `
     <div class="tuner-song">
       <h2 class="tuner-song__title">${song.title}</h2>
       <p class="tuner-song__key">Tono: <strong>${song.key}</strong></p>
+      ${objective}
       <ul class="tuner-scale" id="tuner-scale">
-        ${scale.map((n) => `<li data-pc="${n}">${n}</li>`).join('')}
+        ${scale
+          .map((n) => `<li data-pc="${n}"${n === targetPc ? ' data-target="true"' : ''}>${n}</li>`)
+          .join('')}
       </ul>
     </div>
     <div class="tuner-readout" id="tuner-readout" data-status="">
@@ -156,7 +171,11 @@ function bodySong(song) {
       <div class="tuner-readout__meta">— Hz · —¢</div>
     </div>
     ${renderGauge()}
-    <p class="tuner-hint">Verde = la nota pertenece a <em>${song.key}</em>. Rojo = fuera de escala.</p>
+    <p class="tuner-hint">${
+      targetLabel
+        ? `Cantá <strong>${targetLabel}</strong>. Se pone verde al coincidir. Verde claro = nota en escala de ${song.key}.`
+        : `Verde = la nota pertenece a <em>${song.key}</em>. Rojo = fuera de escala.`
+    }</p>
   `;
 }
 
@@ -288,7 +307,7 @@ export async function renderTuner(container, opts = {}) {
 
     if (mode === 'guitar' || mode === 'voice') {
       bodyEl.innerHTML = bodyGuitarOrVoice(mode, mode === 'voice' ? targetLabel : null);
-    } else if (mode === 'song') bodyEl.innerHTML = bodySong(song);
+    } else if (mode === 'song') bodyEl.innerHTML = bodySong(song, targetLabel);
     else if (mode === 'range') bodyEl.innerHTML = bodyRange(rangeStep, '');
 
     if (mode === 'range') {

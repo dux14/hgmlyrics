@@ -10,7 +10,7 @@ describe('api/songs/[id].js server-side v2 validation', () => {
 
   it('importa validateSongV2 desde voiceSystem', () => {
     expect(src).toMatch(
-      /import\s*\{\s*validateSongV2\s*\}\s*from\s*['"]\.\.\/\.\.\/src\/lib\/voiceSystem\.js['"]/,
+      /import\s*\{[^}]*validateSongV2[^}]*\}\s*from\s*['"]\.\.\/\.\.\/src\/lib\/voiceSystem\.js['"]/,
     );
   });
 
@@ -35,7 +35,7 @@ describe('api/songs/index.js server-side v2 validation (create)', () => {
   const src = readFileSync(resolve(process.cwd(), 'api/songs/index.js'), 'utf8');
 
   it('importa validateSongV2 y valida en create cuando schemaVersion === 2', () => {
-    expect(src).toMatch(/import\s*\{\s*validateSongV2\s*\}/);
+    expect(src).toMatch(/import\s*\{[^}]*validateSongV2[^}]*\}/);
     expect(src).toMatch(/if\s*\(\s*s\.schemaVersion\s*===\s*2\s*\)/);
     expect(src).toMatch(/validateSongV2\(\s*s\s*\)/);
   });
@@ -44,5 +44,20 @@ describe('api/songs/index.js server-side v2 validation (create)', () => {
     expect(src).toMatch(/voice_roster/);
     expect(src).toMatch(/schema_version/);
     expect(src).toMatch(/sql\.json\(s\.voiceRoster/);
+  });
+});
+
+describe('api server-side v3 validation', () => {
+  const idSrc = readFileSync(resolve(process.cwd(), 'api/songs/[id].js'), 'utf8');
+  const createSrc = readFileSync(resolve(process.cwd(), 'api/songs/index.js'), 'utf8');
+
+  it('[id].js importa y valida v3', () => {
+    expect(idSrc).toMatch(/validateSongV3/);
+    expect(idSrc).toMatch(/s\.schemaVersion\s*===\s*3/);
+  });
+
+  it('index.js importa y valida v3 en create', () => {
+    expect(createSrc).toMatch(/validateSongV3/);
+    expect(createSrc).toMatch(/s\.schemaVersion\s*===\s*3/);
   });
 });

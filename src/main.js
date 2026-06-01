@@ -169,9 +169,10 @@ async function boot() {
 
   guardedRoute(
     '/admin/edit/:id',
-    ({ params }) => {
+    ({ params, query }) => {
       hideFilterBar();
-      renderSongEditor(mainContent, params.id);
+      const from = new URLSearchParams(query || '').get('from');
+      renderSongEditor(mainContent, params.id, { from });
     },
     { adminOnly: true },
   );

@@ -3,6 +3,7 @@ import { requireAdmin } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { invalidateListCache } from './index.js';
 import { isValidKey } from '../../src/lib/musicKeys.js';
+import { validateSongV2 } from '../../src/lib/voiceSystem.js';
 
 function normalizeKey(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -46,8 +47,16 @@ async function update(req, res, id) {
   await requireAdmin(req, sql);
   const s = req.body ?? {};
   const key = normalizeKey(s.key);
-  // TODO(Plan D): validar `voiceRoster`/`sections` v2 server-side con validateSongV2
-  // (+ límite de tamaño del JSONB) antes de persistir.
+  // Validación server-side de canciones v2 (la validación del editor en cliente
+  // no es un control de seguridad). v1 (schemaVersion !== 2) conserva su comportamiento.
+  if (s.schemaVersion === 2) {
+    try {
+      validateSongV2(s);
+    } catch (e) {
+      res.status(400).json({ error: e.message });
+      return;
+    }
+  }
   const result = await sql`
     UPDATE songs SET
       title = ${s.title},

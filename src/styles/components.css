@@ -1292,6 +1292,17 @@
   min-height: 1em;
 }
 
+/* El token tenor en tema claro (#b58900) queda en 3.2:1 sobre fondo blanco al
+   tamaño pequeño de la nota (<4.5:1 WCAG AA). Oscurecemos SOLO la nota ruby en
+   tema claro — no el token global, para no alterar el resaltado de voces v1.
+   En tema oscuro el token (#ffe082) ya cumple, así que se restaura. */
+.lyrics__line--tono.voice-text--tenor .syll__note {
+  color: #8a6800;
+}
+[data-theme='dark'] .lyrics__line--tono.voice-text--tenor .syll__note {
+  color: var(--color-voice-tenor);
+}
+
 /* El texto de la sílaba se mantiene en el color de lectura normal; solo la
    nota usa el color de la voz para garantizar contraste de la letra. */
 .lyrics__line--tono .syll__text {

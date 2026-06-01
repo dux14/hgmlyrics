@@ -343,6 +343,50 @@ export function validateSongV2(song) {
 }
 
 /**
+ * Valida una canción v3 (modelo por grupos). No muta. Lanza Error al 1er problema.
+ * `note`/`referenceKey` admiten null. Usa comparación estricta (eqeqeq).
+ * @param {object} song @returns {true}
+ */
+export function validateSongV3(song) {
+  if (!song || song.schemaVersion !== 3) throw new Error('schemaVersion debe ser 3');
+
+  const roster = song.voiceRoster || [];
+  const ids = new Set();
+  for (const v of roster) {
+    if (!CANONICAL_VOICE_ORDER.includes(v.category)) {
+      throw new Error(`category inválida en roster: ${v.category}`);
+    }
+    if (ids.has(v.id)) throw new Error(`id de roster duplicado: ${v.id}`);
+    ids.add(v.id);
+    if (v.referenceKey !== null && v.referenceKey !== undefined && !isValidNote(v.referenceKey)) {
+      throw new Error(`referenceKey (nota) inválida: ${v.referenceKey}`);
+    }
+  }
+
+  for (const section of song.sections || []) {
+    for (const line of section.lines || []) {
+      const len = (line.text || '').length;
+      for (const g of line.groups || []) {
+        if (!(g.start >= 0 && g.end > g.start && g.end <= len)) {
+          throw new Error('group fuera de rango');
+        }
+        if (!ids.has(g.voiceId)) {
+          throw new Error(`group referencia roster inexistente: ${g.voiceId}`);
+        }
+        if (g.note !== null && g.note !== undefined && !isValidNote(g.note)) {
+          throw new Error(`nota inválida: ${g.note}`);
+        }
+      }
+      for (const c of line.chords || []) {
+        if (!(c.pos >= 0 && c.pos <= len)) throw new Error('chord pos fuera de rango');
+        if (typeof c.ch !== 'string' || c.ch.trim() === '') throw new Error('chord vacío');
+      }
+    }
+  }
+  return true;
+}
+
+/**
  * Deriva los voiceRanges (rangos de carácter por categoría) para el coloreado
  * del modo Letra, a partir de syllables + voiceLines. Agrupa sílabas contiguas
  * con el mismo conjunto de categorías; ignora extensores de melisma (ancho cero).

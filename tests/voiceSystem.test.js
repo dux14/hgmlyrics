@@ -656,6 +656,96 @@ describe('groupsForVoice', () => {
   });
 });
 
+import { validateSongV3 } from '../src/lib/voiceSystem.js';
+
+describe('validateSongV3', () => {
+  const base = () => ({
+    schemaVersion: 3,
+    voiceRoster: [{ id: 'sop1', name: 'Voz 1', category: 'soprano', referenceKey: 'B3' }],
+    sections: [
+      {
+        lines: [
+          {
+            text: 'Santo',
+            groups: [{ start: 0, end: 5, voiceId: 'sop1', note: 'B3' }],
+            chords: [{ pos: 0, ch: 'D' }],
+          },
+        ],
+      },
+    ],
+  });
+
+  it('acepta una canción v3 válida', () => {
+    expect(validateSongV3(base())).toBe(true);
+  });
+
+  it('rechaza schemaVersion !== 3', () => {
+    const s = base();
+    s.schemaVersion = 2;
+    expect(() => validateSongV3(s)).toThrow(/schemaVersion/);
+  });
+
+  it('rechaza category de roster inválida', () => {
+    const s = base();
+    s.voiceRoster[0].category = 'mezzo';
+    expect(() => validateSongV3(s)).toThrow(/category/);
+  });
+
+  it('rechaza id de roster duplicado', () => {
+    const s = base();
+    s.voiceRoster.push({ id: 'sop1', name: 'dup', category: 'tenor' });
+    expect(() => validateSongV3(s)).toThrow(/duplicado/);
+  });
+
+  it('rechaza referenceKey inválida', () => {
+    const s = base();
+    s.voiceRoster[0].referenceKey = 'H9';
+    expect(() => validateSongV3(s)).toThrow(/referenceKey/);
+  });
+
+  it('rechaza group fuera de rango', () => {
+    const s = base();
+    s.sections[0].lines[0].groups[0].end = 99;
+    expect(() => validateSongV3(s)).toThrow(/group fuera de rango/);
+  });
+
+  it('rechaza group start >= end', () => {
+    const s = base();
+    s.sections[0].lines[0].groups[0] = { start: 3, end: 3, voiceId: 'sop1', note: null };
+    expect(() => validateSongV3(s)).toThrow(/group fuera de rango/);
+  });
+
+  it('rechaza group con voiceId inexistente', () => {
+    const s = base();
+    s.sections[0].lines[0].groups[0].voiceId = 'ghost';
+    expect(() => validateSongV3(s)).toThrow(/roster inexistente/);
+  });
+
+  it('rechaza nota inválida en group', () => {
+    const s = base();
+    s.sections[0].lines[0].groups[0].note = 'X1';
+    expect(() => validateSongV3(s)).toThrow(/nota inválida/);
+  });
+
+  it('acepta note null en group', () => {
+    const s = base();
+    s.sections[0].lines[0].groups[0].note = null;
+    expect(validateSongV3(s)).toBe(true);
+  });
+
+  it('rechaza chord pos fuera de rango', () => {
+    const s = base();
+    s.sections[0].lines[0].chords[0].pos = 50;
+    expect(() => validateSongV3(s)).toThrow(/chord pos/);
+  });
+
+  it('rechaza chord vacío', () => {
+    const s = base();
+    s.sections[0].lines[0].chords[0].ch = '   ';
+    expect(() => validateSongV3(s)).toThrow(/chord vacío/);
+  });
+});
+
 describe('firstNoteForVoice / tonoGeneralForVoice', () => {
   const song = {
     voiceRoster: [

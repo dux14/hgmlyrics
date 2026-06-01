@@ -19,6 +19,7 @@ import {
   getScaleNotes,
   GUITAR_STANDARD,
   parseTunerTarget,
+  matchesTarget,
 } from '../lib/notes.js';
 import { fetchSongDetail } from '../lib/store.js';
 import { getSession, refreshProfile } from '../lib/authStore.js';
@@ -350,15 +351,9 @@ export async function renderTuner(container, opts = {}) {
     if (!r) return;
     renderReadout(bodyEl, { label: `${r.note}${r.octave}`, hz, cents: r.cents });
     setNeedle(bodyEl, r.cents, colorFromCents(r.cents));
-    // When aiming for a target note, flag the objective as "ok" once the
-    // detected note matches name+octave and is within 10 cents.
     if (targetCanonical) {
-      const matched =
-        r.note === targetCanonical.note &&
-        r.octave === targetCanonical.octave &&
-        Math.abs(r.cents) < 10;
       const objEl = bodyEl.querySelector('#tuner-objective');
-      if (objEl) objEl.dataset.match = matched ? 'ok' : '';
+      if (objEl) objEl.dataset.match = matchesTarget(r, targetCanonical) ? 'ok' : '';
     }
   }
 
@@ -390,6 +385,10 @@ export async function renderTuner(container, opts = {}) {
     }
     const readout = bodyEl.querySelector('#tuner-readout');
     if (readout) readout.dataset.scale = inScale ? 'in' : 'out';
+    if (targetCanonical) {
+      const objEl = bodyEl.querySelector('#tuner-objective');
+      if (objEl) objEl.dataset.match = matchesTarget(r, targetCanonical) ? 'ok' : '';
+    }
   }
 
   function handlePitchRange({ hz }) {

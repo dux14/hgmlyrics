@@ -245,7 +245,7 @@ function uid() {
  * @param {HTMLElement} container
  * @param {string} [editId]
  */
-export async function renderSongEditor(container, editId) {
+export async function renderSongEditor(container, editId, { from = null } = {}) {
   let existingSong = null;
 
   if (editId) {
@@ -264,7 +264,7 @@ export async function renderSongEditor(container, editId) {
       `;
       container
         .querySelector('#editor-back-home')
-        ?.addEventListener('click', () => navigate('/admin/edit'));
+        ?.addEventListener('click', () => navigate(from ? '/song/' + from : '/admin/edit'));
       return;
     }
   }
@@ -1559,7 +1559,9 @@ export async function renderSongEditor(container, editId) {
   renderBlocks();
 
   // ─── Cancel ───
-  container.querySelector('#editor-cancel').addEventListener('click', () => navigate('/admin'));
+  container
+    .querySelector('#editor-cancel')
+    .addEventListener('click', () => navigate(from ? '/song/' + from : '/admin'));
 
   // ─── Delete ───
   if (existingSong) {
@@ -1572,7 +1574,7 @@ export async function renderSongEditor(container, editId) {
   container
     .querySelector('#editor-save')
     .addEventListener('click', () =>
-      handleSave(container, existingSong, blocks, voiceLinkItems, { v2Enabled, voiceRoster }),
+      handleSave(container, existingSong, blocks, voiceLinkItems, { v2Enabled, voiceRoster, from }),
     );
 }
 
@@ -1747,7 +1749,7 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
     }
 
     await refreshData();
-    navigate(existingSong ? '/admin/edit' : '/admin');
+    navigate(postSaveTarget({ from: v2.from || null, isNew: !existingSong }));
     showToast('Canción guardada correctamente');
   } catch (err) {
     console.error(err);

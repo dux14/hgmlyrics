@@ -244,6 +244,7 @@ function uid() {
  * Render the block-based song editor
  * @param {HTMLElement} container
  * @param {string} [editId]
+ * @param {{from?: string|null}} [opts] - Si viene `from`, al guardar/cancelar se vuelve a /song/<from>.
  */
 export async function renderSongEditor(container, editId, { from = null } = {}) {
   let existingSong = null;

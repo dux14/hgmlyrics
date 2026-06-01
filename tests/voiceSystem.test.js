@@ -211,3 +211,56 @@ describe('isValidNote', () => {
     }
   });
 });
+
+import { upgradeLegacySong } from '../src/lib/voiceSystem.js';
+
+describe('upgradeLegacySong', () => {
+  it('devuelve la canción intacta si ya es v2', () => {
+    const v2 = { schemaVersion: 2, voiceRoster: [], sections: [] };
+    expect(upgradeLegacySong(v2)).toBe(v2);
+  });
+
+  it('deriva roster desde las categorías usadas en voiceRanges', () => {
+    const v1 = {
+      sections: [
+        {
+          type: 'verse',
+          label: 'E1',
+          lines: [
+            { text: 'Santo', voiceRanges: [{ start: 0, end: 5, voices: ['soprano', 'tenor'] }] },
+          ],
+        },
+      ],
+    };
+    const up = upgradeLegacySong(v1);
+    expect(up.schemaVersion).toBe(2);
+    const cats = up.voiceRoster.map((v) => v.category).sort();
+    expect(cats).toEqual(['soprano', 'tenor']);
+    // ids estables = category cuando hay una sola persona por categoría
+    expect(up.voiceRoster.find((v) => v.category === 'soprano').id).toBe('soprano');
+  });
+
+  it('convierte voiceRanges a voiceLines sin notas, sobre sílaba única por rango', () => {
+    const v1 = {
+      sections: [
+        {
+          type: 'verse',
+          label: 'E1',
+          lines: [{ text: 'Santo', voiceRanges: [{ start: 0, end: 5, voices: ['soprano'] }] }],
+        },
+      ],
+    };
+    const up = upgradeLegacySong(v1);
+    const line = up.sections[0].lines[0];
+    expect(line.text).toBe('Santo'); // intacto
+    expect(line.syllables).toEqual([{ start: 0, end: 5 }]);
+    expect(line.voiceLines.soprano.sungSyllables).toEqual([0]);
+    expect(line.voiceLines.soprano.notes).toEqual([null]);
+  });
+
+  it('no falla con líneas sin voiceRanges', () => {
+    const v1 = { sections: [{ type: 'verse', label: 'E', lines: [{ text: 'la la' }] }] };
+    const up = upgradeLegacySong(v1);
+    expect(up.sections[0].lines[0].voiceLines).toEqual({});
+  });
+});

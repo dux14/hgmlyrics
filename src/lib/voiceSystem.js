@@ -233,3 +233,52 @@ const NOTE_RE = /^[A-G][#b]?[0-7]$/;
 export function isValidNote(value) {
   return typeof value === 'string' && NOTE_RE.test(value);
 }
+
+/**
+ * Adaptador de lectura: convierte una canción v1 (4 voces fijas, voiceRanges)
+ * en estructura v2 EN MEMORIA. No persiste. Idempotente para v2.
+ * @param {object} song
+ * @returns {object} canción v2
+ */
+export function upgradeLegacySong(song) {
+  if (!song || song.schemaVersion === 2) return song;
+
+  const usedCategories = new Set();
+  for (const section of song.sections || []) {
+    for (const line of section.lines || []) {
+      for (const r of line.voiceRanges || []) {
+        for (const v of r.voices || []) {
+          if (VALID_VOICE_IDS.includes(v)) usedCategories.add(v);
+        }
+      }
+    }
+  }
+
+  const voiceRoster = CANONICAL_VOICE_ORDER.filter((c) => usedCategories.has(c)).map(
+    (category) => ({
+      id: category, // una persona por categoría → id = category
+      name: getVoiceLabel(category),
+      category,
+    }),
+  );
+
+  const sections = (song.sections || []).map((section) => ({
+    ...section,
+    lines: (section.lines || []).map((line) => {
+      const ranges = line.voiceRanges || [];
+      const syllables = ranges.map((r) => ({ start: r.start, end: r.end }));
+      const voiceLines = {};
+      ranges.forEach((r, i) => {
+        for (const v of r.voices || []) {
+          if (!VALID_VOICE_IDS.includes(v)) continue;
+          if (!voiceLines[v]) voiceLines[v] = { sungSyllables: [], notes: [] };
+          voiceLines[v].sungSyllables.push(i);
+          voiceLines[v].notes.push(null);
+        }
+      });
+      return { ...line, syllables, voiceLines };
+    }),
+  }));
+
+  return { ...song, schemaVersion: 2, voiceRoster, sections };
+}

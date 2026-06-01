@@ -7,6 +7,7 @@ import {
   nearestString,
   GUITAR_STANDARD,
   parseTunerTarget,
+  matchesTarget,
 } from '../src/lib/notes.js';
 
 describe('noteToMidi', () => {
@@ -135,5 +136,24 @@ describe('parseTunerTarget', () => {
   });
   it('params vacíos', () => {
     expect(parseTunerTarget({})).toEqual({ note: null, fromSongId: null });
+  });
+});
+
+describe('matchesTarget', () => {
+  const target = { note: 'D', octave: 3 };
+  it('true cuando nota+octava coinciden y |cents| < 10', () => {
+    expect(matchesTarget({ note: 'D', octave: 3, cents: 4 }, target)).toBe(true);
+    expect(matchesTarget({ note: 'D', octave: 3, cents: -9 }, target)).toBe(true);
+  });
+  it('false cuando los cents se pasan de 10', () => {
+    expect(matchesTarget({ note: 'D', octave: 3, cents: 12 }, target)).toBe(false);
+  });
+  it('false cuando difiere nota u octava', () => {
+    expect(matchesTarget({ note: 'E', octave: 3, cents: 0 }, target)).toBe(false);
+    expect(matchesTarget({ note: 'D', octave: 4, cents: 0 }, target)).toBe(false);
+  });
+  it('false con argumentos nulos', () => {
+    expect(matchesTarget(null, target)).toBe(false);
+    expect(matchesTarget({ note: 'D', octave: 3, cents: 0 }, null)).toBe(false);
   });
 });

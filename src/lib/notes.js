@@ -102,6 +102,21 @@ export function parseTunerTarget(params = {}) {
   return { note, fromSongId };
 }
 
+/**
+ * ¿La nota detectada coincide con la nota objetivo (mismo nombre + octava, afinada)?
+ * @param {{note:string,octave:number,cents:number}|null} detected
+ * @param {{note:string,octave:number}|null} target
+ * @returns {boolean}
+ */
+export function matchesTarget(detected, target) {
+  if (!detected || !target) return false;
+  return (
+    detected.note === target.note &&
+    detected.octave === target.octave &&
+    Math.abs(detected.cents) < 10
+  );
+}
+
 /** Standard guitar tuning (E standard), low → high. */
 export const GUITAR_STANDARD = ['E2', 'A2', 'D3', 'G3', 'B3', 'E4'];
 

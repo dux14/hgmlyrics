@@ -511,7 +511,7 @@ export async function renderSongView(container, songIdOrData) {
     rowEl.innerHTML = people
       .map(
         (p) => `
-        <button class="tono-chip tono-chip--person${p.id === activeRosterId ? ' tono-chip--active' : ''}" data-roster-id="${p.id}">
+        <button class="tono-chip tono-chip--person${p.id === activeRosterId ? ' tono-chip--active' : ''}" data-roster-id="${p.id}" aria-pressed="${p.id === activeRosterId}">
           <span class="voice-filter__label-text">${escapeHtml(p.name)}</span>
         </button>`,
       )
@@ -524,7 +524,9 @@ export async function renderSongView(container, songIdOrData) {
   function selectPerson(rosterId) {
     activeRosterId = rosterId;
     container.querySelectorAll('#tono-person-row .tono-chip').forEach((c) => {
-      c.classList.toggle('tono-chip--active', c.dataset.rosterId === rosterId);
+      const isActive = c.dataset.rosterId === rosterId;
+      c.classList.toggle('tono-chip--active', isActive);
+      c.setAttribute('aria-pressed', String(isActive));
     });
     updateActiveVoiceHeading();
     reRenderLyrics();
@@ -534,7 +536,9 @@ export async function renderSongView(container, songIdOrData) {
     activeCategory = category;
     activeRosterId = null;
     container.querySelectorAll('#tono-category-row .tono-chip').forEach((c) => {
-      c.classList.toggle('tono-chip--active', c.dataset.category === category);
+      const isActive = c.dataset.category === category;
+      c.classList.toggle('tono-chip--active', isActive);
+      c.setAttribute('aria-pressed', String(isActive));
     });
     renderPersonRow();
     // Autoselección si la categoría tiene una sola persona.
@@ -700,7 +704,7 @@ function renderTonoFilters(song) {
   const catChips = categories
     .map(
       (c) => `
-      <button class="tono-chip tono-chip--category" data-category="${c}">
+      <button class="tono-chip tono-chip--category" data-category="${c}" aria-pressed="false">
         <span class="voice-filter__dot" style="background: var(--color-voice-${c})"></span>
         <span class="voice-filter__label-text">${escapeHtml(getVoiceLabel(c))}</span>
       </button>`,

@@ -99,3 +99,63 @@ Verificado leyendo el código en esta rama.
 (validación server-side de v2) quedó cerrado en este pase.
 
 ---
+
+## A11Y / MOBILE (Task 5)
+
+### Arreglado en este pase
+
+- **Estado activo de los chips de filtro Tono ahora es programático.** Los chips
+  de categoría y de persona (en `SongView.js` `renderTonoFilters` /
+  `renderPersonRow`) comunicaban su selección solo visualmente. Se añadió
+  `aria-pressed` (`"true"`/`"false"`) a ambos sets y se mantiene en sincronía en
+  `selectCategory` y `selectPerson` (`SongView.js:536-548`). El chip activo no es
+  color-only: ya tenía borde + fondo vía `.tono-chip--active`, confirmado. Cambio
+  mínimo, sin tocar el flujo de selección.
+
+### Verificado presente (arreglado en pases A–F)
+
+- **Contraste de la nota ruby en tenor, tema claro.** Override dedicado:
+  `.lyrics__line--tono.voice-text--tenor .syll__note { color: #8a6800 }`
+  (`components.css:1299-1301`), con restauración del token `--color-voice-tenor`
+  bajo `[data-theme='dark']` (`:1302-1304`). Oscurece solo la nota ruby en claro
+  (el token global de tenor era <4.5:1 a tamaño pequeño), sin alterar el
+  resaltado de voces v1.
+
+### reduced-motion + aria-live (confirmado)
+
+- **reduced-motion honrado en ambos caminos:**
+  - Transición de filtros gateada:
+    `@media (prefers-reduced-motion: reduce) { .lyrics__filter-row { transition: none } }`
+    (`components.css:1382-1386`).
+  - Interpolación de autoscroll gateada: `SongView.js:956` calcula
+    `reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches`
+    y, bajo reduced-motion, salta directo sin transición suave
+    (`SongView.js:991-992`) y no interpola la velocidad por sección
+    (`SongView.js:1046-1048`).
+- **aria-live:** el encabezado de voz activa `#tono-active-voice` lleva
+  `aria-live="polite"` (`SongView.js:715`); el cambio de voz/persona lo actualiza
+  vía `updateActiveVoiceHeading`, anunciándolo a lectores de pantalla. Las filas
+  de chips llevan `role="group"` con `aria-label` ("Categoría de voz" / "Voz").
+
+### Diferido (documentado, NO arreglado en este pase)
+
+- **(a) Opacidad de sílabas no cantadas (`.syll--dimmed { opacity: 0.4 }`,
+  `components.css:1312-1313`).** Baja el contraste de las palabras de-enfatizadas
+  de la letra. Es de-énfasis intencional y consistente con la convención
+  existente `.voice-text--dimmed { opacity: 0.35 }` (`components.css:1257-1258`).
+  Se deja como decisión de diseño; el texto cantado (foco) mantiene contraste
+  pleno.
+- **(b) El modal del note-picker del editor (`openTonoEditor` en
+  `SongEditor.js:892`) no atrapa el foco ni cierra con Escape.** Follow-up
+  conocido de accesibilidad del editor (superficie admin, no de lectura). No se
+  aborda aquí para mantener el pase mínimo.
+
+### Mobile (sin regresión observada)
+
+- Las superficies nuevas (chips Tono, fila de personas, botón Afinar, controles
+  −/+ de scroll) reutilizan tokens y patrones mobile-first existentes. La fila de
+  personas usa scroll horizontal aislado. Verificación visual fina a 375px /
+  landscape se valida en el preview de Vercel (entorno headless local no permite
+  medición de viewport fiel).
+
+---

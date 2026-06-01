@@ -176,9 +176,17 @@ export async function renderSongView(container, songIdOrData) {
 
   let fontSize = getFontSize();
   let activeVoice = 'all';
+  // viewMode: 'lyrics' | 'chords' | 'tono'. showChords se deriva para no tocar
+  // la rama de acordes existente.
+  let viewMode = 'lyrics';
   let showChords = false;
   let transposeSemitones = 0;
   let useFlats = false;
+  // Modo Tono: solo con el flag voz_tono. activeRosterId/activeCategory dirigen
+  // el disclosure categoría→persona del modo notas.
+  const tonoEnabled = isFeatureEnabled('voz_tono');
+  let activeCategory = null;
+  let activeRosterId = null;
 
   const voiceBadgeClass = getVoiceBadgeClass(song.voiceType);
   const voiceLabel = getVoiceTypeLabel(song.voiceType);
@@ -195,6 +203,10 @@ export async function renderSongView(container, songIdOrData) {
   const hasNav = !isPreview && (adjacent.prev || adjacent.next);
   const hasChords = songHasChords(song);
   const usedVoices = detectUsedVoices(song.sections || []);
+  // El modo Tono está disponible si el flag está activo y la canción tiene
+  // roster de voces. La fila toggle aparece si hay acordes o si hay Tono.
+  const tonoAvailable = tonoEnabled && (song.voiceRoster || []).length > 0;
+  const showToggle = hasChords || tonoAvailable;
 
   // Build voice filter chips — only show voices that exist in the song
   const voiceChipsHtml = VOICE_TYPES.filter((v) => usedVoices.has(v.id))
@@ -266,11 +278,12 @@ export async function renderSongView(container, songIdOrData) {
             <button class="font-controls__btn" id="font-increase" aria-label="Aumentar tamaño de letra">A+</button>
           </div>
           ${
-            hasChords
+            showToggle
               ? `
           <div class="chord-toggle" id="chord-toggle" style="margin-bottom: 0;">
             <button class="chord-toggle__btn chord-toggle__btn--active" data-mode="lyrics">Letra</button>
-            <button class="chord-toggle__btn" data-mode="chords">Acordes</button>
+            ${hasChords ? `<button class="chord-toggle__btn" data-mode="chords">Acordes</button>` : ''}
+            ${tonoAvailable ? `<button class="chord-toggle__btn" data-mode="tono">Tono</button>` : ''}
           </div>
           `
               : ''
@@ -349,16 +362,19 @@ export async function renderSongView(container, songIdOrData) {
       `
           : ''
       }
+
+      ${tonoAvailable ? renderTonoFilters(song) : ''}
       `
           : `
       ${
-        hasChords
+        showToggle
           ? `
       <!-- Chord Toggle (Preview mode) -->
       <div style="margin-bottom: var(--space-md);">
         <div class="chord-toggle" id="chord-toggle" style="margin-bottom: 0;">
           <button class="chord-toggle__btn chord-toggle__btn--active" data-mode="lyrics">Letra</button>
-          <button class="chord-toggle__btn" data-mode="chords">Acordes</button>
+          ${hasChords ? `<button class="chord-toggle__btn" data-mode="chords">Acordes</button>` : ''}
+          ${tonoAvailable ? `<button class="chord-toggle__btn" data-mode="tono">Tono</button>` : ''}
         </div>
       </div>
       `
@@ -369,7 +385,7 @@ export async function renderSongView(container, songIdOrData) {
 
       <!-- Lyrics -->
       <div class="lyrics" id="lyrics-content">
-        ${renderSections(song.sections || [], activeVoice, showChords, transposeSemitones, useFlats)}
+        ${renderSections(song.sections || [], activeVoice, showChords, transposeSemitones, useFlats, viewMode, activeRosterId, activeCategory)}
       </div>
 
       ${
@@ -405,6 +421,9 @@ export async function renderSongView(container, songIdOrData) {
         showChords,
         transposeSemitones,
         useFlats,
+        viewMode,
+        activeRosterId,
+        activeCategory,
       );
       if (!isPreview) applyFontSize(fontSize);
     }
@@ -414,14 +433,18 @@ export async function renderSongView(container, songIdOrData) {
   // lyrics reading; cejilla + transposition belong to chords. Cejilla stays
   // visible on chord-less songs since there is no chords mode to gate it.
   function applyModeVisibility() {
+    const isTono = viewMode === 'tono';
+    // El filtro por voz (Letra) y la fila de Tono se excluyen mutuamente.
     const voiceFilterEl = container.querySelector('#voice-part-filter');
-    if (voiceFilterEl) voiceFilterEl.style.display = showChords ? 'none' : '';
+    if (voiceFilterEl) voiceFilterEl.style.display = showChords || isTono ? 'none' : '';
     const lyricsExtrasEl = container.querySelector('#lyrics-extras');
     if (lyricsExtrasEl) lyricsExtrasEl.style.display = showChords ? 'none' : '';
     const cejillaEl = container.querySelector('#cejilla-control');
     if (cejillaEl) cejillaEl.style.display = showChords || !hasChords ? '' : 'none';
     const transposeEl = container.querySelector('#transpose-controls');
     if (transposeEl) transposeEl.style.display = showChords ? 'flex' : 'none';
+    const tonoFiltersEl = container.querySelector('#tono-filters');
+    if (tonoFiltersEl) tonoFiltersEl.style.display = isTono ? '' : 'none';
   }
 
   // Reset the voice filter to "Todos" so lyrics aren't left dimmed by a filter
@@ -436,19 +459,98 @@ export async function renderSongView(container, songIdOrData) {
     });
   }
 
+  // ── Tono mode: disclosure categoría → persona ──
+  function updateActiveVoiceHeading() {
+    const headingEl = container.querySelector('#tono-active-voice');
+    if (!headingEl) return;
+    if (!activeRosterId) {
+      headingEl.textContent = activeCategory ? 'Elegí una voz' : 'Elegí una categoría';
+      return;
+    }
+    const voice = (song.voiceRoster || []).find((v) => v.id === activeRosterId);
+    headingEl.textContent = voice ? `Voz activa: ${voice.name}` : '';
+  }
+
+  function renderPersonRow() {
+    const rowEl = container.querySelector('#tono-person-row');
+    if (!rowEl) return;
+    if (!activeCategory) {
+      rowEl.innerHTML = '';
+      return;
+    }
+    const people = rosterByCategory(song, activeCategory);
+    rowEl.innerHTML = people
+      .map(
+        (p) => `
+        <button class="tono-chip tono-chip--person${p.id === activeRosterId ? ' tono-chip--active' : ''}" data-roster-id="${p.id}">
+          <span class="voice-filter__label-text">${escapeHtml(p.name)}</span>
+        </button>`,
+      )
+      .join('');
+    rowEl.querySelectorAll('[data-roster-id]').forEach((btn) => {
+      btn.addEventListener('click', () => selectPerson(btn.dataset.rosterId));
+    });
+  }
+
+  function selectPerson(rosterId) {
+    activeRosterId = rosterId;
+    container.querySelectorAll('#tono-person-row .tono-chip').forEach((c) => {
+      c.classList.toggle('tono-chip--active', c.dataset.rosterId === rosterId);
+    });
+    updateActiveVoiceHeading();
+    reRenderLyrics();
+  }
+
+  function selectCategory(category) {
+    activeCategory = category;
+    activeRosterId = null;
+    container.querySelectorAll('#tono-category-row .tono-chip').forEach((c) => {
+      c.classList.toggle('tono-chip--active', c.dataset.category === category);
+    });
+    renderPersonRow();
+    // Autoselección si la categoría tiene una sola persona.
+    const people = rosterByCategory(song, category);
+    if (people.length === 1) {
+      selectPerson(people[0].id);
+    } else {
+      updateActiveVoiceHeading();
+      reRenderLyrics();
+    }
+  }
+
+  // Al entrar a Tono sin selección previa, preseleccionar la primera categoría
+  // (y su persona si es única) para que el modo muestre algo de inmediato.
+  function ensureTonoSelection() {
+    if (activeCategory) {
+      updateActiveVoiceHeading();
+      return;
+    }
+    const categories = rosterCategories(song);
+    if (categories.length > 0) selectCategory(categories[0]);
+  }
+
+  if (tonoAvailable) {
+    container.querySelectorAll('#tono-category-row [data-category]').forEach((btn) => {
+      btn.addEventListener('click', () => selectCategory(btn.dataset.category));
+    });
+    updateActiveVoiceHeading();
+  }
+
   if (!isPreview) applyFontSize(fontSize);
   applyModeVisibility();
 
-  // Chord toggle — works in both normal and preview mode
-  if (hasChords) {
+  // Mode toggle (Letra / Acordes / Tono) — works in both normal and preview mode
+  if (showToggle) {
     container.querySelectorAll('[data-mode]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        showChords = btn.dataset.mode === 'chords';
+        viewMode = btn.dataset.mode;
+        showChords = viewMode === 'chords';
         container
           .querySelectorAll('.chord-toggle__btn')
           .forEach((c) => c.classList.toggle('chord-toggle__btn--active', c === btn));
         if (showChords) resetVoiceFilter();
         applyModeVisibility();
+        if (viewMode === 'tono') ensureTonoSelection();
         reRenderLyrics();
       });
     });
@@ -547,6 +649,45 @@ export async function renderSongView(container, songIdOrData) {
 }
 
 /**
+ * Categorías de voz presentes en el roster, en orden canónico.
+ * @param {object} song
+ * @returns {string[]}
+ */
+function rosterCategories(song) {
+  const order = ['soprano', 'contralto', 'tenor', 'bass'];
+  const present = new Set((song.voiceRoster || []).map((v) => v.category));
+  return order.filter((c) => present.has(c));
+}
+
+/**
+ * Render del modo Tono: fila de categorías + fila de personas (disclosure) +
+ * encabezado aria-live con la voz activa. Oculto hasta que el toggle entra en
+ * modo Tono (lo gestiona applyModeVisibility).
+ * @param {object} song
+ * @returns {string}
+ */
+function renderTonoFilters(song) {
+  const categories = rosterCategories(song);
+  const catChips = categories
+    .map(
+      (c) => `
+      <button class="tono-chip tono-chip--category" data-category="${c}">
+        <span class="voice-filter__dot" style="background: var(--color-voice-${c})"></span>
+        <span class="voice-filter__label-text">${escapeHtml(getVoiceLabel(c))}</span>
+      </button>`,
+    )
+    .join('');
+  return `
+    <div class="lyrics__tono-filters" id="tono-filters" style="display: none;">
+      <div class="lyrics__filter-row" id="tono-category-row" role="group" aria-label="Categoría de voz">
+        ${catChips}
+      </div>
+      <div class="lyrics__filter-row" id="tono-person-row" role="group" aria-label="Voz"></div>
+      <p class="lyrics__tono-active" id="tono-active-voice" aria-live="polite"></p>
+    </div>`;
+}
+
+/**
  * Render lyrics sections with voice filter, highlighting, and optional chords
  */
 function renderSections(
@@ -555,6 +696,9 @@ function renderSections(
   showChords = false,
   transposeSemitones = 0,
   useFlats = false,
+  viewMode = 'lyrics',
+  activeRosterId = null,
+  activeCategory = null,
 ) {
   return sections
     .map(
@@ -572,6 +716,14 @@ function renderSections(
               ? `<span class="timing-guide__count">${guide.count}</span><span class="timing-guide__unit">${guide.unit}</span>${guide.extra ? `<span class="timing-guide__extra">${escapeHtml(guide.extra)}</span>` : ''}`
               : `<span class="timing-guide__extra">${escapeHtml(guide.extra)}</span>`;
             return `<div class="timing-guide">${guideContent}</div>`;
+          }
+
+          // ── Tono mode: notas por sílaba (ruby), excluyente de acordes ──
+          if (viewMode === 'tono' && activeRosterId) {
+            if (text.trim() === '') return `<p class="lyrics__line">&nbsp;</p>`;
+            const inner = buildSyllableNotesHTML(line, activeRosterId);
+            const catClass = activeCategory ? ` voice-text--${activeCategory}` : '';
+            return `<div class="lyrics__line lyrics__line--tono${catClass}">${inner}</div>`;
           }
 
           // ── Empty lines ──

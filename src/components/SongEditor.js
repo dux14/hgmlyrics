@@ -1050,7 +1050,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       overlay.innerHTML = `
         <div class="import-modal tono-editor">
           <div class="import-modal__header">
-            <h3 class="import-modal__title" style="display: inline-flex; align-items: center; gap: 0.4em;">${icon('music', { size: 18 })} Tono por sílaba</h3>
+            <h3 class="import-modal__title" style="display: inline-flex; align-items: center; gap: 0.4em;">${icon('music', { size: 18 })} Voces y tono</h3>
             <button class="import-modal__close" data-tono="close" aria-label="Cerrar">${icon('close', { size: 18 })}</button>
           </div>
 

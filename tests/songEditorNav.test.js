@@ -26,11 +26,6 @@ vi.mock('../src/components/SongView.js', () => ({
   renderSongView: vi.fn(),
 }));
 
-// Stub VoiceBottomSheet to avoid its transitive deps.
-vi.mock('../src/components/VoiceBottomSheet.js', () => ({
-  openVoiceBottomSheet: vi.fn(),
-}));
-
 const { postSaveTarget } = await import('../src/components/SongEditor.js');
 
 describe('postSaveTarget', () => {

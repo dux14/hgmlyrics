@@ -457,6 +457,31 @@ export function groupsForVoice(line, voiceId) {
 }
 
 /**
+ * Primera nota no nula que canta una voz, en el orden de la canción.
+ * @param {object} song @param {string} voiceId @returns {string|null}
+ */
+export function firstNoteForVoice(song, voiceId) {
+  for (const section of song?.sections || []) {
+    for (const line of section.lines || []) {
+      for (const g of groupsForVoice(line, voiceId)) {
+        if (g.note !== null && g.note !== undefined) return g.note;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Tono general de una voz: referenceKey explícito o, si no, su 1ª nota.
+ * @param {object} song @param {string} voiceId @returns {string|null}
+ */
+export function tonoGeneralForVoice(song, voiceId) {
+  const voice = (song?.voiceRoster || []).find((v) => v.id === voiceId);
+  if (voice?.referenceKey) return voice.referenceKey;
+  return firstNoteForVoice(song, voiceId);
+}
+
+/**
  * @param {object} song @param {string} category
  * @returns {Array} entradas del roster de esa categoría (en orden original).
  */

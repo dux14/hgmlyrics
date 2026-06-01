@@ -507,6 +507,7 @@ describe('buildSyllableNotesHTML', () => {
 
 import { deriveReferenceKey, rosterByCategory } from '../src/lib/voiceSystem.js';
 import { groupsForVoice } from '../src/lib/voiceSystem.js';
+import { firstNoteForVoice, tonoGeneralForVoice } from '../src/lib/voiceSystem.js';
 
 describe('rosterByCategory', () => {
   it('filtra el roster por categoría conservando orden', () => {
@@ -652,5 +653,45 @@ describe('groupsForVoice', () => {
   it('normaliza note ausente a null', () => {
     const l = { groups: [{ start: 0, end: 2, voiceId: 'sop1' }] };
     expect(groupsForVoice(l, 'sop1')).toEqual([{ start: 0, end: 2, note: null }]);
+  });
+});
+
+describe('firstNoteForVoice / tonoGeneralForVoice', () => {
+  const song = {
+    voiceRoster: [
+      { id: 'sop1', name: 'Voz 1', category: 'soprano', referenceKey: 'C4' },
+      { id: 'ten1', name: 'Voz 1', category: 'tenor' },
+    ],
+    sections: [
+      {
+        lines: [
+          { text: 'aa', groups: [{ start: 0, end: 2, voiceId: 'ten1', note: null }] },
+          {
+            text: 'bbbb',
+            groups: [
+              { start: 0, end: 2, voiceId: 'ten1', note: 'D3' },
+              { start: 2, end: 4, voiceId: 'sop1', note: 'B3' },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  it('firstNoteForVoice toma la 1ª nota no nula en orden', () => {
+    expect(firstNoteForVoice(song, 'ten1')).toBe('D3');
+    expect(firstNoteForVoice(song, 'sop1')).toBe('B3');
+  });
+
+  it('firstNoteForVoice devuelve null si no hay notas', () => {
+    expect(firstNoteForVoice(song, 'baj1')).toBe(null);
+  });
+
+  it('tonoGeneralForVoice usa referenceKey si existe', () => {
+    expect(tonoGeneralForVoice(song, 'sop1')).toBe('C4');
+  });
+
+  it('tonoGeneralForVoice cae a la 1ª nota si no hay referenceKey', () => {
+    expect(tonoGeneralForVoice(song, 'ten1')).toBe('D3');
   });
 });

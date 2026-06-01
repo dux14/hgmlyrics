@@ -223,3 +223,13 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+const NOTE_RE = /^[A-G][#b]?[0-7]$/;
+
+/**
+ * @param {unknown} value
+ * @returns {boolean} true si es notación científica válida (mismo formato que profiles.vocal_range).
+ */
+export function isValidNote(value) {
+  return typeof value === 'string' && NOTE_RE.test(value);
+}

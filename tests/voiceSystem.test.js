@@ -196,3 +196,18 @@ describe('validateVoiceRanges', () => {
     expect(validateVoiceRanges([{ start: 5, end: 10, voices: ['soprano'] }], 5)).toEqual([]);
   });
 });
+
+import { isValidNote } from '../src/lib/voiceSystem.js';
+
+describe('isValidNote', () => {
+  it('acepta notas científicas válidas', () => {
+    for (const n of ['B3', 'A3', 'F#3', 'D4', 'C0', 'G7', 'Eb5']) {
+      expect(isValidNote(n)).toBe(true);
+    }
+  });
+  it('rechaza inválidas', () => {
+    for (const n of ['H3', 'B', '3', 'B#9', '', null, 42, 'B33']) {
+      expect(isValidNote(n)).toBe(false);
+    }
+  });
+});

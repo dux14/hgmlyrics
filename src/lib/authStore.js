@@ -9,6 +9,7 @@ import { supabase } from './supabase.js';
 const state = {
   session: null,
   profile: null,
+  flags: [],
   listeners: new Set(),
 };
 
@@ -53,6 +54,7 @@ export function needsOnboarding() {
 export async function refreshProfile() {
   if (!state.session) {
     state.profile = null;
+    state.flags = [];
     return;
   }
   try {
@@ -62,12 +64,15 @@ export async function refreshProfile() {
     if (res.ok) {
       const data = await res.json();
       state.profile = data.profile;
+      state.flags = Array.isArray(data.flags) ? data.flags : [];
     } else {
       state.profile = null;
+      state.flags = [];
     }
   } catch (e) {
     console.warn('refreshProfile failed', e);
     state.profile = null;
+    state.flags = [];
   }
 }
 
@@ -101,9 +106,20 @@ export async function initAuthStore() {
       await refreshProfile();
     } else {
       state.profile = null;
+      state.flags = [];
     }
     notify();
   });
+}
+
+/** @param {string} key @returns {boolean} */
+export function isFeatureEnabled(key) {
+  return state.flags.includes(key);
+}
+
+/** Solo para tests. */
+export function __setFlagsForTest(flags) {
+  state.flags = Array.isArray(flags) ? flags : [];
 }
 
 export async function signInWithGoogle() {

@@ -487,7 +487,10 @@ export async function renderSongView(container, songIdOrData) {
       slot.innerHTML = '';
       return;
     }
-    slot.innerHTML = `<button class="btn btn--sm" id="tune-voice" data-ref="${refNote}">${icon('mic', { size: 14 })} Afinar · ${refNote}</button>`;
+    // refNote ya viene validado por isValidNote (sin caracteres HTML), pero
+    // escapamos por defensa en profundidad, consistente con el resto del render.
+    const safeRef = escapeHtml(refNote);
+    slot.innerHTML = `<button class="btn btn--sm" id="tune-voice" data-ref="${safeRef}">${icon('mic', { size: 14 })} Afinar · ${safeRef}</button>`;
     slot.querySelector('#tune-voice').addEventListener('click', () => {
       navigate(`/afinador?ref=${encodeURIComponent(refNote)}&from=${encodeURIComponent(song.id)}`);
     });

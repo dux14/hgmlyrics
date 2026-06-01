@@ -18,6 +18,7 @@ import {
   rosterByCategory,
   buildSyllableNotesHTML,
   getVoiceLabel,
+  deriveReferenceKey,
 } from '../lib/voiceSystem.js';
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
@@ -465,10 +466,31 @@ export async function renderSongView(container, songIdOrData) {
     if (!headingEl) return;
     if (!activeRosterId) {
       headingEl.textContent = activeCategory ? 'Elegí una voz' : 'Elegí una categoría';
+      updateTuneAction();
       return;
     }
     const voice = (song.voiceRoster || []).find((v) => v.id === activeRosterId);
     headingEl.textContent = voice ? `Voz activa: ${voice.name}` : '';
+    updateTuneAction();
+  }
+
+  // Botón "Afinar · {nota}" — solo con activeRosterId, flag afinador_shortcut y
+  // un tono de referencia derivable. Degrada a nada si falta cualquiera de esos.
+  function updateTuneAction() {
+    const slot = container.querySelector('#tono-tune-action');
+    if (!slot) return;
+    const refNote =
+      activeRosterId && isFeatureEnabled('afinador_shortcut')
+        ? deriveReferenceKey(song, activeRosterId)
+        : null;
+    if (!refNote) {
+      slot.innerHTML = '';
+      return;
+    }
+    slot.innerHTML = `<button class="btn btn--sm" id="tune-voice" data-ref="${refNote}">${icon('mic', { size: 14 })} Afinar · ${refNote}</button>`;
+    slot.querySelector('#tune-voice').addEventListener('click', () => {
+      navigate(`/afinador?ref=${encodeURIComponent(refNote)}&from=${encodeURIComponent(song.id)}`);
+    });
   }
 
   function renderPersonRow() {
@@ -684,6 +706,7 @@ function renderTonoFilters(song) {
       </div>
       <div class="lyrics__filter-row" id="tono-person-row" role="group" aria-label="Voz"></div>
       <p class="lyrics__tono-active" id="tono-active-voice" aria-live="polite"></p>
+      <div class="lyrics__tono-tune" id="tono-tune-action"></div>
     </div>`;
 }
 

@@ -1342,6 +1342,21 @@
   color: var(--color-text-secondary);
 }
 
+.lyrics__tono-tune {
+  margin-top: 0.5rem;
+}
+
+.lyrics__tono-tune:empty {
+  margin-top: 0;
+}
+
+.lyrics__tono-tune .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+}
+
 .tono-chip {
   display: inline-flex;
   align-items: center;

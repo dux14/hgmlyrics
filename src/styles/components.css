@@ -1267,6 +1267,98 @@
   line-height: 0;
 }
 
+/* ─── Modo Tono: notas por sílaba (ruby) ─── */
+.lyrics__line--tono {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.15rem 0.35rem;
+}
+
+.syll {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+}
+
+.syll__note {
+  font-size: 0.7em;
+  font-variant-numeric: tabular-nums;
+  /* Toma el color de la categoría activa: el contenedor .lyrics__line--tono
+     lleva .voice-text--{category} (define color) → currentColor lo hereda. */
+  color: currentColor;
+  font-weight: 600;
+  min-height: 1em;
+}
+
+/* El texto de la sílaba se mantiene en el color de lectura normal; solo la
+   nota usa el color de la voz para garantizar contraste de la letra. */
+.lyrics__line--tono .syll__text {
+  color: var(--color-text);
+}
+
+.syll--dimmed {
+  opacity: 0.4;
+}
+
+.syll--dimmed .syll__note {
+  visibility: hidden;
+}
+
+.syll--melisma .syll__text {
+  opacity: 0.6;
+}
+
+/* ─── Modo Tono: fila de filtros (disclosure categoría → persona) ─── */
+.lyrics__tono-filters {
+  margin-bottom: var(--space-md);
+}
+
+.lyrics__filter-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+  transition: opacity 200ms ease;
+}
+
+.lyrics__tono-active {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.tono-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tono-chip--active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-bg, var(--color-surface));
+  color: var(--color-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lyrics__filter-row {
+    transition: none;
+  }
+}
+
 .voice-badge-extra--soprano {
   color: var(--color-voice-soprano);
 }

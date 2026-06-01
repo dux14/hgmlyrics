@@ -116,6 +116,7 @@ function bindFilterBarEvents() {
  */
 export function showFilterBar() {
   if (filterBarEl) filterBarEl.style.display = '';
+  document.querySelector('.main')?.classList.add('main--filtered');
 }
 
 /**
@@ -123,4 +124,5 @@ export function showFilterBar() {
  */
 export function hideFilterBar() {
   if (filterBarEl) filterBarEl.style.display = 'none';
+  document.querySelector('.main')?.classList.remove('main--filtered');
 }

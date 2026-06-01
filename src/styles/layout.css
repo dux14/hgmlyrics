@@ -284,8 +284,16 @@
 /* === Main Content === */
 .main {
   flex: 1;
-  padding-top: calc(var(--header-height) + 56px + 48px);
+  /* Reserve space for the fixed header + mobile search row only. The filter
+     bar's height is added on demand (see .main--filtered) so pages without it
+     (song detail, links, admin, profile…) don't leave dead space up top. */
+  padding-top: calc(var(--header-height) + 56px);
   transition: margin-left var(--transition-base);
+}
+
+/* List views show the sticky filter bar → reserve its 48px. */
+.main--filtered {
+  padding-top: calc(var(--header-height) + 56px + 48px);
 }
 
 .main__content {
@@ -404,7 +412,11 @@
 
   .main {
     margin-left: var(--sidebar-width);
-    padding-top: calc(var(--header-height) + 48px); /* +48px for filter bar */
+    padding-top: var(--header-height); /* search is inline in the header here */
+  }
+
+  .main--filtered {
+    padding-top: calc(var(--header-height) + 48px); /* +48px for the filter bar */
   }
 
   .filter-bar {

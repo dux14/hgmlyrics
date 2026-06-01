@@ -187,9 +187,10 @@
 }
 
 .song-view__title {
-  font-size: var(--font-size-2xl);
+  font-size: var(--font-size-xl);
   font-weight: var(--font-weight-bold);
   margin-bottom: var(--space-xs);
+  line-height: var(--line-height-tight);
 }
 
 .song-view__title--linked {
@@ -218,13 +219,13 @@
 }
 
 .song-view__album {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   margin-bottom: var(--space-sm);
 }
 
 .song-view__year {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
   margin-bottom: var(--space-md);
 }
@@ -571,6 +572,10 @@
   .song-view__cover {
     width: 140px;
     height: 140px;
+  }
+
+  .song-view__title {
+    font-size: var(--font-size-2xl);
   }
 
   .voice-filter {

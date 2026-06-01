@@ -273,23 +273,24 @@ export async function renderSongView(container, songIdOrData) {
         </div>
 
         ${
-          (song.cejilla && song.cejilla > 0) || song.key
+          song.cejilla && song.cejilla > 0
             ? `
-        <!-- Zone: Song attributes -->
-        <div class="song-toolbar__group">
-          ${
-            song.cejilla && song.cejilla > 0
-              ? `
+        <!-- Zone: Cejilla — shown in chords mode -->
+        <div class="song-toolbar__group" id="cejilla-control">
           <div class="cejilla-badge" title="Colocar cejilla en el traste ${song.cejilla}">
             <span class="cejilla-badge__icon">${icon('audio-lines', { size: 15 })}</span>
             <span class="cejilla-badge__text">Cejilla: ${song.cejilla}</span>
           </div>
-          `
-              : ''
-          }
-          ${
-            song.key
-              ? `
+        </div>
+        `
+            : ''
+        }
+
+        ${
+          song.key
+            ? `
+        <!-- Zone: Tono + Afinar — shown in lyrics mode -->
+        <div class="song-toolbar__group" id="lyrics-extras">
           <div class="key-badge" title="Tonalidad de la versión oficial">
             <span class="key-badge__icon">${icon('music', { size: 15 })}</span>
             <span class="key-badge__text">Tono: ${song.key}</span>
@@ -297,9 +298,6 @@ export async function renderSongView(container, songIdOrData) {
           <a class="btn btn--secondary song-toolbar__btn" href="#/afinador?mode=song&songId=${song.id}" title="Cantá con este tono">
             ${icon('mic', { size: 16 })} Afinar
           </a>
-          `
-              : ''
-          }
         </div>
         `
             : ''
@@ -407,7 +405,34 @@ export async function renderSongView(container, songIdOrData) {
     }
   }
 
+  // Show controls relevant to the current mode: voices + tono/afinar belong to
+  // lyrics reading; cejilla + transposition belong to chords. Cejilla stays
+  // visible on chord-less songs since there is no chords mode to gate it.
+  function applyModeVisibility() {
+    const voiceFilterEl = container.querySelector('#voice-part-filter');
+    if (voiceFilterEl) voiceFilterEl.style.display = showChords ? 'none' : '';
+    const lyricsExtrasEl = container.querySelector('#lyrics-extras');
+    if (lyricsExtrasEl) lyricsExtrasEl.style.display = showChords ? 'none' : '';
+    const cejillaEl = container.querySelector('#cejilla-control');
+    if (cejillaEl) cejillaEl.style.display = showChords || !hasChords ? '' : 'none';
+    const transposeEl = container.querySelector('#transpose-controls');
+    if (transposeEl) transposeEl.style.display = showChords ? 'flex' : 'none';
+  }
+
+  // Reset the voice filter to "Todos" so lyrics aren't left dimmed by a filter
+  // that the chords mode has hidden.
+  function resetVoiceFilter() {
+    activeVoice = 'all';
+    container.querySelectorAll('.voice-filter__chip').forEach((c) => {
+      c.classList.toggle('voice-filter__chip--active', c.dataset.voice === 'all');
+      c.style.background = '';
+      c.style.color = '';
+      c.style.borderColor = '';
+    });
+  }
+
   if (!isPreview) applyFontSize(fontSize);
+  applyModeVisibility();
 
   // Chord toggle — works in both normal and preview mode
   if (hasChords) {
@@ -417,8 +442,8 @@ export async function renderSongView(container, songIdOrData) {
         container
           .querySelectorAll('.chord-toggle__btn')
           .forEach((c) => c.classList.toggle('chord-toggle__btn--active', c === btn));
-        const transposeEl = container.querySelector('#transpose-controls');
-        if (transposeEl) transposeEl.style.display = showChords ? 'flex' : 'none';
+        if (showChords) resetVoiceFilter();
+        applyModeVisibility();
         reRenderLyrics();
       });
     });

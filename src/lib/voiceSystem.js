@@ -214,6 +214,62 @@ export function buildHighlightedHTML(text, voiceRanges, activeVoice = 'all') {
   return result;
 }
 
+/**
+ * Render de una línea con etiquetas flotantes (acordes/notas) y rangos coloreados.
+ * Texto continuo escapado; las etiquetas son absolutas (CSS) → no parten palabras.
+ * @param {string} text
+ * @param {{ labels?: Array<{pos:number,text:string,className?:string}>,
+ *           spans?: Array<{start:number,end:number,className?:string}>,
+ *           baseClass?: string }} [options]
+ * @returns {string} HTML
+ */
+export function buildAnnotatedLineHTML(text, options = {}) {
+  const str = text || '';
+  const len = str.length;
+  const labels = Array.isArray(options.labels) ? options.labels : [];
+  const spans = Array.isArray(options.spans) ? options.spans : [];
+  const baseClass = options.baseClass || '';
+
+  const cuts = new Set([0, len]);
+  for (const s of spans) {
+    if (s.start >= 0 && s.start <= len) cuts.add(s.start);
+    if (s.end >= 0 && s.end <= len) cuts.add(s.end);
+  }
+  for (const l of labels) {
+    if (l.pos >= 0 && l.pos <= len) cuts.add(l.pos);
+  }
+  const points = [...cuts].sort((a, b) => a - b);
+
+  const labelByPos = new Map();
+  for (const l of labels) {
+    if (!labelByPos.has(l.pos)) labelByPos.set(l.pos, l);
+  }
+  const labelHtml = (l) =>
+    `<span class="float-label ${l.className || ''}">${escapeHtml(l.text)}</span>`;
+
+  let html = '';
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    if (a >= b) continue;
+    const slice = str.slice(a, b);
+    const span = spans.find((s) => s.start <= a && s.end >= b && s.start < s.end);
+    const cls = span ? span.className || '' : baseClass;
+    const label = labelByPos.get(a);
+    if (label || cls) {
+      const wrapCls = ['line-seg', cls].filter(Boolean).join(' ');
+      html += `<span class="${wrapCls}">${label ? labelHtml(label) : ''}${escapeHtml(slice)}</span>`;
+    } else {
+      html += escapeHtml(slice);
+    }
+  }
+  // Etiqueta anclada al final de la línea (pos === len).
+  if (labelByPos.has(len)) {
+    html += `<span class="line-seg">${labelHtml(labelByPos.get(len))}</span>`;
+  }
+  return html;
+}
+
 function escapeHtml(str) {
   if (str === '' || str === null || str === undefined) return '';
   return String(str)

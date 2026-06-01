@@ -5,6 +5,7 @@ import {
   CANONICAL_VOICE_ORDER,
   deriveVoiceRanges,
 } from '../src/lib/voiceSystem.js';
+import { buildAnnotatedLineHTML } from '../src/lib/voiceSystem.js';
 
 describe('CANONICAL_VOICE_ORDER', () => {
   it('is soprano > contralto > tenor > bass', () => {
@@ -783,5 +784,59 @@ describe('firstNoteForVoice / tonoGeneralForVoice', () => {
 
   it('tonoGeneralForVoice cae a la 1ª nota si no hay referenceKey', () => {
     expect(tonoGeneralForVoice(song, 'ten1')).toBe('D3');
+  });
+});
+
+// Suma del texto visible (sin tags) — sirve para asegurar que la palabra no se parte.
+const visibleText = (html) => html.replace(/<[^>]*>/g, '');
+
+describe('buildAnnotatedLineHTML', () => {
+  it('texto plano sin labels/spans → escapado sin wrappers', () => {
+    expect(buildAnnotatedLineHTML('a<b>', {})).toBe('a&lt;b&gt;');
+  });
+
+  it('label en pos 0 → float-label con el texto', () => {
+    const html = buildAnnotatedLineHTML('Santo', {
+      labels: [{ pos: 0, text: 'D', className: 'c' }],
+    });
+    expect(html).toContain('float-label c');
+    expect(html).toContain('>D<');
+    expect(visibleText(html)).toBe('DSanto'); // label + texto, pero el texto sigue íntegro
+  });
+
+  it('NO parte la palabra: dos labels dentro de "universo" reconstruyen la palabra', () => {
+    const html = buildAnnotatedLineHTML('universo', {
+      labels: [
+        { pos: 0, text: 'D4' },
+        { pos: 1, text: 'B3' },
+      ],
+    });
+    // El texto de la letra (quitando las etiquetas flotantes) sigue siendo "universo".
+    const noLabels = html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '');
+    expect(visibleText(noLabels)).toBe('universo');
+  });
+
+  it('span colorea su rango y baseClass cubre el resto', () => {
+    const html = buildAnnotatedLineHTML('abcd', {
+      spans: [{ start: 0, end: 2, className: 'voice-sop' }],
+      baseClass: 'dim',
+    });
+    expect(html).toContain('voice-sop');
+    expect(html).toContain('dim');
+    expect(visibleText(html)).toBe('abcd');
+  });
+
+  it('label al final (pos === len) se renderiza igual', () => {
+    const html = buildAnnotatedLineHTML('ab', { labels: [{ pos: 2, text: 'G' }] });
+    expect(html).toContain('float-label');
+    expect(html).toContain('>G<');
+    // el texto visible de la letra sigue siendo "ab" (la G es etiqueta flotante)
+    const noLabels = html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '');
+    expect(visibleText(noLabels)).toBe('ab');
+  });
+
+  it('escapa el texto de la etiqueta', () => {
+    const html = buildAnnotatedLineHTML('x', { labels: [{ pos: 0, text: 'F#<' }] });
+    expect(html).toContain('F#&lt;');
   });
 });

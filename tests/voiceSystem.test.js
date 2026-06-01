@@ -422,3 +422,33 @@ describe('validateSongV2', () => {
     expect(() => validateSongV2(song)).toThrow(/nota|note/i);
   });
 });
+
+import { resolveSyllableNotes } from '../src/lib/voiceSystem.js';
+
+describe('resolveSyllableNotes', () => {
+  const line = {
+    text: 'Santo',
+    syllables: [
+      { start: 0, end: 3 },
+      { start: 3, end: 5 },
+    ], // "San" "to"
+    voiceLines: { 'sop-a': { sungSyllables: [0], notes: ['B3'] } },
+  };
+
+  it('marca sung + note por sílaba para la voz activa', () => {
+    const out = resolveSyllableNotes(line, 'sop-a');
+    expect(out).toEqual([
+      { text: 'San', note: 'B3', sung: true },
+      { text: 'to', note: null, sung: false },
+    ]);
+  });
+
+  it('si la voz no canta nada, todas las sílabas sung=false', () => {
+    const out = resolveSyllableNotes(line, 'ten-1');
+    expect(out.every((s) => s.sung === false && s.note === null)).toBe(true);
+  });
+
+  it('línea sin syllables devuelve array vacío', () => {
+    expect(resolveSyllableNotes({ text: 'x' }, 'sop-a')).toEqual([]);
+  });
+});

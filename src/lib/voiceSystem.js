@@ -341,3 +341,27 @@ export function validateSongV2(song) {
   }
   return true;
 }
+
+/**
+ * Para el modo Tono/persona: devuelve, por sílaba de la línea, el texto, la
+ * nota de la voz activa (o null) y si esa voz la canta.
+ * @param {object} line
+ * @param {string} rosterId
+ * @returns {Array<{text:string, note:string|null, sung:boolean}>}
+ */
+export function resolveSyllableNotes(line, rosterId) {
+  const text = line?.text || '';
+  const syllables = line?.syllables || [];
+  const vl = line?.voiceLines?.[rosterId];
+  const noteBySyll = new Map();
+  if (vl) {
+    (vl.sungSyllables || []).forEach((sIdx, i) => {
+      noteBySyll.set(sIdx, vl.notes?.[i] ?? null);
+    });
+  }
+  return syllables.map((s, idx) => ({
+    text: text.slice(s.start, s.end),
+    note: noteBySyll.has(idx) ? noteBySyll.get(idx) : null,
+    sung: noteBySyll.has(idx),
+  }));
+}

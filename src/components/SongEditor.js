@@ -18,6 +18,7 @@ import {
   validateSongV2,
   getVoiceLabel,
   isValidNote,
+  deriveVoiceRanges,
 } from '../lib/voiceSystem.js';
 import {
   boundariesToSyllables,
@@ -117,7 +118,7 @@ function blocksToSections(blocks) {
  * @param {Array} blocks
  * @returns {Array}
  */
-function blocksToSectionsV2(blocks) {
+function blocksToSectionsV2(blocks, roster = []) {
   return blocks.map((block) => {
     const section = {
       type: block.type,
@@ -126,11 +127,15 @@ function blocksToSectionsV2(blocks) {
         .filter((l) => l.text.trim() !== '' || l.chords.length > 0 || l.annotation)
         .map((l) => {
           const line = { text: l.text };
-          if (l.voiceRanges && l.voiceRanges.length > 0) line.voiceRanges = l.voiceRanges;
           if (l.chords && l.chords.length > 0) line.chords = l.chords;
           if (l.annotation) line.annotation = true;
           if (Array.isArray(l.syllables) && l.syllables.length > 0) line.syllables = l.syllables;
           if (l.voiceLines && Object.keys(l.voiceLines).length > 0) line.voiceLines = l.voiceLines;
+          // voiceRanges (coloreado de Letra) se DERIVA de voiceLines cuando existe;
+          // si no hay voiceLines, se conservan los voiceRanges previos.
+          const derived = deriveVoiceRanges(line, roster);
+          if (derived && derived.length > 0) line.voiceRanges = derived;
+          else if (l.voiceRanges && l.voiceRanges.length > 0) line.voiceRanges = l.voiceRanges;
           return line;
         }),
     };
@@ -1717,7 +1722,7 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
     if (roster.length > 0) {
       newSong.schemaVersion = 2;
       newSong.voiceRoster = roster;
-      newSong.sections = blocksToSectionsV2(blocks);
+      newSong.sections = blocksToSectionsV2(blocks, newSong.voiceRoster);
       try {
         validateSongV2(newSong);
       } catch (e) {

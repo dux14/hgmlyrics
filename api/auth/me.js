@@ -68,21 +68,29 @@ export default withErrors(async (req, res) => {
     rows = retry;
   }
 
-  // Feature flags habilitados para este usuario.
+  // Feature flags habilitados para este usuario. Las consultas van SECUENCIALES
+  // (no Promise.all): la única conexión del pooler de transacciones —max:1— no
+  // tolera bien queries concurrentes en conexiones reutilizadas. Y son NO
+  // fatales: /api/auth/me es la puerta de toda la app (login wall), así que un
+  // problema resolviendo flags degrada a flags:[] en vez de tumbar la sesión.
   const profile = rows[0];
-  const [flagCatalog, flagAssignments] = await Promise.all([
-    sql`SELECT key, enabled_global AS "enabledGlobal" FROM feature_flags`,
-    sql`
+  let flags;
+  try {
+    const flagCatalog = await sql`SELECT key, enabled_global AS "enabledGlobal" FROM feature_flags`;
+    const flagAssignments = await sql`
       SELECT flag_key AS "flagKey", email, username
       FROM feature_flag_users
       WHERE lower(email) = lower(${user.email ?? ''})
          OR lower(username) = lower(${profile?.username ?? ''})
-    `,
-  ]);
-  const flags = resolveEnabledFlags(flagCatalog, flagAssignments, {
-    email: user.email,
-    username: profile?.username,
-  });
+    `;
+    flags = resolveEnabledFlags(flagCatalog, flagAssignments, {
+      email: user.email,
+      username: profile?.username,
+    });
+  } catch (e) {
+    console.warn('flag resolution failed; defaulting to []', e);
+    flags = [];
+  }
 
   res.status(200).json({
     user: { id: user.id, email: user.email },

@@ -37,6 +37,9 @@ const AUTOSCROLL_SPEED_STEP = 0.05;
 const AUTOSCROLL_SPEED_DEFAULT = 0.5;
 const AUTOSCROLL_BASE_PX_PER_FRAME = 1.8;
 const AUTOSCROLL_COLLAPSE_DELAY = 1500;
+// Fracción del paso manual aplicada por frame al converger hacia el preset de
+// sección (más bajo = transición más suave). Ver Plan F.
+const AUTOSCROLL_CONVERGENCE_RATE = 0.5;
 
 // F6: Transposition
 const NOTES_SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -1039,12 +1042,16 @@ function setupAutoscroll(_container, songId) {
       // sección. Bajo reduced-motion no se interpola (el salto ya ocurrió al
       // entrar la sección). Sin presets, targetSpeed === scrollSpeed → no-op.
       if (!reducedMotion && scrollSpeed !== targetSpeed) {
-        scrollSpeed = stepToward(
+        const next = stepToward(
           scrollSpeed,
           targetSpeed,
-          AUTOSCROLL_SPEED_STEP * (delta / 16.67) * 0.5,
+          AUTOSCROLL_SPEED_STEP * (delta / 16.67) * AUTOSCROLL_CONVERGENCE_RATE,
         );
-        updateSpeedLabel();
+        // Solo reescribir el label si el valor mostrado cambia (evita escritura
+        // de DOM por frame durante la convergencia).
+        const labelChanged = speedToPercentLabel(next) !== speedToPercentLabel(scrollSpeed);
+        scrollSpeed = next;
+        if (labelChanged) updateSpeedLabel();
       }
       // 60fps baseline: pixels = basePx * speed * (delta / 16.67)
       accumulated += AUTOSCROLL_BASE_PX_PER_FRAME * scrollSpeed * (delta / 16.67);

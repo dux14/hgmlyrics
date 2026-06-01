@@ -1047,8 +1047,9 @@ export async function renderSongEditor(container, editId) {
         }
         sylChars += `<span class="syl-char">${text[i] === ' ' ? '&nbsp;' : escapeHtml(text[i])}</span>`;
       }
-      if (text.length === 0)
-        {sylChars = '<span class="syl-char syl-char--empty">(línea vacía)</span>';}
+      if (text.length === 0) {
+        sylChars = '<span class="syl-char syl-char--empty">(línea vacía)</span>';
+      }
 
       // Tira de sílabas (chips). Estado de selección + nota de la voz activa.
       const a = sylSel.anchor;
@@ -1629,6 +1630,16 @@ function collectLinks(container, voiceLinkItems) {
     .filter((v) => v.url?.trim())
     .map((v) => ({ voiceType: v.voiceType, url: v.url.trim(), label: v.label?.trim() || null }));
   return { platforms, voices };
+}
+
+/**
+ * Destino de navegación tras guardar el editor.
+ * @param {{from: string|null, isNew: boolean}} opts
+ * @returns {string} ruta hash (sin '#')
+ */
+export function postSaveTarget({ from, isNew }) {
+  if (from) return '/song/' + from;
+  return isNew ? '/admin' : '/admin/edit';
 }
 
 async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = {}) {

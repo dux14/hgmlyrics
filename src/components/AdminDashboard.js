@@ -1,12 +1,13 @@
 import { navigate } from '../router.js';
 import { getState } from '../lib/store.js';
 import { icon } from '../lib/icons.js';
+import { getSession } from '../lib/authStore.js';
 
 export function renderAdminDashboard(container) {
   container.innerHTML = `
     <div class="admin-dashboard fade-in" style="max-width: 600px; margin: 2rem auto; padding: 2rem; background: var(--color-surface); border-radius: var(--border-radius-lg); box-shadow: 0 4px 12px var(--color-shadow);">
       <h1 class="editor__title" style="text-align: center; margin-bottom: 2rem;">Panel de Administración</h1>
-      
+
       <div style="display: grid; gap: 1rem;">
         <button class="btn btn--primary" id="btn-create" style="padding: 1.5rem; font-size: 1.2rem;">
           ${icon('plus', { size: 20 })} Crear nueva canción
@@ -15,6 +16,11 @@ export function renderAdminDashboard(container) {
           ${icon('pencil', { size: 20 })} Modificar canción existente
         </button>
       </div>
+
+      <section class="ff-section" id="ff-section">
+        <h2 class="ff-section__title">${icon('flag', { size: 18 })} Feature Flags</h2>
+        <div id="ff-list" class="ff-list"></div>
+      </section>
     </div>
   `;
 
@@ -24,6 +30,98 @@ export function renderAdminDashboard(container) {
 
   container.querySelector('#btn-edit').addEventListener('click', () => {
     navigate('/admin/edit');
+  });
+
+  wireFeatureFlags(container);
+  loadFlags(container);
+}
+
+function authHeader() {
+  const session = getSession();
+  return { Authorization: `Bearer ${session?.access_token ?? ''}` };
+}
+
+async function loadFlags(root) {
+  const listEl = root.querySelector('#ff-list');
+  if (!listEl) return;
+  try {
+    const res = await fetch('/api/admin/feature-flags', { headers: authHeader() });
+    if (!res.ok) {
+      listEl.textContent = 'No se pudieron cargar los flags.';
+      return;
+    }
+    const { flags } = await res.json();
+    listEl.innerHTML = flags
+      .map(
+        (f) => `
+      <div class="ff-item" data-flag="${escapeHtmlLocal(f.key)}">
+        <div class="ff-item__head"><strong>${escapeHtmlLocal(f.key)}</strong><span>${escapeHtmlLocal(f.description ?? '')}</span></div>
+        <ul class="ff-item__users">
+          ${f.users
+            .map(
+              (u) =>
+                `<li>${escapeHtmlLocal(u.email ?? u.username)}
+                   <button class="btn btn--secondary btn--sm ff-remove" data-email="${escapeHtmlLocal(u.email ?? '')}" data-username="${escapeHtmlLocal(u.username ?? '')}">Quitar</button>
+                 </li>`,
+            )
+            .join('')}
+        </ul>
+        <div class="ff-item__add">
+          <input class="ff-input" type="text" placeholder="email o usuario" />
+          <button class="btn btn--primary btn--sm ff-add">Agregar</button>
+        </div>
+      </div>`,
+      )
+      .join('');
+  } catch (e) {
+    console.warn('loadFlags failed', e);
+    listEl.textContent = 'No se pudieron cargar los flags.';
+  }
+}
+
+function wireFeatureFlags(root) {
+  const listEl = root.querySelector('#ff-list');
+  if (!listEl) return;
+
+  listEl.addEventListener('click', async (e) => {
+    const addBtn = e.target.closest('.ff-add');
+    const removeBtn = e.target.closest('.ff-remove');
+    const item = e.target.closest('.ff-item');
+    if (!item) return;
+    const flagKey = item.dataset.flag;
+
+    if (addBtn) {
+      const input = item.querySelector('.ff-input');
+      const value = (input?.value ?? '').trim();
+      if (!value) return;
+      const body = value.includes('@') ? { flagKey, email: value } : { flagKey, username: value };
+      try {
+        await fetch('/api/admin/feature-flags', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeader() },
+          body: JSON.stringify(body),
+        });
+        await loadFlags(root);
+      } catch (err) {
+        console.warn('add flag assignment failed', err);
+      }
+      return;
+    }
+
+    if (removeBtn) {
+      const email = removeBtn.dataset.email || null;
+      const username = removeBtn.dataset.username || null;
+      try {
+        await fetch('/api/admin/feature-flags', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json', ...authHeader() },
+          body: JSON.stringify({ flagKey, email, username }),
+        });
+        await loadFlags(root);
+      } catch (err) {
+        console.warn('remove flag assignment failed', err);
+      }
+    }
   });
 }
 

@@ -24,6 +24,7 @@ import {
   toggleBoundary,
   syllablesToBoundaries,
   autoSuggestBoundaries,
+  tokenizeLineForChords,
 } from '../lib/syllabify.js';
 import { MUSICAL_KEYS } from '../lib/musicKeys.js';
 import { icon } from '../lib/icons.js';
@@ -679,53 +680,21 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   }
 
   function renderLineRow(line, _lineIndex, _totalLines, _sectionId) {
-    const chordRowHtml = line.showChords
-      ? `<input class="line-row__chord-input" type="text" value="${escapeHtml(buildChordString(line.text, line.chords))}" data-action="edit-chords" data-line-id="${line.id}" placeholder="Ej: Am    F    C    G" />`
-      : '';
-
     const mainContent = `<input class="line-row__input" type="text" value="${escapeHtml(line.text)}" data-action="edit-text" data-line-id="${line.id}" placeholder="Escribe la línea aquí..." />`;
 
     return `
       <div class="line-row" data-line-id="${line.id}">
-        ${chordRowHtml}
         <div class="line-row__main">
           ${mainContent}
           <div class="line-row__actions">
             ${v2Enabled ? `<button class="line-row__btn line-row__btn--tono" data-action="open-tono" data-line-id="${line.id}" title="Voces y tono" aria-label="Voces y tono">${icon('music', { size: 16 })}</button>` : ''}
-            <button class="line-row__btn ${line.showChords ? 'line-row__btn--active' : ''}" data-action="toggle-chords" data-line-id="${line.id}" title="Acordes" aria-label="Acordes">${icon('audio-lines', { size: 16 })}</button>
+            <button class="line-row__btn ${line.chords && line.chords.length > 0 ? 'line-row__btn--active' : ''}" data-action="open-chords" data-line-id="${line.id}" title="Acordes" aria-label="Acordes">${icon('audio-lines', { size: 16 })}</button>
             <button class="line-row__btn ${line.annotation ? 'line-row__btn--active line-row__btn--annotation' : ''}" data-action="toggle-annotation" data-line-id="${line.id}" title="Marcar como anotación/guía" aria-label="Marcar como anotación/guía">${icon('tag', { size: 16 })}</button>
             <button class="line-row__btn line-row__btn--delete" data-action="delete-line" data-line-id="${line.id}" title="Eliminar" aria-label="Eliminar línea">${icon('close', { size: 16 })}</button>
           </div>
         </div>
       </div>
     `;
-  }
-
-  /**
-   * Build a chord string from text and chord positions for display in the chord input
-   */
-  function buildChordString(text, chords) {
-    if (!chords || chords.length === 0) return '';
-    const sorted = [...chords].sort((a, b) => a.pos - b.pos);
-    let result = '';
-    for (const { ch, pos } of sorted) {
-      while (result.length < pos) result += ' ';
-      result += ch;
-    }
-    return result;
-  }
-
-  /**
-   * Parse chord input string back to chord array
-   */
-  function parseChordsFromInput(chordStr) {
-    const chords = [];
-    const regex = /([A-G][#b]?(?:m|maj|min|dim|aug|sus|add)?[0-9]?(?:\/[A-G][#b]?)?)/g;
-    let match;
-    while ((match = regex.exec(chordStr)) !== null) {
-      chords.push({ ch: match[1], pos: match.index });
-    }
-    return chords;
   }
 
   // Find line/section by IDs
@@ -744,12 +713,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       const found = findLine(e.target.dataset.lineId);
       if (found) {
         found.line.text = e.target.value;
-        updatePreview();
-      }
-    } else if (action === 'edit-chords') {
-      const found = findLine(e.target.dataset.lineId);
-      if (found) {
-        found.line.chords = parseChordsFromInput(e.target.value);
         updatePreview();
       }
     } else if (action === 'change-label') {
@@ -809,12 +772,9 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         found.block.lines = found.block.lines.filter((l) => l.id !== btn.dataset.lineId);
         renderBlocks();
       }
-    } else if (action === 'toggle-chords') {
+    } else if (action === 'open-chords') {
       const found = findLine(btn.dataset.lineId);
-      if (found) {
-        found.line.showChords = !found.line.showChords;
-        renderBlocks();
-      }
+      if (found) openChordEditor(found.line);
     } else if (action === 'toggle-annotation') {
       const found = findLine(btn.dataset.lineId);
       if (found) {
@@ -1170,6 +1130,98 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         if (activeRosterId) {
           const vl = getVoiceLine(activeRosterId);
           vl.role = e.target.checked ? 'primary' : 'secondary';
+        }
+      }
+    });
+
+    render();
+  }
+
+  /** Popup de acordes por token. Muta line.chords = [{ch,pos}] (pos = carácter). */
+  function openChordEditor(line) {
+    const overlay = document.createElement('div');
+    overlay.className = 'import-modal__overlay';
+    document.body.appendChild(overlay);
+    let selectedStart = null; // token.start del token en edición
+
+    const close = () => {
+      overlay.remove();
+      renderBlocks();
+    };
+    const chordAt = (pos) => (line.chords || []).find((c) => c.pos === pos);
+    const setChord = (pos, ch) => {
+      if (!Array.isArray(line.chords)) line.chords = [];
+      const clean = ch.trim();
+      const existing = line.chords.find((c) => c.pos === pos);
+      if (!clean) {
+        line.chords = line.chords.filter((c) => c.pos !== pos);
+      } else if (existing) {
+        existing.ch = clean;
+      } else {
+        line.chords.push({ ch: clean, pos });
+      }
+      line.chords.sort((a, b) => a.pos - b.pos);
+      line.showChords = line.chords.length > 0;
+    };
+
+    function render() {
+      const tokens = tokenizeLineForChords(line);
+      const chips = tokens
+        .map((t) => {
+          const c = chordAt(t.start);
+          const active = t.start === selectedStart ? ' chord-chip--active' : '';
+          const chordLabel = c ? `<span class="chord-chip__chord">${escapeHtml(c.ch)}</span>` : '';
+          return `<span class="chord-chip-wrap">${chordLabel}<button class="chord-chip${active}" data-token-start="${t.start}" type="button">${escapeHtml(t.text)}</button></span>`;
+        })
+        .join('');
+      const sel = selectedStart === null ? null : chordAt(selectedStart);
+      const editor =
+        selectedStart === null
+          ? `<p class="tono-editor__hint">Tocá un token para poner o editar su acorde.</p>`
+          : `<div class="chord-editor__assign">
+               <input class="form-group__input" data-chord="input" type="text" value="${escapeHtml(sel?.ch || '')}" placeholder="Ej: Am, F#m, G7" />
+               <button class="btn btn--sm" data-chord="apply" type="button">Guardar</button>
+               <button class="btn btn--sm btn--secondary" data-chord="clear" type="button">Quitar</button>
+             </div>`;
+      overlay.innerHTML = `
+        <div class="import-modal tono-editor">
+          <div class="import-modal__header">
+            <h3 class="import-modal__title" style="display: inline-flex; align-items: center; gap: 0.4em;">${icon('audio-lines', { size: 18 })} Acordes</h3>
+            <button class="import-modal__close" data-chord="close" aria-label="Cerrar">${icon('close', { size: 18 })}</button>
+          </div>
+          <div class="tono-editor__step">
+            <div class="tono-syllables chord-tokens">${chips || '<em>Línea vacía</em>'}</div>
+          </div>
+          <div class="tono-editor__step">${editor}</div>
+          <div class="import-modal__actions">
+            <button class="btn btn--primary" data-chord="done" type="button">Listo</button>
+          </div>
+        </div>`;
+    }
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) return close();
+      const act = e.target.closest('[data-chord]')?.dataset.chord;
+      if (act === 'close' || act === 'done') return close();
+      if (act === 'apply') {
+        const input = overlay.querySelector('[data-chord="input"]');
+        if (input && selectedStart !== null) setChord(selectedStart, input.value);
+        selectedStart = null;
+        render();
+        return;
+      }
+      if (act === 'clear') {
+        if (selectedStart !== null) setChord(selectedStart, '');
+        selectedStart = null;
+        render();
+        return;
+      }
+      const tokenBtn = e.target.closest('.chord-chip');
+      if (tokenBtn) {
+        const start = Number.parseInt(tokenBtn.dataset.tokenStart, 10);
+        if (!Number.isNaN(start)) {
+          selectedStart = start;
+          render();
         }
       }
     });

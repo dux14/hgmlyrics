@@ -317,6 +317,13 @@
   transform: scale(1.1);
 }
 
+/* Nota objetivo resaltada dentro de la escala (modo Canción con objetivo de voz) */
+.tuner-scale li[data-target='true'] {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+  font-weight: 700;
+}
+
 /* === Range mode === */
 .tuner-range {
   text-align: center;

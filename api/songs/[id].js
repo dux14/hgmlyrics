@@ -46,6 +46,8 @@ async function update(req, res, id) {
   await requireAdmin(req, sql);
   const s = req.body ?? {};
   const key = normalizeKey(s.key);
+  // TODO(Plan D): validar `voiceRoster`/`sections` v2 server-side con validateSongV2
+  // (+ límite de tamaño del JSONB) antes de persistir.
   const result = await sql`
     UPDATE songs SET
       title = ${s.title},

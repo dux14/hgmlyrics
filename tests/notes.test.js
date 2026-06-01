@@ -147,6 +147,7 @@ describe('matchesTarget', () => {
   });
   it('false cuando los cents se pasan de 10', () => {
     expect(matchesTarget({ note: 'D', octave: 3, cents: 12 }, target)).toBe(false);
+    expect(matchesTarget({ note: 'D', octave: 3, cents: 10 }, target)).toBe(false);
   });
   it('false cuando difiere nota u octava', () => {
     expect(matchesTarget({ note: 'E', octave: 3, cents: 0 }, target)).toBe(false);
@@ -155,5 +156,6 @@ describe('matchesTarget', () => {
   it('false con argumentos nulos', () => {
     expect(matchesTarget(null, target)).toBe(false);
     expect(matchesTarget({ note: 'D', octave: 3, cents: 0 }, null)).toBe(false);
+    expect(matchesTarget(null, null)).toBe(false);
   });
 });

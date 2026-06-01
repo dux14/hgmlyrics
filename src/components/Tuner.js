@@ -362,6 +362,8 @@ export async function renderTuner(container, opts = {}) {
     if (hz === null) {
       renderReadout(bodyEl, { label: '—', hz: null, cents: null });
       setNeedle(bodyEl, 0, '');
+      const objEl = bodyEl.querySelector('#tuner-objective');
+      if (objEl) objEl.dataset.match = '';
       return;
     }
     const r = frequencyToNote(hz);

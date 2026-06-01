@@ -30,3 +30,19 @@ describe('api/songs/[id].js server-side v2 validation', () => {
     expect(src).not.toMatch(/TODO\(Plan D\)/);
   });
 });
+
+describe('api/songs/index.js server-side v2 validation (create)', () => {
+  const src = readFileSync(resolve(process.cwd(), 'api/songs/index.js'), 'utf8');
+
+  it('importa validateSongV2 y valida en create cuando schemaVersion === 2', () => {
+    expect(src).toMatch(/import\s*\{\s*validateSongV2\s*\}/);
+    expect(src).toMatch(/if\s*\(\s*s\.schemaVersion\s*===\s*2\s*\)/);
+    expect(src).toMatch(/validateSongV2\(\s*s\s*\)/);
+  });
+
+  it('persiste voice_roster y schema_version en el INSERT', () => {
+    expect(src).toMatch(/voice_roster/);
+    expect(src).toMatch(/schema_version/);
+    expect(src).toMatch(/sql\.json\(s\.voiceRoster/);
+  });
+});

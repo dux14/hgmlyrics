@@ -729,7 +729,9 @@ function renderSections(
   return sections
     .map(
       (section) => `
-    <div class="lyrics__section lyrics__section--${section.type}">
+    <div class="lyrics__section lyrics__section--${section.type}"${
+      typeof section.speedPreset === 'number' ? ` data-speed-preset="${section.speedPreset}"` : ''
+    }>
       <div class="lyrics__section-label">${escapeHtml(section.label)}</div>
       ${(section.lines || [])
         .map((line) => {

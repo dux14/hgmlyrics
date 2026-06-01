@@ -148,4 +148,19 @@ describe('guardedRoute', () => {
     refresh();
     expect(handler).toHaveBeenCalled();
   });
+
+  it('forwards the query string to the handler (e.g. /afinador?mode=song&ref=F#3)', () => {
+    const handler = vi.fn();
+    configureAuth({
+      isAuthenticated: () => true,
+      needsOnboarding: () => false,
+      isAdmin: () => false,
+    });
+    guardedRoute('/afinador', handler);
+    globalThis.location.hash = '/afinador?mode=song&ref=F%233&from=abc';
+    refresh();
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({ query: 'mode=song&ref=F%233&from=abc' }),
+    );
+  });
 });

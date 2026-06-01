@@ -162,7 +162,7 @@ export function configureAuth(adapter) {
  * @param {boolean} [opts.adminOnly=false]
  */
 export function guardedRoute(pattern, handler, { adminOnly = false } = {}) {
-  route(pattern, ({ params, path }) => {
+  route(pattern, ({ params, path, query }) => {
     if (!authAdapter) {
       console.error('guardedRoute called before configureAuth');
       return;
@@ -179,6 +179,7 @@ export function guardedRoute(pattern, handler, { adminOnly = false } = {}) {
       navigate('/');
       return;
     }
-    handler({ params, path });
+    // Forward query too — handlers como /afinador leen ?mode/?ref/?songId/?from.
+    handler({ params, path, query });
   });
 }

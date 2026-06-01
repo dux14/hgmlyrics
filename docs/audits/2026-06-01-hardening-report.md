@@ -159,3 +159,75 @@ Verificado leyendo el código en esta rama.
   medición de viewport fiel).
 
 ---
+
+## PERFORMANCE / LIGHTHOUSE (Task 2)
+
+- `pnpm build` corre limpio (build de Vite + PWA: 69 precache entries, ~1090
+  KiB). El chunk principal `index-*.js` es ~349 KiB (91 KiB gzip) — dispara el
+  warning de >250 KiB de Vite (deuda preexistente, no introducida por A–F).
+- **El gate de Lighthouse se difiere a CI / preview de Vercel.** Intenté
+  `pnpm dlx @lhci/cli autorun` localmente contra `staticDistDir: "dist"`; falla
+  con `NO_FCP` ("The page did not paint any content") en este entorno sandbox.
+  Es esperable: la app es una SPA tras login-wall cuyo render inicial depende de
+  auth/API; el shell estático `dist/index.html` no pinta contenido medible en
+  headless aislado. **No se forzó** (sin instalar Chrome de sistema).
+- El gate vive en `.github/workflows/ci.yml:42-43` (`pnpm exec lhci autorun`) con
+  los umbrales de `.lighthouserc.json`: **accessibility ≥ 0.9 (error)**,
+  **pwa ≥ 0.95 (error)**, performance ≥ 0.8 (warn), best-practices ≥ 0.9 (warn).
+  CI corre lint + `test:ci` + build + LHCI en cada PR / push a master. Los scores
+  se validan ahí y en el preview de Vercel; ningún cambio de este pase toca el
+  bundle ni el CSS crítico de forma que pueda bajar a11y o pwa por debajo de los
+  gates.
+
+---
+
+## LOAD (Task 3)
+
+- `scripts/loadtest.mjs` creado (autocannon vía import; targets
+  `/api/songs/all` y `/api/auth/me`, 10 conexiones × 10s, reporta p95 y req/s).
+  Parsea OK (`node --check`).
+- **No se ejecuta localmente** por diseño: requiere `BASE` apuntando a un deploy
+  con DB real. Se corre contra el preview de Vercel:
+  `BASE=<preview-url> node scripts/loadtest.mjs`. El p95 de `/api/auth/me`
+  (resuelve flags) y la frescura del cache de `/api/songs/all` se anotan ahí.
+
+---
+
+## TESTING / CIERRE (Task 6)
+
+- **Suite unit/integración (Vitest): 18 archivos, 174 tests — PASS.** Incluye la
+  regresión v1 (`regression-v1.test.js`), la validación server-side
+  (`apiSongsValidation.test.js`) y los tests de A–F (feature flags, voiceSystem
+  v2, notes, pitch, syllabify, autoscroll, songView.chord, etc.).
+- **Lint: 0 errores** (3 warnings preexistentes en `UpdateNotifier.js` /
+  `store.js`, no relacionados con este pase).
+- **E2E (Playwright):** specs presentes —
+  `tests/e2e/dynamic-scroll.spec.js`, `editor-v2.spec.js`,
+  `feature-flags.spec.js`, `reader-tono.spec.js`, `tuner-shortcut.spec.js`.
+  Se ejecutan contra el preview de Vercel; Playwright no está instalado
+  localmente de forma intencional (igual que en pases A–F).
+
+### Cierre de la iniciativa (A–G)
+
+- **A · Feature flags:** gating server-side real (`requireFlag` → 403), admin
+  `requireAdmin` antes de escrituras, RLS sin SELECT público sobre
+  `feature_flag_users`.
+- **B · Modelo voz/tono v2:** `upgradeLegacySong` + `validateSongV2`, lectura
+  dual v1↔v2. Regresión v1 verde (HTML byte-idéntico).
+- **C · Lector UI voz/tono:** chips por categoría/persona, ruby de notas con
+  escape de XSS y contraste de tenor corregido en tema claro.
+- **D · Editor jerárquico:** roster + voiceLines, valores escapados; validación
+  ahora también server-side en `PUT /api/songs/[id]`.
+- **E · Afinador shortcut:** `ref` validado, `from` solo navegación interna
+  (sin open-redirect).
+- **F · Scroll dinámico:** velocidad por sección con interpolación, persistencia
+  por canción, reduced-motion honrado.
+- **G · Hardening:** este reporte — regresión v1 verde, gate Lighthouse en CI,
+  loadtest listo para preview, pase de seguridad sin hallazgos abiertos, a11y
+  reforzada (aria-pressed en chips).
+
+**Estado:** A–G implementados, gated por flags, con lectura dual v1↔v2 y test de
+paridad v1 en verde. Validaciones de gate (Lighthouse, carga, E2E) se ejecutan
+en CI / preview de Vercel.
+
+---

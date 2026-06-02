@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildLetraLineHTML } from '../src/lib/lyricsRender.js';
 import { transposeChord, buildChordsLineHTML } from '../src/lib/lyricsRender.js';
+import { buildTonoLineHTML } from '../src/lib/lyricsRender.js';
 
 describe('buildLetraLineHTML', () => {
   it('devuelve texto escapado plano, sin wrappers ni color', () => {
@@ -66,5 +67,50 @@ describe('buildChordsLineHTML', () => {
   it('clampa pos al final del texto', () => {
     const html = buildChordsLineHTML('ab', [{ pos: 99, ch: 'G' }]);
     expect(html).toContain('>G<');
+  });
+});
+
+describe('buildTonoLineHTML', () => {
+  const line = {
+    text: 'Santo es el Señor',
+    groups: [{ start: 0, end: 5, voiceId: 'sop1', note: 'B3' }],
+  };
+  const lyricsOnly = (html) =>
+    html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '').replace(/<[^>]*>/g, '');
+
+  it('colorea el rango de la voz activa con la clase de categoría', () => {
+    const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano');
+    expect(html).toContain('line-seg voice-text--soprano');
+  });
+
+  it('hace flotar la nota de cada grupo con la clase de categoría', () => {
+    const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano');
+    expect(html).toContain('float-label voice-text--soprano');
+    expect(html).toContain('>B3<');
+  });
+
+  it('atenúa con lyrics__tono-dim lo que la voz activa NO canta', () => {
+    const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano');
+    expect(html).toContain('lyrics__tono-dim');
+  });
+
+  it('no parte la letra', () => {
+    const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano');
+    expect(lyricsOnly(html)).toBe('Santo es el Señor');
+  });
+
+  it('grupo sin nota: colorea el rango pero no añade etiqueta flotante', () => {
+    const l = { text: 'abcd', groups: [{ start: 0, end: 2, voiceId: 'sop1', note: null }] };
+    const html = buildTonoLineHTML(l, 'sop1', 'voice-text--soprano');
+    expect(html).toContain('line-seg voice-text--soprano');
+    expect(html).not.toContain('float-label');
+  });
+
+  it('voz que no canta en la línea → todo atenuado, sin color ni notas', () => {
+    const html = buildTonoLineHTML(line, 'ten1', 'voice-text--tenor');
+    expect(html).not.toContain('float-label');
+    expect(html).not.toContain('voice-text--tenor');
+    expect(html).toContain('lyrics__tono-dim');
+    expect(lyricsOnly(html)).toBe('Santo es el Señor');
   });
 });

@@ -5,7 +5,7 @@
  * groupsForVoice) en HTML listo para el lector y para la vista previa del editor.
  * Sin DOM → testeable como string.
  */
-import { buildAnnotatedLineHTML } from './voiceSystem.js';
+import { buildAnnotatedLineHTML, groupsForVoice } from './voiceSystem.js';
 
 /**
  * Modo Letra (GA): texto blanco plano, escapado, sin etiquetas ni color.
@@ -53,4 +53,23 @@ export function buildChordsLineHTML(text, chords, opts = {}) {
     return { pos: Math.min(Math.max(c.pos || 0, 0), len), text: ch, className: 'chord-label' };
   });
   return buildAnnotatedLineHTML(str, { labels, baseClass: 'lyrics__letra-dim' });
+}
+
+/**
+ * Modo Tono (flag voz_tono): la voz activa se colorea (spans con la clase de
+ * categoría) y su nota flota sobre cada grupo; el resto del texto se atenúa.
+ * @param {object} line  línea v3 con {text, groups}
+ * @param {string} voiceId  id de la voz activa (roster)
+ * @param {string} colorClass  clase de color de categoría, p.ej. 'voice-text--soprano'
+ * @returns {string} HTML
+ */
+export function buildTonoLineHTML(line, voiceId, colorClass) {
+  const text = line?.text || '';
+  const groups = groupsForVoice(line, voiceId);
+  const cls = colorClass || '';
+  const spans = groups.map((g) => ({ start: g.start, end: g.end, className: cls }));
+  const labels = groups
+    .filter((g) => g.note !== null && g.note !== undefined)
+    .map((g) => ({ pos: g.start, text: g.note, className: cls }));
+  return buildAnnotatedLineHTML(text, { spans, labels, baseClass: 'lyrics__tono-dim' });
 }

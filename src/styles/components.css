@@ -1706,3 +1706,12 @@
   border-radius: var(--border-radius-full);
   vertical-align: middle;
 }
+
+.lyrics__line--spoken {
+  font-style: italic;
+  opacity: 0.6;
+}
+.lyrics__line--spoken::before {
+  content: '· ';
+  opacity: 0.7;
+}

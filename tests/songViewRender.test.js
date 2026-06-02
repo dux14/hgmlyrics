@@ -76,3 +76,39 @@ describe('renderSections (modo Tono)', () => {
     expect(html).not.toContain('float-label');
   });
 });
+
+const spokenSections = [
+  {
+    type: 'verse',
+    label: 'Santo',
+    lines: [
+      { text: 'Por eso con los ángeles, diciendo:', spoken: true },
+      { text: 'Santo, Santo, Santo' },
+    ],
+  },
+];
+
+describe('renderSections — líneas spoken', () => {
+  it('marca la línea spoken con lyrics__line--spoken en modo lyrics', () => {
+    const html = renderSections(spokenSections, { viewMode: 'lyrics' });
+    expect(html).toContain('lyrics__line--spoken');
+    expect(html).toContain('Por eso con los');
+  });
+
+  it('mantiene spoken en modo chords', () => {
+    const html = renderSections(spokenSections, { viewMode: 'chords' });
+    expect(html).toContain('lyrics__line--spoken');
+  });
+
+  it('mantiene spoken en modo tono aunque haya voz activa', () => {
+    const html = renderSections(spokenSections, { viewMode: 'tono', activeVoiceId: 'tenor' });
+    expect(html).toContain('lyrics__line--spoken');
+  });
+
+  it('no marca como spoken una línea normal', () => {
+    const html = renderSections(spokenSections, { viewMode: 'lyrics' });
+    const normal = html.split('lyrics__line--spoken')[1] || '';
+    expect(normal).toContain('Santo, Santo, Santo');
+    expect(normal).not.toContain('lyrics__line--spoken');
+  });
+});

@@ -663,6 +663,13 @@ export function renderSections(sections, opts = {}) {
         .map((line) => {
           const text = line.text || '';
 
+          // ── Recitado (texto hablado, no cantado): itálica atenuada, ancho
+          //    completo, en todos los modos. Sin groups/chords → excluido de
+          //    Tono/Acordes/afinador de forma natural.
+          if (line.spoken) {
+            return `<p class="lyrics__line lyrics__line--spoken">${buildLetraLineHTML(text)}</p>`;
+          }
+
           // ── Annotation / Timing guide ──
           if (line.annotation || isTimingGuide(text)) {
             const guide = parseTimingGuide(text);

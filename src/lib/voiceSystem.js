@@ -425,6 +425,9 @@ export function validateSongV3(song) {
 
   for (const section of song.sections || []) {
     for (const line of section.lines || []) {
+      if (line.spoken !== undefined && typeof line.spoken !== 'boolean') {
+        throw new Error('spoken debe ser boolean');
+      }
       const len = (line.text || '').length;
       for (const g of line.groups || []) {
         if (!(g.start >= 0 && g.end > g.start && g.end <= len)) {

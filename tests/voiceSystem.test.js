@@ -806,6 +806,26 @@ describe('firstNoteForVoice / tonoGeneralForVoice', () => {
   });
 });
 
+describe('validateSongV3 — campo spoken', () => {
+  const base = (line) => ({
+    schemaVersion: 3,
+    voiceRoster: [],
+    sections: [{ type: 'verse', label: 'V', lines: [line] }],
+  });
+
+  it('acepta una línea con spoken:true', () => {
+    expect(validateSongV3(base({ text: 'Diciendo:', spoken: true }))).toBe(true);
+  });
+
+  it('acepta una línea sin el campo spoken (retrocompat)', () => {
+    expect(validateSongV3(base({ text: 'Santo' }))).toBe(true);
+  });
+
+  it('rechaza spoken no booleano', () => {
+    expect(() => validateSongV3(base({ text: 'x', spoken: 'sí' }))).toThrow(/spoken/);
+  });
+});
+
 // Suma del texto visible (sin tags) — sirve para asegurar que la palabra no se parte.
 const visibleText = (html) => html.replace(/<[^>]*>/g, '');
 

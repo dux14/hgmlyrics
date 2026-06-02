@@ -1553,6 +1553,110 @@
   margin: 0 0 var(--space-sm);
 }
 
+/* ─── Wave 3 Fase 3: editor por rango de caracteres ─── */
+.char-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  padding: var(--space-sm);
+  background: var(--color-bg);
+  border-radius: var(--border-radius-md);
+}
+.char-strip__empty {
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+}
+.char-cell {
+  min-width: 1.1em;
+  padding: 0.35em 0.05em;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.char-cell:hover {
+  background: var(--color-surface);
+}
+.char-cell--sel {
+  background: var(--color-primary);
+  color: #fff;
+}
+.voice-pick-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.voice-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.35em 0.7em;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-pill, 999px);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.voice-pick--active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+.voice-pick__dot {
+  width: 0.7em;
+  height: 0.7em;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.group-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--color-bg);
+  border-radius: var(--border-radius-md);
+}
+.group-row__seg {
+  flex: 1 1 auto;
+  font-weight: 600;
+  white-space: pre-wrap;
+}
+.group-row__voice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+.group-row__note {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 2.5em;
+  text-align: right;
+}
+.group-row__del {
+  border: none;
+  background: transparent;
+  color: var(--color-error);
+  cursor: pointer;
+  padding: 0.2em;
+  display: inline-flex;
+}
+.tono-editor__error {
+  color: var(--color-error);
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0;
+}
+
 .tono-editor__role {
   display: inline-flex;
   align-items: center;

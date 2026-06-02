@@ -1015,22 +1015,28 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     render();
   }
 
-  /** Popup de acordes por token. Muta line.chords = [{ch,pos}] (pos = carácter). */
+  /** Popup de Acordes por rango (pos = inicio del rango). Muta line.chords=[{ch,pos}]. */
   function openChordEditor(line) {
+    if (!Array.isArray(line.chords)) line.chords = [];
     const overlay = document.createElement('div');
     overlay.className = 'import-modal__overlay';
     document.body.appendChild(overlay);
-    let selectedStart = null; // token.start del token en edición
+
+    const sel = { anchor: null, focus: null };
+    let chordDraft = '';
 
     const close = () => {
       overlay.remove();
       renderBlocks();
       updatePreview();
     };
-    const chordAt = (pos) => (line.chords || []).find((c) => c.pos === pos);
+    const currentRange = () => {
+      if (sel.anchor === null) return null;
+      if (sel.focus === null) return { start: sel.anchor, end: sel.anchor + 1 };
+      return normalizeRange(sel.anchor, sel.focus);
+    };
     const setChord = (pos, ch) => {
-      if (!Array.isArray(line.chords)) line.chords = [];
-      const clean = ch.trim();
+      const clean = (ch || '').trim();
       const existing = line.chords.find((c) => c.pos === pos);
       if (!clean) {
         line.chords = line.chords.filter((c) => c.pos !== pos);
@@ -1040,68 +1046,100 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         line.chords.push({ ch: clean, pos });
       }
       line.chords.sort((a, b) => a.pos - b.pos);
-      line.showChords = line.chords.length > 0;
     };
 
     function render() {
-      const tokens = tokenizeLineForChords(line);
-      const chips = tokens
-        .map((t) => {
-          const c = chordAt(t.start);
-          const active = t.start === selectedStart ? ' chord-chip--active' : '';
-          const chordLabel = c ? `<span class="chord-chip__chord">${escapeHtml(c.ch)}</span>` : '';
-          return `<span class="chord-chip-wrap">${chordLabel}<button class="chord-chip${active}" data-token-start="${t.start}" type="button">${escapeHtml(t.text)}</button></span>`;
-        })
-        .join('');
-      const sel = selectedStart === null ? null : chordAt(selectedStart);
-      const editor =
-        selectedStart === null
-          ? `<p class="tono-editor__hint">Tocá un token para poner o editar su acorde.</p>`
-          : `<div class="chord-editor__assign">
-               <input class="form-group__input" data-chord="input" type="text" value="${escapeHtml(sel?.ch || '')}" placeholder="Ej: Am, F#m, G7" />
-               <button class="btn btn--sm" data-chord="apply" type="button">Guardar</button>
-               <button class="btn btn--sm btn--secondary" data-chord="clear" type="button">Quitar</button>
-             </div>`;
+      const text = line.text || '';
+      const range = currentRange();
+      const strip = buildCharStripHTML(text, range);
+      const pos = range ? range.start : null;
+      const existing = pos === null ? null : line.chords.find((c) => c.pos === pos);
+
+      const chordRows =
+        line.chords.length === 0
+          ? '<p class="tono-editor__hint">Aún no hay acordes en esta línea.</p>'
+          : line.chords
+              .map((c) => {
+                const at = escapeHtml(text.slice(c.pos, c.pos + 1)) || '⌑';
+                return `<div class="group-row">
+                  <span class="group-row__seg">${escapeHtml(c.ch)}</span>
+                  <span class="group-row__voice">en "${at}" (pos ${c.pos})</span>
+                  <button class="group-row__del" data-del-pos="${c.pos}" type="button" aria-label="Quitar acorde">${icon('trash', { size: 14 })}</button>
+                </div>`;
+              })
+              .join('');
+
+      const canAdd = pos !== null;
       overlay.innerHTML = `
         <div class="import-modal tono-editor">
           <div class="import-modal__header">
-            <h3 class="import-modal__title" style="display: inline-flex; align-items: center; gap: 0.4em;">${icon('audio-lines', { size: 18 })} Acordes</h3>
+            <h3 class="import-modal__title" style="display:inline-flex;align-items:center;gap:0.4em;">${icon('audio-lines', { size: 18 })} Acordes</h3>
             <button class="import-modal__close" data-chord="close" aria-label="Cerrar">${icon('close', { size: 18 })}</button>
           </div>
+
           <div class="tono-editor__step">
-            <div class="tono-syllables chord-tokens">${chips || '<em>Línea vacía</em>'}</div>
+            <div class="tono-editor__step-head"><span>1 · Toca dónde empieza el acorde</span></div>
+            <div class="char-strip">${strip}</div>
           </div>
-          <div class="tono-editor__step">${editor}</div>
+
+          <div class="tono-editor__step">
+            <div class="tono-editor__step-head"><span>2 · Acorde</span></div>
+            <div class="chord-editor__assign">
+              <input class="form-group__input" data-chord="input" type="text" value="${escapeHtml(chordDraft || existing?.ch || '')}" placeholder="Ej: Am, F#m, G7" />
+              <button class="btn btn--primary" data-chord="apply" type="button"${canAdd ? '' : ' disabled'}>${icon('plus', { size: 14 })} Guardar</button>
+            </div>
+          </div>
+
+          <div class="tono-editor__step">
+            <div class="tono-editor__step-head"><span>Acordes de la línea</span></div>
+            <div class="group-list">${chordRows}</div>
+          </div>
+
           <div class="import-modal__actions">
             <button class="btn btn--primary" data-chord="done" type="button">Listo</button>
           </div>
         </div>`;
     }
 
+    overlay.addEventListener('input', (e) => {
+      if (e.target.dataset.chord === 'input') chordDraft = e.target.value;
+    });
+
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) return close();
       const act = e.target.closest('[data-chord]')?.dataset.chord;
       if (act === 'close' || act === 'done') return close();
       if (act === 'apply') {
-        const input = overlay.querySelector('[data-chord="input"]');
-        if (input && selectedStart !== null) setChord(selectedStart, input.value);
-        selectedStart = null;
+        const range = currentRange();
+        if (!range) return;
+        setChord(range.start, chordDraft);
+        sel.anchor = null;
+        sel.focus = null;
+        chordDraft = '';
         render();
         return;
       }
-      if (act === 'clear') {
-        if (selectedStart !== null) setChord(selectedStart, '');
-        selectedStart = null;
-        render();
-        return;
-      }
-      const tokenBtn = e.target.closest('.chord-chip');
-      if (tokenBtn) {
-        const start = Number.parseInt(tokenBtn.dataset.tokenStart, 10);
-        if (!Number.isNaN(start)) {
-          selectedStart = start;
+      const delBtn = e.target.closest('[data-del-pos]');
+      if (delBtn) {
+        const p = Number.parseInt(delBtn.dataset.delPos, 10);
+        if (!Number.isNaN(p)) {
+          setChord(p, '');
           render();
         }
+        return;
+      }
+      const charBtn = e.target.closest('.char-cell');
+      if (charBtn) {
+        const i = Number.parseInt(charBtn.dataset.char, 10);
+        if (Number.isNaN(i)) return;
+        if (sel.anchor === null || sel.focus !== null) {
+          sel.anchor = i;
+          sel.focus = null;
+        } else {
+          sel.focus = i;
+        }
+        chordDraft = '';
+        render();
       }
     });
 

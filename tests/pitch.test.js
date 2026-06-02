@@ -91,3 +91,33 @@ describe('detectPitch — robustness', () => {
     expect(Math.abs(centsOff(hz, 220))).toBeLessThan(5);
   });
 });
+
+describe('detectPitch — RMS gate (sensibilidad del afinador)', () => {
+  it('el default (0.005) detecta un seno tenue de amp 0.01 (RMS≈0.007)', () => {
+    const hz = detectPitch(sine(440, SAMPLE_RATE, SAMPLES, 0.01), SAMPLE_RATE);
+    expect(hz).not.toBeNull();
+    expect(Math.abs(centsOff(hz, 440))).toBeLessThan(5);
+  });
+
+  it('con el gate viejo (rmsGate: 0.01) ese mismo seno tenue se rechaza', () => {
+    const hz = detectPitch(sine(440, SAMPLE_RATE, SAMPLES, 0.01), SAMPLE_RATE, {
+      rmsGate: 0.01,
+    });
+    expect(hz).toBeNull();
+  });
+
+  it('rmsGate alto rechaza un seno de amplitud normal', () => {
+    const hz = detectPitch(sine(440, SAMPLE_RATE, SAMPLES, 0.5), SAMPLE_RATE, {
+      rmsGate: 0.5,
+    });
+    expect(hz).toBeNull();
+  });
+
+  it('rmsGate: 0 detecta incluso un seno muy tenue (amp 0.001)', () => {
+    const hz = detectPitch(sine(440, SAMPLE_RATE, SAMPLES, 0.001), SAMPLE_RATE, {
+      rmsGate: 0,
+    });
+    expect(hz).not.toBeNull();
+    expect(Math.abs(centsOff(hz, 440))).toBeLessThan(5);
+  });
+});

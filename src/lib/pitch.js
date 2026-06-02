@@ -15,6 +15,7 @@
 const DEFAULT_THRESHOLD = 0.1;
 const DEFAULT_MIN_HZ = 60; // below human bass + below E2 (82Hz) with margin
 const DEFAULT_MAX_HZ = 1500; // above E6; covers human voice + guitar
+const DEFAULT_RMS_GATE = 0.005; // sensibilidad del micrófono: por debajo se considera silencio
 
 /**
  * Detect the fundamental frequency in a buffer.
@@ -22,13 +23,14 @@ const DEFAULT_MAX_HZ = 1500; // above E6; covers human voice + guitar
  *
  * @param {Float32Array|number[]} buffer Mono audio samples in [-1, 1].
  * @param {number} sampleRate
- * @param {{ threshold?: number, minHz?: number, maxHz?: number }} [opts]
+ * @param {{ threshold?: number, minHz?: number, maxHz?: number, rmsGate?: number }} [opts]
  * @returns {number | null} Frequency in Hz, or null.
  */
 export function detectPitch(buffer, sampleRate, opts = {}) {
   const threshold = opts.threshold ?? DEFAULT_THRESHOLD;
   const minHz = opts.minHz ?? DEFAULT_MIN_HZ;
   const maxHz = opts.maxHz ?? DEFAULT_MAX_HZ;
+  const rmsGate = opts.rmsGate ?? DEFAULT_RMS_GATE;
   const N = buffer.length;
   if (N < 64 || !Number.isFinite(sampleRate) || sampleRate <= 0) return null;
 
@@ -36,7 +38,7 @@ export function detectPitch(buffer, sampleRate, opts = {}) {
   let rms = 0;
   for (let i = 0; i < N; i++) rms += buffer[i] * buffer[i];
   rms = Math.sqrt(rms / N);
-  if (rms < 0.01) return null;
+  if (rms < rmsGate) return null;
 
   const halfN = Math.floor(N / 2);
   const tauMin = Math.max(2, Math.floor(sampleRate / maxHz));

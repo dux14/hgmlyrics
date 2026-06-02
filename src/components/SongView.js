@@ -10,16 +10,13 @@
 import { getSongById, filterByAlbum, fetchSongDetail, getAdjacentSongs } from '../lib/store.js';
 import { navigate } from '../router.js';
 import {
-  VOICE_TYPES,
-  getVoiceColor,
-  getVoiceBgColor,
-  buildHighlightedHTML,
   upgradeLegacySong,
   rosterByCategory,
-  buildSyllableNotesHTML,
   getVoiceLabel,
-  deriveReferenceKey,
+  tonoGeneralForVoice,
+  firstNoteForVoice,
 } from '../lib/voiceSystem.js';
+import { buildLetraLineHTML, buildChordsLineHTML, buildTonoLineHTML } from '../lib/lyricsRender.js';
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { presetToSpeed, stepToward } from '../lib/autoscroll.js';
@@ -40,11 +37,6 @@ const AUTOSCROLL_COLLAPSE_DELAY = 1500;
 // Fracción del paso manual aplicada por frame al converger hacia el preset de
 // sección (más bajo = transición más suave). Ver Plan F.
 const AUTOSCROLL_CONVERGENCE_RATE = 0.5;
-
-// F6: Transposition
-const NOTES_SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const NOTES_FLAT = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
-const NORMALIZE = { Db: 'C#', Eb: 'D#', Fb: 'E', Gb: 'F#', Ab: 'G#', Bb: 'A#', Cb: 'B' };
 
 function getFontSize() {
   try {
@@ -116,24 +108,6 @@ function getVoiceTypeLabel(voiceType) {
 }
 
 /**
- * Detect which voices are used in the song
- */
-function detectUsedVoices(sections) {
-  const used = new Set();
-  for (const section of sections) {
-    if (!section.lines) continue;
-    for (const line of section.lines) {
-      if (line.voiceRanges) {
-        line.voiceRanges.forEach((r) => {
-          if (r.voices) r.voices.forEach((v) => used.add(v));
-        });
-      }
-    }
-  }
-  return used;
-}
-
-/**
  * Render the song view
  * @param {HTMLElement} container
  * @param {string|object} songIdOrData - Either a song ID string, or a full song object (with isPreview flag)
@@ -180,7 +154,6 @@ export async function renderSongView(container, songIdOrData) {
   }
 
   let fontSize = getFontSize();
-  let activeVoice = 'all';
   // viewMode: 'lyrics' | 'chords' | 'tono'. showChords se deriva para no tocar
   // la rama de acordes existente.
   let viewMode = 'lyrics';
@@ -207,23 +180,10 @@ export async function renderSongView(container, songIdOrData) {
     : getAdjacentSongs(songId);
   const hasNav = !isPreview && (adjacent.prev || adjacent.next);
   const hasChords = songHasChords(song);
-  const usedVoices = detectUsedVoices(song.sections || []);
   // El modo Tono está disponible si el flag está activo y la canción tiene
   // roster de voces. La fila toggle aparece si hay acordes o si hay Tono.
   const tonoAvailable = tonoEnabled && (song.voiceRoster || []).length > 0;
   const showToggle = hasChords || tonoAvailable;
-
-  // Build voice filter chips — only show voices that exist in the song
-  const voiceChipsHtml = VOICE_TYPES.filter((v) => usedVoices.has(v.id))
-    .map(
-      (v) => `
-      <button class="voice-filter__chip" data-voice="${v.id}">
-        <span class="voice-filter__dot" style="background: var(${v.cssColor})"></span>
-        <span class="voice-filter__label-text">${v.label}</span>
-      </button>
-    `,
-    )
-    .join('');
 
   container.innerHTML = `
     <div class="song-view fade-in">
@@ -296,37 +256,6 @@ export async function renderSongView(container, songIdOrData) {
         </div>
 
         ${
-          song.cejilla && song.cejilla > 0
-            ? `
-        <!-- Zone: Cejilla — shown in chords mode -->
-        <div class="song-toolbar__group" id="cejilla-control">
-          <div class="cejilla-badge" title="Colocar cejilla en el traste ${song.cejilla}">
-            <span class="cejilla-badge__icon">${icon('audio-lines', { size: 15 })}</span>
-            <span class="cejilla-badge__text">Cejilla: ${song.cejilla}</span>
-          </div>
-        </div>
-        `
-            : ''
-        }
-
-        ${
-          song.key
-            ? `
-        <!-- Zone: Tono + Afinar — shown in lyrics mode -->
-        <div class="song-toolbar__group" id="lyrics-extras">
-          <div class="key-badge" title="Tonalidad de la versión oficial">
-            <span class="key-badge__icon">${icon('music', { size: 15 })}</span>
-            <span class="key-badge__text">Tono: ${song.key}</span>
-          </div>
-          <a class="btn btn--secondary song-toolbar__btn" href="#/afinador?mode=song&songId=${song.id}&from=${song.id}" title="Cantá con este tono">
-            ${icon('mic', { size: 16 })} Afinar
-          </a>
-        </div>
-        `
-            : ''
-        }
-
-        ${
           isAdmin()
             ? `
         <!-- Zone: Actions -->
@@ -339,30 +268,32 @@ export async function renderSongView(container, songIdOrData) {
       </div>
 
       ${
-        hasChords
+        hasChords || (song.cejilla && song.cejilla > 0)
           ? `
-      <!-- Transpose Controls — hidden until chords mode -->
-      <div class="transpose-controls" id="transpose-controls" style="display: none;">
-        <span class="transpose-label">Transposición (Beta)</span>
-        <button class="transpose-btn" id="transpose-down">−½</button>
-        <span class="transpose-value" id="transpose-value">0</span>
-        <button class="transpose-btn" id="transpose-up">+½</button>
-        <span class="filter-separator"></span>
-        <button class="transpose-notation-toggle" id="notation-toggle">♯ / ♭</button>
-      </div>
-      `
-          : ''
-      }
-
-      <!-- Voice Part Filter — show only if there are voice-assigned lines -->
-      ${
-        usedVoices.size > 0
-          ? `
-      <div class="voice-filter" id="voice-part-filter">
-        <button class="voice-filter__chip voice-filter__chip--active" data-voice="all">
-          <span class="voice-filter__label-text">Todos</span>
-        </button>
-        ${voiceChipsHtml}
+      <!-- Cejilla + Transposición (modo Acordes) — lado a lado -->
+      <div class="chords-extras" id="chords-extras" style="display: none;">
+        ${
+          song.cejilla && song.cejilla > 0
+            ? `
+        <div class="cejilla-badge" title="Colocar cejilla en el traste ${song.cejilla}">
+          <span class="cejilla-badge__icon">${icon('audio-lines', { size: 15 })}</span>
+          <span class="cejilla-badge__text">Cejilla: ${song.cejilla}</span>
+        </div>`
+            : ''
+        }
+        ${
+          hasChords
+            ? `
+        <div class="transpose-controls" id="transpose-controls">
+          <span class="transpose-label">Transposición (Beta)</span>
+          <button class="transpose-btn" id="transpose-down">−½</button>
+          <span class="transpose-value" id="transpose-value">0</span>
+          <button class="transpose-btn" id="transpose-up">+½</button>
+          <span class="filter-separator"></span>
+          <button class="transpose-notation-toggle" id="notation-toggle">♯ / ♭</button>
+        </div>`
+            : ''
+        }
       </div>
       `
           : ''
@@ -390,7 +321,7 @@ export async function renderSongView(container, songIdOrData) {
 
       <!-- Lyrics -->
       <div class="lyrics" id="lyrics-content">
-        ${renderSections(song.sections || [], activeVoice, showChords, transposeSemitones, useFlats, viewMode, activeRosterId, activeCategory)}
+        ${renderSections(song.sections || [], { viewMode, transposeSemitones, useFlats, activeVoiceId: activeRosterId, activeCategory })}
       </div>
 
       ${
@@ -420,48 +351,25 @@ export async function renderSongView(container, songIdOrData) {
   function reRenderLyrics() {
     const lyricsEl = container.querySelector('#lyrics-content');
     if (lyricsEl) {
-      lyricsEl.innerHTML = renderSections(
-        song.sections || [],
-        activeVoice,
-        showChords,
+      lyricsEl.innerHTML = renderSections(song.sections || [], {
+        viewMode,
         transposeSemitones,
         useFlats,
-        viewMode,
-        activeRosterId,
+        activeVoiceId: activeRosterId,
         activeCategory,
-      );
+      });
       if (!isPreview) applyFontSize(fontSize);
     }
   }
 
-  // Show controls relevant to the current mode: voices + tono/afinar belong to
-  // lyrics reading; cejilla + transposition belong to chords. Cejilla stays
-  // visible on chord-less songs since there is no chords mode to gate it.
+  // Show controls relevant to the current mode: cejilla + transposition belong
+  // to chords mode; tono filters to tono mode.
   function applyModeVisibility() {
     const isTono = viewMode === 'tono';
-    // El filtro por voz (Letra) y la fila de Tono se excluyen mutuamente.
-    const voiceFilterEl = container.querySelector('#voice-part-filter');
-    if (voiceFilterEl) voiceFilterEl.style.display = showChords || isTono ? 'none' : '';
-    const lyricsExtrasEl = container.querySelector('#lyrics-extras');
-    if (lyricsExtrasEl) lyricsExtrasEl.style.display = showChords ? 'none' : '';
-    const cejillaEl = container.querySelector('#cejilla-control');
-    if (cejillaEl) cejillaEl.style.display = showChords || !hasChords ? '' : 'none';
-    const transposeEl = container.querySelector('#transpose-controls');
-    if (transposeEl) transposeEl.style.display = showChords ? 'flex' : 'none';
+    const chordsExtrasEl = container.querySelector('#chords-extras');
+    if (chordsExtrasEl) chordsExtrasEl.style.display = showChords ? 'flex' : 'none';
     const tonoFiltersEl = container.querySelector('#tono-filters');
     if (tonoFiltersEl) tonoFiltersEl.style.display = isTono ? '' : 'none';
-  }
-
-  // Reset the voice filter to "Todos" so lyrics aren't left dimmed by a filter
-  // that the chords mode has hidden.
-  function resetVoiceFilter() {
-    activeVoice = 'all';
-    container.querySelectorAll('.voice-filter__chip').forEach((c) => {
-      c.classList.toggle('voice-filter__chip--active', c.dataset.voice === 'all');
-      c.style.background = '';
-      c.style.color = '';
-      c.style.borderColor = '';
-    });
   }
 
   // ── Tono mode: disclosure categoría → persona ──
@@ -478,31 +386,37 @@ export async function renderSongView(container, songIdOrData) {
     updateTuneAction();
   }
 
-  // Botón "Afinar · {nota}" — solo con activeRosterId, flag afinador_shortcut y
-  // un tono de referencia derivable. Degrada a nada si falta cualquiera de esos.
+  // Dos botones: Afinar · tono general (referenceKey o 1ª nota) y Afinar · 1ª nota.
+  // Sólo con activeRosterId y el flag afinador_shortcut; si no hay notas, no aparece.
   function updateTuneAction() {
     const slot = container.querySelector('#tono-tune-action');
     if (!slot) return;
-    const refNote =
-      activeRosterId && isFeatureEnabled('afinador_shortcut')
-        ? deriveReferenceKey(song, activeRosterId)
-        : null;
-    if (!refNote) {
+    if (!activeRosterId || !isFeatureEnabled('afinador_shortcut')) {
       slot.innerHTML = '';
       return;
     }
-    // refNote ya viene validado por isValidNote (sin caracteres HTML), pero
-    // escapamos por defensa en profundidad, consistente con el resto del render.
-    const safeRef = escapeHtml(refNote);
-    slot.innerHTML = `<button class="btn btn--sm" id="tune-voice" data-ref="${safeRef}">${icon('mic', { size: 14 })} Afinar · ${safeRef}</button>`;
-    slot.querySelector('#tune-voice').addEventListener('click', () => {
-      // Abre el afinador en su sección "Canción" (cargada con esta canción),
-      // llevando la nota de referencia de la voz activa y el origen para poder
-      // volver a la canción ("Volver a la canción").
-      navigate(
-        `/afinador?mode=song&songId=${encodeURIComponent(song.id)}` +
-          `&ref=${encodeURIComponent(refNote)}&from=${encodeURIComponent(song.id)}`,
+    const general = tonoGeneralForVoice(song, activeRosterId);
+    const first = firstNoteForVoice(song, activeRosterId);
+    const btns = [];
+    if (general) {
+      btns.push(
+        `<button class="btn btn--sm" data-ref="${escapeHtml(general)}">${icon('mic', { size: 14 })} Afinar · ${escapeHtml(general)}</button>`,
       );
+    }
+    if (first && first !== general) {
+      btns.push(
+        `<button class="btn btn--sm" data-ref="${escapeHtml(first)}">${icon('mic', { size: 14 })} 1ª nota · ${escapeHtml(first)}</button>`,
+      );
+    }
+    slot.innerHTML = btns.join('');
+    slot.querySelectorAll('[data-ref]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const ref = btn.dataset.ref;
+        navigate(
+          `/afinador?mode=song&songId=${encodeURIComponent(song.id)}` +
+            `&ref=${encodeURIComponent(ref)}&from=${encodeURIComponent(song.id)}`,
+        );
+      });
     });
   }
 
@@ -522,12 +436,15 @@ export async function renderSongView(container, songIdOrData) {
       return;
     }
     rowEl.innerHTML = people
-      .map(
-        (p) => `
+      .map((p) => {
+        const note = tonoGeneralForVoice(song, p.id);
+        const noteHtml = note ? `<span class="tono-chip__note">${escapeHtml(note)}</span>` : '';
+        return `
         <button class="tono-chip tono-chip--person${p.id === activeRosterId ? ' tono-chip--active' : ''}" data-roster-id="${p.id}" aria-pressed="${p.id === activeRosterId}">
           <span class="voice-filter__label-text">${escapeHtml(p.name)}</span>
-        </button>`,
-      )
+          ${noteHtml}
+        </button>`;
+      })
       .join('');
     rowEl.querySelectorAll('[data-roster-id]').forEach((btn) => {
       btn.addEventListener('click', () => selectPerson(btn.dataset.rosterId));
@@ -594,7 +511,6 @@ export async function renderSongView(container, songIdOrData) {
         container
           .querySelectorAll('.chord-toggle__btn')
           .forEach((c) => c.classList.toggle('chord-toggle__btn--active', c === btn));
-        if (showChords) resetVoiceFilter();
         applyModeVisibility();
         if (viewMode === 'tono') ensureTonoSelection();
         reRenderLyrics();
@@ -630,31 +546,6 @@ export async function renderSongView(container, songIdOrData) {
   // Title → links page
   container.querySelector('#song-title-link')?.addEventListener('click', () => {
     navigate(`/song/${songId}/links`);
-  });
-
-  // Voice part filter
-  container.querySelectorAll('.voice-filter__chip').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      activeVoice = btn.dataset.voice;
-      container.querySelectorAll('.voice-filter__chip').forEach((c) => {
-        const isActive = c === btn;
-        c.classList.toggle('voice-filter__chip--active', isActive);
-        // Apply voice-specific color to the active chip
-        if (isActive && btn.dataset.voice !== 'all') {
-          const voiceData = VOICE_TYPES.find((v) => v.id === btn.dataset.voice);
-          if (voiceData) {
-            c.style.background = getVoiceBgColor(voiceData.id);
-            c.style.color = getVoiceColor(voiceData.id);
-            c.style.borderColor = getVoiceColor(voiceData.id);
-          }
-        } else {
-          c.style.background = '';
-          c.style.color = '';
-          c.style.borderColor = '';
-        }
-      });
-      reRenderLyrics();
-    });
   });
 
   // Chord toggle — only transpose and notation for full mode (already set up above)
@@ -706,48 +597,62 @@ function rosterCategories(song) {
 }
 
 /**
- * Render del modo Tono: fila de categorías + fila de personas (disclosure) +
- * encabezado aria-live con la voz activa. Oculto hasta que el toggle entra en
- * modo Tono (lo gestiona applyModeVisibility).
+ * Header del modo Tono: categorías en grid 2×2; al elegir una con varias voces
+ * se despliega el panel lateral de voces. La nota (tono general) va dentro del
+ * chip. Dos botones Afinar (tono general / 1ª nota) bajo el grid.
  * @param {object} song
  * @returns {string}
  */
 function renderTonoFilters(song) {
   const categories = rosterCategories(song);
   const catChips = categories
-    .map(
-      (c) => `
+    .map((c) => {
+      const people = rosterByCategory(song, c);
+      // Nota en el chip sólo si la categoría tiene una sola voz (su tono general).
+      const note = people.length === 1 ? tonoGeneralForVoice(song, people[0].id) : null;
+      const noteHtml = note ? `<span class="tono-chip__note">${escapeHtml(note)}</span>` : '';
+      return `
       <button class="tono-chip tono-chip--category" data-category="${c}" aria-pressed="false">
         <span class="voice-filter__dot" style="background: var(--color-voice-${c})"></span>
         <span class="voice-filter__label-text">${escapeHtml(getVoiceLabel(c))}</span>
-      </button>`,
-    )
+        ${noteHtml}
+      </button>`;
+    })
     .join('');
   return `
     <div class="lyrics__tono-filters" id="tono-filters" style="display: none;">
-      <div class="lyrics__filter-row" id="tono-category-row" role="group" aria-label="Categoría de voz">
-        ${catChips}
+      <div class="lyrics__tono-grid">
+        <div class="lyrics__tono-categories" id="tono-category-row" role="group" aria-label="Categoría de voz">
+          ${catChips}
+        </div>
+        <div class="lyrics__tono-voices" id="tono-person-row" role="group" aria-label="Voz"></div>
       </div>
-      <div class="lyrics__filter-row" id="tono-person-row" role="group" aria-label="Voz"></div>
       <p class="lyrics__tono-active" id="tono-active-voice" aria-live="polite"></p>
       <div class="lyrics__tono-tune" id="tono-tune-action"></div>
     </div>`;
 }
 
 /**
- * Render lyrics sections with voice filter, highlighting, and optional chords
+ * Render del cuerpo del lector (string puro). Letra blanco plano; Acordes con
+ * acordes flotantes + letra atenuada; Tono con la voz activa coloreada + nota.
+ * @param {Array} sections
+ * @param {{ viewMode?: 'lyrics'|'chords'|'tono', transposeSemitones?: number,
+ *           useFlats?: boolean, activeVoiceId?: string|null,
+ *           activeCategory?: string|null }} [opts]
+ * @returns {string} HTML
  */
-function renderSections(
-  sections,
-  activeVoice = 'all',
-  showChords = false,
-  transposeSemitones = 0,
-  useFlats = false,
-  viewMode = 'lyrics',
-  activeRosterId = null,
-  activeCategory = null,
-) {
-  return sections
+export function renderSections(sections, opts = {}) {
+  const {
+    viewMode = 'lyrics',
+    transposeSemitones = 0,
+    useFlats = false,
+    activeVoiceId = null,
+    activeCategory = null,
+  } = opts;
+  const showChords = viewMode === 'chords';
+  const colorClass = activeCategory ? `voice-text--${activeCategory}` : '';
+
+  return (sections || [])
     .map(
       (section) => `
     <div class="lyrics__section lyrics__section--${section.type}"${
@@ -758,7 +663,7 @@ function renderSections(
         .map((line) => {
           const text = line.text || '';
 
-          // ── Annotation / Timing guide detection ──
+          // ── Annotation / Timing guide ──
           if (line.annotation || isTimingGuide(text)) {
             const guide = parseTimingGuide(text);
             const guideContent = guide.count
@@ -767,145 +672,36 @@ function renderSections(
             return `<div class="timing-guide">${guideContent}</div>`;
           }
 
-          // ── Tono mode: notas por sílaba (ruby), excluyente de acordes ──
-          if (viewMode === 'tono' && activeRosterId) {
+          // ── Tono: voz activa coloreada + nota flotante ──
+          if (viewMode === 'tono' && activeVoiceId) {
             if (text.trim() === '') return `<p class="lyrics__line">&nbsp;</p>`;
-            const inner = buildSyllableNotesHTML(line, activeRosterId);
-            const catClass = activeCategory ? ` voice-text--${activeCategory}` : '';
-            return `<div class="lyrics__line lyrics__line--tono${catClass}">${inner}</div>`;
+            const inner = buildTonoLineHTML(line, activeVoiceId, colorClass);
+            return `<p class="lyrics__line lyrics__line--tono">${inner}</p>`;
           }
 
-          // ── Empty lines ──
+          // ── Líneas vacías ──
           if (text.trim() === '') {
             return showChords ? '' : `<p class="lyrics__line">&nbsp;</p>`;
           }
 
-          const highlightClass = '';
-          const lineHighlightBg = '';
-
-          // ── Chord rendering: Inline Anchored (Propuesta A+B) ──
+          // ── Acordes: letra atenuada + acordes flotantes ──
           if (showChords && line.chords?.length > 0) {
-            const inlineHtml = buildInlineChordHTML(
-              text,
-              line.chords,
-              transposeSemitones,
-              useFlats,
-              line.voiceRanges || [],
-              activeVoice,
-            );
-            const styleAttrs = [];
-            if (lineHighlightBg) styleAttrs.push(`background: ${lineHighlightBg}`);
-            const styleStr = styleAttrs.length > 0 ? ` style="${styleAttrs.join('; ')}"` : '';
-            return `
-            <div class="chord-line ${highlightClass}"${styleStr}>
-              ${inlineHtml}
-            </div>`;
+            const inner = buildChordsLineHTML(text, line.chords, { transposeSemitones, useFlats });
+            return `<p class="lyrics__line lyrics__line--chords">${inner}</p>`;
           }
-
-          // ── Regular lyrics line (no chords) ──
-          const lineContent = buildHighlightedHTML(text, line.voiceRanges || [], activeVoice);
-
-          const styleAttrs = [];
-          if (lineHighlightBg) styleAttrs.push(`background: ${lineHighlightBg}`);
-          const styleStr = styleAttrs.length > 0 ? ` style="${styleAttrs.join('; ')}"` : '';
-
           if (showChords) {
-            return `<p class="lyrics__line lyrics__line--no-chord ${highlightClass}"${styleStr}>${lineContent}</p>`;
+            // En modo acordes, una línea sin acordes va atenuada pero plana.
+            return `<p class="lyrics__line lyrics__line--chords lyrics__line--no-chord">${buildChordsLineHTML(text, [])}</p>`;
           }
-          return `<p class="lyrics__line ${highlightClass}"${styleStr}>${lineContent}</p>`;
+
+          // ── Letra (default): blanco plano ──
+          return `<p class="lyrics__line">${buildLetraLineHTML(text)}</p>`;
         })
         .join('')}
     </div>
   `,
     )
     .join('');
-}
-
-/**
- * Build inline chord HTML — each chord is anchored to its text segment.
- * If voiceRanges provided, each segment text is re-wrapped via buildHighlightedHTML
- * which adds absolute-positioned underlines without affecting chord grid alignment.
- */
-function buildInlineChordHTML(
-  text,
-  chords,
-  transposeSemitones = 0,
-  useFlats = false,
-  voiceRanges = [],
-  activeVoice = 'all',
-) {
-  const sorted = [...chords].sort((a, b) => (a.pos || 0) - (b.pos || 0));
-  const segments = [];
-  let lastPos = 0;
-
-  for (const { ch, pos } of sorted) {
-    const chordPos = Math.min(pos || 0, text.length);
-    const transposed =
-      transposeSemitones !== 0 ? transposeChord(ch, transposeSemitones, useFlats) : ch;
-
-    if (chordPos > lastPos) {
-      segments.push({ chord: null, start: lastPos, end: chordPos });
-    }
-    const nextIdx = sorted.findIndex((c) => (c.pos || 0) > chordPos);
-    const nextChordPos = nextIdx !== -1 ? sorted[nextIdx].pos || text.length : text.length;
-    segments.push({ chord: transposed, start: chordPos, end: nextChordPos });
-    lastPos = nextChordPos;
-  }
-
-  if (lastPos < text.length) {
-    segments.push({ chord: null, start: lastPos, end: text.length });
-  }
-
-  return segments
-    .map((seg) => {
-      const segText = text.slice(seg.start, seg.end);
-      const segRanges = sliceRangesForSegment(voiceRanges, seg.start, seg.end);
-      const innerHtml =
-        segRanges.length > 0 || activeVoice !== 'all'
-          ? buildHighlightedHTML(segText, segRanges, activeVoice)
-          : escapeHtml(segText);
-      if (seg.chord) {
-        return `<span class="chord-pair">
-        <span class="chord-badge">${escapeHtml(seg.chord)}</span>
-        <span class="chord-text">${innerHtml}</span>
-      </span>`;
-      }
-      return `<span class="chord-pair chord-pair--empty">
-      <span class="chord-badge">&nbsp;</span>
-      <span class="chord-text">${innerHtml}</span>
-    </span>`;
-    })
-    .join('');
-}
-
-/**
- * Extract the subset of voiceRanges that intersect [segStart, segEnd),
- * rebased to local offsets (0..segEnd-segStart).
- */
-function sliceRangesForSegment(voiceRanges, segStart, segEnd) {
-  if (!voiceRanges || voiceRanges.length === 0) return [];
-  const out = [];
-  for (const r of voiceRanges) {
-    const start = Math.max(r.start, segStart);
-    const end = Math.min(r.end, segEnd);
-    if (start < end) {
-      out.push({ start: start - segStart, end: end - segStart, voices: r.voices });
-    }
-  }
-  return out;
-}
-
-/**
- * Transpose a chord by semitones
- */
-function transposeChord(chord, semitones, useFlats) {
-  return chord.replace(/^([A-G][#b]?)/, (_, root) => {
-    const normalized = NORMALIZE[root] || root;
-    const idx = NOTES_SHARP.indexOf(normalized);
-    if (idx === -1) return root;
-    const newIdx = (((idx + semitones) % 12) + 12) % 12;
-    return useFlats ? NOTES_FLAT[newIdx] : NOTES_SHARP[newIdx];
-  });
 }
 
 /**

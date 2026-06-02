@@ -214,6 +214,62 @@ export function buildHighlightedHTML(text, voiceRanges, activeVoice = 'all') {
   return result;
 }
 
+/**
+ * Render de una línea con etiquetas flotantes (acordes/notas) y rangos coloreados.
+ * Texto continuo escapado; las etiquetas son absolutas (CSS) → no parten palabras.
+ * @param {string} text
+ * @param {{ labels?: Array<{pos:number,text:string,className?:string}>,
+ *           spans?: Array<{start:number,end:number,className?:string}>,
+ *           baseClass?: string }} [options]
+ * @returns {string} HTML
+ */
+export function buildAnnotatedLineHTML(text, options = {}) {
+  const str = text || '';
+  const len = str.length;
+  const labels = Array.isArray(options.labels) ? options.labels : [];
+  const spans = Array.isArray(options.spans) ? options.spans : [];
+  const baseClass = options.baseClass || '';
+
+  const cuts = new Set([0, len]);
+  for (const s of spans) {
+    if (s.start >= 0 && s.start <= len) cuts.add(s.start);
+    if (s.end >= 0 && s.end <= len) cuts.add(s.end);
+  }
+  for (const l of labels) {
+    if (l.pos >= 0 && l.pos <= len) cuts.add(l.pos);
+  }
+  const points = [...cuts].sort((a, b) => a - b);
+
+  const labelByPos = new Map();
+  for (const l of labels) {
+    if (!labelByPos.has(l.pos)) labelByPos.set(l.pos, l);
+  }
+  const labelHtml = (l) =>
+    `<span class="float-label ${l.className || ''}">${escapeHtml(l.text)}</span>`;
+
+  let html = '';
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    if (a >= b) continue;
+    const slice = str.slice(a, b);
+    const span = spans.find((s) => s.start <= a && s.end >= b && s.start < s.end);
+    const cls = span ? span.className || '' : baseClass;
+    const label = labelByPos.get(a);
+    if (label || cls) {
+      const wrapCls = ['line-seg', cls].filter(Boolean).join(' ');
+      html += `<span class="${wrapCls}">${label ? labelHtml(label) : ''}${escapeHtml(slice)}</span>`;
+    } else {
+      html += escapeHtml(slice);
+    }
+  }
+  // Etiqueta anclada al final de la línea (pos === len).
+  if (labelByPos.has(len)) {
+    html += `<span class="line-seg">${labelHtml(labelByPos.get(len))}</span>`;
+  }
+  return html;
+}
+
 function escapeHtml(str) {
   if (str === '' || str === null || str === undefined) return '';
   return String(str)
@@ -343,6 +399,50 @@ export function validateSongV2(song) {
 }
 
 /**
+ * Valida una canción v3 (modelo por grupos). No muta. Lanza Error al 1er problema.
+ * `note`/`referenceKey` admiten null. Usa comparación estricta (eqeqeq).
+ * @param {object} song @returns {true}
+ */
+export function validateSongV3(song) {
+  if (!song || song.schemaVersion !== 3) throw new Error('schemaVersion debe ser 3');
+
+  const roster = song.voiceRoster || [];
+  const ids = new Set();
+  for (const v of roster) {
+    if (!CANONICAL_VOICE_ORDER.includes(v.category)) {
+      throw new Error(`category inválida en roster: ${v.category}`);
+    }
+    if (ids.has(v.id)) throw new Error(`id de roster duplicado: ${v.id}`);
+    ids.add(v.id);
+    if (v.referenceKey !== null && v.referenceKey !== undefined && !isValidNote(v.referenceKey)) {
+      throw new Error(`referenceKey (nota) inválida: ${v.referenceKey}`);
+    }
+  }
+
+  for (const section of song.sections || []) {
+    for (const line of section.lines || []) {
+      const len = (line.text || '').length;
+      for (const g of line.groups || []) {
+        if (!(g.start >= 0 && g.end > g.start && g.end <= len)) {
+          throw new Error('group fuera de rango');
+        }
+        if (!ids.has(g.voiceId)) {
+          throw new Error(`group referencia roster inexistente: ${g.voiceId}`);
+        }
+        if (g.note !== null && g.note !== undefined && !isValidNote(g.note)) {
+          throw new Error(`nota inválida: ${g.note}`);
+        }
+      }
+      for (const c of line.chords || []) {
+        if (!(c.pos >= 0 && c.pos <= len)) throw new Error('chord pos fuera de rango');
+        if (typeof c.ch !== 'string' || c.ch.trim() === '') throw new Error('chord vacío');
+      }
+    }
+  }
+  return true;
+}
+
+/**
  * Deriva los voiceRanges (rangos de carácter por categoría) para el coloreado
  * del modo Letra, a partir de syllables + voiceLines. Agrupa sílabas contiguas
  * con el mismo conjunto de categorías; ignora extensores de melisma (ancho cero).
@@ -441,6 +541,44 @@ export function buildSyllableNotesHTML(line, rosterId) {
       return `<span class="${cls.join(' ')}">${noteHtml}${textHtml}</span>`;
     })
     .join('');
+}
+
+/**
+ * Grupos (rango+nota) de una voz en una línea, ordenados por start.
+ * @param {object} line @param {string} voiceId
+ * @returns {Array<{start:number,end:number,note:string|null}>}
+ */
+export function groupsForVoice(line, voiceId) {
+  const groups = Array.isArray(line?.groups) ? line.groups : [];
+  return groups
+    .filter((g) => g.voiceId === voiceId)
+    .map((g) => ({ start: g.start, end: g.end, note: g.note ?? null }))
+    .sort((a, b) => a.start - b.start);
+}
+
+/**
+ * Primera nota no nula que canta una voz, en el orden de la canción.
+ * @param {object} song @param {string} voiceId @returns {string|null}
+ */
+export function firstNoteForVoice(song, voiceId) {
+  for (const section of song?.sections || []) {
+    for (const line of section.lines || []) {
+      for (const g of groupsForVoice(line, voiceId)) {
+        if (g.note !== null && g.note !== undefined) return g.note;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Tono general de una voz: referenceKey explícito o, si no, su 1ª nota.
+ * @param {object} song @param {string} voiceId @returns {string|null}
+ */
+export function tonoGeneralForVoice(song, voiceId) {
+  const voice = (song?.voiceRoster || []).find((v) => v.id === voiceId);
+  if (voice?.referenceKey) return voice.referenceKey;
+  return firstNoteForVoice(song, voiceId);
 }
 
 /**

@@ -333,6 +333,7 @@
   padding: 2px 4px;
   margin: 0;
   border-radius: 4px;
+  letter-spacing: 0.04em;
   transition:
     font-size var(--transition-fast),
     opacity 300ms ease,
@@ -345,6 +346,49 @@
   border-radius: 4px;
   padding: 2px 6px;
   margin: 0 -2px;
+}
+
+/* ─── Wave 3: etiquetas flotantes (acordes/notas) sin partir palabras ─── */
+.line-seg {
+  position: relative;
+}
+.float-label {
+  position: absolute;
+  top: -1.05em;
+  left: 0;
+  font-size: 0.62em;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  letter-spacing: 0;
+  pointer-events: none;
+}
+.float-label.chord-label {
+  color: var(--color-chord);
+}
+
+/* Atenuación de letra en modo Acordes (~55%) para que predominen los acordes */
+.lyrics__letra-dim {
+  color: #8f8f8f;
+}
+/* Atenuación de lo que la voz activa NO canta en modo Tono */
+.lyrics__tono-dim {
+  color: #5a5a5a;
+}
+
+/* Línea en modo Acordes/Tono: bloque (no flex) + espacio arriba para la etiqueta */
+.lyrics__line--chords,
+.lyrics__line--tono {
+  padding-top: 1.35em;
+}
+
+/* Cejilla + Transposición en una fila (modo Acordes) */
+.chords-extras {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
 }
 
 /* === Theme Toggle === */
@@ -863,63 +907,6 @@
   padding: 0.15em 0.4em;
 }
 
-/* Each chord-lyric unit: chord on top, text below */
-.chord-pair {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  position: relative;
-  vertical-align: bottom;
-}
-
-/* The chord badge above the text */
-.chord-badge {
-  display: block;
-  font-weight: 700;
-  color: var(--color-chord);
-  font-size: 0.95em;
-  line-height: 1.3;
-  padding: 0.12em 0.35em;
-  margin-bottom: 0.12em;
-  border-radius: 4px;
-  background: var(--color-chord-bg);
-  white-space: nowrap;
-  user-select: text;
-  letter-spacing: 0.02em;
-  min-height: 1.3em;
-  transition:
-    background 200ms ease,
-    color 200ms ease;
-}
-
-/* Empty chord slot (no chord, just spacing) */
-.chord-pair--empty .chord-badge {
-  background: transparent;
-  color: transparent;
-  user-select: none;
-  pointer-events: none;
-}
-
-/* Hover effect on chord badge */
-.chord-pair:not(.chord-pair--empty):hover .chord-badge {
-  background: var(--color-chord-hover-bg);
-  color: var(--color-chord-hover);
-}
-
-/* The lyric text below the chord */
-.chord-text {
-  display: block;
-  line-height: 1.6;
-  color: var(--color-text-secondary);
-  white-space: pre-wrap;
-  transition: color 200ms ease;
-}
-
-/* Hover text highlight */
-.chord-pair:not(.chord-pair--empty):hover .chord-text {
-  color: var(--color-text);
-}
-
 /* Lines without chords in chord mode — more subtle */
 .lyrics__line--no-chord {
   opacity: 0.65;
@@ -1326,23 +1313,37 @@
   margin-bottom: var(--space-md);
 }
 
-.lyrics__filter-row {
+.lyrics__tono-grid {
   display: flex;
-  flex-wrap: nowrap;
+  gap: var(--space-md);
+  align-items: flex-start;
+}
+.lyrics__tono-categories {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.5rem;
-  overflow-x: auto;
-  padding-bottom: 0.25rem;
-  transition: opacity 200ms ease;
+  flex: 0 0 auto;
 }
-
-.lyrics__tono-active {
-  margin: 0.5rem 0 0;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
+.lyrics__tono-voices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-left: var(--space-md);
+  border-left: 2px solid var(--color-border);
 }
-
+.lyrics__tono-voices:empty {
+  display: none;
+}
+.tono-chip__note {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-primary);
+  margin-left: 0.1rem;
+}
 .lyrics__tono-tune {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin-top: 0.5rem;
 }
 
@@ -1355,6 +1356,13 @@
   align-items: center;
   gap: 0.4rem;
   min-height: 44px;
+}
+
+.lyrics__tono-active {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
 }
 
 .tono-chip {
@@ -1377,12 +1385,6 @@
   border-color: var(--color-primary);
   background: var(--color-primary-bg, var(--color-surface));
   color: var(--color-primary);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .lyrics__filter-row {
-    transition: none;
-  }
 }
 
 .voice-badge-extra--soprano {
@@ -1494,6 +1496,110 @@
   margin: 0 0 var(--space-sm);
 }
 
+/* ─── Wave 3 Fase 3: editor por rango de caracteres ─── */
+.char-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  padding: var(--space-sm);
+  background: var(--color-bg);
+  border-radius: var(--border-radius-md);
+}
+.char-strip__empty {
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+}
+.char-cell {
+  min-width: 1.1em;
+  padding: 0.35em 0.05em;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.char-cell:hover {
+  background: var(--color-surface);
+}
+.char-cell--sel {
+  background: var(--color-primary);
+  color: #fff;
+}
+.voice-pick-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.voice-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.35em 0.7em;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-pill, 999px);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.voice-pick--active {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+.voice-pick__dot {
+  width: 0.7em;
+  height: 0.7em;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.group-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--color-bg);
+  border-radius: var(--border-radius-md);
+}
+.group-row__seg {
+  flex: 1 1 auto;
+  font-weight: 600;
+  white-space: pre-wrap;
+}
+.group-row__voice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+.group-row__note {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 2.5em;
+  text-align: right;
+}
+.group-row__del {
+  border: none;
+  background: transparent;
+  color: var(--color-error);
+  cursor: pointer;
+  padding: 0.2em;
+  display: inline-flex;
+}
+.tono-editor__error {
+  color: var(--color-error);
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0;
+}
+
 .tono-editor__role {
   display: inline-flex;
   align-items: center;
@@ -1503,186 +1609,8 @@
   min-height: 44px;
 }
 
-/* Fila de silabación: letras + gaps clicables */
-.tono-syllabify {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  padding: var(--space-sm);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-sm);
-  font-size: 1.4rem;
-  line-height: 1.8;
-}
-
-.syl-char {
-  white-space: pre;
-}
-
-.syl-char--empty {
-  font-size: 0.9rem;
-  color: var(--color-text-secondary);
-}
-
-.syl-gap {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 0.7rem;
-  min-height: 44px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--color-primary);
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.syl-gap:hover {
-  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-}
-
-.syl-gap--active {
-  color: var(--color-primary);
-}
-
-/* Tira de sílabas seleccionables */
-.tono-syllables {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-}
-
-.syl-chip-wrap {
-  display: inline-flex;
-  align-items: stretch;
-}
-
-.syl-chip {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.15em;
-  min-height: 44px;
-  min-width: 44px;
-  padding: 0.3rem 0.6rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text);
-  cursor: pointer;
-  font-size: 0.95rem;
-}
-
-.syl-chip--sung {
-  border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-}
-
-.syl-chip--melisma {
-  font-style: italic;
-  color: var(--color-text-secondary);
-}
-
-.syl-chip--in-range {
-  outline: 2px solid var(--color-primary);
-}
-
-.syl-chip--anchor {
-  outline: 2px dashed var(--color-accent);
-}
-
-.syl-chip__note {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--color-primary);
-}
-
-.syl-chip__melisma {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  min-width: 28px;
-  margin-left: 2px;
-  border: 1px solid var(--color-border);
-  border-left: none;
-  border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;
-  background: var(--color-surface);
-  color: var(--color-accent);
-  cursor: pointer;
-}
-
-/* Selector de nota */
-.note-picker__overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.5);
-}
-
-.note-picker {
-  width: 100%;
-  max-width: 480px;
-  max-height: 70vh;
-  overflow-y: auto;
-  padding: var(--space-md);
-  border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
-  background: var(--color-surface);
-}
-
-.note-picker__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--space-sm);
-  font-weight: 600;
-}
-
-.note-picker__close {
-  min-height: 44px;
-  min-width: 44px;
-  border: none;
-  background: transparent;
-  color: var(--color-text);
-  cursor: pointer;
-}
-
-.note-picker__grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-sm);
-}
-
-.note-picker__note {
-  min-height: 44px;
-  padding: 0.4rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text);
-  cursor: pointer;
-  font-size: 0.85rem;
-}
-
-.note-picker__note--active {
-  border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
-  font-weight: 700;
-}
-
 /* Tono button en la fila de línea */
 .line-row__btn--tono.line-row__btn--active,
 .line-row__btn--tono:hover {
   color: var(--color-primary);
-}
-
-@media (min-width: 480px) {
-  .note-picker__grid {
-    grid-template-columns: repeat(6, 1fr);
-  }
 }

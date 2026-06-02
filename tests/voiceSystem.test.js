@@ -5,6 +5,7 @@ import {
   CANONICAL_VOICE_ORDER,
   deriveVoiceRanges,
 } from '../src/lib/voiceSystem.js';
+import { buildAnnotatedLineHTML } from '../src/lib/voiceSystem.js';
 
 describe('CANONICAL_VOICE_ORDER', () => {
   it('is soprano > contralto > tenor > bass', () => {
@@ -506,6 +507,8 @@ describe('buildSyllableNotesHTML', () => {
 });
 
 import { deriveReferenceKey, rosterByCategory } from '../src/lib/voiceSystem.js';
+import { groupsForVoice } from '../src/lib/voiceSystem.js';
+import { firstNoteForVoice, tonoGeneralForVoice } from '../src/lib/voiceSystem.js';
 
 describe('rosterByCategory', () => {
   it('filtra el roster por categoría conservando orden', () => {
@@ -619,5 +622,221 @@ describe('deriveVoiceRanges', () => {
 
   it('sin voiceLines ni voiceRanges: devuelve []', () => {
     expect(deriveVoiceRanges({ text: 'abc' }, roster)).toEqual([]);
+  });
+});
+
+describe('groupsForVoice', () => {
+  const line = {
+    text: 'Santo, Santo es el Señor',
+    groups: [
+      { start: 9, end: 14, voiceId: 'sop1', note: 'A3' },
+      { start: 0, end: 5, voiceId: 'sop1', note: 'B3' },
+      { start: 0, end: 5, voiceId: 'ten1', note: 'D3' },
+    ],
+  };
+
+  it('filtra por voz y ordena por start', () => {
+    expect(groupsForVoice(line, 'sop1')).toEqual([
+      { start: 0, end: 5, note: 'B3' },
+      { start: 9, end: 14, note: 'A3' },
+    ]);
+  });
+
+  it('devuelve [] si la voz no canta en la línea', () => {
+    expect(groupsForVoice(line, 'baj1')).toEqual([]);
+  });
+
+  it('tolera línea sin groups', () => {
+    expect(groupsForVoice({ text: 'x' }, 'sop1')).toEqual([]);
+    expect(groupsForVoice(null, 'sop1')).toEqual([]);
+  });
+
+  it('normaliza note ausente a null', () => {
+    const l = { groups: [{ start: 0, end: 2, voiceId: 'sop1' }] };
+    expect(groupsForVoice(l, 'sop1')).toEqual([{ start: 0, end: 2, note: null }]);
+  });
+});
+
+import { validateSongV3 } from '../src/lib/voiceSystem.js';
+
+describe('validateSongV3', () => {
+  const base = () => ({
+    schemaVersion: 3,
+    voiceRoster: [{ id: 'sop1', name: 'Voz 1', category: 'soprano', referenceKey: 'B3' }],
+    sections: [
+      {
+        lines: [
+          {
+            text: 'Santo',
+            groups: [{ start: 0, end: 5, voiceId: 'sop1', note: 'B3' }],
+            chords: [{ pos: 0, ch: 'D' }],
+          },
+        ],
+      },
+    ],
+  });
+
+  it('acepta una canción v3 válida', () => {
+    expect(validateSongV3(base())).toBe(true);
+  });
+
+  it('rechaza schemaVersion !== 3', () => {
+    const s = base();
+    s.schemaVersion = 2;
+    expect(() => validateSongV3(s)).toThrow(/schemaVersion/);
+  });
+
+  it('rechaza category de roster inválida', () => {
+    const s = base();
+    s.voiceRoster[0].category = 'mezzo';
+    expect(() => validateSongV3(s)).toThrow(/category/);
+  });
+
+  it('rechaza id de roster duplicado', () => {
+    const s = base();
+    s.voiceRoster.push({ id: 'sop1', name: 'dup', category: 'tenor' });
+    expect(() => validateSongV3(s)).toThrow(/duplicado/);
+  });
+
+  it('rechaza referenceKey inválida', () => {
+    const s = base();
+    s.voiceRoster[0].referenceKey = 'H9';
+    expect(() => validateSongV3(s)).toThrow(/referenceKey/);
+  });
+
+  it('rechaza group fuera de rango', () => {
+    const s = base();
+    s.sections[0].lines[0].groups[0].end = 99;
+    expect(() => validateSongV3(s)).toThrow(/group fuera de rango/);
+  });
+
+  it('rechaza group start >= end', () => {
+    const s = base();
+    s.sections[0].lines[0].groups[0] = { start: 3, end: 3, voiceId: 'sop1', note: null };
+    expect(() => validateSongV3(s)).toThrow(/group fuera de rango/);
+  });
+
+  it('rechaza group con voiceId inexistente', () => {
+    const s = base();
+    s.sections[0].lines[0].groups[0].voiceId = 'ghost';
+    expect(() => validateSongV3(s)).toThrow(/roster inexistente/);
+  });
+
+  it('rechaza nota inválida en group', () => {
+    const s = base();
+    s.sections[0].lines[0].groups[0].note = 'X1';
+    expect(() => validateSongV3(s)).toThrow(/nota inválida/);
+  });
+
+  it('acepta note null en group', () => {
+    const s = base();
+    s.sections[0].lines[0].groups[0].note = null;
+    expect(validateSongV3(s)).toBe(true);
+  });
+
+  it('rechaza chord pos fuera de rango', () => {
+    const s = base();
+    s.sections[0].lines[0].chords[0].pos = 50;
+    expect(() => validateSongV3(s)).toThrow(/chord pos/);
+  });
+
+  it('rechaza chord vacío', () => {
+    const s = base();
+    s.sections[0].lines[0].chords[0].ch = '   ';
+    expect(() => validateSongV3(s)).toThrow(/chord vacío/);
+  });
+});
+
+describe('firstNoteForVoice / tonoGeneralForVoice', () => {
+  const song = {
+    voiceRoster: [
+      { id: 'sop1', name: 'Voz 1', category: 'soprano', referenceKey: 'C4' },
+      { id: 'ten1', name: 'Voz 1', category: 'tenor' },
+    ],
+    sections: [
+      {
+        lines: [
+          { text: 'aa', groups: [{ start: 0, end: 2, voiceId: 'ten1', note: null }] },
+          {
+            text: 'bbbb',
+            groups: [
+              { start: 0, end: 2, voiceId: 'ten1', note: 'D3' },
+              { start: 2, end: 4, voiceId: 'sop1', note: 'B3' },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  it('firstNoteForVoice toma la 1ª nota no nula en orden', () => {
+    expect(firstNoteForVoice(song, 'ten1')).toBe('D3');
+    expect(firstNoteForVoice(song, 'sop1')).toBe('B3');
+  });
+
+  it('firstNoteForVoice devuelve null si no hay notas', () => {
+    expect(firstNoteForVoice(song, 'baj1')).toBe(null);
+  });
+
+  it('tonoGeneralForVoice usa referenceKey si existe', () => {
+    expect(tonoGeneralForVoice(song, 'sop1')).toBe('C4');
+  });
+
+  it('tonoGeneralForVoice cae a la 1ª nota si no hay referenceKey', () => {
+    expect(tonoGeneralForVoice(song, 'ten1')).toBe('D3');
+  });
+});
+
+// Suma del texto visible (sin tags) — sirve para asegurar que la palabra no se parte.
+const visibleText = (html) => html.replace(/<[^>]*>/g, '');
+
+describe('buildAnnotatedLineHTML', () => {
+  it('texto plano sin labels/spans → escapado sin wrappers', () => {
+    expect(buildAnnotatedLineHTML('a<b>', {})).toBe('a&lt;b&gt;');
+  });
+
+  it('label en pos 0 → float-label con el texto', () => {
+    const html = buildAnnotatedLineHTML('Santo', {
+      labels: [{ pos: 0, text: 'D', className: 'c' }],
+    });
+    expect(html).toContain('float-label c');
+    expect(html).toContain('>D<');
+    expect(visibleText(html)).toBe('DSanto'); // label + texto, pero el texto sigue íntegro
+  });
+
+  it('NO parte la palabra: dos labels dentro de "universo" reconstruyen la palabra', () => {
+    const html = buildAnnotatedLineHTML('universo', {
+      labels: [
+        { pos: 0, text: 'D4' },
+        { pos: 1, text: 'B3' },
+      ],
+    });
+    // El texto de la letra (quitando las etiquetas flotantes) sigue siendo "universo".
+    const noLabels = html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '');
+    expect(visibleText(noLabels)).toBe('universo');
+  });
+
+  it('span colorea su rango y baseClass cubre el resto', () => {
+    const html = buildAnnotatedLineHTML('abcd', {
+      spans: [{ start: 0, end: 2, className: 'voice-sop' }],
+      baseClass: 'dim',
+    });
+    expect(html).toContain('voice-sop');
+    expect(html).toContain('dim');
+    expect(visibleText(html)).toBe('abcd');
+  });
+
+  it('label al final (pos === len) se renderiza igual', () => {
+    const html = buildAnnotatedLineHTML('ab', { labels: [{ pos: 2, text: 'G' }] });
+    expect(html).toContain('float-label');
+    expect(html).toContain('>G<');
+    // el texto visible de la letra sigue siendo "ab" (la G es etiqueta flotante)
+    const noLabels = html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '');
+    expect(visibleText(noLabels)).toBe('ab');
+  });
+
+  it('escapa el texto de la etiqueta', () => {
+    const html = buildAnnotatedLineHTML('x', { labels: [{ pos: 0, text: 'F#<' }] });
+    expect(html).toContain('F#&lt;');
   });
 });

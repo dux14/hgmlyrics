@@ -28,6 +28,7 @@ import { renderProfile } from './components/Profile.js';
 import { renderPublicProfile } from './components/PublicProfile.js';
 import { renderFriendsPanel } from './components/FriendsPanel.js';
 import { renderFavoritesPage } from './components/FavoritesPage.js';
+import { renderRecommenderPage } from './components/RecommenderPage.js';
 import { renderHeader } from './components/Header.js';
 import { renderSidebar, toggleSidebar, updateSidebarContent } from './components/Sidebar.js';
 import {
@@ -201,6 +202,11 @@ async function boot() {
     hideFilterBar();
     const { renderTuner } = await import('./components/Tuner.js');
     renderTuner(mainContent, { query });
+  });
+
+  guardedRoute('/recomendador', () => {
+    hideFilterBar();
+    renderRecommenderPage(mainContent);
   });
 
   onNotFound(() => {

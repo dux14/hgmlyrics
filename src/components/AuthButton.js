@@ -32,6 +32,7 @@ function buildMenu() {
       <a class="auth-menu__item" href="#/favoritos">Favoritos</a>
       <a class="auth-menu__item" href="#/amigos">Amigos</a>
       <a class="auth-menu__item" href="#/afinador">${icon('audio-lines', { size: 16 })} Afinador <span class="badge--beta">BETA</span></a>
+      <a class="auth-menu__item" href="#/recomendador">${icon('sparkles', { size: 16 })} Recomendador <span class="badge--beta">BETA</span></a>
       <button class="auth-menu__item" id="logout-btn">Cerrar sesión</button>
     </div>
   `;

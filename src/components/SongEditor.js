@@ -78,13 +78,16 @@ function sectionsToBlocks(sections) {
     lines: (section.lines || []).map((line, li) => ({
       id: `line-${si}-${li}-${Date.now()}`,
       text: line.text || '',
-      voiceRanges: line.voiceRanges || [],
-      chords: line.chords || [],
+      groups: Array.isArray(line.groups)
+        ? line.groups.map((g) => ({
+            start: g.start,
+            end: g.end,
+            voiceId: g.voiceId,
+            note: g.note ?? null,
+          }))
+        : [],
+      chords: Array.isArray(line.chords) ? line.chords.map((c) => ({ pos: c.pos, ch: c.ch })) : [],
       annotation: line.annotation || false,
-      showChords: line.chords && line.chords.length > 0,
-      // v2 (sólo se serializa si la canción es v2 — ver blocksToSectionsV2):
-      syllables: Array.isArray(line.syllables) ? line.syllables : null,
-      voiceLines: line.voiceLines && typeof line.voiceLines === 'object' ? line.voiceLines : null,
     })),
   }));
 }
@@ -146,6 +149,44 @@ function blocksToSectionsV2(blocks, roster = []) {
 }
 
 /**
+ * v3: serializa el modelo de bloques al schema v3 — `groups`/`chords` por línea
+ * (capas independientes) + `speedPreset` por sección. Sin `voiceRanges` ni
+ * `voiceLines` (el coloreado de Letra se eliminó en Fase 2).
+ * @param {Array} blocks
+ * @returns {Array}
+ */
+export function blocksToSectionsV3(blocks) {
+  return blocks.map((block) => {
+    const section = {
+      type: block.type,
+      label: block.label,
+      lines: block.lines
+        .filter((l) => l.text.trim() !== '' || (l.chords && l.chords.length > 0) || l.annotation)
+        .map((l) => {
+          const line = { text: l.text };
+          if (Array.isArray(l.groups) && l.groups.length > 0) {
+            line.groups = l.groups.map((g) => ({
+              start: g.start,
+              end: g.end,
+              voiceId: g.voiceId,
+              note: g.note ?? null,
+            }));
+          }
+          if (Array.isArray(l.chords) && l.chords.length > 0) {
+            line.chords = l.chords.map((c) => ({ pos: c.pos, ch: c.ch }));
+          }
+          if (l.annotation) line.annotation = true;
+          return line;
+        }),
+    };
+    if (typeof block.speedPreset === 'number' && !Number.isNaN(block.speedPreset)) {
+      section.speedPreset = block.speedPreset;
+    }
+    return section;
+  });
+}
+
+/**
  * Parse imported plain text into block structure
  */
 function parseImportText(text) {
@@ -181,24 +222,15 @@ function parseImportText(text) {
         };
       }
 
-      // Parse voice tags
-      let line = rawLine;
-      let voices = [];
-      const voiceMatch = line.match(/^\{@([a-z,]+)\}/);
-      if (voiceMatch) {
-        voices = voiceMatch[1].split(',').filter((v) => VALID_VOICE_IDS.includes(v));
-        line = line.slice(voiceMatch[0].length);
-      }
-
       // Parse inline chords
-      const { text: cleanText, chords } = parseLineChords(line);
+      const { text: cleanText, chords } = parseLineChords(rawLine);
 
       current.lines.push({
         id: `line-imp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         text: cleanText,
-        voiceRanges: voices.length > 0 ? [{ start: 0, end: cleanText.length, voices }] : [],
+        groups: [],
         chords: chords || [],
-        showChords: chords && chords.length > 0,
+        annotation: false,
       });
     }
   }
@@ -753,13 +785,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
 
     if (action === 'add-line') {
       const si = parseInt(btn.dataset.section);
-      blocks[si].lines.push({
-        id: uid(),
-        text: '',
-        voiceRanges: [],
-        chords: [],
-        showChords: false,
-      });
+      blocks[si].lines.push({ id: uid(), text: '', groups: [], chords: [], annotation: false });
       renderBlocks();
       // Focus the new line input
       const lastInput = editorRoot.querySelector(
@@ -1237,15 +1263,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       id: uid(),
       type: 'verse',
       label: `Verso ${verseCount + 1}`,
-      lines: [
-        {
-          id: uid(),
-          text: '',
-          voiceRanges: [],
-          chords: [],
-          showChords: false,
-        },
-      ],
+      lines: [{ id: uid(), text: '', groups: [], chords: [], annotation: false }],
     });
     renderBlocks();
     // Focus the new section's first input

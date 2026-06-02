@@ -13,13 +13,12 @@ import {
   VOICE_TYPES,
   getVoiceColor,
   getVoiceBgColor,
-  buildHighlightedHTML,
   upgradeLegacySong,
   rosterByCategory,
-  buildSyllableNotesHTML,
   getVoiceLabel,
   deriveReferenceKey,
 } from '../lib/voiceSystem.js';
+import { buildLetraLineHTML, buildChordsLineHTML, buildTonoLineHTML } from '../lib/lyricsRender.js';
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { presetToSpeed, stepToward } from '../lib/autoscroll.js';
@@ -40,11 +39,6 @@ const AUTOSCROLL_COLLAPSE_DELAY = 1500;
 // Fracción del paso manual aplicada por frame al converger hacia el preset de
 // sección (más bajo = transición más suave). Ver Plan F.
 const AUTOSCROLL_CONVERGENCE_RATE = 0.5;
-
-// F6: Transposition
-const NOTES_SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-const NOTES_FLAT = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
-const NORMALIZE = { Db: 'C#', Eb: 'D#', Fb: 'E', Gb: 'F#', Ab: 'G#', Bb: 'A#', Cb: 'B' };
 
 function getFontSize() {
   try {
@@ -390,7 +384,7 @@ export async function renderSongView(container, songIdOrData) {
 
       <!-- Lyrics -->
       <div class="lyrics" id="lyrics-content">
-        ${renderSections(song.sections || [], activeVoice, showChords, transposeSemitones, useFlats, viewMode, activeRosterId, activeCategory)}
+        ${renderSections(song.sections || [], { viewMode, transposeSemitones, useFlats, activeVoiceId: activeRosterId, activeCategory })}
       </div>
 
       ${
@@ -420,16 +414,13 @@ export async function renderSongView(container, songIdOrData) {
   function reRenderLyrics() {
     const lyricsEl = container.querySelector('#lyrics-content');
     if (lyricsEl) {
-      lyricsEl.innerHTML = renderSections(
-        song.sections || [],
-        activeVoice,
-        showChords,
+      lyricsEl.innerHTML = renderSections(song.sections || [], {
+        viewMode,
         transposeSemitones,
         useFlats,
-        viewMode,
-        activeRosterId,
+        activeVoiceId: activeRosterId,
         activeCategory,
-      );
+      });
       if (!isPreview) applyFontSize(fontSize);
     }
   }
@@ -735,19 +726,26 @@ function renderTonoFilters(song) {
 }
 
 /**
- * Render lyrics sections with voice filter, highlighting, and optional chords
+ * Render del cuerpo del lector (string puro). Letra blanco plano; Acordes con
+ * acordes flotantes + letra atenuada; Tono con la voz activa coloreada + nota.
+ * @param {Array} sections
+ * @param {{ viewMode?: 'lyrics'|'chords'|'tono', transposeSemitones?: number,
+ *           useFlats?: boolean, activeVoiceId?: string|null,
+ *           activeCategory?: string|null }} [opts]
+ * @returns {string} HTML
  */
-function renderSections(
-  sections,
-  activeVoice = 'all',
-  showChords = false,
-  transposeSemitones = 0,
-  useFlats = false,
-  viewMode = 'lyrics',
-  activeRosterId = null,
-  activeCategory = null,
-) {
-  return sections
+export function renderSections(sections, opts = {}) {
+  const {
+    viewMode = 'lyrics',
+    transposeSemitones = 0,
+    useFlats = false,
+    activeVoiceId = null,
+    activeCategory = null,
+  } = opts;
+  const showChords = viewMode === 'chords';
+  const colorClass = activeCategory ? `voice-text--${activeCategory}` : '';
+
+  return (sections || [])
     .map(
       (section) => `
     <div class="lyrics__section lyrics__section--${section.type}"${
@@ -758,7 +756,7 @@ function renderSections(
         .map((line) => {
           const text = line.text || '';
 
-          // ── Annotation / Timing guide detection ──
+          // ── Annotation / Timing guide ──
           if (line.annotation || isTimingGuide(text)) {
             const guide = parseTimingGuide(text);
             const guideContent = guide.count
@@ -767,145 +765,36 @@ function renderSections(
             return `<div class="timing-guide">${guideContent}</div>`;
           }
 
-          // ── Tono mode: notas por sílaba (ruby), excluyente de acordes ──
-          if (viewMode === 'tono' && activeRosterId) {
+          // ── Tono: voz activa coloreada + nota flotante ──
+          if (viewMode === 'tono' && activeVoiceId) {
             if (text.trim() === '') return `<p class="lyrics__line">&nbsp;</p>`;
-            const inner = buildSyllableNotesHTML(line, activeRosterId);
-            const catClass = activeCategory ? ` voice-text--${activeCategory}` : '';
-            return `<div class="lyrics__line lyrics__line--tono${catClass}">${inner}</div>`;
+            const inner = buildTonoLineHTML(line, activeVoiceId, colorClass);
+            return `<p class="lyrics__line lyrics__line--tono">${inner}</p>`;
           }
 
-          // ── Empty lines ──
+          // ── Líneas vacías ──
           if (text.trim() === '') {
             return showChords ? '' : `<p class="lyrics__line">&nbsp;</p>`;
           }
 
-          const highlightClass = '';
-          const lineHighlightBg = '';
-
-          // ── Chord rendering: Inline Anchored (Propuesta A+B) ──
+          // ── Acordes: letra atenuada + acordes flotantes ──
           if (showChords && line.chords?.length > 0) {
-            const inlineHtml = buildInlineChordHTML(
-              text,
-              line.chords,
-              transposeSemitones,
-              useFlats,
-              line.voiceRanges || [],
-              activeVoice,
-            );
-            const styleAttrs = [];
-            if (lineHighlightBg) styleAttrs.push(`background: ${lineHighlightBg}`);
-            const styleStr = styleAttrs.length > 0 ? ` style="${styleAttrs.join('; ')}"` : '';
-            return `
-            <div class="chord-line ${highlightClass}"${styleStr}>
-              ${inlineHtml}
-            </div>`;
+            const inner = buildChordsLineHTML(text, line.chords, { transposeSemitones, useFlats });
+            return `<p class="lyrics__line lyrics__line--chords">${inner}</p>`;
           }
-
-          // ── Regular lyrics line (no chords) ──
-          const lineContent = buildHighlightedHTML(text, line.voiceRanges || [], activeVoice);
-
-          const styleAttrs = [];
-          if (lineHighlightBg) styleAttrs.push(`background: ${lineHighlightBg}`);
-          const styleStr = styleAttrs.length > 0 ? ` style="${styleAttrs.join('; ')}"` : '';
-
           if (showChords) {
-            return `<p class="lyrics__line lyrics__line--no-chord ${highlightClass}"${styleStr}>${lineContent}</p>`;
+            // En modo acordes, una línea sin acordes va atenuada pero plana.
+            return `<p class="lyrics__line lyrics__line--chords lyrics__line--no-chord">${buildChordsLineHTML(text, [])}</p>`;
           }
-          return `<p class="lyrics__line ${highlightClass}"${styleStr}>${lineContent}</p>`;
+
+          // ── Letra (default): blanco plano ──
+          return `<p class="lyrics__line">${buildLetraLineHTML(text)}</p>`;
         })
         .join('')}
     </div>
   `,
     )
     .join('');
-}
-
-/**
- * Build inline chord HTML — each chord is anchored to its text segment.
- * If voiceRanges provided, each segment text is re-wrapped via buildHighlightedHTML
- * which adds absolute-positioned underlines without affecting chord grid alignment.
- */
-function buildInlineChordHTML(
-  text,
-  chords,
-  transposeSemitones = 0,
-  useFlats = false,
-  voiceRanges = [],
-  activeVoice = 'all',
-) {
-  const sorted = [...chords].sort((a, b) => (a.pos || 0) - (b.pos || 0));
-  const segments = [];
-  let lastPos = 0;
-
-  for (const { ch, pos } of sorted) {
-    const chordPos = Math.min(pos || 0, text.length);
-    const transposed =
-      transposeSemitones !== 0 ? transposeChord(ch, transposeSemitones, useFlats) : ch;
-
-    if (chordPos > lastPos) {
-      segments.push({ chord: null, start: lastPos, end: chordPos });
-    }
-    const nextIdx = sorted.findIndex((c) => (c.pos || 0) > chordPos);
-    const nextChordPos = nextIdx !== -1 ? sorted[nextIdx].pos || text.length : text.length;
-    segments.push({ chord: transposed, start: chordPos, end: nextChordPos });
-    lastPos = nextChordPos;
-  }
-
-  if (lastPos < text.length) {
-    segments.push({ chord: null, start: lastPos, end: text.length });
-  }
-
-  return segments
-    .map((seg) => {
-      const segText = text.slice(seg.start, seg.end);
-      const segRanges = sliceRangesForSegment(voiceRanges, seg.start, seg.end);
-      const innerHtml =
-        segRanges.length > 0 || activeVoice !== 'all'
-          ? buildHighlightedHTML(segText, segRanges, activeVoice)
-          : escapeHtml(segText);
-      if (seg.chord) {
-        return `<span class="chord-pair">
-        <span class="chord-badge">${escapeHtml(seg.chord)}</span>
-        <span class="chord-text">${innerHtml}</span>
-      </span>`;
-      }
-      return `<span class="chord-pair chord-pair--empty">
-      <span class="chord-badge">&nbsp;</span>
-      <span class="chord-text">${innerHtml}</span>
-    </span>`;
-    })
-    .join('');
-}
-
-/**
- * Extract the subset of voiceRanges that intersect [segStart, segEnd),
- * rebased to local offsets (0..segEnd-segStart).
- */
-function sliceRangesForSegment(voiceRanges, segStart, segEnd) {
-  if (!voiceRanges || voiceRanges.length === 0) return [];
-  const out = [];
-  for (const r of voiceRanges) {
-    const start = Math.max(r.start, segStart);
-    const end = Math.min(r.end, segEnd);
-    if (start < end) {
-      out.push({ start: start - segStart, end: end - segStart, voices: r.voices });
-    }
-  }
-  return out;
-}
-
-/**
- * Transpose a chord by semitones
- */
-function transposeChord(chord, semitones, useFlats) {
-  return chord.replace(/^([A-G][#b]?)/, (_, root) => {
-    const normalized = NORMALIZE[root] || root;
-    const idx = NOTES_SHARP.indexOf(normalized);
-    if (idx === -1) return root;
-    const newIdx = (((idx + semitones) % 12) + 12) % 12;
-    return useFlats ? NOTES_FLAT[newIdx] : NOTES_SHARP[newIdx];
-  });
 }
 
 /**

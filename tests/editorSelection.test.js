@@ -4,6 +4,7 @@ import {
   buildCharStripHTML,
   addGroupEntry,
   deleteGroupAt,
+  applyGroupsForRange,
 } from '../src/lib/editorSelection.js';
 
 describe('normalizeRange', () => {
@@ -85,5 +86,59 @@ describe('deleteGroupAt', () => {
   it('índice fuera de rango → array igual (copia)', () => {
     const out = deleteGroupAt([{ start: 0, end: 1, voiceId: 'a', note: null }], 9);
     expect(out).toHaveLength(1);
+  });
+});
+
+describe('applyGroupsForRange', () => {
+  const range = { start: 4, end: 7 }; // "del" en "Dio del…" (ejemplo)
+
+  it('agrega varias voces con notas distintas en un rango', () => {
+    const out = applyGroupsForRange([], range, [
+      { voiceId: 'v1', included: true, note: 'F#4' },
+      { voiceId: 'v2', included: true, note: 'D4' },
+      { voiceId: 'v3', included: false, note: null },
+      { voiceId: 'v4', included: true, note: 'F#4' },
+    ]);
+    expect(out).toHaveLength(3);
+    expect(out.find((g) => g.voiceId === 'v1')).toMatchObject({ start: 4, end: 7, note: 'F#4' });
+    expect(out.find((g) => g.voiceId === 'v2').note).toBe('D4');
+    expect(out.find((g) => g.voiceId === 'v3')).toBeUndefined();
+  });
+
+  it('actualiza la nota de una voz ya existente en ese rango (no duplica)', () => {
+    const groups = [{ start: 4, end: 7, voiceId: 'v1', note: 'D4' }];
+    const out = applyGroupsForRange(groups, range, [
+      { voiceId: 'v1', included: true, note: 'F#4' },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].note).toBe('F#4');
+  });
+
+  it('voz incluida sin nota → grupo con note null', () => {
+    const out = applyGroupsForRange([], range, [{ voiceId: 'v1', included: true, note: null }]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ start: 4, end: 7, voiceId: 'v1', note: null });
+  });
+
+  it('excluir una voz que tenía grupo en ese rango → lo quita', () => {
+    const groups = [{ start: 4, end: 7, voiceId: 'v1', note: 'F#4' }];
+    const out = applyGroupsForRange(groups, range, [
+      { voiceId: 'v1', included: false, note: null },
+    ]);
+    expect(out).toHaveLength(0);
+  });
+
+  it('no toca grupos de OTROS rangos de la misma línea', () => {
+    const groups = [{ start: 0, end: 3, voiceId: 'v1', note: 'A3' }];
+    const out = applyGroupsForRange(groups, range, [{ voiceId: 'v2', included: true, note: 'D4' }]);
+    expect(out.find((g) => g.start === 0 && g.voiceId === 'v1')).toMatchObject({ note: 'A3' });
+    expect(out).toHaveLength(2);
+  });
+
+  it('devuelve un array nuevo (no muta la entrada)', () => {
+    const groups = [];
+    const out = applyGroupsForRange(groups, range, [{ voiceId: 'v1', included: true, note: 'B3' }]);
+    expect(out).not.toBe(groups);
+    expect(groups).toHaveLength(0);
   });
 });

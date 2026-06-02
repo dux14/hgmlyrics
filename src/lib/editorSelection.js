@@ -78,3 +78,33 @@ export function deleteGroupAt(groups, idx) {
   if (idx >= 0 && idx < list.length) list.splice(idx, 1);
   return list;
 }
+
+/**
+ * Aplica las asignaciones por voz de UN rango a la lista de grupos de una línea.
+ * Reusa la semántica de addGroupEntry (upsert por start/end/voiceId). No muta la
+ * entrada y NO toca grupos de otros rangos.
+ *
+ * @param {Array<{start,end,voiceId,note}>} groups
+ * @param {{start:number,end:number}} range
+ * @param {Array<{voiceId:string, included:boolean, note:string|null}>} perVoice
+ * @returns {Array}
+ */
+export function applyGroupsForRange(groups, range, perVoice) {
+  let list = Array.isArray(groups) ? groups.slice() : [];
+  const items = Array.isArray(perVoice) ? perVoice : [];
+  for (const item of items) {
+    if (item.included) {
+      list = addGroupEntry(list, {
+        start: range.start,
+        end: range.end,
+        voiceId: item.voiceId,
+        note: item.note ?? null,
+      });
+    } else {
+      list = list.filter(
+        (g) => !(g.start === range.start && g.end === range.end && g.voiceId === item.voiceId),
+      );
+    }
+  }
+  return list;
+}

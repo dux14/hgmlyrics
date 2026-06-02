@@ -222,6 +222,25 @@ describe('upgradeLegacySong', () => {
     expect(upgradeLegacySong(v2)).toBe(v2);
   });
 
+  it('devuelve la canción intacta si ya es v3 (no la corrompe — regresión Wave 3)', () => {
+    const v3 = {
+      schemaVersion: 3,
+      voiceRoster: [{ id: 'v1', name: 'Voz 2', category: 'tenor', referenceKey: 'D3' }],
+      sections: [
+        {
+          type: 'verse',
+          label: 'E1',
+          lines: [{ text: 'Santo', groups: [{ start: 0, end: 2, voiceId: 'v1', note: 'D3' }] }],
+        },
+      ],
+    };
+    const up = upgradeLegacySong(v3);
+    expect(up).toBe(v3); // misma referencia: intacto
+    expect(up.voiceRoster).toHaveLength(1); // NO se vacía → tonoAvailable sigue true
+    expect(up.sections[0].lines[0].groups).toHaveLength(1); // groups preservados
+    expect(up.schemaVersion).toBe(3); // no se degrada a 2
+  });
+
   it('deriva roster desde las categorías usadas en voiceRanges', () => {
     const v1 = {
       sections: [

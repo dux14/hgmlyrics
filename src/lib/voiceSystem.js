@@ -297,7 +297,11 @@ export function isValidNote(value) {
  * @returns {object} canción v2
  */
 export function upgradeLegacySong(song) {
-  if (!song || song.schemaVersion === 2) return song;
+  // v2 y v3 ya son esquemas modernos: pasan intactos. Solo v1 (schemaVersion
+  // ausente o 1) se normaliza. Sin el `>= 2`, una canción v3 entraba aquí y se
+  // reconstruía desde voiceRanges (que v3 no tiene) → voiceRoster:[] + se perdían
+  // los groups, ocultando el modo Tono. (Regresión Wave 3.)
+  if (!song || song.schemaVersion >= 2) return song;
 
   const usedCategories = new Set();
   for (const section of song.sections || []) {

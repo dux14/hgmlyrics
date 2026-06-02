@@ -289,6 +289,10 @@
 }
 
 .font-controls__label {
+  /* Mobile-first: oculto para que tamaños + slide de modos quepan en una fila.
+     Los botones A−/A+ y el texto que se reescala en vivo ya dan feedback.
+     Se restaura en ≥768px (ver media query). */
+  display: none;
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   min-width: 40px;
@@ -649,6 +653,11 @@
 
   .song-toolbar__group--actions {
     margin-left: auto;
+  }
+
+  /* En desktop sobra ancho: se recupera el lector numérico del tamaño. */
+  .font-controls__label {
+    display: inline-block;
   }
 }
 

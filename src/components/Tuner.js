@@ -11,7 +11,7 @@
  */
 
 import '../styles/tuner.css';
-import { createPitchDetector } from '../lib/pitch.js';
+import { createPitchDetector, shouldAutoStartMic } from '../lib/pitch.js';
 import {
   frequencyToNote,
   noteToFrequency,
@@ -578,4 +578,16 @@ export async function renderTuner(container, opts = {}) {
 
   paintTabs();
   paintBody();
+
+  // Micrófono persistente: si el permiso ya está concedido, arrancar sin pedir
+  // un tap. Salvedad iOS: si el AudioContext no resuelve sin gesto, el gate
+  // sigue disponible como fallback. Sin Permissions API → gate normal.
+  try {
+    if (navigator.permissions?.query) {
+      const status = await navigator.permissions.query({ name: 'microphone' });
+      if (shouldAutoStartMic(status.state)) requestMic();
+    }
+  } catch (_e) {
+    /* Permissions API no soporta 'microphone' (Safari antiguo): gate normal */
+  }
 }

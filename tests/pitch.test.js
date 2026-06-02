@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectPitch } from '../src/lib/pitch.js';
+import { detectPitch, shouldAutoStartMic } from '../src/lib/pitch.js';
 
 const SAMPLE_RATE = 44100;
 const SAMPLES = 2048;
@@ -119,5 +119,16 @@ describe('detectPitch — RMS gate (sensibilidad del afinador)', () => {
     });
     expect(hz).not.toBeNull();
     expect(Math.abs(centsOff(hz, 440))).toBeLessThan(5);
+  });
+});
+
+describe('shouldAutoStartMic', () => {
+  it('arranca solo si el permiso está granted', () => {
+    expect(shouldAutoStartMic('granted')).toBe(true);
+  });
+  it('no arranca con prompt/denied/undefined', () => {
+    expect(shouldAutoStartMic('prompt')).toBe(false);
+    expect(shouldAutoStartMic('denied')).toBe(false);
+    expect(shouldAutoStartMic(undefined)).toBe(false);
   });
 });

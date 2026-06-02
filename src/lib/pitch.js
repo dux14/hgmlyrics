@@ -194,3 +194,13 @@ export function createPitchDetector(opts) {
 
   return { start, stop, isRunning: () => running };
 }
+
+/**
+ * Decide si arrancar el micrófono sin pedir un tap, según el estado del permiso
+ * (resultado de navigator.permissions.query({ name: 'microphone' }).state).
+ * @param {string} permissionState
+ * @returns {boolean} true solo si el permiso ya está concedido.
+ */
+export function shouldAutoStartMic(permissionState) {
+  return permissionState === 'granted';
+}

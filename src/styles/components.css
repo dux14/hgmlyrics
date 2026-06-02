@@ -1693,3 +1693,16 @@
 .line-row__btn--tono:hover {
   color: var(--color-primary);
 }
+
+.badge--beta {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.08em;
+  padding: 0.15em 0.5em;
+  margin-left: 0.4em;
+  background: var(--color-accent);
+  color: #fff;
+  border-radius: var(--border-radius-full);
+  vertical-align: middle;
+}

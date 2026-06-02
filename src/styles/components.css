@@ -333,6 +333,7 @@
   padding: 2px 4px;
   margin: 0;
   border-radius: 4px;
+  letter-spacing: 0.04em;
   transition:
     font-size var(--transition-fast),
     opacity 300ms ease,
@@ -345,6 +346,49 @@
   border-radius: 4px;
   padding: 2px 6px;
   margin: 0 -2px;
+}
+
+/* ─── Wave 3: etiquetas flotantes (acordes/notas) sin partir palabras ─── */
+.line-seg {
+  position: relative;
+}
+.float-label {
+  position: absolute;
+  top: -1.05em;
+  left: 0;
+  font-size: 0.62em;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  letter-spacing: 0;
+  pointer-events: none;
+}
+.float-label.chord-label {
+  color: var(--color-chord);
+}
+
+/* Atenuación de letra en modo Acordes (~55%) para que predominen los acordes */
+.lyrics__letra-dim {
+  color: #8f8f8f;
+}
+/* Atenuación de lo que la voz activa NO canta en modo Tono */
+.lyrics__tono-dim {
+  color: #5a5a5a;
+}
+
+/* Línea en modo Acordes/Tono: bloque (no flex) + espacio arriba para la etiqueta */
+.lyrics__line--chords,
+.lyrics__line--tono {
+  padding-top: 1.35em;
+}
+
+/* Cejilla + Transposición en una fila (modo Acordes) */
+.chords-extras {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
 }
 
 /* === Theme Toggle === */

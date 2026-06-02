@@ -10,9 +10,6 @@
 import { getSongById, filterByAlbum, fetchSongDetail, getAdjacentSongs } from '../lib/store.js';
 import { navigate } from '../router.js';
 import {
-  VOICE_TYPES,
-  getVoiceColor,
-  getVoiceBgColor,
   upgradeLegacySong,
   rosterByCategory,
   getVoiceLabel,
@@ -110,24 +107,6 @@ function getVoiceTypeLabel(voiceType) {
 }
 
 /**
- * Detect which voices are used in the song
- */
-function detectUsedVoices(sections) {
-  const used = new Set();
-  for (const section of sections) {
-    if (!section.lines) continue;
-    for (const line of section.lines) {
-      if (line.voiceRanges) {
-        line.voiceRanges.forEach((r) => {
-          if (r.voices) r.voices.forEach((v) => used.add(v));
-        });
-      }
-    }
-  }
-  return used;
-}
-
-/**
  * Render the song view
  * @param {HTMLElement} container
  * @param {string|object} songIdOrData - Either a song ID string, or a full song object (with isPreview flag)
@@ -174,7 +153,6 @@ export async function renderSongView(container, songIdOrData) {
   }
 
   let fontSize = getFontSize();
-  let activeVoice = 'all';
   // viewMode: 'lyrics' | 'chords' | 'tono'. showChords se deriva para no tocar
   // la rama de acordes existente.
   let viewMode = 'lyrics';
@@ -201,23 +179,10 @@ export async function renderSongView(container, songIdOrData) {
     : getAdjacentSongs(songId);
   const hasNav = !isPreview && (adjacent.prev || adjacent.next);
   const hasChords = songHasChords(song);
-  const usedVoices = detectUsedVoices(song.sections || []);
   // El modo Tono está disponible si el flag está activo y la canción tiene
   // roster de voces. La fila toggle aparece si hay acordes o si hay Tono.
   const tonoAvailable = tonoEnabled && (song.voiceRoster || []).length > 0;
   const showToggle = hasChords || tonoAvailable;
-
-  // Build voice filter chips — only show voices that exist in the song
-  const voiceChipsHtml = VOICE_TYPES.filter((v) => usedVoices.has(v.id))
-    .map(
-      (v) => `
-      <button class="voice-filter__chip" data-voice="${v.id}">
-        <span class="voice-filter__dot" style="background: var(${v.cssColor})"></span>
-        <span class="voice-filter__label-text">${v.label}</span>
-      </button>
-    `,
-    )
-    .join('');
 
   container.innerHTML = `
     <div class="song-view fade-in">
@@ -290,37 +255,6 @@ export async function renderSongView(container, songIdOrData) {
         </div>
 
         ${
-          song.cejilla && song.cejilla > 0
-            ? `
-        <!-- Zone: Cejilla — shown in chords mode -->
-        <div class="song-toolbar__group" id="cejilla-control">
-          <div class="cejilla-badge" title="Colocar cejilla en el traste ${song.cejilla}">
-            <span class="cejilla-badge__icon">${icon('audio-lines', { size: 15 })}</span>
-            <span class="cejilla-badge__text">Cejilla: ${song.cejilla}</span>
-          </div>
-        </div>
-        `
-            : ''
-        }
-
-        ${
-          song.key
-            ? `
-        <!-- Zone: Tono + Afinar — shown in lyrics mode -->
-        <div class="song-toolbar__group" id="lyrics-extras">
-          <div class="key-badge" title="Tonalidad de la versión oficial">
-            <span class="key-badge__icon">${icon('music', { size: 15 })}</span>
-            <span class="key-badge__text">Tono: ${song.key}</span>
-          </div>
-          <a class="btn btn--secondary song-toolbar__btn" href="#/afinador?mode=song&songId=${song.id}&from=${song.id}" title="Cantá con este tono">
-            ${icon('mic', { size: 16 })} Afinar
-          </a>
-        </div>
-        `
-            : ''
-        }
-
-        ${
           isAdmin()
             ? `
         <!-- Zone: Actions -->
@@ -333,30 +267,32 @@ export async function renderSongView(container, songIdOrData) {
       </div>
 
       ${
-        hasChords
+        hasChords || (song.cejilla && song.cejilla > 0)
           ? `
-      <!-- Transpose Controls — hidden until chords mode -->
-      <div class="transpose-controls" id="transpose-controls" style="display: none;">
-        <span class="transpose-label">Transposición (Beta)</span>
-        <button class="transpose-btn" id="transpose-down">−½</button>
-        <span class="transpose-value" id="transpose-value">0</span>
-        <button class="transpose-btn" id="transpose-up">+½</button>
-        <span class="filter-separator"></span>
-        <button class="transpose-notation-toggle" id="notation-toggle">♯ / ♭</button>
-      </div>
-      `
-          : ''
-      }
-
-      <!-- Voice Part Filter — show only if there are voice-assigned lines -->
-      ${
-        usedVoices.size > 0
-          ? `
-      <div class="voice-filter" id="voice-part-filter">
-        <button class="voice-filter__chip voice-filter__chip--active" data-voice="all">
-          <span class="voice-filter__label-text">Todos</span>
-        </button>
-        ${voiceChipsHtml}
+      <!-- Cejilla + Transposición (modo Acordes) — lado a lado -->
+      <div class="chords-extras" id="chords-extras" style="display: none;">
+        ${
+          song.cejilla && song.cejilla > 0
+            ? `
+        <div class="cejilla-badge" title="Colocar cejilla en el traste ${song.cejilla}">
+          <span class="cejilla-badge__icon">${icon('audio-lines', { size: 15 })}</span>
+          <span class="cejilla-badge__text">Cejilla: ${song.cejilla}</span>
+        </div>`
+            : ''
+        }
+        ${
+          hasChords
+            ? `
+        <div class="transpose-controls" id="transpose-controls">
+          <span class="transpose-label">Transposición (Beta)</span>
+          <button class="transpose-btn" id="transpose-down">−½</button>
+          <span class="transpose-value" id="transpose-value">0</span>
+          <button class="transpose-btn" id="transpose-up">+½</button>
+          <span class="filter-separator"></span>
+          <button class="transpose-notation-toggle" id="notation-toggle">♯ / ♭</button>
+        </div>`
+            : ''
+        }
       </div>
       `
           : ''
@@ -425,34 +361,14 @@ export async function renderSongView(container, songIdOrData) {
     }
   }
 
-  // Show controls relevant to the current mode: voices + tono/afinar belong to
-  // lyrics reading; cejilla + transposition belong to chords. Cejilla stays
-  // visible on chord-less songs since there is no chords mode to gate it.
+  // Show controls relevant to the current mode: cejilla + transposition belong
+  // to chords mode; tono filters to tono mode.
   function applyModeVisibility() {
     const isTono = viewMode === 'tono';
-    // El filtro por voz (Letra) y la fila de Tono se excluyen mutuamente.
-    const voiceFilterEl = container.querySelector('#voice-part-filter');
-    if (voiceFilterEl) voiceFilterEl.style.display = showChords || isTono ? 'none' : '';
-    const lyricsExtrasEl = container.querySelector('#lyrics-extras');
-    if (lyricsExtrasEl) lyricsExtrasEl.style.display = showChords ? 'none' : '';
-    const cejillaEl = container.querySelector('#cejilla-control');
-    if (cejillaEl) cejillaEl.style.display = showChords || !hasChords ? '' : 'none';
-    const transposeEl = container.querySelector('#transpose-controls');
-    if (transposeEl) transposeEl.style.display = showChords ? 'flex' : 'none';
+    const chordsExtrasEl = container.querySelector('#chords-extras');
+    if (chordsExtrasEl) chordsExtrasEl.style.display = showChords ? 'flex' : 'none';
     const tonoFiltersEl = container.querySelector('#tono-filters');
     if (tonoFiltersEl) tonoFiltersEl.style.display = isTono ? '' : 'none';
-  }
-
-  // Reset the voice filter to "Todos" so lyrics aren't left dimmed by a filter
-  // that the chords mode has hidden.
-  function resetVoiceFilter() {
-    activeVoice = 'all';
-    container.querySelectorAll('.voice-filter__chip').forEach((c) => {
-      c.classList.toggle('voice-filter__chip--active', c.dataset.voice === 'all');
-      c.style.background = '';
-      c.style.color = '';
-      c.style.borderColor = '';
-    });
   }
 
   // ── Tono mode: disclosure categoría → persona ──
@@ -585,7 +501,6 @@ export async function renderSongView(container, songIdOrData) {
         container
           .querySelectorAll('.chord-toggle__btn')
           .forEach((c) => c.classList.toggle('chord-toggle__btn--active', c === btn));
-        if (showChords) resetVoiceFilter();
         applyModeVisibility();
         if (viewMode === 'tono') ensureTonoSelection();
         reRenderLyrics();
@@ -621,31 +536,6 @@ export async function renderSongView(container, songIdOrData) {
   // Title → links page
   container.querySelector('#song-title-link')?.addEventListener('click', () => {
     navigate(`/song/${songId}/links`);
-  });
-
-  // Voice part filter
-  container.querySelectorAll('.voice-filter__chip').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      activeVoice = btn.dataset.voice;
-      container.querySelectorAll('.voice-filter__chip').forEach((c) => {
-        const isActive = c === btn;
-        c.classList.toggle('voice-filter__chip--active', isActive);
-        // Apply voice-specific color to the active chip
-        if (isActive && btn.dataset.voice !== 'all') {
-          const voiceData = VOICE_TYPES.find((v) => v.id === btn.dataset.voice);
-          if (voiceData) {
-            c.style.background = getVoiceBgColor(voiceData.id);
-            c.style.color = getVoiceColor(voiceData.id);
-            c.style.borderColor = getVoiceColor(voiceData.id);
-          }
-        } else {
-          c.style.background = '';
-          c.style.color = '';
-          c.style.borderColor = '';
-        }
-      });
-      reRenderLyrics();
-    });
   });
 
   // Chord toggle — only transpose and notation for full mode (already set up above)

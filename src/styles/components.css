@@ -1370,23 +1370,37 @@
   margin-bottom: var(--space-md);
 }
 
-.lyrics__filter-row {
+.lyrics__tono-grid {
   display: flex;
-  flex-wrap: nowrap;
+  gap: var(--space-md);
+  align-items: flex-start;
+}
+.lyrics__tono-categories {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.5rem;
-  overflow-x: auto;
-  padding-bottom: 0.25rem;
-  transition: opacity 200ms ease;
+  flex: 0 0 auto;
 }
-
-.lyrics__tono-active {
-  margin: 0.5rem 0 0;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
+.lyrics__tono-voices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-left: var(--space-md);
+  border-left: 2px solid var(--color-border);
 }
-
+.lyrics__tono-voices:empty {
+  display: none;
+}
+.tono-chip__note {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-primary);
+  margin-left: 0.1rem;
+}
 .lyrics__tono-tune {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin-top: 0.5rem;
 }
 
@@ -1399,6 +1413,13 @@
   align-items: center;
   gap: 0.4rem;
   min-height: 44px;
+}
+
+.lyrics__tono-active {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
 }
 
 .tono-chip {
@@ -1421,12 +1442,6 @@
   border-color: var(--color-primary);
   background: var(--color-primary-bg, var(--color-surface));
   color: var(--color-primary);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .lyrics__filter-row {
-    transition: none;
-  }
 }
 
 .voice-badge-extra--soprano {

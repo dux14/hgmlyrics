@@ -770,6 +770,12 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     const overlay = document.createElement('div');
     overlay.className = 'import-modal__overlay';
     document.body.appendChild(overlay);
+    // El modal se crea UNA vez; render() solo actualiza su contenido. Si se
+    // recreara en cada interacción, la animación de entrada (modalIn) se
+    // reproduciría cada vez → "mini refresh" visible.
+    const modalEl = document.createElement('div');
+    modalEl.className = 'import-modal tono-editor';
+    overlay.appendChild(modalEl);
 
     function close() {
       overlay.remove();
@@ -827,8 +833,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
               .join('');
 
       const canAdd = !!(range && activeRosterId);
-      overlay.innerHTML = `
-        <div class="import-modal tono-editor">
+      modalEl.innerHTML = `
           <div class="import-modal__header">
             <h3 class="import-modal__title" style="display:inline-flex;align-items:center;gap:0.4em;">${icon('music', { size: 18 })} Voces y tono</h3>
             <button class="import-modal__close" data-tono="close" aria-label="Cerrar">${icon('close', { size: 18 })}</button>
@@ -860,8 +865,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
 
           <div class="import-modal__actions">
             <button class="btn btn--primary" data-tono="done" type="button">Listo</button>
-          </div>
-        </div>`;
+          </div>`;
     }
 
     overlay.addEventListener('input', (e) => {
@@ -932,6 +936,11 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     const overlay = document.createElement('div');
     overlay.className = 'import-modal__overlay';
     document.body.appendChild(overlay);
+    // Modal persistente: render() solo actualiza su contenido, así la animación
+    // de entrada (modalIn) no se reproduce en cada interacción.
+    const modalEl = document.createElement('div');
+    modalEl.className = 'import-modal tono-editor';
+    overlay.appendChild(modalEl);
 
     const sel = { anchor: null, focus: null };
     let chordDraft = '';
@@ -981,8 +990,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
               .join('');
 
       const canAdd = pos !== null;
-      overlay.innerHTML = `
-        <div class="import-modal tono-editor">
+      modalEl.innerHTML = `
           <div class="import-modal__header">
             <h3 class="import-modal__title" style="display:inline-flex;align-items:center;gap:0.4em;">${icon('audio-lines', { size: 18 })} Acordes</h3>
             <button class="import-modal__close" data-chord="close" aria-label="Cerrar">${icon('close', { size: 18 })}</button>
@@ -1008,8 +1016,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
 
           <div class="import-modal__actions">
             <button class="btn btn--primary" data-chord="done" type="button">Listo</button>
-          </div>
-        </div>`;
+          </div>`;
     }
 
     overlay.addEventListener('input', (e) => {

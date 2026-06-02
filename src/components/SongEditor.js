@@ -15,6 +15,7 @@ import {
   VALID_VOICE_IDS,
   VOICE_TYPES,
   validateSongV2,
+  validateSongV3,
   getVoiceLabel,
   isValidNote,
   deriveVoiceRanges,
@@ -364,16 +365,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
             <label class="form-group__label" for="song-cejilla">Cejilla</label>
             <input class="form-group__input" id="song-cejilla" type="number" min="0" max="12" placeholder="0" value="${existingSong?.cejilla || ''}" />
           </div>
-          <div class="form-group" style="flex: 2;">
-            <label class="form-group__label" for="song-key">Tonalidad</label>
-            <select class="form-group__input" id="song-key">
-              <option value="">(sin asignar)</option>
-              ${MUSICAL_KEYS.map(
-                (k) =>
-                  `<option value="${k}" ${existingSong?.key === k ? 'selected' : ''}>${k}</option>`,
-              ).join('')}
-            </select>
-          </div>
         </div>
       </div>
 
@@ -572,7 +563,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     if (!rosterListEl) return;
     if (voiceRoster.length === 0) {
       rosterListEl.innerHTML =
-        '<p style="color: var(--color-text-secondary); font-size: 0.875rem;">Aún no hay voces. Añade al menos una para autorar tono por sílaba.</p>';
+        '<p style="color: var(--color-text-secondary); font-size: 0.875rem;">Aún no hay voces. Añade al menos una para asignar voces y tono por rango.</p>';
       return;
     }
     rosterListEl.innerHTML = voiceRoster
@@ -1235,7 +1226,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   // ─── Preview ───
   function updatePreview() {
     const previewEl = container.querySelector('#preview-content');
-    const sections = blocksToSections(blocks);
+    const sections = blocksToSectionsV3(blocks);
     if (sections.length === 0 || sections.every((s) => s.lines.length === 0)) {
       previewEl.innerHTML =
         '<p style="color: var(--color-text-secondary); font-size: 0.875rem;">Agrega secciones y letras para ver la vista previa.</p>';
@@ -1266,6 +1257,11 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       coverImage: '',
       sections,
     };
+
+    if (v2Enabled && voiceRoster.length > 0) {
+      draftSong.schemaVersion = 3;
+      draftSong.voiceRoster = voiceRoster;
+    }
 
     renderSongView(previewEl, draftSong);
   }
@@ -1408,7 +1404,6 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
 
     // 2. Save song data
     const cejilla = Number.parseInt(container.querySelector('#song-cejilla').value) || null;
-    const key = container.querySelector('#song-key').value || null;
 
     const newSong = {
       id: songId,
@@ -1423,17 +1418,15 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
       coverImage,
       albumOrder,
       cejilla,
-      key,
-      sections: blocksToSections(blocks),
+      sections: blocksToSectionsV3(blocks),
     };
 
-    // ─── v2: sólo cuando hay roster. Si no, el payload queda idéntico a v1. ───
+    // ─── v3: sólo cuando hay roster. Sin roster, el payload es de forma v1. ───
     if (roster.length > 0) {
-      newSong.schemaVersion = 2;
+      newSong.schemaVersion = 3;
       newSong.voiceRoster = roster;
-      newSong.sections = blocksToSectionsV2(blocks, newSong.voiceRoster);
       try {
-        validateSongV2(newSong);
+        validateSongV3(newSong);
       } catch (e) {
         showSaveError(container, `No se pudo guardar (tono): ${e.message}`);
         return;

@@ -12,42 +12,18 @@ import { getSession, isFeatureEnabled } from '../lib/authStore.js';
 import { renderSongView } from './SongView.js';
 import {
   CANONICAL_VOICE_ORDER,
-  VALID_VOICE_IDS,
   VOICE_TYPES,
-  validateSongV2,
   validateSongV3,
   getVoiceLabel,
   isValidNote,
-  deriveVoiceRanges,
 } from '../lib/voiceSystem.js';
-import {
-  boundariesToSyllables,
-  toggleBoundary,
-  syllablesToBoundaries,
-  autoSuggestBoundaries,
-  tokenizeLineForChords,
-} from '../lib/syllabify.js';
 import {
   normalizeRange,
   buildCharStripHTML,
   addGroupEntry,
   deleteGroupAt,
 } from '../lib/editorSelection.js';
-import { MUSICAL_KEYS } from '../lib/musicKeys.js';
 import { icon } from '../lib/icons.js';
-
-/**
- * Notas válidas seleccionables por sílaba (notación científica, octavas 2-6
- * cubren el rango coral típico). El usuario puede dejar una sílaba sin nota.
- */
-const NOTE_OPTIONS = (() => {
-  const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-  const out = [];
-  for (let oct = 2; oct <= 6; oct++) {
-    for (const n of names) out.push(`${n}${oct}`);
-  }
-  return out.filter(isValidNote);
-})();
 
 const API_URL = '/api';
 
@@ -97,62 +73,6 @@ function sectionsToBlocks(sections) {
       annotation: line.annotation || false,
     })),
   }));
-}
-
-/**
- * Convert editable blocks back to sections JSON for saving
- */
-function blocksToSections(blocks) {
-  return blocks.map((block) => {
-    const section = {
-      type: block.type,
-      label: block.label,
-      lines: block.lines
-        .filter((l) => l.text.trim() !== '' || l.chords.length > 0 || l.annotation)
-        .map((l) => {
-          const line = { text: l.text };
-          if (l.voiceRanges && l.voiceRanges.length > 0) line.voiceRanges = l.voiceRanges;
-          if (l.chords && l.chords.length > 0) line.chords = l.chords;
-          if (l.annotation) line.annotation = true;
-          return line;
-        }),
-    };
-    return section;
-  });
-}
-
-/**
- * v2: como blocksToSections pero conservando syllables/voiceLines por línea y
- * speedPreset por sección. Sólo se usa cuando la canción tiene voiceRoster.
- * @param {Array} blocks
- * @returns {Array}
- */
-function blocksToSectionsV2(blocks, roster = []) {
-  return blocks.map((block) => {
-    const section = {
-      type: block.type,
-      label: block.label,
-      lines: block.lines
-        .filter((l) => l.text.trim() !== '' || l.chords.length > 0 || l.annotation)
-        .map((l) => {
-          const line = { text: l.text };
-          if (l.chords && l.chords.length > 0) line.chords = l.chords;
-          if (l.annotation) line.annotation = true;
-          if (Array.isArray(l.syllables) && l.syllables.length > 0) line.syllables = l.syllables;
-          if (l.voiceLines && Object.keys(l.voiceLines).length > 0) line.voiceLines = l.voiceLines;
-          // voiceRanges (coloreado de Letra) se DERIVA de voiceLines cuando existe;
-          // si no hay voiceLines, se conservan los voiceRanges previos.
-          const derived = deriveVoiceRanges(line, roster);
-          if (derived && derived.length > 0) line.voiceRanges = derived;
-          else if (l.voiceRanges && l.voiceRanges.length > 0) line.voiceRanges = l.voiceRanges;
-          return line;
-        }),
-    };
-    if (typeof block.speedPreset === 'number' && !Number.isNaN(block.speedPreset)) {
-      section.speedPreset = block.speedPreset;
-    }
-    return section;
-  });
 }
 
 /**

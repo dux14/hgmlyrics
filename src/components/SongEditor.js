@@ -20,8 +20,8 @@ import {
 import {
   normalizeRange,
   buildCharStripHTML,
-  addGroupEntry,
   deleteGroupAt,
+  applyGroupsForRange,
 } from '../lib/editorSelection.js';
 import { icon } from '../lib/icons.js';
 
@@ -762,17 +762,15 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   function openTonoEditor(line) {
     if (!Array.isArray(line.groups)) line.groups = [];
 
-    let activeRosterId = voiceRoster[0]?.id || null;
     const sel = { anchor: null, focus: null }; // índices de carácter
-    let noteDraft = '';
-    let noteError = '';
+    let perVoice = {}; // voiceId → { included, note, invalid }
+    let formError = '';
 
     const overlay = document.createElement('div');
     overlay.className = 'import-modal__overlay';
     document.body.appendChild(overlay);
-    // El modal se crea UNA vez; render() solo actualiza su contenido. Si se
-    // recreara en cada interacción, la animación de entrada (modalIn) se
-    // reproduciría cada vez → "mini refresh" visible.
+    // El modal se crea UNA vez; render() solo actualiza su contenido (evita que
+    // la animación de entrada se reproduzca en cada interacción).
     const modalEl = document.createElement('div');
     modalEl.className = 'import-modal tono-editor';
     overlay.appendChild(modalEl);
@@ -793,21 +791,41 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       return voiceRoster.find((v) => v.id === id) || null;
     }
 
+    // Siembra el estado por voz desde los grupos que coinciden con el rango actual.
+    function seedPerVoice() {
+      const range = currentRange();
+      const map = {};
+      for (const v of voiceRoster) {
+        const g = range
+          ? line.groups.find(
+              (x) => x.start === range.start && x.end === range.end && x.voiceId === v.id,
+            )
+          : null;
+        const note = g && g.note !== null && g.note !== undefined ? g.note : '';
+        map[v.id] = { included: !!g, note, invalid: false };
+      }
+      return map;
+    }
+
     function render() {
       const text = line.text || '';
       const range = currentRange();
       const strip = buildCharStripHTML(text, range);
 
-      const voiceChips =
+      const voiceRows =
         voiceRoster.length === 0
           ? '<p class="tono-editor__hint">Añade voces en el roster (arriba) para asignar.</p>'
           : voiceRoster
               .map((v) => {
-                const on = v.id === activeRosterId;
-                return `<button class="voice-pick${on ? ' voice-pick--active' : ''}" data-voice="${v.id}" type="button" aria-pressed="${on}">
-                  <span class="voice-pick__dot" style="background: var(--color-voice-${v.category})"></span>
-                  ${escapeHtml(v.name || getVoiceLabel(v.category))}
-                </button>`;
+                const st = perVoice[v.id] || { included: false, note: '', invalid: false };
+                const on = st.included;
+                return `<div class="voice-note-row">
+                  <button class="voice-pick${on ? ' voice-pick--active' : ''}" data-voice="${v.id}" type="button" aria-pressed="${on}">
+                    <span class="voice-pick__dot" style="background: var(--color-voice-${v.category})"></span>
+                    ${escapeHtml(v.name || getVoiceLabel(v.category))}
+                  </button>
+                  <input class="form-group__input voice-note-row__note${st.invalid ? ' form-group__input--invalid' : ''}" data-note-for="${v.id}" type="text" value="${escapeHtml(st.note)}" placeholder="Ej: B3 (vacío = sin nota)" aria-invalid="${st.invalid}" />
+                </div>`;
               })
               .join('');
 
@@ -832,7 +850,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
               })
               .join('');
 
-      const canAdd = !!(range && activeRosterId);
       modalEl.innerHTML = `
           <div class="import-modal__header">
             <h3 class="import-modal__title" style="display:inline-flex;align-items:center;gap:0.4em;">${icon('music', { size: 18 })} Voces y tono</h3>
@@ -845,17 +862,10 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
           </div>
 
           <div class="tono-editor__step">
-            <div class="tono-editor__step-head"><span>2 · Voz</span></div>
-            <div class="voice-pick-row">${voiceChips}</div>
-          </div>
-
-          <div class="tono-editor__step">
-            <div class="tono-editor__step-head"><span>3 · Nota (opcional)</span></div>
-            <div class="chord-editor__assign">
-              <input class="form-group__input${noteError ? ' form-group__input--invalid' : ''}" data-tono="note" type="text" value="${escapeHtml(noteDraft)}" placeholder="Ej: B3 (vacío = sin nota)" />
-              <button class="btn btn--primary" data-tono="add" type="button"${canAdd ? '' : ' disabled'}>${icon('plus', { size: 14 })} Agregar grupo</button>
-            </div>
-            ${noteError ? `<p class="tono-editor__error" role="alert">${escapeHtml(noteError)}</p>` : ''}
+            <div class="tono-editor__step-head"><span>2 · Notas por voz (vacío = esa voz no canta el rango)</span></div>
+            <div class="voice-note-grid">${voiceRows}</div>
+            <button class="btn btn--primary" data-tono="apply" type="button" style="margin-top: var(--space-sm);"${range ? '' : ' disabled'}>${icon('plus', { size: 14 })} Agregar grupos del rango</button>
+            ${formError ? `<p class="tono-editor__error" role="alert">${escapeHtml(formError)}</p>` : ''}
           </div>
 
           <div class="tono-editor__step">
@@ -868,40 +878,63 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
           </div>`;
     }
 
+    // Escribir una nota actualiza el estado SIN re-render (preserva el caret) y
+    // auto-incluye la voz; el chip se actualiza directamente por DOM.
     overlay.addEventListener('input', (e) => {
-      if (e.target.dataset.tono === 'note') noteDraft = e.target.value;
+      const id = e.target.dataset.noteFor;
+      if (!id || !perVoice[id]) return;
+      perVoice[id].note = e.target.value;
+      perVoice[id].invalid = false;
+      if (e.target.value.trim() !== '') perVoice[id].included = true;
+      const chip = overlay.querySelector(`.voice-pick[data-voice="${id}"]`);
+      if (chip) {
+        chip.classList.toggle('voice-pick--active', perVoice[id].included);
+        chip.setAttribute('aria-pressed', String(perVoice[id].included));
+      }
+      e.target.classList.remove('form-group__input--invalid');
     });
 
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) return close();
       const tono = e.target.closest('[data-tono]')?.dataset.tono;
       if (tono === 'close' || tono === 'done') return close();
-      if (tono === 'add') {
+      if (tono === 'apply') {
         const range = currentRange();
-        if (!range || !activeRosterId) return;
-        const raw = noteDraft.trim();
-        if (raw !== '' && !isValidNote(raw)) {
-          noteError = `Nota inválida: "${raw}". Usa notación científica (Ej: B3).`;
+        if (!range) return;
+        let bad = false;
+        for (const v of voiceRoster) {
+          const st = perVoice[v.id];
+          const raw = st ? st.note.trim() : '';
+          if (st && st.included && raw !== '' && !isValidNote(raw)) {
+            st.invalid = true;
+            bad = true;
+          }
+        }
+        if (bad) {
+          formError = 'Corrige las notas inválidas (notación científica, ej: B3).';
           render();
           return;
         }
-        noteError = '';
-        line.groups = addGroupEntry(line.groups, {
-          start: range.start,
-          end: range.end,
-          voiceId: activeRosterId,
-          note: raw === '' ? null : raw,
+        formError = '';
+        const perVoiceArray = voiceRoster.map((v) => {
+          const st = perVoice[v.id] || { included: false, note: '' };
+          const raw = st.note.trim();
+          return { voiceId: v.id, included: st.included, note: raw === '' ? null : raw };
         });
+        line.groups = applyGroupsForRange(line.groups, range, perVoiceArray);
         sel.anchor = null;
         sel.focus = null;
-        noteDraft = '';
+        perVoice = seedPerVoice();
         render();
         return;
       }
       const voiceBtn = e.target.closest('[data-voice]');
       if (voiceBtn) {
-        activeRosterId = voiceBtn.dataset.voice;
-        render();
+        const id = voiceBtn.dataset.voice;
+        if (perVoice[id]) {
+          perVoice[id].included = !perVoice[id].included;
+          render();
+        }
         return;
       }
       const delBtn = e.target.closest('[data-del-idx]');
@@ -909,6 +942,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         const i = Number.parseInt(delBtn.dataset.delIdx, 10);
         if (!Number.isNaN(i)) {
           line.groups = deleteGroupAt(line.groups, i);
+          perVoice = seedPerVoice();
           render();
         }
         return;
@@ -923,10 +957,12 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         } else {
           sel.focus = i;
         }
+        perVoice = seedPerVoice();
         render();
       }
     });
 
+    perVoice = seedPerVoice();
     render();
   }
 

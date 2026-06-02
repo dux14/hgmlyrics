@@ -142,41 +142,63 @@ function bodyGuitarOrVoice(mode, targetNote) {
  * @returns {string} HTML string.
  */
 export function bodySong(song, targetLabel = null) {
-  if (!song?.key) {
+  // v1/v2: tonalidad explícita de canción → escala completa + (opcional) objetivo.
+  if (song?.key) {
+    const scale = getScaleNotes(song.key);
+    // pitch-class del objetivo = label sin la octava final (D3 -> D, F#3 -> F#).
+    const targetPc = targetLabel ? targetLabel.replace(/\d+$/, '') : null;
+    const objective = targetLabel
+      ? `<p class="tuner-objective" id="tuner-objective">Objetivo de tu voz: <strong>${targetLabel}</strong></p>`
+      : '';
     return `
-      <div class="tuner-empty">
-        <p>Esta canción no tiene tonalidad asignada todavía.</p>
-        <p>Pedile al admin que la configure en el editor.</p>
+      <div class="tuner-song">
+        <h2 class="tuner-song__title">${song.title}</h2>
+        <p class="tuner-song__key">Tono: <strong>${song.key}</strong></p>
+        ${objective}
+        <ul class="tuner-scale" id="tuner-scale">
+          ${scale
+            .map(
+              (n) => `<li data-pc="${n}"${n === targetPc ? ' data-target="true"' : ''}>${n}</li>`,
+            )
+            .join('')}
+      </ul>
       </div>
+      <div class="tuner-readout" id="tuner-readout" data-status="">
+        <div class="tuner-readout__note">—</div>
+        <div class="tuner-readout__meta">— Hz · —¢</div>
+      </div>
+      ${renderGauge()}
+      <p class="tuner-hint">${
+        targetLabel
+          ? `Cantá <strong>${targetLabel}</strong>. Se pone verde al coincidir. Verde claro = nota en escala de ${song.key}.`
+          : `Verde = la nota pertenece a <em>${song.key}</em>. Rojo = fuera de escala.`
+      }</p>
     `;
   }
-  const scale = getScaleNotes(song.key);
-  // pitch-class del objetivo = label sin la octava final (D3 -> D, F#3 -> F#).
-  const targetPc = targetLabel ? targetLabel.replace(/\d+$/, '') : null;
-  const objective = targetLabel
-    ? `<p class="tuner-objective" id="tuner-objective">Objetivo de tu voz: <strong>${targetLabel}</strong></p>`
-    : '';
+
+  // v3: la canción no tiene tono propio, pero la voz trae su nota de referencia
+  // (`ref` → targetLabel). Afinamos contra esa nota (sin escala — v3 es por voz).
+  if (targetLabel) {
+    return `
+      <div class="tuner-song">
+        <h2 class="tuner-song__title">${song?.title ?? ''}</h2>
+        <p class="tuner-objective" id="tuner-objective">Tu nota de referencia: <strong>${targetLabel}</strong></p>
+      </div>
+      <div class="tuner-readout" id="tuner-readout" data-status="">
+        <div class="tuner-readout__note">—</div>
+        <div class="tuner-readout__meta">— Hz · —¢</div>
+      </div>
+      ${renderGauge()}
+      <p class="tuner-hint">Cantá <strong>${targetLabel}</strong> sostenida. Se pone verde al coincidir.</p>
+    `;
+  }
+
+  // Sin tono y sin nota objetivo: no hay nada contra qué afinar.
   return `
-    <div class="tuner-song">
-      <h2 class="tuner-song__title">${song.title}</h2>
-      <p class="tuner-song__key">Tono: <strong>${song.key}</strong></p>
-      ${objective}
-      <ul class="tuner-scale" id="tuner-scale">
-        ${scale
-          .map((n) => `<li data-pc="${n}"${n === targetPc ? ' data-target="true"' : ''}>${n}</li>`)
-          .join('')}
-      </ul>
+    <div class="tuner-empty">
+      <p>Esta canción no tiene notas asignadas todavía.</p>
+      <p>Pedile al admin que configure las voces y el tono en el editor.</p>
     </div>
-    <div class="tuner-readout" id="tuner-readout" data-status="">
-      <div class="tuner-readout__note">—</div>
-      <div class="tuner-readout__meta">— Hz · —¢</div>
-    </div>
-    ${renderGauge()}
-    <p class="tuner-hint">${
-      targetLabel
-        ? `Cantá <strong>${targetLabel}</strong>. Se pone verde al coincidir. Verde claro = nota en escala de ${song.key}.`
-        : `Verde = la nota pertenece a <em>${song.key}</em>. Rojo = fuera de escala.`
-    }</p>
   `;
 }
 
@@ -358,7 +380,8 @@ export async function renderTuner(container, opts = {}) {
   }
 
   function handlePitchSong({ hz }) {
-    if (!song?.key) return;
+    // Ni tono de canción (v1/v2) ni nota objetivo (v3) → nada que afinar.
+    if (!song?.key && !targetCanonical) return;
     if (hz === null) {
       renderReadout(bodyEl, { label: '—', hz: null, cents: null });
       setNeedle(bodyEl, 0, '');
@@ -368,15 +391,18 @@ export async function renderTuner(container, opts = {}) {
     }
     const r = frequencyToNote(hz);
     if (!r) return;
-    const scale = getScaleNotes(song.key);
-    const inScale = scale.includes(r.note);
+    // La escala solo existe cuando la canción tiene tono explícito (v1/v2).
+    const inScale = song?.key ? getScaleNotes(song.key).includes(r.note) : null;
     renderReadout(bodyEl, {
       label: `${r.note}${r.octave}`,
       hz,
       cents: r.cents,
-      sub: inScale
-        ? `${icon('check', { size: 14 })} en escala`
-        : `${icon('close', { size: 14 })} fuera de escala`,
+      sub:
+        inScale === null
+          ? undefined
+          : inScale
+            ? `${icon('check', { size: 14 })} en escala`
+            : `${icon('close', { size: 14 })} fuera de escala`,
     });
     setNeedle(bodyEl, r.cents, colorFromCents(r.cents));
     const ul = bodyEl.querySelector('#tuner-scale');
@@ -386,7 +412,7 @@ export async function renderTuner(container, opts = {}) {
       }
     }
     const readout = bodyEl.querySelector('#tuner-readout');
-    if (readout) readout.dataset.scale = inScale ? 'in' : 'out';
+    if (readout && inScale !== null) readout.dataset.scale = inScale ? 'in' : 'out';
     if (targetCanonical) {
       const objEl = bodyEl.querySelector('#tuner-objective');
       if (objEl) objEl.dataset.match = matchesTarget(r, targetCanonical) ? 'ok' : '';

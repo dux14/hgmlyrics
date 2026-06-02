@@ -189,6 +189,26 @@ export async function fetchSongDetail(id) {
 }
 
 /**
+ * Borra la entrada cacheada del detalle de una canción en el Service Worker.
+ *
+ * El SW cachea `GET /api/songs/:id` con StaleWhileRevalidate, así que tras
+ * editar una canción el lector seguiría sirviendo la versión vieja en la
+ * primera visita. Llamar a esto tras guardar fuerza un fetch fresco a red.
+ * No-op si la Cache API no está disponible (dev sin SW / modo privado).
+ * @param {string} id
+ * @returns {Promise<void>}
+ */
+export async function invalidateSongDetailCache(id) {
+  try {
+    if (typeof caches === 'undefined') return;
+    const cache = await caches.open('api-songs-detail-v2');
+    await cache.delete(`${API_URL}/songs/${id}`);
+  } catch (e) {
+    console.warn('No se pudo invalidar la caché de detalle de la canción', e);
+  }
+}
+
+/**
  * Filter by album
  * @param {string|null} albumSlug - null to clear filter
  */

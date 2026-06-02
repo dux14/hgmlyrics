@@ -44,7 +44,17 @@ describe('bodySong', () => {
     expect(html).toContain('Se pone verde al coincidir');
   });
 
-  it('sin key: muestra el estado vacío', () => {
-    expect(bodySong({ title: 'x' }, 'D3')).toContain('tuner-empty');
+  it('v3 (sin key) con nota objetivo: afina contra la nota, no muestra estado vacío', () => {
+    const html = bodySong({ title: 'Santo' }, 'D3');
+    expect(html).not.toContain('tuner-empty');
+    expect(html).toContain('tuner-objective');
+    expect(html).toContain('D3');
+    expect(html).toContain('tuner-readout'); // hay gauge/lectura para afinar
+    expect(html).not.toContain('tuner-scale'); // v3 no define escala de canción
+  });
+
+  it('sin key y sin nota objetivo: estado vacío (nada que afinar)', () => {
+    const html = bodySong({ title: 'x' }, null);
+    expect(html).toContain('tuner-empty');
   });
 });

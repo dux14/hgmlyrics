@@ -6,7 +6,7 @@
  * chord editor (UltimateGuitar style), import modal, and live preview.
  */
 
-import { fetchSongDetail, refreshData } from '../lib/store.js';
+import { fetchSongDetail, refreshData, invalidateSongDetailCache } from '../lib/store.js';
 import { navigate } from '../router.js';
 import { getSession, isFeatureEnabled } from '../lib/authStore.js';
 import { renderSongView } from './SongView.js';
@@ -1376,6 +1376,9 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
       });
     }
 
+    // El SW cachea el detalle (StaleWhileRevalidate); sin esto el lector
+    // mostraría la versión vieja en la primera visita tras editar.
+    await invalidateSongDetailCache(songId);
     await refreshData();
     navigate(postSaveTarget({ from: v2.from || null, isNew: !existingSong }));
     showToast('Canción guardada correctamente');

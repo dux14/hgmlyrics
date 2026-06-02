@@ -27,3 +27,16 @@ export function stepToward(current, target, step) {
   const next = current + dir * Math.abs(step);
   return dir > 0 ? Math.min(next, target) : Math.max(next, target);
 }
+
+/**
+ * Decide si el FAB de autoscroll debe mostrarse.
+ * Oculto en el header (tope); visible al leer la letra. Si el autoscroll está
+ * corriendo, siempre visible (para no perder el botón de pausa al volver arriba).
+ * @param {boolean} headerVisible  el header de la canción está en viewport
+ * @param {boolean} isScrolling    el autoscroll está corriendo
+ * @returns {boolean}
+ */
+export function shouldShowFab(headerVisible, isScrolling) {
+  if (isScrolling) return true;
+  return !headerVisible;
+}

@@ -19,7 +19,7 @@ import {
 import { buildLetraLineHTML, buildChordsLineHTML, buildTonoLineHTML } from '../lib/lyricsRender.js';
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
-import { presetToSpeed, stepToward } from '../lib/autoscroll.js';
+import { presetToSpeed, stepToward, shouldShowFab } from '../lib/autoscroll.js';
 
 const FONT_SIZE_KEY = 'hkn-lyrics-font-size';
 const FONT_STEP = 0.125; // rem
@@ -792,6 +792,26 @@ function setupAutoscroll(_container, songId) {
   `;
   document.body.appendChild(fab);
 
+  // ── Visibilidad del FAB según el header (Plan #3) ──
+  let headerVisible = true; // al cargar estás en el tope → header visible
+
+  function applyFabVisibility() {
+    fab.classList.toggle('autoscroll-fab--hidden', !shouldShowFab(headerVisible, isScrolling));
+  }
+  applyFabVisibility(); // estado inicial: oculto en el header
+
+  const headerEl = document.querySelector('.song-view__header');
+  const headerIo = headerEl
+    ? new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) headerVisible = entry.isIntersecting;
+          applyFabVisibility();
+        },
+        { threshold: 0 },
+      )
+    : null;
+  if (headerIo && headerEl) headerIo.observe(headerEl);
+
   // ── Velocidad objetivo por sección (speedPreset → targetSpeed) ──
   // Las secciones sin data-speed-preset no se observan, así que targetSpeed
   // permanece igual a scrollSpeed y la interpolación es un no-op (backward-compat).
@@ -840,6 +860,7 @@ function setupAutoscroll(_container, songId) {
 
   function startScroll() {
     isScrolling = true;
+    applyFabVisibility();
     // Ignore touch/wheel events for 500ms after starting to prevent false-positive pause
     ignoreScrollUntil = Date.now() + 500;
     iconEl.innerHTML = PAUSE_ICON_SVG;
@@ -900,6 +921,7 @@ function setupAutoscroll(_container, songId) {
 
   function stopScroll() {
     isScrolling = false;
+    applyFabVisibility();
     if (rafId) {
       cancelAnimationFrame(rafId);
       rafId = null;
@@ -977,6 +999,7 @@ function setupAutoscroll(_container, songId) {
     stopScroll();
     clearTimeout(collapseTimer);
     io.disconnect();
+    if (headerIo) headerIo.disconnect();
     fab.remove();
     window.removeEventListener('wheel', onUserScroll);
     window.removeEventListener('touchmove', onUserScroll);

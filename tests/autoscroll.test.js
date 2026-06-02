@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { presetToSpeed, stepToward } from '../src/lib/autoscroll.js';
+import { presetToSpeed, stepToward, shouldShowFab } from '../src/lib/autoscroll.js';
 
 describe('presetToSpeed', () => {
   const range = { min: 0.5, max: 3 };
@@ -30,5 +30,18 @@ describe('stepToward', () => {
   });
   it('si ya está en el objetivo, lo mantiene', () => {
     expect(stepToward(1.5, 1.5, 0.2)).toBeCloseTo(1.5);
+  });
+});
+
+describe('shouldShowFab', () => {
+  it('oculta el FAB cuando el header es visible y no está scrolleando', () => {
+    expect(shouldShowFab(true, false)).toBe(false);
+  });
+  it('muestra el FAB cuando el header no es visible', () => {
+    expect(shouldShowFab(false, false)).toBe(true);
+  });
+  it('muestra el FAB siempre que el autoscroll esté corriendo', () => {
+    expect(shouldShowFab(true, true)).toBe(true);
+    expect(shouldShowFab(false, true)).toBe(true);
   });
 });

@@ -1715,3 +1715,9 @@
   content: '· ';
   opacity: 0.7;
 }
+
+.autoscroll-fab--hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px);
+}

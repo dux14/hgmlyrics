@@ -78,14 +78,15 @@ describe('buildTonoLineHTML', () => {
   const lyricsOnly = (html) =>
     html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '').replace(/<[^>]*>/g, '');
 
-  it('colorea el rango de la voz activa con la clase de categoría', () => {
+  it('la letra cantada de la voz activa va neutra (lyrics__tono-sung), no con el color de voz', () => {
     const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano');
-    expect(html).toContain('line-seg voice-text--soprano');
+    expect(html).toContain('line-seg lyrics__tono-sung');
+    expect(html).not.toContain('line-seg voice-text--soprano');
   });
 
-  it('hace flotar la nota de cada grupo con la clase de categoría', () => {
+  it('la nota flota con el color de la voz y la clase de tamaño/fondo tono-note', () => {
     const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano');
-    expect(html).toContain('float-label voice-text--soprano');
+    expect(html).toContain('float-label voice-text--soprano tono-note');
     expect(html).toContain('>B3<');
   });
 
@@ -99,10 +100,10 @@ describe('buildTonoLineHTML', () => {
     expect(lyricsOnly(html)).toBe('Santo es el Señor');
   });
 
-  it('grupo sin nota: colorea el rango pero no añade etiqueta flotante', () => {
+  it('grupo sin nota: marca el rango con la clase neutra pero no añade etiqueta flotante', () => {
     const l = { text: 'abcd', groups: [{ start: 0, end: 2, voiceId: 'sop1', note: null }] };
     const html = buildTonoLineHTML(l, 'sop1', 'voice-text--soprano');
-    expect(html).toContain('line-seg voice-text--soprano');
+    expect(html).toContain('line-seg lyrics__tono-sung');
     expect(html).not.toContain('float-label');
   });
 

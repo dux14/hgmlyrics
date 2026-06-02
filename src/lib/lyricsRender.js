@@ -56,8 +56,10 @@ export function buildChordsLineHTML(text, chords, opts = {}) {
 }
 
 /**
- * Modo Tono (flag voz_tono): la voz activa se colorea (spans con la clase de
- * categoría) y su nota flota sobre cada grupo; el resto del texto se atenúa.
+ * Modo Tono (flag voz_tono): la letra cantada por la voz activa va neutra
+ * (clase `lyrics__tono-sung`, legible) y su NOTA flota sobre cada grupo con el
+ * color de la voz (`colorClass`) para que resalte; el resto del texto se atenúa.
+ * Mismo esquema para las 4 voces.
  * @param {object} line  línea v3 con {text, groups}
  * @param {string} voiceId  id de la voz activa (roster)
  * @param {string} colorClass  clase de color de categoría, p.ej. 'voice-text--soprano'
@@ -67,9 +69,13 @@ export function buildTonoLineHTML(line, voiceId, colorClass) {
   const text = line?.text || '';
   const groups = groupsForVoice(line, voiceId);
   const cls = colorClass || '';
-  const spans = groups.map((g) => ({ start: g.start, end: g.end, className: cls }));
+  const spans = groups.map((g) => ({
+    start: g.start,
+    end: g.end,
+    className: 'lyrics__tono-sung',
+  }));
   const labels = groups
     .filter((g) => g.note !== null && g.note !== undefined)
-    .map((g) => ({ pos: g.start, text: g.note, className: cls }));
+    .map((g) => ({ pos: g.start, text: g.note, className: `${cls} tono-note` }));
   return buildAnnotatedLineHTML(text, { spans, labels, baseClass: 'lyrics__tono-dim' });
 }

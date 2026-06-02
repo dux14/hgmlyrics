@@ -371,7 +371,32 @@
   color: var(--color-chord);
   /* Los acordes mandan en modo Acordes: bien grandes como antes (legacy 1.4em). */
   font-size: 0.95em;
-  top: -1.15em;
+  top: -1.25em;
+  /* Pill de fondo para despegar el acorde de la letra (igual que las notas de Tono). */
+  background: var(--color-chord-bg);
+  padding: 0.1em 0.35em;
+  border-radius: 5px;
+}
+
+/* Nota de Tono: un poco más grande que el default y con pill del color de la voz
+   (la letra cantada va neutra, así la nota resalta). Aplica a las 4 voces. */
+.float-label.tono-note {
+  font-size: 0.8em;
+  top: -1.25em;
+  padding: 0.1em 0.35em;
+  border-radius: 5px;
+}
+.float-label.tono-note.voice-text--soprano {
+  background: var(--color-voice-soprano-bg);
+}
+.float-label.tono-note.voice-text--contralto {
+  background: var(--color-voice-contralto-bg);
+}
+.float-label.tono-note.voice-text--tenor {
+  background: var(--color-voice-tenor-bg);
+}
+.float-label.tono-note.voice-text--bass {
+  background: var(--color-voice-bass-bg);
 }
 
 /* Atenuación de letra en modo Acordes (~55%) para que predominen los acordes */
@@ -382,10 +407,14 @@
 .lyrics__tono-dim {
   color: #5a5a5a;
 }
+/* Letra que SÍ canta la voz activa: neutra y legible (el color lo lleva la nota). */
+.lyrics__tono-sung {
+  color: var(--color-text);
+}
 
 /* Línea en modo Acordes/Tono: bloque (no flex) + espacio arriba para la etiqueta */
 .lyrics__line--tono {
-  padding-top: 1.35em;
+  padding-top: 1.6em;
 }
 /* Acordes grandes → más aire arriba para que no pisen la línea anterior. */
 .lyrics__line--chords {

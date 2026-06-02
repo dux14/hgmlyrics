@@ -369,6 +369,9 @@
 }
 .float-label.chord-label {
   color: var(--color-chord);
+  /* Los acordes mandan en modo Acordes: bien grandes como antes (legacy 1.4em). */
+  font-size: 0.95em;
+  top: -1.15em;
 }
 
 /* Atenuación de letra en modo Acordes (~55%) para que predominen los acordes */
@@ -381,9 +384,12 @@
 }
 
 /* Línea en modo Acordes/Tono: bloque (no flex) + espacio arriba para la etiqueta */
-.lyrics__line--chords,
 .lyrics__line--tono {
   padding-top: 1.35em;
+}
+/* Acordes grandes → más aire arriba para que no pisen la línea anterior. */
+.lyrics__line--chords {
+  padding-top: 1.75em;
 }
 
 /* Cejilla + Transposición en una fila (modo Acordes) */

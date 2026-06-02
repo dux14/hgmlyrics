@@ -71,6 +71,7 @@ function sectionsToBlocks(sections) {
         : [],
       chords: Array.isArray(line.chords) ? line.chords.map((c) => ({ pos: c.pos, ch: c.ch })) : [],
       annotation: line.annotation || false,
+      spoken: line.spoken || false,
     })),
   }));
 }
@@ -88,7 +89,10 @@ export function blocksToSectionsV3(blocks) {
       type: block.type,
       label: block.label,
       lines: block.lines
-        .filter((l) => l.text.trim() !== '' || (l.chords && l.chords.length > 0) || l.annotation)
+        .filter(
+          (l) =>
+            l.text.trim() !== '' || (l.chords && l.chords.length > 0) || l.annotation || l.spoken,
+        )
         .map((l) => {
           const line = { text: l.text };
           if (Array.isArray(l.groups) && l.groups.length > 0) {
@@ -103,6 +107,7 @@ export function blocksToSectionsV3(blocks) {
             line.chords = l.chords.map((c) => ({ pos: c.pos, ch: c.ch }));
           }
           if (l.annotation) line.annotation = true;
+          if (l.spoken) line.spoken = true;
           return line;
         }),
     };
@@ -639,6 +644,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
             ${v2Enabled ? `<button class="line-row__btn line-row__btn--tono${line.groups && line.groups.length > 0 ? ' line-row__btn--active' : ''}" data-action="open-tono" data-line-id="${line.id}" title="Voces y tono" aria-label="Voces y tono">${icon('music', { size: 16 })}</button>` : ''}
             <button class="line-row__btn ${line.chords && line.chords.length > 0 ? 'line-row__btn--active' : ''}" data-action="open-chords" data-line-id="${line.id}" title="Acordes" aria-label="Acordes">${icon('audio-lines', { size: 16 })}</button>
             <button class="line-row__btn ${line.annotation ? 'line-row__btn--active line-row__btn--annotation' : ''}" data-action="toggle-annotation" data-line-id="${line.id}" title="Marcar como anotación/guía" aria-label="Marcar como anotación/guía">${icon('tag', { size: 16 })}</button>
+            <button class="line-row__btn ${line.spoken ? 'line-row__btn--active' : ''}" data-action="toggle-spoken" data-line-id="${line.id}" title="Marcar como recitado (texto hablado)" aria-label="Marcar como recitado">${icon('message', { size: 16 })}</button>
             <button class="line-row__btn line-row__btn--delete" data-action="delete-line" data-line-id="${line.id}" title="Eliminar" aria-label="Eliminar línea">${icon('close', { size: 16 })}</button>
           </div>
         </div>
@@ -702,7 +708,14 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
 
     if (action === 'add-line') {
       const si = parseInt(btn.dataset.section);
-      blocks[si].lines.push({ id: uid(), text: '', groups: [], chords: [], annotation: false });
+      blocks[si].lines.push({
+        id: uid(),
+        text: '',
+        groups: [],
+        chords: [],
+        annotation: false,
+        spoken: false,
+      });
       renderBlocks();
       // Focus the new line input
       const lastInput = editorRoot.querySelector(
@@ -722,6 +735,12 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       const found = findLine(btn.dataset.lineId);
       if (found) {
         found.line.annotation = !found.line.annotation;
+        renderBlocks();
+      }
+    } else if (action === 'toggle-spoken') {
+      const found = findLine(btn.dataset.lineId);
+      if (found) {
+        found.line.spoken = !found.line.spoken;
         renderBlocks();
       }
     } else if (action === 'open-tono') {

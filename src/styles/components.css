@@ -378,25 +378,13 @@
   border-radius: 5px;
 }
 
-/* Nota de Tono: un poco más grande que el default y con pill del color de la voz
-   (la letra cantada va neutra, así la nota resalta). Aplica a las 4 voces. */
+/* Wave 4 — estilo "aire + letra manda": nota pequeña, sin pill, subrayada con
+   el color de la voz (currentColor viene de .voice-text--*; una sola regla
+   sirve para las 4 voces). La letra cantada manda; la nota es anotación. */
 .float-label.tono-note {
-  font-size: 0.8em;
-  top: -1.25em;
-  padding: 0.1em 0.35em;
-  border-radius: 5px;
-}
-.float-label.tono-note.voice-text--soprano {
-  background: var(--color-voice-soprano-bg);
-}
-.float-label.tono-note.voice-text--contralto {
-  background: var(--color-voice-contralto-bg);
-}
-.float-label.tono-note.voice-text--tenor {
-  background: var(--color-voice-tenor-bg);
-}
-.float-label.tono-note.voice-text--bass {
-  background: var(--color-voice-bass-bg);
+  font-size: 0.68em;
+  padding: 0 0.1em 0.2em;
+  border-bottom: 1.5px solid color-mix(in srgb, currentColor 45%, transparent);
 }
 
 /* Atenuación de letra en modo Acordes (~55%) para que predominen los acordes */
@@ -407,9 +395,19 @@
 .lyrics__tono-dim {
   color: #5a5a5a;
 }
-/* Letra que SÍ canta la voz activa: neutra y legible (el color lo lleva la nota). */
+/* Letra que SÍ canta la voz activa: blanca plena y firme (el color lo lleva la nota). */
 .lyrics__tono-sung {
   color: var(--color-text);
+  font-weight: 500;
+}
+/* Grupo de la voz activa SIN nota asignada: el color vive en la palabra
+   (estado "pendiente de nota" durante el autorado). Punteado que dialoga
+   con el subrayado sólido de las notas. currentColor = .voice-text--*. */
+.lyrics__tono-pending {
+  font-weight: 500;
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, currentColor 50%, transparent);
+  text-underline-offset: 0.25em;
 }
 
 /* ─── Reservar espacio: la nota/acorde empuja su sílaba (estilo cancionero) ───
@@ -429,21 +427,174 @@
   align-items: flex-start;
   vertical-align: bottom;
 }
-.lyrics__line--tono .float-label,
 .lyrics__line--chords .float-label {
   position: static;
   top: auto;
   left: auto;
   margin-bottom: 0.08em;
 }
+.lyrics__line--tono .float-label {
+  position: static;
+  top: auto;
+  left: auto;
+  margin-bottom: 0.4em;
+}
+/* Separación entre líneas del modo Tono (colchón "aire + letra manda") */
+.lyrics__line--tono {
+  margin-bottom: 0.6em;
+}
 
-/* Cejilla + Transposición en una fila (modo Acordes) */
+/* ─── Wave 4: vista combinada (letra+acordes+tono por voz) — 3 rieles ESTRICTOS
+   de altura fija. El riel existe en todo segmento (con o sin contenido) para
+   que comas/guiones/texto-dim alineen SIEMPRE con la letra, nunca con notas. */
+.lyrics__line--mix {
+  white-space: pre-wrap;
+  padding-top: 0.35em;
+  margin-bottom: 0.6em;
+}
+.mix-seg {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  vertical-align: bottom;
+}
+.mix-rail {
+  display: block;
+  line-height: 1;
+  white-space: pre;
+}
+.mix-rail--chord {
+  height: 1.5em;
+  font-size: 0.78em;
+  font-weight: 700;
+}
+.mix-rail--chord i {
+  font-style: normal;
+  color: var(--color-chord);
+  background: var(--color-chord-bg);
+  padding: 0.12em 0.4em;
+  border-radius: 5px;
+  display: inline-block;
+}
+.mix-rail--lyric {
+  line-height: var(--line-height-lyrics);
+}
+.mix-rail--note {
+  height: 1.7em;
+  font-size: 0.68em;
+  font-weight: 700;
+  padding-top: 0.55em;
+}
+.mix-rail--note i {
+  font-style: normal;
+  border-top: 1.5px solid color-mix(in srgb, currentColor 45%, transparent);
+  padding-top: 0.25em;
+  display: inline-block;
+}
+
+/* Wave 4: el modo Acordes agrupa sus herramientas en cajas temáticas
+   (Guitarra / Voz) del mismo material, a lo ancho completo. */
 .chords-extras {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
   gap: var(--space-sm);
   margin-bottom: var(--space-md);
+}
+
+.tool-box {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: 0.6rem 0.75rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+.tool-box__title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--color-text-secondary);
+}
+.tool-box__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+/* Dentro de la caja, la transposición pierde su caja propia (sin doble marco) */
+.tool-box .transpose-controls {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin-bottom: 0;
+}
+
+/* Panel Voz */
+.voice-panel__title {
+  justify-content: space-between;
+  margin-bottom: 0;
+}
+.voice-panel__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  padding: 0.25rem 0;
+  min-height: 38px;
+}
+.voice-panel__toggle[aria-expanded='true'] .voice-panel__chevron {
+  transform: rotate(180deg);
+}
+.voice-panel__chevron {
+  display: inline-flex;
+  transition: transform var(--transition-fast);
+}
+.voice-panel__close {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  min-height: 38px;
+}
+.voice-panel__body {
+  margin-top: 0.5rem;
+}
+.voice-panel__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+.voice-panel__grid .voice-panel__chip {
+  width: 100%;
+  justify-content: center;
+}
+.voice-panel__people {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.voice-panel__people:empty {
+  display: none;
+}
+.voice-panel .tono-chip {
+  background: var(--color-bg);
 }
 
 /* === Theme Toggle === */
@@ -1060,11 +1211,6 @@
   flex-wrap: wrap;
 }
 
-.transpose-label {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-}
-
 .transpose-btn {
   width: 32px;
   height: 32px;
@@ -1347,6 +1493,17 @@
   color: #8a6800;
 }
 [data-theme='dark'] .lyrics__line--tono.voice-text--tenor .syll__note {
+  color: var(--color-voice-tenor);
+}
+
+/* Mismo fix de contraste para las notas Wave 4 (subrayadas, sin pill):
+   tenor en tema claro baja a #8a6800; en oscuro el token ya cumple. */
+.float-label.tono-note.voice-text--tenor,
+.mix-rail--note.voice-text--tenor {
+  color: #8a6800;
+}
+[data-theme='dark'] .float-label.tono-note.voice-text--tenor,
+[data-theme='dark'] .mix-rail--note.voice-text--tenor {
   color: var(--color-voice-tenor);
 }
 
@@ -1664,6 +1821,14 @@
   font-variant-numeric: tabular-nums;
   min-width: 2.5em;
   text-align: right;
+}
+/* Wave 4: grupo sin nota — mismo lenguaje visual que el lector (color de voz
+   + punteado "pendiente de nota"). currentColor viene de .voice-text--*. */
+.group-row__note--pending {
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, currentColor 50%, transparent);
+  text-underline-offset: 0.2em;
+  font-weight: 600;
 }
 .group-row__del {
   border: none;

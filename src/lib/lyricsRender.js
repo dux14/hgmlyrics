@@ -93,18 +93,17 @@ export function buildTonoLineHTML(line, voiceId, colorClass) {
   const text = line?.text || '';
   const groups = groupsForVoice(line, voiceId);
   const cls = colorClass || '';
+  // Predicado único: nota presente y no-vacía.
+  const hasNote = (g) => g.note !== null && g.note !== undefined && g.note !== '';
   // Semántica Wave 4: el color vive en la palabra mientras el grupo no tiene
   // nota; cuando la nota existe, el color se muda a ella y la palabra va blanca.
   const spans = groups.map((g) => ({
     start: g.start,
     end: g.end,
-    className:
-      g.note !== null && g.note !== undefined
-        ? 'lyrics__tono-sung'
-        : `lyrics__tono-pending ${cls}`.trim(),
+    className: hasNote(g) ? 'lyrics__tono-sung' : `lyrics__tono-pending ${cls}`.trim(),
   }));
   const labels = groups
-    .filter((g) => g.note !== null && g.note !== undefined)
+    .filter(hasNote)
     .map((g) => ({ pos: g.start, text: g.note, className: `${cls} tono-note` }));
   return buildAnnotatedLineHTML(text, { spans, labels, baseClass: 'lyrics__tono-dim' });
 }

@@ -105,6 +105,21 @@ describe('buildTonoLineHTML', () => {
     const html = buildTonoLineHTML(l, 'sop1', 'voice-text--soprano');
     expect(html).toContain('lyrics__tono-pending voice-text--soprano');
     expect(html).not.toContain('float-label');
+    expect(html).not.toContain('lyrics__tono-sung');
+  });
+
+  it("grupo con note: '' trata como sin nota → pending, sin etiqueta flotante", () => {
+    const l = { text: 'abcd', groups: [{ start: 0, end: 2, voiceId: 'sop1', note: '' }] };
+    const html = buildTonoLineHTML(l, 'sop1', 'voice-text--soprano');
+    expect(html).toContain('lyrics__tono-pending voice-text--soprano');
+    expect(html).not.toContain('float-label');
+    expect(html).not.toContain('lyrics__tono-sung');
+  });
+
+  it("colorClass vacío ('') → pending sin espacio extra ni clase doble", () => {
+    const l = { text: 'abcd', groups: [{ start: 0, end: 2, voiceId: 'sop1', note: null }] };
+    const html = buildTonoLineHTML(l, 'sop1', '');
+    expect(html).toContain('class="line-seg lyrics__tono-pending"');
   });
 
   it('voz que no canta en la línea → todo atenuado, sin color ni notas', () => {

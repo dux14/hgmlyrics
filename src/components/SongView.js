@@ -16,7 +16,12 @@ import {
   tonoGeneralForVoice,
   firstNoteForVoice,
 } from '../lib/voiceSystem.js';
-import { buildLetraLineHTML, buildChordsLineHTML, buildTonoLineHTML } from '../lib/lyricsRender.js';
+import {
+  buildLetraLineHTML,
+  buildChordsLineHTML,
+  buildTonoLineHTML,
+  buildMixedLineHTML,
+} from '../lib/lyricsRender.js';
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { presetToSpeed, stepToward, shouldShowFab } from '../lib/autoscroll.js';
@@ -635,10 +640,14 @@ function renderTonoFilters(song) {
 /**
  * Render del cuerpo del lector (string puro). Letra blanco plano; Acordes con
  * acordes flotantes + letra atenuada; Tono con la voz activa coloreada + nota.
+ * Cuando se pasa `chordsVoiceId` en modo `chords`, cada línea se renderiza en
+ * vista combinada (3 rieles: acorde / letra / nota de voz).
  * @param {Array} sections
  * @param {{ viewMode?: 'lyrics'|'chords'|'tono', transposeSemitones?: number,
  *           useFlats?: boolean, activeVoiceId?: string|null,
- *           activeCategory?: string|null }} [opts]
+ *           activeCategory?: string|null,
+ *           chordsVoiceId?: string|null,
+ *           chordsCategory?: string|null }} [opts]
  * @returns {string} HTML
  */
 export function renderSections(sections, opts = {}) {
@@ -648,9 +657,12 @@ export function renderSections(sections, opts = {}) {
     useFlats = false,
     activeVoiceId = null,
     activeCategory = null,
+    chordsVoiceId = null,
+    chordsCategory = null,
   } = opts;
   const showChords = viewMode === 'chords';
   const colorClass = activeCategory ? `voice-text--${activeCategory}` : '';
+  const mixColorClass = chordsCategory ? `voice-text--${chordsCategory}` : '';
 
   return (sections || [])
     .map(
@@ -684,6 +696,22 @@ export function renderSections(sections, opts = {}) {
             if (text.trim() === '') return `<p class="lyrics__line">&nbsp;</p>`;
             const inner = buildTonoLineHTML(line, activeVoiceId, colorClass);
             return `<p class="lyrics__line lyrics__line--tono">${inner}</p>`;
+          }
+
+          // ── Combinada (Acordes + Voz): 3 rieles estrictos ──
+          if (showChords && chordsVoiceId) {
+            if (text.trim() === '') return `<p class="lyrics__line">&nbsp;</p>`;
+            const inner = buildMixedLineHTML(
+              line,
+              line.chords || [],
+              chordsVoiceId,
+              mixColorClass,
+              {
+                transposeSemitones,
+                useFlats,
+              },
+            );
+            return `<p class="lyrics__line lyrics__line--mix">${inner}</p>`;
           }
 
           // ── Líneas vacías ──

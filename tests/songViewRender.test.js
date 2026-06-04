@@ -112,3 +112,42 @@ describe('renderSections — líneas spoken', () => {
     expect(normal).not.toContain('lyrics__line--spoken');
   });
 });
+
+describe('renderSections — vista combinada (chordsVoiceId)', () => {
+  const sections = [
+    {
+      type: 'verse',
+      label: 'Santo',
+      lines: [
+        {
+          text: 'San to el Señor',
+          chords: [{ pos: 0, ch: 'D' }],
+          groups: [{ voiceId: 'v1', start: 0, end: 6, note: 'B3' }],
+        },
+      ],
+    },
+  ];
+
+  it('con viewMode chords + chordsVoiceId renderiza línea mix con rieles', () => {
+    const html = renderSections(sections, {
+      viewMode: 'chords',
+      chordsVoiceId: 'v1',
+      chordsCategory: 'tenor',
+    });
+    expect(html).toContain('lyrics__line--mix');
+    expect(html).toContain('mix-rail--chord');
+    expect(html).toContain('voice-text--tenor');
+  });
+
+  it('sin chordsVoiceId el modo chords queda EXACTAMENTE como antes', () => {
+    const html = renderSections(sections, { viewMode: 'chords' });
+    expect(html).toContain('lyrics__line--chords');
+    expect(html).not.toContain('mix-seg');
+  });
+
+  it('línea vacía en combinada produce línea en blanco (no se omite)', () => {
+    const withEmpty = [{ type: 'verse', label: 'X', lines: [{ text: '' }] }];
+    const html = renderSections(withEmpty, { viewMode: 'chords', chordsVoiceId: 'v1' });
+    expect(html).toContain('&nbsp;');
+  });
+});

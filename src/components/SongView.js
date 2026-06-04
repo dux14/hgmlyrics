@@ -285,7 +285,7 @@ export async function renderSongView(container, songIdOrData) {
       <!-- Wave 4: cajas temáticas del modo Acordes — Guitarra y Voz -->
       <div class="chords-extras" id="chords-extras" style="display: none;">
         <div class="tool-box">
-          <p class="tool-box__title">${icon('audio-lines', { size: 13 })} Guitarra</p>
+          <div class="tool-box__title">${icon('audio-lines', { size: 13 })} Guitarra</div>
           <div class="tool-box__row">
             ${
               song.cejilla && song.cejilla > 0
@@ -387,6 +387,8 @@ export async function renderSongView(container, songIdOrData) {
     if (chordsExtrasEl) chordsExtrasEl.style.display = showChords ? 'flex' : 'none';
     const tonoFiltersEl = container.querySelector('#tono-filters');
     if (tonoFiltersEl) tonoFiltersEl.style.display = isTono ? '' : 'none';
+    // Re-asegura el estado del panel Voz al cambiar de modo (defensivo).
+    syncVoicePanel();
   }
 
   // ── Tono mode: disclosure categoría → persona ──
@@ -755,7 +757,7 @@ export function renderVoicePanel(song) {
   return `
     <div class="tool-box voice-panel" id="voice-panel">
       <div class="tool-box__title voice-panel__title">
-        <button class="voice-panel__toggle" id="voice-panel-toggle" aria-expanded="false">
+        <button class="voice-panel__toggle" id="voice-panel-toggle" aria-expanded="false" aria-controls="voice-panel-body">
           <span id="voice-panel-label">${icon('mic', { size: 13 })} Voz</span>
           <span class="voice-panel__chevron">${icon('chevron-down', { size: 14 })}</span>
         </button>

@@ -181,6 +181,7 @@ describe('renderVoicePanel', () => {
     expect(html).toContain('data-category="bass"');
     expect(html).toContain('Solo acordes');
     expect(html).toContain('hidden'); // cuerpo plegado por defecto
+    expect(html).toContain('aria-controls="voice-panel-body"');
   });
   it('no usa emojis', () => {
     expect(renderVoicePanel(song)).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);

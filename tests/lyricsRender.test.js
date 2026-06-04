@@ -256,4 +256,34 @@ describe('buildMixedLineHTML — carriles estrictos', () => {
     expect(html).not.toContain('<b>');
     expect(html).toContain('a&lt;b&gt;');
   });
+
+  it('acorde anclado al final de línea (pos === len) emite segmento de cola', () => {
+    const html = buildMixedLineHTML(
+      { text: 'abc', groups: [] },
+      [{ pos: 3, ch: 'G' }],
+      'v1',
+      '',
+      {},
+    );
+    const segs = html.match(/<span class="mix-seg">/g) || [];
+    expect(segs.length).toBe(2);
+    expect(html).toContain('>G</i>');
+  });
+
+  it('grupo zero-width (start === end) no emite nota', () => {
+    const html = buildMixedLineHTML(
+      { text: 'abc', groups: [{ voiceId: 'v1', start: 1, end: 1, note: 'B3' }] },
+      [],
+      'v1',
+      'voice-text--tenor',
+      {},
+    );
+    expect(html).not.toContain('B3');
+  });
+
+  it('colorClass vacío no deja espacio colgante en el riel de nota', () => {
+    const html = buildMixedLineHTML({ text: 'abc', groups: [] }, [], 'v1', '', {});
+    expect(html).not.toContain('mix-rail--note "');
+    expect(html).toContain('class="mix-rail mix-rail--note"');
+  });
 });

@@ -155,7 +155,7 @@ export function buildMixedLineHTML(line, chords, voiceId, colorClass, opts = {})
   }
   const noteByPos = new Map();
   for (const g of groups) {
-    if (hasNote(g) && !noteByPos.has(g.start)) {
+    if (g.start < g.end && hasNote(g) && !noteByPos.has(g.start)) {
       noteByPos.set(g.start, semis !== 0 ? transposeNote(g.note, semis, useFlats) : g.note);
     }
   }
@@ -172,7 +172,7 @@ export function buildMixedLineHTML(line, chords, voiceId, colorClass, opts = {})
     `<span class="mix-seg">` +
     `<span class="mix-rail mix-rail--chord">${chord ? `<i>${esc(chord)}</i>` : ''}</span>` +
     `<span class="mix-rail mix-rail--lyric ${lyricCls}">${esc(slice)}</span>` +
-    `<span class="mix-rail mix-rail--note ${cls}">${note ? `<i>${esc(note)}</i>` : ''}</span>` +
+    `<span class="mix-rail mix-rail--note${cls ? ` ${cls}` : ''}">${note ? `<i>${esc(note)}</i>` : ''}</span>` +
     `</span>`;
 
   let html = '';
@@ -187,6 +187,7 @@ export function buildMixedLineHTML(line, chords, voiceId, colorClass, opts = {})
     }
     html += seg(chordByPos.get(a), lyricCls, text.slice(a, b), noteByPos.get(a));
   }
+  // noteByPos.has(len) es defensivo — el esquema v3 impide g.start === len
   if (chordByPos.has(len) || noteByPos.has(len)) {
     html += seg(chordByPos.get(len), 'lyrics__tono-dim', '', noteByPos.get(len));
   }

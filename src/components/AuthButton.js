@@ -28,12 +28,12 @@ function buildButton(profile) {
 function buildMenu() {
   return `
     <div class="auth-menu" id="auth-menu">
-      <a class="auth-menu__item" href="#/perfil">Perfil</a>
-      <a class="auth-menu__item" href="#/favoritos">Favoritos</a>
-      <a class="auth-menu__item" href="#/amigos">Amigos</a>
+      <a class="auth-menu__item" href="#/perfil">${icon('user', { size: 16 })} Perfil</a>
+      <a class="auth-menu__item" href="#/favoritos">${icon('heart', { size: 16 })} Favoritos</a>
+      <a class="auth-menu__item" href="#/amigos">${icon('users', { size: 16 })} Amigos</a>
       <a class="auth-menu__item" href="#/afinador">${icon('audio-lines', { size: 16 })} Afinador <span class="badge--beta">BETA</span></a>
       <a class="auth-menu__item" href="#/recomendador">${icon('sparkles', { size: 16 })} Recomendador <span class="badge--beta">BETA</span></a>
-      <button class="auth-menu__item" id="logout-btn">Cerrar sesión</button>
+      <button class="auth-menu__item auth-menu__item--danger" id="logout-btn">${icon('log-out', { size: 16 })} Cerrar sesión</button>
     </div>
   `;
 }

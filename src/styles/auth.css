@@ -308,7 +308,9 @@
 }
 
 .auth-menu__item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
   color: var(--color-text);
   text-decoration: none;
@@ -322,6 +324,11 @@
 
 .auth-menu__item:hover {
   background: var(--color-surface-hover);
+}
+
+.auth-menu__item--danger:hover {
+  background: rgba(244, 67, 54, 0.08);
+  color: var(--color-error);
 }
 
 @media (min-width: 768px) {

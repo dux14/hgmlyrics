@@ -859,11 +859,14 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
                   ? escapeHtml(v.name || getVoiceLabel(v.category))
                   : '(voz eliminada)';
                 const seg = escapeHtml(text.slice(g.start, g.end)) || '·';
-                const note = g.note === null || g.note === undefined ? '—' : escapeHtml(g.note);
+                const noteHtml =
+                  g.note === null || g.note === undefined || g.note === ''
+                    ? `<span class="group-row__note group-row__note--pending voice-text--${cat}">—</span>`
+                    : `<span class="group-row__note">${escapeHtml(g.note)}</span>`;
                 return `<div class="group-row">
                   <span class="group-row__seg">${seg}</span>
                   <span class="group-row__voice"><span class="voice-pick__dot" style="background: var(--color-voice-${cat})"></span>${vname}</span>
-                  <span class="group-row__note">${note}</span>
+                  ${noteHtml}
                   <button class="group-row__del" data-del-idx="${i}" type="button" aria-label="Eliminar grupo">${icon('trash', { size: 14 })}</button>
                 </div>`;
               })

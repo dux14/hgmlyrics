@@ -23,6 +23,12 @@ vi.mock('../src/router.js', () => ({
   navigate: vi.fn(),
 }));
 
+// Stub authStore — enable voz_tono for preview parity tests.
+vi.mock('../src/lib/authStore.js', () => ({
+  isAdmin: vi.fn().mockReturnValue(false),
+  isFeatureEnabled: vi.fn((key) => key === 'voz_tono'),
+}));
+
 const { renderSections, renderVoicePanel } = await import('../src/components/SongView.js');
 
 const sections = [
@@ -185,5 +191,34 @@ describe('renderVoicePanel', () => {
   });
   it('no usa emojis', () => {
     expect(renderVoicePanel(song)).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
+  });
+});
+
+describe('preview del editor — paridad de voz', () => {
+  it('renderSongView en modo preview incluye filtros de Tono y panel Voz', async () => {
+    const { renderSongView } = await import('../src/components/SongView.js');
+    const container = document.createElement('div');
+    const draft = {
+      isPreview: true,
+      title: 'Test',
+      schemaVersion: 3,
+      voiceRoster: [{ id: 'v1', name: 'Tenor', category: 'tenor' }],
+      sections: [
+        {
+          type: 'verse',
+          label: 'V',
+          lines: [
+            {
+              text: 'hola mundo',
+              chords: [{ pos: 0, ch: 'D' }],
+              groups: [{ voiceId: 'v1', start: 0, end: 4, note: 'B3' }],
+            },
+          ],
+        },
+      ],
+    };
+    await renderSongView(container, draft);
+    expect(container.querySelector('#tono-filters')).not.toBeNull();
+    expect(container.querySelector('#voice-panel')).not.toBeNull();
   });
 });

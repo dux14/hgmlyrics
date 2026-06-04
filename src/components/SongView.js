@@ -331,6 +331,12 @@ export async function renderSongView(container, songIdOrData) {
       `
           : ''
       }
+      ${
+        mixAvailable
+          ? `<div class="chords-extras" id="chords-extras" style="display: none;">${renderVoicePanel(song)}</div>`
+          : ''
+      }
+      ${tonoAvailable ? renderTonoFilters(song) : ''}
       `
       }
 

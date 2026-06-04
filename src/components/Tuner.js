@@ -232,6 +232,50 @@ function bodyRange(step, currentNote) {
   `;
 }
 
+const FREE_NOTE_KEY = 'hkn-tuner-free-note';
+const FREE_PCS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const FREE_OCT_MIN = 1;
+const FREE_OCT_MAX = 6;
+
+/**
+ * Valida una nota libre del afinador (sharps canónicos, octavas 1-6).
+ * @param {unknown} raw
+ * @returns {string|null}
+ */
+export function sanitizeFreeNote(raw) {
+  return typeof raw === 'string' && /^[A-G]#?[1-6]$/.test(raw) ? raw : null;
+}
+
+/**
+ * Picker de nota libre (pestaña Canción sin canción): 12 chips de pitch-class
+ * + stepper de octava + CTA. Render puro (string) para testear sin DOM.
+ * @param {{ pc: string, octave: number }} pick
+ * @returns {string}
+ */
+export function bodyFreeNote(pick) {
+  const label = `${pick.pc}${pick.octave}`;
+  const hz = noteToFrequency(label);
+  return `
+    <div class="tuner-free">
+      <p class="tuner-free__hint">Elegí la nota que querés afinar</p>
+      <div class="tuner-free__grid" role="group" aria-label="Nota">
+        ${FREE_PCS.map(
+          (pc) =>
+            `<button class="tuner-free__pc" data-pc="${pc}" data-active="${pc === pick.pc}">${pc}</button>`,
+        ).join('')}
+      </div>
+      <div class="tuner-free__oct">
+        <button class="tuner-free__oct-btn" id="free-oct-down" aria-label="Octava más grave">−</button>
+        <span class="tuner-free__oct-val">Octava ${pick.octave}</span>
+        <button class="tuner-free__oct-btn" id="free-oct-up" aria-label="Octava más aguda">+</button>
+      </div>
+      <div class="tuner-free__note">${label}</div>
+      <p class="tuner-free__sub">Tu nota de referencia · ${hz.toFixed(1)} Hz</p>
+      <button class="btn btn--primary tuner-free__cta" id="free-tune">${icon('mic', { size: 15 })} Afinar ${label}</button>
+    </div>
+  `;
+}
+
 /* ─── Mic permission gate ─── */
 
 function bodyPermissionGate(state) {
@@ -266,8 +310,8 @@ export async function renderTuner(container, opts = {}) {
 
   // Canonical (sharp-spelled) target so it matches frequencyToNote output,
   // e.g. an incoming "Bb5" becomes { note: 'A#', octave: 5 }.
-  const targetCanonical = target.note ? frequencyToNote(noteToFrequency(target.note)) : null;
-  const targetLabel = targetCanonical ? `${targetCanonical.note}${targetCanonical.octave}` : null;
+  let targetCanonical = target.note ? frequencyToNote(noteToFrequency(target.note)) : null;
+  let targetLabel = targetCanonical ? `${targetCanonical.note}${targetCanonical.octave}` : null;
   let song = null;
   if (mode === 'song' && songId) {
     song = await fetchSongDetail(songId).catch(() => null);
@@ -284,6 +328,18 @@ export async function renderTuner(container, opts = {}) {
   let rangeTimerId = null;
   let rangeStartMs = 0;
   let rangeSamples = [];
+  // Nota libre (Canción sin canción): pick persistido + flag de confirmación.
+  let freeConfirmed = false;
+  const freePick = (() => {
+    let stored = null;
+    try {
+      stored = sanitizeFreeNote(localStorage.getItem(FREE_NOTE_KEY));
+    } catch (_e) {
+      /* ignore */
+    }
+    const note = stored || 'A3';
+    return { pc: note.slice(0, -1), octave: Number.parseInt(note.slice(-1), 10) };
+  })();
 
   container.innerHTML = `
     <div class="tuner-page fade-in">
@@ -332,8 +388,27 @@ export async function renderTuner(container, opts = {}) {
 
     if (mode === 'guitar' || mode === 'voice') {
       bodyEl.innerHTML = bodyGuitarOrVoice(mode, mode === 'voice' ? targetLabel : null);
-    } else if (mode === 'song') bodyEl.innerHTML = bodySong(song, targetLabel);
-    else if (mode === 'range') bodyEl.innerHTML = bodyRange(rangeStep, '');
+    } else if (mode === 'song') {
+      if (!song && !targetLabel && !freeConfirmed) {
+        bodyEl.innerHTML = bodyFreeNote(freePick);
+        bindFreeNotePicker();
+      } else {
+        bodyEl.innerHTML = bodySong(song, targetLabel);
+        if (!song && freeConfirmed) {
+          const change = document.createElement('button');
+          change.className = 'btn btn--secondary tuner-free__change';
+          change.id = 'free-change';
+          change.textContent = 'Cambiar nota';
+          bodyEl.appendChild(change);
+          change.addEventListener('click', () => {
+            freeConfirmed = false;
+            targetCanonical = null;
+            targetLabel = null;
+            paintBody();
+          });
+        }
+      }
+    } else if (mode === 'range') bodyEl.innerHTML = bodyRange(rangeStep, '');
 
     if (mode === 'range') {
       bodyEl.querySelector('#range-cancel').addEventListener('click', cancelRange);
@@ -516,6 +591,37 @@ export async function renderTuner(container, opts = {}) {
     rangeTempHigh = null;
     rangeSamples = [];
     navigate('/perfil');
+  }
+
+  /* ─── free note picker binder ─── */
+
+  function bindFreeNotePicker() {
+    bodyEl.querySelectorAll('.tuner-free__pc').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        freePick.pc = btn.dataset.pc;
+        paintBody();
+      });
+    });
+    bodyEl.querySelector('#free-oct-down')?.addEventListener('click', () => {
+      freePick.octave = Math.max(FREE_OCT_MIN, freePick.octave - 1);
+      paintBody();
+    });
+    bodyEl.querySelector('#free-oct-up')?.addEventListener('click', () => {
+      freePick.octave = Math.min(FREE_OCT_MAX, freePick.octave + 1);
+      paintBody();
+    });
+    bodyEl.querySelector('#free-tune')?.addEventListener('click', () => {
+      const label = `${freePick.pc}${freePick.octave}`;
+      targetCanonical = frequencyToNote(noteToFrequency(label));
+      targetLabel = `${targetCanonical.note}${targetCanonical.octave}`;
+      freeConfirmed = true;
+      try {
+        localStorage.setItem(FREE_NOTE_KEY, label);
+      } catch (_e) {
+        /* ignore */
+      }
+      paintBody();
+    });
   }
 
   /* ─── mic lifecycle ─── */

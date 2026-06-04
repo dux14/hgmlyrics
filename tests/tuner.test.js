@@ -23,7 +23,7 @@ vi.mock('../src/lib/pitch.js', () => ({
   createPitchDetector: vi.fn(),
 }));
 
-const { bodySong } = await import('../src/components/Tuner.js');
+const { bodySong, sanitizeFreeNote, bodyFreeNote } = await import('../src/components/Tuner.js');
 
 const song = { title: 'Santo', key: 'D major' };
 
@@ -56,5 +56,43 @@ describe('bodySong', () => {
   it('sin key y sin nota objetivo: estado vacío (nada que afinar)', () => {
     const html = bodySong({ title: 'x' }, null);
     expect(html).toContain('tuner-empty');
+  });
+});
+
+describe('sanitizeFreeNote', () => {
+  it('acepta notas válidas C1–B6', () => {
+    expect(sanitizeFreeNote('D4')).toBe('D4');
+    expect(sanitizeFreeNote('F#3')).toBe('F#3');
+    expect(sanitizeFreeNote('C1')).toBe('C1');
+    expect(sanitizeFreeNote('B6')).toBe('B6');
+  });
+  it('rechaza fuera de rango, bemoles y basura', () => {
+    expect(sanitizeFreeNote('C0')).toBeNull();
+    expect(sanitizeFreeNote('C7')).toBeNull();
+    expect(sanitizeFreeNote('Bb3')).toBeNull();
+    expect(sanitizeFreeNote('')).toBeNull();
+    expect(sanitizeFreeNote(null)).toBeNull();
+    expect(sanitizeFreeNote('<img>')).toBeNull();
+  });
+});
+
+describe('bodyFreeNote', () => {
+  it('renderiza 12 chips de nota, stepper de octava, nota grande y CTA', () => {
+    const html = bodyFreeNote({ pc: 'D', octave: 4 });
+    for (const pc of ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']) {
+      expect(html).toContain(`data-pc="${pc}"`);
+    }
+    expect(html).toContain('id="free-oct-down"');
+    expect(html).toContain('id="free-oct-up"');
+    expect(html).toContain('D4');
+    expect(html).toContain('293.7'); // Hz de D4
+    expect(html).toContain('id="free-tune"');
+  });
+  it('marca el chip activo', () => {
+    const html = bodyFreeNote({ pc: 'A', octave: 3 });
+    expect(html).toMatch(/data-pc="A"[^>]*data-active="true"/);
+  });
+  it('no usa emojis', () => {
+    expect(bodyFreeNote({ pc: 'C', octave: 4 })).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
   });
 });

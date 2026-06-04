@@ -77,6 +77,12 @@ export function buildChordsLineHTML(text, chords, opts = {}) {
  * Modo Tono (flag voz_tono): la letra cantada por la voz activa va neutra
  * (clase `lyrics__tono-sung`, legible) y su NOTA flota sobre cada grupo con el
  * color de la voz (`colorClass`) para que resalte; el resto del texto se atenúa.
+ *
+ * Wave 4 — estado "pending": cuando un grupo NO tiene nota asignada, el color
+ * de la voz vive en la PALABRA misma (clase `lyrics__tono-pending` + colorClass)
+ * y no se genera etiqueta flotante. Cuando la nota existe el color se muda a
+ * ella y la palabra va blanca (`lyrics__tono-sung`).
+ *
  * Mismo esquema para las 4 voces.
  * @param {object} line  línea v3 con {text, groups}
  * @param {string} voiceId  id de la voz activa (roster)
@@ -87,10 +93,15 @@ export function buildTonoLineHTML(line, voiceId, colorClass) {
   const text = line?.text || '';
   const groups = groupsForVoice(line, voiceId);
   const cls = colorClass || '';
+  // Semántica Wave 4: el color vive en la palabra mientras el grupo no tiene
+  // nota; cuando la nota existe, el color se muda a ella y la palabra va blanca.
   const spans = groups.map((g) => ({
     start: g.start,
     end: g.end,
-    className: 'lyrics__tono-sung',
+    className:
+      g.note !== null && g.note !== undefined
+        ? 'lyrics__tono-sung'
+        : `lyrics__tono-pending ${cls}`.trim(),
   }));
   const labels = groups
     .filter((g) => g.note !== null && g.note !== undefined)

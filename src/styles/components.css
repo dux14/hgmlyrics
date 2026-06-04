@@ -400,6 +400,15 @@
   color: var(--color-text);
   font-weight: 500;
 }
+/* Grupo de la voz activa SIN nota asignada: el color vive en la palabra
+   (estado "pendiente de nota" durante el autorado). Punteado que dialoga
+   con el subrayado sólido de las notas. currentColor = .voice-text--*. */
+.lyrics__tono-pending {
+  font-weight: 500;
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, currentColor 50%, transparent);
+  text-underline-offset: 0.25em;
+}
 
 /* ─── Reservar espacio: la nota/acorde empuja su sílaba (estilo cancionero) ───
    Cada .line-seg pasa a columna in-flow [nota arriba / sílaba abajo], así su

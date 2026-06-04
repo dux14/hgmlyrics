@@ -100,10 +100,10 @@ describe('buildTonoLineHTML', () => {
     expect(lyricsOnly(html)).toBe('Santo es el Señor');
   });
 
-  it('grupo sin nota: marca el rango con la clase neutra pero no añade etiqueta flotante', () => {
+  it('grupo sin nota: marca el rango con pending + color de voz, sin nota flotante', () => {
     const l = { text: 'abcd', groups: [{ start: 0, end: 2, voiceId: 'sop1', note: null }] };
     const html = buildTonoLineHTML(l, 'sop1', 'voice-text--soprano');
-    expect(html).toContain('line-seg lyrics__tono-sung');
+    expect(html).toContain('lyrics__tono-pending voice-text--soprano');
     expect(html).not.toContain('float-label');
   });
 
@@ -138,5 +138,38 @@ describe('transposeNote', () => {
   it('entrada inválida pasa intacta', () => {
     expect(transposeNote('xx', 2, false)).toBe('xx');
     expect(transposeNote('', 2, false)).toBe('');
+  });
+  it('salto de octava completa ±12', () => {
+    expect(transposeNote('A3', 12, false)).toBe('A4');
+    expect(transposeNote('A3', -12, false)).toBe('A2');
+  });
+  it('cruce doble hacia abajo (C3 −13 → B1)', () => {
+    expect(transposeNote('C3', -13, false)).toBe('B1');
+  });
+});
+
+describe('buildTonoLineHTML — pending (grupo sin nota)', () => {
+  const line = {
+    text: 'San to canta',
+    groups: [
+      { voiceId: 'v1', start: 0, end: 3, note: 'B3' },
+      { voiceId: 'v1', start: 4, end: 6, note: null },
+    ],
+  };
+  it('grupo con nota → lyrics__tono-sung + nota flotante', () => {
+    const html = buildTonoLineHTML(line, 'v1', 'voice-text--tenor');
+    expect(html).toContain('lyrics__tono-sung');
+    expect(html).toContain('tono-note');
+    expect(html).toContain('B3');
+  });
+  it('grupo sin nota → lyrics__tono-pending + clase de color de voz, sin nota flotante', () => {
+    const html = buildTonoLineHTML(line, 'v1', 'voice-text--tenor');
+    expect(html).toContain('lyrics__tono-pending voice-text--tenor');
+    const pendingSeg = html.split('<span class="line-seg').find((s) => s.includes('tono-pending'));
+    expect(pendingSeg).not.toContain('float-label');
+  });
+  it('texto fuera de grupos sigue dim', () => {
+    const html = buildTonoLineHTML(line, 'v1', 'voice-text--tenor');
+    expect(html).toContain('lyrics__tono-dim');
   });
 });

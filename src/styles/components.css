@@ -444,6 +444,54 @@
   margin-bottom: 0.6em;
 }
 
+/* ─── Wave 4: vista combinada (letra+acordes+tono por voz) — 3 rieles ESTRICTOS
+   de altura fija. El riel existe en todo segmento (con o sin contenido) para
+   que comas/guiones/texto-dim alineen SIEMPRE con la letra, nunca con notas. */
+.lyrics__line--mix {
+  white-space: pre-wrap;
+  padding-top: 0.35em;
+  margin-bottom: 0.6em;
+}
+.mix-seg {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  vertical-align: bottom;
+}
+.mix-rail {
+  display: block;
+  line-height: 1;
+  white-space: pre;
+}
+.mix-rail--chord {
+  height: 1.5em;
+  font-size: 0.78em;
+  font-weight: 700;
+}
+.mix-rail--chord i {
+  font-style: normal;
+  color: var(--color-chord);
+  background: var(--color-chord-bg);
+  padding: 0.12em 0.4em;
+  border-radius: 5px;
+  display: inline-block;
+}
+.mix-rail--lyric {
+  line-height: var(--line-height-lyrics);
+}
+.mix-rail--note {
+  height: 1.7em;
+  font-size: 0.68em;
+  font-weight: 700;
+  padding-top: 0.55em;
+}
+.mix-rail--note i {
+  font-style: normal;
+  border-top: 1.5px solid color-mix(in srgb, currentColor 45%, transparent);
+  padding-top: 0.25em;
+  display: inline-block;
+}
+
 /* Cejilla + Transposición en una fila (modo Acordes) */
 .chords-extras {
   display: flex;

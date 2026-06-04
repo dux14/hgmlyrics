@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildLetraLineHTML } from '../src/lib/lyricsRender.js';
 import { transposeChord, transposeNote, buildChordsLineHTML } from '../src/lib/lyricsRender.js';
 import { buildTonoLineHTML } from '../src/lib/lyricsRender.js';
+import { buildMixedLineHTML } from '../src/lib/lyricsRender.js';
 
 describe('buildLetraLineHTML', () => {
   it('devuelve texto escapado plano, sin wrappers ni color', () => {
@@ -186,5 +187,73 @@ describe('buildTonoLineHTML — pending (grupo sin nota)', () => {
   it('texto fuera de grupos sigue dim', () => {
     const html = buildTonoLineHTML(line, 'v1', 'voice-text--tenor');
     expect(html).toContain('lyrics__tono-dim');
+  });
+});
+
+describe('buildMixedLineHTML — carriles estrictos', () => {
+  const line = {
+    text: 'San to, Dioos del',
+    chords: [],
+    groups: [
+      { voiceId: 'v1', start: 0, end: 3, note: 'B3' },
+      { voiceId: 'v1', start: 4, end: 6, note: 'A3' },
+      { voiceId: 'v1', start: 14, end: 17, note: null },
+    ],
+  };
+  const chords = [
+    { pos: 0, ch: 'D' },
+    { pos: 14, ch: 'G' },
+  ];
+
+  it('TODO segmento tiene los 3 rieles (chord/lyric/note), tenga o no contenido', () => {
+    const html = buildMixedLineHTML(line, chords, 'v1', 'voice-text--tenor', {});
+    const segs = html.match(/<span class="mix-seg">/g) || [];
+    expect(segs.length).toBeGreaterThan(0);
+    const chordRails = html.match(/mix-rail--chord/g) || [];
+    const lyricRails = html.match(/mix-rail--lyric/g) || [];
+    const noteRails = html.match(/mix-rail--note/g) || [];
+    expect(chordRails.length).toBe(segs.length);
+    expect(lyricRails.length).toBe(segs.length);
+    expect(noteRails.length).toBe(segs.length);
+  });
+
+  it('acorde en su riel, nota en el suyo, anclados a su sílaba', () => {
+    const html = buildMixedLineHTML(line, chords, 'v1', 'voice-text--tenor', {});
+    expect(html).toContain('>D</i>');
+    expect(html).toContain('>B3</i>');
+    expect(html).toContain('>G</i>');
+  });
+
+  it('texto fuera de grupos va dim en el riel de letra (nunca al de notas)', () => {
+    const html = buildMixedLineHTML(line, chords, 'v1', 'voice-text--tenor', {});
+    expect(html).toContain('lyrics__tono-dim');
+    expect(html).toMatch(/mix-rail--lyric lyrics__tono-dim[^>]*>[^<]*Dioos/);
+  });
+
+  it('grupo sin nota → pending con color, sin <i> en el riel de nota', () => {
+    const html = buildMixedLineHTML(line, chords, 'v1', 'voice-text--tenor', {});
+    expect(html).toContain('lyrics__tono-pending voice-text--tenor');
+  });
+
+  it('transposición mueve acordes Y notas juntos', () => {
+    const html = buildMixedLineHTML(line, chords, 'v1', 'voice-text--tenor', {
+      transposeSemitones: 1,
+      useFlats: false,
+    });
+    expect(html).toContain('>D#</i>');
+    expect(html).toContain('>C4</i>');
+  });
+
+  it('texto plano sin grupos ni acordes devuelve una línea dim íntegra', () => {
+    const html = buildMixedLineHTML({ text: 'solo texto', groups: [] }, [], 'v1', '', {});
+    expect(html).toContain('solo texto');
+    expect(html).toContain('lyrics__tono-dim');
+  });
+
+  it('escapa HTML en letra, acorde y nota', () => {
+    const evil = { text: 'a<b>', groups: [{ voiceId: 'v1', start: 0, end: 4, note: 'B3' }] };
+    const html = buildMixedLineHTML(evil, [{ pos: 0, ch: 'D<i>' }], 'v1', '', {});
+    expect(html).not.toContain('<b>');
+    expect(html).toContain('a&lt;b&gt;');
   });
 });

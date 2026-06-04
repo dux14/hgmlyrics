@@ -73,6 +73,25 @@ export function buildChordsLineHTML(text, chords, opts = {}) {
   return buildAnnotatedLineHTML(str, { labels, baseClass: 'lyrics__letra-dim' });
 }
 
+// Predicado único: nota presente y no-vacía. Usado por buildTonoLineHTML y
+// buildMixedLineHTML para detectar si un grupo tiene nota asignada.
+const hasNote = (g) => g.note !== null && g.note !== undefined && g.note !== '';
+
+/**
+ * Escapa caracteres HTML especiales para uso seguro en strings de HTML.
+ * @param {string|null|undefined} str
+ * @returns {string}
+ */
+function esc(str) {
+  if (str === '' || str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 /**
  * Modo Tono (flag voz_tono): la letra cantada por la voz activa va neutra
  * (clase `lyrics__tono-sung`, legible) y su NOTA flota sobre cada grupo con el
@@ -93,8 +112,6 @@ export function buildTonoLineHTML(line, voiceId, colorClass) {
   const text = line?.text || '';
   const groups = groupsForVoice(line, voiceId);
   const cls = colorClass || '';
-  // Predicado único: nota presente y no-vacía.
-  const hasNote = (g) => g.note !== null && g.note !== undefined && g.note !== '';
   // Semántica Wave 4: el color vive en la palabra mientras el grupo no tiene
   // nota; cuando la nota existe, el color se muda a ella y la palabra va blanca.
   const spans = groups.map((g) => ({
@@ -106,4 +123,72 @@ export function buildTonoLineHTML(line, voiceId, colorClass) {
     .filter(hasNote)
     .map((g) => ({ pos: g.start, text: g.note, className: `${cls} tono-note` }));
   return buildAnnotatedLineHTML(text, { spans, labels, baseClass: 'lyrics__tono-dim' });
+}
+
+/**
+ * Vista combinada (flag voz_tono): letra + acordes + tono de UNA voz en una
+ * línea de 3 rieles ESTRICTOS de altura fija — acorde arriba / letra al medio /
+ * nota abajo. Todo run de texto (incluido lo no cantado, comas, guiones) vive
+ * en el riel de letra; los rieles existen en todos los segmentos para que nada
+ * "caiga" de carril. Transposición mueve acordes y notas juntos.
+ * @param {object} line línea v3 con {text, groups}
+ * @param {Array<{pos:number,ch:string}>} chords
+ * @param {string} voiceId voz activa (roster)
+ * @param {string} colorClass p.ej. 'voice-text--tenor'
+ * @param {{ transposeSemitones?: number, useFlats?: boolean }} [opts]
+ * @returns {string} HTML
+ */
+export function buildMixedLineHTML(line, chords, voiceId, colorClass, opts = {}) {
+  const text = line?.text || '';
+  const len = text.length;
+  const semis = opts.transposeSemitones || 0;
+  const useFlats = !!opts.useFlats;
+  const cls = colorClass || '';
+  const groups = groupsForVoice(line, voiceId);
+
+  const chordByPos = new Map();
+  for (const c of Array.isArray(chords) ? chords : []) {
+    const pos = Math.min(Math.max(c.pos || 0, 0), len);
+    if (!chordByPos.has(pos)) {
+      chordByPos.set(pos, semis !== 0 ? transposeChord(c.ch, semis, useFlats) : c.ch);
+    }
+  }
+  const noteByPos = new Map();
+  for (const g of groups) {
+    if (hasNote(g) && !noteByPos.has(g.start)) {
+      noteByPos.set(g.start, semis !== 0 ? transposeNote(g.note, semis, useFlats) : g.note);
+    }
+  }
+
+  const cuts = new Set([0, len]);
+  for (const p of chordByPos.keys()) cuts.add(p);
+  for (const g of groups) {
+    if (g.start >= 0 && g.start <= len) cuts.add(g.start);
+    if (g.end >= 0 && g.end <= len) cuts.add(g.end);
+  }
+  const points = [...cuts].sort((a, b) => a - b);
+
+  const seg = (chord, lyricCls, slice, note) =>
+    `<span class="mix-seg">` +
+    `<span class="mix-rail mix-rail--chord">${chord ? `<i>${esc(chord)}</i>` : ''}</span>` +
+    `<span class="mix-rail mix-rail--lyric ${lyricCls}">${esc(slice)}</span>` +
+    `<span class="mix-rail mix-rail--note ${cls}">${note ? `<i>${esc(note)}</i>` : ''}</span>` +
+    `</span>`;
+
+  let html = '';
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    if (a >= b) continue;
+    const group = groups.find((g) => g.start <= a && g.end >= b && g.start < g.end);
+    let lyricCls = 'lyrics__tono-dim';
+    if (group) {
+      lyricCls = hasNote(group) ? 'lyrics__tono-sung' : `lyrics__tono-pending ${cls}`.trim();
+    }
+    html += seg(chordByPos.get(a), lyricCls, text.slice(a, b), noteByPos.get(a));
+  }
+  if (chordByPos.has(len) || noteByPos.has(len)) {
+    html += seg(chordByPos.get(len), 'lyrics__tono-dim', '', noteByPos.get(len));
+  }
+  return html;
 }

@@ -378,25 +378,13 @@
   border-radius: 5px;
 }
 
-/* Nota de Tono: un poco más grande que el default y con pill del color de la voz
-   (la letra cantada va neutra, así la nota resalta). Aplica a las 4 voces. */
+/* Wave 4 — estilo "aire + letra manda": nota pequeña, sin pill, subrayada con
+   el color de la voz (currentColor viene de .voice-text--*; una sola regla
+   sirve para las 4 voces). La letra cantada manda; la nota es anotación. */
 .float-label.tono-note {
-  font-size: 0.8em;
-  top: -1.25em;
-  padding: 0.1em 0.35em;
-  border-radius: 5px;
-}
-.float-label.tono-note.voice-text--soprano {
-  background: var(--color-voice-soprano-bg);
-}
-.float-label.tono-note.voice-text--contralto {
-  background: var(--color-voice-contralto-bg);
-}
-.float-label.tono-note.voice-text--tenor {
-  background: var(--color-voice-tenor-bg);
-}
-.float-label.tono-note.voice-text--bass {
-  background: var(--color-voice-bass-bg);
+  font-size: 0.68em;
+  padding: 0 0.1em 0.2em;
+  border-bottom: 1.5px solid color-mix(in srgb, currentColor 45%, transparent);
 }
 
 /* Atenuación de letra en modo Acordes (~55%) para que predominen los acordes */
@@ -407,9 +395,10 @@
 .lyrics__tono-dim {
   color: #5a5a5a;
 }
-/* Letra que SÍ canta la voz activa: neutra y legible (el color lo lleva la nota). */
+/* Letra que SÍ canta la voz activa: blanca plena y firme (el color lo lleva la nota). */
 .lyrics__tono-sung {
   color: var(--color-text);
+  font-weight: 500;
 }
 
 /* ─── Reservar espacio: la nota/acorde empuja su sílaba (estilo cancionero) ───
@@ -429,12 +418,21 @@
   align-items: flex-start;
   vertical-align: bottom;
 }
-.lyrics__line--tono .float-label,
 .lyrics__line--chords .float-label {
   position: static;
   top: auto;
   left: auto;
   margin-bottom: 0.08em;
+}
+.lyrics__line--tono .float-label {
+  position: static;
+  top: auto;
+  left: auto;
+  margin-bottom: 0.4em;
+}
+/* Separación entre líneas del modo Tono (colchón "aire + letra manda") */
+.lyrics__line--tono {
+  margin-bottom: 0.6em;
 }
 
 /* Cejilla + Transposición en una fila (modo Acordes) */

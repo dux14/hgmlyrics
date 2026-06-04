@@ -36,6 +36,24 @@ export function transposeChord(chord, semitones, useFlats) {
 }
 
 /**
+ * Transpone una nota en notación científica (p.ej. "B3") por semitonos,
+ * con manejo de octava (B3 +1 → C4). Entrada inválida pasa intacta.
+ * @param {string} note @param {number} semitones @param {boolean} [useFlats]
+ * @returns {string}
+ */
+export function transposeNote(note, semitones, useFlats = false) {
+  const m = /^([A-G][#b]?)(-?\d+)$/.exec(String(note || '').trim());
+  if (!m) return note;
+  const root = NORMALIZE[m[1]] || m[1];
+  const idx = NOTES_SHARP.indexOf(root);
+  if (idx === -1) return note;
+  const total = idx + semitones;
+  const newIdx = ((total % 12) + 12) % 12;
+  const octave = Number.parseInt(m[2], 10) + Math.floor(total / 12);
+  return `${useFlats ? NOTES_FLAT[newIdx] : NOTES_SHARP[newIdx]}${octave}`;
+}
+
+/**
  * Modo Acordes (GA): letra atenuada (~55%) + acordes flotantes anclados a su
  * carácter (no parten palabras). `pos` se clampa a [0, len].
  * @param {string} text

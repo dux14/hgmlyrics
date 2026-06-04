@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildLetraLineHTML } from '../src/lib/lyricsRender.js';
-import { transposeChord, buildChordsLineHTML } from '../src/lib/lyricsRender.js';
+import { transposeChord, transposeNote, buildChordsLineHTML } from '../src/lib/lyricsRender.js';
 import { buildTonoLineHTML } from '../src/lib/lyricsRender.js';
 
 describe('buildLetraLineHTML', () => {
@@ -113,5 +113,30 @@ describe('buildTonoLineHTML', () => {
     expect(html).not.toContain('voice-text--tenor');
     expect(html).toContain('lyrics__tono-dim');
     expect(lyricsOnly(html)).toBe('Santo es el Señor');
+  });
+});
+
+describe('transposeNote', () => {
+  it('sube semitonos dentro de la octava', () => {
+    expect(transposeNote('A3', 2, false)).toBe('B3');
+  });
+  it('cruza la frontera de octava hacia arriba (B3 +1 → C4)', () => {
+    expect(transposeNote('B3', 1, false)).toBe('C4');
+  });
+  it('cruza la frontera de octava hacia abajo (C3 −1 → B2)', () => {
+    expect(transposeNote('C3', -1, false)).toBe('B2');
+  });
+  it('usa bemoles cuando useFlats', () => {
+    expect(transposeNote('A3', 1, true)).toBe('Bb3');
+  });
+  it('normaliza bemoles de entrada', () => {
+    expect(transposeNote('Bb3', 2, false)).toBe('C4');
+  });
+  it('semitonos 0 devuelve igual', () => {
+    expect(transposeNote('F#3', 0, false)).toBe('F#3');
+  });
+  it('entrada inválida pasa intacta', () => {
+    expect(transposeNote('xx', 2, false)).toBe('xx');
+    expect(transposeNote('', 2, false)).toBe('');
   });
 });

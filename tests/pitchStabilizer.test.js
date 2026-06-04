@@ -80,3 +80,24 @@ describe('pitchStabilizer — reset', () => {
     expect(s.push(null)).toBeNull();
   });
 });
+
+describe('pitchStabilizer — guardas de entrada', () => {
+  it('hz 0, negativo, NaN e Infinity se tratan como null', () => {
+    const s = makeStab();
+    for (let i = 0; i < 6; i++) s.push(220);
+    for (const bad of [0, -100, NaN, Infinity]) {
+      const out = s.push(bad);
+      expect(out === null || out.held === true).toBe(true);
+    }
+  });
+  it('los frames held NO extienden la ventana de hold', () => {
+    const s = makeStab({ holdMs: 250 });
+    for (let i = 0; i < 6; i++) s.push(220);
+    // 7 nulls a 33ms: los primeros ~7 frames (231ms) van held, luego null
+    const outs = [];
+    for (let i = 0; i < 9; i++) outs.push(s.push(null));
+    expect(outs[0]).not.toBeNull();
+    expect(outs[0].held).toBe(true);
+    expect(outs[8]).toBeNull(); // 9*33=297ms > 250ms: expiró pese a los held intermedios
+  });
+});

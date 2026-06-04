@@ -12,6 +12,7 @@
 
 import '../styles/tuner.css';
 import { createPitchDetector, shouldAutoStartMic } from '../lib/pitch.js';
+import { createPitchStabilizer } from '../lib/pitchStabilizer.js';
 import {
   frequencyToNote,
   noteToFrequency,
@@ -274,6 +275,7 @@ export async function renderTuner(container, opts = {}) {
 
   /** @type {ReturnType<typeof createPitchDetector> | null} */
   let detector = null;
+  const stabilizer = createPitchStabilizer();
   let micState = 'idle'; // 'idle' | 'requesting' | 'running' | 'denied' | 'stopped'
   // Range-mode state
   let rangeStep = 'low';
@@ -341,18 +343,17 @@ export async function renderTuner(container, opts = {}) {
 
   /* ─── pitch handlers per mode ─── */
 
-  function handlePitchGuitar({ hz }) {
-    if (hz === null) {
+  function handlePitchGuitar(stab) {
+    if (stab === null) {
       renderReadout(bodyEl, { label: '—', hz: null, cents: null });
       setNeedle(bodyEl, 0, '');
       return;
     }
-    const nearest = nearestString(hz);
+    const nearest = nearestString(stab.hz);
     if (!nearest) return;
     const status = colorFromCents(nearest.cents);
-    renderReadout(bodyEl, { label: nearest.string, hz, cents: nearest.cents });
+    renderReadout(bodyEl, { label: nearest.string, hz: stab.hz, cents: nearest.cents });
     setNeedle(bodyEl, nearest.cents, status);
-    // highlight closest string
     const strings = bodyEl.querySelector('#tuner-strings');
     if (strings) {
       for (const li of strings.children) {
@@ -361,42 +362,36 @@ export async function renderTuner(container, opts = {}) {
     }
   }
 
-  function handlePitchVoice({ hz }) {
-    if (hz === null) {
+  function handlePitchVoice(stab) {
+    if (stab === null) {
       renderReadout(bodyEl, { label: '—', hz: null, cents: null });
       setNeedle(bodyEl, 0, '');
       const objEl = bodyEl.querySelector('#tuner-objective');
       if (objEl) objEl.dataset.match = '';
       return;
     }
-    const r = frequencyToNote(hz);
-    if (!r) return;
-    renderReadout(bodyEl, { label: `${r.note}${r.octave}`, hz, cents: r.cents });
-    setNeedle(bodyEl, r.cents, colorFromCents(r.cents));
+    renderReadout(bodyEl, { label: `${stab.note}${stab.octave}`, hz: stab.hz, cents: stab.cents });
+    setNeedle(bodyEl, stab.cents, colorFromCents(stab.cents));
     if (targetCanonical) {
       const objEl = bodyEl.querySelector('#tuner-objective');
-      if (objEl) objEl.dataset.match = matchesTarget(r, targetCanonical) ? 'ok' : '';
+      if (objEl) objEl.dataset.match = matchesTarget(stab, targetCanonical) ? 'ok' : '';
     }
   }
 
-  function handlePitchSong({ hz }) {
-    // Ni tono de canción (v1/v2) ni nota objetivo (v3) → nada que afinar.
+  function handlePitchSong(stab) {
     if (!song?.key && !targetCanonical) return;
-    if (hz === null) {
+    if (stab === null) {
       renderReadout(bodyEl, { label: '—', hz: null, cents: null });
       setNeedle(bodyEl, 0, '');
       const objEl = bodyEl.querySelector('#tuner-objective');
       if (objEl) objEl.dataset.match = '';
       return;
     }
-    const r = frequencyToNote(hz);
-    if (!r) return;
-    // La escala solo existe cuando la canción tiene tono explícito (v1/v2).
-    const inScale = song?.key ? getScaleNotes(song.key).includes(r.note) : null;
+    const inScale = song?.key ? getScaleNotes(song.key).includes(stab.note) : null;
     renderReadout(bodyEl, {
-      label: `${r.note}${r.octave}`,
-      hz,
-      cents: r.cents,
+      label: `${stab.note}${stab.octave}`,
+      hz: stab.hz,
+      cents: stab.cents,
       sub:
         inScale === null
           ? undefined
@@ -404,32 +399,30 @@ export async function renderTuner(container, opts = {}) {
             ? `${icon('check', { size: 14 })} en escala`
             : `${icon('close', { size: 14 })} fuera de escala`,
     });
-    setNeedle(bodyEl, r.cents, colorFromCents(r.cents));
+    setNeedle(bodyEl, stab.cents, colorFromCents(stab.cents));
     const ul = bodyEl.querySelector('#tuner-scale');
     if (ul) {
       for (const li of ul.children) {
-        li.dataset.active = li.dataset.pc === r.note ? 'true' : 'false';
+        li.dataset.active = li.dataset.pc === stab.note ? 'true' : 'false';
       }
     }
     const readout = bodyEl.querySelector('#tuner-readout');
     if (readout && inScale !== null) readout.dataset.scale = inScale ? 'in' : 'out';
     if (targetCanonical) {
       const objEl = bodyEl.querySelector('#tuner-objective');
-      if (objEl) objEl.dataset.match = matchesTarget(r, targetCanonical) ? 'ok' : '';
+      if (objEl) objEl.dataset.match = matchesTarget(stab, targetCanonical) ? 'ok' : '';
     }
   }
 
-  function handlePitchRange({ hz }) {
-    if (rangeTimerId === null) return; // not measuring
-    if (hz === null) return;
-    const r = frequencyToNote(hz);
-    if (!r) return;
-    rangeSamples.push({ note: `${r.note}${r.octave}`, hz });
-    const label = `${r.note}${r.octave}`;
+  function handlePitchRange(stab) {
+    if (rangeTimerId === null) return;
+    if (stab === null || stab.held) return; // solo lecturas frescas cuentan para el rango
+    rangeSamples.push({ note: `${stab.note}${stab.octave}`, hz: stab.hz });
+    const label = `${stab.note}${stab.octave}`;
     const readoutNote = bodyEl.querySelector('.tuner-readout__note');
     const readoutMeta = bodyEl.querySelector('.tuner-readout__meta');
     if (readoutNote) readoutNote.textContent = label;
-    if (readoutMeta) readoutMeta.textContent = `${hz.toFixed(1)} Hz`;
+    if (readoutMeta) readoutMeta.textContent = `${stab.hz.toFixed(1)} Hz`;
   }
 
   function dispatchPitch(payload) {
@@ -530,7 +523,7 @@ export async function renderTuner(container, opts = {}) {
   function requestMic() {
     if (detector) return;
     detector = createPitchDetector({
-      onPitch: dispatchPitch,
+      onPitch: (payload) => dispatchPitch(stabilizer.push(payload)),
       onError: (err) => {
         console.warn('[tuner] mic error:', err);
         micState = 'denied';
@@ -553,6 +546,7 @@ export async function renderTuner(container, opts = {}) {
     const nextMode = btn.dataset.mode;
     if (nextMode === mode) return;
     mode = nextMode;
+    stabilizer.reset();
     // Cancel any in-progress range timer when switching away.
     if (rangeTimerId !== null) {
       clearInterval(rangeTimerId);

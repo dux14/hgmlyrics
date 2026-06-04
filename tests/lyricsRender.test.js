@@ -162,6 +162,10 @@ describe('transposeNote', () => {
   it('cruce doble hacia abajo (C3 −13 → B1)', () => {
     expect(transposeNote('C3', -13, false)).toBe('B1');
   });
+  it('Cb normaliza con su octava real (Cb4 ≡ B3)', () => {
+    expect(transposeNote('Cb4', 0, false)).toBe('B3');
+    expect(transposeNote('Cb4', 1, false)).toBe('C4');
+  });
 });
 
 describe('buildTonoLineHTML — pending (grupo sin nota)', () => {

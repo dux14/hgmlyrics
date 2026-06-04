@@ -413,10 +413,11 @@ export async function renderSongView(container, songIdOrData) {
 
   // Dos botones: Afinar · tono general (referenceKey o 1ª nota) y Afinar · 1ª nota.
   // Sólo con activeRosterId y el flag afinador_shortcut; si no hay notas, no aparece.
+  // En preview no hay song.id (draft del editor) → sin botones (URL rota si no).
   function updateTuneAction() {
     const slot = container.querySelector('#tono-tune-action');
     if (!slot) return;
-    if (!activeRosterId || !isFeatureEnabled('afinador_shortcut')) {
+    if (isPreview || !activeRosterId || !isFeatureEnabled('afinador_shortcut')) {
       slot.innerHTML = '';
       return;
     }

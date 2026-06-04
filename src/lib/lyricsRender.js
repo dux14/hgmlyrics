@@ -47,9 +47,11 @@ export function transposeNote(note, semitones, useFlats = false) {
   const root = NORMALIZE[m[1]] || m[1];
   const idx = NOTES_SHARP.indexOf(root);
   if (idx === -1) return note;
+  // Cb cruza la octava hacia abajo al normalizar (Cb4 ≡ B3, no B4).
+  const enharmonicShift = m[1] === 'Cb' ? -1 : 0;
   const total = idx + semitones;
   const newIdx = ((total % 12) + 12) % 12;
-  const octave = Number.parseInt(m[2], 10) + Math.floor(total / 12);
+  const octave = Number.parseInt(m[2], 10) + Math.floor(total / 12) + enharmonicShift;
   return `${useFlats ? NOTES_FLAT[newIdx] : NOTES_SHARP[newIdx]}${octave}`;
 }
 
@@ -121,7 +123,11 @@ export function buildTonoLineHTML(line, voiceId, colorClass) {
   }));
   const labels = groups
     .filter(hasNote)
-    .map((g) => ({ pos: g.start, text: g.note, className: `${cls} tono-note` }));
+    .map((g) => ({
+      pos: g.start,
+      text: g.note,
+      className: cls ? `${cls} tono-note` : 'tono-note',
+    }));
   return buildAnnotatedLineHTML(text, { spans, labels, baseClass: 'lyrics__tono-dim' });
 }
 

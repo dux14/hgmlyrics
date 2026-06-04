@@ -1211,11 +1211,6 @@
   flex-wrap: wrap;
 }
 
-.transpose-label {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-}
-
 .transpose-btn {
   width: 32px;
   height: 32px;
@@ -1498,6 +1493,17 @@
   color: #8a6800;
 }
 [data-theme='dark'] .lyrics__line--tono.voice-text--tenor .syll__note {
+  color: var(--color-voice-tenor);
+}
+
+/* Mismo fix de contraste para las notas Wave 4 (subrayadas, sin pill):
+   tenor en tema claro baja a #8a6800; en oscuro el token ya cumple. */
+.float-label.tono-note.voice-text--tenor,
+.mix-rail--note.voice-text--tenor {
+  color: #8a6800;
+}
+[data-theme='dark'] .float-label.tono-note.voice-text--tenor,
+[data-theme='dark'] .mix-rail--note.voice-text--tenor {
   color: var(--color-voice-tenor);
 }
 

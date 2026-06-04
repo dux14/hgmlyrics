@@ -342,7 +342,7 @@ export async function renderSongView(container, songIdOrData) {
 
       <!-- Lyrics -->
       <div class="lyrics" id="lyrics-content">
-        ${renderSections(song.sections || [], { viewMode, transposeSemitones, useFlats, activeVoiceId: activeRosterId, activeCategory })}
+        ${renderSections(song.sections || [], { viewMode, transposeSemitones, useFlats, activeVoiceId: activeRosterId, activeCategory, chordsVoiceId, chordsCategory })}
       </div>
 
       ${
@@ -551,13 +551,15 @@ export async function renderSongView(container, songIdOrData) {
     const toggle = panel.querySelector('#voice-panel-toggle');
     const label = panel.querySelector('#voice-panel-label');
     const close = panel.querySelector('#voice-panel-close');
-    body.hidden = !voicePanelOpen;
-    toggle.setAttribute('aria-expanded', String(voicePanelOpen));
+    if (body) body.hidden = !voicePanelOpen;
+    if (toggle) toggle.setAttribute('aria-expanded', String(voicePanelOpen));
     const voice = (song.voiceRoster || []).find((v) => v.id === chordsVoiceId);
-    label.innerHTML = voice
-      ? `${icon('mic', { size: 13 })} Voz · ${escapeHtml(voice.name)}`
-      : `${icon('mic', { size: 13 })} Voz`;
-    close.hidden = !chordsVoiceId;
+    if (label) {
+      label.innerHTML = voice
+        ? `${icon('mic', { size: 13 })} Voz · ${escapeHtml(voice.name)}`
+        : `${icon('mic', { size: 13 })} Voz`;
+    }
+    if (close) close.hidden = !chordsVoiceId;
     panel.querySelectorAll('#voice-panel-categories .tono-chip').forEach((c) => {
       const isActive = c.dataset.category === chordsCategory;
       c.classList.toggle('tono-chip--active', isActive);

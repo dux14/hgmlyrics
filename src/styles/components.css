@@ -492,13 +492,109 @@
   display: inline-block;
 }
 
-/* Cejilla + Transposición en una fila (modo Acordes) */
+/* Wave 4: el modo Acordes agrupa sus herramientas en cajas temáticas
+   (Guitarra / Voz) del mismo material, a lo ancho completo. */
 .chords-extras {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
   gap: var(--space-sm);
   margin-bottom: var(--space-md);
+}
+
+.tool-box {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: 0.6rem 0.75rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+.tool-box__title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--color-text-secondary);
+}
+.tool-box__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+/* Dentro de la caja, la transposición pierde su caja propia (sin doble marco) */
+.tool-box .transpose-controls {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin-bottom: 0;
+}
+
+/* Panel Voz */
+.voice-panel__title {
+  justify-content: space-between;
+  margin-bottom: 0;
+}
+.voice-panel__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  padding: 0.25rem 0;
+  min-height: 38px;
+}
+.voice-panel__toggle[aria-expanded='true'] .voice-panel__chevron {
+  transform: rotate(180deg);
+}
+.voice-panel__chevron {
+  display: inline-flex;
+  transition: transform var(--transition-fast);
+}
+.voice-panel__close {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  min-height: 38px;
+}
+.voice-panel__body {
+  margin-top: 0.5rem;
+}
+.voice-panel__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+.voice-panel__grid .voice-panel__chip {
+  width: 100%;
+  justify-content: center;
+}
+.voice-panel__people {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.voice-panel__people:empty {
+  display: none;
+}
+.voice-panel .tono-chip {
+  background: var(--color-bg);
 }
 
 /* === Theme Toggle === */

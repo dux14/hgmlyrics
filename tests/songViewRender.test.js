@@ -23,7 +23,7 @@ vi.mock('../src/router.js', () => ({
   navigate: vi.fn(),
 }));
 
-const { renderSections } = await import('../src/components/SongView.js');
+const { renderSections, renderVoicePanel } = await import('../src/components/SongView.js');
 
 const sections = [
   {
@@ -149,5 +149,40 @@ describe('renderSections — vista combinada (chordsVoiceId)', () => {
     const withEmpty = [{ type: 'verse', label: 'X', lines: [{ text: '' }] }];
     const html = renderSections(withEmpty, { viewMode: 'chords', chordsVoiceId: 'v1' });
     expect(html).toContain('&nbsp;');
+  });
+
+  it('línea spoken dentro de la combinada sigue siendo spoken (no mix)', () => {
+    const withSpoken = [{ type: 'verse', label: 'X', lines: [{ text: 'hablado', spoken: true }] }];
+    const html = renderSections(withSpoken, { viewMode: 'chords', chordsVoiceId: 'v1' });
+    expect(html).toContain('lyrics__line--spoken');
+    expect(html).not.toContain('lyrics__line--mix');
+  });
+
+  it('timing-guide dentro de la combinada sigue siendo guide (no mix)', () => {
+    const withGuide = [{ type: 'verse', label: 'X', lines: [{ text: '4 TIEMPOS' }] }];
+    const html = renderSections(withGuide, { viewMode: 'chords', chordsVoiceId: 'v1' });
+    expect(html).toContain('timing-guide');
+    expect(html).not.toContain('lyrics__line--mix');
+  });
+});
+
+describe('renderVoicePanel', () => {
+  const song = {
+    voiceRoster: [
+      { id: 'v1', name: 'Tenor', category: 'tenor' },
+      { id: 'v2', name: 'Bajo', category: 'bass' },
+    ],
+    sections: [],
+  };
+  it('renderiza caja plegada con chips de categoría y cierre', () => {
+    const html = renderVoicePanel(song);
+    expect(html).toContain('voice-panel');
+    expect(html).toContain('data-category="tenor"');
+    expect(html).toContain('data-category="bass"');
+    expect(html).toContain('Solo acordes');
+    expect(html).toContain('hidden'); // cuerpo plegado por defecto
+  });
+  it('no usa emojis', () => {
+    expect(renderVoicePanel(song)).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
   });
 });

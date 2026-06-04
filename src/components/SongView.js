@@ -171,6 +171,14 @@ export async function renderSongView(container, songIdOrData) {
   let activeCategory = null;
   let activeRosterId = null;
 
+  const hasChords = songHasChords(song);
+  // Vista combinada (Acordes+Voz, Wave 4): voz activa del modo Acordes,
+  // independiente de la de Tono. Solo con flag voz_tono + roster + acordes.
+  let chordsCategory = null;
+  let chordsVoiceId = null;
+  let voicePanelOpen = false;
+  const mixAvailable = tonoEnabled && (song.voiceRoster || []).length > 0 && hasChords;
+
   const voiceBadgeClass = getVoiceBadgeClass(song.voiceType);
   const voiceLabel = getVoiceTypeLabel(song.voiceType);
 
@@ -184,7 +192,6 @@ export async function renderSongView(container, songIdOrData) {
     ? { prev: null, next: null, currentIndex: 0, total: 0 }
     : getAdjacentSongs(songId);
   const hasNav = !isPreview && (adjacent.prev || adjacent.next);
-  const hasChords = songHasChords(song);
   // El modo Tono está disponible si el flag está activo y la canción tiene
   // roster de voces. La fila toggle aparece si hay acordes o si hay Tono.
   const tonoAvailable = tonoEnabled && (song.voiceRoster || []).length > 0;
@@ -275,30 +282,33 @@ export async function renderSongView(container, songIdOrData) {
       ${
         hasChords || (song.cejilla && song.cejilla > 0)
           ? `
-      <!-- Cejilla + Transposición (modo Acordes) — lado a lado -->
+      <!-- Wave 4: cajas temáticas del modo Acordes — Guitarra y Voz -->
       <div class="chords-extras" id="chords-extras" style="display: none;">
-        ${
-          song.cejilla && song.cejilla > 0
-            ? `
-        <div class="cejilla-badge" title="Colocar cejilla en el traste ${song.cejilla}">
-          <span class="cejilla-badge__icon">${icon('audio-lines', { size: 15 })}</span>
-          <span class="cejilla-badge__text">Cejilla: ${song.cejilla}</span>
-        </div>`
-            : ''
-        }
-        ${
-          hasChords
-            ? `
-        <div class="transpose-controls" id="transpose-controls">
-          <span class="transpose-label">Transposición (Beta)</span>
-          <button class="transpose-btn" id="transpose-down">−½</button>
-          <span class="transpose-value" id="transpose-value">0</span>
-          <button class="transpose-btn" id="transpose-up">+½</button>
-          <span class="filter-separator"></span>
-          <button class="transpose-notation-toggle" id="notation-toggle">♯ / ♭</button>
-        </div>`
-            : ''
-        }
+        <div class="tool-box">
+          <p class="tool-box__title">${icon('audio-lines', { size: 13 })} Guitarra</p>
+          <div class="tool-box__row">
+            ${
+              song.cejilla && song.cejilla > 0
+                ? `<div class="cejilla-badge" title="Colocar cejilla en el traste ${song.cejilla}">
+                     <span class="cejilla-badge__icon">${icon('audio-lines', { size: 15 })}</span>
+                     <span class="cejilla-badge__text">Cejilla: ${song.cejilla}</span>
+                   </div>`
+                : ''
+            }
+            ${
+              hasChords
+                ? `<div class="transpose-controls" id="transpose-controls">
+                     <button class="transpose-btn" id="transpose-down">−½</button>
+                     <span class="transpose-value" id="transpose-value">0</span>
+                     <button class="transpose-btn" id="transpose-up">+½</button>
+                     <span class="filter-separator"></span>
+                     <button class="transpose-notation-toggle" id="notation-toggle">♯ / ♭</button>
+                   </div>`
+                : ''
+            }
+          </div>
+        </div>
+        ${mixAvailable ? renderVoicePanel(song) : ''}
       </div>
       `
           : ''
@@ -362,6 +372,8 @@ export async function renderSongView(container, songIdOrData) {
         useFlats,
         activeVoiceId: activeRosterId,
         activeCategory,
+        chordsVoiceId,
+        chordsCategory,
       });
       if (!isPreview) applyFontSize(fontSize);
     }
@@ -523,6 +535,91 @@ export async function renderSongView(container, songIdOrData) {
     });
   }
 
+  // ── Vista combinada: panel Voz del modo Acordes (Wave 4) ──
+  function syncVoicePanel() {
+    const panel = container.querySelector('#voice-panel');
+    if (!panel) return;
+    const body = panel.querySelector('#voice-panel-body');
+    const toggle = panel.querySelector('#voice-panel-toggle');
+    const label = panel.querySelector('#voice-panel-label');
+    const close = panel.querySelector('#voice-panel-close');
+    body.hidden = !voicePanelOpen;
+    toggle.setAttribute('aria-expanded', String(voicePanelOpen));
+    const voice = (song.voiceRoster || []).find((v) => v.id === chordsVoiceId);
+    label.innerHTML = voice
+      ? `${icon('mic', { size: 13 })} Voz · ${escapeHtml(voice.name)}`
+      : `${icon('mic', { size: 13 })} Voz`;
+    close.hidden = !chordsVoiceId;
+    panel.querySelectorAll('#voice-panel-categories .tono-chip').forEach((c) => {
+      const isActive = c.dataset.category === chordsCategory;
+      c.classList.toggle('tono-chip--active', isActive);
+      c.setAttribute('aria-pressed', String(isActive));
+    });
+  }
+
+  function renderChordsPersonRow() {
+    const rowEl = container.querySelector('#voice-panel-people');
+    if (!rowEl) return;
+    if (!chordsCategory) {
+      rowEl.innerHTML = '';
+      return;
+    }
+    const people = rosterByCategory(song, chordsCategory);
+    if (people.length <= 1) {
+      rowEl.innerHTML = '';
+      return;
+    }
+    rowEl.innerHTML = people
+      .map(
+        (p) => `
+        <button class="tono-chip tono-chip--person voice-panel__chip${p.id === chordsVoiceId ? ' tono-chip--active' : ''}" data-mix-roster-id="${p.id}" aria-pressed="${p.id === chordsVoiceId}">
+          <span class="voice-filter__label-text">${escapeHtml(p.name)}</span>
+        </button>`,
+      )
+      .join('');
+    rowEl.querySelectorAll('[data-mix-roster-id]').forEach((btn) => {
+      btn.addEventListener('click', () => selectChordsPerson(btn.dataset.mixRosterId));
+    });
+  }
+
+  function selectChordsPerson(rosterId) {
+    chordsVoiceId = rosterId;
+    renderChordsPersonRow();
+    syncVoicePanel();
+    reRenderLyrics();
+  }
+
+  function selectChordsCategory(category) {
+    chordsCategory = category;
+    chordsVoiceId = null;
+    renderChordsPersonRow();
+    const people = rosterByCategory(song, category);
+    if (people.length === 1) {
+      selectChordsPerson(people[0].id);
+    } else {
+      syncVoicePanel();
+      reRenderLyrics();
+    }
+  }
+
+  if (mixAvailable) {
+    container.querySelector('#voice-panel-toggle')?.addEventListener('click', () => {
+      voicePanelOpen = !voicePanelOpen;
+      syncVoicePanel();
+    });
+    container.querySelector('#voice-panel-close')?.addEventListener('click', () => {
+      chordsVoiceId = null;
+      chordsCategory = null;
+      voicePanelOpen = false;
+      syncVoicePanel();
+      renderChordsPersonRow();
+      reRenderLyrics();
+    });
+    container.querySelectorAll('#voice-panel-categories [data-category]').forEach((btn) => {
+      btn.addEventListener('click', () => selectChordsCategory(btn.dataset.category));
+    });
+  }
+
   // ── Preview mode: skip remaining interactive controls ──
   if (isPreview) return;
 
@@ -634,6 +731,44 @@ function renderTonoFilters(song) {
       </div>
       <p class="lyrics__tono-active" id="tono-active-voice" aria-live="polite"></p>
       <div class="lyrics__tono-tune" id="tono-tune-action"></div>
+    </div>`;
+}
+
+/**
+ * Caja «Voz» del modo Acordes (Wave 4): plegada muestra solo el título;
+ * expandida, grid de categorías + fila de personas (disclosure como Tono).
+ * El cierre «Solo acordes» vive en el título. Iconos lucide, nunca emojis.
+ * @param {object} song
+ * @returns {string}
+ */
+export function renderVoicePanel(song) {
+  const categories = rosterCategories(song);
+  const catChips = categories
+    .map(
+      (c) => `
+      <button class="tono-chip tono-chip--category voice-panel__chip" data-category="${c}" aria-pressed="false">
+        <span class="voice-filter__dot" style="background: var(--color-voice-${c})"></span>
+        <span class="voice-filter__label-text">${escapeHtml(getVoiceLabel(c))}</span>
+      </button>`,
+    )
+    .join('');
+  return `
+    <div class="tool-box voice-panel" id="voice-panel">
+      <div class="tool-box__title voice-panel__title">
+        <button class="voice-panel__toggle" id="voice-panel-toggle" aria-expanded="false">
+          <span id="voice-panel-label">${icon('mic', { size: 13 })} Voz</span>
+          <span class="voice-panel__chevron">${icon('chevron-down', { size: 14 })}</span>
+        </button>
+        <button class="voice-panel__close" id="voice-panel-close" hidden>
+          ${icon('close', { size: 12 })} Solo acordes
+        </button>
+      </div>
+      <div class="voice-panel__body" id="voice-panel-body" hidden>
+        <div class="voice-panel__grid" id="voice-panel-categories" role="group" aria-label="Categoría de voz">
+          ${catChips}
+        </div>
+        <div class="voice-panel__people" id="voice-panel-people" role="group" aria-label="Voz"></div>
+      </div>
     </div>`;
 }
 

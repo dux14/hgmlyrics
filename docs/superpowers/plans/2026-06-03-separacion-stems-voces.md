@@ -484,19 +484,38 @@ git commit -m "feat(estudio): cliente Replicate + verificación de firma de webh
 
 Los slugs de Replicate cambian; este task los VERIFICA contra la API antes de fijarlos. El registry es el ÚNICO lugar donde viven.
 
+> **Estado de la industria (verificado con `/last30days` el 2026-06-09).** Defaults recomendados, ya reflejados abajo:
+> - **Stems 6-pistas:** `htdemucs_6s` sigue siendo la única vía turnkey a 6 stems (voz/batería/bajo/guitarra/piano/otros). Salvedad conocida: el stem de **piano es flojo**. `htdemucs_ft` da mejor calidad pero solo 4 stems; no sirve si queremos 6.
+> - **Líder/coros (etapa 2a):** el SOTA 2026 para voz es **RoFormer** (BS-/Mel-RoFormer), por encima de Demucs en aislamiento vocal. Para *líder vs coros* (no voz-vs-instrumental) el modelo correcto es un **RoFormer "karaoke"** del ecosistema UVR (vía `audio-separator`). Ver la tabla comparativa en el Step 1.
+> - **Diarización (etapa 2b):** el actual es **pyannote community-1** (pyannote.audio 4.0, feb 2026), no 3.x. Mejora marcada en conteo/asignación de hablantes en audio ruidoso.
+
 - [ ] **Step 1: Buscar y verificar modelos disponibles (manual, documentar resultado)**
 
 ```bash
-# 6-stem (candidato principal: ryan5453/demucs con htdemucs_6s)
+# 6-stem (candidato principal: ryan5453/demucs o cjwbw/demucs con htdemucs_6s)
 curl -s -H "Authorization: Bearer $REPLICATE_API_TOKEN" \
   "https://api.replicate.com/v1/models/ryan5453/demucs" | head -c 400
-# Karaoke (lead/backing) y diarización: buscar y elegir el mejor disponible
 curl -s -H "Authorization: Bearer $REPLICATE_API_TOKEN" \
-  "https://api.replicate.com/v1/search?query=vocal+separation+roformer" | python3 -m json.tool | head -50
+  "https://api.replicate.com/v1/models/cjwbw/demucs" | head -c 400
+# Líder/coros (RoFormer karaoke / MDX23) y diarización (community-1): buscar y elegir el mejor disponible
 curl -s -H "Authorization: Bearer $REPLICATE_API_TOKEN" \
-  "https://api.replicate.com/v1/search?query=speaker+diarization" | python3 -m json.tool | head -50
+  "https://api.replicate.com/v1/search?query=roformer+karaoke+vocal+separation" | python3 -m json.tool | head -60
+curl -s -H "Authorization: Bearer $REPLICATE_API_TOKEN" \
+  "https://api.replicate.com/v1/models/lucataco/mvsep-mdx23-music-separation" | head -c 400
+curl -s -H "Authorization: Bearer $REPLICATE_API_TOKEN" \
+  "https://api.replicate.com/v1/search?query=pyannote+speaker+diarization" | python3 -m json.tool | head -60
 ```
-Expected: respuestas 200 con metadata de modelos. **Anota los slugs elegidos y el shape EXACTO del output de cada uno** (campo de ejemplo en `latest_version.openapi_schema`). Si no existe modelo karaoke utilizable, usa el mismo modelo de stems en modo 2-stem sobre el stem vocal como aproximación líder/coros y documenta la limitación en el registry.
+Expected: respuestas 200 con metadata de modelos. **Anota los slugs elegidos y el shape EXACTO del output de cada uno** (campo de ejemplo en `latest_version.openapi_schema`).
+
+**Comparación de modelos para el stage de voces (etapa 2a — líder/coros), 2026:**
+
+| Candidato (Replicate) | Qué hace | Calidad voz | Líder vs coros nativo | Estado / turnkey | Veredicto |
+|---|---|---|---|---|---|
+| **RoFormer karaoke (UVR vía `audio-separator`)** | Separa voz **líder** de **coros/armonías** | SOTA (RoFormer) | **Sí** (modelos *karaoke* de UVR: Mel/BS-RoFormer karaoke, UVR-MDX-NET Karaoke) | Requiere push de un Cog propio o un wrapper comunitario; verificar slug | **Preferido** para líder/coros real |
+| **`lucataco/mvsep-mdx23-music-separation`** | Vocals/instrumental (+bass/drums/other opcional) | Muy alta (MDX23, 3º SDX23) | **No** (es voz-vs-instrumental, no líder-vs-coros) | Hosteado y listo (`owner/model`) | **Fallback** si no hay karaoke RoFormer turnkey: trata toda la voz como "líder", sin separar coros |
+| **htdemucs (Demucs) 2-stem sobre el stem vocal** | Voz vs resto | Inferior a RoFormer en voz | No | Ya en el pipeline (etapa 1) | Último recurso; documentar la limitación |
+
+> **Decisión:** apuntar `karaoke.slug` a un **RoFormer karaoke** (líder/coros). Si en el Step 1 no encontrás un slug turnkey de RoFormer karaoke, usá `lucataco/mvsep-mdx23-music-separation` como fallback **y marcá en el registry** que en ese modo "coros" puede venir vacío (toda la voz va a `lead`). NO uses Demucs 2-stem salvo que ningún RoFormer esté disponible.
 
 - [ ] **Step 2: Implementar el registry con los slugs verificados**
 
@@ -508,9 +527,11 @@ Expected: respuestas 200 con metadata de modelos. **Anota los slugs elegidos y e
  */
 
 export const MODELS = {
-  // Etapa 1: separación 6-stem. ryan5453/demucs corre htdemucs_6s.
+  // Etapa 1: separación 6-stem. demucs corre htdemucs_6s (única vía a 6 stems).
+  // Nota 2026: htdemucs_ft da mejor calidad pero solo 4 stems; usamos _6s porque
+  // necesitamos piano/guitarra. Salvedad conocida: el stem de piano es flojo.
   stems: {
-    slug: 'ryan5453/demucs', // VERIFICADO Task 4 Step 1 — actualizar si cambió
+    slug: 'ryan5453/demucs', // VERIFICADO Task 4 Step 1 — alternativa: cjwbw/demucs
     buildInput: (audioUrl) => ({
       audio: audioUrl,
       model: 'htdemucs_6s',
@@ -530,16 +551,25 @@ export const MODELS = {
     }),
   },
 
-  // Etapa 2a: líder vs coros sobre el stem vocal.
+  // Etapa 2a: líder vs coros sobre el stem vocal. SOTA 2026 = RoFormer karaoke.
+  // Candidato preferido: un RoFormer "karaoke" del ecosistema UVR (audio-separator).
+  // Fallback hosteado: lucataco/mvsep-mdx23-music-separation (vocals/instrumental;
+  // en ese modo "backing" puede venir null y toda la voz va a "lead").
   karaoke: {
-    slug: 'REEMPLAZAR/CON-SLUG-VERIFICADO', // del Step 1; ver nota de fallback
+    slug: 'REEMPLAZAR/CON-SLUG-ROFORMER-KARAOKE', // del Step 1; fallback: lucataco/mvsep-mdx23-music-separation
+    // Para RoFormer karaoke: { audio: vocalUrl }. Ajustar al schema real del modelo elegido.
     buildInput: (vocalUrl) => ({ audio: vocalUrl }),
-    parseOutput: (output) => ({ lead: output.lead ?? output.vocals, backing: output.backing ?? output.other }),
+    // RoFormer karaoke suele devolver { vocals: lead, instrumental: backing } o { lead, backing }.
+    parseOutput: (output) => ({
+      lead: output.lead ?? output.vocals ?? null,
+      backing: output.backing ?? output.instrumental ?? output.other ?? null,
+    }),
   },
 
-  // Etapa 2b: diarización (segmentos por cantante) sobre el stem vocal.
+  // Etapa 2b: diarización (segmentos por cantante). Actual 2026 = pyannote community-1
+  // (pyannote.audio 4.0). Ver la colección replicate.com/collections/speaker-diarization.
   diarization: {
-    slug: 'REEMPLAZAR/CON-SLUG-VERIFICADO', // del Step 1 (candidato: pyannote 3.x)
+    slug: 'REEMPLAZAR/CON-SLUG-VERIFICADO', // del Step 1 (candidato: pyannote community-1 / 4.0)
     buildInput: (vocalUrl) => ({ audio: vocalUrl }),
     /** Normaliza a [{ voice: 'Voz 1', start: seg, end: seg }] */
     parseOutput: (output) => {
@@ -555,7 +585,7 @@ export const MODELS = {
 };
 ```
 
-**IMPORTANTE:** los dos `REEMPLAZAR/CON-SLUG-VERIFICADO` DEBEN quedar resueltos en este task con los slugs reales del Step 1 (y `buildInput`/`parseOutput` ajustados al schema real de cada modelo). No avances a Task 5 con placeholders — este es el único punto del plan donde un valor depende de un servicio externo y se resuelve aquí, no después.
+**IMPORTANTE:** los dos slugs `REEMPLAZAR/...` (karaoke RoFormer y diarización community-1) DEBEN quedar resueltos en este task con los slugs reales del Step 1 (y `buildInput`/`parseOutput` ajustados al schema real de cada modelo). No avances a Task 5 con placeholders — este es el único punto del plan donde un valor depende de un servicio externo y se resuelve aquí, no después. Si el RoFormer karaoke no tiene slug turnkey, fija el fallback `lucataco/mvsep-mdx23-music-separation` y deja el comentario de la limitación de "backing".
 
 - [ ] **Step 3: Lint + commit**
 
@@ -2010,5 +2040,5 @@ EOF
 ## Self-Review (hecho al escribir el plan)
 
 1. **Spec coverage:** tabla+bucket (T1), máquina de estados/cuota/validación (T2), Replicate+firma (T3), registry (T4), storage (T5), POST/GET jobs (T6), pipeline (T7-T8), estado+reconciliación+start (T9), cron+vercel.json (T10), cliente (T11), página+ruta+menú+5 estados UI (T12), env+smoke (T13). Segmentos virtuales reflejados en spec actualizado. ✓
-2. **Placeholders:** los dos `REEMPLAZAR/CON-SLUG-VERIFICADO` de Task 4 son deliberados y el task EXIGE resolverlos dentro del propio task (Step 1 da los comandos de verificación); no se avanza con ellos pendientes. Resto sin TBDs. ✓
+2. **Placeholders:** los dos slugs `REEMPLAZAR/...` de Task 4 (RoFormer karaoke y diarización community-1) son deliberados y el task EXIGE resolverlos dentro del propio task (Step 1 da los comandos de verificación + tabla comparativa + fallback `lucataco/mvsep-mdx23-music-separation`); no se avanza con ellos pendientes. Resto sin TBDs. ✓
 3. **Consistencia de tipos:** `voices.segments = [{voice,start,end}]` igual en `_models.parseOutput`, `_process`, y `StudioPage`; `predictions = {stems,karaoke,diarization}` consistente en start/webhook/[id]; estados idénticos a `NEXT` del dominio; `quota = {used,limit}` igual en API y página. ✓

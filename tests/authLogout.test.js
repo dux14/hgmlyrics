@@ -30,7 +30,7 @@ vi.mock('../src/lib/supabase.js', () => ({
   },
 }));
 
-const { route, navigate, guardedRoute, configureAuth, refresh, getCurrentPath } =
+const { route, navigate, guardedRoute, configureAuth, refresh, getCurrentPath, initRouter } =
   await import('../src/router.js');
 const { initAuthStore, isAuthenticated, needsOnboarding, isAdmin } =
   await import('../src/lib/authStore.js');
@@ -193,5 +193,48 @@ describe('SIGNED_OUT tardío re-evalúa el guard de la ruta visible', () => {
     expect(getCurrentPath()).toBe(`/login?next=${encodeURIComponent('/favoritos')}`);
     expect(loginHandler).toHaveBeenCalled();
     expect(favHandler).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SIGNED_OUT estando ya en /login no duplica el render del login', () => {
+  beforeEach(() => {
+    window.location.hash = '';
+  });
+
+  it('el callback SIGNED_OUT no vuelve a invocar el handler de /login (incluso con query)', async () => {
+    await initAuthStoreWithSession();
+    configureAuth({ isAuthenticated, needsOnboarding, isAdmin });
+    const loginHandler = vi.fn();
+    route('/login', loginHandler);
+
+    // Logout same-tab: el AuthButton ya navegó a /login (puede llevar ?next=...).
+    window.location.hash = `/login?next=${encodeURIComponent('/favoritos')}`;
+    refresh();
+    expect(loginHandler).toHaveBeenCalledTimes(1);
+
+    // El SIGNED_OUT posterior de supabase no debe re-resolver: ya estamos en /login.
+    await authStateChangeHandler('SIGNED_OUT', null);
+
+    expect(loginHandler).toHaveBeenCalledTimes(1);
+  });
+});
+
+// NOTA: este describe va al final del archivo — initRouter() registra un listener
+// de hashchange que persiste para el resto de los tests del archivo.
+describe('initRouter no queda envenenado por un refresh() previo al registro de rutas', () => {
+  it('un resolve temprano sin rutas que matcheen no impide el render inicial', () => {
+    // Boot real: el hash ya apunta a la ruta pero ésta aún no está registrada
+    // (en main.js initAuthStore() corre antes que initRouter()).
+    window.location.hash = '/boot-inicial';
+    // SIGNED_OUT durante el boot → refresh() resuelve sin match y deja
+    // currentRoute apuntando al hash sin haber renderizado nada.
+    refresh();
+
+    const bootHandler = vi.fn();
+    route('/boot-inicial', bootHandler);
+
+    // initRouter descarta el currentRoute rancio: el resolve inicial SÍ renderiza.
+    initRouter();
+    expect(bootHandler).toHaveBeenCalledTimes(1);
   });
 });

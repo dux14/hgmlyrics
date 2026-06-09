@@ -6,7 +6,7 @@
  */
 import { supabase } from './supabase.js';
 // Sin ciclo: router.js nunca importa authStore (usa el adapter de configureAuth).
-import { refresh } from '../router.js';
+import { refresh, getCurrentPath } from '../router.js';
 
 const state = {
   session: null,
@@ -116,7 +116,10 @@ export async function initAuthStore() {
       // cualquier cierre de sesión (multi-pestaña, expiración, signOut tardío)
       // debe re-evaluar el guard de la ruta visible. refresh() fuerza el
       // re-resolve y el guard patea a /login con replace si la ruta era protegida.
-      refresh();
+      // Si ya estamos en /login (p. ej. el logout same-tab ya navegó) no hay
+      // nada que re-evaluar y re-resolver duplicaría el render del login.
+      const path = getCurrentPath().split('?')[0];
+      if (path !== '/login') refresh();
     }
   });
 }

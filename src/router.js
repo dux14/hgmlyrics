@@ -132,6 +132,11 @@ export function initRouter() {
     resolve();
   });
 
+  // Un refresh() temprano (p. ej. SIGNED_OUT durante el boot, antes de registrar
+  // rutas) puede dejar currentRoute apuntando al hash sin que la ruta se haya
+  // renderizado; se descarta para que el resolve inicial no haga early-return.
+  currentRoute = null;
+
   // Initial resolve
   resolve();
 }

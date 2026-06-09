@@ -39,6 +39,7 @@ supabase/.branches/
 
 # claude
 CLAUDE.md
+validacion-repo.spec.md
 MIGRATION_PLAN.md
 .superpowers/
 

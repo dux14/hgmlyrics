@@ -42,6 +42,14 @@ describe('router', () => {
       navigate('/');
       expect(window.location.hash).toBe('#/');
     });
+
+    it('with { replace } resolves synchronously without leaving a history entry', () => {
+      const handler = vi.fn();
+      route('/login', handler);
+      navigate('/login', { replace: true });
+      expect(handler).toHaveBeenCalled();
+      expect(getCurrentPath()).toBe('/login');
+    });
   });
 
   describe('route + initRouter', () => {

@@ -32,10 +32,21 @@ export function onNotFound(handler) {
 /**
  * Navigate to a hash route
  * @param {string} path - e.g., '/song/my-song-id'
+ * @param {{ replace?: boolean }} [opts] - replace: usa history.replaceState y
+ *   re-resuelve de forma síncrona (no deja la ruta actual en el history).
  */
-export function navigate(path) {
+export function navigate(path, { replace = false } = {}) {
   const currentHash = window.location.hash;
   const targetHash = path.startsWith('#') ? path : `#${path}`;
+
+  if (replace) {
+    // Reemplaza la entrada actual (la protegida no queda en el history) y
+    // fuerza el re-resolve: replaceState no dispara 'hashchange'.
+    window.history.replaceState(null, '', targetHash);
+    currentRoute = null;
+    resolve();
+    return;
+  }
 
   if (currentHash === targetHash) {
     // Hash is already set, hashchange won't fire — force re-resolve

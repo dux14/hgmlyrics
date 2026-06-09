@@ -79,9 +79,20 @@ export function renderAuthButton(mount) {
       };
 
       menu.querySelector('#logout-btn').addEventListener('click', async () => {
-        await signOut();
-        cleanup();
-        navigate('/login');
+        try {
+          // auth-js puede devolver { error } sin lanzar (fallo de red) y dejar la
+          // sesión local viva: lo registramos, pero la salida no depende de él.
+          const result = await signOut();
+          if (result?.error) console.error('signOut falló', result.error);
+        } catch (err) {
+          // signOut también puede lanzar (timeout del navigator-lock, red).
+          console.error('signOut falló', err);
+        } finally {
+          // La salida visual ocurre SIEMPRE; replace evita dejar la ruta
+          // protegida en el history (back-trap).
+          cleanup();
+          navigate('/login', { replace: true });
+        }
       });
       // Close on outside click
       setTimeout(() => {

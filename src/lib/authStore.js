@@ -5,6 +5,8 @@
  * mutations only via exported actions. Wraps supabase.auth.onAuthStateChange.
  */
 import { supabase } from './supabase.js';
+// Sin ciclo: router.js nunca importa authStore (usa el adapter de configureAuth).
+import { refresh } from '../router.js';
 
 const state = {
   session: null,
@@ -100,7 +102,7 @@ export async function initAuthStore() {
   state.session = data.session;
   if (state.session) await refreshProfile();
 
-  supabase.auth.onAuthStateChange(async (_event, session) => {
+  supabase.auth.onAuthStateChange(async (event, session) => {
     state.session = session;
     if (session) {
       await refreshProfile();
@@ -109,6 +111,13 @@ export async function initAuthStore() {
       state.flags = [];
     }
     notify();
+    if (event === 'SIGNED_OUT') {
+      // El router solo reacciona a hashchange y no "ve" los cambios de auth:
+      // cualquier cierre de sesión (multi-pestaña, expiración, signOut tardío)
+      // debe re-evaluar el guard de la ruta visible. refresh() fuerza el
+      // re-resolve y el guard patea a /login con replace si la ruta era protegida.
+      refresh();
+    }
   });
 }
 

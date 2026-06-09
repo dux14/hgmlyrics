@@ -181,7 +181,8 @@ export function guardedRoute(pattern, handler, { adminOnly = false } = {}) {
       return;
     }
     if (!authAdapter.isAuthenticated()) {
-      navigate(`/login?next=${encodeURIComponent(path)}`);
+      // replace: la ruta protegida no debe quedar en el history (back-trap).
+      navigate(`/login?next=${encodeURIComponent(path)}`, { replace: true });
       return;
     }
     if (authAdapter.needsOnboarding() && path !== '/onboarding') {

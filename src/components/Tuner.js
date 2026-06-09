@@ -26,6 +26,7 @@ import { fetchSongDetail } from '../lib/store.js';
 import { getSession, refreshProfile } from '../lib/authStore.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
+import { getCalibrationCents, applyCalibration } from '../lib/calibration.js';
 
 const MODES = [
   { id: 'guitar', label: `${icon('audio-lines', { size: 15 })} Guitarra` },
@@ -321,6 +322,7 @@ export async function renderTuner(container, opts = {}) {
   let detector = null;
   const stabilizer = createPitchStabilizer();
   let micState = 'idle'; // 'idle' | 'requesting' | 'running' | 'denied' | 'stopped'
+  const capturePitch = null; // hook temporal para el auto-test de calibración
   // Range-mode state
   let rangeStep = 'low';
   let rangeTempLow = null;
@@ -629,7 +631,15 @@ export async function renderTuner(container, opts = {}) {
   function requestMic() {
     if (detector) return;
     detector = createPitchDetector({
-      onPitch: (payload) => dispatchPitch(stabilizer.push(payload)),
+      onPitch: (payload) => {
+        const calCents = getCalibrationCents();
+        const corrected =
+          payload && Number.isFinite(payload.hz) && payload.hz > 0
+            ? { ...payload, hz: applyCalibration(payload.hz, calCents) }
+            : payload;
+        if (capturePitch && corrected) capturePitch(corrected);
+        dispatchPitch(stabilizer.push(corrected));
+      },
       onError: (err) => {
         console.warn('[tuner] mic error:', err);
         micState = 'denied';
@@ -637,7 +647,6 @@ export async function renderTuner(container, opts = {}) {
       },
       onState: (s) => {
         micState = s;
-        // Re-paint when transitioning into running (first frame).
         if (s === 'running' || s === 'denied' || s === 'stopped') paintBody();
       },
     });

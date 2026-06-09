@@ -32,8 +32,11 @@ export function medianOffsetCents(measurements) {
  *   sampleDetected: (hz: number) => Promise<number|null>,
  *   notes?: string[],
  *   toneMs?: number,
+ *   isCancelled?: () => boolean,
  * }} opts - `sampleDetected(hz)` reproduce/espera y resuelve el hz detectado
  *   para el tono pedido (lo provee Tuner.js, que tiene el detector vivo).
+ *   `isCancelled` se consulta antes de cada nota; si devuelve true se aborta el
+ *   loop sin lanzar error (el test parcial no se aplica como calibración).
  * @returns {Promise<{ ok: boolean, offsetCents: number|null, detail: object[] }>}
  */
 export async function runLoopbackTest({
@@ -41,9 +44,11 @@ export async function runLoopbackTest({
   sampleDetected,
   notes = ['A4', 'C4', 'E4'],
   toneMs = 1200,
+  isCancelled = () => false,
 }) {
   const detail = [];
   for (const label of notes) {
+    if (isCancelled()) break;
     const expectedHz = noteToFrequency(label);
     tonePlayer.play(expectedHz, toneMs);
     const detectedHz = await sampleDetected(expectedHz);

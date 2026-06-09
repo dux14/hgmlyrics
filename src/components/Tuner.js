@@ -36,6 +36,9 @@ import {
 import { runLoopbackTest } from '../lib/loopbackTest.js';
 import { createTonePlayer } from '../lib/tonePlayer.js';
 
+/** Formatea un valor de cents con signo explícito: "+5¢", "-3¢", "0¢". */
+const fmtCents = (c) => `${c > 0 ? '+' : ''}${c}¢`;
+
 const MODES = [
   { id: 'guitar', label: `${icon('audio-lines', { size: 15 })} Guitarra` },
   { id: 'voice', label: `${icon('mic', { size: 15 })} Voz` },
@@ -98,8 +101,7 @@ function renderReadout(container, { label, hz, cents, sub }) {
   const el = container.querySelector('#tuner-readout');
   if (!el) return;
   const hzText = hz === null || hz === undefined ? '— Hz' : `${hz.toFixed(1)} Hz`;
-  const centsText =
-    cents === null || cents === undefined ? '—¢' : `${cents > 0 ? '+' : ''}${cents}¢`;
+  const centsText = cents === null || cents === undefined ? '—¢' : fmtCents(cents);
   el.innerHTML = `
     <div class="tuner-readout__note">${label ?? '—'}</div>
     <div class="tuner-readout__meta">
@@ -294,13 +296,12 @@ export function bodyFreeNote(pick) {
  */
 export function bodyCalibrar({ calCents }) {
   const a4 = Math.round(centsToA4(calCents));
-  const signed = `${calCents > 0 ? '+' : ''}${calCents}`;
   return `
     <div class="tuner-cal">
       <p class="tuner-cal__hint">
         ${icon('info', { size: 14 })} Usá un <strong>altavoz</strong> (no audífonos) para el auto-test.
       </p>
-      <div class="tuner-cal__current">Ajuste actual: <strong id="cal-current">${signed}¢</strong></div>
+      <div class="tuner-cal__current">Ajuste actual: <strong id="cal-current">${fmtCents(calCents)}</strong></div>
       <button class="btn btn--primary" id="cal-run">${icon('activity', { size: 14 })} Probar afinador</button>
       <div class="tuner-cal__result" id="cal-result" aria-live="polite"></div>
 
@@ -359,6 +360,9 @@ export async function renderTuner(container, opts = {}) {
   const stabilizer = createPitchStabilizer();
   let micState = 'idle'; // 'idle' | 'requesting' | 'running' | 'denied' | 'stopped'
   let capturePitch = null; // hook temporal para el auto-test de calibración
+  // Fix 1: player único para el test de calibrar; createTonePlayer no abre el
+  // AudioContext hasta el primer play(), así que es barato crearlo aquí.
+  const calPlayer = createTonePlayer({});
   // Range-mode state
   let rangeStep = 'low';
   let rangeTempLow = null;
@@ -670,16 +674,21 @@ export async function renderTuner(container, opts = {}) {
   /* ─── calibrar binder ─── */
 
   function bindCalibrar() {
-    const player = createTonePlayer({});
+    // Fix 1: usa calPlayer hoisteado al scope de renderTuner; no se crea aquí.
     const resultEl = bodyEl.querySelector('#cal-result');
     const currentEl = bodyEl.querySelector('#cal-current');
 
-    // Muestrea el hz mediano detectado mientras suena `expectedHz`.
-    function sampleDetected() {
+    // Fix 4: firma actualizada — descarta muestras alejadas más de ±300 cents
+    // del tono esperado para evitar que ruido o reverb de notas anteriores
+    // contaminen la medición.
+    function sampleDetected(expectedHz) {
       return new Promise((resolve) => {
         const samples = [];
         const onPitch = (payload) => {
-          if (payload && Number.isFinite(payload.hz) && payload.hz > 0) samples.push(payload.hz);
+          if (!payload || !Number.isFinite(payload.hz) || payload.hz <= 0) return;
+          const centsDiff = Math.abs(1200 * Math.log2(payload.hz / expectedHz));
+          if (centsDiff > 300) return; // demasiado lejos: ruido o nota anterior
+          samples.push(payload.hz);
         };
         // Engancha temporalmente al detector vivo vía el stabilizer compartido:
         capturePitch = onPitch;
@@ -692,37 +701,53 @@ export async function renderTuner(container, opts = {}) {
       });
     }
 
-    bodyEl.querySelector('#cal-run')?.addEventListener('click', async () => {
+    // Fix 2: captura el botón una sola vez y lo deshabilita durante el test.
+    const runBtn = bodyEl.querySelector('#cal-run');
+    runBtn?.addEventListener('click', async () => {
       if (micState !== 'running') {
         resultEl.textContent = 'Activá el micrófono primero.';
         return;
       }
+      // Fix 2: deshabilita para evitar dobles clics concurrentes.
+      runBtn.disabled = true;
       resultEl.textContent = 'Probando…';
-      const { ok, offsetCents } = await runLoopbackTest({
-        tonePlayer: player,
-        sampleDetected,
-      });
-      if (!ok) {
-        resultEl.textContent = 'No detecté los tonos. Subí el volumen y reintentá.';
-        return;
+      try {
+        const { ok, offsetCents } = await runLoopbackTest({
+          tonePlayer: calPlayer,
+          sampleDetected,
+          // Fix 3: cancela el loop si el usuario cambió de pestaña.
+          isCancelled: () => mode !== 'calibrar',
+        });
+        if (!ok) {
+          resultEl.textContent = 'No detecté los tonos. Subí el volumen y reintentá.';
+          return;
+        }
+        const rounded = Math.round(offsetCents);
+        resultEl.innerHTML = `Offset medido: <strong>${fmtCents(rounded)}</strong>
+          <button class="btn btn--sm btn--primary" id="cal-apply">Aplicar ajuste</button>`;
+        resultEl.querySelector('#cal-apply')?.addEventListener('click', () => {
+          const c = setCalibrationCents(rounded);
+          currentEl.textContent = fmtCents(c);
+          resultEl.textContent = 'Ajuste aplicado.';
+        });
+      } finally {
+        // Fix 2: re-habilita siempre, incluso si hubo error o cancelación.
+        runBtn.disabled = false;
       }
-      const rounded = Math.round(offsetCents);
-      resultEl.innerHTML = `Offset medido: <strong>${rounded > 0 ? '+' : ''}${rounded}¢</strong>
-        <button class="btn btn--sm btn--primary" id="cal-apply">Aplicar ajuste</button>`;
-      resultEl.querySelector('#cal-apply')?.addEventListener('click', () => {
-        const c = setCalibrationCents(rounded);
-        currentEl.textContent = `${c > 0 ? '+' : ''}${c}¢`;
-        resultEl.textContent = 'Ajuste aplicado.';
-      });
     });
 
     const a4Input = bodyEl.querySelector('#cal-a4');
     const a4Val = bodyEl.querySelector('#cal-a4-val');
+    // Fix 5: 'input' solo actualiza las etiquetas (sin escribir a localStorage);
+    // 'change' persiste al soltar el slider (un solo write).
     a4Input?.addEventListener('input', () => {
       const hz = Number(a4Input.value);
       a4Val.textContent = `${hz} Hz`;
-      const c = setCalibrationCents(Math.round(a4ToCents(hz)));
-      currentEl.textContent = `${c > 0 ? '+' : ''}${c}¢`;
+      currentEl.textContent = fmtCents(Math.round(a4ToCents(hz)));
+    });
+    a4Input?.addEventListener('change', () => {
+      const hz = Number(a4Input.value);
+      setCalibrationCents(Math.round(a4ToCents(hz)));
     });
 
     bodyEl.querySelector('#cal-reset')?.addEventListener('click', () => {
@@ -774,6 +799,10 @@ export async function renderTuner(container, opts = {}) {
       clearInterval(rangeTimerId);
       rangeTimerId = null;
     }
+    // Fix 3: si había un test de calibración en curso, cancela la captura y
+    // corta el tono que pudiera estar sonando.
+    capturePitch = null;
+    calPlayer.stop();
     paintTabs();
     paintBody();
   });
@@ -787,6 +816,9 @@ export async function renderTuner(container, opts = {}) {
         detector = null;
       }
       if (rangeTimerId !== null) clearInterval(rangeTimerId);
+      // Fix 1: cierra el AudioContext del player de calibración para liberar
+      // recursos de audio al abandonar la ruta.
+      calPlayer.close();
       window.removeEventListener('hashchange', cleanupOnHashChange);
     }
   };

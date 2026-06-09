@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **GUARD DE RAMA (obligatorio para subagentes):** todo el trabajo va en la rama `feat/estudio-stems`. Antes de CUALQUIER edición ejecuta `git branch --show-current`; si no estás en `feat/estudio-stems`, créala desde master (`git checkout -b feat/estudio-stems`) o haz checkout. NUNCA commitees a master.
+> **GUARD DE RAMA (obligatorio para subagentes):** todo el trabajo va en la rama `beta-stems` (rama de integración del wave beta, junto al afinador). Antes de CUALQUIER edición ejecuta `git branch --show-current`; si no estás en `beta-stems`, haz `git checkout beta-stems`. NUNCA commitees a `master`.
 
 **Goal:** Nueva página `#/estudio` donde un usuario logueado sube un audio (≤25 MB) y recibe 6 stems + separación de voces (líder/coros + segmentos por cantante), procesado en Replicate, con resultados efímeros (48 h).
 
@@ -18,6 +18,7 @@
 - Tests en `tests/*.test.js`, mockeando `@supabase/supabase-js` y `postgres` ANTES del import dinámico (patrón de `tests/apiAuth.test.js`).
 - Comentarios y copy de UI en español; código (nombres) en inglés.
 - Prettier: singleQuote, printWidth 100. Corre `pnpm lint` antes de cada commit.
+- **Todos los commits terminan con la línea:** `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
 
 ---
 
@@ -56,9 +57,9 @@
 - [ ] **Step 1: Crear la rama**
 
 ```bash
-cd /home/samu/code/personal/Mark-N-Hkl/hgmlyrics
-git checkout master && git pull && git checkout -b feat/estudio-stems
-git branch --show-current   # Expected: feat/estudio-stems
+cd /Users/samu/code/personal/Mark-N-Hkl/hgmlyrics
+git checkout beta-stems && git pull
+git branch --show-current   # Expected: beta-stems
 ```
 
 ---
@@ -1974,7 +1975,7 @@ Expected: lint limpio, tests verdes con coverage ≥ umbral, build OK.
 - [ ] **Step 3: Smoke real en preview (cuesta centavos)**
 
 ```bash
-git push -u origin feat/estudio-stems   # dispara deploy de preview en Vercel
+git push origin beta-stems   # dispara deploy de preview en Vercel para la rama del wave
 ```
 En el deploy de preview: login → `#/estudio` → subir un audio corto (~30 s) → verificar:
 1. Upload directo OK (Network: PUT a supabase).
@@ -1983,14 +1984,17 @@ En el deploy de preview: login → `#/estudio` → subir un audio corto (~30 s) 
 4. `vercel logs` sin errores en webhook.
 5. Forzar un fallo (subir un mp3 corrupto renombrado) → estado failed amigable y cuota intacta.
 
-- [ ] **Step 4: PR**
+- [ ] **Step 4: PR (a nivel de wave)**
+
+El Estudio se integra en `beta-stems` junto al resto del wave beta (afinador). **No se abre un PR por-feature.** El PR `beta-stems → master` se crea cuando todo el wave esté listo y verificado; este feature es uno de sus commits. Cuando llegue ese momento:
 
 ```bash
-gh pr create --title "feat: Estudio de pistas (separación de stems y voces)" --body "$(cat <<'EOF'
+gh pr create --base master --head beta-stems \
+  --title "feat: wave beta — Estudio de pistas + afinador (entrenamiento/calibración) + fixes" \
+  --body "$(cat <<'EOF'
 ## Summary
-- Nueva página #/estudio (BETA): sube un audio y recibe 6 stems + voz dividida (líder/coros + segmentos por cantante)
-- Pipeline en Replicate (2 etapas) orquestado con webhooks firmados; resultados efímeros 48h; cuota 3/día
-- Cron de limpieza horario; spec en docs/superpowers/specs/2026-06-03-separacion-stems-voces-design.md (local)
+- Estudio de pistas (BETA, #/estudio): sube audio → 6 stems + voz dividida (líder/coros + segmentos por cantante); pipeline Replicate (2 etapas) con webhooks firmados; resultados efímeros 48h; cuota 3/día; cron de limpieza horario
+- (Otros features del wave que ya estén en beta-stems al abrir el PR)
 
 ## Test plan
 - [ ] pnpm test:ci verde

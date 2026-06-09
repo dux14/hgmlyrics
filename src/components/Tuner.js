@@ -26,13 +26,22 @@ import { fetchSongDetail } from '../lib/store.js';
 import { getSession, refreshProfile } from '../lib/authStore.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
-import { getCalibrationCents, applyCalibration } from '../lib/calibration.js';
+import {
+  getCalibrationCents,
+  applyCalibration,
+  setCalibrationCents,
+  centsToA4,
+  a4ToCents,
+} from '../lib/calibration.js';
+import { runLoopbackTest } from '../lib/loopbackTest.js';
+import { createTonePlayer } from '../lib/tonePlayer.js';
 
 const MODES = [
   { id: 'guitar', label: `${icon('audio-lines', { size: 15 })} Guitarra` },
   { id: 'voice', label: `${icon('mic', { size: 15 })} Voz` },
   { id: 'song', label: `${icon('music', { size: 15 })} Canción` },
   { id: 'range', label: `${icon('ruler', { size: 15 })} Rango` },
+  { id: 'calibrar', label: `${icon('settings', { size: 15 })} Calibrar` },
 ];
 
 const RANGE_STEP_MS = 10000;
@@ -277,6 +286,33 @@ export function bodyFreeNote(pick) {
   `;
 }
 
+/**
+ * Cuerpo del modo Calibrar: auto-test de loopback + control manual de A4.
+ * Render puro (string) para testear sin DOM.
+ * @param {{ calCents: number }} state
+ * @returns {string}
+ */
+export function bodyCalibrar({ calCents }) {
+  const a4 = Math.round(centsToA4(calCents));
+  const signed = `${calCents > 0 ? '+' : ''}${calCents}`;
+  return `
+    <div class="tuner-cal">
+      <p class="tuner-cal__hint">
+        ${icon('info', { size: 14 })} Usá un <strong>altavoz</strong> (no audífonos) para el auto-test.
+      </p>
+      <div class="tuner-cal__current">Ajuste actual: <strong id="cal-current">${signed}¢</strong></div>
+      <button class="btn btn--primary" id="cal-run">${icon('activity', { size: 14 })} Probar afinador</button>
+      <div class="tuner-cal__result" id="cal-result" aria-live="polite"></div>
+
+      <div class="tuner-cal__manual">
+        <label for="cal-a4">A4 de referencia: <strong id="cal-a4-val">${a4} Hz</strong></label>
+        <input type="range" id="cal-a4" min="415" max="466" step="1" value="${a4}" />
+        <button class="btn btn--secondary btn--sm" id="cal-reset">Restablecer (440 Hz)</button>
+      </div>
+    </div>
+  `;
+}
+
 /* ─── Mic permission gate ─── */
 
 function bodyPermissionGate(state) {
@@ -322,7 +358,7 @@ export async function renderTuner(container, opts = {}) {
   let detector = null;
   const stabilizer = createPitchStabilizer();
   let micState = 'idle'; // 'idle' | 'requesting' | 'running' | 'denied' | 'stopped'
-  const capturePitch = null; // hook temporal para el auto-test de calibración
+  let capturePitch = null; // hook temporal para el auto-test de calibración
   // Range-mode state
   let rangeStep = 'low';
   let rangeTempLow = null;
@@ -410,7 +446,12 @@ export async function renderTuner(container, opts = {}) {
           });
         }
       }
-    } else if (mode === 'range') bodyEl.innerHTML = bodyRange(rangeStep, '');
+    } else if (mode === 'range') {
+      bodyEl.innerHTML = bodyRange(rangeStep, '');
+    } else if (mode === 'calibrar') {
+      bodyEl.innerHTML = bodyCalibrar({ calCents: getCalibrationCents() });
+      bindCalibrar();
+    }
 
     if (mode === 'range') {
       bodyEl.querySelector('#range-cancel').addEventListener('click', cancelRange);
@@ -622,6 +663,70 @@ export async function renderTuner(container, opts = {}) {
       } catch (_e) {
         /* ignore */
       }
+      paintBody();
+    });
+  }
+
+  /* ─── calibrar binder ─── */
+
+  function bindCalibrar() {
+    const player = createTonePlayer({});
+    const resultEl = bodyEl.querySelector('#cal-result');
+    const currentEl = bodyEl.querySelector('#cal-current');
+
+    // Muestrea el hz mediano detectado mientras suena `expectedHz`.
+    function sampleDetected() {
+      return new Promise((resolve) => {
+        const samples = [];
+        const onPitch = (payload) => {
+          if (payload && Number.isFinite(payload.hz) && payload.hz > 0) samples.push(payload.hz);
+        };
+        // Engancha temporalmente al detector vivo vía el stabilizer compartido:
+        capturePitch = onPitch;
+        setTimeout(() => {
+          capturePitch = null;
+          if (samples.length === 0) return resolve(null);
+          const sorted = [...samples].sort((a, b) => a - b);
+          resolve(sorted[Math.floor(sorted.length / 2)]);
+        }, 900);
+      });
+    }
+
+    bodyEl.querySelector('#cal-run')?.addEventListener('click', async () => {
+      if (micState !== 'running') {
+        resultEl.textContent = 'Activá el micrófono primero.';
+        return;
+      }
+      resultEl.textContent = 'Probando…';
+      const { ok, offsetCents } = await runLoopbackTest({
+        tonePlayer: player,
+        sampleDetected,
+      });
+      if (!ok) {
+        resultEl.textContent = 'No detecté los tonos. Subí el volumen y reintentá.';
+        return;
+      }
+      const rounded = Math.round(offsetCents);
+      resultEl.innerHTML = `Offset medido: <strong>${rounded > 0 ? '+' : ''}${rounded}¢</strong>
+        <button class="btn btn--sm btn--primary" id="cal-apply">Aplicar ajuste</button>`;
+      resultEl.querySelector('#cal-apply')?.addEventListener('click', () => {
+        const c = setCalibrationCents(rounded);
+        currentEl.textContent = `${c > 0 ? '+' : ''}${c}¢`;
+        resultEl.textContent = 'Ajuste aplicado.';
+      });
+    });
+
+    const a4Input = bodyEl.querySelector('#cal-a4');
+    const a4Val = bodyEl.querySelector('#cal-a4-val');
+    a4Input?.addEventListener('input', () => {
+      const hz = Number(a4Input.value);
+      a4Val.textContent = `${hz} Hz`;
+      const c = setCalibrationCents(Math.round(a4ToCents(hz)));
+      currentEl.textContent = `${c > 0 ? '+' : ''}${c}¢`;
+    });
+
+    bodyEl.querySelector('#cal-reset')?.addEventListener('click', () => {
+      setCalibrationCents(0);
       paintBody();
     });
   }

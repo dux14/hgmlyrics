@@ -23,7 +23,16 @@ vi.mock('../src/lib/pitch.js', () => ({
   createPitchDetector: vi.fn(),
 }));
 
-const { bodySong, sanitizeFreeNote, bodyFreeNote } = await import('../src/components/Tuner.js');
+// Stub loopbackTest and tonePlayer (require AudioContext / real audio).
+vi.mock('../src/lib/loopbackTest.js', () => ({
+  runLoopbackTest: vi.fn(),
+}));
+vi.mock('../src/lib/tonePlayer.js', () => ({
+  createTonePlayer: vi.fn(() => ({ play: vi.fn(), stop: vi.fn(), close: vi.fn() })),
+}));
+
+const { bodySong, sanitizeFreeNote, bodyFreeNote, bodyCalibrar } =
+  await import('../src/components/Tuner.js');
 
 const song = { title: 'Santo', key: 'D major' };
 
@@ -94,5 +103,24 @@ describe('bodyFreeNote', () => {
   });
   it('no usa emojis', () => {
     expect(bodyFreeNote({ pc: 'C', octave: 4 })).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
+  });
+});
+
+describe('bodyCalibrar', () => {
+  it('muestra el offset actual, el boton de auto-test y el control de A4', () => {
+    const html = bodyCalibrar({ calCents: 0 });
+    expect(html).toContain('id="cal-run"'); // "Probar afinador"
+    expect(html).toContain('id="cal-a4"'); // slider de A4
+    expect(html).toContain('id="cal-reset"'); // restablecer
+    expect(html).toContain('440'); // A4 por defecto
+  });
+
+  it('refleja un offset aplicado', () => {
+    const html = bodyCalibrar({ calCents: 12 });
+    expect(html).toContain('+12');
+  });
+
+  it('no usa emojis', () => {
+    expect(bodyCalibrar({ calCents: 0 })).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
   });
 });

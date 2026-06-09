@@ -46,7 +46,9 @@ describe('router', () => {
     it('with { replace } resolves synchronously without leaving a history entry', () => {
       const handler = vi.fn();
       route('/login', handler);
+      const lengthBefore = window.history.length;
       navigate('/login', { replace: true });
+      expect(window.history.length).toBe(lengthBefore); // replaceState, no pushState
       expect(handler).toHaveBeenCalled();
       expect(getCurrentPath()).toBe('/login');
     });

@@ -1,11 +1,13 @@
 // tests/authLogout.test.js
 /**
  * Regresión del bug: logout que a veces aterriza en una ruta protegida.
- * Causa raíz confirmada en investigación (Task 1): el fix del plan cubre el
- * back-trap (la redirección del guard y el logout empujaban la ruta protegida
- * al history); además signOut() puede fallar/lanzar sin que nadie re-evalúe
- * los guards (se endurece en la tarea siguiente).
- * Este fix añade navigate(path, { replace }) con re-resolve síncrono.
+ * Causa raíz confirmada en investigación (Task 1): H1 y H2 refutadas; la causa
+ * real es doble: (a) el logout dependía del happy-path de signOut() — si falla
+ * o lanza, la sesión queda viva o nunca se navega a /login — y (b) el router
+ * solo reacciona a hashchange y nunca re-evalúa los guards al cambiar el estado
+ * de auth; además el guard y el logout empujaban la ruta protegida al history
+ * (back-trap). Este archivo cubre el endurecimiento de la navegación con
+ * navigate(path, { replace }); el endurecimiento del logout llega en Task 4.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {

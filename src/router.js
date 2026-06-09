@@ -42,6 +42,8 @@ export function navigate(path, { replace = false } = {}) {
   if (replace) {
     // Reemplaza la entrada actual (la protegida no queda en el history) y
     // fuerza el re-resolve: replaceState no dispara 'hashchange'.
+    // NOTA: re-resolve síncrono — no llamar navigate({ replace }) hacia el mismo
+    // destino desde un handler de ruta, o se producirá recursión ilimitada.
     window.history.replaceState(null, '', targetHash);
     currentRoute = null;
     resolve();

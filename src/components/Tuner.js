@@ -742,7 +742,9 @@ export async function renderTuner(container, opts = {}) {
           payload && Number.isFinite(payload.hz) && payload.hz > 0
             ? { ...payload, hz: applyCalibration(payload.hz, calCents) }
             : payload;
-        if (capturePitch && corrected) capturePitch(corrected);
+        // El auto-test mide el offset ABSOLUTO del dispositivo y se aplica como
+        // reemplazo (setCalibrationCents): debe ver el hz crudo, sin calibrar.
+        if (capturePitch && payload) capturePitch(payload);
         dispatchPitch(stabilizer.push(corrected));
       },
       onError: (err) => {

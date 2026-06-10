@@ -100,3 +100,16 @@ def run_diarization(audio_url: str, job_id: str, user_id: str, callback_url: str
     except Exception as e:
         _post_callback(callback_url, {"status": "failed", "error": str(e)[:200]})
         raise
+
+
+@app.function(image=image, secrets=secrets, gpu="T4", timeout=900)
+def run_mdx23(audio_url: str, job_id: str, user_id: str, callback_url: str):
+    # TODO(B4): MDX23 no es pip-installable. Hay que vendorizar el repo que usa
+    # `lucataco/mvsep-mdx23-music-separation` (revisar su cog.yaml/predict.py) + sus pesos
+    # en la imagen (image.run_commands / image.add_local_dir, versiones fijadas), correr la
+    # inferencia, subir lead.mp3/backing.mp3 a `{user_id}/{job_id}/voices/` y postear el callback
+    # con {"output": {"lead": key, "backing": key}}.
+    # VÁLVULA: hasta entonces, mantener STEMS_PROVIDER_KARAOKE=replicate en Vercel; karaoke
+    # nunca se despacha a Modal, así que este stub no se invoca en producción.
+    _post_callback(callback_url, {"status": "failed", "error": "run_mdx23 no implementado todavía (ver TODO B4)"})
+    raise NotImplementedError("run_mdx23 pendiente: vendorizar MDX23. Usar STEMS_PROVIDER_KARAOKE=replicate.")

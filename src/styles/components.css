@@ -1924,6 +1924,14 @@
   margin-bottom: var(--space-md);
 }
 
+/* Body copy del Estudio: el contenedor alinea a la izquierda. No heredar el
+   centrado de .empty-state__text (max-width + margin:0 auto), pensado para
+   estados vacíos, que dejaba expiry y el copy de Voces indentados al centro. */
+.studio .empty-state__text {
+  margin-left: 0;
+  margin-right: auto;
+}
+
 .studio__section-title {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
@@ -2158,7 +2166,7 @@
   left: 0;
   right: 0;
   height: 6px;
-  background: var(--color-surface);
+  background: var(--color-border);
   border-radius: 3px;
 }
 .studio-player__fill {

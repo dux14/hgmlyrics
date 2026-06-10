@@ -225,12 +225,32 @@ async function showJob(body, jobId, quota) {
   }
 }
 
-function renderProcessing(body, job) {
-  const step1Done = job.status === 'separating_voices';
+function renderProcessing(body, job, filename) {
+  const status = job.status;
+  const stagesDone = status === 'separating_voices';
+  const stage = (iconName, label, state) => {
+    const mark =
+      state === 'done'
+        ? icon('check-circle', { size: 18 })
+        : `<span class="studio-stage__dot studio-stage__dot--${state}"></span>`;
+    return `
+      <div class="studio-stage studio-stage--${state}" aria-label="${label}: ${state === 'done' ? 'completado' : state === 'active' ? 'en curso' : 'en espera'}">
+        ${mark}
+        ${icon(iconName, { size: 18 })}
+        <span class="studio-stage__label">${label}</span>
+        <span class="studio-stage__eta">~2 min</span>
+      </div>`;
+  };
   body.innerHTML = `
-    <div class="studio-steps">
-      <p class="studio-steps__item">${step1Done ? '✅' : '⏳'} <strong>Separando pistas…</strong> ~2 min</p>
-      <p class="studio-steps__item">${step1Done ? '⏳' : '○'} <strong>Separando voces…</strong> ~2 min</p>
+    ${filename ? `<p class="studio__filename" title="${filename}">${icon('audio-lines', { size: 16 })} <span>${filename}</span></p>` : ''}
+    <div class="studio-loader">
+      <div class="studio-eq" aria-hidden="true">
+        ${Array.from({ length: 7 }, (_, i) => `<span class="studio-eq__bar" style="--i:${i}"></span>`).join('')}
+      </div>
+      <div class="studio-stages">
+        ${stage('layers', 'Separando pistas', stagesDone ? 'done' : 'active')}
+        ${stage('audio-lines', 'Separando voces', stagesDone ? 'active' : 'wait')}
+      </div>
       <p class="empty-state__text">Puedes salir de esta página; el proceso sigue solo.</p>
     </div>
   `;

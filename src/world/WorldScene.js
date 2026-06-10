@@ -88,6 +88,8 @@ export class WorldScene extends Phaser.Scene {
       });
 
       this.world.onPeerMove(({ uid, x, y, t }) => {
+        // Ignorar self (presence puede hacer eco del propio usuario)
+        if (uid === ctx.me.id) return;
         // Crear peer lazy si llega un move antes del presence join
         if (!this.peers.has(uid)) {
           this._createPeerEntry(uid, uid);
@@ -98,6 +100,8 @@ export class WorldScene extends Phaser.Scene {
       this.world.onPeerJoin(({ key, newPresences }) => {
         const presence = newPresences?.[0] ?? {};
         const uid = presence.uid ?? key;
+        // Ignorar self (Supabase presence no filtra broadcast: { self:false })
+        if (uid === ctx.me.id) return;
         const name = presence.name ?? uid;
         if (!this.peers.has(uid)) {
           this._createPeerEntry(uid, name);
@@ -116,9 +120,9 @@ export class WorldScene extends Phaser.Scene {
       this._pushRoster(ctx);
     }
 
-    // Limpiar canal al destruir/salir de la escena
+    // Limpiar canal al salir de la escena.
+    // shutdown siempre precede a destroy, con un solo listener es suficiente.
     this.events.once('shutdown', () => this.world?.leave());
-    this.events.once('destroy', () => this.world?.leave());
   }
 
   update() {
@@ -147,7 +151,7 @@ export class WorldScene extends Phaser.Scene {
 
     // ---- Enviar posición propia ----
     const moving = vx !== 0 || vy !== 0;
-    this.world?.sendPosition(this.player.x, this.player.y, this.lastDir, moving);
+    if (this.world) this.world.sendPosition(this.player.x, this.player.y, this.lastDir, moving);
 
     // ---- Interpolar peers ----
     // Los timestamps del buffer son Date.now()-based (worldRealtime usa Date.now()),
@@ -160,6 +164,8 @@ export class WorldScene extends Phaser.Scene {
         sprite.y = pos.y;
         label.x = pos.x;
         label.y = pos.y - 18;
+        sprite.setVisible(true);
+        label.setVisible(true);
       }
     });
   }
@@ -174,7 +180,7 @@ export class WorldScene extends Phaser.Scene {
    * @param {string} name
    */
   _createPeerEntry(uid, name) {
-    const sprite = this.add.rectangle(0, 0, 16, 24, PEER_COLOR);
+    const sprite = this.add.rectangle(0, 0, 16, 24, PEER_COLOR).setVisible(false);
     const label = this.add.text(0, -18, name, {
       fontSize: '10px',
       color: '#ffffff',
@@ -182,6 +188,7 @@ export class WorldScene extends Phaser.Scene {
       strokeThickness: 2,
     });
     label.setOrigin(0.5, 1);
+    label.setVisible(false);
     const buffer = new PeerBuffer({ delayMs: INTERP_DELAY_MS });
     this.peers.set(uid, { sprite, label, buffer, name });
   }
@@ -203,7 +210,7 @@ export class WorldScene extends Phaser.Scene {
    * @param {{ me: { id: string, name: string }, onRoster: Function }} ctx
    */
   _pushRoster(ctx) {
-    const entries = [{ uid: ctx.me.id, name: `${ctx.me.name} (tu)` }];
+    const entries = [{ uid: ctx.me.id, name: `${ctx.me.name} (tú)` }];
     this.peers.forEach(({ name }, uid) => entries.push({ uid, name }));
     ctx.onRoster(entries);
   }

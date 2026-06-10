@@ -60,8 +60,8 @@ export function WorldRoster() {
    * @param {RosterEntry[]} entries
    */
   function setRoster(entries) {
-    header.textContent = `En linea (${entries.length})`;
-    list.innerHTML = '';
+    header.textContent = `En línea (${entries.length})`;
+    list.replaceChildren();
     entries.forEach(({ name }) => {
       const li = document.createElement('li');
       li.style.cssText = 'padding:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;';

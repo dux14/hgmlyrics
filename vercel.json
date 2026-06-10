@@ -7,14 +7,14 @@
   "regions": ["pdx1"],
   "ignoreCommand": "git diff --quiet HEAD^ HEAD -- ':!docs' ':!*.md' ':!tests' ':!.lighthouserc.json' ':!.github' ':!CLAUDE.md' ':!MIGRATION_PLAN.md'",
   "functions": {
-    "api/**/*.js": {
-      "maxDuration": 10
-    },
     "api/stems/webhook.js": {
       "maxDuration": 300
     },
     "api/stems/cleanup.js": {
       "maxDuration": 60
+    },
+    "api/**/*.js": {
+      "maxDuration": 10
     }
   },
   "crons": [{ "path": "/api/stems/cleanup", "schedule": "0 * * * *" }]

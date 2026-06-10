@@ -1,14 +1,16 @@
 /**
- * ListDetail.js — Vista de detalle/editor de una lista efímera.
+ * ListDetail.js — Editor y vista de una lista efímera.
  *
- * Uso: renderListDetail(container, listId)
- * - role === 'owner': editor completo (nombre, canciones, miembros, fecha, borrar)
- * - role === 'member': solo lectura (tap canción → navega con contexto de lista)
+ * renderListDetail(container, id, { mode }):
+ *   - id null/'nueva' → lista nueva, modo 'edit'.
+ *   - mode 'view' (default) → solo lectura (owner y member).
+ *   - mode 'edit' (solo owner / lista nueva) → editor con borrador local.
  */
 
 import '../styles/lists.css';
 import {
   getList,
+  createList,
   updateList,
   deleteList,
   setListSongs,
@@ -19,14 +21,16 @@ import {
 import { getSongById } from '../lib/store.js';
 import { searchSongs } from '../lib/search.js';
 import { getAcceptedFriends } from '../lib/friends.js';
-
-// Listener global para cerrar los resultados de búsqueda al clicar fuera.
-// Se guarda a nivel de módulo y se reemplaza en cada render del editor, así
-// nunca se acumula más de uno (evita fugas al navegar entre listas).
-let dismissSearchHandler = null;
+import { filterFriends, diffMembers, resolveExpiresAt } from '../lib/listDraft.js';
+import { songRowCompact } from './songRow.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { updateSidebarContent } from './Sidebar.js';
+
+/* global CSS */
+
+// Listener global para cerrar el dropdown de búsqueda al clicar fuera.
+let dismissSearchHandler = null;
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -34,11 +38,6 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-/**
- * Formatea la fecha de caducidad en texto legible.
- * @param {string} expiresAt - ISO date string
- * @returns {string}
- */
 function formatExpiry(expiresAt) {
   if (!expiresAt) return '';
   const diff = Math.ceil((new Date(expiresAt) - Date.now()) / 86400000);
@@ -47,12 +46,40 @@ function formatExpiry(expiresAt) {
   return `caduca en ${diff}d`;
 }
 
+function isUrgent(expiresAt) {
+  return expiresAt && Math.ceil((new Date(expiresAt) - Date.now()) / 86400000) <= 1;
+}
+
+function expiryChipHtml(expiresAt) {
+  const text = formatExpiry(expiresAt);
+  if (!text) return '';
+  return `<span class="lists__expiry-chip ${isUrgent(expiresAt) ? 'lists__expiry-chip--urgent' : ''}">${escapeHtml(text)}</span>`;
+}
+
+/** Info de canción para render (degrada si fue borrada del catálogo). */
+function songForRender(songId) {
+  const s = getSongById(songId);
+  return s || { id: songId, title: songId, album: '', voiceType: 'mixed', coverImage: '' };
+}
+
 /**
- * Renderiza el detalle de una lista efímera.
- * @param {HTMLElement} container
- * @param {string} id - listId
+ * Punto de entrada. mode 'view' (default) o 'edit'.
  */
-export async function renderListDetail(container, id) {
+export async function renderListDetail(container, id, { mode = 'view' } = {}) {
+  const isNew = !id || id === 'nueva';
+
+  if (isNew) {
+    renderEditor(container, {
+      id: null,
+      name: '',
+      expires_at: null,
+      songs: [],
+      members: [],
+      role: 'owner',
+    });
+    return;
+  }
+
   container.innerHTML = `
     <div class="list-detail__container">
       <div class="empty-state fade-in">
@@ -81,79 +108,78 @@ export async function renderListDetail(container, id) {
   }
 
   const isOwner = listData.role === 'owner';
-
-  if (isOwner) {
+  if (mode === 'edit' && isOwner) {
     renderEditor(container, listData);
   } else {
-    renderReadonly(container, listData);
+    renderReadonly(container, listData, { isOwner });
   }
 }
 
 /* ── Editor (owner) ────────────────────────────────────────────── */
 
 function renderEditor(container, listData) {
-  let order = (listData.songs || []).map((s) => s.song_id ?? s.id ?? s);
-  const members = listData.members || [];
+  const isNew = !listData.id;
 
-  function songInfo(songId) {
-    const s = getSongById(songId);
-    return s ? { title: s.title, album: s.album } : { title: songId, album: '' };
-  }
+  // Estado original (para el diff de miembros al guardar)
+  const originalMembers = (listData.members || []).map((m) => ({
+    user_id: m.user_id ?? m.id,
+    username: m.username ?? m.user_id ?? m.id,
+  }));
 
-  function songRowHtml(songId, idx) {
-    const { title, album } = songInfo(songId);
-    return `
-      <div class="list-detail__song-row" data-song-id="${escapeHtml(songId)}" data-idx="${idx}">
-        <span class="list-detail__song-name">${escapeHtml(title)}</span>
-        <span class="list-detail__song-sub">${escapeHtml(album)}</span>
-        <button class="list-detail__row-btn" data-action="up" title="Subir" ${idx === 0 ? 'disabled' : ''}>${icon('chevron-up', { size: 14 })}</button>
-        <button class="list-detail__row-btn" data-action="down" title="Bajar" ${idx === order.length - 1 ? 'disabled' : ''}>${icon('chevron-down', { size: 14 })}</button>
-        <button class="list-detail__row-btn list-detail__row-btn--danger" data-action="remove" title="Quitar">${icon('close', { size: 14 })}</button>
-      </div>
-    `;
-  }
+  // Borrador local
+  const draft = {
+    name: listData.name || '',
+    expiresAt: listData.expires_at || null,
+    order: (listData.songs || []).map((s) => s.song_id ?? s.id ?? s),
+    invitees: (listData.members || []).map((m) => ({
+      id: m.user_id ?? m.id,
+      username: m.username ?? m.user_id ?? m.id,
+      displayName: m.displayName || m.username || m.user_id || m.id,
+      avatarUrl: m.avatarUrl || '',
+    })),
+    days: isNew ? 7 : null,
+    dateValue: '',
+  };
 
-  function memberRowHtml(member) {
-    return `
-      <div class="list-detail__member-row" data-member-id="${escapeHtml(member.user_id ?? member.id)}">
-        <span class="list-detail__member-name">${escapeHtml(member.username ?? member.user_id ?? member.id)}</span>
-        <button class="list-detail__row-btn list-detail__row-btn--danger" data-action="remove-member" title="Quitar miembro">${icon('close', { size: 14 })}</button>
-      </div>
-    `;
-  }
-
-  const expiryText = formatExpiry(listData.expires_at);
-  const isUrgent =
-    listData.expires_at && Math.ceil((new Date(listData.expires_at) - Date.now()) / 86400000) <= 1;
+  let friendsCache = [];
 
   container.innerHTML = `
     <div class="list-detail__container">
-      <div class="list-detail__header">
-        <div style="flex:1;min-width:0">
-          <input
-            class="list-detail__title-input"
-            type="text"
-            id="list-detail-name"
-            value="${escapeHtml(listData.name)}"
-            maxlength="80"
-            aria-label="Nombre de la lista"
-          />
-          ${expiryText ? `<span class="lists__expiry-chip ${isUrgent ? 'lists__expiry-chip--urgent' : ''}">${escapeHtml(expiryText)}</span>` : ''}
+      <div class="list-detail__section">
+        <div class="list-detail__header">
+          <div style="flex:1;min-width:0">
+            <input
+              class="list-detail__title-input"
+              type="text"
+              id="list-detail-name"
+              value="${escapeHtml(draft.name)}"
+              maxlength="80"
+              placeholder="Nombre de la lista"
+              aria-label="Nombre de la lista"
+            />
+          </div>
+          <div class="list-detail__header-actions">
+            ${
+              isNew
+                ? ''
+                : `<button class="list-detail__icon-btn list-detail__icon-btn--danger" id="list-detail-delete" title="Borrar lista">${icon('trash', { size: 18 })}</button>`
+            }
+          </div>
         </div>
-        <div class="list-detail__header-actions">
-          <button class="btn btn--primary" id="list-detail-save">
-            ${icon('check-circle', { size: 16 })} Guardar
-          </button>
-          <button class="list-detail__icon-btn list-detail__icon-btn--danger" id="list-detail-delete" title="Borrar lista">
-            ${icon('trash', { size: 18 })}
-          </button>
+        <div class="list-detail__expiry">
+          <div class="list-detail__segmented" id="list-detail-presets">
+            <button class="list-detail__segmented-btn ${draft.days === 1 ? 'list-detail__segmented-btn--active' : ''}" data-days="1">1 día</button>
+            <button class="list-detail__segmented-btn ${draft.days === 7 ? 'list-detail__segmented-btn--active' : ''}" data-days="7">7 días</button>
+            <button class="list-detail__segmented-btn ${draft.days === 30 ? 'list-detail__segmented-btn--active' : ''}" data-days="30">30 días</button>
+          </div>
+          <button class="list-detail__expiry-toggle" id="list-detail-date-toggle" type="button">Fecha exacta</button>
+          <input class="list-detail__date-input" type="date" id="list-detail-date" style="display:none" />
         </div>
       </div>
 
-      <!-- Buscador de canciones -->
-      <div>
-        <p class="list-detail__section-title">${icon('list', { size: 14 })} Canciones</p>
-        <div class="list-detail__search-wrap" style="margin-top: var(--space-xs)">
+      <div class="list-detail__section">
+        <h2 class="list-detail__section-heading">Canciones</h2>
+        <div class="list-detail__search-wrap">
           <input
             class="list-detail__search-input"
             type="search"
@@ -163,112 +189,117 @@ function renderEditor(container, listData) {
           />
           <div class="list-detail__search-results" id="list-detail-results" style="display:none"></div>
         </div>
+        <div class="list-detail__songs" id="list-detail-songs"></div>
       </div>
 
-      <!-- Lista de canciones -->
-      <div class="list-detail__songs" id="list-detail-songs">
-        ${order.length === 0 ? `<p class="list-detail__empty">Sin canciones aún.</p>` : order.map(songRowHtml).join('')}
+      <div class="list-detail__section">
+        <h2 class="list-detail__section-heading">Invitados</h2>
+        <input
+          class="list-detail__search-input"
+          type="search"
+          id="list-detail-friend-search"
+          placeholder="Buscar entre tus amigos…"
+          autocomplete="off"
+        />
+        <div class="list-detail__friend-results" id="list-detail-friend-results"></div>
+        <div class="list-detail__invitees" id="list-detail-invitees"></div>
       </div>
 
-      <!-- Invitados -->
-      <div>
-        <p class="list-detail__section-title">${icon('users', { size: 14 })} Invitados</p>
-        <div class="list-detail__invite-row" style="margin-top: var(--space-xs)">
-          <input
-            class="list-detail__search-input"
-            type="text"
-            id="list-detail-invite-input"
-            placeholder="Nombre de usuario"
-            autocomplete="off"
-            style="flex:1"
-          />
-          <button class="btn btn--secondary" id="list-detail-invite-btn">
-            ${icon('plus', { size: 14 })} Invitar
-          </button>
-        </div>
-        <p class="list-detail__error" id="list-detail-invite-error" aria-live="polite"></p>
-        <div class="list-detail__friend-suggestions" id="list-detail-friends"></div>
-        <div class="list-detail__members" id="list-detail-members">
-          ${members.length === 0 ? `<p class="list-detail__empty">Sin invitados.</p>` : members.map(memberRowHtml).join('')}
-        </div>
+      <div class="list-detail__section">
+        <button class="btn btn--primary" id="list-detail-save">${icon('check-circle', { size: 16 })} Guardar</button>
+        <p class="list-detail__error" id="list-detail-error" aria-live="polite"></p>
       </div>
-
-      <p class="list-detail__error" id="list-detail-error" aria-live="polite"></p>
     </div>
   `;
 
   const errorEl = container.querySelector('#list-detail-error');
-  const id = listData.id;
-  let persistTimer = null;
 
-  function persistSongs() {
-    clearTimeout(persistTimer);
-    persistTimer = setTimeout(() => {
-      setListSongs(id, order).catch((err) => {
-        if (errorEl) errorEl.textContent = err.message;
-      });
-    }, 400);
+  container.querySelector('#list-detail-name')?.addEventListener('input', (e) => {
+    draft.name = e.target.value;
+  });
+
+  const presetsEl = container.querySelector('#list-detail-presets');
+  const dateToggle = container.querySelector('#list-detail-date-toggle');
+  const dateInput = container.querySelector('#list-detail-date');
+
+  presetsEl?.querySelectorAll('.list-detail__segmented-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      presetsEl
+        .querySelectorAll('.list-detail__segmented-btn')
+        .forEach((b) => b.classList.remove('list-detail__segmented-btn--active'));
+      btn.classList.add('list-detail__segmented-btn--active');
+      draft.days = Number(btn.dataset.days);
+      draft.dateValue = '';
+      dateInput.value = '';
+    });
+  });
+
+  dateToggle?.addEventListener('click', () => {
+    const showing = dateInput.style.display !== 'none';
+    dateInput.style.display = showing ? 'none' : 'block';
+    if (!showing) dateInput.focus();
+  });
+
+  dateInput?.addEventListener('input', () => {
+    draft.dateValue = dateInput.value;
+    if (dateInput.value) {
+      draft.days = null;
+      presetsEl
+        .querySelectorAll('.list-detail__segmented-btn')
+        .forEach((b) => b.classList.remove('list-detail__segmented-btn--active'));
+    }
+  });
+
+  const songsEl = container.querySelector('#list-detail-songs');
+
+  function rowActions(idx) {
+    return `
+      <button class="list-detail__row-btn" data-action="up" title="Subir" ${idx === 0 ? 'disabled' : ''}>${icon('chevron-up', { size: 14 })}</button>
+      <button class="list-detail__row-btn" data-action="down" title="Bajar" ${idx === draft.order.length - 1 ? 'disabled' : ''}>${icon('chevron-down', { size: 14 })}</button>
+      <button class="list-detail__row-btn list-detail__row-btn--danger" data-action="remove" title="Quitar">${icon('close', { size: 14 })}</button>
+    `;
   }
 
-  function rerenderSongs() {
-    const songsEl = container.querySelector('#list-detail-songs');
-    if (!songsEl) return;
-    songsEl.innerHTML =
-      order.length === 0
-        ? `<p class="list-detail__empty">Sin canciones aún.</p>`
-        : order.map(songRowHtml).join('');
-    bindSongRowEvents();
-    persistSongs();
+  function renderSongs(enteringId = null) {
+    if (draft.order.length === 0) {
+      songsEl.innerHTML = `<p class="list-detail__empty">Busca arriba para agregar canciones.</p>`;
+      return;
+    }
+    songsEl.innerHTML = draft.order
+      .map((sid, idx) =>
+        songRowCompact(songForRender(sid), { index: idx + 1, actions: rowActions(idx) }),
+      )
+      .join('');
+    if (enteringId) {
+      songsEl
+        .querySelector(`[data-song-id="${CSS.escape(enteringId)}"]`)
+        ?.classList.add('is-entering');
+    }
+    bindSongRows();
   }
 
-  function bindSongRowEvents() {
-    container.querySelectorAll('.list-detail__song-row').forEach((row) => {
-      const idx = Number(row.dataset.idx);
+  function bindSongRows() {
+    songsEl.querySelectorAll('.song-row-compact').forEach((row, idx) => {
       const songId = row.dataset.songId;
-
       row.querySelector('[data-action="up"]')?.addEventListener('click', () => {
         if (idx === 0) return;
-        [order[idx - 1], order[idx]] = [order[idx], order[idx - 1]];
-        rerenderSongs();
+        [draft.order[idx - 1], draft.order[idx]] = [draft.order[idx], draft.order[idx - 1]];
+        renderSongs();
       });
-
       row.querySelector('[data-action="down"]')?.addEventListener('click', () => {
-        if (idx === order.length - 1) return;
-        [order[idx], order[idx + 1]] = [order[idx + 1], order[idx]];
-        rerenderSongs();
+        if (idx === draft.order.length - 1) return;
+        [draft.order[idx], draft.order[idx + 1]] = [draft.order[idx + 1], draft.order[idx]];
+        renderSongs();
       });
-
       row.querySelector('[data-action="remove"]')?.addEventListener('click', () => {
-        order = order.filter((sid) => sid !== songId);
-        rerenderSongs();
+        draft.order = draft.order.filter((sid) => sid !== songId);
+        renderSongs();
       });
     });
   }
 
-  bindSongRowEvents();
+  renderSongs();
 
-  // Guardar nombre al salir del campo
-  container.querySelector('#list-detail-name')?.addEventListener('blur', (e) => {
-    const newName = e.target.value.trim();
-    if (newName && newName !== listData.name) {
-      updateList(id, { name: newName }).catch((err) => {
-        if (errorEl) errorEl.textContent = err.message;
-      });
-    }
-  });
-
-  // Borrar lista
-  container.querySelector('#list-detail-delete')?.addEventListener('click', async () => {
-    if (!confirm('¿Borrar esta lista? Esta acción no se puede deshacer.')) return;
-    try {
-      await deleteList(id);
-      navigate('/');
-    } catch (err) {
-      if (errorEl) errorEl.textContent = err.message;
-    }
-  });
-
-  // Buscador de canciones
   const searchInput = container.querySelector('#list-detail-search');
   const resultsEl = container.querySelector('#list-detail-results');
   let searchTimer = null;
@@ -282,39 +313,28 @@ function renderEditor(container, listData) {
       return;
     }
     searchTimer = setTimeout(() => {
-      const hits = searchSongs(q, 8);
+      const hits = searchSongs(q, 8).filter((s) => !draft.order.includes(s.id));
       if (!hits.length) {
         resultsEl.style.display = 'none';
         return;
       }
-      resultsEl.innerHTML = hits
-        .map(
-          (s) => `
-          <div class="list-detail__search-result" data-song-id="${escapeHtml(s.id)}">
-            <span>${escapeHtml(s.title)}</span>
-            <span class="list-detail__search-result-sub">${escapeHtml(s.album || '')}</span>
-          </div>
-        `,
-        )
-        .join('');
+      resultsEl.innerHTML = hits.map((s) => songRowCompact(s, {})).join('');
       resultsEl.style.display = 'block';
-
-      resultsEl.querySelectorAll('.list-detail__search-result').forEach((item) => {
+      resultsEl.querySelectorAll('.song-row-compact').forEach((item) => {
         item.addEventListener('click', () => {
           const sid = item.dataset.songId;
-          if (!order.includes(sid)) {
-            order.push(sid);
-            rerenderSongs();
+          if (!draft.order.includes(sid)) {
+            draft.order.push(sid);
+            renderSongs(sid);
           }
           searchInput.value = '';
           resultsEl.style.display = 'none';
+          resultsEl.innerHTML = '';
         });
       });
     }, 200);
   });
 
-  // Cerrar resultados al hacer clic fuera. Reemplaza cualquier listener previo
-  // para que no se acumulen al re-renderizar o navegar entre listas.
   if (dismissSearchHandler) document.removeEventListener('click', dismissSearchHandler);
   dismissSearchHandler = (e) => {
     if (!container.querySelector('.list-detail__search-wrap')?.contains(e.target)) {
@@ -323,130 +343,142 @@ function renderEditor(container, listData) {
   };
   document.addEventListener('click', dismissSearchHandler);
 
-  // Invitar miembro
-  const inviteInput = container.querySelector('#list-detail-invite-input');
-  const inviteError = container.querySelector('#list-detail-invite-error');
+  const inviteesEl = container.querySelector('#list-detail-invitees');
+  const friendSearch = container.querySelector('#list-detail-friend-search');
+  const friendResultsEl = container.querySelector('#list-detail-friend-results');
 
-  container.querySelector('#list-detail-invite-btn')?.addEventListener('click', async () => {
-    const username = inviteInput.value.trim();
-    inviteError.textContent = '';
-    if (!username) {
-      inviteError.textContent = 'Ingresa un nombre de usuario.';
+  function renderInvitees() {
+    if (draft.invitees.length === 0) {
+      inviteesEl.innerHTML = `<p class="list-detail__empty">Sin invitados.</p>`;
       return;
     }
-    try {
-      await inviteMember(id, username);
-      const updated = await getList(id);
-      const membersEl = container.querySelector('#list-detail-members');
-      const newMembers = updated.members || [];
-      membersEl.innerHTML =
-        newMembers.length === 0
-          ? `<p class="list-detail__empty">Sin invitados.</p>`
-          : newMembers.map(memberRowHtml).join('');
-      bindMemberEvents();
-      renderFriendSuggestions();
-      inviteInput.value = '';
-    } catch (err) {
-      inviteError.textContent = err.message;
-    }
-  });
+    inviteesEl.innerHTML = draft.invitees
+      .map(
+        (f) => `
+        <div class="list-detail__invitee-row" data-id="${escapeHtml(f.id)}">
+          <img class="list-detail__invitee-avatar" src="${escapeHtml(f.avatarUrl || '')}" alt="" onerror="this.style.visibility='hidden'" />
+          <span class="list-detail__invitee-name">${escapeHtml(f.displayName || f.username)}</span>
+          <button class="list-detail__row-btn list-detail__row-btn--danger" data-action="uninvite" title="Quitar">${icon('close', { size: 14 })}</button>
+        </div>
+      `,
+      )
+      .join('');
+    inviteesEl.querySelectorAll('[data-action="uninvite"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.closest('[data-id]')?.dataset.id;
+        draft.invitees = draft.invitees.filter((f) => f.id !== id);
+        renderInvitees();
+        renderFriendResults();
+      });
+    });
+  }
 
-  function bindMemberEvents() {
-    container.querySelectorAll('[data-action="remove-member"]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const row = btn.closest('[data-member-id]');
-        const userId = row?.dataset.memberId;
-        if (!userId) return;
-        try {
-          await removeMember(id, userId);
-          row.remove();
-        } catch (err) {
-          if (inviteError) inviteError.textContent = err.message;
+  function renderFriendResults() {
+    const q = friendSearch.value.trim();
+    if (!q) {
+      friendResultsEl.innerHTML = '';
+      return;
+    }
+    if (friendsCache.length === 0) {
+      friendResultsEl.innerHTML = `<p class="list-detail__empty">No tienes amigos. <a href="#/amigos">Agregar amigos</a></p>`;
+      return;
+    }
+    const excluded = new Set(draft.invitees.map((f) => f.id));
+    const matches = filterFriends(friendsCache, q, excluded);
+    if (matches.length === 0) {
+      friendResultsEl.innerHTML = `<p class="list-detail__empty">No tienes amigos que coincidan.</p>`;
+      return;
+    }
+    friendResultsEl.innerHTML = matches
+      .map(
+        (f) => `
+        <div class="list-detail__friend-result" data-id="${escapeHtml(f.id)}">
+          <img class="list-detail__friend-result-avatar" src="${escapeHtml(f.avatarUrl || '')}" alt="" onerror="this.style.visibility='hidden'" />
+          <div class="list-detail__friend-result-info">
+            <span class="list-detail__friend-result-name">${escapeHtml(f.displayName || f.username)}</span>
+            <span class="list-detail__friend-result-handle">@${escapeHtml(f.username)}</span>
+          </div>
+          <button class="btn btn--secondary" data-action="invite">${icon('plus', { size: 14 })} Invitar</button>
+        </div>
+      `,
+      )
+      .join('');
+    friendResultsEl.querySelectorAll('[data-action="invite"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.closest('[data-id]')?.dataset.id;
+        const friend = friendsCache.find((f) => f.id === id);
+        if (friend && !draft.invitees.some((f) => f.id === id)) {
+          draft.invitees.push(friend);
+          renderInvitees();
+          renderFriendResults();
         }
       });
     });
   }
 
-  bindMemberEvents();
-
-  // Preview clicable de amigos
-  const friendsEl = container.querySelector('#list-detail-friends');
-
-  function currentMemberIds() {
-    return new Set(
-      [...container.querySelectorAll('#list-detail-members [data-member-id]')].map(
-        (el) => el.dataset.memberId,
-      ),
-    );
-  }
-
-  async function inviteFriend(friend) {
-    inviteError.textContent = '';
-    try {
-      await inviteMember(id, friend.username);
-      const updated = await getList(id);
-      const membersEl = container.querySelector('#list-detail-members');
-      const newMembers = updated.members || [];
-      membersEl.innerHTML =
-        newMembers.length === 0
-          ? `<p class="list-detail__empty">Sin invitados.</p>`
-          : newMembers.map(memberRowHtml).join('');
-      bindMemberEvents();
-      renderFriendSuggestions();
-    } catch (err) {
-      inviteError.textContent = err.message;
-    }
-  }
-
-  let friendsCache = [];
-  function renderFriendSuggestions() {
-    if (!friendsEl) return;
-    const memberIds = currentMemberIds();
-    const available = friendsCache.filter((f) => !memberIds.has(f.id));
-    if (available.length === 0) {
-      friendsEl.innerHTML = '';
-      return;
-    }
-    friendsEl.innerHTML = available
-      .map(
-        (f) => `
-        <button class="list-detail__friend-chip" data-friend-id="${escapeHtml(f.id)}" data-friend-username="${escapeHtml(f.username)}">
-          <img class="list-detail__friend-avatar" src="${escapeHtml(f.avatarUrl || '')}" alt="" onerror="this.style.display='none'" />
-          <span>${escapeHtml(f.displayName || f.username)}</span>
-        </button>
-      `,
-      )
-      .join('');
-    friendsEl.querySelectorAll('.list-detail__friend-chip').forEach((chip) => {
-      chip.addEventListener('click', () =>
-        inviteFriend({ id: chip.dataset.friendId, username: chip.dataset.friendUsername }),
-      );
-    });
-  }
+  friendSearch?.addEventListener('input', renderFriendResults);
+  renderInvitees();
 
   getAcceptedFriends().then((friends) => {
-    if (!friendsEl?.isConnected) return;
+    if (!inviteesEl?.isConnected) return;
     friendsCache = friends;
-    renderFriendSuggestions();
+    renderFriendResults();
   });
 
-  // Guardar y volver
+  container.querySelector('#list-detail-delete')?.addEventListener('click', async () => {
+    if (!confirm('¿Borrar esta lista? Esta acción no se puede deshacer.')) return;
+    try {
+      await deleteList(listData.id);
+      updateSidebarContent();
+      navigate('/');
+    } catch (err) {
+      if (errorEl) errorEl.textContent = err.message;
+    }
+  });
+
   const saveBtn = container.querySelector('#list-detail-save');
   saveBtn?.addEventListener('click', async () => {
-    clearTimeout(persistTimer);
+    errorEl.textContent = '';
+    const name = draft.name.trim();
+    if (!name) {
+      errorEl.textContent = 'El nombre no puede estar vacío.';
+      return;
+    }
+
+    let expiresAt;
+    try {
+      expiresAt = resolveExpiresAt({ days: draft.days, dateValue: draft.dateValue });
+    } catch (err) {
+      errorEl.textContent = err.message;
+      return;
+    }
+
     saveBtn.disabled = true;
     const original = saveBtn.innerHTML;
     saveBtn.textContent = 'Guardando…';
+
     try {
-      const nameInput = container.querySelector('#list-detail-name');
-      const newName = nameInput?.value.trim();
-      if (newName && newName !== listData.name) {
-        await updateList(id, { name: newName });
+      let listId = listData.id;
+
+      if (isNew) {
+        const created = await createList(name, expiresAt);
+        listId = created.id;
+        await setListSongs(listId, draft.order);
+        for (const username of draft.invitees.map((f) => f.username)) {
+          await inviteMember(listId, username);
+        }
+      } else {
+        if (name !== listData.name || expiresAt !== listData.expires_at) {
+          await updateList(listId, { name, expires_at: expiresAt });
+        }
+        await setListSongs(listId, draft.order);
+        const { toInvite, toRemove } = diffMembers(originalMembers, draft.invitees);
+        for (const username of toInvite) await inviteMember(listId, username);
+        for (const userId of toRemove) await removeMember(listId, userId);
       }
-      await setListSongs(id, order);
-      saveBtn.textContent = 'Guardado ✓';
+
       updateSidebarContent();
-      navigate('/');
+      navigate(`/lista/${listId}`);
     } catch (err) {
       if (errorEl) errorEl.textContent = err.message;
       saveBtn.disabled = false;
@@ -455,42 +487,46 @@ function renderEditor(container, listData) {
   });
 }
 
-/* ── Solo lectura (member) ──────────────────────────────────────── */
+/* ── Solo lectura (vista) ───────────────────────────────────────── */
 
-function renderReadonly(container, listData) {
+function renderReadonly(container, listData, { isOwner } = {}) {
   const songs = listData.songs || [];
   const orderedSongIds = songs.map((s) => s.song_id ?? s.id ?? s);
-  const expiryText = formatExpiry(listData.expires_at);
-  const isUrgent =
-    listData.expires_at && Math.ceil((new Date(listData.expires_at) - Date.now()) / 86400000) <= 1;
-
-  function songRowHtml(songId) {
-    const s = getSongById(songId);
-    const title = s ? s.title : songId;
-    const album = s ? s.album : '';
-    return `
-      <div class="list-detail__song-row list-detail__song-row--readonly" data-song-id="${escapeHtml(songId)}">
-        <span class="list-detail__song-name">${escapeHtml(title)}</span>
-        <span class="list-detail__song-sub">${escapeHtml(album)}</span>
-      </div>
-    `;
-  }
 
   container.innerHTML = `
     <div class="list-detail__container">
       <div class="list-detail__header">
         <h1 class="list-detail__title">${escapeHtml(listData.name)}</h1>
-        ${expiryText ? `<span class="lists__expiry-chip ${isUrgent ? 'lists__expiry-chip--urgent' : ''}">${escapeHtml(expiryText)}</span>` : ''}
+        ${expiryChipHtml(listData.expires_at)}
+        ${
+          isOwner
+            ? `<button class="btn btn--secondary list-detail__edit-btn" id="list-detail-edit">${icon('pencil', { size: 14 })} Editar</button>`
+            : ''
+        }
       </div>
-
       <div class="list-detail__songs">
-        ${orderedSongIds.length === 0 ? `<p class="list-detail__empty">Esta lista no tiene canciones aún.</p>` : orderedSongIds.map(songRowHtml).join('')}
+        ${
+          orderedSongIds.length === 0
+            ? `<p class="list-detail__empty">Esta lista no tiene canciones aún.</p>`
+            : orderedSongIds
+                .map((sid, idx) => {
+                  const row = songRowCompact(songForRender(sid), { index: idx + 1 });
+                  return row.replace(
+                    'class="song-row-compact"',
+                    'class="song-row-compact song-row-compact--clickable"',
+                  );
+                })
+                .join('')
+        }
       </div>
     </div>
   `;
 
-  // Tap en canción → establece contexto y navega
-  container.querySelectorAll('.list-detail__song-row--readonly').forEach((row) => {
+  container.querySelector('#list-detail-edit')?.addEventListener('click', () => {
+    renderEditor(container, listData);
+  });
+
+  container.querySelectorAll('.song-row-compact--clickable').forEach((row) => {
     row.addEventListener('click', () => {
       const songId = row.dataset.songId;
       setActiveContext({ listId: listData.id, name: listData.name, orderedSongIds });

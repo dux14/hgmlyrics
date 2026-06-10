@@ -9,7 +9,6 @@ import { getAlbums, filterByAlbum, getState } from '../lib/store.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { listMyLists } from '../lib/lists.js';
-import { openListCreateModal } from './ListCreateModal.js';
 
 let sidebarEl = null;
 let overlayEl = null;
@@ -128,12 +127,10 @@ function bindSidebarEvents() {
       });
     });
 
-  // Botón "Nueva lista"
+  // Botón "Nueva lista" → editor único en /lista/nueva
   sidebarEl.querySelector('#lists-add')?.addEventListener('click', () => {
-    openListCreateModal((list) => {
-      updateSidebarContent();
-      navigate('/lista/' + list.id);
-    });
+    navigate('/lista/nueva');
+    if (window.innerWidth < 768) closeSidebar();
   });
 
   // Cargar listas de forma asíncrona

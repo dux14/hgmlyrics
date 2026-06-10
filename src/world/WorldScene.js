@@ -1,5 +1,5 @@
 /**
- * WorldScene.js — Escena principal del mundo virtual (Phaser 3).
+ * WorldScene.js — Escena principal del mundo virtual (Phaser 4).
  *
  * Assets de prueba (dev):
  *   public/world/dev-map.json   — tilemap Tiled 20×15 (suelo + colisión)
@@ -72,32 +72,25 @@ export class WorldScene extends Phaser.Scene {
   update() {
     /** @type {Phaser.Physics.Arcade.Body} */
     const body = this.player.body;
-    body.setVelocity(0, 0);
 
     const left = this.cursors.left.isDown || this.wasd.left.isDown;
     const right = this.cursors.right.isDown || this.wasd.right.isDown;
     const up = this.cursors.up.isDown || this.wasd.up.isDown;
     const down = this.cursors.down.isDown || this.wasd.down.isDown;
 
-    if (left) {
-      body.setVelocityX(-SPEED);
-      this.lastDir = 'left';
-    } else if (right) {
-      body.setVelocityX(SPEED);
-      this.lastDir = 'right';
+    const vx = (right ? 1 : 0) - (left ? 1 : 0);
+    const vy = (down ? 1 : 0) - (up ? 1 : 0);
+
+    // Una sola asignación de velocidad; setLength normaliza la diagonal para
+    // mantener una velocidad constante en todas las direcciones.
+    body.setVelocity(vx * SPEED, vy * SPEED);
+    if (vx !== 0 && vy !== 0) {
+      body.velocity.setLength(SPEED);
     }
 
-    if (up) {
-      body.setVelocityY(-SPEED);
-      this.lastDir = 'up';
-    } else if (down) {
-      body.setVelocityY(SPEED);
-      this.lastDir = 'down';
-    }
-
-    // Normalizar velocidad diagonal para mantener speed constante
-    if ((left || right) && (up || down)) {
-      body.velocity.normalize().scale(SPEED);
-    }
+    if (left) this.lastDir = 'left';
+    else if (right) this.lastDir = 'right';
+    if (up) this.lastDir = 'up';
+    else if (down) this.lastDir = 'down';
   }
 }

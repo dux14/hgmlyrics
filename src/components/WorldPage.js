@@ -95,7 +95,18 @@ export async function renderWorldPage(container) {
   host.style.cssText = 'width:100%;height:100vh;overflow:hidden;background:#000;';
   container.appendChild(host);
 
-  const { createGame } = await import('../world/createGame.js');
-  _game = createGame('world-canvas');
-  startHashGuard();
+  try {
+    const { createGame } = await import('../world/createGame.js');
+    _game = createGame('world-canvas');
+    startHashGuard();
+  } catch (err) {
+    console.error('[mundo] no se pudo iniciar la escena Phaser', err);
+    teardown();
+    container.innerHTML = `
+      <div class="empty-state fade-in">
+        <h2 class="empty-state__title">Error al cargar el mundo</h2>
+        <p class="empty-state__text">No se pudo iniciar la escena. Recarga la pagina.</p>
+      </div>
+    `;
+  }
 }

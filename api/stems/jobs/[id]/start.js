@@ -2,7 +2,7 @@ import sql from '../../../_lib/db.js';
 import { requireUser } from '../../../_lib/auth.js';
 import { allowMethods, withErrors } from '../../../_lib/http.js';
 import { signStemsDownload } from '../../../_lib/storage.js';
-import { createPrediction } from '../../../_lib/replicate.js';
+import { startModel, providerFor } from '../../_provider.js';
 import { MODELS } from '../../_models.js';
 
 export default withErrors(async (req, res) => {
@@ -34,10 +34,13 @@ export default withErrors(async (req, res) => {
 
   const base =
     process.env.PUBLIC_BASE_URL ?? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
-  const prediction = await createPrediction({
-    model: MODELS.stems.slug,
+  const suffix = providerFor('stems') === 'modal' ? '&provider=modal' : '';
+  const prediction = await startModel({
+    kind: 'stems',
     input: MODELS.stems.buildInput(audioUrl),
-    webhook: `${base}/api/stems/webhook?job=${job.id}&kind=stems`,
+    jobId: job.id,
+    userId: user.id,
+    callbackUrl: `${base}/api/stems/webhook?job=${job.id}&kind=stems${suffix}`,
   });
 
   await sql`

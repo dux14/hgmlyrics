@@ -80,6 +80,14 @@ const STEM_LABELS = {
 const VOICE_LABELS = { lead: 'Voz líder', backing: 'Coros' };
 const ALL_LABELS = { ...STEM_LABELS, ...VOICE_LABELS };
 
+function voicesCopy(voices) {
+  const has = [];
+  if (voices.lead) has.push('voz líder');
+  if (voices.backing) has.push('coros');
+  if (has.length === 0) return '';
+  return `Separamos ${has.join(' y ')} de la mezcla; los segmentos alternados se reproducen sobre la pista de voz.`;
+}
+
 export function renderStudioPage(container) {
   stopPolling();
   // Guarda de navegación robusta (no {once:true}, que se consumiría al re-renderizar
@@ -301,9 +309,12 @@ function renderJob(body, job, quota) {
       .filter(([k]) => stems[k])
       .map(([k, label]) => playerRow(label, stems[k]))
       .join('')}
-    <h2 class="studio__section-title">Voces</h2>
-    <p class="empty-state__text">Las secciones en armonía simultánea se entregan como líder/coros;
-    los segmentos alternados se reproducen sobre la pista de voz.</p>
+    ${
+      voices.lead || voices.backing || segments.length > 0
+        ? `<h2 class="studio__section-title">Voces</h2>`
+        : ''
+    }
+    ${voices.lead || voices.backing ? `<p class="empty-state__text">${voicesCopy(voices)}</p>` : ''}
     ${voices.lead ? playerRow('Voz líder', voices.lead) : ''}
     ${voices.backing ? playerRow('Coros', voices.backing) : ''}
     ${

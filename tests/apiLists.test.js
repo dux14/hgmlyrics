@@ -160,3 +160,39 @@ describe('PUT /api/lists/:id/songs', () => {
     expect(res.statusCode).toBe(403);
   });
 });
+
+const membersHandler = (await import('../api/lists/[id]/members.js')).default;
+
+describe('POST /api/lists/:id/members', () => {
+  it('invita por username (solo dueño)', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([{ id: 'list1' }]); // ownership
+    sqlResponses.push([{ id: 'u2', username: 'bob' }]); // profile por username
+    sqlResponses.push([]); // INSERT member (ON CONFLICT)
+    const req = {
+      method: 'POST',
+      headers: { authorization: 'Bearer t' },
+      query: { id: 'list1' },
+      body: { username: 'bob' },
+    };
+    const res = makeRes();
+    await membersHandler(req, res);
+    expect(res.statusCode).toBe(201);
+    expect(res.body.user_id).toBe('u2');
+  });
+
+  it('404 si el username no existe', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([{ id: 'list1' }]); // ownership
+    sqlResponses.push([]); // username no encontrado
+    const req = {
+      method: 'POST',
+      headers: { authorization: 'Bearer t' },
+      query: { id: 'list1' },
+      body: { username: 'ghost' },
+    };
+    const res = makeRes();
+    await membersHandler(req, res);
+    expect(res.statusCode).toBe(404);
+  });
+});

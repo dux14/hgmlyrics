@@ -18,6 +18,11 @@ import {
 } from '../lib/lists.js';
 import { getSongById } from '../lib/store.js';
 import { searchSongs } from '../lib/search.js';
+
+// Listener global para cerrar los resultados de búsqueda al clicar fuera.
+// Se guarda a nivel de módulo y se reemplaza en cada render del editor, así
+// nunca se acumula más de uno (evita fugas al navegar entre listas).
+let dismissSearchHandler = null;
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
 
@@ -303,16 +308,15 @@ function renderEditor(container, listData) {
     }, 200);
   });
 
-  // Cerrar resultados al hacer clic fuera
-  document.addEventListener(
-    'click',
-    (e) => {
-      if (!container.querySelector('.list-detail__search-wrap')?.contains(e.target)) {
-        if (resultsEl) resultsEl.style.display = 'none';
-      }
-    },
-    { once: false },
-  );
+  // Cerrar resultados al hacer clic fuera. Reemplaza cualquier listener previo
+  // para que no se acumulen al re-renderizar o navegar entre listas.
+  if (dismissSearchHandler) document.removeEventListener('click', dismissSearchHandler);
+  dismissSearchHandler = (e) => {
+    if (!container.querySelector('.list-detail__search-wrap')?.contains(e.target)) {
+      if (resultsEl) resultsEl.style.display = 'none';
+    }
+  };
+  document.addEventListener('click', dismissSearchHandler);
 
   // Invitar miembro
   const inviteInput = container.querySelector('#list-detail-invite-input');

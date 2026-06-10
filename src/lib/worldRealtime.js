@@ -19,6 +19,21 @@
 import { makeRateLimiter } from '../world/throttle.js';
 
 /**
+ * Mapea el estado crudo del canal Supabase Realtime a un estado de conexión
+ * de alto nivel para la UI.
+ *
+ * @param {string} status  Estado de `channel.subscribe` (SUBSCRIBED, CHANNEL_ERROR, …).
+ * @returns {'connected'|'disconnected'|'connecting'}
+ */
+export function mapChannelStatus(status) {
+  if (status === 'SUBSCRIBED') return 'connected';
+  if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+    return 'disconnected';
+  }
+  return 'connecting';
+}
+
+/**
  * @typedef {{ uid: string, x: number, y: number, dir: string, t: number }} PeerMovePayload
  * @typedef {{ key: string, newPresences: object[] }} PeerJoinPayload
  * @typedef {{ key: string, leftPresences: object[] }} PeerLeavePayload
@@ -51,6 +66,8 @@ export function joinWorld({ supabase, user, now = () => Date.now() }) {
   let _onPeerJoin = null;
   /** @type {((data: PeerLeavePayload) => void) | null} */
   let _onPeerLeave = null;
+  /** @type {((state: 'connected'|'disconnected'|'connecting') => void) | null} */
+  let _onStatus = null;
 
   // Fix A: guard para no enviar antes de que el canal esté suscrito
   let subscribed = false;
@@ -82,12 +99,19 @@ export function joinWorld({ supabase, user, now = () => Date.now() }) {
     if (_onPeerLeave) _onPeerLeave({ key, leftPresences });
   });
 
-  // Suscribir; al confirmarse, rastrear la presencia del usuario actual
-  channel.subscribe(async (status) => {
-    if (status === 'SUBSCRIBED') {
-      subscribed = true;
-      await channel.track({ uid: user.id, name: user.name ?? user.id });
+  // Suscribir; al confirmarse, rastrear la presencia del usuario actual.
+  // Supabase reinvoca este callback en cada (re)conexión, así que el track()
+  // sobre 'connected' cubre el "re-hace presence track" del spec §7.3.
+  // Orden importante: actualizar `subscribed` ANTES de notificar el estado, para
+  // que un re-emit de posición disparado desde onStatus pase el guard de envío.
+  channel.subscribe((status) => {
+    const state = mapChannelStatus(status);
+    subscribed = state === 'connected';
+    if (state === 'connected') {
+      // Fire-and-forget; un fallo de track no debe quedar como unhandled rejection.
+      Promise.resolve(channel.track({ uid: user.id, name: user.name ?? user.id })).catch(() => {});
     }
+    if (_onStatus) _onStatus(state);
   });
 
   // ---------------------------------------------------------------------------
@@ -141,6 +165,15 @@ export function joinWorld({ supabase, user, now = () => Date.now() }) {
   }
 
   /**
+   * Registra el callback que recibe el estado de conexión del canal
+   * ('connected' | 'disconnected' | 'connecting') en cada cambio.
+   * @param {(state: 'connected'|'disconnected'|'connecting') => void} cb
+   */
+  function onStatus(cb) {
+    _onStatus = cb;
+  }
+
+  /**
    * Desconecta del canal y limpia el estado local.
    * Idempotente: llamadas adicionales no tienen efecto.
    */
@@ -152,7 +185,8 @@ export function joinWorld({ supabase, user, now = () => Date.now() }) {
     _onPeerMove = null;
     _onPeerJoin = null;
     _onPeerLeave = null;
+    _onStatus = null;
   }
 
-  return { sendPosition, onPeerMove, onPeerJoin, onPeerLeave, leave };
+  return { sendPosition, onPeerMove, onPeerJoin, onPeerLeave, onStatus, leave };
 }

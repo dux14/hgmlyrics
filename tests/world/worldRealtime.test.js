@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { joinWorld } from '../../src/lib/worldRealtime.js';
+import { joinWorld, mapChannelStatus } from '../../src/lib/worldRealtime.js';
 
 // ---------------------------------------------------------------------------
 // Fake Supabase
@@ -21,6 +21,7 @@ function makeFakeSupabase({ deferSubscribe = false } = {}) {
   const handlers = new Map();
   const sentMessages = [];
   let trackedState = null;
+  let trackCount = 0;
   let _subscribeCb = null;
   let removeChannelCount = 0;
   let removedChannel = null;
@@ -46,12 +47,14 @@ function makeFakeSupabase({ deferSubscribe = false } = {}) {
     },
     track(state) {
       trackedState = state;
+      trackCount++;
       return Promise.resolve();
     },
     // Acceso interno para los tests
     _handlers: handlers,
     _sentMessages: sentMessages,
     _getTracked: () => trackedState,
+    _getTrackCount: () => trackCount,
     /** Dispara manualmente el callback de subscribe (para tests de timing) */
     _triggerSubscribe: (status) => _subscribeCb && _subscribeCb(status),
   };
@@ -221,5 +224,74 @@ describe('joinWorld', () => {
 
       expect(received).toHaveLength(0);
     });
+  });
+
+  // M5.3 — estados de conexión / reconexión
+  describe('onStatus — estados de conexión', () => {
+    it('reporta "connected" cuando el canal recibe SUBSCRIBED', () => {
+      const deferredSupabase = makeFakeSupabase({ deferSubscribe: true });
+      const world = joinWorld({ supabase: deferredSupabase, user, now: () => clock });
+      const states = [];
+      world.onStatus((s) => states.push(s));
+      deferredSupabase._fakeChannel._triggerSubscribe('SUBSCRIBED');
+      expect(states).toContain('connected');
+    });
+
+    it('reporta "disconnected" ante CHANNEL_ERROR / TIMED_OUT / CLOSED', () => {
+      const deferredSupabase = makeFakeSupabase({ deferSubscribe: true });
+      const world = joinWorld({ supabase: deferredSupabase, user, now: () => clock });
+      const states = [];
+      world.onStatus((s) => states.push(s));
+      deferredSupabase._fakeChannel._triggerSubscribe('CHANNEL_ERROR');
+      deferredSupabase._fakeChannel._triggerSubscribe('TIMED_OUT');
+      deferredSupabase._fakeChannel._triggerSubscribe('CLOSED');
+      expect(states).toEqual(['disconnected', 'disconnected', 'disconnected']);
+    });
+
+    it('re-rastrea presence en cada SUBSCRIBED (reconexión → re-track)', () => {
+      const deferredSupabase = makeFakeSupabase({ deferSubscribe: true });
+      joinWorld({ supabase: deferredSupabase, user, now: () => clock });
+      deferredSupabase._fakeChannel._triggerSubscribe('SUBSCRIBED'); // conexión inicial
+      deferredSupabase._fakeChannel._triggerSubscribe('CHANNEL_ERROR'); // caída
+      deferredSupabase._fakeChannel._triggerSubscribe('SUBSCRIBED'); // reconexión
+      expect(deferredSupabase._fakeChannel._getTrackCount()).toBe(2);
+    });
+
+    it('al notificar "connected", el guard de envío ya permite sendPosition (re-emit §7.3)', () => {
+      const deferredSupabase = makeFakeSupabase({ deferSubscribe: true });
+      const world = joinWorld({ supabase: deferredSupabase, user, now: () => clock });
+      // Simula el handler de la escena: re-emite posición al reconectar.
+      world.onStatus((s) => {
+        if (s === 'connected') world.sendPosition(7, 8, 'up', true);
+      });
+      deferredSupabase._fakeChannel._triggerSubscribe('SUBSCRIBED');
+      expect(deferredSupabase._fakeChannel._sentMessages).toHaveLength(1);
+      expect(deferredSupabase._fakeChannel._sentMessages[0].payload).toMatchObject({ x: 7, y: 8 });
+    });
+
+    it('leave() limpia el callback de estado (no se invoca tras leave)', () => {
+      const deferredSupabase = makeFakeSupabase({ deferSubscribe: true });
+      const world = joinWorld({ supabase: deferredSupabase, user, now: () => clock });
+      const states = [];
+      world.onStatus((s) => states.push(s));
+      world.leave();
+      deferredSupabase._fakeChannel._triggerSubscribe('SUBSCRIBED');
+      expect(states).toHaveLength(0);
+    });
+  });
+});
+
+describe('mapChannelStatus — mapeo puro de estados Supabase', () => {
+  it('SUBSCRIBED → connected', () => {
+    expect(mapChannelStatus('SUBSCRIBED')).toBe('connected');
+  });
+  it('CHANNEL_ERROR / TIMED_OUT / CLOSED → disconnected', () => {
+    expect(mapChannelStatus('CHANNEL_ERROR')).toBe('disconnected');
+    expect(mapChannelStatus('TIMED_OUT')).toBe('disconnected');
+    expect(mapChannelStatus('CLOSED')).toBe('disconnected');
+  });
+  it('estado desconocido → connecting', () => {
+    expect(mapChannelStatus('JOINING')).toBe('connecting');
+    expect(mapChannelStatus(undefined)).toBe('connecting');
   });
 });

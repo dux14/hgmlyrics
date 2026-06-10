@@ -3,7 +3,7 @@
  * Ver WorldScene.js para la escena.
  *
  * @param {string} parentId  id del elemento DOM host
- * @param {{ supabase: object, me: { id: string, name: string }, onRoster: Function, onZoneChange?: Function }|null} [context]
+ * @param {{ supabase: object, me: { id: string, name: string }, onRoster: Function, onZoneChange?: Function, input?: { vector: { x: number, y: number } }, onStatus?: Function }|null} [context]
  * @returns {Phaser.Game}
  */
 import Phaser from 'phaser';

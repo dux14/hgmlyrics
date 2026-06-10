@@ -13,10 +13,12 @@ import { PeerBuffer } from './interpolation.js';
 import { getActiveMapDescriptor } from './worldMapStore.js';
 import { parseZones, zoneAt } from './zones.js';
 import { createAvatarSprite, publicAvatarUrl } from './avatarSprite.js';
+import { mergeInputVector, deriveDir } from './input.js';
 
 const SPEED = 160; // px/s
 const PEER_COLOR = 0xe57373; // rojo claro para distinguir peers del jugador local
 const INTERP_DELAY_MS = 100;
+const LABEL_OFFSET_Y = 18; // px que el label de nombre se eleva sobre el sprite
 
 export class WorldScene extends Phaser.Scene {
   constructor() {
@@ -45,6 +47,12 @@ export class WorldScene extends Phaser.Scene {
     this.playerAvatar = null;
     /** @type {object|null} cliente supabase, guardado en create() para uso en _createPeerEntry */
     this._supabase = null;
+    /** @type {{ vector: { x: number, y: number } }|null} fuente de input del joystick (ref mutable) */
+    this._inputRef = null;
+    /** @type {boolean} true mientras la última transición de red fue 'disconnected' */
+    this._wasDisconnected = false;
+    /** @type {Phaser.GameObjects.Text|null} label de nombre del jugador local */
+    this.playerLabel = null;
   }
 
   preload() {
@@ -102,6 +110,17 @@ export class WorldScene extends Phaser.Scene {
     if (ctx) {
       // Guardar supabase para _createPeerEntry y carga de avatares
       this._supabase = ctx.supabase;
+      // Fuente de input alterna (joystick táctil), ref mutable compartida con WorldPage
+      this._inputRef = ctx.input ?? null;
+
+      // Label de nombre del jugador local (legible: stroke + origen centrado)
+      this.playerLabel = this.add.text(startX, startY - LABEL_OFFSET_Y, ctx.me.name, {
+        fontSize: '10px',
+        color: '#9fe6ff',
+        stroke: '#000000',
+        strokeThickness: 2,
+      });
+      this.playerLabel.setOrigin(0.5, 1);
 
       this.world = joinWorld({
         supabase: ctx.supabase,
@@ -146,6 +165,17 @@ export class WorldScene extends Phaser.Scene {
         this._pushRoster(ctx);
       });
 
+      // Estado de conexión: puente hacia el overlay DOM + re-emisión de posición
+      // al reconectar (spec §7.3). El re-track de presence lo hace worldRealtime
+      // automáticamente en cada SUBSCRIBED.
+      this.world.onStatus((state) => {
+        ctx.onStatus?.(state);
+        if (state === 'connected' && this._wasDisconnected) {
+          this.world.sendPosition(this.player.x, this.player.y, this.lastDir, true);
+        }
+        this._wasDisconnected = state === 'disconnected';
+      });
+
       // Roster inicial: solo self
       this._pushRoster(ctx);
 
@@ -172,6 +202,8 @@ export class WorldScene extends Phaser.Scene {
       this.world?.leave();
       this.playerAvatar?.destroy();
       this.playerAvatar = null;
+      this.playerLabel?.destroy();
+      this.playerLabel = null;
     });
   }
 
@@ -184,29 +216,43 @@ export class WorldScene extends Phaser.Scene {
     const up = this.cursors.up.isDown || this.wasd.up.isDown;
     const down = this.cursors.down.isDown || this.wasd.down.isDown;
 
-    const vx = (right ? 1 : 0) - (left ? 1 : 0);
-    const vy = (down ? 1 : 0) - (up ? 1 : 0);
+    const keyboard = {
+      x: (right ? 1 : 0) - (left ? 1 : 0),
+      y: (down ? 1 : 0) - (up ? 1 : 0),
+    };
+    // Joystick táctil (M5): vector analógico desde WorldPage vía ref mutable.
+    const joystick = this._inputRef?.vector ?? { x: 0, y: 0 };
+    const input = mergeInputVector(keyboard, joystick);
 
-    // Una sola asignación de velocidad; setLength normaliza la diagonal para
-    // mantener una velocidad constante en todas las direcciones.
-    body.setVelocity(vx * SPEED, vy * SPEED);
-    if (vx !== 0 && vy !== 0) {
-      body.velocity.setLength(SPEED);
+    // Velocidad: escala analógica del joystick preservada; el teclado en diagonal
+    // se clampa a SPEED para no exceder la velocidad en línea recta.
+    let velX = input.x * SPEED;
+    let velY = input.y * SPEED;
+    const speed = Math.hypot(velX, velY);
+    if (speed > SPEED) {
+      const k = SPEED / speed;
+      velX *= k;
+      velY *= k;
     }
+    body.setVelocity(velX, velY);
 
-    if (left) this.lastDir = 'left';
-    else if (right) this.lastDir = 'right';
-    if (up) this.lastDir = 'up';
-    else if (down) this.lastDir = 'down';
+    const moving = input.x !== 0 || input.y !== 0;
+    this.lastDir = deriveDir(input.x, input.y, this.lastDir);
 
     // ---- Enviar posición propia ----
-    const moving = vx !== 0 || vy !== 0;
     if (this.world) this.world.sendPosition(this.player.x, this.player.y, this.lastDir, moving);
 
-    // ---- Avatar jugador local ----
+    // ---- Avatar jugador local + label + z-order por y ----
+    this.player.setDepth(this.player.y);
+    if (this.playerLabel) {
+      this.playerLabel.x = this.player.x;
+      this.playerLabel.y = this.player.y - LABEL_OFFSET_Y;
+      this.playerLabel.setDepth(this.player.y + 1);
+    }
     if (this.playerAvatar?.gameObject) {
       this.playerAvatar.setPosition(this.player.x, this.player.y);
       this.playerAvatar.update(this.lastDir, moving);
+      this.playerAvatar.gameObject.setDepth(this.player.y);
     }
 
     // ---- Detección de zona ----
@@ -221,14 +267,17 @@ export class WorldScene extends Phaser.Scene {
       if (pos) {
         sprite.x = pos.x;
         sprite.y = pos.y;
+        sprite.setDepth(pos.y);
         label.x = pos.x;
-        label.y = pos.y - 18;
+        label.y = pos.y - LABEL_OFFSET_Y;
+        label.setDepth(pos.y + 1);
         sprite.setVisible(true);
         label.setVisible(true);
 
         // Actualizar avatar del peer si cargó correctamente
         if (avatar?.gameObject) {
           avatar.setPosition(pos.x, pos.y);
+          avatar.gameObject.setDepth(pos.y);
           const peerMoving = now - (lastMoveT ?? 0) < 200;
           avatar.update(dir ?? 'down', peerMoving);
         }
@@ -268,7 +317,7 @@ export class WorldScene extends Phaser.Scene {
    */
   _createPeerEntry(uid, name) {
     const sprite = this.add.rectangle(0, 0, 16, 24, PEER_COLOR).setVisible(false);
-    const label = this.add.text(0, -18, name, {
+    const label = this.add.text(0, -LABEL_OFFSET_Y, name, {
       fontSize: '10px',
       color: '#ffffff',
       stroke: '#000000',

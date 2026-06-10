@@ -134,10 +134,14 @@ describe('POST /api/stems/webhook', () => {
   it('stems OK: copia outputs, lanza etapa 2 y pasa a separating_voices', async () => {
     sqlResponses.push([{ id: 'j1', user_id: 'u1', status: 'separating_stems', voices: null }]);
     sqlResponses.push([]); // UPDATE a separating_voices
-    // fetch: 6 descargas de stems + 2 createPrediction
+    // fetch: 6 descargas de stems + 2 createPrediction (cada una: GET versión + POST predicción)
     fetch.mockImplementation(async (url) => {
-      if (String(url).includes('api.replicate.com')) {
+      const u = String(url);
+      if (u.endsWith('/v1/predictions')) {
         return { ok: true, json: async () => ({ id: 'pred_x' }) };
+      }
+      if (u.includes('api.replicate.com/v1/models/')) {
+        return { ok: true, json: async () => ({ latest_version: { id: 'ver_x' } }) };
       }
       return {
         ok: true,
@@ -157,10 +161,10 @@ describe('POST /api/stems/webhook', () => {
     await handler(signedReq({ status: 'succeeded', output }), res);
     expect(res.statusCode).toBe(200);
     expect(mockUpload).toHaveBeenCalledTimes(6);
-    const replicateCalls = fetch.mock.calls.filter((c) =>
-      String(c[0]).includes('api.replicate.com'),
+    const predictionCalls = fetch.mock.calls.filter((c) =>
+      String(c[0]).endsWith('/v1/predictions'),
     );
-    expect(replicateCalls).toHaveLength(2); // karaoke + diarization
+    expect(predictionCalls).toHaveLength(2); // karaoke + diarization
     expect(sqlCalls.some((c) => c.text.includes("status = 'separating_voices'"))).toBe(true);
   });
 

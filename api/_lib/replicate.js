@@ -29,12 +29,22 @@ async function replicateFetch(url, opts = {}) {
 
 /**
  * Crea una predicción contra la última versión del modelo.
+ * Los modelos de la comunidad (los que usamos) requieren POST /v1/predictions con un
+ * version hash; el endpoint /models/{owner}/{name}/predictions es solo para modelos
+ * oficiales y devuelve 404 para los demás. Resolvemos la última versión y la usamos.
  * @param {{ model: string, input: object, webhook: string }} args
  */
 export async function createPrediction({ model, input, webhook }) {
-  return replicateFetch(`${API}/models/${model}/predictions`, {
+  const meta = await replicateFetch(`${API}/models/${model}`);
+  const version = meta.latest_version?.id;
+  if (!version) {
+    const e = new Error(`El modelo ${model} no tiene una versión disponible`);
+    e.status = 502;
+    throw e;
+  }
+  return replicateFetch(`${API}/predictions`, {
     method: 'POST',
-    body: JSON.stringify({ input, webhook, webhook_events_filter: ['completed'] }),
+    body: JSON.stringify({ version, input, webhook, webhook_events_filter: ['completed'] }),
   });
 }
 

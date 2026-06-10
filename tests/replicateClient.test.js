@@ -67,24 +67,39 @@ describe('createPrediction / getPrediction', () => {
     vi.restoreAllMocks();
   });
 
-  it('hace POST al endpoint del modelo con webhook y token', async () => {
-    fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'pred_1' }) });
+  it('resuelve la versión y hace POST a /v1/predictions con webhook y token', async () => {
+    // 1) GET /models/{owner}/{name} → última versión; 2) POST /predictions
+    fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ latest_version: { id: 'ver_abc' } }),
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'pred_1' }) });
     const out = await createPrediction({
       model: 'owner/model',
       input: { audio: 'https://x/audio.mp3' },
       webhook: 'https://app/api/stems/webhook?job=j1&kind=stems',
     });
     expect(out.id).toBe('pred_1');
-    const [url, opts] = fetch.mock.calls[0];
-    expect(url).toBe('https://api.replicate.com/v1/models/owner/model/predictions');
+    expect(fetch.mock.calls[0][0]).toBe('https://api.replicate.com/v1/models/owner/model');
+    const [url, opts] = fetch.mock.calls[1];
+    expect(url).toBe('https://api.replicate.com/v1/predictions');
     expect(opts.headers.Authorization).toBe('Bearer r8_test_token');
     const body = JSON.parse(opts.body);
+    expect(body.version).toBe('ver_abc');
     expect(body.webhook).toContain('/api/stems/webhook');
     expect(body.webhook_events_filter).toEqual(['completed']);
   });
 
-  it('lanza 502 si Replicate responde error', async () => {
-    fetch.mockResolvedValueOnce({ ok: false, status: 422, text: async () => 'bad input' });
+  it('lanza 502 si el modelo no tiene versión disponible', async () => {
+    fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ latest_version: null }) });
+    await expect(
+      createPrediction({ model: 'o/m', input: {}, webhook: 'https://x' }),
+    ).rejects.toMatchObject({ status: 502 });
+  });
+
+  it('lanza 502 si Replicate responde error al resolver el modelo', async () => {
+    fetch.mockResolvedValueOnce({ ok: false, status: 404, text: async () => 'not found' });
     await expect(
       createPrediction({ model: 'o/m', input: {}, webhook: 'https://x' }),
     ).rejects.toMatchObject({ status: 502 });

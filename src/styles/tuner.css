@@ -496,3 +496,134 @@
   display: block;
   margin: 0.75rem auto 0;
 }
+
+/* ─── Modo Entrenar ─── */
+.tuner-train {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.tuner-train__hint {
+  margin: 0;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.tuner-train__warmup {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 44px;
+}
+
+/* Separador "o ejercicio de escala" con reglas a los lados */
+.tuner-train__divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.tuner-train__divider::before,
+.tuner-train__divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
+.tuner-train__presets {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2xs);
+}
+
+@media (min-width: 480px) {
+  .tuner-train__presets {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.tuner-train__preset {
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tuner-train__preset:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+
+.tuner-train__fit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.tuner-train__fit input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--color-primary);
+}
+
+/* Runner: nota objetivo + gauge + acciones */
+.tuner-train-run {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  max-width: 420px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.tuner-train-run__progress {
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.tuner-train-run__target {
+  font-size: 3rem;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* El botón de tono de referencia queda compacto y centrado, no a todo el ancho */
+.tuner-train-run > .btn--sm {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.tuner-train-run__actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}

@@ -92,3 +92,31 @@ export function analyzeBuffer(buffer, sampleRate, opts = {}) {
   const hz = detectPitch(buffer, sampleRate, opts);
   return { hz, rms };
 }
+
+/**
+ * Acumula frames de tamaño arbitrario (el worklet entrega 128 muestras) en
+ * ventanas no solapadas de `fftSize`. Devuelve una COPIA de la ventana cuando
+ * se llena, o null mientras acumula.
+ * @param {number} fftSize
+ * @returns {{ push: (frame: Float32Array|number[]) => Float32Array|null, reset: () => void }}
+ */
+export function createWindower(fftSize) {
+  const buf = new Float32Array(fftSize);
+  let filled = 0;
+  return {
+    push(frame) {
+      let out = null;
+      for (let i = 0; i < frame.length; i++) {
+        buf[filled++] = frame[i];
+        if (filled >= fftSize) {
+          out = buf.slice(0);
+          filled = 0;
+        }
+      }
+      return out;
+    },
+    reset() {
+      filled = 0;
+    },
+  };
+}

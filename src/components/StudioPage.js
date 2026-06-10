@@ -204,8 +204,12 @@ function watchJob(body, jobId, quota, filename) {
   pollTimer = setInterval(refresh, SAFETY_POLL_MS);
 
   // Si el push no conectó en ~6s, refrescar más seguido (modo sin push).
+  // Capturamos la referencia del interval activo: si para entonces stopPolling
+  // o una nueva llamada a watchJob lo reemplazaron, este timeout no debe tocar
+  // el poll vigente (evita resucitar un poll fantasma de un job anterior).
+  const safetyTimer = pollTimer;
   setTimeout(() => {
-    if (!pushAlive && pollTimer) {
+    if (!pushAlive && pollTimer === safetyTimer) {
       clearInterval(pollTimer);
       pollTimer = setInterval(refresh, NO_PUSH_POLL_MS);
     }

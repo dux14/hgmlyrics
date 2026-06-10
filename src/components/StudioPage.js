@@ -16,10 +16,29 @@ import {
 const POLL_MS = 5000;
 const MAX_DURATION_S = 10.5 * 60;
 let pollTimer = null;
+let hashChangeHandler = null;
 
+// Teardown completo: detiene el timer Y desregistra la guarda de navegación.
+// Se usa al desmontar la página o al navegar fuera de #/estudio.
 function stopPolling() {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = null;
+  if (hashChangeHandler) {
+    window.removeEventListener('hashchange', hashChangeHandler);
+    hashChangeHandler = null;
+  }
+}
+
+// Registra (una sola vez) la guarda que corta el polling cuando el usuario sale
+// de #/estudio. Idempotente: si ya hay guarda, no añade otra.
+function startHashGuard() {
+  if (hashChangeHandler) return;
+  hashChangeHandler = () => {
+    if (!window.location.hash.startsWith('#/estudio')) {
+      stopPolling();
+    }
+  };
+  window.addEventListener('hashchange', hashChangeHandler);
 }
 
 function fmtTime(s) {
@@ -43,7 +62,9 @@ const STEM_LABELS = {
 
 export function renderStudioPage(container) {
   stopPolling();
-  window.addEventListener('hashchange', stopPolling, { once: true });
+  // Guarda de navegación robusta (no {once:true}, que se consumiría al re-renderizar
+  // desde el mismo hash). Persiste mientras estemos en #/estudio.
+  startHashGuard();
   container.innerHTML = `
     <div class="studio fade-in">
       <h1 class="studio__title">
@@ -133,7 +154,10 @@ async function handleFile(body, file, quota) {
 }
 
 function watchJob(body, jobId, quota) {
-  stopPolling();
+  // Reinicia SOLO el timer (no la guarda de navegación, que debe seguir viva
+  // mientras hagamos polling). El teardown completo es responsabilidad de stopPolling().
+  if (pollTimer) clearInterval(pollTimer);
+  startHashGuard();
   const tick = async () => {
     try {
       const { job } = await getJob(jobId);

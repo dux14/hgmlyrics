@@ -75,6 +75,32 @@ describe('renderStudioPage', () => {
     expect(container.textContent.toLowerCase()).toContain('disponible por');
   });
 
+  it('FIX-7: el polling se detiene al cambiar el hash fuera de #/estudio', async () => {
+    stemsApi.listJobs.mockResolvedValueOnce({
+      jobs: [{ id: 'j1', status: 'separating_stems' }],
+      quota: { used: 1, limit: 3 },
+    });
+    stemsApi.getJob.mockResolvedValue({ job: { id: 'j1', status: 'separating_stems' } });
+
+    renderStudioPage(container);
+    // Esperar a que watchJob arranque (tick inicial) y setInterval esté activo
+    await vi.waitFor(() => expect(stemsApi.getJob).toHaveBeenCalled());
+    // Dejar que el intervalo dispare al menos una vez más
+    await vi.advanceTimersByTimeAsync(5100);
+    const callsAfterFirstTick = stemsApi.getJob.mock.calls.length;
+    expect(callsAfterFirstTick).toBeGreaterThan(0);
+
+    // Disparar hashchange — en jsdom el hash es '' (no '#/estudio'), la guarda detiene el polling
+    window.dispatchEvent(new Event('hashchange'));
+
+    // Forzar que cualquier promesa pendiente se resuelva antes de avanzar timers
+    await Promise.resolve();
+
+    // Avanzar 3 ticks más — no debe haber nuevas llamadas a getJob
+    await vi.advanceTimersByTimeAsync(15100);
+    expect(stemsApi.getJob.mock.calls.length).toBe(callsAfterFirstTick);
+  });
+
   it('job failed: mensaje y reintentar', async () => {
     stemsApi.listJobs.mockResolvedValueOnce({
       jobs: [{ id: 'j1', status: 'failed', error: 'El procesamiento falló.' }],

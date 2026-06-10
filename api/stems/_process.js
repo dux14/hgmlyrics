@@ -1,18 +1,19 @@
 /**
- * _process.js — Avance del pipeline cuando una predicción de Replicate termina.
+ * _process.js — Avance del pipeline cuando una predicción termina.
  * Compartido por webhook.js (camino feliz) y jobs/[id].js (reconciliación).
+ * La ingestión (descarga/upload) y el arranque de modelos van por el provider.
  */
 import { MODELS } from './_models.js';
-import { createPrediction } from '../_lib/replicate.js';
-import { copyUrlToStems, signStemsDownload } from '../_lib/storage.js';
+import { startModel, providerFor, ingestResult } from './_provider.js';
+import { signStemsDownload } from '../_lib/storage.js';
 import { canTransition, expiresAt } from '../_lib/stems.js';
 
 const FRIENDLY_FAIL = 'El procesamiento falló. Intenta de nuevo (no consumió tu cuota).';
 
 function webhookUrl(jobId, kind) {
-  const base =
-    process.env.PUBLIC_BASE_URL ?? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
-  return `${base}/api/stems/webhook?job=${jobId}&kind=${kind}`;
+  const base = process.env.PUBLIC_BASE_URL ?? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  const suffix = providerFor(kind) === 'modal' ? '&provider=modal' : '';
+  return `${base}/api/stems/webhook?job=${jobId}&kind=${kind}${suffix}`;
 }
 
 /**
@@ -20,9 +21,10 @@ function webhookUrl(jobId, kind) {
  * @param {import('postgres').Sql} sql
  * @param {object} job - fila actual de stem_jobs
  * @param {'stems'|'karaoke'|'diarization'} kind
- * @param {object} prediction - payload de Replicate { status, output, error }
+ * @param {object} prediction - payload del provider { status, output, error }
+ * @param {'replicate'|'modal'} [provider]
  */
-export async function processPredictionResult(sql, job, kind, prediction) {
+export async function processPredictionResult(sql, job, kind, prediction, provider = 'replicate') {
   if (prediction.status !== 'succeeded') {
     if (['failed', 'canceled'].includes(prediction.status) && canTransition(job.status, 'failed')) {
       await sql`
@@ -35,12 +37,7 @@ export async function processPredictionResult(sql, job, kind, prediction) {
 
   if (kind === 'stems') {
     if (job.status !== 'separating_stems') return; // ya procesado (idempotencia)
-    const urls = MODELS.stems.parseOutput(prediction.output);
-    const stems = {};
-    for (const [name, url] of Object.entries(urls)) {
-      if (!url) continue;
-      stems[name] = await copyUrlToStems(url, `${job.user_id}/${job.id}/stems/${name}.mp3`);
-    }
+    const stems = await ingestResult({ kind, provider, prediction, job });
     if (!stems.vocals) {
       await sql`
         UPDATE stem_jobs SET status = 'failed',
@@ -53,16 +50,8 @@ export async function processPredictionResult(sql, job, kind, prediction) {
     // TODO: re-firmar al reproducir si el TTL no cubre las 48h
     const vocalUrl = await signStemsDownload(stems.vocals, 21600);
     const [karaoke, diarization] = await Promise.all([
-      createPrediction({
-        model: MODELS.karaoke.slug,
-        input: MODELS.karaoke.buildInput(vocalUrl),
-        webhook: webhookUrl(job.id, 'karaoke'),
-      }),
-      createPrediction({
-        model: MODELS.diarization.slug,
-        input: MODELS.diarization.buildInput(vocalUrl),
-        webhook: webhookUrl(job.id, 'diarization'),
-      }),
+      startModel({ kind: 'karaoke', input: MODELS.karaoke.buildInput(vocalUrl), jobId: job.id, userId: job.user_id, callbackUrl: webhookUrl(job.id, 'karaoke') }),
+      startModel({ kind: 'diarization', input: MODELS.diarization.buildInput(vocalUrl), jobId: job.id, userId: job.user_id, callbackUrl: webhookUrl(job.id, 'diarization') }),
     ]);
     await sql`
       UPDATE stem_jobs SET status = 'separating_voices',
@@ -82,19 +71,12 @@ export async function processPredictionResult(sql, job, kind, prediction) {
   if (kind === 'karaoke') {
     // Idempotencia: si ya llegó karaoke, no reescribir
     if (job.voices?.lead !== undefined) return;
-    const out = MODELS.karaoke.parseOutput(prediction.output);
-    const lead = out.lead
-      ? await copyUrlToStems(out.lead, `${job.user_id}/${job.id}/voices/lead.mp3`)
-      : null;
-    const backing = out.backing
-      ? await copyUrlToStems(out.backing, `${job.user_id}/${job.id}/voices/backing.mp3`)
-      : null;
-    patch = { lead, backing };
+    patch = await ingestResult({ kind, provider, prediction, job }); // { lead, backing }
   } else {
     // kind === 'diarization'
     // Idempotencia: si ya llegó diarización, no reescribir
     if (job.voices?.segments !== undefined) return;
-    patch = { segments: MODELS.diarization.parseOutput(prediction.output) };
+    patch = { segments: await ingestResult({ kind, provider, prediction, job }) };
   }
 
   // Merge atómico: solo aporta las claves propias, sin pisar las del otro webhook

@@ -4,6 +4,7 @@
  * Estados: idle → uploading → processing → done | failed.
  */
 import { icon } from '../lib/icons.js';
+import { mergeSegments, segmentToPct, voiceColorVar } from '../lib/studioSegments.js';
 import {
   createJob,
   uploadInput,
@@ -291,38 +292,91 @@ function renderJob(body, job, quota) {
     ${voices.backing ? playerRow('Coros', voices.backing) : ''}
     ${
       segments.length > 0
-        ? `<h3 class="studio__section-title studio__section-title--sm">Segmentos por cantante</h3>
-           <audio id="studio-vocal-seg" preload="none" src="${stems.vocals ?? voices.lead}"></audio>
-           <ul class="studio-segments">
-             ${segments
-               .map(
-                 (s, i) => `<li class="studio-segments__item">
-                   <button class="btn studio-seg" data-i="${i}" data-start="${s.start}" data-end="${s.end}">
-                     ▶ ${s.voice}: ${fmtTime(s.start)}–${fmtTime(s.end)}
-                   </button>
-                 </li>`,
-               )
-               .join('')}
-           </ul>`
+        ? (() => {
+            const merged = mergeSegments(segments);
+            const order = [...new Set(merged.map((s) => s.voice))];
+            const fallbackDur = merged.reduce((m, s) => Math.max(m, s.end), 0);
+            const blocks = merged
+              .map((s) => {
+                const { left, width } = segmentToPct(s, fallbackDur);
+                const color = voiceColorVar(s.voice, order);
+                return `<button class="studio-tl__block" data-start="${s.start}"
+                          style="left:${left}%;width:${width}%;background:${color}"
+                          aria-label="${s.voice}, ${fmtTime(s.start)} a ${fmtTime(s.end)}"></button>`;
+              })
+              .join('');
+            const legend = order
+              .map(
+                (v) =>
+                  `<span class="studio-tl__legend-item"><span class="studio-tl__swatch" style="background:${voiceColorVar(v, order)}"></span>${v}</span>`,
+              )
+              .join('');
+            return `
+              <h3 class="studio__section-title studio__section-title--sm">Segmentos por cantante</h3>
+              <audio id="studio-vocal-seg" preload="metadata" src="${stems.vocals ?? voices.lead}"></audio>
+              <div class="studio-tl__legend">${legend}</div>
+              <div class="studio-tl" id="studio-tl" data-dur="${fallbackDur}">
+                <div class="studio-tl__track" id="studio-tl-track">
+                  ${blocks}
+                  <div class="studio-tl__playhead" id="studio-tl-playhead" style="left:0%"></div>
+                </div>
+              </div>
+              <div class="studio-transport">
+                <button class="btn studio-transport__btn" id="studio-tl-play" aria-label="Reproducir">${icon('play', { size: 18 })}</button>
+                <button class="btn studio-transport__btn" id="studio-tl-restart" aria-label="Reiniciar">${icon('rotate-ccw', { size: 18 })}</button>
+                <span class="studio-transport__time"><span id="studio-tl-cur">0:00</span> / <span id="studio-tl-dur">${fmtTime(fallbackDur)}</span></span>
+              </div>`;
+          })()
         : ''
     }
     <button class="btn btn--primary studio__new-btn" id="studio-new">Procesar otra canción</button>
   `;
 
-  // Player de segmentos virtuales: seek a start, pausa en end
+  // Player de timeline: play/pausa, seek por click en pista o en bloque, playhead
   const segAudio = body.querySelector('#studio-vocal-seg');
   if (segAudio) {
-    let endAt = null;
-    segAudio.addEventListener('timeupdate', () => {
-      if (endAt !== null && segAudio.currentTime >= endAt) {
-        segAudio.pause();
-        endAt = null;
-      }
+    const playBtn = body.querySelector('#studio-tl-play');
+    const restartBtn = body.querySelector('#studio-tl-restart');
+    const playhead = body.querySelector('#studio-tl-playhead');
+    const track = body.querySelector('#studio-tl-track');
+    const curEl = body.querySelector('#studio-tl-cur');
+    const durEl = body.querySelector('#studio-tl-dur');
+    const tl = body.querySelector('#studio-tl');
+
+    const dur = () =>
+      Number.isFinite(segAudio.duration) ? segAudio.duration : Number(tl.dataset.dur) || 0;
+
+    segAudio.addEventListener('loadedmetadata', () => {
+      if (Number.isFinite(segAudio.duration)) durEl.textContent = fmtTime(segAudio.duration);
     });
-    body.querySelectorAll('.studio-seg').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        segAudio.currentTime = Number(btn.dataset.start);
-        endAt = Number(btn.dataset.end);
+    segAudio.addEventListener('timeupdate', () => {
+      const d = dur();
+      if (d > 0) playhead.style.left = `${Math.min(100, (segAudio.currentTime / d) * 100)}%`;
+      curEl.textContent = fmtTime(segAudio.currentTime);
+    });
+    const setPlayIcon = () => {
+      playBtn.innerHTML = icon(segAudio.paused ? 'play' : 'pause', { size: 18 });
+      playBtn.setAttribute('aria-label', segAudio.paused ? 'Reproducir' : 'Pausar');
+    };
+    segAudio.addEventListener('play', setPlayIcon);
+    segAudio.addEventListener('pause', setPlayIcon);
+
+    playBtn.addEventListener('click', () => {
+      if (segAudio.paused) void segAudio.play();
+      else segAudio.pause();
+    });
+    restartBtn.addEventListener('click', () => {
+      segAudio.currentTime = 0;
+    });
+    track.addEventListener('click', (e) => {
+      if (e.target.classList.contains('studio-tl__block')) return;
+      const rect = track.getBoundingClientRect();
+      const d = dur();
+      if (d > 0) segAudio.currentTime = ((e.clientX - rect.left) / rect.width) * d;
+    });
+    body.querySelectorAll('.studio-tl__block').forEach((b) => {
+      b.addEventListener('click', () => {
+        segAudio.currentTime = Number(b.dataset.start);
         void segAudio.play();
       });
     });

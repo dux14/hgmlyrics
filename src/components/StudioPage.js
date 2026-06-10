@@ -11,11 +11,14 @@ import {
   getJob,
   listJobs,
   readAudioDuration,
+  watchJobRealtime,
 } from '../lib/stemsApi.js';
 
-const POLL_MS = 5000;
 const MAX_DURATION_S = 10.5 * 60;
 let pollTimer = null;
+let jobChannel = null; // { leave } del Realtime del job activo
+const SAFETY_POLL_MS = 30000; // red de seguridad + reconciliación server-side
+const NO_PUSH_POLL_MS = 10000; // si el canal no conecta, refrescar más seguido
 let hashChangeHandler = null;
 
 // Teardown completo: detiene el timer Y desregistra la guarda de navegación.
@@ -23,6 +26,10 @@ let hashChangeHandler = null;
 function stopPolling() {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = null;
+  if (jobChannel) {
+    jobChannel.leave();
+    jobChannel = null;
+  }
   if (hashChangeHandler) {
     window.removeEventListener('hashchange', hashChangeHandler);
     hashChangeHandler = null;
@@ -86,7 +93,7 @@ async function loadInitial(body) {
     // dejar un spinner eterno; el backend lo reclama en la próxima subida.
     const active = jobs.find((j) => ['separating_stems', 'separating_voices'].includes(j.status));
     const recent = jobs.find((j) => ['done', 'failed'].includes(j.status));
-    if (active) return watchJob(body, active.id, quota);
+    if (active) return watchJob(body, active.id, quota, active.input_meta?.filename);
     if (recent) return showJob(body, recent.id, quota);
     renderIdle(body, quota);
   } catch {
@@ -144,7 +151,7 @@ async function handleFile(body, file, quota) {
     const { job, upload } = await createJob(file);
     await uploadInput(upload, file);
     await startJob(job.id);
-    watchJob(body, job.id, quota);
+    watchJob(body, job.id, quota, file.name);
   } catch (e) {
     body.innerHTML = `
       <p class="studio__error">${e.message}</p>
@@ -154,26 +161,55 @@ async function handleFile(body, file, quota) {
   }
 }
 
-function watchJob(body, jobId, quota) {
-  // Reinicia SOLO el timer (no la guarda de navegación, que debe seguir viva
-  // mientras hagamos polling). El teardown completo es responsabilidad de stopPolling().
+function watchJob(body, jobId, quota, filename) {
+  // Teardown previo del timer/canal (sin tocar la guarda de navegación).
   if (pollTimer) clearInterval(pollTimer);
+  if (jobChannel) {
+    jobChannel.leave();
+    jobChannel = null;
+  }
   startHashGuard();
-  const tick = async () => {
+
+  const finishIfDone = (job) => {
+    if (job.status === 'done' || job.status === 'failed') {
+      stopPolling();
+      renderJob(body, job, quota);
+      return true;
+    }
+    return false;
+  };
+
+  const refresh = async () => {
     try {
       const { job } = await getJob(jobId);
-      if (job.status === 'done' || job.status === 'failed') {
-        stopPolling();
-        renderJob(body, job, quota);
-        return;
-      }
-      renderProcessing(body, job);
+      if (finishIfDone(job)) return;
+      renderProcessing(body, job, job.input_meta?.filename ?? filename);
     } catch {
-      /* siguiente tick reintenta */
+      /* el siguiente tick reintenta */
     }
   };
-  void tick();
-  pollTimer = setInterval(tick, POLL_MS);
+
+  // Push: en cada cambio de estado refrescamos vía la API saneada.
+  let pushAlive = false;
+  jobChannel = watchJobRealtime({
+    jobId,
+    onStatus: () => void refresh(),
+    onSubscribed: () => {
+      pushAlive = true;
+    },
+  });
+
+  // Render inicial + poll de seguridad (también dispara la reconciliación).
+  void refresh();
+  pollTimer = setInterval(refresh, SAFETY_POLL_MS);
+
+  // Si el push no conectó en ~6s, refrescar más seguido (modo sin push).
+  setTimeout(() => {
+    if (!pushAlive && pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = setInterval(refresh, NO_PUSH_POLL_MS);
+    }
+  }, 6000);
 }
 
 async function showJob(body, jobId, quota) {

@@ -338,7 +338,11 @@ export function bodyEntrenarPicker() {
         ${presets}
       </div>
       <label class="tuner-train__fit">
-        <input type="checkbox" id="train-fit-range" /> Ajustar la escala a mi rango
+        <input type="checkbox" id="train-fit-range" />
+        <span class="tuner-train__fit-text">
+          <span class="tuner-train__fit-title">Ajustar la escala a mi rango</span>
+          <span class="tuner-train__fit-desc">Transpone el ejercicio para que entre en tu tesitura.</span>
+        </span>
       </label>
     </div>
   `;

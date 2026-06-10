@@ -575,16 +575,51 @@
 
 .tuner-train__fit {
   display: flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tuner-train__fit:hover {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+}
+
+.tuner-train__fit:has(input:checked) {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
 }
 
 .tuner-train__fit input {
-  width: 1.1rem;
-  height: 1.1rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-top: 0.1rem;
+  flex-shrink: 0;
   accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.tuner-train__fit-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.tuner-train__fit-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.tuner-train__fit-desc {
+  font-size: var(--font-size-xs);
+  line-height: 1.3;
+  color: var(--color-text-secondary);
 }
 
 /* Runner: nota objetivo + gauge + acciones */

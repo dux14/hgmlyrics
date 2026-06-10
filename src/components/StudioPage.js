@@ -68,7 +68,7 @@ export function renderStudioPage(container) {
   container.innerHTML = `
     <div class="studio fade-in">
       <h1 class="studio__title">
-        ${icon('audio-lines', { size: 28 })} Estudio <span class="badge--beta">BETA</span>
+        ${icon('layers', { size: 28 })} Estudio <span class="badge--beta">BETA</span>
       </h1>
       <div id="studio-body" aria-live="polite"></div>
     </div>

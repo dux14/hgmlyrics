@@ -60,3 +60,68 @@ export async function deleteAvatarObjects(userId) {
   const { error } = await supabase.storage.from(AVATARS_BUCKET).remove(keys);
   if (error && !/not.*found/i.test(error.message || '')) throw error;
 }
+
+// ──────────────────────────────────────────────
+// Estudio de pistas — bucket privado 'stems-jobs'
+// ──────────────────────────────────────────────
+const STEMS_BUCKET = 'stems-jobs';
+
+/**
+ * Signed upload URL para que el browser suba el input directo a Storage.
+ * @param {string} key - p.ej. `${userId}/${jobId}/input/cancion.mp3`
+ * @returns {Promise<{ path: string, token: string }>}
+ */
+export async function createStemsUploadUrl(key) {
+  const { data, error } = await supabase.storage.from(STEMS_BUCKET).createSignedUploadUrl(key);
+  if (error) throw error;
+  return { path: data.path, token: data.token };
+}
+
+/**
+ * Copia un archivo remoto (output de Replicate) al bucket de stems.
+ * @param {string} url - URL temporal de replicate.delivery
+ * @param {string} key - destino en el bucket
+ */
+export async function copyUrlToStems(url, key) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    const e = new Error(`No se pudo descargar el resultado (${res.status})`);
+    e.status = 502;
+    throw e;
+  }
+  const body = Buffer.from(await res.arrayBuffer());
+  const contentType = res.headers.get('content-type') ?? 'audio/wav';
+  const { error } = await supabase.storage
+    .from(STEMS_BUCKET)
+    .upload(key, body, { contentType, upsert: true });
+  if (error) throw error;
+  return key;
+}
+
+/**
+ * Signed URL de descarga (1h por defecto).
+ * @param {string} key
+ * @param {number} [expiresIn]
+ */
+export async function signStemsDownload(key, expiresIn = 3600) {
+  const { data, error } = await supabase.storage.from(STEMS_BUCKET).createSignedUrl(key, expiresIn);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+/**
+ * Borra TODOS los archivos bajo un prefijo (input + resultados de un job).
+ * @param {string} prefix - p.ej. `${userId}/${jobId}`
+ */
+export async function deleteStemsPrefix(prefix) {
+  const toDelete = [];
+  // El bucket anida input/ stems/ voices/: listar cada nivel conocido.
+  for (const sub of ['input', 'stems', 'voices']) {
+    const { data, error } = await supabase.storage.from(STEMS_BUCKET).list(`${prefix}/${sub}`);
+    if (error || !data) continue;
+    for (const f of data) toDelete.push(`${prefix}/${sub}/${f.name}`);
+  }
+  if (toDelete.length > 0) {
+    await supabase.storage.from(STEMS_BUCKET).remove(toDelete);
+  }
+}

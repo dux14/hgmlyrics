@@ -38,16 +38,14 @@ export function createPitchDetector(opts) {
   let lastEmit = 0;
   let running = false;
   let buffer = null;
+  let workletNode = null;
 
   async function start() {
     if (running) return;
     onState('requesting');
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-        },
+        audio: { echoCancellation: false, noiseSuppression: false },
       });
     } catch (e) {
       onState('denied');
@@ -59,6 +57,38 @@ export function createPitchDetector(opts) {
     ctx = new AC();
     if (ctx.state === 'suspended') await ctx.resume();
     const source = ctx.createMediaStreamSource(stream);
+
+    // Camino moderno: YIN en el hilo de audio. Si falla, fallback a AnalyserNode.
+    if (ctx.audioWorklet && typeof globalThis.AudioWorkletNode === 'function') {
+      try {
+        await ctx.audioWorklet.addModule(new URL('./pitchWorklet.js', import.meta.url));
+        workletNode = new globalThis.AudioWorkletNode(ctx, 'yin-processor', {
+          processorOptions: { fftSize, intervalMs },
+        });
+        workletNode.port.onmessage = (e) => onPitch(e.data);
+        // Mantener vivo el grafo (quirk iOS) con una ganancia silenciosa.
+        const silentGain = ctx.createGain();
+        silentGain.gain.value = 0;
+        source.connect(workletNode);
+        workletNode.connect(silentGain);
+        silentGain.connect(ctx.destination);
+        if (ctx.state === 'suspended') await ctx.resume();
+        running = true;
+        onState('running');
+        return;
+      } catch (e) {
+        console.warn('[tuner] AudioWorklet no disponible, usando AnalyserNode:', e);
+        if (workletNode) {
+          workletNode.disconnect();
+          workletNode = null;
+        }
+      }
+    }
+
+    startWithAnalyser(source);
+  }
+
+  function startWithAnalyser(source) {
     analyser = ctx.createAnalyser();
     analyser.fftSize = fftSize;
     analyser.smoothingTimeConstant = 0;
@@ -71,8 +101,6 @@ export function createPitchDetector(opts) {
     source.connect(analyser);
     analyser.connect(silentGain);
     silentGain.connect(ctx.destination);
-    // Some iOS builds keep ctx suspended until after connect(); re-resume.
-    if (ctx.state === 'suspended') await ctx.resume();
     buffer = new Float32Array(analyser.fftSize);
 
     running = true;
@@ -87,8 +115,7 @@ export function createPitchDetector(opts) {
         for (let i = 0; i < buffer.length; i++) sum += buffer[i] * buffer[i];
         const rms = Math.sqrt(sum / buffer.length);
         const hz = detectPitch(buffer, ctx.sampleRate);
-        if (hz !== null) onPitch({ hz, rms });
-        else onPitch({ hz: null, rms });
+        onPitch({ hz: hz !== null ? hz : null, rms });
       }
       rafId = requestAnimationFrame(tick);
     };
@@ -99,6 +126,11 @@ export function createPitchDetector(opts) {
     running = false;
     if (rafId !== null) cancelAnimationFrame(rafId);
     rafId = null;
+    if (workletNode) {
+      workletNode.port.onmessage = null;
+      workletNode.disconnect();
+      workletNode = null;
+    }
     if (stream) {
       stream.getTracks().forEach((t) => t.stop());
       stream = null;

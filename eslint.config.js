@@ -32,6 +32,7 @@ export default [
         URLSearchParams: 'readonly',
         Blob: 'readonly',
         FileReader: 'readonly',
+        Audio: 'readonly',
         Image: 'readonly',
         TextEncoder: 'readonly',
         globalThis: 'readonly',

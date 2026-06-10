@@ -287,6 +287,9 @@ export async function renderWorldPage(container) {
       // recrearlo. El mesh tambien se recrea para que su handler onSignal apunte
       // al nuevo canal; diffPeers se encarga de solo abrir las conexiones nuevas.
       if (_currentZone && _localStream) {
+        // Limpiar peers remotos anteriores para que el roster se reconstruya limpio.
+        _voiceControls?.clearRemotePeers();
+
         if (_voiceMesh) {
           _voiceMesh.closeAll();
         }
@@ -453,7 +456,7 @@ export async function renderWorldPage(container) {
     });
 
     _voiceMesh.onRemoteStream((peerId, stream) => {
-      voiceControls.addRemotePeer(peerId, stream);
+      _voiceControls?.addRemotePeer(peerId, stream);
     });
 
     // Alimentar el mesh con los peers de zona actuales (respetando el cap).

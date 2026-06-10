@@ -42,6 +42,7 @@ import { renderSongView } from './components/SongView.js';
 import { renderSongEditor } from './components/SongEditor.js';
 import { renderAdminDashboard, renderAdminEditList } from './components/AdminDashboard.js';
 import { renderPrayerPage } from './components/PrayerPage.js';
+import { renderListDetail } from './components/ListDetail.js';
 import { initUpdateNotifier } from './components/UpdateNotifier.js';
 
 // Initialize theme immediately to avoid flash
@@ -213,6 +214,11 @@ async function boot() {
   guardedRoute('/oracion', () => {
     hideFilterBar();
     renderPrayerPage(mainContent);
+  });
+
+  guardedRoute('/lista/:id', ({ params }) => {
+    hideFilterBar();
+    renderListDetail(mainContent, params.id);
   });
 
   guardedRoute('/estudio', async () => {

@@ -8,7 +8,6 @@
  */
 
 import { getSongById, filterByAlbum, fetchSongDetail, getAdjacentSongs } from '../lib/store.js';
-import { getAdjacentInList, getList, setActiveContext } from '../lib/lists.js';
 import { navigate } from '../router.js';
 import {
   upgradeLegacySong,
@@ -198,21 +197,22 @@ export async function renderSongView(container, songIdOrData) {
   if (isPreview) {
     adjacent = { prev: null, next: null, currentIndex: 0, total: 0 };
   } else if (listId) {
+    // Carga lists.js dinámicamente para no añadir supabase al bundle de tests
+    const listsLib = await import('../lib/lists.js');
     // Intenta usar el contexto en memoria; si no existe (recarga), lo rehidrata
-    let adj = getAdjacentInList(listId, songId);
+    let adj = listsLib.getAdjacentInList(listId, songId);
     if (!adj) {
       try {
-        const listData = await getList(listId);
+        const listData = await listsLib.getList(listId);
         const orderedSongIds = (listData.songs || []).map((s) => s.song_id ?? s.id ?? s);
-        setActiveContext({ listId, name: listData.name, orderedSongIds });
+        listsLib.setActiveContext({ listId, name: listData.name, orderedSongIds });
         listName = listData.name;
-        adj = getAdjacentInList(listId, songId);
+        adj = listsLib.getAdjacentInList(listId, songId);
       } catch (_e) {
         // Si falla la carga de lista, caer al comportamiento normal
       }
     } else {
-      const ctx = (await import('../lib/lists.js')).getActiveContext();
-      listName = ctx?.name ?? null;
+      listName = listsLib.getActiveContext()?.name ?? null;
     }
     adjacent = adj ?? getAdjacentSongs(songId);
   } else {

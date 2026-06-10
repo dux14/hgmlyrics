@@ -142,6 +142,21 @@ export function createVoiceMesh({ signaling, getLocalStream, iceServers, selfId 
     // Nota: si localStream es null, la conexion se crea sin tracks locales.
     // La renegociacion al obtener el stream queda fuera del alcance de esta version.
 
+    // Monitorear el estado de la conexión para medir la tasa de fallos P2P.
+    // En producción, estos logs permiten decidir si se necesita TURN.
+    pc.onconnectionstatechange = () => {
+      const state = pc.connectionState;
+      if (state === 'failed') {
+        console.warn(
+          '[voz] peer=' +
+            peerId +
+            ' connectionState=failed — posible NAT simétrico; considerar TURN',
+        );
+      } else if (state === 'disconnected') {
+        console.warn('[voz] peer=' + peerId + ' connectionState=disconnected');
+      }
+    };
+
     // Enviar candidatos ICE al par remoto en cuanto esten disponibles
     pc.onicecandidate = ({ candidate }) => {
       if (candidate) {

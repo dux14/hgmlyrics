@@ -48,7 +48,22 @@ export default withErrors(async (req, res) => {
     await deleteStemsPrefix(`${job.user_id}/${job.id}`);
   }
 
-  res
-    .status(200)
-    .json({ expired: expired.length, zombies: zombies.length, abandoned: abandoned.length });
+  // 4) Failed con storage huérfano: borrar archivos y limpiar paths (una sola vez).
+  // Cubre los reclamados por POST /jobs, zombis y fallos del webhook: ninguno de esos
+  // borra siempre el storage, y un job 'failed' nunca se vuelve a tocar.
+  const orphanStorage = await sql`
+    UPDATE stem_jobs SET stems = NULL, voices = NULL, input_path = NULL, updated_at = now()
+    WHERE status = 'failed' AND input_path IS NOT NULL
+    RETURNING id, user_id
+  `;
+  for (const job of orphanStorage) {
+    await deleteStemsPrefix(`${job.user_id}/${job.id}`);
+  }
+
+  res.status(200).json({
+    expired: expired.length,
+    zombies: zombies.length,
+    abandoned: abandoned.length,
+    failedStorage: orphanStorage.length,
+  });
 });

@@ -124,3 +124,39 @@ describe('GET /api/lists/:id', () => {
     expect(res.statusCode).toBe(204);
   });
 });
+
+const songsHandler = (await import('../api/lists/[id]/songs.js')).default;
+
+describe('PUT /api/lists/:id/songs', () => {
+  it('reemplaza el orden completo (solo dueño)', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([{ id: 'list1' }]); // verifica ownership
+    sqlResponses.push([{ id: 's1' }, { id: 's2' }]); // songs existen
+    sqlResponses.push([]); // DELETE viejos (dentro de begin)
+    sqlResponses.push([]); // INSERT nuevos
+    const req = {
+      method: 'PUT',
+      headers: { authorization: 'Bearer t' },
+      query: { id: 'list1' },
+      body: { songIds: ['s1', 's2'] },
+    };
+    const res = makeRes();
+    await songsHandler(req, res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.count).toBe(2);
+  });
+
+  it('403 si no es dueño', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u9' } }, error: null });
+    sqlResponses.push([]); // ownership vacío
+    const req = {
+      method: 'PUT',
+      headers: { authorization: 'Bearer t' },
+      query: { id: 'list1' },
+      body: { songIds: ['s1'] },
+    };
+    const res = makeRes();
+    await songsHandler(req, res);
+    expect(res.statusCode).toBe(403);
+  });
+});

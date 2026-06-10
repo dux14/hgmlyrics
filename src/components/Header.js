@@ -61,7 +61,7 @@ export function renderHeader(container, { onMenuToggle }) {
         </svg>
       </button>
       <button class="header__btn" id="prayer-btn" aria-label="Oración del artista" title="Oración del artista">
-        ${icon('pray', { size: 20 })}
+        ${icon('flame', { size: 20 })}
       </button>
       <div id="theme-toggle-mount"></div>
       <div id="auth-button-mount"></div>

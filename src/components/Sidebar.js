@@ -49,7 +49,7 @@ export function updateSidebarContent() {
     <!-- Oración del artista -->
     <div class="sidebar__section">
       <div class="sidebar__album-item sidebar__nav-item" data-nav="oracion">
-        <span>${icon('pray', { size: 16 })}</span>
+        <span>${icon('flame', { size: 16 })}</span>
         <span>Oración del artista</span>
       </div>
     </div>

@@ -15,7 +15,13 @@ import {
   watchJobRealtime,
 } from '../lib/stemsApi.js';
 import { downloadAllZip } from '../lib/studioZip.js';
-import { createStudioPlayer, clamp, magnifyRange, magnifyPosToTime } from './StudioPlayer.js';
+import {
+  createStudioPlayer,
+  clamp,
+  magnifyRange,
+  magnifyPosToTime,
+  fmtTimeCs,
+} from './StudioPlayer.js';
 
 const MAX_DURATION_S = 10.5 * 60;
 let pollTimer = null;
@@ -348,7 +354,7 @@ function renderJob(body, job, quota) {
                   <div class="studio-tl__playhead" id="studio-tl-playhead" style="left:0%"></div>
                   <div class="studio-tl__mag" id="studio-tl-mag" hidden aria-hidden="true">
                     <span class="studio-tl__mag-needle"></span>
-                    <span class="studio-tl__mag-time">0:00</span>
+                    <span class="studio-tl__mag-time">0:00.00</span>
                   </div>
                 </div>
               </div>
@@ -399,8 +405,15 @@ function renderJob(body, job, quota) {
     restartBtn.addEventListener('click', () => {
       segAudio.currentTime = 0;
     });
+    let tlJustMagnified = false;
     track.addEventListener('click', (e) => {
       if (e.target.classList.contains('studio-tl__block')) return;
+      if (tlJustMagnified) {
+        // Tras usar la lupa, el navegador emite un click sintético: no lo
+        // dejamos pisar la posición precisa que el usuario acaba de elegir.
+        tlJustMagnified = false;
+        return;
+      }
       const rect = track.getBoundingClientRect();
       const d = dur();
       if (d > 0) segAudio.currentTime = ((e.clientX - rect.left) / rect.width) * d;
@@ -434,7 +447,7 @@ function renderJob(body, job, quota) {
         const t = magnifyPosToTime(r, tlRange);
         segAudio.currentTime = t;
         if (tlNeedle) tlNeedle.style.left = `${r * 100}%`;
-        if (tlMagTime) tlMagTime.textContent = fmtTime(t);
+        if (tlMagTime) tlMagTime.textContent = fmtTimeCs(t);
       }
     });
     const tlEnd = () => {
@@ -445,6 +458,7 @@ function renderJob(body, job, quota) {
       if (tlMagOpen) {
         tlMagOpen = false;
         tlRange = null;
+        tlJustMagnified = true;
         if (tlMag) tlMag.hidden = true;
       }
     };
@@ -468,10 +482,14 @@ function renderJob(body, job, quota) {
         zipBtn.innerHTML = original;
       } catch (e) {
         zipBtn.innerHTML = original;
+        const actions = zipBtn.closest('.studio-actions');
+        if (actions.nextElementSibling?.classList.contains('studio__error')) {
+          actions.nextElementSibling.remove();
+        }
         const err = document.createElement('p');
         err.className = 'studio__error';
         err.textContent = e.message || 'No pudimos generar el ZIP.';
-        zipBtn.closest('.studio-actions').insertAdjacentElement('afterend', err);
+        actions.insertAdjacentElement('afterend', err);
       } finally {
         zipBtn.disabled = false;
       }

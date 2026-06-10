@@ -71,10 +71,12 @@ export async function downloadAllZip(job, labels) {
   const base = (job?.input_meta?.filename ?? 'audio').replace(/\.[^/.]+$/, '') || 'audio';
   const a = document.createElement('a');
   a.href = href;
-  a.download = `${base.replace(/[/\\:*?"<>|]/g, '_')} - pistas.zip`;
+  a.download = `${sanitize(base)} - pistas.zip`;
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(href);
+  // Revocar de inmediato puede cancelar la descarga en Safari/Firefox (la
+  // descarga arranca de forma asíncrona tras el click); diferimos la limpieza.
+  setTimeout(() => URL.revokeObjectURL(href), 1000);
   return tracks.length;
 }

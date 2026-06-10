@@ -8,7 +8,9 @@
  * Teardown: registra una guarda de hashchange que destruye el juego Phaser
  * al salir de #/mundo (mismo patrón que StudioPage.js).
  */
-import { getSession } from '../lib/authStore.js';
+import { getSession, getProfile } from '../lib/authStore.js';
+import { supabase } from '../lib/supabase.js';
+import { WorldRoster } from './WorldRoster.js';
 
 // ---------------------------------------------------------------------------
 // Lógica pura — testeable con Vitest/jsdom sin Phaser
@@ -31,11 +33,16 @@ export function resolveWorldGate({ user, online }) {
 
 let _game = null;
 let _hashGuardHandler = null;
+let _rosterEl = null;
 
 function teardown() {
   if (_game) {
     _game.destroy(true);
     _game = null;
+  }
+  if (_rosterEl) {
+    _rosterEl.remove();
+    _rosterEl = null;
   }
   if (_hashGuardHandler) {
     window.removeEventListener('hashchange', _hashGuardHandler);
@@ -90,14 +97,30 @@ export async function renderWorldPage(container) {
   }
 
   // gate === 'ok'
+  // Envolver canvas + roster en un contenedor relativo para posicionar el overlay
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'position:relative;width:100%;height:100vh;overflow:hidden;';
+  container.appendChild(wrapper);
+
   const host = document.createElement('div');
   host.id = 'world-canvas';
   host.style.cssText = 'width:100%;height:100vh;overflow:hidden;background:#000;';
-  container.appendChild(host);
+  wrapper.appendChild(host);
+
+  // Roster overlay
+  const roster = WorldRoster();
+  _rosterEl = roster.el;
+  wrapper.appendChild(roster.el);
+
+  // Contexto de red
+  const me = {
+    id: user.id,
+    name: getProfile()?.username || 'Invitado',
+  };
 
   try {
     const { createGame } = await import('../world/createGame.js');
-    _game = createGame('world-canvas');
+    _game = createGame('world-canvas', { supabase, me, onRoster: roster.setRoster });
     startHashGuard();
   } catch (err) {
     console.error('[mundo] no se pudo iniciar la escena Phaser', err);

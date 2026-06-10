@@ -8,8 +8,12 @@
  * Para regenerar dev-tileset.png: ver scripts/gen-dev-tileset.mjs
  */
 import Phaser from 'phaser';
+import { joinWorld } from '../lib/worldRealtime.js';
+import { PeerBuffer } from './interpolation.js';
 
 const SPEED = 160; // px/s
+const PEER_COLOR = 0xe57373; // rojo claro para distinguir peers del jugador local
+const INTERP_DELAY_MS = 100;
 
 export class WorldScene extends Phaser.Scene {
   constructor() {
@@ -22,6 +26,13 @@ export class WorldScene extends Phaser.Scene {
     this.wasd = null;
     /** @type {'up'|'down'|'left'|'right'} última dirección dominante */
     this.lastDir = 'down';
+    /** @type {{ sendPosition: Function, onPeerMove: Function, onPeerJoin: Function, onPeerLeave: Function, leave: Function }|null} */
+    this.world = null;
+    /**
+     * Map uid → { sprite: Rectangle, label: Text, buffer: PeerBuffer, name: string }
+     * @type {Map<string, { sprite: Phaser.GameObjects.Rectangle, label: Phaser.GameObjects.Text, buffer: PeerBuffer, name: string }>}
+     */
+    this.peers = new Map();
   }
 
   preload() {
@@ -67,6 +78,47 @@ export class WorldScene extends Phaser.Scene {
 
     // ---- Límites del mundo ----
     this.physics.world.setBounds(0, 0, map.widthInPixels, map.heightInPixels);
+
+    // ---- Red (opcional: solo si hay contexto inyectado) ----
+    const ctx = this.registry.get('worldContext');
+    if (ctx) {
+      this.world = joinWorld({
+        supabase: ctx.supabase,
+        user: { id: ctx.me.id, name: ctx.me.name },
+      });
+
+      this.world.onPeerMove(({ uid, x, y, t }) => {
+        // Crear peer lazy si llega un move antes del presence join
+        if (!this.peers.has(uid)) {
+          this._createPeerEntry(uid, uid);
+        }
+        this.peers.get(uid).buffer.push({ x, y, t });
+      });
+
+      this.world.onPeerJoin(({ key, newPresences }) => {
+        const presence = newPresences?.[0] ?? {};
+        const uid = presence.uid ?? key;
+        const name = presence.name ?? uid;
+        if (!this.peers.has(uid)) {
+          this._createPeerEntry(uid, name);
+        }
+        this._pushRoster(ctx);
+      });
+
+      this.world.onPeerLeave(({ key, leftPresences }) => {
+        const presence = leftPresences?.[0] ?? {};
+        const uid = presence.uid ?? key;
+        this._destroyPeerEntry(uid);
+        this._pushRoster(ctx);
+      });
+
+      // Roster inicial: solo self
+      this._pushRoster(ctx);
+    }
+
+    // Limpiar canal al destruir/salir de la escena
+    this.events.once('shutdown', () => this.world?.leave());
+    this.events.once('destroy', () => this.world?.leave());
   }
 
   update() {
@@ -92,5 +144,67 @@ export class WorldScene extends Phaser.Scene {
     else if (right) this.lastDir = 'right';
     if (up) this.lastDir = 'up';
     else if (down) this.lastDir = 'down';
+
+    // ---- Enviar posición propia ----
+    const moving = vx !== 0 || vy !== 0;
+    this.world?.sendPosition(this.player.x, this.player.y, this.lastDir, moving);
+
+    // ---- Interpolar peers ----
+    // Los timestamps del buffer son Date.now()-based (worldRealtime usa Date.now()),
+    // por eso se muestrea con Date.now() y NO con this.time.now (reloj relativo de Phaser).
+    const now = Date.now();
+    this.peers.forEach(({ sprite, label, buffer }) => {
+      const pos = buffer.sample(now);
+      if (pos) {
+        sprite.x = pos.x;
+        sprite.y = pos.y;
+        label.x = pos.x;
+        label.y = pos.y - 18;
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helpers privados
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Crea el sprite + label para un peer y lo registra en this.peers.
+   * @param {string} uid
+   * @param {string} name
+   */
+  _createPeerEntry(uid, name) {
+    const sprite = this.add.rectangle(0, 0, 16, 24, PEER_COLOR);
+    const label = this.add.text(0, -18, name, {
+      fontSize: '10px',
+      color: '#ffffff',
+      stroke: '#000000',
+      strokeThickness: 2,
+    });
+    label.setOrigin(0.5, 1);
+    const buffer = new PeerBuffer({ delayMs: INTERP_DELAY_MS });
+    this.peers.set(uid, { sprite, label, buffer, name });
+  }
+
+  /**
+   * Destruye el sprite + label de un peer y lo elimina de this.peers.
+   * @param {string} uid
+   */
+  _destroyPeerEntry(uid) {
+    const peer = this.peers.get(uid);
+    if (!peer) return;
+    peer.sprite.destroy();
+    peer.label.destroy();
+    this.peers.delete(uid);
+  }
+
+  /**
+   * Llama ctx.onRoster con el array actualizado de presencias (peers + self).
+   * @param {{ me: { id: string, name: string }, onRoster: Function }} ctx
+   */
+  _pushRoster(ctx) {
+    const entries = [{ uid: ctx.me.id, name: `${ctx.me.name} (tu)` }];
+    this.peers.forEach(({ name }, uid) => entries.push({ uid, name }));
+    ctx.onRoster(entries);
   }
 }

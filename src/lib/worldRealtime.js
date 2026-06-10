@@ -86,7 +86,7 @@ export function joinWorld({ supabase, user, now = () => Date.now() }) {
   channel.subscribe(async (status) => {
     if (status === 'SUBSCRIBED') {
       subscribed = true;
-      await channel.track({ uid: user.id });
+      await channel.track({ uid: user.id, name: user.name ?? user.id });
     }
   });
 

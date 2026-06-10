@@ -216,9 +216,14 @@ async function boot() {
     renderPrayerPage(mainContent);
   });
 
+  guardedRoute('/lista/nueva', () => {
+    hideFilterBar();
+    renderListDetail(mainContent, null, { mode: 'edit' });
+  });
+
   guardedRoute('/lista/:id', ({ params }) => {
     hideFilterBar();
-    renderListDetail(mainContent, params.id);
+    renderListDetail(mainContent, params.id, { mode: 'view' });
   });
 
   guardedRoute('/estudio', async () => {

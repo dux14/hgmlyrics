@@ -29,6 +29,14 @@ CREATE TABLE public.world_maps (
 -- Solo puede existir UN mapa activo a la vez.
 CREATE UNIQUE INDEX world_maps_one_active ON public.world_maps (is_active) WHERE is_active;
 
+-- Índice FK para buscar registros por el usuario que realizó la última edición.
+CREATE INDEX world_maps_updated_by_idx ON public.world_maps (updated_by);
+
+-- Mantiene updated_at al día en cada actualización (reutiliza set_updated_at() de 0002).
+CREATE TRIGGER world_maps_set_updated_at
+  BEFORE UPDATE ON public.world_maps
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 -- =============================================================
 -- 2. RLS — world_maps
 -- =============================================================

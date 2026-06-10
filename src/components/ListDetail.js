@@ -18,6 +18,7 @@ import {
 } from '../lib/lists.js';
 import { getSongById } from '../lib/store.js';
 import { searchSongs } from '../lib/search.js';
+import { getAcceptedFriends } from '../lib/friends.js';
 
 // Listener global para cerrar los resultados de búsqueda al clicar fuera.
 // Se guarda a nivel de módulo y se reemplaza en cada render del editor, así
@@ -186,6 +187,7 @@ function renderEditor(container, listData) {
           </button>
         </div>
         <p class="list-detail__error" id="list-detail-invite-error" aria-live="polite"></p>
+        <div class="list-detail__friend-suggestions" id="list-detail-friends"></div>
         <div class="list-detail__members" id="list-detail-members">
           ${members.length === 0 ? `<p class="list-detail__empty">Sin invitados.</p>` : members.map(memberRowHtml).join('')}
         </div>
@@ -366,6 +368,67 @@ function renderEditor(container, listData) {
   }
 
   bindMemberEvents();
+
+  // Preview clicable de amigos
+  const friendsEl = container.querySelector('#list-detail-friends');
+
+  function currentMemberIds() {
+    return new Set(
+      [...container.querySelectorAll('#list-detail-members [data-member-id]')].map(
+        (el) => el.dataset.memberId,
+      ),
+    );
+  }
+
+  async function inviteFriend(friend) {
+    inviteError.textContent = '';
+    try {
+      await inviteMember(id, friend.username);
+      const updated = await getList(id);
+      const membersEl = container.querySelector('#list-detail-members');
+      const newMembers = updated.members || [];
+      membersEl.innerHTML =
+        newMembers.length === 0
+          ? `<p class="list-detail__empty">Sin invitados.</p>`
+          : newMembers.map(memberRowHtml).join('');
+      bindMemberEvents();
+      renderFriendSuggestions();
+    } catch (err) {
+      inviteError.textContent = err.message;
+    }
+  }
+
+  let friendsCache = [];
+  function renderFriendSuggestions() {
+    if (!friendsEl) return;
+    const memberIds = currentMemberIds();
+    const available = friendsCache.filter((f) => !memberIds.has(f.id));
+    if (available.length === 0) {
+      friendsEl.innerHTML = '';
+      return;
+    }
+    friendsEl.innerHTML = available
+      .map(
+        (f) => `
+        <button class="list-detail__friend-chip" data-friend-id="${escapeHtml(f.id)}" data-friend-username="${escapeHtml(f.username)}">
+          <img class="list-detail__friend-avatar" src="${escapeHtml(f.avatarUrl || '')}" alt="" onerror="this.style.display='none'" />
+          <span>${escapeHtml(f.displayName || f.username)}</span>
+        </button>
+      `,
+      )
+      .join('');
+    friendsEl.querySelectorAll('.list-detail__friend-chip').forEach((chip) => {
+      chip.addEventListener('click', () =>
+        inviteFriend({ id: chip.dataset.friendId, username: chip.dataset.friendUsername }),
+      );
+    });
+  }
+
+  getAcceptedFriends().then((friends) => {
+    if (!friendsEl?.isConnected) return;
+    friendsCache = friends;
+    renderFriendSuggestions();
+  });
 
   // Guardar y volver
   const saveBtn = container.querySelector('#list-detail-save');

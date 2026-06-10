@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "frame": {
+    "w": 64,
+    "h": 64,
+    "cols": 9,
+    "rows": 4
+  },
+  "rowDir": ["up", "left", "down", "right"],
+  "bodyTypes": [
+    {
+      "id": "male",
+      "name": "Masculino"
+    },
+    {
+      "id": "female",
+      "name": "Femenino"
+    }
+  ],
+  "layers": [
+    {
+      "key": "body",
+      "name": "Cuerpo",
+      "zPos": 10,
+      "required": true,
+      "options": [
+        {
+          "id": "base",
+          "name": "Base",
+          "files": {
+            "male": "lpc/body/base/male.png",
+            "female": "lpc/body/base/female.png"
+          }
+        }
+      ]
+    },
+    {
+      "key": "legs",
+      "name": "Pantalon",
+      "zPos": 20,
+      "required": false,
+      "options": [
+        {
+          "id": "black",
+          "name": "Negro",
+          "files": {
+            "male": "lpc/legs/black/male.png",
+            "female": "lpc/legs/black/female.png"
+          }
+        },
+        {
+          "id": "blue",
+          "name": "Azul",
+          "files": {
+            "male": "lpc/legs/blue/male.png",
+            "female": "lpc/legs/blue/female.png"
+          }
+        },
+        {
+          "id": "brown",
+          "name": "Marron",
+          "files": {
+            "male": "lpc/legs/brown/male.png",
+            "female": "lpc/legs/brown/female.png"
+          }
+        },
+        {
+          "id": "gray",
+          "name": "Gris",
+          "files": {
+            "male": "lpc/legs/gray/male.png",
+            "female": "lpc/legs/gray/female.png"
+          }
+        },
+        {
+          "id": "green",
+          "name": "Verde",
+          "files": {
+            "male": "lpc/legs/green/male.png",
+            "female": "lpc/legs/green/female.png"
+          }
+        },
+        {
+          "id": "red",
+          "name": "Rojo",
+          "files": {
+            "male": "lpc/legs/red/male.png",
+            "female": "lpc/legs/red/female.png"
+          }
+        }
+      ]
+    },
+    {
+      "key": "torso",
+      "name": "Camiseta",
+      "zPos": 35,
+      "required": false,
+      "options": [
+        {
+          "id": "shortsleeve",
+          "name": "Manga corta",
+          "files": {
+            "male": "lpc/torso/shortsleeve/male.png",
+            "female": "lpc/torso/shortsleeve/female.png"
+          }
+        },
+        {
+          "id": "longsleeve",
+          "name": "Manga larga",
+          "files": {
+            "male": "lpc/torso/longsleeve/male.png",
+            "female": "lpc/torso/longsleeve/female.png"
+          }
+        }
+      ]
+    },
+    {
+      "key": "hair",
+      "name": "Pelo",
+      "zPos": 120,
+      "required": false,
+      "options": [
+        {
+          "id": "plain",
+          "name": "Liso",
+          "files": {
+            "male": "lpc/hair/plain.png",
+            "female": "lpc/hair/plain.png"
+          }
+        },
+        {
+          "id": "long",
+          "name": "Largo",
+          "files": {
+            "male": "lpc/hair/long.png",
+            "female": "lpc/hair/long.png"
+          }
+        },
+        {
+          "id": "bob",
+          "name": "Bob",
+          "files": {
+            "male": "lpc/hair/bob.png",
+            "female": "lpc/hair/bob.png"
+          }
+        },
+        {
+          "id": "curly_long",
+          "name": "Rizado",
+          "files": {
+            "male": "lpc/hair/curly_long.png",
+            "female": "lpc/hair/curly_long.png"
+          }
+        },
+        {
+          "id": "messy1",
+          "name": "Despeinado",
+          "files": {
+            "male": "lpc/hair/messy1.png",
+            "female": "lpc/hair/messy1.png"
+          }
+        }
+      ]
+    }
+  ]
+}

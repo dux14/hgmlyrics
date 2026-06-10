@@ -12,6 +12,7 @@ import { joinWorld } from '../lib/worldRealtime.js';
 import { PeerBuffer } from './interpolation.js';
 import { getActiveMapDescriptor } from './worldMapStore.js';
 import { parseZones, zoneAt } from './zones.js';
+import { createAvatarSprite, publicAvatarUrl } from './avatarSprite.js';
 
 const SPEED = 160; // px/s
 const PEER_COLOR = 0xe57373; // rojo claro para distinguir peers del jugador local
@@ -31,14 +32,19 @@ export class WorldScene extends Phaser.Scene {
     /** @type {{ sendPosition: Function, onPeerMove: Function, onPeerJoin: Function, onPeerLeave: Function, leave: Function }|null} */
     this.world = null;
     /**
-     * Map uid → { sprite: Rectangle, label: Text, buffer: PeerBuffer, name: string }
-     * @type {Map<string, { sprite: Phaser.GameObjects.Rectangle, label: Phaser.GameObjects.Text, buffer: PeerBuffer, name: string }>}
+     * Map uid → { sprite: Rectangle, label: Text, buffer: PeerBuffer, name: string,
+     *              avatar: object|null, dir: string, lastMoveT: number }
+     * @type {Map<string, { sprite: Phaser.GameObjects.Rectangle, label: Phaser.GameObjects.Text, buffer: PeerBuffer, name: string, avatar: object|null, dir: string, lastMoveT: number }>}
      */
     this.peers = new Map();
     /** @type {{ name: string, channelId: string, rect: object }[]} zonas del mapa activo */
     this.zones = [];
     /** @type {{ name: string, channelId: string }|null} zona actual del jugador */
     this.currentZone = null;
+    /** @type {object|null} manager de avatar del jugador local (createAvatarSprite) */
+    this.playerAvatar = null;
+    /** @type {object|null} cliente supabase, guardado en create() para uso en _createPeerEntry */
+    this._supabase = null;
   }
 
   preload() {
@@ -94,19 +100,27 @@ export class WorldScene extends Phaser.Scene {
     // ---- Red (opcional: solo si hay contexto inyectado) ----
     const ctx = this.registry.get('worldContext');
     if (ctx) {
+      // Guardar supabase para _createPeerEntry y carga de avatares
+      this._supabase = ctx.supabase;
+
       this.world = joinWorld({
         supabase: ctx.supabase,
         user: { id: ctx.me.id, name: ctx.me.name },
       });
 
-      this.world.onPeerMove(({ uid, x, y, t }) => {
+      this.world.onPeerMove(({ uid, x, y, dir, t }) => {
         // Ignorar self (presence puede hacer eco del propio usuario)
         if (uid === ctx.me.id) return;
         // Crear peer lazy si llega un move antes del presence join
         if (!this.peers.has(uid)) {
           this._createPeerEntry(uid, uid);
         }
-        this.peers.get(uid).buffer.push({ x, y, t });
+        const peer = this.peers.get(uid);
+        peer.buffer.push({ x, y, t });
+        if (dir) {
+          peer.dir = dir;
+          peer.lastMoveT = Date.now();
+        }
       });
 
       this.world.onPeerJoin(({ key, newPresences }) => {
@@ -134,11 +148,31 @@ export class WorldScene extends Phaser.Scene {
 
       // Roster inicial: solo self
       this._pushRoster(ctx);
+
+      // ---- Avatar jugador local ----
+      // Intentar cargar el spritesheet compuesto del jugador. Si falla (404),
+      // se mantiene el rectángulo provisional como fallback.
+      const localAvatarUrl = publicAvatarUrl(ctx.supabase, ctx.me.id);
+      this.playerAvatar = createAvatarSprite(this, {
+        uid: ctx.me.id,
+        url: localAvatarUrl,
+        depth: 10,
+      });
+      this.playerAvatar.ready.then((ok) => {
+        if (ok) {
+          // Ocultar rectángulo provisional; el sprite lo reemplaza visualmente
+          this.player.setVisible(false);
+        }
+      });
     }
 
     // Limpiar canal al salir de la escena.
     // shutdown siempre precede a destroy, con un solo listener es suficiente.
-    this.events.once('shutdown', () => this.world?.leave());
+    this.events.once('shutdown', () => {
+      this.world?.leave();
+      this.playerAvatar?.destroy();
+      this.playerAvatar = null;
+    });
   }
 
   update() {
@@ -169,6 +203,12 @@ export class WorldScene extends Phaser.Scene {
     const moving = vx !== 0 || vy !== 0;
     if (this.world) this.world.sendPosition(this.player.x, this.player.y, this.lastDir, moving);
 
+    // ---- Avatar jugador local ----
+    if (this.playerAvatar?.gameObject) {
+      this.playerAvatar.setPosition(this.player.x, this.player.y);
+      this.playerAvatar.update(this.lastDir, moving);
+    }
+
     // ---- Detección de zona ----
     this._updateZone();
 
@@ -176,7 +216,7 @@ export class WorldScene extends Phaser.Scene {
     // Los timestamps del buffer son Date.now()-based (worldRealtime usa Date.now()),
     // por eso se muestrea con Date.now() y NO con this.time.now (reloj relativo de Phaser).
     const now = Date.now();
-    this.peers.forEach(({ sprite, label, buffer }) => {
+    this.peers.forEach(({ sprite, label, buffer, avatar, dir, lastMoveT }) => {
       const pos = buffer.sample(now);
       if (pos) {
         sprite.x = pos.x;
@@ -185,6 +225,13 @@ export class WorldScene extends Phaser.Scene {
         label.y = pos.y - 18;
         sprite.setVisible(true);
         label.setVisible(true);
+
+        // Actualizar avatar del peer si cargó correctamente
+        if (avatar?.gameObject) {
+          avatar.setPosition(pos.x, pos.y);
+          const peerMoving = now - (lastMoveT ?? 0) < 200;
+          avatar.update(dir ?? 'down', peerMoving);
+        }
       }
     });
   }
@@ -214,6 +261,8 @@ export class WorldScene extends Phaser.Scene {
 
   /**
    * Crea el sprite + label para un peer y lo registra en this.peers.
+   * Si hay cliente supabase disponible, intenta cargar el avatar LPC del peer;
+   * cuando carga OK, oculta el rectángulo provisional.
    * @param {string} uid
    * @param {string} name
    */
@@ -228,11 +277,25 @@ export class WorldScene extends Phaser.Scene {
     label.setOrigin(0.5, 1);
     label.setVisible(false);
     const buffer = new PeerBuffer({ delayMs: INTERP_DELAY_MS });
-    this.peers.set(uid, { sprite, label, buffer, name });
+
+    // Avatar peer: intento on-demand si hay supabase
+    let avatar = null;
+    if (this._supabase) {
+      const peerUrl = publicAvatarUrl(this._supabase, uid);
+      avatar = createAvatarSprite(this, { uid, url: peerUrl, depth: 10 });
+      avatar.ready.then((ok) => {
+        if (ok && this.peers.has(uid)) {
+          // Ocultar rectángulo provisional del peer
+          this.peers.get(uid).sprite.setVisible(false);
+        }
+      });
+    }
+
+    this.peers.set(uid, { sprite, label, buffer, name, avatar, dir: 'down', lastMoveT: 0 });
   }
 
   /**
-   * Destruye el sprite + label de un peer y lo elimina de this.peers.
+   * Destruye el sprite + label (+ avatar si existe) de un peer y lo elimina de this.peers.
    * @param {string} uid
    */
   _destroyPeerEntry(uid) {
@@ -240,6 +303,7 @@ export class WorldScene extends Phaser.Scene {
     if (!peer) return;
     peer.sprite.destroy();
     peer.label.destroy();
+    peer.avatar?.destroy();
     this.peers.delete(uid);
   }
 

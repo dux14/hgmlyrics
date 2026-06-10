@@ -20,6 +20,7 @@ import { joinZone } from '../lib/zoneChannel.js';
 import { joinSignaling } from '../lib/voiceSignaling.js';
 import { createVoiceMesh } from '../world/voiceMesh.js';
 import { getIceServers } from '../world/iceConfig.js';
+import { capPublishers } from '../world/voicePolicy.js';
 
 // ---------------------------------------------------------------------------
 // Lógica pura — testeable con Vitest/jsdom sin Phaser
@@ -411,19 +412,22 @@ export async function renderWorldPage(container) {
       voiceControls.addRemotePeer(peerId, stream);
     });
 
-    // Alimentar el mesh con los peers de zona actuales.
-    _voiceMesh.setPeers(_zonePeerIds);
+    // Alimentar el mesh con los peers de zona actuales (respetando el cap).
+    _voiceMesh.setPeers(capPublishers(_zonePeerIds));
   };
 
   /**
    * Actualiza la lista de peers de voz para la zona actual.
-   * Llamado desde onPeerJoin/onPeerLeave del mundo.
+   * Aplica el cap de publicadores (max 8) antes de alimentar el mesh.
+   * La seleccion es determinista (orden lex), por lo que todos los clientes
+   * de la zona eligen el mismo subconjunto sin coordinacion central.
+   *
    * @param {string[]} peerIds — uid[] de todos los peers en presencia (excluye self)
    */
   function _pushVoicePeers(peerIds) {
     _zonePeerIds = peerIds;
     if (_voiceMesh) {
-      _voiceMesh.setPeers(peerIds);
+      _voiceMesh.setPeers(capPublishers(peerIds));
     }
   }
 

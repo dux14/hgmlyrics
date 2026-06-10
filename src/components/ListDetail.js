@@ -18,6 +18,7 @@ import {
 } from '../lib/lists.js';
 import { getSongById } from '../lib/store.js';
 import { searchSongs } from '../lib/search.js';
+import { getAcceptedFriends } from '../lib/friends.js';
 
 // Listener global para cerrar los resultados de búsqueda al clicar fuera.
 // Se guarda a nivel de módulo y se reemplaza en cada render del editor, así
@@ -25,6 +26,7 @@ import { searchSongs } from '../lib/search.js';
 let dismissSearchHandler = null;
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
+import { updateSidebarContent } from './Sidebar.js';
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -139,6 +141,9 @@ function renderEditor(container, listData) {
           ${expiryText ? `<span class="lists__expiry-chip ${isUrgent ? 'lists__expiry-chip--urgent' : ''}">${escapeHtml(expiryText)}</span>` : ''}
         </div>
         <div class="list-detail__header-actions">
+          <button class="btn btn--primary" id="list-detail-save">
+            ${icon('check-circle', { size: 16 })} Guardar
+          </button>
           <button class="list-detail__icon-btn list-detail__icon-btn--danger" id="list-detail-delete" title="Borrar lista">
             ${icon('trash', { size: 18 })}
           </button>
@@ -182,6 +187,7 @@ function renderEditor(container, listData) {
           </button>
         </div>
         <p class="list-detail__error" id="list-detail-invite-error" aria-live="polite"></p>
+        <div class="list-detail__friend-suggestions" id="list-detail-friends"></div>
         <div class="list-detail__members" id="list-detail-members">
           ${members.length === 0 ? `<p class="list-detail__empty">Sin invitados.</p>` : members.map(memberRowHtml).join('')}
         </div>
@@ -192,6 +198,7 @@ function renderEditor(container, listData) {
   `;
 
   const errorEl = container.querySelector('#list-detail-error');
+  const id = listData.id;
   let persistTimer = null;
 
   function persistSongs() {
@@ -202,8 +209,6 @@ function renderEditor(container, listData) {
       });
     }, 400);
   }
-
-  const id = listData.id;
 
   function rerenderSongs() {
     const songsEl = container.querySelector('#list-detail-songs');
@@ -339,6 +344,7 @@ function renderEditor(container, listData) {
           ? `<p class="list-detail__empty">Sin invitados.</p>`
           : newMembers.map(memberRowHtml).join('');
       bindMemberEvents();
+      renderFriendSuggestions();
       inviteInput.value = '';
     } catch (err) {
       inviteError.textContent = err.message;
@@ -362,6 +368,91 @@ function renderEditor(container, listData) {
   }
 
   bindMemberEvents();
+
+  // Preview clicable de amigos
+  const friendsEl = container.querySelector('#list-detail-friends');
+
+  function currentMemberIds() {
+    return new Set(
+      [...container.querySelectorAll('#list-detail-members [data-member-id]')].map(
+        (el) => el.dataset.memberId,
+      ),
+    );
+  }
+
+  async function inviteFriend(friend) {
+    inviteError.textContent = '';
+    try {
+      await inviteMember(id, friend.username);
+      const updated = await getList(id);
+      const membersEl = container.querySelector('#list-detail-members');
+      const newMembers = updated.members || [];
+      membersEl.innerHTML =
+        newMembers.length === 0
+          ? `<p class="list-detail__empty">Sin invitados.</p>`
+          : newMembers.map(memberRowHtml).join('');
+      bindMemberEvents();
+      renderFriendSuggestions();
+    } catch (err) {
+      inviteError.textContent = err.message;
+    }
+  }
+
+  let friendsCache = [];
+  function renderFriendSuggestions() {
+    if (!friendsEl) return;
+    const memberIds = currentMemberIds();
+    const available = friendsCache.filter((f) => !memberIds.has(f.id));
+    if (available.length === 0) {
+      friendsEl.innerHTML = '';
+      return;
+    }
+    friendsEl.innerHTML = available
+      .map(
+        (f) => `
+        <button class="list-detail__friend-chip" data-friend-id="${escapeHtml(f.id)}" data-friend-username="${escapeHtml(f.username)}">
+          <img class="list-detail__friend-avatar" src="${escapeHtml(f.avatarUrl || '')}" alt="" onerror="this.style.display='none'" />
+          <span>${escapeHtml(f.displayName || f.username)}</span>
+        </button>
+      `,
+      )
+      .join('');
+    friendsEl.querySelectorAll('.list-detail__friend-chip').forEach((chip) => {
+      chip.addEventListener('click', () =>
+        inviteFriend({ id: chip.dataset.friendId, username: chip.dataset.friendUsername }),
+      );
+    });
+  }
+
+  getAcceptedFriends().then((friends) => {
+    if (!friendsEl?.isConnected) return;
+    friendsCache = friends;
+    renderFriendSuggestions();
+  });
+
+  // Guardar y volver
+  const saveBtn = container.querySelector('#list-detail-save');
+  saveBtn?.addEventListener('click', async () => {
+    clearTimeout(persistTimer);
+    saveBtn.disabled = true;
+    const original = saveBtn.innerHTML;
+    saveBtn.textContent = 'Guardando…';
+    try {
+      const nameInput = container.querySelector('#list-detail-name');
+      const newName = nameInput?.value.trim();
+      if (newName && newName !== listData.name) {
+        await updateList(id, { name: newName });
+      }
+      await setListSongs(id, order);
+      saveBtn.textContent = 'Guardado ✓';
+      updateSidebarContent();
+      navigate('/');
+    } catch (err) {
+      if (errorEl) errorEl.textContent = err.message;
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = original;
+    }
+  });
 }
 
 /* ── Solo lectura (member) ──────────────────────────────────────── */

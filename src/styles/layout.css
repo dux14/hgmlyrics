@@ -260,6 +260,18 @@
   color: #fff;
 }
 
+/* Item de navegación destacado: la Oración del artista, lo principal del sidebar. */
+.sidebar__nav-item--featured {
+  background: var(--prayer-bg);
+  color: var(--prayer-text);
+  font-weight: 600;
+  border-radius: var(--radius-md, 10px);
+  margin-bottom: var(--space-xs);
+}
+.sidebar__nav-item--featured:hover {
+  filter: brightness(0.97);
+}
+
 .sidebar__album-thumb {
   width: 32px;
   height: 32px;

@@ -79,3 +79,24 @@ def run_demucs(audio_url: str, job_id: str, user_id: str, callback_url: str):
     except Exception as e:
         _post_callback(callback_url, {"status": "failed", "error": str(e)[:200]})
         raise
+
+
+@app.function(image=image, secrets=secrets, gpu="T4", timeout=900)
+def run_diarization(audio_url: str, job_id: str, user_id: str, callback_url: str):
+    try:
+        from pyannote.audio import Pipeline
+        import torch
+        src = _download(audio_url)
+        pipe = Pipeline.from_pretrained(
+            "pyannote/speaker-diarization-3.1", use_auth_token=os.environ["HF_TOKEN"]
+        )
+        pipe.to(torch.device("cuda"))
+        dia = pipe(src)
+        segments = [
+            {"speaker": label, "start": round(turn.start, 3), "stop": round(turn.end, 3)}
+            for turn, _, label in dia.itertracks(yield_label=True)
+        ]
+        _post_callback(callback_url, {"status": "succeeded", "output": {"segments": segments}})
+    except Exception as e:
+        _post_callback(callback_url, {"status": "failed", "error": str(e)[:200]})
+        raise

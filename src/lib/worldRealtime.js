@@ -52,6 +52,11 @@ export function joinWorld({ supabase, user, now = () => Date.now() }) {
   /** @type {((data: PeerLeavePayload) => void) | null} */
   let _onPeerLeave = null;
 
+  // Fix A: guard para no enviar antes de que el canal esté suscrito
+  let subscribed = false;
+  // Fix B: guard para que leave() sea idempotente
+  let left = false;
+
   // Crear y suscribir el canal
   const channel = supabase.channel('world:global', {
     config: {
@@ -62,6 +67,8 @@ export function joinWorld({ supabase, user, now = () => Date.now() }) {
 
   // Registrar handler de posición entrante (broadcast)
   channel.on('broadcast', { event: 'pos' }, ({ payload }) => {
+    // Fix C: ignorar payloads nulos para evitar _onPeerMove(null)
+    if (!payload) return;
     if (_onPeerMove) _onPeerMove(payload);
   });
 
@@ -78,6 +85,7 @@ export function joinWorld({ supabase, user, now = () => Date.now() }) {
   // Suscribir; al confirmarse, rastrear la presencia del usuario actual
   channel.subscribe(async (status) => {
     if (status === 'SUBSCRIBED') {
+      subscribed = true;
       await channel.track({ uid: user.id });
     }
   });
@@ -97,6 +105,8 @@ export function joinWorld({ supabase, user, now = () => Date.now() }) {
    */
   function sendPosition(x, y, dir, moving) {
     if (!moving) return;
+    // Fix A: no enviar hasta que el canal esté suscrito
+    if (!subscribed) return;
     const t = now();
     if (!limiter(t)) return;
     channel.send({
@@ -132,8 +142,12 @@ export function joinWorld({ supabase, user, now = () => Date.now() }) {
 
   /**
    * Desconecta del canal y limpia el estado local.
+   * Idempotente: llamadas adicionales no tienen efecto.
    */
   function leave() {
+    // Fix B: idempotente
+    if (left) return;
+    left = true;
     supabase.removeChannel(channel);
     _onPeerMove = null;
     _onPeerJoin = null;

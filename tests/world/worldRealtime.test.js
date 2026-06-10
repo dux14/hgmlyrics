@@ -16,12 +16,13 @@ import { joinWorld } from '../../src/lib/worldRealtime.js';
  * Construye un fake del cliente Supabase con un único canal simulado.
  * `fakeChannel` almacena los handlers registrados y los mensajes enviados.
  */
-function makeFakeSupabase() {
+function makeFakeSupabase({ deferSubscribe = false } = {}) {
   /** @type {Map<string, Function>} clave = "type:event" */
   const handlers = new Map();
   const sentMessages = [];
   let trackedState = null;
-  let subscribeCallback = null;
+  let _subscribeCb = null;
+  let removeChannelCount = 0;
   let removedChannel = null;
 
   const fakeChannel = {
@@ -32,9 +33,11 @@ function makeFakeSupabase() {
       return this;
     },
     subscribe(cb) {
-      subscribeCallback = cb;
-      // Invoca SUBSCRIBED de forma síncrona para simplificar los tests
-      cb('SUBSCRIBED');
+      _subscribeCb = cb;
+      if (!deferSubscribe) {
+        // Invoca SUBSCRIBED de forma síncrona para simplificar los tests
+        cb('SUBSCRIBED');
+      }
       return this;
     },
     send(msg) {
@@ -45,14 +48,12 @@ function makeFakeSupabase() {
       trackedState = state;
       return Promise.resolve();
     },
-    untrack() {
-      trackedState = null;
-      return Promise.resolve();
-    },
     // Acceso interno para los tests
     _handlers: handlers,
     _sentMessages: sentMessages,
     _getTracked: () => trackedState,
+    /** Dispara manualmente el callback de subscribe (para tests de timing) */
+    _triggerSubscribe: (status) => _subscribeCb && _subscribeCb(status),
   };
 
   const fakeSupabase = {
@@ -60,9 +61,11 @@ function makeFakeSupabase() {
       return fakeChannel;
     },
     removeChannel(ch) {
+      removeChannelCount++;
       removedChannel = ch;
     },
     _getRemovedChannel: () => removedChannel,
+    _getRemoveChannelCount: () => removeChannelCount,
     _fakeChannel: fakeChannel,
   };
 
@@ -172,6 +175,51 @@ describe('joinWorld', () => {
       const world = joinWorld({ supabase, user, now: () => clock });
       world.leave();
       expect(supabase._getRemovedChannel()).toBe(supabase._fakeChannel);
+    });
+
+    // Fix B: leave() idempotente
+    it('segunda llamada a leave() NO vuelve a llamar removeChannel', () => {
+      const world = joinWorld({ supabase, user, now: () => clock });
+      world.leave();
+      world.leave();
+      expect(supabase._getRemoveChannelCount()).toBe(1);
+    });
+  });
+
+  // Fix A: sendPosition no envía hasta SUBSCRIBED
+  describe('sendPosition — guard SUBSCRIBED', () => {
+    it('NO envía antes de recibir SUBSCRIBED', () => {
+      const deferredSupabase = makeFakeSupabase({ deferSubscribe: true });
+      const world = joinWorld({ supabase: deferredSupabase, user, now: () => clock });
+      world.sendPosition(10, 20, 'right', true);
+      expect(deferredSupabase._fakeChannel._sentMessages).toHaveLength(0);
+    });
+
+    it('sí envía después de que el canal recibe SUBSCRIBED', () => {
+      const deferredSupabase = makeFakeSupabase({ deferSubscribe: true });
+      const world = joinWorld({ supabase: deferredSupabase, user, now: () => clock });
+      // Antes de SUBSCRIBED: sin envíos
+      world.sendPosition(10, 20, 'right', true);
+      expect(deferredSupabase._fakeChannel._sentMessages).toHaveLength(0);
+      // Disparar SUBSCRIBED manualmente
+      deferredSupabase._fakeChannel._triggerSubscribe('SUBSCRIBED');
+      // Ahora sí debe enviar
+      world.sendPosition(10, 20, 'right', true);
+      expect(deferredSupabase._fakeChannel._sentMessages).toHaveLength(1);
+    });
+  });
+
+  // Fix C: broadcast con payload nulo no llama onPeerMove
+  describe('onPeerMove — payload nulo', () => {
+    it('NO invoca el callback si el payload es nulo', () => {
+      const world = joinWorld({ supabase, user, now: () => clock });
+      const received = [];
+      world.onPeerMove((data) => received.push(data));
+
+      const handler = supabase._fakeChannel._handlers.get('broadcast:pos');
+      handler({ payload: null });
+
+      expect(received).toHaveLength(0);
     });
   });
 });

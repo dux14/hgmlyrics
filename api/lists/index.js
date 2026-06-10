@@ -41,7 +41,7 @@ export default withErrors(async (req, res) => {
                         WHERE m.list_id = l.id AND m.user_id = ${user.id}))
       ORDER BY l.created_at DESC
     `;
-    res.status(200).json({ lists: rows });
+    res.status(200).json(rows);
     return;
   }
 

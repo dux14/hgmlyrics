@@ -81,6 +81,22 @@ describe('POST /api/lists', () => {
   });
 });
 
+describe('GET /api/lists', () => {
+  it('devuelve un array de listas (consumible con .map en el sidebar)', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([
+      { id: 'list1', name: 'hora santa', expires_at: '2026-06-11T14:31:42Z', is_owner: true },
+    ]);
+    const req = { method: 'GET', headers: { authorization: 'Bearer t' } };
+    const res = makeRes();
+    await indexHandler(req, res);
+    expect(res.statusCode).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].name).toBe('hora santa');
+  });
+});
+
 const idHandler = (await import('../api/lists/[id].js')).default;
 
 describe('GET /api/lists/:id', () => {

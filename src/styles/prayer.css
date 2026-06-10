@@ -16,6 +16,13 @@
   background: var(--prayer-bg);
 }
 
+/* Full-bleed: anula el padding y el ancho máximo del contenedor de página
+ * solo para la oración, igual que hace el editor admin con .editor. */
+.main__content:has(.prayer) {
+  padding: 0;
+  max-width: 100%;
+}
+
 /* Halo de luz suave detrás del texto (glow estático que respira muy lento). */
 .prayer__glow {
   position: absolute;

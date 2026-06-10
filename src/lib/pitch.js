@@ -1,95 +1,15 @@
 /**
  * pitch.js — Real-time monophonic pitch detection via YIN.
  *
- * Pure DSP in `detectPitch` (testable). `createPitchDetector` wires a
- * MediaStream → AnalyserNode → requestAnimationFrame loop and emits
- * pitches at ~30 Hz.
+ * La lógica DSP pura vive en `pitchCore.js` (sin DOM ni Web Audio).
+ * `createPitchDetector` conecta MediaStream → AudioWorklet (con fallback a
+ * AnalyserNode) y emite pitches a ~30 Hz.
  *
  * No external deps. Single-window analysis (~46 ms @ 44.1 kHz / 2048).
- *
- * References:
- *   - de Cheveigné & Kawahara (2002), "YIN, a fundamental frequency
- *     estimator for speech and music." J. Acoust. Soc. Am. 111(4).
  */
 
-const DEFAULT_THRESHOLD = 0.1;
-const DEFAULT_MIN_HZ = 60; // below human bass + below E2 (82Hz) with margin
-const DEFAULT_MAX_HZ = 1500; // above E6; covers human voice + guitar
-const DEFAULT_RMS_GATE = 0.005; // sensibilidad del micrófono: por debajo se considera silencio
-
-/**
- * Detect the fundamental frequency in a buffer.
- * Returns `null` when no confident pitch is found (silence / inharmonic).
- *
- * @param {Float32Array|number[]} buffer Mono audio samples in [-1, 1].
- * @param {number} sampleRate
- * @param {{ threshold?: number, minHz?: number, maxHz?: number, rmsGate?: number }} [opts]
- * @returns {number | null} Frequency in Hz, or null.
- */
-export function detectPitch(buffer, sampleRate, opts = {}) {
-  const threshold = opts.threshold ?? DEFAULT_THRESHOLD;
-  const minHz = opts.minHz ?? DEFAULT_MIN_HZ;
-  const maxHz = opts.maxHz ?? DEFAULT_MAX_HZ;
-  const rmsGate = opts.rmsGate ?? DEFAULT_RMS_GATE;
-  const N = buffer.length;
-  if (N < 64 || !Number.isFinite(sampleRate) || sampleRate <= 0) return null;
-
-  // RMS gate: skip near-silent buffers.
-  let rms = 0;
-  for (let i = 0; i < N; i++) rms += buffer[i] * buffer[i];
-  rms = Math.sqrt(rms / N);
-  if (rms < rmsGate) return null;
-
-  const halfN = Math.floor(N / 2);
-  const tauMin = Math.max(2, Math.floor(sampleRate / maxHz));
-  const tauMax = Math.min(halfN - 1, Math.floor(sampleRate / minHz));
-  if (tauMax <= tauMin) return null;
-
-  // 1. Difference function d(tau)
-  const d = new Float32Array(tauMax + 1);
-  for (let tau = 1; tau <= tauMax; tau++) {
-    let sum = 0;
-    for (let i = 0; i < halfN; i++) {
-      const delta = buffer[i] - buffer[i + tau];
-      sum += delta * delta;
-    }
-    d[tau] = sum;
-  }
-
-  // 2. Cumulative mean normalized difference d'(tau)
-  const cmnd = new Float32Array(tauMax + 1);
-  cmnd[0] = 1;
-  let runningSum = 0;
-  for (let tau = 1; tau <= tauMax; tau++) {
-    runningSum += d[tau];
-    cmnd[tau] = (d[tau] * tau) / (runningSum || 1);
-  }
-
-  // 3. Absolute threshold — find smallest tau where cmnd < threshold,
-  //    then descend into its local minimum.
-  let tauEstimate = -1;
-  for (let tau = tauMin; tau <= tauMax; tau++) {
-    if (cmnd[tau] < threshold) {
-      while (tau + 1 <= tauMax && cmnd[tau + 1] < cmnd[tau]) tau++;
-      tauEstimate = tau;
-      break;
-    }
-  }
-  if (tauEstimate < 0) return null;
-
-  // 4. Parabolic interpolation for sub-sample precision.
-  let betterTau = tauEstimate;
-  const x0 = tauEstimate > 0 ? cmnd[tauEstimate - 1] : cmnd[tauEstimate];
-  const x1 = cmnd[tauEstimate];
-  const x2 = tauEstimate < tauMax ? cmnd[tauEstimate + 1] : cmnd[tauEstimate];
-  const denom = x0 + x2 - 2 * x1;
-  if (Math.abs(denom) > 1e-9) {
-    const shift = (x0 - x2) / (2 * denom);
-    if (Math.abs(shift) < 1) betterTau = tauEstimate + shift;
-  }
-
-  return sampleRate / betterTau;
-}
+import { detectPitch } from './pitchCore.js';
+export { detectPitch } from './pitchCore.js';
 
 /**
  * Create a live pitch detector. Returns a controller with `start()`/`stop()`.

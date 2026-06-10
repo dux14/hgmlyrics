@@ -1,0 +1,110 @@
+/* prayer.css — Oración del artista
+ * Theme-aware: luz del alba en light, luz de vela en dark.
+ * Tipografía fluida con clamp(); medida acotada en ch para lectura óptima.
+ */
+
+.prayer {
+  position: relative;
+  min-height: calc(100vh - var(--header-height, 64px));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(2rem, 6vw, 5rem) clamp(1.25rem, 5vw, 3rem);
+  overflow: hidden;
+  isolation: isolate;
+  /* Fondo theme-aware. Light = alba cálida; Dark = penumbra ámbar. */
+  background: var(--prayer-bg);
+}
+
+/* Halo de luz suave detrás del texto (glow estático que respira muy lento). */
+.prayer__glow {
+  position: absolute;
+  top: -10%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(70vw, 640px);
+  height: min(70vw, 640px);
+  border-radius: 50%;
+  background: var(--prayer-glow);
+  filter: blur(40px);
+  z-index: -1;
+  animation: prayer-breathe 9s ease-in-out infinite;
+}
+
+@keyframes prayer-breathe {
+  0%,
+  100% {
+    opacity: 0.75;
+    transform: translateX(-50%) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prayer__glow {
+    animation: none;
+  }
+}
+
+.prayer__inner {
+  position: relative;
+  max-width: 36ch;
+  text-align: center;
+}
+
+.prayer__label {
+  font-family: var(--font-family);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  font-size: clamp(0.62rem, 1.4vw, 0.78rem);
+  font-weight: 500;
+  color: var(--prayer-label);
+  margin: 0 0 clamp(1.5rem, 4vw, 2.5rem);
+}
+
+.prayer__body {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.1rem, 3vw, 1.8rem);
+}
+
+.prayer__stanza {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 500;
+  font-size: clamp(1.18rem, 1rem + 1.4vw, 1.7rem);
+  line-height: 1.55;
+  color: var(--prayer-text);
+  margin: 0;
+  text-wrap: balance;
+}
+
+.prayer__amen {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: clamp(1.15rem, 1rem + 1vw, 1.5rem);
+  color: var(--prayer-accent);
+  margin: clamp(1.6rem, 4vw, 2.4rem) 0 0;
+}
+
+/* ---- Tokens de tema ---- */
+:root {
+  /* Light: luz del alba */
+  --prayer-bg: linear-gradient(165deg, #fffaf2 0%, #ffeccb 42%, #f8d39a 78%, #f0bd77 100%);
+  --prayer-glow: radial-gradient(circle, rgba(255, 255, 255, 0.9), transparent 62%);
+  --prayer-label: #a8701f;
+  --prayer-text: #5a3d14;
+  --prayer-accent: #9a5a16;
+}
+
+:root[data-theme='dark'] {
+  /* Dark: luz de vela sobre la penumbra de la app */
+  --prayer-bg: radial-gradient(120% 95% at 50% 12%, #2a1d08 0%, #160e05 48%, #0b0703 100%);
+  --prayer-glow: radial-gradient(circle, rgba(255, 183, 77, 0.4), transparent 66%);
+  --prayer-label: #d49a4e;
+  --prayer-text: #f3e9d8;
+  --prayer-accent: #ffb74d;
+}

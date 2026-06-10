@@ -11,6 +11,8 @@
 import { getSession, getProfile } from '../lib/authStore.js';
 import { supabase } from '../lib/supabase.js';
 import { WorldRoster } from './WorldRoster.js';
+import { ZoneChat } from './ZoneChat.js';
+import { joinZone } from '../lib/zoneChannel.js';
 
 // ---------------------------------------------------------------------------
 // Lógica pura — testeable con Vitest/jsdom sin Phaser
@@ -34,12 +36,18 @@ export function resolveWorldGate({ user, online }) {
 let _game = null;
 let _hashGuardHandler = null;
 let _rosterEl = null;
+let _chatEl = null;
+let _zoneChannel = null;
 let _wrapperEl = null;
 
 function teardown() {
   if (_game) {
     _game.destroy(true);
     _game = null;
+  }
+  if (_zoneChannel) {
+    _zoneChannel.leave();
+    _zoneChannel = null;
   }
   if (_wrapperEl) {
     _wrapperEl.remove();
@@ -48,6 +56,10 @@ function teardown() {
   if (_rosterEl) {
     _rosterEl.remove();
     _rosterEl = null;
+  }
+  if (_chatEl) {
+    _chatEl.remove();
+    _chatEl = null;
   }
   if (_hashGuardHandler) {
     window.removeEventListener('hashchange', _hashGuardHandler);
@@ -118,15 +130,45 @@ export async function renderWorldPage(container) {
   _rosterEl = roster.el;
   wrapper.appendChild(roster.el);
 
+  // Chat por zona overlay (oculto hasta entrar a una zona)
+  const chat = ZoneChat();
+  _chatEl = chat.el;
+  wrapper.appendChild(chat.el);
+
   // Contexto de red
   const me = {
     id: user.id,
     name: getProfile()?.username || 'Invitado',
   };
 
+  // Envío local: publica al canal de la zona y hace eco en la propia lista
+  // (el canal usa broadcast { self:false }, así que no hay eco del servidor).
+  chat.onSend((text) => {
+    if (!_zoneChannel) return;
+    _zoneChannel.send(text);
+    chat.addMessage({ uid: me.id, name: me.name, text, ts: Date.now(), self: true });
+  });
+
+  // Transición de zona: salir del canal anterior, entrar al nuevo (o ninguno).
+  const onZoneChange = (zone) => {
+    if (_zoneChannel) {
+      _zoneChannel.leave();
+      _zoneChannel = null;
+    }
+    chat.setZone(zone); // truthy → muestra+limpia; null → oculta+limpia
+    if (zone) {
+      _zoneChannel = joinZone({
+        supabase,
+        channelId: zone.channelId,
+        user: { id: me.id, display_name: me.name },
+      });
+      _zoneChannel.onMessage((msg) => chat.addMessage(msg));
+    }
+  };
+
   try {
     const { createGame } = await import('../world/createGame.js');
-    _game = createGame('world-canvas', { supabase, me, onRoster: roster.setRoster });
+    _game = createGame('world-canvas', { supabase, me, onRoster: roster.setRoster, onZoneChange });
     startHashGuard();
   } catch (err) {
     console.error('[mundo] no se pudo iniciar la escena Phaser', err);

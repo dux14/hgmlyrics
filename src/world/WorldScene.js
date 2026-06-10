@@ -10,6 +10,8 @@
 import Phaser from 'phaser';
 import { joinWorld } from '../lib/worldRealtime.js';
 import { PeerBuffer } from './interpolation.js';
+import { getActiveMapDescriptor } from './worldMapStore.js';
+import { parseZones, zoneAt } from './zones.js';
 
 const SPEED = 160; // px/s
 const PEER_COLOR = 0xe57373; // rojo claro para distinguir peers del jugador local
@@ -33,17 +35,27 @@ export class WorldScene extends Phaser.Scene {
      * @type {Map<string, { sprite: Phaser.GameObjects.Rectangle, label: Phaser.GameObjects.Text, buffer: PeerBuffer, name: string }>}
      */
     this.peers = new Map();
+    /** @type {{ name: string, channelId: string, rect: object }[]} zonas del mapa activo */
+    this.zones = [];
+    /** @type {{ name: string, channelId: string }|null} zona actual del jugador */
+    this.currentZone = null;
   }
 
   preload() {
-    this.load.tilemapTiledJSON('dev-map', '/world/dev-map.json');
-    this.load.image('dev-tileset', '/world/dev-tileset.png');
+    const mapDesc = getActiveMapDescriptor();
+    this.load.tilemapTiledJSON(mapDesc.key, mapDesc.url);
+    this.load.image(mapDesc.tilesetKey, mapDesc.tilesetUrl);
   }
 
   create() {
     // ---- Tilemap ----
-    const map = this.make.tilemap({ key: 'dev-map' });
-    const tileset = map.addTilesetImage('dev-tileset', 'dev-tileset');
+    const mapDesc = getActiveMapDescriptor();
+    const map = this.make.tilemap({ key: mapDesc.key });
+    const tileset = map.addTilesetImage(mapDesc.tilesetName, mapDesc.tilesetKey);
+
+    // Zonas (object layer "zones"). El JSON crudo del tilemap está en la caché;
+    // parseZones tolera mapas sin la capa (devuelve []).
+    this.zones = parseZones(this.cache.tilemap.get(mapDesc.key)?.data ?? {});
 
     // Capa de suelo (visible, sin colisión)
     map.createLayer('ground', tileset, 0, 0);
@@ -157,6 +169,9 @@ export class WorldScene extends Phaser.Scene {
     const moving = vx !== 0 || vy !== 0;
     if (this.world) this.world.sendPosition(this.player.x, this.player.y, this.lastDir, moving);
 
+    // ---- Detección de zona ----
+    this._updateZone();
+
     // ---- Interpolar peers ----
     // Los timestamps del buffer son Date.now()-based (worldRealtime usa Date.now()),
     // por eso se muestrea con Date.now() y NO con this.time.now (reloj relativo de Phaser).
@@ -177,6 +192,25 @@ export class WorldScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
   // Helpers privados
   // ---------------------------------------------------------------------------
+
+  /**
+   * Recalcula la zona del jugador y, si cambió, notifica.
+   * Emite por dos canales:
+   *  - `this.events.emit('zonechange', zone)` — para consumidores de la escena (Fase 2 audio).
+   *  - `ctx.onZoneChange(zone)` — puente escena↔DOM (M3 chat por zona).
+   * `zone` es el objeto `{ name, channelId, rect }` o `null` fuera de toda zona.
+   */
+  _updateZone() {
+    const zone = zoneAt(this.zones, this.player.x, this.player.y);
+    const newId = zone?.channelId ?? null;
+    const curId = this.currentZone?.channelId ?? null;
+    if (newId === curId) return;
+
+    this.currentZone = zone;
+    this.events.emit('zonechange', zone);
+    const ctx = this.registry.get('worldContext');
+    ctx?.onZoneChange?.(zone);
+  }
 
   /**
    * Crea el sprite + label para un peer y lo registra en this.peers.

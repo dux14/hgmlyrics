@@ -8,6 +8,8 @@
 import { getAlbums, filterByAlbum, getState } from '../lib/store.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
+import { listMyLists } from '../lib/lists.js';
+import { openListCreateModal } from './ListCreateModal.js';
 
 let sidebarEl = null;
 let overlayEl = null;
@@ -46,6 +48,18 @@ export function updateSidebarContent() {
   const { activeAlbum } = getState();
 
   sidebarEl.innerHTML = `
+    <!-- Listas efímeras -->
+    <div class="sidebar__section" id="sidebar-lists">
+      <div class="sidebar__section-title sidebar__section-title--static">
+        Listas
+        <button class="sidebar__add-btn" id="lists-add" aria-label="Nueva lista">${icon('plus', { size: 16 })}</button>
+      </div>
+      <div class="sidebar__section-content" id="lists-content">
+        <div class="sidebar__empty">Cargando…</div>
+      </div>
+    </div>
+    <div class="sidebar__divider" role="separator"></div>
+
     <!-- Oración del artista -->
     <div class="sidebar__section">
       <div class="sidebar__album-item sidebar__nav-item" data-nav="oracion">
@@ -53,6 +67,7 @@ export function updateSidebarContent() {
         <span>Oración del artista</span>
       </div>
     </div>
+    <div class="sidebar__divider" role="separator"></div>
 
     <!-- Albums Section -->
     <div class="sidebar__section" id="sidebar-albums">
@@ -103,13 +118,58 @@ function bindSidebarEvents() {
     return;
   }
 
-  // Section collapse toggles
-  sidebarEl.querySelectorAll('.sidebar__section-title').forEach((title) => {
-    title.addEventListener('click', () => {
-      const section = title.closest('.sidebar__section');
-      section.classList.toggle('collapsed');
+  // Section collapse toggles (only collapsible titles, not static ones)
+  sidebarEl
+    .querySelectorAll('.sidebar__section-title:not(.sidebar__section-title--static)')
+    .forEach((title) => {
+      title.addEventListener('click', () => {
+        const section = title.closest('.sidebar__section');
+        section.classList.toggle('collapsed');
+      });
+    });
+
+  // Botón "Nueva lista"
+  sidebarEl.querySelector('#lists-add')?.addEventListener('click', () => {
+    openListCreateModal((list) => {
+      navigate('/lista/' + list.id);
     });
   });
+
+  // Cargar listas de forma asíncrona
+  const listsContentEl = sidebarEl.querySelector('#lists-content');
+  if (listsContentEl) {
+    listMyLists()
+      .then((lists) => {
+        if (!listsContentEl.isConnected) return;
+        if (!lists || lists.length === 0) {
+          listsContentEl.innerHTML = `<div class="sidebar__empty">Sin listas aún.</div>`;
+          return;
+        }
+        listsContentEl.innerHTML = lists
+          .map(
+            (l) => `
+            <div class="sidebar__list-item" data-lista-id="${escapeHtml(l.id)}">
+              <span class="sidebar__list-item-name">${escapeHtml(l.name)}</span>
+              ${l.expires_at ? `<span class="lists__expiry-chip">${escapeHtml(formatExpiry(l.expires_at))}</span>` : ''}
+            </div>
+          `,
+          )
+          .join('');
+
+        listsContentEl.querySelectorAll('[data-lista-id]').forEach((item) => {
+          item.addEventListener('click', () => {
+            navigate('/lista/' + item.dataset.listaId);
+            if (window.innerWidth < 768) closeSidebar();
+          });
+        });
+      })
+      .catch(() => {
+        // Error silencioso
+        if (listsContentEl.isConnected) {
+          listsContentEl.innerHTML = `<div class="sidebar__empty">Sin listas aún.</div>`;
+        }
+      });
+  }
 
   // Navegación directa (oración)
   sidebarEl.querySelectorAll('[data-nav]').forEach((item) => {
@@ -177,6 +237,19 @@ export function closeSidebar() {
   if (overlayEl) {
     overlayEl.classList.remove('active');
   }
+}
+
+/**
+ * Formatea la fecha de caducidad de una lista.
+ * @param {string} expiresAt - ISO date string
+ * @returns {string}
+ */
+function formatExpiry(expiresAt) {
+  if (!expiresAt) return '';
+  const diff = Math.ceil((new Date(expiresAt) - Date.now()) / 86400000);
+  if (diff <= 0) return 'caducada';
+  if (diff === 1) return 'caduca hoy';
+  return `caduca en ${diff}d`;
 }
 
 /**

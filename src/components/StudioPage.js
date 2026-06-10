@@ -55,6 +55,13 @@ function fmtTime(s) {
   return `${m}:${String(sec).padStart(2, '0')}`;
 }
 
+function escHtml(s) {
+  return String(s).replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+  );
+}
+
 function hoursLeft(expiresAt) {
   return Math.max(0, Math.round((new Date(expiresAt).getTime() - Date.now()) / 3600e3));
 }
@@ -243,7 +250,7 @@ function renderProcessing(body, job, filename) {
       </div>`;
   };
   body.innerHTML = `
-    ${filename ? `<p class="studio__filename" title="${filename}">${icon('audio-lines', { size: 16 })} <span>${filename}</span></p>` : ''}
+    ${filename ? `<p class="studio__filename" title="${escHtml(filename)}">${icon('audio-lines', { size: 16 })} <span>${escHtml(filename)}</span></p>` : ''}
     <div class="studio-loader">
       <div class="studio-eq" aria-hidden="true">
         ${Array.from({ length: 7 }, (_, i) => `<span class="studio-eq__bar" style="--i:${i}"></span>`).join('')}
@@ -280,7 +287,7 @@ function renderJob(body, job, quota) {
   const segments = Array.isArray(voices.segments) ? voices.segments : [];
   body.innerHTML = `
     <p class="empty-state__text studio__expiry">Disponible por <strong>${hoursLeft(job.expires_at)} h</strong> más.</p>
-    ${job.input_meta?.filename ? `<p class="studio__filename" title="${job.input_meta.filename}">${icon('audio-lines', { size: 16 })} <span>${job.input_meta.filename}</span></p>` : ''}
+    ${job.input_meta?.filename ? `<p class="studio__filename" title="${escHtml(job.input_meta.filename)}">${icon('audio-lines', { size: 16 })} <span>${escHtml(job.input_meta.filename)}</span></p>` : ''}
     <h2 class="studio__section-title">Pistas</h2>
     ${Object.entries(STEM_LABELS)
       .filter(([k]) => stems[k])

@@ -34,11 +34,16 @@ export function resolveWorldGate({ user, online }) {
 let _game = null;
 let _hashGuardHandler = null;
 let _rosterEl = null;
+let _wrapperEl = null;
 
 function teardown() {
   if (_game) {
     _game.destroy(true);
     _game = null;
+  }
+  if (_wrapperEl) {
+    _wrapperEl.remove();
+    _wrapperEl = null;
   }
   if (_rosterEl) {
     _rosterEl.remove();
@@ -79,8 +84,8 @@ export async function renderWorldPage(container) {
   if (gate === 'offline') {
     container.innerHTML = `
       <div class="empty-state fade-in">
-        <h2 class="empty-state__title">Sin conexion</h2>
-        <p class="empty-state__text">El mundo necesita conexion.</p>
+        <h2 class="empty-state__title">Sin conexión</h2>
+        <p class="empty-state__text">El mundo necesita conexión.</p>
       </div>
     `;
     return;
@@ -90,7 +95,7 @@ export async function renderWorldPage(container) {
     // En la práctica guardedRoute ya redirige; este branch es defensivo.
     container.innerHTML = `
       <div class="empty-state fade-in">
-        <p class="empty-state__text">Debes iniciar sesion para entrar al mundo.</p>
+        <p class="empty-state__text">Debes iniciar sesión para entrar al mundo.</p>
       </div>
     `;
     return;
@@ -100,6 +105,7 @@ export async function renderWorldPage(container) {
   // Envolver canvas + roster en un contenedor relativo para posicionar el overlay
   const wrapper = document.createElement('div');
   wrapper.style.cssText = 'position:relative;width:100%;height:100vh;overflow:hidden;';
+  _wrapperEl = wrapper;
   container.appendChild(wrapper);
 
   const host = document.createElement('div');
@@ -128,7 +134,7 @@ export async function renderWorldPage(container) {
     container.innerHTML = `
       <div class="empty-state fade-in">
         <h2 class="empty-state__title">Error al cargar el mundo</h2>
-        <p class="empty-state__text">No se pudo iniciar la escena. Recarga la pagina.</p>
+        <p class="empty-state__text">No se pudo iniciar la escena. Recarga la página.</p>
       </div>
     `;
   }

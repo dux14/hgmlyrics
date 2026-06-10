@@ -105,6 +105,10 @@ export class WorldScene extends Phaser.Scene {
         const name = presence.name ?? uid;
         if (!this.peers.has(uid)) {
           this._createPeerEntry(uid, name);
+        } else if (this.peers.get(uid).name === uid) {
+          const entry = this.peers.get(uid);
+          entry.label.setText(name);
+          entry.name = name;
         }
         this._pushRoster(ctx);
       });

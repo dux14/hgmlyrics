@@ -280,6 +280,7 @@ function renderJob(body, job, quota) {
   const segments = Array.isArray(voices.segments) ? voices.segments : [];
   body.innerHTML = `
     <p class="empty-state__text studio__expiry">Disponible por <strong>${hoursLeft(job.expires_at)} h</strong> más.</p>
+    ${job.input_meta?.filename ? `<p class="studio__filename" title="${job.input_meta.filename}">${icon('audio-lines', { size: 16 })} <span>${job.input_meta.filename}</span></p>` : ''}
     <h2 class="studio__section-title">Pistas</h2>
     ${Object.entries(STEM_LABELS)
       .filter(([k]) => stems[k])

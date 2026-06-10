@@ -15,6 +15,7 @@ import {
   watchJobRealtime,
 } from '../lib/stemsApi.js';
 import { downloadAllZip } from '../lib/studioZip.js';
+import { createStudioPlayer } from './StudioPlayer.js';
 
 const MAX_DURATION_S = 10.5 * 60;
 let pollTimer = null;
@@ -280,13 +281,8 @@ function renderJob(body, job, quota) {
 
   const stems = job.stems ?? {};
   const voices = job.voices ?? {};
-  const playerRow = (label, url) => `
-    <div class="studio-player-row">
-      <span class="studio-player-row__label">${label}</span>
-      <audio controls preload="none" src="${url}" class="studio-player-row__audio"></audio>
-      <a class="btn studio-player-row__dl" href="${url}" download aria-label="Descargar ${label}">${icon('download', { size: 16 })}</a>
-    </div>
-  `;
+  const playerRow = (label, url) =>
+    `<div class="studio-player-mount" data-label="${escHtml(label)}" data-url="${escHtml(url)}"></div>`;
 
   const segments = Array.isArray(voices.segments) ? voices.segments : [];
   body.innerHTML = `
@@ -421,5 +417,9 @@ function renderJob(body, job, quota) {
       }
     });
   }
+  body.querySelectorAll('.studio-player-mount').forEach((mount) => {
+    const { el } = createStudioPlayer({ label: mount.dataset.label, url: mount.dataset.url });
+    mount.replaceWith(el);
+  });
   body.querySelector('#studio-new').addEventListener('click', () => renderIdle(body, quota));
 }

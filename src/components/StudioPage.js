@@ -14,6 +14,7 @@ import {
   readAudioDuration,
   watchJobRealtime,
 } from '../lib/stemsApi.js';
+import { downloadAllZip } from '../lib/studioZip.js';
 
 const MAX_DURATION_S = 10.5 * 60;
 let pollTimer = null;
@@ -74,6 +75,9 @@ const STEM_LABELS = {
   piano: 'Piano',
   other: 'Otros',
 };
+
+const VOICE_LABELS = { lead: 'Voz líder', backing: 'Coros' };
+const ALL_LABELS = { ...STEM_LABELS, ...VOICE_LABELS };
 
 export function renderStudioPage(container) {
   stopPolling();
@@ -288,6 +292,14 @@ function renderJob(body, job, quota) {
   body.innerHTML = `
     <p class="empty-state__text studio__expiry">Disponible por <strong>${hoursLeft(job.expires_at)} h</strong> más.</p>
     ${job.input_meta?.filename ? `<p class="studio__filename" title="${escHtml(job.input_meta.filename)}">${icon('audio-lines', { size: 16 })} <span>${escHtml(job.input_meta.filename)}</span></p>` : ''}
+    <div class="studio-actions">
+      <button class="btn btn--primary studio-actions__zip" id="studio-zip">
+        ${icon('download', { size: 16 })} Descargar todo (ZIP)
+      </button>
+      <span class="studio-actions__soon" aria-disabled="true" title="Próximamente">
+        ${icon('upload', { size: 16 })} Guardar en Drive · pronto
+      </span>
+    </div>
     <h2 class="studio__section-title">Pistas</h2>
     ${Object.entries(STEM_LABELS)
       .filter(([k]) => stems[k])
@@ -387,6 +399,26 @@ function renderJob(body, job, quota) {
         segAudio.currentTime = Number(b.dataset.start);
         void segAudio.play();
       });
+    });
+  }
+  const zipBtn = body.querySelector('#studio-zip');
+  if (zipBtn) {
+    zipBtn.addEventListener('click', async () => {
+      const original = zipBtn.innerHTML;
+      zipBtn.disabled = true;
+      zipBtn.textContent = 'Empaquetando…';
+      try {
+        await downloadAllZip(job, ALL_LABELS);
+        zipBtn.innerHTML = original;
+      } catch (e) {
+        zipBtn.innerHTML = original;
+        const err = document.createElement('p');
+        err.className = 'studio__error';
+        err.textContent = e.message || 'No pudimos generar el ZIP.';
+        zipBtn.closest('.studio-actions').insertAdjacentElement('afterend', err);
+      } finally {
+        zipBtn.disabled = false;
+      }
     });
   }
   body.querySelector('#studio-new').addEventListener('click', () => renderIdle(body, quota));

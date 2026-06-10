@@ -25,6 +25,7 @@ import { searchSongs } from '../lib/search.js';
 let dismissSearchHandler = null;
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
+import { updateSidebarContent } from './Sidebar.js';
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -139,6 +140,9 @@ function renderEditor(container, listData) {
           ${expiryText ? `<span class="lists__expiry-chip ${isUrgent ? 'lists__expiry-chip--urgent' : ''}">${escapeHtml(expiryText)}</span>` : ''}
         </div>
         <div class="list-detail__header-actions">
+          <button class="btn btn--primary" id="list-detail-save">
+            ${icon('check-circle', { size: 16 })} Guardar
+          </button>
           <button class="list-detail__icon-btn list-detail__icon-btn--danger" id="list-detail-delete" title="Borrar lista">
             ${icon('trash', { size: 18 })}
           </button>
@@ -362,6 +366,30 @@ function renderEditor(container, listData) {
   }
 
   bindMemberEvents();
+
+  // Guardar y volver
+  const saveBtn = container.querySelector('#list-detail-save');
+  saveBtn?.addEventListener('click', async () => {
+    clearTimeout(persistTimer);
+    saveBtn.disabled = true;
+    const original = saveBtn.innerHTML;
+    saveBtn.textContent = 'Guardando…';
+    try {
+      const nameInput = container.querySelector('#list-detail-name');
+      const newName = nameInput?.value.trim();
+      if (newName && newName !== listData.name) {
+        await updateList(id, { name: newName });
+      }
+      await setListSongs(id, order);
+      saveBtn.textContent = 'Guardado ✓';
+      updateSidebarContent();
+      navigate('/');
+    } catch (err) {
+      if (errorEl) errorEl.textContent = err.message;
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = original;
+    }
+  });
 }
 
 /* ── Solo lectura (member) ──────────────────────────────────────── */

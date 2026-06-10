@@ -96,6 +96,8 @@ export default [
         afterAll: 'readonly',
         vi: 'readonly',
         process: 'readonly',
+        Buffer: 'readonly',
+        global: 'readonly',
         Response: 'readonly',
         Request: 'readonly',
         Headers: 'readonly',

@@ -36,11 +36,12 @@ export default withErrors(async (req, res) => {
 
   // Reconciliación: si está en proceso y sin avance > 3 min, consultar Replicate directo
   const inProgress = ['separating_stems', 'separating_voices'].includes(job.status);
-  const stale = Date.now() - new Date(job.updated_at).getTime() > STALE_MS;
+  const elapsed = Date.now() - new Date(job.updated_at).getTime();
+  const stale = elapsed > STALE_MS;
   const activeKinds = job.status === 'separating_stems' ? ['stems'] : ['karaoke', 'diarization'];
   const anyModal = activeKinds.some((k) => providerFor(k) === 'modal');
 
-  if (inProgress && anyModal && Date.now() - new Date(job.updated_at).getTime() > MODAL_TIMEOUT_MS) {
+  if (inProgress && anyModal && elapsed > MODAL_TIMEOUT_MS) {
     // Modal es fire-and-forget: si lleva >10 min sin avanzar, marcar como fallido
     await sql`
       UPDATE stem_jobs SET status = 'failed',

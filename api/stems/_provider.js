@@ -9,6 +9,9 @@ import { copyUrlToStems } from '../_lib/storage.js';
 
 /** @param {'stems'|'karaoke'|'diarization'} kind @returns {'replicate'|'modal'} */
 export function providerFor(kind) {
+  // Override por-kind solo para karaoke a propósito: MDX23 (karaoke) es el modelo de riesgo
+  // alto, así que puede quedarse en Replicate (STEMS_PROVIDER_KARAOKE=replicate) mientras
+  // stems/diarization van a Modal. Los otros kinds siguen el global STEMS_PROVIDER.
   const override = kind === 'karaoke' ? process.env.STEMS_PROVIDER_KARAOKE : undefined;
   const p = override ?? process.env.STEMS_PROVIDER ?? 'replicate';
   return p === 'modal' ? 'modal' : 'replicate';
@@ -35,6 +38,9 @@ export async function startModel({ kind, input, jobId, userId, callbackUrl }) {
 export async function ingestResult({ kind, provider, prediction, job }) {
   if (provider === 'modal') {
     if (kind === 'diarization') return MODELS.diarization.parseOutput(prediction.output);
+    if (!prediction.output || typeof prediction.output !== 'object') {
+      throw Object.assign(new Error('Modal: output ausente en callback succeeded'), { status: 502 });
+    }
     return prediction.output; // stems / karaoke: keys passthrough
   }
   // Replicate

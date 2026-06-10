@@ -14,6 +14,7 @@ export function verifyModalSignature({ timestamp, signature, body, secret }) {
   const expected = createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
   const a = Buffer.from(signature, 'hex');
   const b = Buffer.from(expected, 'hex');
+  if (a.length === 0) return false;
   return a.length === b.length && timingSafeEqual(a, b);
 }
 

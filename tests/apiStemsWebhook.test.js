@@ -313,4 +313,13 @@ describe('POST /api/stems/webhook (Modal)', () => {
     expect(mockUpload).not.toHaveBeenCalled();
     expect(sqlCalls.some((c) => c.text.includes("status = 'separating_voices'"))).toBe(true);
   });
+
+  it('failed Modal → status failed', async () => {
+    sqlResponses.push([{ id: 'j1', user_id: 'u1', status: 'separating_stems', voices: null }]); // SELECT
+    sqlResponses.push([]); // UPDATE failed
+    const res = makeRes();
+    await handler(modalReq({ status: 'failed', error: 'boom' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(sqlCalls.some((c) => c.text.includes("status = 'failed'"))).toBe(true);
+  });
 });

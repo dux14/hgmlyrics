@@ -1,0 +1,429 @@
+/**
+ * lists.css — Estilos para listas efímeras
+ * Prefijos: lists__ (modal/general), list-detail__ (vista de detalle)
+ */
+
+/* ── Separador del sidebar ── */
+.sidebar__divider {
+  height: 1px;
+  margin: var(--space-sm) var(--space-md);
+  background: var(--color-border);
+}
+
+/* ── Sección Listas del sidebar ── */
+.sidebar__add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+
+.sidebar__add-btn:hover {
+  color: var(--color-text);
+  background: var(--color-surface-alt);
+}
+
+.sidebar__section-title--static {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: default;
+}
+
+.sidebar__section-title--static:hover {
+  background: none;
+}
+
+.sidebar__empty {
+  padding: var(--space-xs) var(--space-md);
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.sidebar__list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-xs) var(--space-md);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  gap: var(--space-sm);
+  transition: background 0.15s;
+}
+
+.sidebar__list-item:hover {
+  background: var(--color-surface-alt);
+}
+
+.sidebar__list-item-name {
+  flex: 1;
+  font-size: 0.875rem;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Chip de caducidad ── */
+.lists__expiry-chip {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.lists__expiry-chip--urgent {
+  background: color-mix(in srgb, var(--color-error, #e53935) 15%, transparent);
+  color: var(--color-error, #e53935);
+}
+
+/* ── Modal de creación ── */
+.lists__modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: var(--z-modal, 300);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-md);
+}
+
+.lists__modal-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.lists__modal-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.lists__modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.lists__modal-close:hover {
+  color: var(--color-text);
+}
+
+.lists__modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lists__modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.lists__modal-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.lists__modal-input {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: 0.9rem;
+  box-sizing: border-box;
+}
+
+.lists__modal-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.lists__presets {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.lists__preset-btn {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.lists__preset-btn:hover,
+.lists__preset-btn--active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+.lists__modal-error {
+  font-size: 0.8rem;
+  color: var(--color-error, #e53935);
+  min-height: 1.2em;
+}
+
+/* ── Detalle de lista ── */
+.list-detail__container {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.list-detail__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.list-detail__title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin: 0;
+  flex: 1;
+}
+
+.list-detail__title-input {
+  font-size: 1.2rem;
+  font-weight: 700;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  width: 100%;
+  padding: 2px 0;
+}
+
+.list-detail__title-input:focus {
+  outline: none;
+  border-bottom-color: var(--color-accent);
+}
+
+.list-detail__header-actions {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.list-detail__icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s;
+}
+
+.list-detail__icon-btn:hover {
+  color: var(--color-text);
+}
+
+.list-detail__icon-btn--danger:hover {
+  color: var(--color-error, #e53935);
+}
+
+/* Buscador de canciones */
+.list-detail__search-wrap {
+  position: relative;
+}
+
+.list-detail__search-input {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: 0.9rem;
+  box-sizing: border-box;
+}
+
+.list-detail__search-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.list-detail__search-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  z-index: 10;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.list-detail__search-result {
+  padding: var(--space-sm) var(--space-md);
+  cursor: pointer;
+  font-size: 0.875rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.list-detail__search-result:hover {
+  background: var(--color-surface-alt);
+}
+
+.list-detail__search-result-sub {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+/* Filas de canciones */
+.list-detail__songs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.list-detail__song-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
+}
+
+.list-detail__song-row--readonly {
+  cursor: pointer;
+}
+
+.list-detail__song-row--readonly:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-alt));
+}
+
+.list-detail__song-name {
+  flex: 1;
+  font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-detail__song-sub {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 8rem;
+}
+
+.list-detail__row-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: 2px;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.list-detail__row-btn:hover {
+  color: var(--color-text);
+}
+
+.list-detail__row-btn--danger:hover {
+  color: var(--color-error, #e53935);
+}
+
+/* Sección de invitados */
+.list-detail__section-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: 0;
+}
+
+.list-detail__invite-row {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.list-detail__members {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.list-detail__member-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 0.875rem;
+  padding: var(--space-xs) 0;
+}
+
+.list-detail__member-name {
+  flex: 1;
+}
+
+.list-detail__error {
+  font-size: 0.8rem;
+  color: var(--color-error, #e53935);
+  min-height: 1.2em;
+}
+
+.list-detail__empty {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  padding: var(--space-sm) 0;
+}

@@ -60,10 +60,16 @@ export default withErrors(async (req, res) => {
     await deleteStemsPrefix(`${job.user_id}/${job.id}`);
   }
 
+  // Listas efímeras caducadas: borrar (cascadea a songs y members)
+  const expiredLists = await sql`
+    DELETE FROM ephemeral_lists WHERE expires_at < now() RETURNING id
+  `;
+
   res.status(200).json({
     expired: expired.length,
     zombies: zombies.length,
     abandoned: abandoned.length,
     failedStorage: orphanStorage.length,
+    expiredLists: expiredLists.length,
   });
 });

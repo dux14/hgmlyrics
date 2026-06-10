@@ -50,7 +50,7 @@ let _zoneChannel = null;
 let _wrapperEl = null;
 let _joystick = null;
 let _reconnectEl = null;
-/** @type {{ el: HTMLElement, addRemotePeer: Function, removeRemotePeer: Function, destroy: Function }|null} */
+/** @type {{ el: HTMLElement, addRemotePeer: Function, removeRemotePeer: Function, clearRemotePeers: Function, destroy: Function }|null} */
 let _voiceControls = null;
 /** @type {{ setPeers: Function, onRemoteStream: Function, onPeerSpeaking: Function, closeAll: Function }|null} */
 let _voiceMesh = null;
@@ -324,10 +324,6 @@ export async function renderWorldPage(container) {
         _voiceSignaling = null;
       }
     },
-    onPeerSpeaking(peerId, speaking) {
-      // Propagar al mesh para que otros consumidores puedan usarlo (ej: A3)
-      _voiceMesh?.onPeerSpeaking?.((cb) => cb(peerId, speaking));
-    },
   });
   _voiceControls = voiceControls;
 
@@ -375,6 +371,9 @@ export async function renderWorldPage(container) {
     }
 
     // ---- Voz: cambiar de zona ----
+    // Limpiar peers remotos de la zona anterior antes de cerrar mesh/señalizacion.
+    _voiceControls?.clearRemotePeers();
+
     // Cerrar el mesh + señalizacion anteriores (si los hay).
     if (_voiceMesh) {
       _voiceMesh.closeAll();

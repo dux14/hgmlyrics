@@ -153,6 +153,7 @@ function createPeerIndicator(peerId, label) {
  *   el:               HTMLElement,
  *   addRemotePeer:    (peerId: string, stream: MediaStream, label?: string) => void,
  *   removeRemotePeer: (peerId: string) => void,
+ *   clearRemotePeers: () => void,
  *   destroy:          () => void,
  * }}
  */
@@ -176,8 +177,10 @@ export function VoiceControls({
   let voiceActive = false;
 
   /**
-   * Map peerId → { monitor: { stop }, indicator }
-   * @type {Map<string, { monitor: { stop: () => void }, indicator: object }>}
+   * Map peerId → { stream: MediaStream, monitor: { stop: () => void } | null, indicator }
+   * Se guarda stream para poder arrancar el monitor retroactivamente cuando
+   * audioCtx se crea despues de que llego el stream remoto.
+   * @type {Map<string, { stream: MediaStream, monitor: { stop: () => void }|null, indicator: object }>}
    */
   const remotePeers = new Map();
 
@@ -271,6 +274,21 @@ export function VoiceControls({
         localIndicator.setSpeaking(speaking);
       });
 
+      // Arrancar monitores para peers remotos que llegaron antes de activar la voz.
+      // Tambien los añadimos al DOM ahora que la voz esta activa (Minor 1).
+      remotePeers.forEach((entry, peerId) => {
+        if (!entry.monitor) {
+          entry.monitor = createLevelMonitor(audioCtx, entry.stream, (speaking) => {
+            entry.indicator.setSpeaking(speaking);
+            onPeerSpeaking?.(peerId, speaking);
+          });
+        }
+        // Añadir al DOM si todavia no esta (puede haberse añadido ya si voiceActive era true)
+        if (!entry.indicator.el.parentNode) {
+          peerList.appendChild(entry.indicator.el);
+        }
+      });
+
       onActivate?.(localStream);
     } catch (err) {
       console.error('[VoiceControls] Error al obtener microfono:', err);
@@ -331,12 +349,20 @@ export function VoiceControls({
    * @param {string}      [label]
    */
   function addRemotePeer(peerId, stream, label) {
+    // Ignorar si ya existe o si es el propio usuario (Minor 2)
+    if (peerId === selfId) return;
     if (remotePeers.has(peerId)) return;
 
     const indicator = createPeerIndicator(peerId, label);
-    peerList.appendChild(indicator.el);
 
-    // Solo monitorear si hay AudioContext activo (voz local activa)
+    // Solo mostrar el indicador en el DOM si la voz local ya esta activa (Minor 1).
+    // Si no, se aniadira al activar la voz (ver handler de activacion).
+    if (voiceActive) {
+      peerList.appendChild(indicator.el);
+    }
+
+    // Solo monitorear si hay AudioContext activo (voz local activa).
+    // Si no, el monitor se arrancara retroactivamente al activar la voz.
     let monitor = null;
     if (audioCtx) {
       monitor = createLevelMonitor(audioCtx, stream, (speaking) => {
@@ -345,7 +371,8 @@ export function VoiceControls({
       });
     }
 
-    remotePeers.set(peerId, { monitor, indicator });
+    // Guardar stream para poder arrancar el monitor retroactivamente (Important 1)
+    remotePeers.set(peerId, { stream, monitor, indicator });
   }
 
   /**
@@ -362,6 +389,14 @@ export function VoiceControls({
   }
 
   /**
+   * Elimina todos los peers remotos: detiene monitores y quita indicadores.
+   * Llamado desde WorldPage al cambiar de zona para limpiar el estado de la zona anterior.
+   */
+  function clearRemotePeers() {
+    remotePeers.forEach((_, peerId) => removeRemotePeer(peerId));
+  }
+
+  /**
    * Destruye el componente: para todos los monitores, libera el stream local.
    */
   function destroy() {
@@ -374,5 +409,5 @@ export function VoiceControls({
     el.remove();
   }
 
-  return { el, addRemotePeer, removeRemotePeer, destroy };
+  return { el, addRemotePeer, removeRemotePeer, clearRemotePeers, destroy };
 }

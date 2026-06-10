@@ -76,3 +76,19 @@ export function detectPitch(buffer, sampleRate, opts = {}) {
 
   return sampleRate / betterTau;
 }
+
+/**
+ * Calcula RMS y pitch de un buffer en una sola pasada de conveniencia.
+ * Reporta rms SIEMPRE (incluso si hz es null), igual que el tick actual.
+ * @param {Float32Array|number[]} buffer
+ * @param {number} sampleRate
+ * @param {object} [opts] - mismas opciones que detectPitch
+ * @returns {{ hz: number|null, rms: number }}
+ */
+export function analyzeBuffer(buffer, sampleRate, opts = {}) {
+  let sum = 0;
+  for (let i = 0; i < buffer.length; i++) sum += buffer[i] * buffer[i];
+  const rms = buffer.length ? Math.sqrt(sum / buffer.length) : 0;
+  const hz = detectPitch(buffer, sampleRate, opts);
+  return { hz, rms };
+}

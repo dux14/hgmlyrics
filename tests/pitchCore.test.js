@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectPitch } from '../src/lib/pitchCore.js';
+import { detectPitch, analyzeBuffer } from '../src/lib/pitchCore.js';
 
 const SAMPLE_RATE = 44100;
 const SAMPLES = 2048;
@@ -17,5 +17,18 @@ describe('pitchCore.detectPitch', () => {
   });
   it('rechaza el silencio', () => {
     expect(detectPitch(new Float32Array(SAMPLES), SAMPLE_RATE)).toBeNull();
+  });
+});
+
+describe('analyzeBuffer', () => {
+  it('devuelve { hz, rms } para un seno A4', () => {
+    const { hz, rms } = analyzeBuffer(sine(440), SAMPLE_RATE);
+    expect(Math.abs(1200 * Math.log2(hz / 440))).toBeLessThan(5);
+    expect(rms).toBeGreaterThan(0.3); // amp 0.5 → rms ≈ 0.354
+  });
+  it('hz null pero rms reportado en silencio', () => {
+    const { hz, rms } = analyzeBuffer(new Float32Array(SAMPLES), SAMPLE_RATE);
+    expect(hz).toBeNull();
+    expect(rms).toBe(0);
   });
 });

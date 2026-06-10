@@ -5,9 +5,12 @@ import { createStemsUploadUrl } from '../_lib/storage.js';
 import { ACTIVE_STATUSES, DAILY_QUOTA, validateUploadMeta } from '../_lib/stems.js';
 
 async function quotaUsedToday(userId) {
+  // Solo cuenta jobs que realmente entraron a procesamiento o terminaron OK.
+  // created/uploaded abandonados no consumen cuota.
   const rows = await sql`
     SELECT count(*)::int AS n FROM stem_jobs
-    WHERE user_id = ${userId} AND status <> 'failed'
+    WHERE user_id = ${userId}
+      AND status IN ('separating_stems', 'separating_voices', 'done')
       AND created_at >= date_trunc('day', now())
   `;
   return rows[0]?.n ?? 0;

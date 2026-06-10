@@ -9,14 +9,18 @@ const { createPrediction, getPrediction, verifyWebhookSignature } =
 describe('verifyWebhookSignature', () => {
   const secret = 'whsec_' + Buffer.from('super-secret-key').toString('base64');
   const id = 'msg_123';
-  const timestamp = '1718000000';
   const body = '{"status":"succeeded"}';
+
+  function currentTimestamp() {
+    return String(Math.floor(Date.now() / 1000));
+  }
 
   function sign(key, content) {
     return createHmac('sha256', key).update(content).digest('base64');
   }
 
-  it('acepta una firma válida', () => {
+  it('acepta una firma válida con timestamp reciente', () => {
+    const timestamp = currentTimestamp();
     const key = Buffer.from(secret.split('_')[1], 'base64');
     const sig = sign(key, `${id}.${timestamp}.${body}`);
     expect(verifyWebhookSignature({ id, timestamp, signatures: `v1,${sig}`, body, secret })).toBe(
@@ -25,15 +29,33 @@ describe('verifyWebhookSignature', () => {
   });
 
   it('rechaza una firma inválida', () => {
+    const timestamp = currentTimestamp();
     expect(verifyWebhookSignature({ id, timestamp, signatures: 'v1,AAAA', body, secret })).toBe(
       false,
     );
   });
 
   it('rechaza si falta algún header', () => {
+    const timestamp = currentTimestamp();
     expect(verifyWebhookSignature({ id: '', timestamp, signatures: 'v1,x', body, secret })).toBe(
       false,
     );
+  });
+
+  it('rechaza timestamp fuera de la tolerancia de ±5 min (anti-replay)', () => {
+    // Timestamp de hace 6 minutos → fuera de tolerancia
+    const oldTimestamp = String(Math.floor(Date.now() / 1000) - 6 * 60);
+    const key = Buffer.from(secret.split('_')[1], 'base64');
+    const sig = sign(key, `${id}.${oldTimestamp}.${body}`);
+    expect(
+      verifyWebhookSignature({
+        id,
+        timestamp: oldTimestamp,
+        signatures: `v1,${sig}`,
+        body,
+        secret,
+      }),
+    ).toBe(false);
   });
 });
 

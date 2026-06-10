@@ -10,6 +10,7 @@ import {
 describe('canTransition', () => {
   it('permite el camino feliz completo', () => {
     expect(canTransition('created', 'uploaded')).toBe(true);
+    expect(canTransition('created', 'separating_stems')).toBe(true); // salto directo de start.js
     expect(canTransition('uploaded', 'separating_stems')).toBe(true);
     expect(canTransition('separating_stems', 'separating_voices')).toBe(true);
     expect(canTransition('separating_voices', 'done')).toBe(true);

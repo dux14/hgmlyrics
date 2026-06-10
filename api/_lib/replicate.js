@@ -46,10 +46,13 @@ export async function getPrediction(id) {
 /**
  * Verifica la firma svix-style de un webhook de Replicate.
  * signatures: "v1,<base64> v1,<base64>..." — válida si ALGUNA coincide.
+ * También rechaza timestamps fuera de ±5 min (anti-replay).
  * @returns {boolean}
  */
 export function verifyWebhookSignature({ id, timestamp, signatures, body, secret }) {
   if (!id || !timestamp || !signatures || !secret) return false;
+  // Anti-replay: rechazar si el timestamp está fuera de la tolerancia de ±5 min
+  if (Math.abs(Date.now() - Number(timestamp) * 1000) > 5 * 60 * 1000) return false;
   const key = Buffer.from(secret.split('_')[1] ?? '', 'base64');
   if (key.length === 0) return false;
   const expected = createHmac('sha256', key).update(`${id}.${timestamp}.${body}`).digest();

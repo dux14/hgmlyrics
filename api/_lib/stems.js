@@ -23,7 +23,9 @@ const AUDIO_MIMES = new Set([
 
 /** Transiciones válidas (solo hacia adelante). */
 const NEXT = {
-  created: ['uploaded', 'failed'],
+  // start.js salta created → separating_stems directamente (sin pasar por uploaded).
+  // Se mantiene 'uploaded' para compatibilidad con cualquier flujo futuro de dos pasos.
+  created: ['uploaded', 'separating_stems', 'failed'],
   uploaded: ['separating_stems', 'failed'],
   separating_stems: ['separating_voices', 'failed'],
   separating_voices: ['done', 'failed'],

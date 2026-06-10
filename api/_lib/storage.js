@@ -99,11 +99,14 @@ export async function copyUrlToStems(url, key) {
 }
 
 /**
- * Signed URL de descarga (1h por defecto).
+ * Signed URL de descarga (6h por defecto).
+ * Los resultados se prometen disponibles 48h; 6h reduce la probabilidad de que un audio
+ * en pestaña abierta expire antes de que el usuario lo descargue.
+ * TODO: re-firmar al reproducir si el TTL no cubre las 48h
  * @param {string} key
  * @param {number} [expiresIn]
  */
-export async function signStemsDownload(key, expiresIn = 3600) {
+export async function signStemsDownload(key, expiresIn = 21600) {
   const { data, error } = await supabase.storage.from(STEMS_BUCKET).createSignedUrl(key, expiresIn);
   if (error) throw error;
   return data.signedUrl;

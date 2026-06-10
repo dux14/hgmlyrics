@@ -39,7 +39,7 @@ export async function processPredictionResult(sql, job, kind, prediction) {
     const stems = {};
     for (const [name, url] of Object.entries(urls)) {
       if (!url) continue;
-      stems[name] = await copyUrlToStems(url, `${job.user_id}/${job.id}/stems/${name}.wav`);
+      stems[name] = await copyUrlToStems(url, `${job.user_id}/${job.id}/stems/${name}.mp3`);
     }
     if (!stems.vocals) {
       await sql`
@@ -50,7 +50,8 @@ export async function processPredictionResult(sql, job, kind, prediction) {
       return;
     }
     // Etapa 2: karaoke + diarización en paralelo sobre el stem vocal
-    const vocalUrl = await signStemsDownload(stems.vocals, 3600);
+    // TODO: re-firmar al reproducir si el TTL no cubre las 48h
+    const vocalUrl = await signStemsDownload(stems.vocals, 21600);
     const [karaoke, diarization] = await Promise.all([
       createPrediction({
         model: MODELS.karaoke.slug,
@@ -74,32 +75,42 @@ export async function processPredictionResult(sql, job, kind, prediction) {
   }
 
   // kind === 'karaoke' | 'diarization' (etapa 2)
+  // FIX-1: merge atómico con jsonb || para evitar lost-update entre las 2 predicciones concurrentes.
   if (job.status !== 'separating_voices') return;
-  const voices = job.voices ?? {};
 
-  if (kind === 'karaoke' && voices.lead === undefined) {
+  let patch;
+  if (kind === 'karaoke') {
+    // Idempotencia: si ya llegó karaoke, no reescribir
+    if (job.voices?.lead !== undefined) return;
     const out = MODELS.karaoke.parseOutput(prediction.output);
-    voices.lead = out.lead
-      ? await copyUrlToStems(out.lead, `${job.user_id}/${job.id}/voices/lead.wav`)
+    const lead = out.lead
+      ? await copyUrlToStems(out.lead, `${job.user_id}/${job.id}/voices/lead.mp3`)
       : null;
-    voices.backing = out.backing
-      ? await copyUrlToStems(out.backing, `${job.user_id}/${job.id}/voices/backing.wav`)
+    const backing = out.backing
+      ? await copyUrlToStems(out.backing, `${job.user_id}/${job.id}/voices/backing.mp3`)
       : null;
-  }
-  if (kind === 'diarization' && voices.segments === undefined) {
-    voices.segments = MODELS.diarization.parseOutput(prediction.output);
+    patch = { lead, backing };
+  } else {
+    // kind === 'diarization'
+    // Idempotencia: si ya llegó diarización, no reescribir
+    if (job.voices?.segments !== undefined) return;
+    patch = { segments: MODELS.diarization.parseOutput(prediction.output) };
   }
 
-  const complete = voices.lead !== undefined && voices.segments !== undefined;
+  // Merge atómico: solo aporta las claves propias, sin pisar las del otro webhook
+  const [updated] = await sql`
+    UPDATE stem_jobs
+      SET voices = COALESCE(voices, '{}'::jsonb) || ${sql.json(patch)}, updated_at = now()
+      WHERE id = ${job.id} AND status = 'separating_voices'
+      RETURNING voices
+  `;
+  if (!updated) return; // race: el job ya salió de separating_voices
+
+  const merged = updated.voices ?? {};
+  const complete = merged.lead !== undefined && merged.segments !== undefined;
   if (complete) {
     await sql`
-      UPDATE stem_jobs SET status = 'done', voices = ${sql.json(voices)},
-        expires_at = ${expiresAt()}, updated_at = now()
-      WHERE id = ${job.id} AND status = 'separating_voices'
-    `;
-  } else {
-    await sql`
-      UPDATE stem_jobs SET voices = ${sql.json(voices)}, updated_at = now()
+      UPDATE stem_jobs SET status = 'done', expires_at = ${expiresAt()}, updated_at = now()
       WHERE id = ${job.id} AND status = 'separating_voices'
     `;
   }

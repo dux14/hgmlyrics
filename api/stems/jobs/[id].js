@@ -43,7 +43,7 @@ export default withErrors(async (req, res) => {
       const prediction = await getPrediction(predId);
       if (['succeeded', 'failed', 'canceled'].includes(prediction.status)) {
         await processPredictionResult(sql, job, kind, prediction);
-        rows = await sql`SELECT * FROM stem_jobs WHERE id = ${id}`;
+        rows = await sql`SELECT * FROM stem_jobs WHERE id = ${id} AND user_id = ${user.id}`;
         job = rows[0];
       }
     }

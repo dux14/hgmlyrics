@@ -40,7 +40,8 @@ const handler = (await import('../api/stems/webhook.js')).default;
 function signedReq(bodyObj, { job = 'j1', kind = 'stems' } = {}) {
   const body = JSON.stringify(bodyObj);
   const id = 'msg_1';
-  const timestamp = '1718000000';
+  // Usar timestamp actual para pasar la validación anti-replay (FIX-2)
+  const timestamp = String(Math.floor(Date.now() / 1000));
   const key = Buffer.from(SECRET.split('_')[1], 'base64');
   const sig = createHmac('sha256', key).update(`${id}.${timestamp}.${body}`).digest('base64');
   const req = Readable.from([Buffer.from(body)]);
@@ -88,6 +89,27 @@ describe('POST /api/stems/webhook', () => {
   it('401 si la firma es inválida', async () => {
     const req = signedReq({ status: 'succeeded' });
     req.headers['webhook-signature'] = 'v1,AAAA';
+    const res = makeRes();
+    await handler(req, res);
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('401 si el timestamp está fuera de la tolerancia (anti-replay)', async () => {
+    const body = JSON.stringify({ status: 'succeeded' });
+    const id = 'msg_old';
+    // Timestamp de hace 10 minutos
+    const timestamp = String(Math.floor(Date.now() / 1000) - 10 * 60);
+    const key = Buffer.from(SECRET.split('_')[1], 'base64');
+    const sig = createHmac('sha256', key).update(`${id}.${timestamp}.${body}`).digest('base64');
+    const req = Readable.from([Buffer.from(body)]);
+    req.method = 'POST';
+    req.headers = {
+      'webhook-id': id,
+      'webhook-timestamp': timestamp,
+      'webhook-signature': `v1,${sig}`,
+    };
+    req.query = { job: 'j1', kind: 'stems' };
+    req.url = '/api/stems/webhook?job=j1&kind=stems';
     const res = makeRes();
     await handler(req, res);
     expect(res.statusCode).toBe(401);
@@ -149,14 +171,92 @@ describe('POST /api/stems/webhook', () => {
         id: 'j1',
         user_id: 'u1',
         status: 'separating_voices',
-        voices: { lead: 'l.wav', backing: 'b.wav' },
+        voices: { lead: 'l.mp3', backing: 'b.mp3' },
       },
     ]);
-    sqlResponses.push([]); // UPDATE done
+    // UPDATE merge atómico → RETURNING voices completo
+    sqlResponses.push([{ voices: { lead: 'l.mp3', backing: 'b.mp3', segments: [] } }]);
+    // UPDATE status = 'done'
+    sqlResponses.push([]);
     const output = { segments: [{ speaker: 'SPEAKER_00', start: 1.5, end: 4.2 }] };
     const res = makeRes();
     await handler(signedReq({ status: 'succeeded', output }, { kind: 'diarization' }), res);
     expect(res.statusCode).toBe(200);
+    expect(sqlCalls.some((c) => c.text.includes("status = 'done'"))).toBe(true);
+  });
+
+  it('FIX-1: llegada concurrente de karaoke y diarización no pierde ninguna parte', async () => {
+    // Simula que AMBOS webhooks leen el job con voices=null (antes de que el otro escriba).
+    // El primer webhook (karaoke) que llega: job.voices = null → no hay idempotencia early-exit.
+    // El merge atómico retorna las voces con lead+backing. No hay segments aún → no done.
+    sqlResponses.push([
+      {
+        id: 'j1',
+        user_id: 'u1',
+        status: 'separating_voices',
+        voices: null, // ambos webhooks vieron voices=null
+      },
+    ]);
+    // RETURNING del UPDATE atómico de karaoke: solo lead+backing (diarización no llegó aún)
+    sqlResponses.push([
+      { voices: { lead: 'u1/j1/voices/lead.mp3', backing: 'u1/j1/voices/backing.mp3' } },
+    ]);
+    // No hay UPDATE de done porque segments aún no existe
+
+    fetch.mockImplementation(async (url) => {
+      if (String(url).includes('api.replicate.com')) {
+        return { ok: true, json: async () => ({ id: 'pred_x' }) };
+      }
+      return {
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(4),
+        headers: { get: () => 'audio/mpeg' },
+      };
+    });
+
+    const karaokeOutput = ['https://r/lead.mp3', 'https://r/backing.mp3'];
+    const res = makeRes();
+    await handler(
+      signedReq({ status: 'succeeded', output: karaokeOutput }, { kind: 'karaoke' }),
+      res,
+    );
+    expect(res.statusCode).toBe(200);
+    // El UPDATE de karaoke usa COALESCE || merge (no sobreescribe todo voices)
+    expect(sqlCalls.some((c) => c.text.includes('COALESCE(voices'))).toBe(true);
+    // No debe marcar done porque aún faltan segments
+    expect(sqlCalls.some((c) => c.text.includes("status = 'done'"))).toBe(false);
+
+    // Ahora llega diarización (también vio voices=null, pero el merge atómico ya tiene lead+backing en DB)
+    sqlCalls.length = 0;
+    sqlResponses.push([
+      {
+        id: 'j1',
+        user_id: 'u1',
+        status: 'separating_voices',
+        voices: null, // diarización también leyó voices=null antes de que karaoke escribiera
+      },
+    ]);
+    // RETURNING: el merge atómico de diarización sobre el estado real del DB (lead+backing ya están)
+    sqlResponses.push([
+      {
+        voices: {
+          lead: 'u1/j1/voices/lead.mp3',
+          backing: 'u1/j1/voices/backing.mp3',
+          segments: [],
+        },
+      },
+    ]);
+    // UPDATE done
+    sqlResponses.push([]);
+
+    const diarizationOutput = { segments: [] };
+    const res2 = makeRes();
+    await handler(
+      signedReq({ status: 'succeeded', output: diarizationOutput }, { kind: 'diarization' }),
+      res2,
+    );
+    expect(res2.statusCode).toBe(200);
+    // El RETURNING contiene lead+backing+segments → completo → done
     expect(sqlCalls.some((c) => c.text.includes("status = 'done'"))).toBe(true);
   });
 });

@@ -198,6 +198,7 @@ function renderEditor(container, listData) {
   `;
 
   const errorEl = container.querySelector('#list-detail-error');
+  const id = listData.id;
   let persistTimer = null;
 
   function persistSongs() {
@@ -208,8 +209,6 @@ function renderEditor(container, listData) {
       });
     }, 400);
   }
-
-  const id = listData.id;
 
   function rerenderSongs() {
     const songsEl = container.querySelector('#list-detail-songs');
@@ -345,6 +344,7 @@ function renderEditor(container, listData) {
           ? `<p class="list-detail__empty">Sin invitados.</p>`
           : newMembers.map(memberRowHtml).join('');
       bindMemberEvents();
+      renderFriendSuggestions();
       inviteInput.value = '';
     } catch (err) {
       inviteError.textContent = err.message;

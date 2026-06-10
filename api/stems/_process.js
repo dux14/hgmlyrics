@@ -27,6 +27,11 @@ function webhookUrl(jobId, kind) {
 export async function processPredictionResult(sql, job, kind, prediction, provider = 'replicate') {
   if (prediction.status !== 'succeeded') {
     if (['failed', 'canceled'].includes(prediction.status) && canTransition(job.status, 'failed')) {
+      // El usuario ve FRIENDLY_FAIL, pero el detalle técnico del provider se pierde si no
+      // lo logueamos: lo dejamos en los logs del servidor para poder depurar sin adivinar.
+      console.error(
+        `[stems] job=${job.id} kind=${kind} provider=${provider} ${prediction.status}: ${prediction.error ?? '(sin detalle)'}`
+      );
       await sql`
         UPDATE stem_jobs SET status = 'failed', error = ${FRIENDLY_FAIL}, updated_at = now()
         WHERE id = ${job.id} AND status = ${job.status}

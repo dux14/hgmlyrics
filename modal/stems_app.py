@@ -87,13 +87,24 @@ def run_demucs(audio_url: str, job_id: str, user_id: str, callback_url: str):
 def run_diarization(audio_url: str, job_id: str, user_id: str, callback_url: str):
     try:
         from pyannote.audio import Pipeline
-        import torch
+        import torch, torchaudio
         src = _download(audio_url)
         pipe = Pipeline.from_pretrained(
             "pyannote/speaker-diarization-3.1", use_auth_token=os.environ["HF_TOKEN"]
         )
         pipe.to(torch.device("cuda"))
-        dia = pipe(src)
+        # El stem vocal llega en MP3 (demucs --mp3): torchaudio reporta un num_frames
+        # que no calza con las muestras decodificadas, y pyannote arma su última ventana
+        # de embeddings corta → torch.vstack revienta ("Sizes of tensors must match").
+        # Cargamos en memoria, downmix a mono y resample a 16 kHz, y pasamos el waveform
+        # directo: así pyannote usa longitudes exactas y consistentes.
+        waveform, sr = torchaudio.load(src)
+        if waveform.shape[0] > 1:
+            waveform = waveform.mean(dim=0, keepdim=True)
+        if sr != 16000:
+            waveform = torchaudio.functional.resample(waveform, sr, 16000)
+            sr = 16000
+        dia = pipe({"waveform": waveform, "sample_rate": sr})
         segments = [
             {"speaker": label, "start": round(turn.start, 3), "stop": round(turn.end, 3)}
             for turn, _, label in dia.itertracks(yield_label=True)

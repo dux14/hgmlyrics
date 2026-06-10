@@ -31,3 +31,67 @@ export function buildMultipartBody(metadata, fileBlob, boundary) {
     type: `multipart/related; boundary=${boundary}`,
   });
 }
+
+async function driveFetchJson(token, url, options = {}) {
+  const res = await fetch(url, {
+    ...options,
+    headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) },
+  });
+  if (!res.ok) {
+    const err = new Error(`Drive respondió ${res.status}.`);
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+}
+
+/**
+ * Encuentra (o crea) una carpeta por nombre bajo parentId. Con scope drive.file
+ * solo ve carpetas que la app creó → idempotente entre guardados.
+ * @returns {Promise<string>} id de la carpeta
+ */
+export async function findOrCreateFolder(token, name, parentId) {
+  const q = buildSearchQuery(name, parentId);
+  const found = await driveFetchJson(
+    token,
+    `${FILES_URL}?q=${encodeURIComponent(q)}&fields=files(id,name)`,
+  );
+  if (found.files && found.files.length > 0) return found.files[0].id;
+  const created = await driveFetchJson(token, FILES_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, mimeType: FOLDER_MIME, parents: [parentId] }),
+  });
+  return created.id;
+}
+
+/**
+ * Sube el ZIP a Pistas Hakuna/{songBase}/{songBase} - pistas.zip.
+ * @param {string} token @param {Blob} blob @param {string} songBase
+ * @returns {Promise<{fileId: string, folderUrl: string}>}
+ */
+export async function uploadZipToDrive(token, blob, songBase) {
+  const rootId = await findOrCreateFolder(token, 'Pistas Hakuna', 'root');
+  const songFolderId = await findOrCreateFolder(token, songBase, rootId);
+
+  const boundary = `hknDrive${Math.random().toString(16).slice(2)}`;
+  const metadata = { name: `${songBase} - pistas.zip`, parents: [songFolderId] };
+  const body = buildMultipartBody(metadata, blob, boundary);
+
+  const res = await fetch(`${UPLOAD_URL}&fields=id`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': `multipart/related; boundary=${boundary}`,
+    },
+    body,
+  });
+  if (!res.ok) {
+    const err = new Error(`Drive respondió ${res.status} al subir el ZIP.`);
+    err.status = res.status;
+    throw err;
+  }
+  const data = await res.json();
+  const folder = await driveFetchJson(token, `${FILES_URL}/${songFolderId}?fields=webViewLink`);
+  return { fileId: data.id, folderUrl: folder.webViewLink };
+}

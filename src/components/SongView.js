@@ -8,6 +8,7 @@
  */
 
 import { getSongById, filterByAlbum, fetchSongDetail, getAdjacentSongs } from '../lib/store.js';
+import { getAdjacentInList, getList, setActiveContext } from '../lib/lists.js';
 import { navigate } from '../router.js';
 import {
   upgradeLegacySong,
@@ -188,9 +189,35 @@ export async function renderSongView(container, songIdOrData) {
       : `/covers/${song.coverImage}`
     : '';
 
-  const adjacent = isPreview
-    ? { prev: null, next: null, currentIndex: 0, total: 0 }
-    : getAdjacentSongs(songId);
+  // Leer ?lista= del hash (p. ej. #/song/abc?lista=xyz)
+  const _hashQuery = new URLSearchParams((globalThis.location?.hash ?? '').split('?')[1] || '');
+  const listId = isPreview ? null : _hashQuery.get('lista') || null;
+
+  let adjacent;
+  let listName = null;
+  if (isPreview) {
+    adjacent = { prev: null, next: null, currentIndex: 0, total: 0 };
+  } else if (listId) {
+    // Intenta usar el contexto en memoria; si no existe (recarga), lo rehidrata
+    let adj = getAdjacentInList(listId, songId);
+    if (!adj) {
+      try {
+        const listData = await getList(listId);
+        const orderedSongIds = (listData.songs || []).map((s) => s.song_id ?? s.id ?? s);
+        setActiveContext({ listId, name: listData.name, orderedSongIds });
+        listName = listData.name;
+        adj = getAdjacentInList(listId, songId);
+      } catch (_e) {
+        // Si falla la carga de lista, caer al comportamiento normal
+      }
+    } else {
+      const ctx = (await import('../lib/lists.js')).getActiveContext();
+      listName = ctx?.name ?? null;
+    }
+    adjacent = adj ?? getAdjacentSongs(songId);
+  } else {
+    adjacent = getAdjacentSongs(songId);
+  }
   const hasNav = !isPreview && (adjacent.prev || adjacent.next);
   // El modo Tono está disponible si el flag está activo y la canción tiene
   // roster de voces. La fila toggle aparece si hay acordes o si hay Tono.
@@ -355,7 +382,7 @@ export async function renderSongView(container, songIdOrData) {
             <polyline points="15 18 9 12 15 6"></polyline>
           </svg>
         </button>
-        <span class="song-nav__info">${adjacent.currentIndex + 1} / ${adjacent.total}</span>
+        <span class="song-nav__info">${listName ? `${escapeHtml(listName)} · ` : ''}${adjacent.currentIndex + 1} / ${adjacent.total}</span>
         <button class="song-nav__btn song-nav__btn--next" id="nav-next" aria-label="Canción siguiente">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="9 6 15 12 9 18"></polyline>
@@ -682,13 +709,14 @@ export async function renderSongView(container, songIdOrData) {
     });
   }
 
-  // Album navigation
+  // Album / lista navigation
   if (hasNav) {
+    const listSuffix = listId ? `?lista=${listId}` : '';
     container.querySelector('#nav-prev')?.addEventListener('click', () => {
-      if (adjacent.prev) navigate(`/song/${adjacent.prev.id}`);
+      if (adjacent.prev) navigate(`/song/${adjacent.prev.id}${listSuffix}`);
     });
     container.querySelector('#nav-next')?.addEventListener('click', () => {
-      if (adjacent.next) navigate(`/song/${adjacent.next.id}`);
+      if (adjacent.next) navigate(`/song/${adjacent.next.id}${listSuffix}`);
     });
   }
 

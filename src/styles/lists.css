@@ -89,118 +89,6 @@
   color: var(--color-error, #e53935);
 }
 
-/* ── Modal de creación ── */
-.lists__modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: var(--z-modal, 300);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-md);
-}
-
-.lists__modal-card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-lg);
-  width: 100%;
-  max-width: 420px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-}
-
-.lists__modal-title {
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin: 0;
-}
-
-.lists__modal-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--color-text-muted);
-  display: flex;
-  align-items: center;
-  padding: 4px;
-  border-radius: var(--radius-sm);
-}
-
-.lists__modal-close:hover {
-  color: var(--color-text);
-}
-
-.lists__modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.lists__modal-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
-
-.lists__modal-label {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--color-text-muted);
-}
-
-.lists__modal-input {
-  width: 100%;
-  padding: var(--space-sm) var(--space-md);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text);
-  font-size: 0.9rem;
-  box-sizing: border-box;
-}
-
-.lists__modal-input:focus {
-  outline: none;
-  border-color: var(--color-accent);
-}
-
-.lists__presets {
-  display: flex;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
-}
-
-.lists__preset-btn {
-  padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-alt);
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font-size: 0.8rem;
-  transition:
-    background 0.15s,
-    border-color 0.15s,
-    color 0.15s;
-}
-
-.lists__preset-btn:hover,
-.lists__preset-btn--active {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
-}
-
-.lists__modal-error {
-  font-size: 0.8rem;
-  color: var(--color-error, #e53935);
-  min-height: 1.2em;
-}
-
 /* ── Detalle de lista ── */
 .list-detail__container {
   max-width: 680px;
@@ -302,63 +190,11 @@
   overflow-y: auto;
 }
 
-.list-detail__search-result {
-  padding: var(--space-sm) var(--space-md);
-  cursor: pointer;
-  font-size: 0.875rem;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.list-detail__search-result:hover {
-  background: var(--color-surface-alt);
-}
-
-.list-detail__search-result-sub {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-}
-
 /* Filas de canciones */
 .list-detail__songs {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.list-detail__song-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-alt);
-}
-
-.list-detail__song-row--readonly {
-  cursor: pointer;
-}
-
-.list-detail__song-row--readonly:hover {
-  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-alt));
-}
-
-.list-detail__song-name {
-  flex: 1;
-  font-size: 0.875rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.list-detail__song-sub {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 8rem;
 }
 
 .list-detail__row-btn {
@@ -393,29 +229,6 @@
   margin: 0;
 }
 
-.list-detail__invite-row {
-  display: flex;
-  gap: var(--space-sm);
-}
-
-.list-detail__members {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.list-detail__member-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  font-size: 0.875rem;
-  padding: var(--space-xs) 0;
-}
-
-.list-detail__member-name {
-  flex: 1;
-}
-
 .list-detail__error {
   font-size: 0.8rem;
   color: var(--color-error, #e53935);
@@ -426,35 +239,6 @@
   color: var(--color-text-muted);
   font-size: 0.875rem;
   padding: var(--space-sm) 0;
-}
-
-/* Sugerencias de amigos para invitar */
-.list-detail__friend-suggestions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
-  margin-top: var(--space-xs);
-}
-.list-detail__friend-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px 4px 4px;
-  border: 1px solid var(--color-border, rgba(128, 128, 128, 0.25));
-  border-radius: 999px;
-  background: var(--color-surface, transparent);
-  color: inherit;
-  cursor: pointer;
-  font-size: 0.85rem;
-}
-.list-detail__friend-chip:hover {
-  background: var(--color-surface-hover, rgba(128, 128, 128, 0.12));
-}
-.list-detail__friend-avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  object-fit: cover;
 }
 
 /* ── Fila compacta de canción (home + listas) ── */

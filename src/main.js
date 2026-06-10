@@ -209,6 +209,12 @@ async function boot() {
     renderRecommenderPage(mainContent);
   });
 
+  guardedRoute('/estudio', async () => {
+    hideFilterBar();
+    const { renderStudioPage } = await import('./components/StudioPage.js');
+    renderStudioPage(mainContent);
+  });
+
   onNotFound(() => {
     hideFilterBar();
     mainContent.innerHTML = `

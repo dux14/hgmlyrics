@@ -33,6 +33,7 @@ function buildMenu() {
       <a class="auth-menu__item" href="#/amigos">${icon('users', { size: 16 })} Amigos</a>
       <a class="auth-menu__item" href="#/afinador">${icon('audio-lines', { size: 16 })} Afinador <span class="badge--beta">BETA</span></a>
       <a class="auth-menu__item" href="#/recomendador">${icon('sparkles', { size: 16 })} Recomendador <span class="badge--beta">BETA</span></a>
+      <a class="auth-menu__item" href="#/estudio">${icon('audio-lines', { size: 16 })} Estudio <span class="badge--beta">BETA</span></a>
       <button class="auth-menu__item auth-menu__item--danger" id="logout-btn">${icon('log-out', { size: 16 })} Cerrar sesión</button>
     </div>
   `;

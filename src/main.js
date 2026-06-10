@@ -227,6 +227,12 @@ async function boot() {
     renderStudioPage(mainContent);
   });
 
+  guardedRoute('/mundo', async () => {
+    hideFilterBar();
+    const { renderWorldPage } = await import('./components/WorldPage.js');
+    renderWorldPage(mainContent);
+  });
+
   onNotFound(() => {
     hideFilterBar();
     mainContent.innerHTML = `

@@ -1,7 +1,18 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import path from 'path';
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      // Point to the pre-built ESM dist so Rollup does not traverse Phaser's
+      // raw source tree (its `main` field points to unresolvable source files
+      // in pnpm's virtual store). Update path if Phaser version changes.
+      phaser: path.resolve(
+        './node_modules/.pnpm/phaser@4.1.0/node_modules/phaser/dist/phaser.esm.js',
+      ),
+    },
+  },
   server: {
     proxy: {
       '/api': 'http://localhost:3000',
@@ -104,6 +115,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           flexsearch: ['flexsearch'],
+          phaser: ['phaser'],
         },
       },
     },

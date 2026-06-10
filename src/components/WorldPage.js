@@ -60,6 +60,8 @@ let _voiceMesh = null;
 let _voiceSignaling = null;
 /** @type {MediaStream|null} stream local de audio (usado para proveer al mesh) */
 let _localStream = null;
+/** @type {{ channelId: string, name: string }|null} zona activa al momento de la desconexion */
+let _currentZone = null;
 
 function teardown() {
   if (_game) {
@@ -83,6 +85,7 @@ function teardown() {
     _voiceControls = null;
   }
   _localStream = null;
+  _currentZone = null;
   if (_avatarCreator) {
     _avatarCreator.destroy();
     _avatarCreator = null;
@@ -270,11 +273,50 @@ export async function renderWorldPage(container) {
   _reconnectEl = reconnectEl;
   wrapper.appendChild(reconnectEl);
 
-  // Estado de conexión: muestra el overlay al caer, lo oculta al reconectar.
+  // Estado de conexión: muestra el overlay al caer; al reconectar, re-suscribe
+  // la señalizacion de voz y reconcilia el mesh con la presencia actual.
+  let _wasDisconnected = false;
   const onStatus = (state) => {
     if (!_reconnectEl) return;
     // Visible mientras NO esté conectado (disconnected o connecting).
     _reconnectEl.hidden = state === 'connected';
+
+    if (state === 'connected' && _wasDisconnected) {
+      // Re-suscribir señalizacion y reconciliar el mesh si habia zona y microfono.
+      // El canal de señalizacion Supabase se cierra al caer la conexion; hay que
+      // recrearlo. El mesh tambien se recrea para que su handler onSignal apunte
+      // al nuevo canal; diffPeers se encarga de solo abrir las conexiones nuevas.
+      if (_currentZone && _localStream) {
+        if (_voiceMesh) {
+          _voiceMesh.closeAll();
+        }
+        if (_voiceSignaling) {
+          _voiceSignaling.leave();
+        }
+
+        _voiceSignaling = joinSignaling({
+          supabase,
+          channelId: _currentZone.channelId,
+          user: { id: me.id },
+        });
+
+        _voiceMesh = createVoiceMesh({
+          signaling: _voiceSignaling,
+          getLocalStream: () => _localStream,
+          iceServers: getIceServers(import.meta.env),
+          selfId: me.id,
+        });
+
+        _voiceMesh.onRemoteStream((peerId, stream) => {
+          _voiceControls?.addRemotePeer(peerId, stream);
+        });
+
+        // Reconciliar el mesh con el roster actual post-reconexion.
+        _voiceMesh.setPeers(capPublishers(_zonePeerIds));
+      }
+    }
+
+    _wasDisconnected = state === 'disconnected';
   };
 
   // ---- Joystick táctil (M5.1/5.2) — solo en dispositivos de puntero grueso ----
@@ -358,6 +400,8 @@ export async function renderWorldPage(container) {
 
   // Transición de zona: salir del canal anterior, entrar al nuevo (o ninguno).
   const onZoneChange = (zone) => {
+    // Registrar la zona activa para poder re-suscribir la señalizacion en reconexion.
+    _currentZone = zone ?? null;
     if (_zoneChannel) {
       _zoneChannel.leave();
       _zoneChannel = null;

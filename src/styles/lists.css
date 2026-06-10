@@ -6,7 +6,7 @@
 /* ── Separador del sidebar ── */
 .sidebar__divider {
   height: 1px;
-  margin: var(--space-sm) var(--space-md);
+  margin: var(--space-xs) var(--space-md);
   background: var(--color-border);
 }
 

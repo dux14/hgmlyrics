@@ -115,7 +115,7 @@ describe('GET /api/lists/:id', () => {
     await idHandler(req, res);
     expect(res.statusCode).toBe(200);
     expect(res.body.role).toBe('owner');
-    expect(res.body.songIds).toEqual(['s1', 's2']);
+    expect(res.body.songs).toEqual(['s1', 's2']);
   });
 
   it('404 si no es dueño ni miembro', async () => {

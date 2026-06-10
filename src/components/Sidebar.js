@@ -58,9 +58,14 @@ export function updateSidebarContent() {
 
     <!-- Listas efímeras -->
     <div class="sidebar__section" id="sidebar-lists">
-      <div class="sidebar__section-title sidebar__section-title--static">
-        Listas
-        <button class="sidebar__add-btn" id="lists-add" aria-label="Nueva lista">${icon('plus', { size: 16 })}</button>
+      <div class="sidebar__section-title" data-section="lists">
+        <span>Listas</span>
+        <span class="sidebar__section-actions">
+          <button class="sidebar__add-btn" id="lists-add" aria-label="Nueva lista">${icon('plus', { size: 16 })}</button>
+          <svg class="sidebar__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </span>
       </div>
       <div class="sidebar__section-content" id="lists-content">
         <div class="sidebar__empty">Cargando…</div>
@@ -72,7 +77,7 @@ export function updateSidebarContent() {
     <div class="sidebar__section" id="sidebar-albums">
       <div class="sidebar__section-title" data-section="albums">
         Álbumes
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg class="sidebar__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
       </div>
@@ -117,18 +122,18 @@ function bindSidebarEvents() {
     return;
   }
 
-  // Section collapse toggles (only collapsible titles, not static ones)
-  sidebarEl
-    .querySelectorAll('.sidebar__section-title:not(.sidebar__section-title--static)')
-    .forEach((title) => {
-      title.addEventListener('click', () => {
-        const section = title.closest('.sidebar__section');
-        section.classList.toggle('collapsed');
-      });
+  // Section collapse toggles
+  sidebarEl.querySelectorAll('.sidebar__section-title').forEach((title) => {
+    title.addEventListener('click', () => {
+      const section = title.closest('.sidebar__section');
+      section.classList.toggle('collapsed');
     });
+  });
 
-  // Botón "Nueva lista" → editor único en /lista/nueva
-  sidebarEl.querySelector('#lists-add')?.addEventListener('click', () => {
+  // Botón "Nueva lista" → editor único en /lista/nueva.
+  // stopPropagation para no togglear el colapso de la sección al clicar el botón.
+  sidebarEl.querySelector('#lists-add')?.addEventListener('click', (e) => {
+    e.stopPropagation();
     navigate('/lista/nueva');
     if (window.innerWidth < 768) closeSidebar();
   });

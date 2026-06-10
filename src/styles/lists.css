@@ -32,15 +32,11 @@
   background: var(--color-surface-alt);
 }
 
-.sidebar__section-title--static {
-  display: flex;
+/* Botón + y chevron de la sección Listas, agrupados a la derecha del título. */
+.sidebar__section-actions {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  cursor: default;
-}
-
-.sidebar__section-title--static:hover {
-  background: none;
+  gap: var(--space-xs);
 }
 
 .sidebar__empty {

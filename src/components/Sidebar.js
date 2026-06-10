@@ -46,6 +46,14 @@ export function updateSidebarContent() {
   const { activeAlbum } = getState();
 
   sidebarEl.innerHTML = `
+    <!-- Oración del artista -->
+    <div class="sidebar__section">
+      <div class="sidebar__album-item sidebar__nav-item" data-nav="oracion">
+        <span>${icon('pray', { size: 16 })}</span>
+        <span>Oración del artista</span>
+      </div>
+    </div>
+
     <!-- Albums Section -->
     <div class="sidebar__section" id="sidebar-albums">
       <div class="sidebar__section-title" data-section="albums">
@@ -100,6 +108,19 @@ function bindSidebarEvents() {
     title.addEventListener('click', () => {
       const section = title.closest('.sidebar__section');
       section.classList.toggle('collapsed');
+    });
+  });
+
+  // Navegación directa (oración)
+  sidebarEl.querySelectorAll('[data-nav]').forEach((item) => {
+    item.addEventListener('click', () => {
+      const dest = item.dataset.nav;
+      if (dest === 'oracion') {
+        navigate('/oracion');
+      }
+      if (window.innerWidth < 768) {
+        closeSidebar();
+      }
     });
   });
 

@@ -1,8 +1,8 @@
 import sql from '../_lib/db.js';
 import { requireUser } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
-import { createStemsUploadUrl } from '../_lib/storage.js';
-import { ACTIVE_STATUSES, DAILY_QUOTA, validateUploadMeta } from '../_lib/stems.js';
+import { createStemsUploadUrl, deleteStemsPrefix } from '../_lib/storage.js';
+import { DAILY_QUOTA, validateUploadMeta } from '../_lib/stems.js';
 
 async function quotaUsedToday(userId) {
   // Solo cuenta jobs que realmente entraron a procesamiento o terminaron OK.
@@ -33,10 +33,23 @@ export default withErrors(async (req, res) => {
     return;
   }
 
-  // POST: crear job
+  // POST: crear job.
+  // Reclama intentos previos sin empezar (created/uploaded): no consumen cuota y, si
+  // quedaron huérfanos por una subida fallida, bloquearían nuevos uploads hasta el
+  // cleanup de 24 h. Los liberamos aquí para que el usuario pueda reintentar al instante.
+  const stale = await sql`
+    UPDATE stem_jobs SET status = 'failed', error = 'Reemplazado por una nueva subida', updated_at = now()
+    WHERE user_id = ${user.id} AND status IN ('created', 'uploaded')
+    RETURNING id, input_path
+  `;
+  for (const j of stale) {
+    if (j.input_path) await deleteStemsPrefix(`${user.id}/${j.id}`).catch(() => {});
+  }
+
+  // Solo un job realmente en proceso bloquea uno nuevo.
   const active = await sql`
     SELECT id FROM stem_jobs
-    WHERE user_id = ${user.id} AND status IN ${sql(ACTIVE_STATUSES)}
+    WHERE user_id = ${user.id} AND status IN ('separating_stems', 'separating_voices')
     LIMIT 1
   `;
   if (active.length > 0) {

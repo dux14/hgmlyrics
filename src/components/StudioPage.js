@@ -81,9 +81,10 @@ async function loadInitial(body) {
   body.innerHTML = `<p class="empty-state__text">Cargando…</p>`;
   try {
     const { jobs, quota } = await listJobs();
-    const active = jobs.find((j) =>
-      ['created', 'uploaded', 'separating_stems', 'separating_voices'].includes(j.status),
-    );
+    // Solo vigilamos jobs realmente en proceso. Un created/uploaded al cargar la página
+    // es una subida abandonada (el upload en memoria se perdió): no lo seguimos para no
+    // dejar un spinner eterno; el backend lo reclama en la próxima subida.
+    const active = jobs.find((j) => ['separating_stems', 'separating_voices'].includes(j.status));
     const recent = jobs.find((j) => ['done', 'failed'].includes(j.status));
     if (active) return watchJob(body, active.id, quota);
     if (recent) return showJob(body, recent.id, quota);

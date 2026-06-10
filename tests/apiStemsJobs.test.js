@@ -6,7 +6,11 @@ vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     auth: { getUser: mockGetUser },
     storage: {
-      from: () => ({ createSignedUploadUrl: mockCreateSignedUploadUrl }),
+      from: () => ({
+        createSignedUploadUrl: mockCreateSignedUploadUrl,
+        list: vi.fn().mockResolvedValue({ data: [], error: null }),
+        remove: vi.fn().mockResolvedValue({ data: [], error: null }),
+      }),
     },
   }),
 }));
@@ -71,15 +75,28 @@ beforeEach(() => {
 });
 
 describe('POST /api/stems/jobs', () => {
-  it('409 si hay un job activo', async () => {
-    sqlResponses.push([{ id: 'job-activo' }]); // query de job activo
+  it('409 solo si hay un job realmente en proceso', async () => {
+    sqlResponses.push([]); // reclamo de created/uploaded huérfanos
+    sqlResponses.push([{ id: 'job-activo' }]); // job en separating_*
     const res = makeRes();
     await handler(authedReq(), res);
     expect(res.statusCode).toBe(409);
   });
 
+  it('reclama un created huérfano y deja crear uno nuevo (regresión del 409)', async () => {
+    sqlResponses.push([{ id: 'old', input_path: 'u1/old/input/a.mp3' }]); // reclamo huérfano
+    sqlResponses.push([]); // ya no hay job en proceso
+    sqlResponses.push([{ n: 0 }]); // cuota 0/3
+    sqlResponses.push([{ id: 'j2', status: 'created' }]); // INSERT ... RETURNING
+    const res = makeRes();
+    await handler(authedReq(), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.job.id).toBe('j2');
+  });
+
   it('429 si la cuota diaria está agotada', async () => {
-    sqlResponses.push([]); // sin job activo
+    sqlResponses.push([]); // reclamo
+    sqlResponses.push([]); // sin job en proceso
     sqlResponses.push([{ n: 3 }]); // cuota usada
     const res = makeRes();
     await handler(authedReq(), res);
@@ -87,7 +104,8 @@ describe('POST /api/stems/jobs', () => {
   });
 
   it('400 si el archivo no es audio', async () => {
-    sqlResponses.push([]); // sin job activo
+    sqlResponses.push([]); // reclamo
+    sqlResponses.push([]); // sin job en proceso
     sqlResponses.push([{ n: 0 }]);
     const res = makeRes();
     await handler(
@@ -98,7 +116,8 @@ describe('POST /api/stems/jobs', () => {
   });
 
   it('crea el job y devuelve upload firmado', async () => {
-    sqlResponses.push([]); // sin job activo
+    sqlResponses.push([]); // reclamo
+    sqlResponses.push([]); // sin job en proceso
     sqlResponses.push([{ n: 1 }]); // cuota 1/3
     sqlResponses.push([{ id: 'j1', status: 'created' }]); // INSERT ... RETURNING
     const res = makeRes();

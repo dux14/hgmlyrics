@@ -55,6 +55,9 @@ export function createVoiceMesh({ signaling, getLocalStream, iceServers, selfId 
   /** @type {Map<string, PeerEntry>} */
   const peers = new Map();
 
+  /** Conjunto de peer ids que se esperan en la zona actual (excluye selfId). */
+  let expectedPeers = new Set();
+
   /** @type {((peerId: string, stream: MediaStream) => void) | null} */
   let _onRemoteStream = null;
 
@@ -68,6 +71,10 @@ export function createVoiceMesh({ signaling, getLocalStream, iceServers, selfId 
 
   signaling.onSignal(async ({ fromUid, type, payload }) => {
     if (type === 'offer') {
+      // Ignorar ofertas de peers que ya no esperamos y que no estan en la malla,
+      // para evitar crear RTCPeerConnections huerfanas por mensajes tardios.
+      if (!peers.has(fromUid) && !expectedPeers.has(fromUid)) return;
+
       // Recibimos una oferta: somos el respondedor (answerer)
       const entry = getOrCreatePeer(fromUid, /* isAnswerer */ true);
       try {
@@ -154,9 +161,13 @@ export function createVoiceMesh({ signaling, getLocalStream, iceServers, selfId 
     // Si somos el oferente (determinado por shouldOffer), enviamos la oferta
     if (!isAnswerer && shouldOffer(selfId, peerId)) {
       pc.createOffer()
-        .then((offer) => pc.setLocalDescription(offer))
-        .then(() => {
-          signaling.sendSignal(peerId, { type: 'offer', payload: pc.localDescription });
+        .then((offer) => pc.setLocalDescription(offer).then(() => offer))
+        .then((offer) => {
+          // Verificar que el peer siga activo antes de enviar: el teardown pudo
+          // haber ocurrido mientras la promesa estaba en vuelo.
+          const current = peers.get(peerId);
+          if (!current || current.pc !== pc || pc.signalingState === 'closed') return;
+          signaling.sendSignal(peerId, { type: 'offer', payload: offer });
         })
         .catch((err) => {
           console.error('[voiceMesh] Error creando offer para', peerId, err);
@@ -206,6 +217,10 @@ export function createVoiceMesh({ signaling, getLocalStream, iceServers, selfId 
    * @param {string[]} peerIdList - Lista de peer ids que deben estar conectados.
    */
   function setPeers(peerIdList) {
+    // Actualizar el conjunto esperado antes de computar el delta, para que la
+    // guardia de la oferta entrante ya refleje la nueva lista desde este momento.
+    expectedPeers = new Set(peerIdList.filter((id) => id !== selfId));
+
     const { toAdd, toRemove } = diffPeers([...peers.keys()], peerIdList, selfId);
 
     toAdd.forEach((peerId) => getOrCreatePeer(peerId));
@@ -235,7 +250,8 @@ export function createVoiceMesh({ signaling, getLocalStream, iceServers, selfId 
    * Cierra todas las RTCPeerConnections y detiene los tracks del stream local.
    */
   function closeAll() {
-    peers.forEach((_entry, peerId) => teardownPeer(peerId));
+    // Snapshot de claves para evitar iterar sobre el Map mientras se muta.
+    [...peers.keys()].forEach((peerId) => teardownPeer(peerId));
 
     // Detener tracks del stream local
     getLocalStream()

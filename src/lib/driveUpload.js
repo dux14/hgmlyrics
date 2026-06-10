@@ -15,3 +15,19 @@ export function buildSearchQuery(name, parentId) {
   const escaped = String(name).replace(/'/g, "\\'");
   return `name='${escaped}' and mimeType='${FOLDER_MIME}' and trashed=false and '${parentId}' in parents`;
 }
+
+/**
+ * Arma el cuerpo multipart/related (RFC 2387): parte JSON + parte binaria.
+ * @param {object} metadata @param {Blob} fileBlob @param {string} boundary @returns {Blob}
+ */
+export function buildMultipartBody(metadata, fileBlob, boundary) {
+  const metaPart =
+    `--${boundary}\r\n` +
+    `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
+    `${JSON.stringify(metadata)}\r\n`;
+  const mediaHeader = `--${boundary}\r\nContent-Type: application/zip\r\n\r\n`;
+  const closing = `\r\n--${boundary}--`;
+  return new Blob([metaPart, mediaHeader, fileBlob, closing], {
+    type: `multipart/related; boundary=${boundary}`,
+  });
+}

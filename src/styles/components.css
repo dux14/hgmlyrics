@@ -1891,7 +1891,7 @@
 
 /* === Estudio de pistas (BETA) === */
 .studio {
-  max-width: 640px;
+  max-width: var(--max-content-width);
   margin: 0 auto;
   padding: var(--space-md) var(--space-lg) var(--space-2xl);
 }
@@ -2091,33 +2091,6 @@
   margin: 0;
 }
 
-/* Audio player row */
-.studio-player-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin: var(--space-sm) 0;
-}
-
-.studio-player-row__label {
-  min-width: 5.5rem;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  flex-shrink: 0;
-}
-
-.studio-player-row__audio {
-  flex: 1;
-  min-width: 0;
-}
-
-.studio-player-row__dl {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
 /* Segment list */
 .studio-segments {
   list-style: none;
@@ -2126,6 +2099,165 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
+}
+
+/* Barra de acciones (ZIP + Drive) */
+.studio-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: var(--space-sm) 0 var(--space-md);
+}
+.studio-actions__soon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Reproductor propio */
+.studio-player {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: var(--space-sm) 0;
+}
+.studio-player__label {
+  min-width: 5.5rem;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+.studio-player__play,
+.studio-player__dl {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}
+.studio-player__bar {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none; /* el gesto de lupa no debe hacer scroll */
+}
+.studio-player__bar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: var(--color-surface);
+  border-radius: 3px;
+}
+.studio-player__fill {
+  position: absolute;
+  left: 0;
+  height: 6px;
+  background: var(--color-accent);
+  border-radius: 3px;
+  pointer-events: none;
+}
+.studio-player__thumb {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-text);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.studio-player__time {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+  min-width: 4.5rem;
+  text-align: right;
+}
+/* Lupa del reproductor propio */
+.studio-player__mag {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  background: var(--color-bg);
+  border: 1px solid var(--color-accent);
+  border-radius: 8px;
+  padding: 8px;
+}
+.studio-player__mag-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-accent);
+  margin-bottom: 6px;
+}
+.studio-player__mag-track {
+  position: relative;
+  height: 36px;
+  background: var(--color-surface);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.studio-player__mag-needle {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 2px;
+  height: 100%;
+  background: var(--color-text);
+}
+.studio-player__mag-time {
+  text-align: center;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 6px;
+}
+
+/* Lupa de la timeline de segmentos */
+.studio-tl__mag {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.studio-tl__mag-needle {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: var(--color-text);
+}
+.studio-tl__mag-time {
+  position: absolute;
+  top: 2px;
+  left: 6px;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+  background: var(--color-bg);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+/* Desktop: el label cabe holgado, el tiempo con más aire */
+@media (min-width: 768px) {
+  .studio-player__label {
+    min-width: 7rem;
+  }
 }
 
 /* Estudio — línea de tiempo de voces + transporte */
@@ -2154,16 +2286,17 @@
 }
 .studio-tl__track {
   position: relative;
-  height: 40px;
+  height: 44px;
   width: 100%;
   background: var(--color-surface);
   border-radius: 8px;
   overflow: hidden;
   cursor: pointer;
+  touch-action: none;
 }
 .studio-tl__block {
   position: absolute;
-  top: 6px;
+  top: 8px;
   height: 28px;
   min-width: 2px;
   padding: 0;

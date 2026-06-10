@@ -15,7 +15,7 @@ import {
   watchJobRealtime,
 } from '../lib/stemsApi.js';
 import { downloadAllZip } from '../lib/studioZip.js';
-import { createStudioPlayer } from './StudioPlayer.js';
+import { createStudioPlayer, clamp, magnifyRange, magnifyPosToTime } from './StudioPlayer.js';
 
 const MAX_DURATION_S = 10.5 * 60;
 let pollTimer = null;
@@ -346,6 +346,10 @@ function renderJob(body, job, quota) {
                 <div class="studio-tl__track" id="studio-tl-track">
                   ${blocks}
                   <div class="studio-tl__playhead" id="studio-tl-playhead" style="left:0%"></div>
+                  <div class="studio-tl__mag" id="studio-tl-mag" hidden aria-hidden="true">
+                    <span class="studio-tl__mag-needle"></span>
+                    <span class="studio-tl__mag-time">0:00</span>
+                  </div>
                 </div>
               </div>
               <div class="studio-transport">
@@ -401,6 +405,51 @@ function renderJob(body, job, quota) {
       const d = dur();
       if (d > 0) segAudio.currentTime = ((e.clientX - rect.left) / rect.width) * d;
     });
+    const tlMag = body.querySelector('#studio-tl-mag');
+    const tlNeedle = tlMag?.querySelector('.studio-tl__mag-needle');
+    const tlMagTime = tlMag?.querySelector('.studio-tl__mag-time');
+    let tlPress = null;
+    let tlMagOpen = false;
+    let tlRange = null;
+    const tlRatio = (clientX) => {
+      const rect = track.getBoundingClientRect();
+      return rect.width > 0 ? clamp((clientX - rect.left) / rect.width, 0, 1) : 0;
+    };
+    track.addEventListener('pointerdown', (e) => {
+      if (e.target.classList.contains('studio-tl__block')) return;
+      try {
+        track.setPointerCapture(e.pointerId);
+      } catch {
+        /* no soportado */
+      }
+      tlPress = setTimeout(() => {
+        tlRange = magnifyRange(segAudio.currentTime, dur());
+        tlMagOpen = true;
+        if (tlMag) tlMag.hidden = false;
+      }, 400);
+    });
+    track.addEventListener('pointermove', (e) => {
+      if (tlMagOpen && tlRange) {
+        const r = tlRatio(e.clientX);
+        const t = magnifyPosToTime(r, tlRange);
+        segAudio.currentTime = t;
+        if (tlNeedle) tlNeedle.style.left = `${r * 100}%`;
+        if (tlMagTime) tlMagTime.textContent = fmtTime(t);
+      }
+    });
+    const tlEnd = () => {
+      if (tlPress) {
+        clearTimeout(tlPress);
+        tlPress = null;
+      }
+      if (tlMagOpen) {
+        tlMagOpen = false;
+        tlRange = null;
+        if (tlMag) tlMag.hidden = true;
+      }
+    };
+    track.addEventListener('pointerup', tlEnd);
+    track.addEventListener('pointercancel', tlEnd);
     body.querySelectorAll('.studio-tl__block').forEach((b) => {
       b.addEventListener('click', () => {
         segAudio.currentTime = Number(b.dataset.start);

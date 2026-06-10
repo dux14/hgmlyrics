@@ -41,6 +41,7 @@ import { renderSongList, renderSongListSkeleton } from './components/SongList.js
 import { renderSongView } from './components/SongView.js';
 import { renderSongEditor } from './components/SongEditor.js';
 import { renderAdminDashboard, renderAdminEditList } from './components/AdminDashboard.js';
+import { renderPrayerPage } from './components/PrayerPage.js';
 import { initUpdateNotifier } from './components/UpdateNotifier.js';
 
 // Initialize theme immediately to avoid flash
@@ -207,6 +208,11 @@ async function boot() {
   guardedRoute('/recomendador', () => {
     hideFilterBar();
     renderRecommenderPage(mainContent);
+  });
+
+  guardedRoute('/oracion', () => {
+    hideFilterBar();
+    renderPrayerPage(mainContent);
   });
 
   guardedRoute('/estudio', async () => {

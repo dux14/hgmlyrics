@@ -48,6 +48,15 @@ export function updateSidebarContent() {
   const { activeAlbum } = getState();
 
   sidebarEl.innerHTML = `
+    <!-- Oración del artista (destacada, primero) -->
+    <div class="sidebar__section">
+      <div class="sidebar__album-item sidebar__nav-item sidebar__nav-item--featured" data-nav="oracion">
+        <span>${icon('flame', { size: 18 })}</span>
+        <span>Oración del artista</span>
+      </div>
+    </div>
+    <div class="sidebar__divider" role="separator"></div>
+
     <!-- Listas efímeras -->
     <div class="sidebar__section" id="sidebar-lists">
       <div class="sidebar__section-title sidebar__section-title--static">
@@ -56,15 +65,6 @@ export function updateSidebarContent() {
       </div>
       <div class="sidebar__section-content" id="lists-content">
         <div class="sidebar__empty">Cargando…</div>
-      </div>
-    </div>
-    <div class="sidebar__divider" role="separator"></div>
-
-    <!-- Oración del artista -->
-    <div class="sidebar__section">
-      <div class="sidebar__album-item sidebar__nav-item" data-nav="oracion">
-        <span>${icon('flame', { size: 16 })}</span>
-        <span>Oración del artista</span>
       </div>
     </div>
     <div class="sidebar__divider" role="separator"></div>
@@ -131,6 +131,7 @@ function bindSidebarEvents() {
   // Botón "Nueva lista"
   sidebarEl.querySelector('#lists-add')?.addEventListener('click', () => {
     openListCreateModal((list) => {
+      updateSidebarContent();
       navigate('/lista/' + list.id);
     });
   });

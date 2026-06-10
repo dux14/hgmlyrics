@@ -31,7 +31,13 @@ vi.mock('../src/lib/tonePlayer.js', () => ({
   createTonePlayer: vi.fn(() => ({ play: vi.fn(), stop: vi.fn(), close: vi.fn() })),
 }));
 
-const { bodySong, sanitizeFreeNote, bodyFreeNote, bodyCalibrar } =
+// Stub warmup (no deps de audio, pero evita imports transitivos en test).
+vi.mock('../src/lib/warmup.js', () => ({
+  buildWarmup: vi.fn(() => []),
+  DEFAULT_RANGES: {},
+}));
+
+const { bodySong, sanitizeFreeNote, bodyFreeNote, bodyCalibrar, bodyEntrenarPicker } =
   await import('../src/components/Tuner.js');
 
 const song = { title: 'Santo', key: 'D major' };
@@ -122,5 +128,21 @@ describe('bodyCalibrar', () => {
 
   it('no usa emojis', () => {
     expect(bodyCalibrar({ calCents: 0 })).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
+  });
+});
+
+describe('bodyEntrenarPicker', () => {
+  it('ofrece calentamiento por rango y los 4 presets de escala', () => {
+    const html = bodyEntrenarPicker();
+    expect(html).toContain('data-train="warmup"');
+    expect(html).toContain('data-preset="c-major-pentatonic"');
+    expect(html).toContain('data-preset="c-major"');
+    expect(html).toContain('data-preset="e-minor-pentatonic"');
+    expect(html).toContain('data-preset="e-minor"');
+    expect(html).toContain('id="train-fit-range"');
+  });
+
+  it('no usa emojis', () => {
+    expect(bodyEntrenarPicker()).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
   });
 });

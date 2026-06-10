@@ -23,7 +23,7 @@ import {
   matchesTarget,
 } from '../lib/notes.js';
 import { fetchSongDetail } from '../lib/store.js';
-import { getSession, refreshProfile } from '../lib/authStore.js';
+import { getSession, refreshProfile, getProfile } from '../lib/authStore.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
 import {
@@ -35,6 +35,9 @@ import {
 } from '../lib/calibration.js';
 import { runLoopbackTest } from '../lib/loopbackTest.js';
 import { createTonePlayer } from '../lib/tonePlayer.js';
+import { buildScaleSequence, pickStartOctave, EXERCISE_PRESETS } from '../lib/scales.js';
+import { buildWarmup } from '../lib/warmup.js';
+import { createExercise } from '../lib/exerciseEngine.js';
 
 /** Formatea un valor de cents con signo explícito: "+5¢", "-3¢", "0¢". */
 const fmtCents = (c) => `${c > 0 ? '+' : ''}${c}¢`;
@@ -45,6 +48,7 @@ const MODES = [
   { id: 'song', label: `${icon('music', { size: 15 })} Canción` },
   { id: 'range', label: `${icon('ruler', { size: 15 })} Rango` },
   { id: 'calibrar', label: `${icon('settings', { size: 15 })} Calibrar` },
+  { id: 'entrenar', label: `${icon('activity', { size: 15 })} Entrenar` },
 ];
 
 const RANGE_STEP_MS = 10000;
@@ -314,6 +318,32 @@ export function bodyCalibrar({ calCents }) {
   `;
 }
 
+/**
+ * Picker inicial del modo Entrenar: calentamiento por rango o ejercicio de escala.
+ * Render puro (string) para testear sin DOM.
+ * @returns {string}
+ */
+export function bodyEntrenarPicker() {
+  const presets = EXERCISE_PRESETS.map(
+    (p) => `<button class="tuner-train__preset" data-preset="${p.id}">${p.label}</button>`,
+  ).join('');
+  return `
+    <div class="tuner-train">
+      <p class="tuner-train__hint">Elegí un entrenamiento</p>
+      <button class="btn btn--primary tuner-train__warmup" data-train="warmup">
+        ${icon('flame', { size: 15 })} Calentamiento por mi rango
+      </button>
+      <div class="tuner-train__divider">o ejercicio de escala</div>
+      <div class="tuner-train__presets" role="group" aria-label="Escalas">
+        ${presets}
+      </div>
+      <label class="tuner-train__fit">
+        <input type="checkbox" id="train-fit-range" /> Ajustar la escala a mi rango
+      </label>
+    </div>
+  `;
+}
+
 /* ─── Mic permission gate ─── */
 
 function bodyPermissionGate(state) {
@@ -370,6 +400,23 @@ export async function renderTuner(container, opts = {}) {
   let rangeTimerId = null;
   let rangeStartMs = 0;
   let rangeSamples = [];
+  // Estado del modo Entrenar.
+  let exercise = null; // ReturnType<typeof createExercise> | null
+  let exerciseDone = false;
+  const tonePlayer = createTonePlayer({});
+
+  function startExercise(sequence) {
+    if (!sequence || sequence.length === 0) {
+      alert('No pude armar el ejercicio. Configurá tu rango en el perfil.');
+      return;
+    }
+    exercise = createExercise({ sequence, holdFrames: 8 });
+    exerciseDone = false;
+    paintBody();
+    const first = exercise.current();
+    if (first) tonePlayer.play(noteToFrequency(first.label));
+  }
+
   // Nota libre (Canción sin canción): pick persistido + flag de confirmación.
   let freeConfirmed = false;
   const freePick = (() => {
@@ -455,6 +502,15 @@ export async function renderTuner(container, opts = {}) {
     } else if (mode === 'calibrar') {
       bodyEl.innerHTML = bodyCalibrar({ calCents: getCalibrationCents() });
       bindCalibrar();
+    } else if (mode === 'entrenar') {
+      if (!exercise) {
+        bodyEl.innerHTML = bodyEntrenarPicker();
+        bindEntrenarPicker();
+      } else if (exerciseDone) {
+        finishExercise();
+      } else {
+        renderExerciseRunner();
+      }
     }
 
     if (mode === 'range') {
@@ -552,6 +608,7 @@ export async function renderTuner(container, opts = {}) {
     if (mode === 'voice') return handlePitchVoice(payload);
     if (mode === 'song') return handlePitchSong(payload);
     if (mode === 'range') return handlePitchRange(payload);
+    if (mode === 'entrenar') return handlePitchEntrenar(payload);
   }
 
   /* ─── range measurement ─── */
@@ -669,6 +726,115 @@ export async function renderTuner(container, opts = {}) {
       }
       paintBody();
     });
+  }
+
+  /* ─── entrenar binder + runners ─── */
+
+  function bindEntrenarPicker() {
+    const fit = bodyEl.querySelector('#train-fit-range');
+    const profile = getProfile();
+    bodyEl.querySelector('[data-train="warmup"]')?.addEventListener('click', () => {
+      startExercise(
+        buildWarmup({
+          rangeLow: profile?.vocalRangeLow,
+          rangeHigh: profile?.vocalRangeHigh,
+          voiceType: profile?.voiceType,
+        }),
+      );
+    });
+    bodyEl.querySelectorAll('.tuner-train__preset').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const preset = EXERCISE_PRESETS.find((p) => p.id === btn.dataset.preset);
+        if (!preset) return;
+        const fitRange = !!fit?.checked && profile?.vocalRangeLow && profile?.vocalRangeHigh;
+        const startOctave = fitRange
+          ? pickStartOctave({
+              tonic: preset.tonic,
+              type: preset.type,
+              rangeLow: profile.vocalRangeLow,
+              rangeHigh: profile.vocalRangeHigh,
+            })
+          : preset.tonic === 'C'
+            ? 4
+            : 3;
+        startExercise(buildScaleSequence({ tonic: preset.tonic, type: preset.type, startOctave }));
+      });
+    });
+  }
+
+  function renderExerciseRunner() {
+    const st = exercise.push(null); // estado actual sin avanzar
+    const target = st.target;
+    bodyEl.innerHTML = `
+      <div class="tuner-train-run">
+        <div class="tuner-train-run__progress">Nota ${Math.min(st.index + 1, st.total)} / ${st.total}</div>
+        <div class="tuner-train-run__target" id="train-target">${target ? target.label : '—'}</div>
+        <button class="btn btn--sm" id="train-ref">${icon('volume-2', { size: 14 })} Tono de referencia</button>
+        <div class="tuner-readout" id="tuner-readout" data-status="">
+          <div class="tuner-readout__note">—</div>
+          <div class="tuner-readout__meta">— Hz · —¢</div>
+        </div>
+        ${renderGauge()}
+        <div class="tuner-train-run__actions">
+          <button class="btn btn--secondary" id="train-skip">Saltar</button>
+          <button class="btn btn--secondary" id="train-quit">Terminar</button>
+        </div>
+      </div>
+    `;
+    bodyEl.querySelector('#train-ref')?.addEventListener('click', () => {
+      if (target) tonePlayer.play(noteToFrequency(target.label));
+    });
+    bodyEl.querySelector('#train-skip')?.addEventListener('click', () => {
+      const r = exercise.skip();
+      if (r.done) finishExercise();
+      else {
+        renderExerciseRunner();
+        tonePlayer.play(noteToFrequency(r.target.label));
+      }
+    });
+    bodyEl.querySelector('#train-quit')?.addEventListener('click', () => {
+      exercise = null;
+      paintBody();
+    });
+  }
+
+  function finishExercise() {
+    const s = exercise.summary();
+    exerciseDone = true;
+    bodyEl.innerHTML = `
+      <div class="tuner-empty">
+        <h2>${icon('check-circle', { size: 22 })} Entrenamiento completado</h2>
+        <p>Aciertos: <strong>${s.hits}</strong> / ${s.total}</p>
+        <button class="btn btn--primary" id="train-again">Repetir</button>
+      </div>
+    `;
+    bodyEl.querySelector('#train-again')?.addEventListener('click', () => {
+      exercise.reset();
+      exerciseDone = false;
+      paintBody();
+      const first = exercise.current();
+      if (first) tonePlayer.play(noteToFrequency(first.label));
+    });
+  }
+
+  function handlePitchEntrenar(stab) {
+    if (!exercise || exerciseDone) return;
+    if (stab === null) {
+      renderReadout(bodyEl, { label: '—', hz: null, cents: null });
+      setNeedle(bodyEl, 0, '');
+      exercise.push(null);
+      return;
+    }
+    renderReadout(bodyEl, { label: `${stab.note}${stab.octave}`, hz: stab.hz, cents: stab.cents });
+    setNeedle(bodyEl, stab.cents, colorFromCents(stab.cents));
+    const r = exercise.push(stab);
+    if (r.justAdvanced) {
+      if (r.done) finishExercise();
+      else {
+        renderExerciseRunner();
+        tonePlayer.play(noteToFrequency(r.target.label));
+      }
+    }
   }
 
   /* ─── calibrar binder ─── */
@@ -803,6 +969,10 @@ export async function renderTuner(container, opts = {}) {
     // corta el tono que pudiera estar sonando.
     capturePitch = null;
     calPlayer.stop();
+    // Resetea el estado de entrenar al cambiar de pestaña.
+    exercise = null;
+    exerciseDone = false;
+    tonePlayer.stop();
     paintTabs();
     paintBody();
   });
@@ -819,6 +989,7 @@ export async function renderTuner(container, opts = {}) {
       // Fix 1: cierra el AudioContext del player de calibración para liberar
       // recursos de audio al abandonar la ruta.
       calPlayer.close();
+      tonePlayer.close();
       window.removeEventListener('hashchange', cleanupOnHashChange);
     }
   };

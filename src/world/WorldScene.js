@@ -12,6 +12,8 @@ import { joinWorld } from '../lib/worldRealtime.js';
 import { PeerBuffer } from './interpolation.js';
 import { getActiveMapDescriptor } from './worldMapStore.js';
 import { parseZones, zoneAt } from './zones.js';
+// Nota: getActiveMapDescriptor se mantiene como fallback cuando no hay
+// descriptor inyectado vía registry (modo dev sin WorldPage).
 import { createAvatarSprite, publicAvatarUrl } from './avatarSprite.js';
 import { mergeInputVector, deriveDir } from './input.js';
 
@@ -56,14 +58,30 @@ export class WorldScene extends Phaser.Scene {
   }
 
   preload() {
-    const mapDesc = getActiveMapDescriptor();
-    this.load.tilemapTiledJSON(mapDesc.key, mapDesc.url);
-    this.load.image(mapDesc.tilesetKey, mapDesc.tilesetUrl);
+    // Preferir el descriptor inyectado por WorldPage (resuelto async antes de
+    // crear el juego). Si no está disponible (p. ej. entorno de test sin
+    // registry completo), usar el fallback estático de dev.
+    const mapDesc = this.registry.get('worldMapDescriptor') ?? getActiveMapDescriptor();
+
+    if (mapDesc.source === 'db') {
+      // Mapa desde DB: el JSON de Tiled ya está en memoria — cargarlo directo
+      // en la caché de Phaser sin hacer una petición HTTP.
+      this.cache.tilemap.add(mapDesc.key, {
+        format: Phaser.Tilemaps.Formats.TILED_JSON,
+        data: mapDesc.tiledJson,
+      });
+      // El tileset sí viene de Storage (URL pública): descargarlo normalmente.
+      this.load.image(mapDesc.tilesetKey, mapDesc.tilesetUrl);
+    } else {
+      // Mapa dev (fuente: fichero estático local) — comportamiento original.
+      this.load.tilemapTiledJSON(mapDesc.key, mapDesc.url);
+      this.load.image(mapDesc.tilesetKey, mapDesc.tilesetUrl);
+    }
   }
 
   create() {
     // ---- Tilemap ----
-    const mapDesc = getActiveMapDescriptor();
+    const mapDesc = this.registry.get('worldMapDescriptor') ?? getActiveMapDescriptor();
     const map = this.make.tilemap({ key: mapDesc.key });
     const tileset = map.addTilesetImage(mapDesc.tilesetName, mapDesc.tilesetKey);
 

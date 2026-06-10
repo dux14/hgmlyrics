@@ -3,7 +3,7 @@
  * Ver WorldScene.js para la escena.
  *
  * @param {string} parentId  id del elemento DOM host
- * @param {{ supabase: object, me: { id: string, name: string }, onRoster: Function, onZoneChange?: Function, input?: { vector: { x: number, y: number } }, onStatus?: Function }|null} [context]
+ * @param {{ supabase: object, me: { id: string, name: string }, mapDescriptor?: object, onRoster: Function, onZoneChange?: Function, input?: { vector: { x: number, y: number } }, onStatus?: Function }|null} [context]
  * @returns {Phaser.Game}
  */
 import Phaser from 'phaser';
@@ -24,7 +24,13 @@ export function createGame(parentId, context) {
     },
     scene: [WorldScene],
   });
-  // Stash context so WorldScene can read it via this.registry.get('worldContext')
+  // Stash context so WorldScene can read it via this.registry.get('worldContext').
+  // mapDescriptor (si existe) se separa en su propia clave del registry para que
+  // WorldScene lo use en preload() sin necesidad de desestructurar el contexto
+  // de red.
   game.registry.set('worldContext', context ?? null);
+  if (context?.mapDescriptor) {
+    game.registry.set('worldMapDescriptor', context.mapDescriptor);
+  }
   return game;
 }

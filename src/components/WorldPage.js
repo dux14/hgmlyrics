@@ -21,6 +21,7 @@ import { joinSignaling } from '../lib/voiceSignaling.js';
 import { createVoiceMesh } from '../world/voiceMesh.js';
 import { getIceServers } from '../world/iceConfig.js';
 import { capPublishers } from '../world/voicePolicy.js';
+import { loadActiveMap } from '../world/worldMapStore.js';
 
 // ---------------------------------------------------------------------------
 // Lógica pura — testeable con Vitest/jsdom sin Phaser
@@ -479,10 +480,16 @@ export async function renderWorldPage(container) {
   }
 
   try {
+    // Cargar el mapa activo ANTES de crear el juego Phaser para poder pasarle
+    // el descriptor ya resuelto. Si la DB no tiene mapa activo o falla, el
+    // descriptor de dev se usa transparentemente (sin cambio visual).
+    const mapDescriptor = await loadActiveMap({ supabase });
+
     const { createGame } = await import('../world/createGame.js');
     _game = createGame('world-canvas', {
       supabase,
       me,
+      mapDescriptor,
       onRoster(entries) {
         roster.setRoster(entries);
         // Derivar lista de peers para el mesh (excluir self).

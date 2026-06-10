@@ -80,3 +80,47 @@ describe('POST /api/lists', () => {
     expect(res.statusCode).toBe(401);
   });
 });
+
+const idHandler = (await import('../api/lists/[id].js')).default;
+
+describe('GET /api/lists/:id', () => {
+  it('devuelve detalle con canciones ordenadas para el dueño', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([
+      { id: 'list1', name: 'L', owner_id: 'u1', expires_at: '2026-06-20T00:00:00Z' },
+    ]); // list
+    sqlResponses.push([
+      { song_id: 's1', position: 0 },
+      { song_id: 's2', position: 1 },
+    ]); // songs
+    sqlResponses.push([{ user_id: 'u2', username: 'bob' }]); // members
+    const req = { method: 'GET', headers: { authorization: 'Bearer t' }, query: { id: 'list1' } };
+    const res = makeRes();
+    await idHandler(req, res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.role).toBe('owner');
+    expect(res.body.songIds).toEqual(['s1', 's2']);
+  });
+
+  it('404 si no es dueño ni miembro', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u9' } }, error: null });
+    sqlResponses.push([]); // list query (filtrada por acceso) vacía
+    const req = { method: 'GET', headers: { authorization: 'Bearer t' }, query: { id: 'list1' } };
+    const res = makeRes();
+    await idHandler(req, res);
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('DELETE solo dueño', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([{ id: 'list1' }]); // DELETE ... RETURNING
+    const req = {
+      method: 'DELETE',
+      headers: { authorization: 'Bearer t' },
+      query: { id: 'list1' },
+    };
+    const res = makeRes();
+    await idHandler(req, res);
+    expect(res.statusCode).toBe(204);
+  });
+});

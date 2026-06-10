@@ -113,3 +113,18 @@ def run_mdx23(audio_url: str, job_id: str, user_id: str, callback_url: str):
     # nunca se despacha a Modal, así que este stub no se invoca en producción.
     _post_callback(callback_url, {"status": "failed", "error": "run_mdx23 no implementado todavía (ver TODO B4)"})
     raise NotImplementedError("run_mdx23 pendiente: vendorizar MDX23. Usar STEMS_PROVIDER_KARAOKE=replicate.")
+
+
+DISPATCH = {"stems": run_demucs, "karaoke": run_mdx23, "diarization": run_diarization}
+
+@app.function(image=image, secrets=secrets)
+@modal.fastapi_endpoint(method="POST")
+def start(payload: dict, x_inbound_secret: str = Header(default="")):
+    if not hmac.compare_digest(x_inbound_secret, os.environ.get("MODAL_INBOUND_SECRET", "")):
+        raise HTTPException(status_code=401, detail="bad inbound secret")
+    kind = payload.get("kind")
+    fn = DISPATCH.get(kind)
+    if fn is None:
+        raise HTTPException(status_code=400, detail="bad kind")
+    call = fn.spawn(payload["audioUrl"], payload["jobId"], payload["userId"], payload["callbackUrl"])
+    return {"callId": call.object_id}

@@ -7,6 +7,7 @@ vi.mock('../src/lib/stemsApi.js', () => ({
   getJob: vi.fn(),
   listJobs: vi.fn(),
   readAudioDuration: vi.fn().mockResolvedValue(180),
+  watchJobRealtime: vi.fn(() => ({ leave: vi.fn() })),
 }));
 vi.mock('../src/lib/authStore.js', () => ({
   getSession: () => ({ access_token: 'tok' }),
@@ -70,8 +71,11 @@ describe('renderStudioPage', () => {
     renderStudioPage(container);
     await vi.waitFor(() => expect(container.textContent).toContain('Pistas'));
     expect(container.querySelectorAll('audio').length).toBeGreaterThanOrEqual(4);
-    expect(container.textContent).toContain('Voz 1');
-    expect(container.textContent).toContain('0:42');
+    expect(container.textContent).toContain('Voz 1'); // leyenda de la timeline
+    // El segmento se renderiza como bloque de la timeline; su rango va en aria-label.
+    const block = container.querySelector('.studio-tl__block');
+    expect(block).not.toBeNull();
+    expect(block.getAttribute('aria-label')).toContain('0:42');
     expect(container.textContent.toLowerCase()).toContain('disponible por');
   });
 

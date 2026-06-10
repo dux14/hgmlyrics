@@ -9,6 +9,7 @@ import { isPWA, isSongCached } from '../lib/offlineCache.js';
 import { isAuthenticated } from '../lib/authStore.js';
 import { isFavorite, toggleFavorite, subscribe as subscribeFavorites } from '../lib/favorites.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
+import { resolveCoverUrl, voiceBadge } from './songRow.js';
 
 let currentViewMode = localStorage.getItem('hkn-view-mode') || 'grid';
 let favUnsubscribe = null;
@@ -126,20 +127,8 @@ function createSongCard(song, index) {
   card.setAttribute('tabindex', '0');
   card.setAttribute('aria-label', `${song.title} — ${song.album}`);
 
-  const voiceBadgeClass =
-    song.voiceType === 'male'
-      ? 'voice-badge--male'
-      : song.voiceType === 'female'
-        ? 'voice-badge--female'
-        : 'voice-badge--mixed';
-
-  const voiceLabel =
-    song.voiceType === 'male' ? 'Masculina' : song.voiceType === 'female' ? 'Femenina' : 'Mixta';
-
-  const coverUrl =
-    song.coverImage.startsWith('/') || song.coverImage.startsWith('http')
-      ? song.coverImage
-      : `/covers/${song.coverImage}`;
+  const { class: voiceBadgeClass, label: voiceLabel } = voiceBadge(song);
+  const coverUrl = resolveCoverUrl(song);
 
   // First card above the fold is the LCP candidate: load eagerly + high priority.
   const isLCP = index === 0;
@@ -245,23 +234,8 @@ function createSongTable(songs) {
     <tbody>
       ${songs
         .map((song, i) => {
-          const coverUrl =
-            song.coverImage.startsWith('/') || song.coverImage.startsWith('http')
-              ? song.coverImage
-              : `/covers/${song.coverImage}`;
-
-          const voiceBadgeClass =
-            song.voiceType === 'male'
-              ? 'voice-badge--male'
-              : song.voiceType === 'female'
-                ? 'voice-badge--female'
-                : 'voice-badge--mixed';
-          const voiceLabel =
-            song.voiceType === 'male'
-              ? 'Masculina'
-              : song.voiceType === 'female'
-                ? 'Femenina'
-                : 'Mixta';
+          const coverUrl = resolveCoverUrl(song);
+          const { class: voiceBadgeClass, label: voiceLabel } = voiceBadge(song);
 
           return `
           <tr class="song-table__row fade-in" style="animation-delay: ${i * 30}ms" data-id="${song.id}" tabindex="0">

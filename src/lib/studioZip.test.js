@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { zipFilename, buildTrackList } from './studioZip.js';
+import { vi } from 'vitest';
+import { zipFilename, buildTrackList, buildZipBlob } from './studioZip.js';
 
 describe('zipFilename', () => {
   it('usa el nombre original sin extensión + label + .mp3', () => {
@@ -49,5 +50,27 @@ describe('buildTrackList', () => {
   it('sin filename → cae a "audio"', () => {
     const job = { stems: { other: 'u/o' } };
     expect(buildTrackList(job, labels)).toEqual([{ url: 'u/o', filename: 'audio - Otros.mp3' }]);
+  });
+});
+
+describe('buildZipBlob', () => {
+  const labels = { drums: 'Batería', lead: 'Voz líder' };
+  it('descarga las pistas, zippea y devuelve blob/count/base', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+    }));
+    const job = {
+      input_meta: { filename: 'colombia.mp3' },
+      stems: { drums: 'u/drums' },
+      voices: { lead: 'u/lead' },
+    };
+    const { blob, count, base } = await buildZipBlob(job, labels);
+    expect(count).toBe(2);
+    expect(base).toBe('colombia');
+    expect(blob.type).toBe('application/zip');
+  });
+  it('sin pistas → lanza', async () => {
+    await expect(buildZipBlob({ input_meta: {} }, labels)).rejects.toThrow('No hay pistas');
   });
 });

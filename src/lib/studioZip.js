@@ -47,13 +47,11 @@ export function buildTrackList(job, labels) {
 }
 
 /**
- * Descarga todas las pistas y las entrega como un único ZIP en el navegador.
- * Si falla el fetch de cualquier pista, lanza y NO descarga un zip parcial.
- * @param {object} job
- * @param {Record<string,string>} labels
- * @returns {Promise<number>} número de pistas empaquetadas
+ * Descarga las pistas del job, las zippea y devuelve el Blob + metadatos.
+ * @param {object} job @param {Record<string,string>} labels
+ * @returns {Promise<{blob: Blob, count: number, base: string}>}
  */
-export async function downloadAllZip(job, labels) {
+export async function buildZipBlob(job, labels) {
   const tracks = buildTrackList(job, labels);
   if (tracks.length === 0) throw new Error('No hay pistas para descargar.');
 
@@ -61,22 +59,32 @@ export async function downloadAllZip(job, labels) {
   for (const { url, filename } of tracks) {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`No pudimos descargar "${filename}".`);
-    const buf = new Uint8Array(await res.arrayBuffer());
-    files[filename] = buf;
+    files[filename] = new Uint8Array(await res.arrayBuffer());
   }
 
   const zipped = zipSync(files, { level: 0 }); // MP3 ya está comprimido → sin recompresión
   const blob = new Blob([zipped], { type: 'application/zip' });
+  const base = sanitize((job?.input_meta?.filename ?? 'audio').replace(/\.[^/.]+$/, '') || 'audio');
+  return { blob, count: tracks.length, base };
+}
+
+/**
+ * Descarga todas las pistas y las entrega como un único ZIP en el navegador.
+ * Si falla el fetch de cualquier pista, lanza y NO descarga un zip parcial.
+ * @param {object} job @param {Record<string,string>} labels
+ * @returns {Promise<number>} número de pistas empaquetadas
+ */
+export async function downloadAllZip(job, labels) {
+  const { blob, count, base } = await buildZipBlob(job, labels);
   const href = URL.createObjectURL(blob);
-  const base = (job?.input_meta?.filename ?? 'audio').replace(/\.[^/.]+$/, '') || 'audio';
   const a = document.createElement('a');
   a.href = href;
-  a.download = `${sanitize(base)} - pistas.zip`;
+  a.download = `${base} - pistas.zip`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   // Revocar de inmediato puede cancelar la descarga en Safari/Firefox (la
   // descarga arranca de forma asíncrona tras el click); diferimos la limpieza.
   setTimeout(() => URL.revokeObjectURL(href), 1000);
-  return tracks.length;
+  return count;
 }

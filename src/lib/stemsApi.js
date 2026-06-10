@@ -76,3 +76,31 @@ export function readAudioDuration(file) {
     audio.src = url;
   });
 }
+
+/**
+ * Suscribe el estado de un job vía Realtime Broadcast (canal 'stems:job:{id}').
+ * Modelado según worldRealtime.js: guard de SUBSCRIBED, leave() idempotente.
+ *
+ * @param {{ jobId: string, onStatus: (status: string) => void, onSubscribed?: () => void }} opts
+ * @returns {{ leave: () => void }}
+ */
+export function watchJobRealtime({ jobId, onStatus, onSubscribed }) {
+  let left = false;
+  const channel = supabase.channel(`stems:job:${jobId}`, {
+    config: { broadcast: { self: false } },
+  });
+  channel.on('broadcast', { event: 'status' }, ({ payload }) => {
+    if (!payload || !payload.status) return;
+    onStatus(payload.status);
+  });
+  channel.subscribe((status) => {
+    if (status === 'SUBSCRIBED' && onSubscribed) onSubscribed();
+  });
+  return {
+    leave() {
+      if (left) return;
+      left = true;
+      supabase.removeChannel(channel);
+    },
+  };
+}

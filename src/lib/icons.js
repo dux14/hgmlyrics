@@ -59,6 +59,11 @@ const PATHS = {
     '<circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/>',
   'wifi-off':
     '<path d="M12 20h.01"/><path d="M8.5 16.43a5 5 0 0 1 7 0"/><path d="M5 12.86a10 10 0 0 1 5.17-2.69"/><path d="M19 12.86a10 10 0 0 0-2.01-1.52"/><path d="M2 8.82a15 15 0 0 1 4.18-2.64"/><path d="M22 8.82a15 15 0 0 0-11.29-3.76"/><path d="m2 2 20 20"/>',
+  play: '<polygon points="6 3 20 12 6 21 6 3"></polygon>',
+  pause:
+    '<line x1="14" y1="4" x2="14" y2="20"></line><line x1="10" y1="4" x2="10" y2="20"></line>',
+  'rotate-ccw':
+    '<polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>',
 };
 
 /**

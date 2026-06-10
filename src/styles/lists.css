@@ -6,7 +6,7 @@
 /* ── Separador del sidebar ── */
 .sidebar__divider {
   height: 1px;
-  margin: var(--space-sm) var(--space-md);
+  margin: var(--space-xs) var(--space-md);
   background: var(--color-border);
 }
 
@@ -32,15 +32,11 @@
   background: var(--color-surface-alt);
 }
 
-.sidebar__section-title--static {
-  display: flex;
+/* Botón + y chevron de la sección Listas, agrupados a la derecha del título. */
+.sidebar__section-actions {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  cursor: default;
-}
-
-.sidebar__section-title--static:hover {
-  background: none;
+  gap: var(--space-xs);
 }
 
 .sidebar__empty {
@@ -87,118 +83,6 @@
 .lists__expiry-chip--urgent {
   background: color-mix(in srgb, var(--color-error, #e53935) 15%, transparent);
   color: var(--color-error, #e53935);
-}
-
-/* ── Modal de creación ── */
-.lists__modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: var(--z-modal, 300);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-md);
-}
-
-.lists__modal-card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-lg);
-  width: 100%;
-  max-width: 420px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-}
-
-.lists__modal-title {
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin: 0;
-}
-
-.lists__modal-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--color-text-muted);
-  display: flex;
-  align-items: center;
-  padding: 4px;
-  border-radius: var(--radius-sm);
-}
-
-.lists__modal-close:hover {
-  color: var(--color-text);
-}
-
-.lists__modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.lists__modal-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
-
-.lists__modal-label {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--color-text-muted);
-}
-
-.lists__modal-input {
-  width: 100%;
-  padding: var(--space-sm) var(--space-md);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text);
-  font-size: 0.9rem;
-  box-sizing: border-box;
-}
-
-.lists__modal-input:focus {
-  outline: none;
-  border-color: var(--color-accent);
-}
-
-.lists__presets {
-  display: flex;
-  gap: var(--space-sm);
-  flex-wrap: wrap;
-}
-
-.lists__preset-btn {
-  padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-alt);
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font-size: 0.8rem;
-  transition:
-    background 0.15s,
-    border-color 0.15s,
-    color 0.15s;
-}
-
-.lists__preset-btn:hover,
-.lists__preset-btn--active {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
-}
-
-.lists__modal-error {
-  font-size: 0.8rem;
-  color: var(--color-error, #e53935);
-  min-height: 1.2em;
 }
 
 /* ── Detalle de lista ── */
@@ -302,63 +186,11 @@
   overflow-y: auto;
 }
 
-.list-detail__search-result {
-  padding: var(--space-sm) var(--space-md);
-  cursor: pointer;
-  font-size: 0.875rem;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.list-detail__search-result:hover {
-  background: var(--color-surface-alt);
-}
-
-.list-detail__search-result-sub {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-}
-
 /* Filas de canciones */
 .list-detail__songs {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.list-detail__song-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-alt);
-}
-
-.list-detail__song-row--readonly {
-  cursor: pointer;
-}
-
-.list-detail__song-row--readonly:hover {
-  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-alt));
-}
-
-.list-detail__song-name {
-  flex: 1;
-  font-size: 0.875rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.list-detail__song-sub {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 8rem;
 }
 
 .list-detail__row-btn {
@@ -393,29 +225,6 @@
   margin: 0;
 }
 
-.list-detail__invite-row {
-  display: flex;
-  gap: var(--space-sm);
-}
-
-.list-detail__members {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.list-detail__member-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  font-size: 0.875rem;
-  padding: var(--space-xs) 0;
-}
-
-.list-detail__member-name {
-  flex: 1;
-}
-
 .list-detail__error {
   font-size: 0.8rem;
   color: var(--color-error, #e53935);
@@ -428,31 +237,251 @@
   padding: var(--space-sm) 0;
 }
 
-/* Sugerencias de amigos para invitar */
-.list-detail__friend-suggestions {
+/* ── Fila compacta de canción (home + listas) ── */
+.song-row-compact {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
-  margin-top: var(--space-xs);
-}
-.list-detail__friend-chip {
-  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px 4px 4px;
-  border: 1px solid var(--color-border, rgba(128, 128, 128, 0.25));
-  border-radius: 999px;
-  background: var(--color-surface, transparent);
-  color: inherit;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+}
+
+.song-row-compact__index {
+  flex-shrink: 0;
+  width: 1.5rem;
+  text-align: center;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+
+.song-row-compact__cover {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+}
+
+.song-row-compact__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.song-row-compact__title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.song-row-compact__album {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.song-row-compact__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.song-row-compact--clickable {
   cursor: pointer;
+  transition: background 0.15s;
+}
+
+.song-row-compact--clickable:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-alt));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .song-row-compact.is-entering {
+    animation: list-row-in 0.28s ease both;
+  }
+}
+@keyframes list-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── Secciones del editor ── */
+.list-detail__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.list-detail__section:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.list-detail__section-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+/* ── Caducidad: segmented control + fecha exacta revelable ── */
+.list-detail__expiry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.list-detail__segmented {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-md);
+  width: fit-content;
+}
+
+.list-detail__segmented-btn {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.list-detail__segmented-btn--active {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.list-detail__expiry-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-accent);
+  font-size: 0.8rem;
+  padding: 0;
+  width: fit-content;
+  text-align: left;
+}
+
+.list-detail__date-input {
+  width: fit-content;
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
   font-size: 0.85rem;
 }
-.list-detail__friend-chip:hover {
-  background: var(--color-surface-hover, rgba(128, 128, 128, 0.12));
+
+/* ── Dropdown de búsqueda con portada ── */
+.list-detail__search-results .song-row-compact {
+  border-radius: 0;
+  background: var(--color-surface);
+  cursor: pointer;
 }
-.list-detail__friend-avatar {
-  width: 24px;
-  height: 24px;
+
+.list-detail__search-results .song-row-compact:hover {
+  background: var(--color-surface-alt);
+}
+
+/* ── Buscador social (solo amigos) ── */
+.list-detail__friend-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.list-detail__friend-result {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-md);
+}
+
+.list-detail__friend-result-avatar {
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   object-fit: cover;
+  flex-shrink: 0;
+  background: var(--color-surface-alt);
+}
+
+.list-detail__friend-result-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.list-detail__friend-result-name {
+  font-size: 0.88rem;
+  color: var(--color-text);
+}
+
+.list-detail__friend-result-handle {
+  font-size: 0.76rem;
+  color: var(--color-text-secondary);
+}
+
+/* ── Invitados (borrador) ── */
+.list-detail__invitees {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.list-detail__invitee-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+}
+
+.list-detail__invitee-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.list-detail__invitee-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-detail__edit-btn {
+  flex-shrink: 0;
 }

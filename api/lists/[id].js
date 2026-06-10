@@ -46,7 +46,7 @@ export default withErrors(async (req, res) => {
       name: list.name,
       expires_at: list.expires_at,
       role: list.owner_id === user.id ? 'owner' : 'member',
-      songIds: songs.map((s) => s.song_id),
+      songs: songs.map((s) => s.song_id),
       members,
     });
     return;

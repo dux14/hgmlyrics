@@ -34,6 +34,7 @@ process.env.REPLICATE_API_TOKEN = 'r8_x';
 process.env.PUBLIC_BASE_URL = 'https://hgmlyrics.vercel.app';
 const SECRET = 'whsec_' + Buffer.from('k').toString('base64');
 process.env.REPLICATE_WEBHOOK_SECRET = SECRET;
+process.env.MODAL_WEBHOOK_SECRET = 'modalwebhooksecret';
 
 const handler = (await import('../api/stems/webhook.js')).default;
 
@@ -84,6 +85,20 @@ beforeEach(() => {
     .mockResolvedValue({ data: { signedUrl: 'https://signed/x' }, error: null });
   global.fetch = vi.fn();
 });
+
+function modalReq(bodyObj, { job = 'j1', kind = 'stems' } = {}) {
+  const body = JSON.stringify(bodyObj);
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const sig = createHmac('sha256', 'modalwebhooksecret')
+    .update(`${timestamp}.${body}`)
+    .digest('hex');
+  const req = Readable.from([Buffer.from(body)]);
+  req.method = 'POST';
+  req.headers = { 'x-modal-timestamp': timestamp, 'x-modal-signature': sig };
+  req.query = { job, kind, provider: 'modal' };
+  req.url = `/api/stems/webhook?job=${job}&kind=${kind}&provider=modal`;
+  return req;
+}
 
 describe('POST /api/stems/webhook', () => {
   it('401 si la firma es inválida', async () => {
@@ -262,5 +277,49 @@ describe('POST /api/stems/webhook', () => {
     expect(res2.statusCode).toBe(200);
     // El RETURNING contiene lead+backing+segments → completo → done
     expect(sqlCalls.some((c) => c.text.includes("status = 'done'"))).toBe(true);
+  });
+});
+
+describe('POST /api/stems/webhook (Modal)', () => {
+  it('401 si la firma Modal es inválida', async () => {
+    const req = modalReq({ status: 'succeeded', output: {} });
+    req.headers['x-modal-signature'] = 'deadbeef';
+    const res = makeRes();
+    await handler(req, res);
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('stems Modal: keys passthrough (sin descargas) y pasa a separating_voices', async () => {
+    sqlResponses.push([{ id: 'j1', user_id: 'u1', status: 'separating_stems', voices: null }]);
+    sqlResponses.push([]); // UPDATE separating_voices
+    fetch.mockImplementation(async (url) => {
+      const u = String(url);
+      if (u.endsWith('/v1/predictions')) return { ok: true, json: async () => ({ id: 'pred_x' }) };
+      if (u.includes('/v1/models/')) return { ok: true, json: async () => ({ latest_version: { id: 'ver_x' } }) };
+      return { ok: true, arrayBuffer: async () => new ArrayBuffer(4), headers: { get: () => 'audio/mpeg' } };
+    });
+    const output = {
+      vocals: 'u1/j1/stems/vocals.mp3',
+      drums: 'u1/j1/stems/drums.mp3',
+      bass: 'u1/j1/stems/bass.mp3',
+      guitar: 'u1/j1/stems/guitar.mp3',
+      piano: 'u1/j1/stems/piano.mp3',
+      other: 'u1/j1/stems/other.mp3',
+    };
+    const res = makeRes();
+    await handler(modalReq({ status: 'succeeded', output }), res);
+    expect(res.statusCode).toBe(200);
+    // No hubo descargas de stems → mockUpload NO se llamó por ingestión de stems
+    expect(mockUpload).not.toHaveBeenCalled();
+    expect(sqlCalls.some((c) => c.text.includes("status = 'separating_voices'"))).toBe(true);
+  });
+
+  it('failed Modal → status failed', async () => {
+    sqlResponses.push([{ id: 'j1', user_id: 'u1', status: 'separating_stems', voices: null }]); // SELECT
+    sqlResponses.push([]); // UPDATE failed
+    const res = makeRes();
+    await handler(modalReq({ status: 'failed', error: 'boom' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(sqlCalls.some((c) => c.text.includes("status = 'failed'"))).toBe(true);
   });
 });

@@ -19,6 +19,7 @@ import { VoiceControls } from './VoiceControls.js';
 import { joinZone } from '../lib/zoneChannel.js';
 import { joinSignaling } from '../lib/voiceSignaling.js';
 import { createVoiceMesh } from '../world/voiceMesh.js';
+import { getIceServers } from '../world/iceConfig.js';
 
 // ---------------------------------------------------------------------------
 // Lógica pura — testeable con Vitest/jsdom sin Phaser
@@ -402,7 +403,7 @@ export async function renderWorldPage(container) {
     _voiceMesh = createVoiceMesh({
       signaling: _voiceSignaling,
       getLocalStream: () => _localStream,
-      iceServers: [], // STUN/TURN se agrega en A3
+      iceServers: getIceServers(import.meta.env),
       selfId: me.id,
     });
 

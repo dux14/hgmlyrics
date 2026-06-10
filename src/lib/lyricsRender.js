@@ -121,13 +121,11 @@ export function buildTonoLineHTML(line, voiceId, colorClass) {
     end: g.end,
     className: hasNote(g) ? 'lyrics__tono-sung' : `lyrics__tono-pending ${cls}`.trim(),
   }));
-  const labels = groups
-    .filter(hasNote)
-    .map((g) => ({
-      pos: g.start,
-      text: g.note,
-      className: cls ? `${cls} tono-note` : 'tono-note',
-    }));
+  const labels = groups.filter(hasNote).map((g) => ({
+    pos: g.start,
+    text: g.note,
+    className: cls ? `${cls} tono-note` : 'tono-note',
+  }));
   return buildAnnotatedLineHTML(text, { spans, labels, baseClass: 'lyrics__tono-dim' });
 }
 

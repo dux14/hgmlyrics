@@ -22,11 +22,19 @@ export class PeerBuffer {
   }
 
   /**
-   * Añade una muestra al buffer (se asume que llegan en orden creciente de t).
+   * Añade una muestra al buffer. Las muestras deben llegar con `t` estrictamente
+   * creciente (orden monotónico). El transporte es Supabase Realtime Broadcast
+   * sobre WebSocket (TCP ordenado), por lo que el reordenamiento es raro, pero
+   * como defensa ante duplicados o paquetes rezagados se descarta cualquier
+   * muestra cuyo `t` no sea mayor al último `t` registrado.
    * @param {Sample} sample
    */
   push(sample) {
-    this._samples.push(sample);
+    const q = this._samples;
+    if (q.length > 0 && sample.t <= q[q.length - 1].t) {
+      return; // descarta muestra fuera de orden o duplicada
+    }
+    q.push(sample);
   }
 
   /**

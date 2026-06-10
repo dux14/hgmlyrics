@@ -17,7 +17,12 @@ function loadGis() {
     s.async = true;
     s.defer = true;
     s.onload = () => resolve();
-    s.onerror = () => reject(new Error('No pudimos cargar Google Identity Services.'));
+    s.onerror = () => {
+      // No cachear el fallo: limpiar para que un reintento vuelva a cargar el script.
+      gisPromise = null;
+      s.remove();
+      reject(new Error('No pudimos cargar Google Identity Services.'));
+    };
     document.head.appendChild(s);
   });
   return gisPromise;

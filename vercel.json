@@ -9,6 +9,13 @@
   "functions": {
     "api/**/*.js": {
       "maxDuration": 10
+    },
+    "api/stems/webhook.js": {
+      "maxDuration": 300
+    },
+    "api/stems/cleanup.js": {
+      "maxDuration": 60
     }
-  }
+  },
+  "crons": [{ "path": "/api/stems/cleanup", "schedule": "0 * * * *" }]
 }

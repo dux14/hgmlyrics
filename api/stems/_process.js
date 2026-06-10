@@ -11,7 +11,8 @@ import { canTransition, expiresAt } from '../_lib/stems.js';
 const FRIENDLY_FAIL = 'El procesamiento falló. Intenta de nuevo (no consumió tu cuota).';
 
 function webhookUrl(jobId, kind) {
-  const base = process.env.PUBLIC_BASE_URL ?? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  const base =
+    process.env.PUBLIC_BASE_URL ?? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
   const suffix = providerFor(kind) === 'modal' ? '&provider=modal' : '';
   return `${base}/api/stems/webhook?job=${jobId}&kind=${kind}${suffix}`;
 }
@@ -30,7 +31,7 @@ export async function processPredictionResult(sql, job, kind, prediction, provid
       // El usuario ve FRIENDLY_FAIL, pero el detalle técnico del provider se pierde si no
       // lo logueamos: lo dejamos en los logs del servidor para poder depurar sin adivinar.
       console.error(
-        `[stems] job=${job.id} kind=${kind} provider=${provider} ${prediction.status}: ${prediction.error ?? '(sin detalle)'}`
+        `[stems] job=${job.id} kind=${kind} provider=${provider} ${prediction.status}: ${prediction.error ?? '(sin detalle)'}`,
       );
       await sql`
         UPDATE stem_jobs SET status = 'failed', error = ${FRIENDLY_FAIL}, updated_at = now()
@@ -51,25 +52,27 @@ export async function processPredictionResult(sql, job, kind, prediction, provid
       `;
       return;
     }
-    // Etapa 2: karaoke + diarización en paralelo sobre el stem vocal
-    // TODO: re-firmar al reproducir si el TTL no cubre las 48h
-    const vocalUrl = await signStemsDownload(stems.vocals, 21600);
-    const [karaoke, diarization] = await Promise.all([
-      startModel({ kind: 'karaoke', input: MODELS.karaoke.buildInput(vocalUrl), jobId: job.id, userId: job.user_id, callbackUrl: webhookUrl(job.id, 'karaoke') }),
-      startModel({ kind: 'diarization', input: MODELS.diarization.buildInput(vocalUrl), jobId: job.id, userId: job.user_id, callbackUrl: webhookUrl(job.id, 'diarization') }),
-    ]);
+    // Persistir el trabajo de GPU (la separación) ANTES de despachar la etapa 2. Si un
+    // dispatch falla luego, los stems no se pierden ni el job queda clavado en
+    // separating_stems hasta expirar: ese era el bug (UPDATE después del Promise.all).
     await sql`
       UPDATE stem_jobs SET status = 'separating_voices',
-        stems = ${sql.json(stems)},
-        predictions = predictions || ${sql.json({ karaoke: karaoke.id, diarization: diarization.id })},
-        updated_at = now()
+        stems = ${sql.json(stems)}, updated_at = now()
       WHERE id = ${job.id} AND status = 'separating_stems'
     `;
+    // Etapa 2: karaoke + diarización sobre el stem vocal. Cada dispatch va aislado, así un
+    // fallo no aborta al otro ni descarta los stems. El job ya está en separating_voices.
+    // TODO: re-firmar al reproducir si el TTL no cubre las 48h
+    const vocalUrl = await signStemsDownload(stems.vocals, 21600);
+    const stage2 = { ...job, status: 'separating_voices', stems, voices: job.voices ?? null };
+    await Promise.all([
+      dispatchStage2(sql, stage2, 'karaoke', MODELS.karaoke.buildInput(vocalUrl)),
+      dispatchStage2(sql, stage2, 'diarization', MODELS.diarization.buildInput(vocalUrl)),
+    ]);
     return;
   }
 
-  // kind === 'karaoke' | 'diarization' (etapa 2)
-  // FIX-1: merge atómico con jsonb || para evitar lost-update entre las 2 predicciones concurrentes.
+  // kind === 'karaoke' | 'diarización' (etapa 2): llega el webhook con el resultado.
   if (job.status !== 'separating_voices') return;
 
   let patch;
@@ -84,6 +87,55 @@ export async function processPredictionResult(sql, job, kind, prediction, provid
     patch = { segments: await ingestResult({ kind, provider, prediction, job }) };
   }
 
+  await applyStage2Patch(sql, job, patch);
+}
+
+/**
+ * Arranca un modelo reintentando una vez ante un fallo: cubre el 502 transitorio de
+ * Replicate (p. ej. el GET de la versión del modelo) sin descartar trabajo ya hecho.
+ */
+async function startModelWithRetry(args) {
+  try {
+    return await startModel(args);
+  } catch {
+    return await startModel(args);
+  }
+}
+
+/**
+ * Despacha un modelo de etapa 2 de forma aislada. Si arranca, registra su prediction id;
+ * si falla incluso tras el reintento, DEGRADA el job escribiendo un resultado vacío para
+ * ese kind (karaoke → lead/backing null; diarización → segments []), de modo que el job
+ * pueda llegar a 'done' con los stems + lo que sí corrió, sin tirar el trabajo de GPU.
+ */
+async function dispatchStage2(sql, job, kind, input) {
+  try {
+    const pred = await startModelWithRetry({
+      kind,
+      input,
+      jobId: job.id,
+      userId: job.user_id,
+      callbackUrl: webhookUrl(job.id, kind),
+    });
+    await sql`
+      UPDATE stem_jobs
+        SET predictions = predictions || ${sql.json({ [kind]: pred.id })}, updated_at = now()
+        WHERE id = ${job.id} AND status = 'separating_voices'
+    `;
+  } catch (err) {
+    console.error(`[stems] job=${job.id} kind=${kind} dispatch falló, degradando: ${err.message}`);
+    const patch = kind === 'karaoke' ? { lead: null, backing: null } : { segments: [] };
+    await applyStage2Patch(sql, job, patch);
+  }
+}
+
+/**
+ * Aplica un patch de voices con merge atómico y, si ya están las dos partes (lead y
+ * segments), transiciona el job a 'done'. Compartido por el camino de webhooks (etapa 2)
+ * y por la degradación de un dispatch fallido.
+ * FIX-1: el merge jsonb || evita lost-update entre las 2 predicciones concurrentes.
+ */
+async function applyStage2Patch(sql, job, patch) {
   // Merge atómico: solo aporta las claves propias, sin pisar las del otro webhook
   const [updated] = await sql`
     UPDATE stem_jobs

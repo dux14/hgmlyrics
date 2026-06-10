@@ -14,7 +14,9 @@ import {
   readAudioDuration,
   watchJobRealtime,
 } from '../lib/stemsApi.js';
-import { downloadAllZip } from '../lib/studioZip.js';
+import { downloadAllZip, buildZipBlob } from '../lib/studioZip.js';
+import { getDriveToken } from '../lib/driveAuth.js';
+import { uploadZipToDrive } from '../lib/driveUpload.js';
 import {
   createStudioPlayer,
   clamp,
@@ -306,9 +308,9 @@ function renderJob(body, job, quota) {
       <button class="btn btn--primary studio-actions__zip" id="studio-zip">
         ${icon('download', { size: 16 })} Descargar todo (ZIP)
       </button>
-      <span class="studio-actions__soon" aria-disabled="true" title="Próximamente">
-        ${icon('upload', { size: 16 })} Guardar en Drive · pronto
-      </span>
+      <button class="btn studio-actions__drive" id="studio-drive">
+        ${icon('upload', { size: 16 })} Guardar en Drive
+      </button>
     </div>
     <h2 class="studio__section-title">Pistas</h2>
     ${Object.entries(STEM_LABELS)
@@ -492,6 +494,51 @@ function renderJob(body, job, quota) {
         actions.insertAdjacentElement('afterend', err);
       } finally {
         zipBtn.disabled = false;
+      }
+    });
+  }
+  const driveBtn = body.querySelector('#studio-drive');
+  if (driveBtn) {
+    driveBtn.addEventListener('click', async () => {
+      const original = driveBtn.innerHTML;
+      const actions = driveBtn.closest('.studio-actions');
+      const clearMsgs = () => {
+        actions.parentElement
+          .querySelectorAll('.studio__error, .studio__drive-link')
+          .forEach((n) => n.remove());
+      };
+      driveBtn.disabled = true;
+      clearMsgs();
+      try {
+        driveBtn.textContent = 'Autorizando…';
+        let token = await getDriveToken();
+        driveBtn.textContent = 'Empaquetando…';
+        const { blob, base } = await buildZipBlob(job, ALL_LABELS);
+        driveBtn.textContent = 'Subiendo a Drive…';
+        let result;
+        try {
+          result = await uploadZipToDrive(token, blob, base);
+        } catch (e) {
+          if (e.status === 401) {
+            token = await getDriveToken();
+            result = await uploadZipToDrive(token, blob, base);
+          } else {
+            throw e;
+          }
+        }
+        driveBtn.innerHTML = `${icon('check-circle', { size: 16 })} Guardado`;
+        const link = document.createElement('p');
+        link.className = 'studio__drive-link';
+        link.innerHTML = `Guardado en Drive · <a href="${escHtml(result.folderUrl)}" target="_blank" rel="noopener">abrir carpeta</a>`;
+        actions.insertAdjacentElement('afterend', link);
+      } catch (e) {
+        driveBtn.innerHTML = original;
+        const err = document.createElement('p');
+        err.className = 'studio__error';
+        err.textContent = e.message || 'No pudimos guardar en Drive.';
+        actions.insertAdjacentElement('afterend', err);
+      } finally {
+        driveBtn.disabled = false;
       }
     });
   }

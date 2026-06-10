@@ -8,6 +8,7 @@ import { searchSongs } from '../lib/search.js';
 import { navigate } from '../router.js';
 import { renderThemeToggle } from './ThemeToggle.js';
 import { renderAuthButton } from './AuthButton.js';
+import { icon } from '../lib/icons.js';
 
 let searchTimeout = null;
 
@@ -59,6 +60,9 @@ export function renderHeader(container, { onMenuToggle }) {
           <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
         </svg>
       </button>
+      <button class="header__btn" id="prayer-btn" aria-label="Oración del artista" title="Oración del artista">
+        ${icon('pray', { size: 20 })}
+      </button>
       <div id="theme-toggle-mount"></div>
       <div id="auth-button-mount"></div>
     </div>
@@ -103,6 +107,9 @@ export function renderHeader(container, { onMenuToggle }) {
   // Cache clear button
   const cacheBtn = header.querySelector('#cache-btn');
   cacheBtn.addEventListener('click', handleCacheClear);
+
+  const prayerBtn = header.querySelector('#prayer-btn');
+  prayerBtn.addEventListener('click', () => navigate('/oracion'));
 }
 
 /**

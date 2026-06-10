@@ -15,7 +15,10 @@ import { ZoneChat } from './ZoneChat.js';
 import { AvatarCreator } from './AvatarCreator.js';
 import { WorldCredits } from './WorldCredits.js';
 import { Joystick } from './Joystick.js';
+import { VoiceControls } from './VoiceControls.js';
 import { joinZone } from '../lib/zoneChannel.js';
+import { joinSignaling } from '../lib/voiceSignaling.js';
+import { createVoiceMesh } from '../world/voiceMesh.js';
 
 // ---------------------------------------------------------------------------
 // Lógica pura — testeable con Vitest/jsdom sin Phaser
@@ -47,6 +50,14 @@ let _zoneChannel = null;
 let _wrapperEl = null;
 let _joystick = null;
 let _reconnectEl = null;
+/** @type {{ el: HTMLElement, addRemotePeer: Function, removeRemotePeer: Function, destroy: Function }|null} */
+let _voiceControls = null;
+/** @type {{ setPeers: Function, onRemoteStream: Function, onPeerSpeaking: Function, closeAll: Function }|null} */
+let _voiceMesh = null;
+/** @type {{ sendSignal: Function, onSignal: Function, leave: Function }|null} */
+let _voiceSignaling = null;
+/** @type {MediaStream|null} stream local de audio (usado para proveer al mesh) */
+let _localStream = null;
 
 function teardown() {
   if (_game) {
@@ -57,6 +68,19 @@ function teardown() {
     _zoneChannel.leave();
     _zoneChannel = null;
   }
+  if (_voiceMesh) {
+    _voiceMesh.closeAll();
+    _voiceMesh = null;
+  }
+  if (_voiceSignaling) {
+    _voiceSignaling.leave();
+    _voiceSignaling = null;
+  }
+  if (_voiceControls) {
+    _voiceControls.destroy();
+    _voiceControls = null;
+  }
+  _localStream = null;
   if (_avatarCreator) {
     _avatarCreator.destroy();
     _avatarCreator = null;
@@ -271,6 +295,55 @@ export async function renderWorldPage(container) {
     name: getProfile()?.username || 'Invitado',
   };
 
+  // ---- Panel de controles de voz (esquina inferior derecha) ----
+  // Nota de diseño: el peer set del mesh viene de WorldScene.peers (presencia
+  // global). El canal de señalizacion es por zona (signal:{channelId}); solo
+  // los peers que estén en la misma zona joinean ese canal, por lo que el
+  // filtrado real ocurre en la capa de señalizacion. No se duplica la logica
+  // de membresía por zona aquí (ver spec §Design note).
+  const voiceControls = VoiceControls({
+    selfId: me.id,
+    selfLabel: me.name,
+    onActivate(stream) {
+      _localStream = stream;
+      // Si ya habia un mesh activo (zona con voz), re-alimentar el stream.
+      // El mesh original fue creado con getLocalStream() === null; al tener
+      // el stream ahora, re-establecemos las conexiones para la zona actual
+      // llamando a setPeers con la lista ya registrada (si la hay).
+      // La renegociacion completa queda para A3; aqui nos limitamos a dar el
+      // stream al contexto del mesh.
+    },
+    onDeactivate() {
+      _localStream = null;
+      if (_voiceMesh) {
+        _voiceMesh.closeAll();
+        _voiceMesh = null;
+      }
+      if (_voiceSignaling) {
+        _voiceSignaling.leave();
+        _voiceSignaling = null;
+      }
+    },
+    onPeerSpeaking(peerId, speaking) {
+      // Propagar al mesh para que otros consumidores puedan usarlo (ej: A3)
+      _voiceMesh?.onPeerSpeaking?.((cb) => cb(peerId, speaking));
+    },
+  });
+  _voiceControls = voiceControls;
+
+  voiceControls.el.style.cssText = [
+    'position:absolute',
+    'bottom:12px',
+    'right:12px',
+    'z-index:22',
+    'pointer-events:auto',
+    'background:rgba(0,0,0,0.55)',
+    'border:1px solid rgba(255,255,255,0.15)',
+    'border-radius:6px',
+    'padding:8px 10px',
+  ].join(';');
+  wrapper.appendChild(voiceControls.el);
+
   // Envío local: publica al canal de la zona y hace eco en la propia lista
   // (el canal usa broadcast { self:false }, así que no hay eco del servidor).
   chat.onSend((text) => {
@@ -278,6 +351,12 @@ export async function renderWorldPage(container) {
     _zoneChannel.send(text);
     chat.addMessage({ uid: me.id, name: me.name, text, ts: Date.now(), self: true });
   });
+
+  /**
+   * Peers de voz actuales (uid[] excluye self). Se actualizan en cada zonechange.
+   * @type {string[]}
+   */
+  let _zonePeerIds = [];
 
   // Transición de zona: salir del canal anterior, entrar al nuevo (o ninguno).
   const onZoneChange = (zone) => {
@@ -294,14 +373,71 @@ export async function renderWorldPage(container) {
       });
       _zoneChannel.onMessage((msg) => chat.addMessage(msg));
     }
+
+    // ---- Voz: cambiar de zona ----
+    // Cerrar el mesh + señalizacion anteriores (si los hay).
+    if (_voiceMesh) {
+      _voiceMesh.closeAll();
+      _voiceMesh = null;
+    }
+    if (_voiceSignaling) {
+      _voiceSignaling.leave();
+      _voiceSignaling = null;
+    }
+
+    if (!zone || !_localStream) {
+      // Sin zona o sin microfono: no hay nada que conectar.
+      _zonePeerIds = [];
+      return;
+    }
+
+    // Crear nueva señalizacion para esta zona y un nuevo mesh.
+    // Peer set inicial: vacío — se actualiza al recibir onPeerJoin/onPeerLeave
+    // (ver _pushVoicePeers abajo).
+    _voiceSignaling = joinSignaling({
+      supabase,
+      channelId: zone.channelId,
+      user: { id: me.id },
+    });
+
+    _voiceMesh = createVoiceMesh({
+      signaling: _voiceSignaling,
+      getLocalStream: () => _localStream,
+      iceServers: [], // STUN/TURN se agrega en A3
+      selfId: me.id,
+    });
+
+    _voiceMesh.onRemoteStream((peerId, stream) => {
+      voiceControls.addRemotePeer(peerId, stream);
+    });
+
+    // Alimentar el mesh con los peers de zona actuales.
+    _voiceMesh.setPeers(_zonePeerIds);
   };
+
+  /**
+   * Actualiza la lista de peers de voz para la zona actual.
+   * Llamado desde onPeerJoin/onPeerLeave del mundo.
+   * @param {string[]} peerIds — uid[] de todos los peers en presencia (excluye self)
+   */
+  function _pushVoicePeers(peerIds) {
+    _zonePeerIds = peerIds;
+    if (_voiceMesh) {
+      _voiceMesh.setPeers(peerIds);
+    }
+  }
 
   try {
     const { createGame } = await import('../world/createGame.js');
     _game = createGame('world-canvas', {
       supabase,
       me,
-      onRoster: roster.setRoster,
+      onRoster(entries) {
+        roster.setRoster(entries);
+        // Derivar lista de peers para el mesh (excluir self).
+        const peerIds = entries.filter((e) => e.uid !== me.id).map((e) => e.uid);
+        _pushVoicePeers(peerIds);
+      },
       onZoneChange,
       input: inputRef,
       onStatus,

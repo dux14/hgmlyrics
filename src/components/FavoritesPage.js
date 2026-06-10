@@ -7,7 +7,7 @@
 import { getState, subscribe as subscribeStore } from '../lib/store.js';
 import { subscribe as subscribeFavorites, isFavorite } from '../lib/favorites.js';
 import { renderSongList } from './SongList.js';
-import { navigate } from '../router.js';
+import { navigate, getCurrentPath } from '../router.js';
 import { icon } from '../lib/icons.js';
 
 let unsubFav = null;
@@ -32,6 +32,23 @@ export function renderFavoritesPage(container) {
   }
 
   function paint() {
+    // Estas suscripciones (favoritos/store) sobreviven a la navegación: solo se
+    // limpian al volver a entrar a esta vista. Al cerrar sesión, initFavorites
+    // limpia los favoritos y dispara este callback aunque ya estemos en /login,
+    // repintando "Mis favoritos" sobre la ruta actual. Si ya no estamos en
+    // /favoritos, soltamos las suscripciones y no repintamos.
+    if (getCurrentPath().split('?')[0] !== '/favoritos') {
+      if (unsubFav) {
+        unsubFav();
+        unsubFav = null;
+      }
+      if (unsubStore) {
+        unsubStore();
+        unsubStore = null;
+      }
+      return;
+    }
+
     const favs = favoriteSongs();
     container.innerHTML = `
       <div class="profile-page fade-in">

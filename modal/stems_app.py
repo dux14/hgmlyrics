@@ -22,6 +22,8 @@ def _upload_to_supabase(local_path: str, key: str, content_type: str = "audio/mp
     """Sube un archivo al bucket privado stems-jobs con la service role key. Devuelve la key."""
     import httpx
     url = os.environ["SUPABASE_URL"]
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url  # la integración Supabase-Vercel guarda el host sin scheme
     service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
     data = pathlib.Path(local_path).read_bytes()
     r = httpx.post(

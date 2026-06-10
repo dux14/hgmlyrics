@@ -104,6 +104,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           flexsearch: ['flexsearch'],
+          phaser: ['phaser'],
         },
       },
     },

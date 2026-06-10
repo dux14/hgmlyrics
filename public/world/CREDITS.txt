@@ -1,0 +1,115 @@
+CREDITOS — Assets LPC (mundo virtual)
+=====================================
+
+Los sprites de avatar del mundo virtual son un subset curado del
+Universal LPC Spritesheet Character Generator:
+  https://github.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator
+
+LPC es multi-licencia. Los assets aqui usados se distribuyen bajo una
+combinacion de: OGA-BY 3.0, CC-BY-SA 3.0 y GPL 3.0. Los spritesheets
+compuestos (artwork derivado) heredan estas obligaciones (atribucion +
+copyleft sobre las IMAGENES). El codigo de la aplicacion NO queda afectado.
+
+Licencias presentes en este subset:
+  CC-BY-SA 3.0
+  CC0
+  GPL 3.0
+  OGA-BY 3.0
+
+Autores (atribucion agregada):
+  Benjamin K. Smith (BenCreating), Durrani, Eliza Wyatt (ElizaWy), ElizaWy, Evert, JaidynReiman, Joe White, Johannes Sjölund (wulax), Manuel Riecke (MrBeast), Matthew Krohn (makrohn), MuffinElZangano, Pierre Vigier (pvigier), Stephen Challener (Redshrike), TheraHedwig, bluecarrot16
+
+Fuentes (OpenGameArt / repos):
+  http://opengameart.org/content/lpc-clothing-updates
+  http://opengameart.org/content/lpc-revised-character-basics
+  https://github.com/ElizaWy/LPC/blob/main/Characters/Hair
+  https://github.com/ElizaWy/LPC/tree/main/Characters/Clothing
+  https://gitlab.com/vagabondgame/lpc-characters
+  https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+  https://opengameart.org/content/lpc-7-womens-shirts
+  https://opengameart.org/content/lpc-be-seated
+  https://opengameart.org/content/lpc-character-bases
+  https://opengameart.org/content/lpc-expanded-hair
+  https://opengameart.org/content/lpc-expanded-pants
+  https://opengameart.org/content/lpc-expanded-simple-shirts
+  https://opengameart.org/content/lpc-expanded-sit-run-jump-more
+  https://opengameart.org/content/lpc-hair
+  https://opengameart.org/content/lpc-jump-expanded
+  https://opengameart.org/content/lpc-ladies
+  https://opengameart.org/content/lpc-male-jumping-animation-by-durrani
+  https://opengameart.org/content/lpc-medieval-fantasy-character-sprites
+  https://opengameart.org/content/lpc-revised-character-basics
+  https://opengameart.org/content/lpc-runcycle-and-diagonal-walkcycle
+  https://opengameart.org/content/lpc-runcycle-for-male-muscular-and-pregnant-character-bases-with-modular-heads
+  https://opengameart.org/content/ponytail-and-plain-hairstyles
+
+Detalle por asset usado:
+- body/bodies/female/walk.png
+    autores: Benjamin K. Smith (BenCreating), bluecarrot16, TheraHedwig, Evert, MuffinElZangano, Durrani, Pierre Vigier (pvigier), ElizaWy, Matthew Krohn (makrohn), Johannes Sjölund (wulax), Stephen Challener (Redshrike)
+    licencias: OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0
+- body/bodies/male/walk.png
+    autores: bluecarrot16, JaidynReiman, Benjamin K. Smith (BenCreating), Evert, Eliza Wyatt (ElizaWy), TheraHedwig, MuffinElZangano, Durrani, Johannes Sjölund (wulax), Stephen Challener (Redshrike)
+    licencias: OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0
+- hair/bob/adult/walk.png
+    autores: ElizaWy, bluecarrot16
+    licencias: CC0
+- hair/curly_long/adult/walk.png
+    autores: ElizaWy
+    licencias: OGA-BY 3.0
+- hair/long/adult/walk.png
+    autores: JaidynReiman, Manuel Riecke (MrBeast)
+    licencias: CC-BY-SA 3.0, GPL 3.0
+- hair/messy1/adult/walk.png
+    autores: JaidynReiman, Manuel Riecke (MrBeast)
+    licencias: CC-BY-SA 3.0, GPL 3.0
+- hair/plain/adult/walk.png
+    autores: JaidynReiman, Manuel Riecke (MrBeast), Joe White
+    licencias: OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0
+- legs/pants/male/walk/black.png
+    autores: bluecarrot16, JaidynReiman, ElizaWy, Matthew Krohn (makrohn), Johannes Sjölund (wulax), Stephen Challener (Redshrike)
+    licencias: OGA-BY 3.0, GPL 3.0, CC-BY-SA 3.0
+- legs/pants/male/walk/blue.png
+    autores: bluecarrot16, JaidynReiman, ElizaWy, Matthew Krohn (makrohn), Johannes Sjölund (wulax), Stephen Challener (Redshrike)
+    licencias: OGA-BY 3.0, GPL 3.0, CC-BY-SA 3.0
+- legs/pants/male/walk/brown.png
+    autores: bluecarrot16, JaidynReiman, ElizaWy, Matthew Krohn (makrohn), Johannes Sjölund (wulax), Stephen Challener (Redshrike)
+    licencias: OGA-BY 3.0, GPL 3.0, CC-BY-SA 3.0
+- legs/pants/male/walk/gray.png
+    autores: bluecarrot16, JaidynReiman, ElizaWy, Matthew Krohn (makrohn), Johannes Sjölund (wulax), Stephen Challener (Redshrike)
+    licencias: OGA-BY 3.0, GPL 3.0, CC-BY-SA 3.0
+- legs/pants/male/walk/green.png
+    autores: bluecarrot16, JaidynReiman, ElizaWy, Matthew Krohn (makrohn), Johannes Sjölund (wulax), Stephen Challener (Redshrike)
+    licencias: OGA-BY 3.0, GPL 3.0, CC-BY-SA 3.0
+- legs/pants/male/walk/red.png
+    autores: bluecarrot16, JaidynReiman, ElizaWy, Matthew Krohn (makrohn), Johannes Sjölund (wulax), Stephen Challener (Redshrike)
+    licencias: OGA-BY 3.0, GPL 3.0, CC-BY-SA 3.0
+- legs/pants/thin/walk/black.png
+    autores: bluecarrot16, JaidynReiman, ElizaWy, Joe White, Matthew Krohn (makrohn), Johannes Sjölund (wulax), Stephen Challener (Redshrike)
+    licencias: OGA-BY 3.0, GPL 3.0, CC-BY-SA 3.0
+- legs/pants/thin/walk/blue.png
+    autores: bluecarrot16, JaidynReiman, ElizaWy, Joe White, Matthew Krohn (makrohn), Johannes Sjölund (wulax), Stephen Challener (Redshrike)
+    licencias: OGA-BY 3.0, GPL 3.0, CC-BY-SA 3.0
+- legs/pants/thin/walk/brown.png
+    autores: bluecarrot16, JaidynReiman, ElizaWy, Joe White, Matthew Krohn (makrohn), Johannes Sjölund (wulax), Stephen Challener (Redshrike)
+    licencias: OGA-BY 3.0, GPL 3.0, CC-BY-SA 3.0
+- legs/pants/thin/walk/gray.png
+    autores: bluecarrot16, JaidynReiman, ElizaWy, Joe White, Matthew Krohn (makrohn), Johannes Sjölund (wulax), Stephen Challener (Redshrike)
+    licencias: OGA-BY 3.0, GPL 3.0, CC-BY-SA 3.0
+- legs/pants/thin/walk/green.png
+    autores: bluecarrot16, JaidynReiman, ElizaWy, Joe White, Matthew Krohn (makrohn), Johannes Sjölund (wulax), Stephen Challener (Redshrike)
+    licencias: OGA-BY 3.0, GPL 3.0, CC-BY-SA 3.0
+- legs/pants/thin/walk/red.png
+    autores: bluecarrot16, JaidynReiman, ElizaWy, Joe White, Matthew Krohn (makrohn), Johannes Sjölund (wulax), Stephen Challener (Redshrike)
+    licencias: OGA-BY 3.0, GPL 3.0, CC-BY-SA 3.0
+- torso/clothes/longsleeve/longsleeve/female/walk.png
+    autores: bluecarrot16, ElizaWy, JaidynReiman, Stephen Challener (Redshrike)
+    licencias: OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0
+- torso/clothes/longsleeve/longsleeve/male/walk.png
+    autores: JaidynReiman, Johannes Sjölund (wulax)
+    licencias: OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0
+- torso/clothes/shortsleeve/shortsleeve/female/walk.png
+    autores: bluecarrot16, ElizaWy, JaidynReiman, Stephen Challener (Redshrike)
+    licencias: OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0
+- torso/clothes/shortsleeve/shortsleeve/male/walk.png
+    autores: bluecarrot16, ElizaWy, JaidynReiman, Stephen Challener (Redshrike)
+    licencias: OGA-BY 3.0, CC-BY-SA 3.0, GPL 3.0

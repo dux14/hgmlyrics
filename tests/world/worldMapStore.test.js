@@ -1,7 +1,18 @@
 /**
  * worldMapStore.test.js — Pruebas del descriptor del mapa activo.
+ *
+ * worldMapStore.js importa authStore.js (para las funciones admin), que a su
+ * vez importa supabase.js (que llama createClient en el nivel de módulo).
+ * Se mockean ambos para evitar el error "supabaseUrl is required" en CI.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('../../src/lib/supabase.js', () => ({ supabase: {} }));
+vi.mock('../../src/lib/authStore.js', () => ({
+  getSession: vi.fn(() => ({ access_token: '' })),
+  isAdmin: vi.fn(() => false),
+}));
+
 import { getActiveMapDescriptor, loadActiveMap } from '../../src/world/worldMapStore.js';
 
 // ---------------------------------------------------------------------------

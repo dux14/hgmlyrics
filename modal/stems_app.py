@@ -46,6 +46,9 @@ image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("ffmpeg")
     .pip_install_from_requirements("requirements.txt")
+    # Modal 1.x ya no auto-monta los módulos locales hermanos: hay que incluir
+    # explícitamente el paquete `sections` para que el contenedor pueda importarlo.
+    .add_local_python_source("sections")
 )
 
 # Sólo necesitamos el secret de webhook en el orquestador principal.

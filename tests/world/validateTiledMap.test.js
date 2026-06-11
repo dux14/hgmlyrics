@@ -333,3 +333,32 @@ describe('validateTiledMap – entradas basura', () => {
     expect(result.zones).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// properties no-array en zona (seguridad: no debe lanzar TypeError)
+// ---------------------------------------------------------------------------
+describe('validateTiledMap – properties no-array en zona', () => {
+  it('properties como string corrupto → ok:false sin lanzar', () => {
+    const map = makeValidMap();
+    // Sustituir la primera zona con properties siendo un string (no array)
+    map.layers[2].objects[0] = { x: 0, y: 0, width: 100, height: 80, properties: 'corrupted' };
+    let result;
+    expect(() => {
+      result = validateTiledMap(map);
+    }).not.toThrow();
+    expect(result.ok).toBe(false);
+    // Debe reportar errores de name y channelId faltantes en esa zona
+    expect(result.errors.some((e) => /name/i.test(e) || /channelId/i.test(e))).toBe(true);
+  });
+
+  it('properties como número → ok:false sin lanzar', () => {
+    const map = makeValidMap();
+    map.layers[2].objects[0] = { x: 0, y: 0, width: 100, height: 80, properties: 42 };
+    let result;
+    expect(() => {
+      result = validateTiledMap(map);
+    }).not.toThrow();
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => /name/i.test(e) || /channelId/i.test(e))).toBe(true);
+  });
+});

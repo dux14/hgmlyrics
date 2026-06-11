@@ -61,7 +61,10 @@ function validateZoneObjects(objects, errors) {
 
   objects.forEach((obj, idx) => {
     const label = `Zona ${idx}`;
-    const props = Object.fromEntries(((obj && obj.properties) || []).map((p) => [p.name, p.value]));
+    // Degradar a [] si properties no es un array (string, número u otro truthy no iterable)
+    const props = Object.fromEntries(
+      (Array.isArray(obj && obj.properties) ? obj.properties : []).map((p) => [p.name, p.value]),
+    );
 
     let nameOk = true;
     let channelIdOk = true;

@@ -34,13 +34,17 @@ function mockFetch(body, status = 200) {
   );
 }
 
-/** Supabase fake con Storage upload que siempre tiene éxito. */
-function makeSupabaseStorage(publicUrl = 'https://storage.example.com/world-maps/map/tileset.png') {
-  const fromObj = {
-    upload: vi.fn(() => Promise.resolve({ error: null })),
-    getPublicUrl: vi.fn(() => ({ data: { publicUrl } })),
-  };
-  return { storage: { from: vi.fn(() => fromObj) }, _fromObj: fromObj };
+/**
+ * Crea un fetch global para la secuencia: primera llamada = respuesta del upload,
+ * segunda llamada = respuesta del POST create.
+ */
+function mockFetchSequence(...responses) {
+  let i = 0;
+  return vi.fn(() => {
+    const r = responses[i] ?? responses[responses.length - 1];
+    i++;
+    return Promise.resolve(r);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -107,67 +111,70 @@ describe('saveMap', () => {
     vi.restoreAllMocks();
   });
 
-  it('sube el tileset a Storage y llama POST /api/admin/world-map con create', async () => {
-    const fakeSupabase = makeSupabaseStorage();
+  it('sube el tileset via /api/admin/tileset-upload y llama POST /api/admin/world-map con create', async () => {
+    // Primera llamada: POST /api/admin/tileset-upload → URL del tileset
+    // Segunda llamada: POST /api/admin/world-map → respuesta del create
+    const uploadUrl = 'https://storage.example.com/world-maps/mi-mapa-123/tileset.png';
     const responseBody = {
       map: { id: 'new-uuid', name: 'Mi Mapa', isActive: false, updatedAt: '2024-01-01T00:00:00Z' },
       zones: [{ name: 'Sala', channelId: 'ch-sala' }],
     };
-    globalThis.fetch = mockFetch(responseBody, 201);
+    globalThis.fetch = mockFetchSequence(
+      { ok: true, status: 200, json: () => Promise.resolve({ url: uploadUrl }) },
+      { ok: true, status: 201, json: () => Promise.resolve(responseBody) },
+    );
 
     const tilesetBlob = new Blob(['PNG_DATA'], { type: 'image/png' });
     const result = await saveMap({
-      supabase: fakeSupabase,
+      supabase: {},
       name: 'Mi Mapa',
       tiledJson: VALID_TILED_JSON,
       tilesetBlob,
     });
 
-    // Verificar que se llamó a Storage.upload con el bucket correcto
-    expect(fakeSupabase.storage.from).toHaveBeenCalledWith('world-maps');
-    expect(fakeSupabase._fromObj.upload).toHaveBeenCalledOnce();
-    const [storagePath] = fakeSupabase._fromObj.upload.mock.calls[0];
-    expect(storagePath).toMatch(/^mi-mapa-\d+\/tileset\.png$/);
-
-    // Verificar el fetch POST
-    expect(fetch).toHaveBeenCalledOnce();
-    const [url, opts] = fetch.mock.calls[0];
-    expect(url).toBe('/api/admin/world-map');
-    expect(opts.method).toBe('POST');
-    const body = JSON.parse(opts.body);
+    // Primera llamada debe ser al endpoint de upload
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const [uploadUrl1, uploadOpts] = fetch.mock.calls[0];
+    expect(uploadUrl1).toBe('/api/admin/tileset-upload');
+    expect(uploadOpts.method).toBe('POST');
+    // Segunda llamada al endpoint de create
+    const [createUrl, createOpts] = fetch.mock.calls[1];
+    expect(createUrl).toBe('/api/admin/world-map');
+    expect(createOpts.method).toBe('POST');
+    const body = JSON.parse(createOpts.body);
     expect(body.action).toBe('create');
     expect(body.name).toBe('Mi Mapa');
-    expect(body.tilesetUrl).toBe('https://storage.example.com/world-maps/map/tileset.png');
+    expect(body.tilesetUrl).toBe(uploadUrl);
 
     expect(result.map.name).toBe('Mi Mapa');
     expect(result.zones).toHaveLength(1);
   });
 
-  it('lanza si Storage upload falla (no llega al fetch POST)', async () => {
-    const fakeSupabase = {
-      storage: {
-        from: () => ({
-          upload: vi.fn(() => Promise.resolve({ error: { message: 'storage_error' } })),
-          getPublicUrl: vi.fn(),
-        }),
-      },
-    };
-    globalThis.fetch = vi.fn();
+  it('lanza si /api/admin/tileset-upload falla (no llega al fetch POST create)', async () => {
+    globalThis.fetch = mockFetchSequence({
+      ok: false,
+      status: 500,
+      json: () => Promise.resolve({ error: 'storage_error' }),
+    });
     const tilesetBlob = new Blob(['data'], { type: 'image/png' });
 
     await expect(
-      saveMap({ supabase: fakeSupabase, name: 'X', tiledJson: VALID_TILED_JSON, tilesetBlob }),
+      saveMap({ supabase: {}, name: 'X', tiledJson: VALID_TILED_JSON, tilesetBlob }),
     ).rejects.toThrow('storage_error');
-    expect(fetch).not.toHaveBeenCalled();
+    // Solo se llama al endpoint de upload, no al de create
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('lanza con errors array si el servidor responde 400 con errors', async () => {
-    const fakeSupabase = makeSupabaseStorage();
-    globalThis.fetch = mockFetch({ errors: ['Error A', 'Error B'] }, 400);
+  it('lanza con errors array si el servidor de create responde 400 con errors', async () => {
+    const uploadUrl = 'https://storage.example.com/world-maps/x/tileset.png';
+    globalThis.fetch = mockFetchSequence(
+      { ok: true, status: 200, json: () => Promise.resolve({ url: uploadUrl }) },
+      { ok: false, status: 400, json: () => Promise.resolve({ errors: ['Error A', 'Error B'] }) },
+    );
     const tilesetBlob = new Blob(['data'], { type: 'image/png' });
 
     const err = await saveMap({
-      supabase: fakeSupabase,
+      supabase: {},
       name: 'X',
       tiledJson: VALID_TILED_JSON,
       tilesetBlob,

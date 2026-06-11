@@ -112,36 +112,32 @@ export async function listMaps(_opts) {
 }
 
 /**
- * Sube el tileset al bucket "world-maps" de Supabase Storage y crea el mapa
- * vía POST /api/admin/world-map con action:"create".
+ * Sube el tileset via el endpoint admin /api/admin/tileset-upload (service-role,
+ * igual que el avatar se sube via /api/profile/avatar) y crea el mapa via
+ * POST /api/admin/world-map con action:"create".
  *
- * La ruta en el bucket es: `<nombre-sanitizado>-<timestamp>/tileset.<ext>`
+ * El upload directo al bucket "world-maps" desde el cliente está bloqueado por RLS
+ * (no hay policy INSERT para `authenticated`). Rutar por el endpoint resuelve eso.
  *
  * @param {{ supabase: object, name: string, tiledJson: object, tilesetBlob: Blob }} opts
  * @returns {Promise<{ map: object, zones: Array<{ name: string, channelId: string }> }>}
  */
-export async function saveMap({ supabase, name, tiledJson, tilesetBlob }) {
-  // Subir el tileset a Storage. El bucket "world-maps" tiene política de lectura
-  // pública; el cliente usa el anon key con la sesión del admin para el upload.
-  const safeName = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .slice(0, 40);
-  const ext =
-    (tilesetBlob.type || 'image/png')
-      .split('/')
-      .pop()
-      .replace(/[^a-z0-9]/g, '') || 'png';
-  const path = `${safeName}-${Date.now()}/tileset.${ext}`;
+export async function saveMap({ supabase: _supabase, name, tiledJson, tilesetBlob }) {
+  // Subir el tileset a traves del endpoint admin (usa service-role internamente).
+  const formData = new FormData();
+  formData.append('tileset', tilesetBlob);
+  formData.append('mapName', name.trim());
 
-  const { error: uploadError } = await supabase.storage
-    .from('world-maps')
-    .upload(path, tilesetBlob, { contentType: tilesetBlob.type || 'image/png', upsert: false });
-  if (uploadError) throw new Error(`Storage upload: ${uploadError.message}`);
-
-  const { data: urlData } = supabase.storage.from('world-maps').getPublicUrl(path);
-  const tilesetUrl = urlData.publicUrl;
+  const uploadRes = await fetch('/api/admin/tileset-upload', {
+    method: 'POST',
+    headers: authHeader(),
+    body: formData,
+  });
+  if (!uploadRes.ok) {
+    const uploadBody = await uploadRes.json().catch(() => ({}));
+    throw new Error(`Storage upload: ${uploadBody.error ?? `HTTP ${uploadRes.status}`}`);
+  }
+  const { url: tilesetUrl } = await uploadRes.json();
 
   // Crear el mapa en la base de datos a través del endpoint admin.
   const res = await fetch('/api/admin/world-map', {

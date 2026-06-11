@@ -62,6 +62,29 @@ export async function deleteAvatarObjects(userId) {
 }
 
 // ──────────────────────────────────────────────
+// Mapas del mundo — bucket publico 'world-maps'
+// ──────────────────────────────────────────────
+const WORLD_MAPS_BUCKET = 'world-maps';
+
+/**
+ * Sube un tileset al bucket 'world-maps' usando el cliente service-role,
+ * igual que uploadAvatar. Retorna la URL publica.
+ * Se invoca desde el endpoint admin (api/admin/tileset-upload.js), nunca
+ * desde el cliente directamente, para sortear el bloqueo RLS de Storage.
+ *
+ * @param {{ path: string, contentType: string, body: Buffer|NodeJS.ReadableStream }} opts
+ * @returns {Promise<string>} URL publica del tileset subido.
+ */
+export async function uploadTileset({ path, contentType, body }) {
+  const { error } = await supabase.storage
+    .from(WORLD_MAPS_BUCKET)
+    .upload(path, body, { contentType: contentType || 'image/png', upsert: false });
+  if (error) throw error;
+  const { data } = supabase.storage.from(WORLD_MAPS_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+// ──────────────────────────────────────────────
 // Estudio de pistas — bucket privado 'stems-jobs'
 // ──────────────────────────────────────────────
 const STEMS_BUCKET = 'stems-jobs';

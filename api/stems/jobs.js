@@ -2,7 +2,7 @@ import sql from '../_lib/db.js';
 import { requireUser } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { createStemsUploadUrl, deleteStemsPrefix } from '../_lib/storage.js';
-import { DAILY_QUOTA, validateUploadMeta } from '../_lib/stems.js';
+import { DAILY_QUOTA, validateUploadMeta, checkStudioAccess } from '../_lib/stems.js';
 
 async function quotaUsedToday(userId) {
   // Solo cuenta jobs que realmente entraron a procesamiento o terminaron OK.
@@ -10,7 +10,7 @@ async function quotaUsedToday(userId) {
   const rows = await sql`
     SELECT count(*)::int AS n FROM stem_jobs
     WHERE user_id = ${userId}
-      AND status IN ('separating_stems', 'separating_voices', 'done')
+      AND status IN ('processing', 'done', 'partial')
       AND created_at >= date_trunc('day', now())
   `;
   return rows[0]?.n ?? 0;
@@ -34,6 +34,15 @@ export default withErrors(async (req, res) => {
   }
 
   // POST: crear job.
+  // Verificar acceso beta antes de cualquier operación de escritura.
+  const profileRows = await sql`SELECT is_admin, studio_beta FROM profiles WHERE id = ${user.id}`;
+  const profile = profileRows[0] ?? {};
+  const access = checkStudioAccess(profile);
+  if (!access.ok) {
+    res.status(403).json({ error: 'beta', reason: access.reason });
+    return;
+  }
+
   // Reclama intentos previos sin empezar (created/uploaded): no consumen cuota y, si
   // quedaron huérfanos por una subida fallida, bloquearían nuevos uploads hasta el
   // cleanup de 24 h. Los liberamos aquí para que el usuario pueda reintentar al instante.
@@ -46,10 +55,11 @@ export default withErrors(async (req, res) => {
     if (j.input_path) await deleteStemsPrefix(`${user.id}/${j.id}`).catch(() => {});
   }
 
-  // Solo un job realmente en proceso bloquea uno nuevo.
+  // Solo un job realmente en proceso bloquea uno nuevo. 'partial' es terminal
+  // (unas secciones ok, otras fallidas; no llega más trabajo) → no bloquea.
   const active = await sql`
     SELECT id FROM stem_jobs
-    WHERE user_id = ${user.id} AND status IN ('separating_stems', 'separating_voices')
+    WHERE user_id = ${user.id} AND status = 'processing'
     LIMIT 1
   `;
   if (active.length > 0) {
@@ -60,9 +70,8 @@ export default withErrors(async (req, res) => {
 
   const used = await quotaUsedToday(user.id);
   if (used >= DAILY_QUOTA) {
-    const e = new Error(`Alcanzaste el límite de ${DAILY_QUOTA} canciones por día. Vuelve mañana.`);
-    e.status = 429;
-    throw e;
+    res.status(429).json({ error: 'quota', reason: 'quota' });
+    return;
   }
 
   const { filename, size, mime } = req.body ?? {};

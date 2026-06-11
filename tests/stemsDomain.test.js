@@ -10,16 +10,17 @@ import {
 describe('canTransition', () => {
   it('permite el camino feliz completo', () => {
     expect(canTransition('created', 'uploaded')).toBe(true);
-    expect(canTransition('created', 'separating_stems')).toBe(true); // salto directo de start.js
-    expect(canTransition('uploaded', 'separating_stems')).toBe(true);
-    expect(canTransition('separating_stems', 'separating_voices')).toBe(true);
-    expect(canTransition('separating_voices', 'done')).toBe(true);
+    expect(canTransition('created', 'processing')).toBe(true); // salto directo de start.js
+    expect(canTransition('uploaded', 'processing')).toBe(true);
+    expect(canTransition('processing', 'done')).toBe(true);
+    expect(canTransition('processing', 'partial')).toBe(true);
+    expect(canTransition('partial', 'done')).toBe(true);
     expect(canTransition('done', 'expired')).toBe(true);
   });
 
   it('permite failed desde estados en proceso, no desde done', () => {
-    expect(canTransition('separating_stems', 'failed')).toBe(true);
-    expect(canTransition('separating_voices', 'failed')).toBe(true);
+    expect(canTransition('processing', 'failed')).toBe(true);
+    expect(canTransition('partial', 'failed')).toBe(true);
     expect(canTransition('done', 'failed')).toBe(false);
   });
 
@@ -27,6 +28,14 @@ describe('canTransition', () => {
     expect(canTransition('done', 'separating_stems')).toBe(false);
     expect(canTransition('expired', 'done')).toBe(false);
     expect(canTransition('nope', 'done')).toBe(false);
+  });
+
+  it('alias v1 separating_stems/voices siguen siendo válidos (compat hasta Task 0.7)', () => {
+    expect(canTransition('created', 'separating_stems')).toBe(true);
+    expect(canTransition('separating_stems', 'separating_voices')).toBe(true);
+    expect(canTransition('separating_stems', 'failed')).toBe(true);
+    expect(canTransition('separating_voices', 'done')).toBe(true);
+    expect(canTransition('separating_voices', 'failed')).toBe(true);
   });
 });
 
@@ -64,13 +73,8 @@ describe('validateUploadMeta', () => {
 });
 
 describe('constantes', () => {
-  it('cuota diaria es 3 y los estados activos son los de proceso', () => {
-    expect(DAILY_QUOTA).toBe(3);
-    expect(ACTIVE_STATUSES).toEqual([
-      'created',
-      'uploaded',
-      'separating_stems',
-      'separating_voices',
-    ]);
+  it('cuota diaria es 1 y los estados activos son los de proceso', () => {
+    expect(DAILY_QUOTA).toBe(1);
+    expect(ACTIVE_STATUSES).toEqual(['created', 'uploaded', 'processing']);
   });
 });

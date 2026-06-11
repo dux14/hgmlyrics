@@ -154,6 +154,13 @@ function startHashGuard() {
  * @param {HTMLElement} container
  */
 export async function renderWorldPage(container) {
+  // Guardia de re-entrada: si ya hay una instancia activa (SPA navegar fuera
+  // y volver), limpiar la anterior antes de montar la nueva para evitar
+  // canales Supabase huerfanos y closures obsoletos.
+  if (_game) {
+    teardown();
+  }
+
   container.innerHTML = '';
 
   const user = getSession()?.user ?? null;

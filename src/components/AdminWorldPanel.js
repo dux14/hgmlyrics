@@ -128,11 +128,17 @@ async function renderVersions(listEl, statusEl, adminChannel) {
         btn.textContent = 'Activando…';
         try {
           const result = await activate({ id: mapId });
-          // Notificar a todos los clientes conectados que el mapa cambió (E4.1)
-          adminChannel?.broadcastMapUpdated({
-            mapId: result.map?.id ?? mapId,
-            mapName: result.map?.name ?? targetMap?.name ?? '',
-          });
+          // Notificar a todos los clientes conectados que el mapa cambió (E4.1).
+          // Fire-and-forget; no bloqueamos el UX de éxito. Un fallo silencioso
+          // se volvería invisible, así que lo registramos como advertencia.
+          adminChannel
+            ?.broadcastMapUpdated({
+              mapId: result.map?.id ?? mapId,
+              mapName: result.map?.name ?? targetMap?.name ?? '',
+            })
+            ?.catch((err) => {
+              console.warn('[mundo] No se pudo difundir map-updated a los clientes:', err);
+            });
           if (statusEl) {
             statusEl.textContent = 'Mapa activado correctamente.';
             statusEl.style.color = 'var(--color-success, green)';

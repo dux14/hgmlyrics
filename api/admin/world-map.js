@@ -70,11 +70,14 @@ async function createMap(req, res, user) {
 // Así no se viola el índice parcial único `world_maps_one_active` en ningún
 // punto intermedio de la transacción.
 // ---------------------------------------------------------------------------
-async function activateMap(req, res) {
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function activateMap(req, res, user) {
   const { id } = req.body ?? {};
 
-  if (!id) {
-    res.status(400).json({ error: '"id" es obligatorio para activar un mapa.' });
+  // Validar que id existe y tiene formato UUID antes de tocar la BD
+  if (!id || !UUID_RE.test(id)) {
+    res.status(400).json({ error: 'id invalido.' });
     return;
   }
 
@@ -91,10 +94,10 @@ async function activateMap(req, res) {
     // Paso 1: desactivar todos los mapas activos (puede ser 0 o 1)
     await tx`UPDATE world_maps SET is_active = false WHERE is_active = true`;
 
-    // Paso 2: activar el mapa solicitado
+    // Paso 2: activar el mapa solicitado y registrar quién lo activó
     const rows = await tx`
       UPDATE world_maps
-      SET is_active = true, updated_at = now()
+      SET is_active = true, updated_at = now(), updated_by = ${user.id}
       WHERE id = ${id}
       RETURNING id, name, is_active AS "isActive", updated_at AS "updatedAt"
     `;
@@ -118,7 +121,7 @@ export default withErrors(async (req, res) => {
   const { action } = req.body ?? {};
 
   if (action === 'create') return createMap(req, res, user);
-  if (action === 'activate') return activateMap(req, res);
+  if (action === 'activate') return activateMap(req, res, user);
 
   res.status(400).json({ error: 'El campo "action" debe ser "create" o "activate".' });
 });

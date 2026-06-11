@@ -9,6 +9,8 @@ La pista `instrumental` se construye como suma de las 5 pistas no vocales
 Phase 1 swapará S1_EXTRACTOR por "bs_roformer_ep_317" para mejor separación vocal.
 """
 
+from __future__ import annotations
+
 import os
 import pathlib
 import subprocess

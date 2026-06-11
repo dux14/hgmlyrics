@@ -19,6 +19,8 @@ NOTAS DE DESPLIEGUE
   (el upload se hace con signed PUT URLs pre-firmadas por Vercel).
 """
 
+from __future__ import annotations
+
 import hashlib
 import hmac
 import os

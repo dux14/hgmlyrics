@@ -61,7 +61,9 @@ export function joinWorldAdmin({ supabase }) {
    * @param {MapUpdatedPayload} [payload]
    */
   function broadcastMapUpdated(payload) {
-    channel.send({
+    // Devuelve la promesa de send() para que quien llama pueda capturar fallos
+    // de difusión (el call site usa `?.catch(...)`).
+    return channel.send({
       type: 'broadcast',
       event: 'map-updated',
       payload: payload ?? {},

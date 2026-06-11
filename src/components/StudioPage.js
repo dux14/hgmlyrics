@@ -120,7 +120,7 @@ async function loadInitial(body) {
     // Solo vigilamos jobs realmente en proceso. Un created/uploaded al cargar la página
     // es una subida abandonada (el upload en memoria se perdió): no lo seguimos para no
     // dejar un spinner eterno; el backend lo reclama en la próxima subida.
-    const active = jobs.find((j) => ['separating_stems', 'separating_voices'].includes(j.status));
+    const active = jobs.find((j) => j.status === 'processing');
     const recent = jobs.find((j) => ['done', 'failed'].includes(j.status));
     if (active) return watchJob(body, active.id, quota, active.input_meta?.filename);
     if (recent) return showJob(body, recent.id, quota);
@@ -256,7 +256,7 @@ async function showJob(body, jobId, quota) {
 
 function renderProcessing(body, job, filename) {
   const status = job.status;
-  const stagesDone = status === 'separating_voices';
+  const stagesDone = false; // pipeline DAG: las secciones se siguen por sección, no por etapa global
   const stage = (iconName, label, state) => {
     const mark =
       state === 'done'

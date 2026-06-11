@@ -24,18 +24,12 @@ describe('canTransition', () => {
     expect(canTransition('done', 'failed')).toBe(false);
   });
 
-  it('rechaza retrocesos y estados desconocidos', () => {
-    expect(canTransition('done', 'separating_stems')).toBe(false);
+  it('rechaza retrocesos, estados v1 eliminados y estados desconocidos', () => {
     expect(canTransition('expired', 'done')).toBe(false);
     expect(canTransition('nope', 'done')).toBe(false);
-  });
-
-  it('alias v1 separating_stems/voices siguen siendo válidos (compat hasta Task 0.7)', () => {
-    expect(canTransition('created', 'separating_stems')).toBe(true);
-    expect(canTransition('separating_stems', 'separating_voices')).toBe(true);
-    expect(canTransition('separating_stems', 'failed')).toBe(true);
-    expect(canTransition('separating_voices', 'done')).toBe(true);
-    expect(canTransition('separating_voices', 'failed')).toBe(true);
+    // separating_stems/separating_voices eliminados en Task 0.7
+    expect(canTransition('created', 'separating_stems')).toBe(false);
+    expect(canTransition('separating_stems', 'separating_voices')).toBe(false);
   });
 });
 

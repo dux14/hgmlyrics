@@ -1,6 +1,6 @@
 /**
  * modal.js — Cliente de la app de Modal del Estudio de pistas.
- * Espeja el rol de replicate.js: arrancar jobs y verificar el callback firmado.
+ * Espeja el rol de replicate.js: arrancar el orquestador DAG y verificar el callback firmado.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
@@ -38,33 +38,6 @@ export async function invokeModalPipeline(payload) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-inbound-secret': secret },
     body: JSON.stringify({ fn: 'run_pipeline', ...payload }),
-  });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => '');
-    const e = new Error(`Modal ${res.status}: ${detail.slice(0, 200)}`);
-    e.status = 502;
-    throw e;
-  }
-  return { id: (await res.json()).callId };
-}
-
-/**
- * Arranca un modelo en Modal. `input.audio` es la signed URL del audio fuente.
- * @param {{ kind:string, input:object, jobId:string, userId:string, callbackUrl:string }} args
- * @returns {Promise<{ id:string }>}
- */
-export async function createModalJob({ kind, input, jobId, userId, callbackUrl }) {
-  const endpoint = process.env.MODAL_STEMS_ENDPOINT;
-  const secret = process.env.MODAL_INBOUND_SECRET;
-  if (!endpoint || !secret) {
-    const e = new Error('MODAL_STEMS_ENDPOINT / MODAL_INBOUND_SECRET no configurados');
-    e.status = 500;
-    throw e;
-  }
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-inbound-secret': secret },
-    body: JSON.stringify({ kind, audioUrl: input.audio, jobId, userId, callbackUrl }),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => '');

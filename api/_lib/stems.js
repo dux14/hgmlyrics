@@ -25,14 +25,10 @@ const AUDIO_MIMES = new Set([
 const NEXT = {
   // start.js salta created → processing directamente (sin pasar por uploaded).
   // Se mantiene 'uploaded' para compatibilidad con flujos futuros de dos pasos.
-  // separating_stems/separating_voices se conservan como alias del pipeline v1
-  // hasta que _process.js migre a 'processing' en Task 0.7.
-  created: ['uploaded', 'processing', 'separating_stems', 'failed'],
-  uploaded: ['processing', 'separating_stems', 'failed'],
+  created: ['uploaded', 'processing', 'failed'],
+  uploaded: ['processing', 'failed'],
   processing: ['done', 'partial', 'failed'],
   partial: ['done', 'failed'],
-  separating_stems: ['separating_voices', 'processing', 'failed'],
-  separating_voices: ['done', 'failed'],
   done: ['expired'],
   failed: [],
   expired: [],

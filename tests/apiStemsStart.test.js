@@ -38,7 +38,6 @@ vi.mock('postgres', () => ({ default: () => sqlMock }));
 const mockInvokeModalPipeline = vi.fn();
 vi.mock('../api/_lib/modal.js', () => ({
   invokeModalPipeline: mockInvokeModalPipeline,
-  createModalJob: vi.fn(),
   verifyModalSignature: vi.fn(),
 }));
 

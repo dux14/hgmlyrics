@@ -18,6 +18,7 @@ import { Joystick } from './Joystick.js';
 import { VoiceControls } from './VoiceControls.js';
 import { joinZone } from '../lib/zoneChannel.js';
 import { joinSignaling } from '../lib/voiceSignaling.js';
+import { joinWorldAdmin } from '../lib/worldAdminChannel.js';
 import { createVoiceMesh } from '../world/voiceMesh.js';
 import { getIceServers } from '../world/iceConfig.js';
 import { capPublishers } from '../world/voicePolicy.js';
@@ -50,6 +51,8 @@ let _avatarCreator = null;
 let _worldCredits = null;
 let _overlayBtnsEl = null;
 let _zoneChannel = null;
+/** @type {{ broadcastMapUpdated: Function, onMapUpdated: Function, leave: Function }|null} */
+let _adminChannel = null;
 let _wrapperEl = null;
 let _joystick = null;
 let _reconnectEl = null;
@@ -72,6 +75,10 @@ function teardown() {
   if (_zoneChannel) {
     _zoneChannel.leave();
     _zoneChannel = null;
+  }
+  if (_adminChannel) {
+    _adminChannel.leave();
+    _adminChannel = null;
   }
   if (_voiceMesh) {
     _voiceMesh.closeAll();
@@ -500,6 +507,29 @@ export async function renderWorldPage(container) {
       input: inputRef,
       onStatus,
     });
+
+    // Suscribir al canal de administración para recarga en caliente del mapa (E4.2).
+    // Cuando el admin activa un mapa nuevo, se recibe map-updated → cargar el nuevo
+    // descriptor y reiniciar la escena WorldScene sin perder la sesión de auth/presencia.
+    _adminChannel = joinWorldAdmin({ supabase });
+    _adminChannel.onMapUpdated(async () => {
+      try {
+        const newDescriptor = await loadActiveMap({ supabase });
+        // Actualizar el descriptor en el registry del juego para que la escena lo
+        // lea en preload() al reiniciarse.
+        _game?.registry.set('worldMapDescriptor', newDescriptor);
+        // Reiniciar la escena WorldScene: shutdown + create (preload re-corre).
+        // La conexión de presencia/realtime vive en el Game (no en la escena), así
+        // que sobrevive al restart. La sesión de auth del usuario no se toca.
+        const scene = _game?.scene.getScene('WorldScene');
+        if (scene) {
+          scene.scene.restart();
+        }
+      } catch (err) {
+        console.warn('[mundo] No se pudo recargar el mapa en caliente:', err);
+      }
+    });
+
     startHashGuard();
   } catch (err) {
     console.error('[mundo] no se pudo iniciar la escena Phaser', err);

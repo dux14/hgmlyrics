@@ -8,14 +8,27 @@ import { validateTiledMap } from '../_lib/validateTiledMap.js';
 //      action:"activate" body: { action:"activate", id }
 
 // ---------------------------------------------------------------------------
-// Listar todos los mapas (usado por el panel admin en E3)
+// Listar todos los mapas (usado por el panel admin en E3+E4)
+// Incluye las zonas de cada mapa (extraídas del tiled_json) para que el panel
+// pueda mostrar el aviso de channelId cuando el admin activa un mapa (E4.3).
 // ---------------------------------------------------------------------------
 async function listMaps(_req, res) {
-  const maps = await sql`
-    SELECT id, name, is_active AS "isActive", updated_at AS "updatedAt"
+  const rows = await sql`
+    SELECT id, name, is_active AS "isActive", updated_at AS "updatedAt", tiled_json AS "tiledJson"
     FROM world_maps
     ORDER BY updated_at DESC
   `;
+  // Extraer zonas de cada mapa de forma segura (sin exponer el JSON completo al cliente)
+  const maps = rows.map(({ tiledJson, ...rest }) => {
+    let zones = [];
+    try {
+      const { zones: parsed } = validateTiledMap(tiledJson ?? {});
+      zones = parsed;
+    } catch {
+      // Si el JSON no es válido, devolver zonas vacías
+    }
+    return { ...rest, zones };
+  });
   res.status(200).json({ maps });
 }
 

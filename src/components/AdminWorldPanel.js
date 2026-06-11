@@ -12,6 +12,8 @@ import { supabase } from '../lib/supabase.js';
 import { icon } from '../lib/icons.js';
 import { validateTiledMap } from '../../api/_lib/validateTiledMap.js';
 import { listMaps, saveMap, activate } from '../world/worldMapStore.js';
+import { joinWorldAdmin } from '../lib/worldAdminChannel.js';
+import { diffZoneChannels } from '../world/zoneChannelsDiff.js';
 
 // ---------------------------------------------------------------------------
 // Pequeño helper HTML-escape (consistente con AdminDashboard)
@@ -42,9 +44,38 @@ function fmtDate(iso) {
 }
 
 // ---------------------------------------------------------------------------
+// Construir el aviso de impacto en channelIds (E4.3)
+// Devuelve '' si no hay impacto; de lo contrario devuelve el HTML del aviso.
+// ---------------------------------------------------------------------------
+function buildChannelWarning(currentZones, nextZones) {
+  const { changed, removed } = diffZoneChannels(currentZones, nextZones);
+  if (!changed.length && !removed.length) return '';
+
+  const lines = [];
+  if (changed.length) {
+    const names = changed.map((z) => `"${esc(z.name)}"`).join(', ');
+    lines.push(
+      `Las zonas ${names} cambian de channelId: los usuarios conectados perderán su sesión de chat/voz.`,
+    );
+  }
+  if (removed.length) {
+    const names = removed.map((z) => `"${esc(z.name)}"`).join(', ');
+    lines.push(
+      `Las zonas ${names} desaparecen del nuevo mapa: los usuarios en esas zonas perderán su conexión.`,
+    );
+  }
+
+  return `
+    <div style="margin-top:var(--space-sm);padding:var(--space-sm);background:var(--color-warning-bg,#fff8e1);border:1px solid var(--color-warning,#f59e0b);border-radius:var(--border-radius-sm);font-size:var(--font-size-sm);color:var(--color-warning-text,#92400e);">
+      <strong>Aviso:</strong> ${lines.join(' ')}
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------------
 // Renderizar la lista de versiones
 // ---------------------------------------------------------------------------
-async function renderVersions(listEl, statusEl) {
+async function renderVersions(listEl, statusEl, adminChannel) {
   listEl.innerHTML =
     '<p style="color:var(--color-text-secondary);font-size:var(--font-size-sm);">Cargando versiones…</p>';
   try {
@@ -54,9 +85,16 @@ async function renderVersions(listEl, statusEl) {
         '<p style="color:var(--color-text-secondary);font-size:var(--font-size-sm);">No hay mapas guardados.</p>';
       return;
     }
+
+    // Zonas del mapa actualmente activo (para la comparación E4.3)
+    const activeMap = maps.find((m) => m.isActive);
+    const activeZones = activeMap?.zones ?? [];
+
     listEl.innerHTML = maps
-      .map(
-        (m) => `
+      .map((m) => {
+        // Aviso de impacto en channelIds para mapas inactivos
+        const warning = !m.isActive ? buildChannelWarning(activeZones, m.zones ?? []) : '';
+        return `
       <div class="ff-item wm-version-item" data-id="${esc(m.id)}">
         <div class="ff-item__head">
           <strong>${esc(m.name)}</strong>
@@ -72,9 +110,10 @@ async function renderVersions(listEl, statusEl) {
               : ''
           }
         </div>
+        ${warning}
       </div>
-    `,
-      )
+    `;
+      })
       .join('');
 
     // Eventos de activar
@@ -83,15 +122,22 @@ async function renderVersions(listEl, statusEl) {
         const item = btn.closest('.wm-version-item');
         const mapId = item?.dataset.id;
         if (!mapId) return;
+        // Obtener el nombre del mapa activado (para el payload del broadcast)
+        const targetMap = maps.find((m) => m.id === mapId);
         btn.disabled = true;
         btn.textContent = 'Activando…';
         try {
-          await activate({ id: mapId });
+          const result = await activate({ id: mapId });
+          // Notificar a todos los clientes conectados que el mapa cambió (E4.1)
+          adminChannel?.broadcastMapUpdated({
+            mapId: result.map?.id ?? mapId,
+            mapName: result.map?.name ?? targetMap?.name ?? '',
+          });
           if (statusEl) {
             statusEl.textContent = 'Mapa activado correctamente.';
             statusEl.style.color = 'var(--color-success, green)';
           }
-          await renderVersions(listEl, statusEl);
+          await renderVersions(listEl, statusEl, adminChannel);
         } catch (err) {
           if (statusEl) {
             statusEl.textContent = `Error al activar: ${err.message}`;
@@ -248,6 +294,12 @@ export function mountAdminWorldPanel(container) {
   const statusEl = container.querySelector('#wm-status');
   const versionsList = container.querySelector('#wm-versions-list');
 
+  // Canal world:admin — usado para notificar a los clientes cuando el admin
+  // activa un mapa (E4.1). Se desmonta junto con el panel (no hay teardown
+  // explícito del panel en esta versión, pero la conexión vive lo que dura la
+  // sesión admin, que es aceptable).
+  const adminChannel = joinWorldAdmin({ supabase });
+
   // Estado local: guardamos el tiledJson parseado y las zonas detectadas.
   // tiledJsonRef.value es el objeto que se modifica cuando el admin edita zonas.
   const tiledJsonRef = { value: null };
@@ -341,7 +393,7 @@ export function mountAdminWorldPanel(container) {
       updateSaveEnabled();
 
       // Refrescar lista de versiones
-      await renderVersions(versionsList, statusEl);
+      await renderVersions(versionsList, statusEl, adminChannel);
     } catch (err) {
       const msgs = err.errors ? err.errors.map((m) => `• ${m}`).join('\n') : err.message;
       saveStatus.textContent = `Error: ${msgs}`;
@@ -352,5 +404,5 @@ export function mountAdminWorldPanel(container) {
   });
 
   // Cargar lista de versiones al montar
-  renderVersions(versionsList, statusEl);
+  renderVersions(versionsList, statusEl, adminChannel);
 }

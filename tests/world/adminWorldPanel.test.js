@@ -11,7 +11,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // Mocks de dependencias externas
 // ---------------------------------------------------------------------------
 
-vi.mock('../../src/lib/supabase.js', () => ({ supabase: {} }));
+// El supabase mock incluye channel() para que joinWorldAdmin (E4.1) no falle al montar.
+vi.mock('../../src/lib/supabase.js', () => ({
+  supabase: {
+    channel: () => ({
+      on: () => ({ on: () => ({}) }),
+      subscribe: () => {},
+      send: () => Promise.resolve('ok'),
+    }),
+    removeChannel: () => {},
+  },
+}));
 vi.mock('../../src/lib/authStore.js', () => ({
   getSession: vi.fn(() => ({ access_token: 'test-token' })),
   isAdmin: vi.fn(() => true),

@@ -99,7 +99,7 @@ function authHeader() {
  *
  * @param {{ supabase: object }} _opts — supabase no se usa aquí (la endpoint
  *   usa el rol de servicio), pero se mantiene por consistencia con loadActiveMap.
- * @returns {Promise<Array<{ id: string, name: string, isActive: boolean, updatedAt: string }>>}
+ * @returns {Promise<Array<{ id: string, name: string, isActive: boolean, updatedAt: string, zones: Array<{ name: string, channelId: string }> }>>}
  */
 export async function listMaps(_opts) {
   const res = await fetch('/api/admin/world-map', { headers: authHeader() });

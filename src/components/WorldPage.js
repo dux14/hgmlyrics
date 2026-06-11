@@ -58,7 +58,7 @@ let _joystick = null;
 let _reconnectEl = null;
 /** @type {{ el: HTMLElement, addRemotePeer: Function, removeRemotePeer: Function, clearRemotePeers: Function, destroy: Function }|null} */
 let _voiceControls = null;
-/** @type {{ setPeers: Function, onRemoteStream: Function, onPeerSpeaking: Function, closeAll: Function }|null} */
+/** @type {{ setPeers: Function, onRemoteStream: Function, onPeerSpeaking: Function, closeAllPeers: Function, closeAll: Function }|null} */
 let _voiceMesh = null;
 /** @type {{ sendSignal: Function, onSignal: Function, leave: Function }|null} */
 let _voiceSignaling = null;
@@ -305,8 +305,9 @@ export async function renderWorldPage(container) {
         // Limpiar peers remotos anteriores para que el roster se reconstruya limpio.
         _voiceControls?.clearRemotePeers();
 
+        // Solo cerrar las conexiones de peers (no detener el microfono local).
         if (_voiceMesh) {
-          _voiceMesh.closeAll();
+          _voiceMesh.closeAllPeers();
         }
         if (_voiceSignaling) {
           _voiceSignaling.leave();
@@ -438,9 +439,9 @@ export async function renderWorldPage(container) {
     // Limpiar peers remotos de la zona anterior antes de cerrar mesh/señalizacion.
     _voiceControls?.clearRemotePeers();
 
-    // Cerrar el mesh + señalizacion anteriores (si los hay).
+    // Solo cerrar las conexiones de peers: el microfono sigue activo entre zonas.
     if (_voiceMesh) {
-      _voiceMesh.closeAll();
+      _voiceMesh.closeAllPeers();
       _voiceMesh = null;
     }
     if (_voiceSignaling) {

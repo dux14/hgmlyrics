@@ -262,11 +262,21 @@ export function createVoiceMesh({ signaling, getLocalStream, iceServers, selfId 
   }
 
   /**
-   * Cierra todas las RTCPeerConnections y detiene los tracks del stream local.
+   * Cierra todas las RTCPeerConnections y streams remotos asociados.
+   * NO detiene los tracks del stream local (el microfono sigue activo).
+   * Usar en cambios de zona o reconexion, donde el stream local debe seguir vivo.
    */
-  function closeAll() {
+  function closeAllPeers() {
     // Snapshot de claves para evitar iterar sobre el Map mientras se muta.
     [...peers.keys()].forEach((peerId) => teardownPeer(peerId));
+  }
+
+  /**
+   * Teardown completo: cierra todas las RTCPeerConnections Y detiene los tracks
+   * del stream local. Usar solo al desactivar la voz o al destruir la pagina.
+   */
+  function closeAll() {
+    closeAllPeers();
 
     // Detener tracks del stream local
     getLocalStream()
@@ -274,5 +284,5 @@ export function createVoiceMesh({ signaling, getLocalStream, iceServers, selfId 
       .forEach((t) => t.stop());
   }
 
-  return { setPeers, onRemoteStream, onPeerSpeaking, closeAll };
+  return { setPeers, onRemoteStream, onPeerSpeaking, closeAllPeers, closeAll };
 }

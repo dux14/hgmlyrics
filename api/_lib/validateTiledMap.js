@@ -13,16 +13,16 @@
 
 /**
  * Nombres aceptados (en minúsculas) para la capa de suelo.
- * Acepta: "suelo", "floor".
+ * Canónico del motor: "ground". Alias: "suelo", "floor".
  */
-const FLOOR_NAMES = ['suelo', 'floor'];
+const FLOOR_NAMES = ['ground', 'suelo', 'floor'];
 
 /**
  * Nombres aceptados (en minúsculas) para la capa de colisión.
- * Acepta: "colisión", "colision", "collision".
+ * Canónico del motor: "walls". Alias: "colisión", "colision", "collision".
  * Se normaliza quitando la tilde antes de comparar.
  */
-const COLLISION_NAMES = ['colisión', 'colision', 'collision'];
+const COLLISION_NAMES = ['walls', 'colisión', 'colision', 'collision'];
 
 /** Normaliza una cadena a minúsculas para comparación case-insensitive. */
 function lower(s) {
@@ -187,7 +187,7 @@ export function validateTiledMap(json) {
   const floorLayer = tileLayers.find((l) => FLOOR_NAMES.includes(lower(l.name)));
   if (!floorLayer) {
     errors.push(
-      `Falta la capa de suelo. Se esperaba un tilelayer con nombre "suelo" o "floor" (insensible a mayúsculas).`,
+      `Falta la capa de suelo. Se esperaba un tilelayer con nombre "ground", "suelo" o "floor" (insensible a mayúsculas).`,
     );
   }
 
@@ -195,7 +195,7 @@ export function validateTiledMap(json) {
   const collisionLayer = tileLayers.find((l) => COLLISION_NAMES.includes(lower(l.name)));
   if (!collisionLayer) {
     errors.push(
-      `Falta la capa de colisión. Se esperaba un tilelayer con nombre "colisión", "colision" o "collision" (insensible a mayúsculas).`,
+      `Falta la capa de colisión. Se esperaba un tilelayer con nombre "walls", "colisión", "colision" o "collision" (insensible a mayúsculas).`,
     );
   }
 

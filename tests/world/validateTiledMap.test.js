@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { validateTiledMap } from '../../api/_lib/validateTiledMap.js';
 
 // ---------------------------------------------------------------------------
-// Fixture base: mapa Tiled válido mínimo
+// Fixture base: mapa Tiled válido mínimo (nombres canónicos del motor: ground/walls)
 // ---------------------------------------------------------------------------
 const makeValidMap = () => ({
   width: 20,
@@ -13,12 +13,12 @@ const makeValidMap = () => ({
   tilesets: [{ name: 'tileset-principal' }],
   layers: [
     {
-      name: 'suelo',
+      name: 'ground',
       type: 'tilelayer',
       data: Array(20 * 15).fill(1),
     },
     {
-      name: 'colision',
+      name: 'walls',
       type: 'tilelayer',
       data: Array(20 * 15).fill(0),
     },
@@ -65,15 +65,15 @@ describe('validateTiledMap – caso válido', () => {
     ]);
   });
 
-  it('acepta nombres de capa con acento: "suelo"/"colisión" (utf-8)', () => {
+  it('acepta nombres de capa con acento: "suelo"/"colisión" (alias utf-8)', () => {
     const map = makeValidMap();
-    // Reemplaza el nombre de la capa de colisión por la versión acentuada
+    map.layers[0].name = 'suelo';
     map.layers[1].name = 'colisión';
     const result = validateTiledMap(map);
     expect(result.ok).toBe(true);
   });
 
-  it('acepta nombre de capa "floor"/"collision" (inglés)', () => {
+  it('acepta nombre de capa "floor"/"collision" (alias inglés)', () => {
     const map = makeValidMap();
     map.layers[0].name = 'floor';
     map.layers[1].name = 'collision';
@@ -81,10 +81,19 @@ describe('validateTiledMap – caso válido', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('acepta nombres canónicos del motor: "ground"/"walls"', () => {
+    const map = makeValidMap();
+    // makeValidMap ya usa ground/walls; verificar explícitamente
+    expect(map.layers[0].name).toBe('ground');
+    expect(map.layers[1].name).toBe('walls');
+    const result = validateTiledMap(map);
+    expect(result.ok).toBe(true);
+  });
+
   it('acepta nombres de capa en mayúsculas (case-insensitive)', () => {
     const map = makeValidMap();
-    map.layers[0].name = 'SUELO';
-    map.layers[1].name = 'COLISION';
+    map.layers[0].name = 'GROUND';
+    map.layers[1].name = 'WALLS';
     const result = validateTiledMap(map);
     expect(result.ok).toBe(true);
   });
@@ -108,12 +117,12 @@ describe('validateTiledMap – capa zones ausente', () => {
 // Layer de suelo ausente
 // ---------------------------------------------------------------------------
 describe('validateTiledMap – capa de suelo ausente', () => {
-  it('reporta error cuando falta la capa de suelo/floor', () => {
+  it('reporta error cuando falta la capa de suelo/floor/ground', () => {
     const map = makeValidMap();
-    map.layers = map.layers.filter((l) => l.name !== 'suelo');
+    map.layers = map.layers.filter((l) => l.name !== 'ground');
     const result = validateTiledMap(map);
     expect(result.ok).toBe(false);
-    expect(result.errors.some((e) => /suelo|floor/i.test(e))).toBe(true);
+    expect(result.errors.some((e) => /suelo|floor|ground/i.test(e))).toBe(true);
   });
 });
 
@@ -121,12 +130,12 @@ describe('validateTiledMap – capa de suelo ausente', () => {
 // Layer de colisión ausente
 // ---------------------------------------------------------------------------
 describe('validateTiledMap – capa de colisión ausente', () => {
-  it('reporta error cuando falta la capa de colisión/collision', () => {
+  it('reporta error cuando falta la capa de colisión/collision/walls', () => {
     const map = makeValidMap();
-    map.layers = map.layers.filter((l) => l.name !== 'colision');
+    map.layers = map.layers.filter((l) => l.name !== 'walls');
     const result = validateTiledMap(map);
     expect(result.ok).toBe(false);
-    expect(result.errors.some((e) => /colisi[oó]n|collision/i.test(e))).toBe(true);
+    expect(result.errors.some((e) => /colisi[oó]n|collision|walls/i.test(e))).toBe(true);
   });
 });
 

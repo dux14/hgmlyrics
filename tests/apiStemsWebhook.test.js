@@ -2,15 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createHmac } from 'node:crypto';
 import { Readable } from 'node:stream';
 
-const mockCreateSignedUrl = vi.fn();
-const mockUpload = vi.fn();
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     auth: { getUser: vi.fn() },
     storage: {
       from: () => ({
-        createSignedUrl: mockCreateSignedUrl,
-        upload: mockUpload,
+        createSignedUrl: vi.fn(),
+        upload: vi.fn(),
         createSignedUploadUrl: vi.fn(),
       }),
     },
@@ -30,32 +28,10 @@ vi.mock('postgres', () => ({ default: () => sqlMock }));
 process.env.SUPABASE_URL = 'https://x.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'key';
 process.env.DATABASE_URL = 'postgresql://test';
-process.env.REPLICATE_API_TOKEN = 'r8_x';
 process.env.PUBLIC_BASE_URL = 'https://hgmlyrics.vercel.app';
-const SECRET = 'whsec_' + Buffer.from('k').toString('base64');
-process.env.REPLICATE_WEBHOOK_SECRET = SECRET;
 process.env.MODAL_WEBHOOK_SECRET = 'modalwebhooksecret';
 
 const handler = (await import('../api/stems/webhook.js')).default;
-
-function signedReq(bodyObj, { job = 'j1', kind = 'stems' } = {}) {
-  const body = JSON.stringify(bodyObj);
-  const id = 'msg_1';
-  // Usar timestamp actual para pasar la validación anti-replay (FIX-2)
-  const timestamp = String(Math.floor(Date.now() / 1000));
-  const key = Buffer.from(SECRET.split('_')[1], 'base64');
-  const sig = createHmac('sha256', key).update(`${id}.${timestamp}.${body}`).digest('base64');
-  const req = Readable.from([Buffer.from(body)]);
-  req.method = 'POST';
-  req.headers = {
-    'webhook-id': id,
-    'webhook-timestamp': timestamp,
-    'webhook-signature': `v1,${sig}`,
-  };
-  req.query = { job, kind };
-  req.url = `/api/stems/webhook?job=${job}&kind=${kind}`;
-  return req;
-}
 
 function makeRes() {
   return {
@@ -79,14 +55,10 @@ function makeRes() {
 beforeEach(() => {
   sqlResponses.length = 0;
   sqlCalls.length = 0;
-  mockUpload.mockReset().mockResolvedValue({ data: {}, error: null });
-  mockCreateSignedUrl
-    .mockReset()
-    .mockResolvedValue({ data: { signedUrl: 'https://signed/x' }, error: null });
-  global.fetch = vi.fn();
+  sqlMock.begin = undefined;
 });
 
-function modalReq(bodyObj, { job = 'j1', kind = 'stems' } = {}) {
+function modalSectionReq(bodyObj) {
   const body = JSON.stringify(bodyObj);
   const timestamp = String(Math.floor(Date.now() / 1000));
   const sig = createHmac('sha256', 'modalwebhooksecret')
@@ -95,231 +67,136 @@ function modalReq(bodyObj, { job = 'j1', kind = 'stems' } = {}) {
   const req = Readable.from([Buffer.from(body)]);
   req.method = 'POST';
   req.headers = { 'x-modal-timestamp': timestamp, 'x-modal-signature': sig };
-  req.query = { job, kind, provider: 'modal' };
-  req.url = `/api/stems/webhook?job=${job}&kind=${kind}&provider=modal`;
+  req.query = {};
+  req.url = '/api/stems/webhook';
   return req;
 }
 
-describe('POST /api/stems/webhook', () => {
-  it('401 si la firma es inválida', async () => {
-    const req = signedReq({ status: 'succeeded' });
-    req.headers['webhook-signature'] = 'v1,AAAA';
+// sql mock con begin() para las transacciones FOR UPDATE de applySectionWebhook
+function setupSqlBegin({ sections, status = 'processing' } = {}) {
+  sqlResponses.length = 0;
+  sqlCalls.length = 0;
+
+  sqlMock.begin = async (cb) => {
+    const innerSql = (strings, ...values) => {
+      if (!strings?.raw) return strings;
+      sqlCalls.push({ text: strings.join('?').replace(/\s+/g, ' ').trim(), values });
+      return Promise.resolve(sqlResponses.shift() ?? []);
+    };
+    innerSql.json = (v) => v;
+    return cb(innerSql);
+  };
+
+  if (sections !== null) {
+    sqlResponses.push([{ sections, status }]); // SELECT FOR UPDATE
+    sqlResponses.push([]);                      // UPDATE stem_jobs SET sections = ...
+  } else {
+    sqlResponses.push([]);                      // job desconocido
+  }
+}
+
+describe('POST /api/stems/webhook — firma HMAC', () => {
+  it('401 si la firma Modal es inválida', async () => {
+    const body = JSON.stringify({ jobId: 'j1', section: 'structure', result: { status: 'done' } });
+    const req = Readable.from([Buffer.from(body)]);
+    req.method = 'POST';
+    req.headers = {
+      'x-modal-timestamp': String(Math.floor(Date.now() / 1000)),
+      'x-modal-signature': 'deadbeef',
+    };
+    req.query = {};
+    req.url = '/api/stems/webhook';
     const res = makeRes();
     await handler(req, res);
     expect(res.statusCode).toBe(401);
   });
 
   it('401 si el timestamp está fuera de la tolerancia (anti-replay)', async () => {
-    const body = JSON.stringify({ status: 'succeeded' });
-    const id = 'msg_old';
-    // Timestamp de hace 10 minutos
-    const timestamp = String(Math.floor(Date.now() / 1000) - 10 * 60);
-    const key = Buffer.from(SECRET.split('_')[1], 'base64');
-    const sig = createHmac('sha256', key).update(`${id}.${timestamp}.${body}`).digest('base64');
+    const body = JSON.stringify({ jobId: 'j1', section: 'structure', result: { status: 'done' } });
+    const oldTs = String(Math.floor(Date.now() / 1000) - 10 * 60);
+    const sig = createHmac('sha256', 'modalwebhooksecret')
+      .update(`${oldTs}.${body}`)
+      .digest('hex');
     const req = Readable.from([Buffer.from(body)]);
     req.method = 'POST';
-    req.headers = {
-      'webhook-id': id,
-      'webhook-timestamp': timestamp,
-      'webhook-signature': `v1,${sig}`,
-    };
-    req.query = { job: 'j1', kind: 'stems' };
-    req.url = '/api/stems/webhook?job=j1&kind=stems';
+    req.headers = { 'x-modal-timestamp': oldTs, 'x-modal-signature': sig };
+    req.query = {};
+    req.url = '/api/stems/webhook';
     const res = makeRes();
     await handler(req, res);
     expect(res.statusCode).toBe(401);
-  });
-
-  it('404 si el job no existe', async () => {
-    sqlResponses.push([]); // SELECT job
-    const res = makeRes();
-    await handler(signedReq({ status: 'succeeded' }), res);
-    expect(res.statusCode).toBe(404);
-  });
-
-  it('marca failed cuando la predicción falla', async () => {
-    sqlResponses.push([{ id: 'j1', user_id: 'u1', status: 'separating_stems', voices: null }]);
-    sqlResponses.push([]); // UPDATE failed
-    const res = makeRes();
-    await handler(signedReq({ status: 'failed', error: 'boom' }), res);
-    expect(res.statusCode).toBe(200);
-    expect(sqlCalls.some((c) => c.text.includes("status = 'failed'"))).toBe(true);
-  });
-
-  it('stems OK: copia outputs, lanza etapa 2 y pasa a separating_voices', async () => {
-    sqlResponses.push([{ id: 'j1', user_id: 'u1', status: 'separating_stems', voices: null }]);
-    sqlResponses.push([]); // UPDATE a separating_voices
-    // fetch: 6 descargas de stems + 2 createPrediction (cada una: GET versión + POST predicción)
-    fetch.mockImplementation(async (url) => {
-      const u = String(url);
-      if (u.endsWith('/v1/predictions')) {
-        return { ok: true, json: async () => ({ id: 'pred_x' }) };
-      }
-      if (u.includes('api.replicate.com/v1/models/')) {
-        return { ok: true, json: async () => ({ latest_version: { id: 'ver_x' } }) };
-      }
-      return {
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(4),
-        headers: { get: () => 'audio/wav' },
-      };
-    });
-    const output = {
-      vocals: 'https://r/v.wav',
-      drums: 'https://r/d.wav',
-      bass: 'https://r/b.wav',
-      guitar: 'https://r/g.wav',
-      piano: 'https://r/p.wav',
-      other: 'https://r/o.wav',
-    };
-    const res = makeRes();
-    await handler(signedReq({ status: 'succeeded', output }), res);
-    expect(res.statusCode).toBe(200);
-    expect(mockUpload).toHaveBeenCalledTimes(6);
-    const predictionCalls = fetch.mock.calls.filter((c) =>
-      String(c[0]).endsWith('/v1/predictions'),
-    );
-    expect(predictionCalls).toHaveLength(2); // karaoke + diarization
-    expect(sqlCalls.some((c) => c.text.includes("status = 'separating_voices'"))).toBe(true);
-  });
-
-  it('etapa 2 completa (karaoke y diarización) → done', async () => {
-    // Llega diarización cuando karaoke ya está en voices
-    sqlResponses.push([
-      {
-        id: 'j1',
-        user_id: 'u1',
-        status: 'separating_voices',
-        voices: { lead: 'l.mp3', backing: 'b.mp3' },
-      },
-    ]);
-    // UPDATE merge atómico → RETURNING voices completo
-    sqlResponses.push([{ voices: { lead: 'l.mp3', backing: 'b.mp3', segments: [] } }]);
-    // UPDATE status = 'done'
-    sqlResponses.push([]);
-    const output = { segments: [{ speaker: 'SPEAKER_00', start: 1.5, end: 4.2 }] };
-    const res = makeRes();
-    await handler(signedReq({ status: 'succeeded', output }, { kind: 'diarization' }), res);
-    expect(res.statusCode).toBe(200);
-    expect(sqlCalls.some((c) => c.text.includes("status = 'done'"))).toBe(true);
-  });
-
-  it('FIX-1: llegada concurrente de karaoke y diarización no pierde ninguna parte', async () => {
-    // Simula que AMBOS webhooks leen el job con voices=null (antes de que el otro escriba).
-    // El primer webhook (karaoke) que llega: job.voices = null → no hay idempotencia early-exit.
-    // El merge atómico retorna las voces con lead+backing. No hay segments aún → no done.
-    sqlResponses.push([
-      {
-        id: 'j1',
-        user_id: 'u1',
-        status: 'separating_voices',
-        voices: null, // ambos webhooks vieron voices=null
-      },
-    ]);
-    // RETURNING del UPDATE atómico de karaoke: solo lead+backing (diarización no llegó aún)
-    sqlResponses.push([
-      { voices: { lead: 'u1/j1/voices/lead.mp3', backing: 'u1/j1/voices/backing.mp3' } },
-    ]);
-    // No hay UPDATE de done porque segments aún no existe
-
-    fetch.mockImplementation(async (url) => {
-      if (String(url).includes('api.replicate.com')) {
-        return { ok: true, json: async () => ({ id: 'pred_x' }) };
-      }
-      return {
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(4),
-        headers: { get: () => 'audio/mpeg' },
-      };
-    });
-
-    const karaokeOutput = ['https://r/lead.mp3', 'https://r/backing.mp3'];
-    const res = makeRes();
-    await handler(
-      signedReq({ status: 'succeeded', output: karaokeOutput }, { kind: 'karaoke' }),
-      res,
-    );
-    expect(res.statusCode).toBe(200);
-    // El UPDATE de karaoke usa COALESCE || merge (no sobreescribe todo voices)
-    expect(sqlCalls.some((c) => c.text.includes('COALESCE(voices'))).toBe(true);
-    // No debe marcar done porque aún faltan segments
-    expect(sqlCalls.some((c) => c.text.includes("status = 'done'"))).toBe(false);
-
-    // Ahora llega diarización (también vio voices=null, pero el merge atómico ya tiene lead+backing en DB)
-    sqlCalls.length = 0;
-    sqlResponses.push([
-      {
-        id: 'j1',
-        user_id: 'u1',
-        status: 'separating_voices',
-        voices: null, // diarización también leyó voices=null antes de que karaoke escribiera
-      },
-    ]);
-    // RETURNING: el merge atómico de diarización sobre el estado real del DB (lead+backing ya están)
-    sqlResponses.push([
-      {
-        voices: {
-          lead: 'u1/j1/voices/lead.mp3',
-          backing: 'u1/j1/voices/backing.mp3',
-          segments: [],
-        },
-      },
-    ]);
-    // UPDATE done
-    sqlResponses.push([]);
-
-    const diarizationOutput = { segments: [] };
-    const res2 = makeRes();
-    await handler(
-      signedReq({ status: 'succeeded', output: diarizationOutput }, { kind: 'diarization' }),
-      res2,
-    );
-    expect(res2.statusCode).toBe(200);
-    // El RETURNING contiene lead+backing+segments → completo → done
-    expect(sqlCalls.some((c) => c.text.includes("status = 'done'"))).toBe(true);
   });
 });
 
-describe('POST /api/stems/webhook (Modal)', () => {
-  it('401 si la firma Modal es inválida', async () => {
-    const req = modalReq({ status: 'succeeded', output: {} });
-    req.headers['x-modal-signature'] = 'deadbeef';
+describe('POST /api/stems/webhook — validación payload', () => {
+  it('400 si falta jobId', async () => {
     const res = makeRes();
-    await handler(req, res);
-    expect(res.statusCode).toBe(401);
+    await handler(modalSectionReq({ section: 'structure', result: { status: 'done' } }), res);
+    expect(res.statusCode).toBe(400);
   });
 
-  it('stems Modal: keys passthrough (sin descargas) y pasa a separating_voices', async () => {
-    sqlResponses.push([{ id: 'j1', user_id: 'u1', status: 'separating_stems', voices: null }]);
-    sqlResponses.push([]); // UPDATE separating_voices
-    fetch.mockImplementation(async (url) => {
-      const u = String(url);
-      if (u.endsWith('/v1/predictions')) return { ok: true, json: async () => ({ id: 'pred_x' }) };
-      if (u.includes('/v1/models/')) return { ok: true, json: async () => ({ latest_version: { id: 'ver_x' } }) };
-      return { ok: true, arrayBuffer: async () => new ArrayBuffer(4), headers: { get: () => 'audio/mpeg' } };
-    });
-    const output = {
-      vocals: 'u1/j1/stems/vocals.mp3',
-      drums: 'u1/j1/stems/drums.mp3',
-      bass: 'u1/j1/stems/bass.mp3',
-      guitar: 'u1/j1/stems/guitar.mp3',
-      piano: 'u1/j1/stems/piano.mp3',
-      other: 'u1/j1/stems/other.mp3',
-    };
+  it('400 si falta section', async () => {
     const res = makeRes();
-    await handler(modalReq({ status: 'succeeded', output }), res);
-    expect(res.statusCode).toBe(200);
-    // No hubo descargas de stems → mockUpload NO se llamó por ingestión de stems
-    expect(mockUpload).not.toHaveBeenCalled();
-    expect(sqlCalls.some((c) => c.text.includes("status = 'separating_voices'"))).toBe(true);
+    await handler(modalSectionReq({ jobId: 'j1', result: { status: 'done' } }), res);
+    expect(res.statusCode).toBe(400);
   });
 
-  it('failed Modal → status failed', async () => {
-    sqlResponses.push([{ id: 'j1', user_id: 'u1', status: 'separating_stems', voices: null }]); // SELECT
-    sqlResponses.push([]); // UPDATE failed
+  it('400 si section no es válida', async () => {
     const res = makeRes();
-    await handler(modalReq({ status: 'failed', error: 'boom' }), res);
+    await handler(
+      modalSectionReq({ jobId: 'j1', section: 'SECCION_INVALIDA', result: { status: 'done' } }),
+      res,
+    );
+    expect(res.statusCode).toBe(400);
+  });
+});
+
+describe('POST /api/stems/webhook — contrato per-sección DAG', () => {
+  it('404 si el job no existe', async () => {
+    setupSqlBegin({ sections: null });
+    const res = makeRes();
+    await handler(
+      modalSectionReq({ jobId: 'j1', section: 'structure', result: { status: 'done', segments: [] } }),
+      res,
+    );
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('done en structure → 200 con status processing (otras secciones pendientes)', async () => {
+    const { initSections } = await import('../api/stems/_sections.js');
+    const sections = initSections(['voiceInstrumental', 'structure', 'leadBacking']);
+    setupSqlBegin({ sections, status: 'processing' });
+
+    const res = makeRes();
+    await handler(
+      modalSectionReq({
+        jobId: 'j1',
+        section: 'structure',
+        result: { status: 'done', model: 'allin1', segments: [{ start: 0, end: 4, label: 'verse' }] },
+      }),
+      res,
+    );
     expect(res.statusCode).toBe(200);
-    expect(sqlCalls.some((c) => c.text.includes("status = 'failed'"))).toBe(true);
+    expect(res.body.status).toBe('processing');
+    expect(sqlCalls.some((c) => c.text.includes('FOR UPDATE'))).toBe(true);
+  });
+
+  it('failed en una sección con las demás done → 200 con status partial', async () => {
+    const { initSections, applySectionResult } = await import('../api/stems/_sections.js');
+    let sections = initSections(['voiceInstrumental', 'structure']);
+    sections = applySectionResult(sections, 'structure', { status: 'done', model: 'allin1', segments: [] });
+    setupSqlBegin({ sections, status: 'processing' });
+
+    const res = makeRes();
+    await handler(
+      modalSectionReq({
+        jobId: 'j1',
+        section: 'voiceInstrumental',
+        result: { status: 'failed', model: 'htdemucs', error: 'OOM' },
+      }),
+      res,
+    );
+    expect(res.statusCode).toBe(200);
+    expect(res.body.status).toBe('partial');
   });
 });

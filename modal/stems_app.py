@@ -1,143 +1,326 @@
 # modal/stems_app.py
-import hashlib, hmac, json, os, time, pathlib, tempfile
+"""
+Orquestador DAG del Estudio de pistas — HKN Lyrics.
+
+DAG:
+  S1 (extract htdemucs_6s) ─┐
+  S2 (structure stub)       ├─ paralelo al inicio
+                             │
+  S3 (leadBacking stub) ────┤ arranca cuando S1 termina (necesita vocals key)
+  S4 (gender stub)    ──────┘ arranca cuando S1 termina (idem)
+
+Cada nodo postea su propio webhook al terminar (éxito o fallo).
+La Vercel API acumula los resultados en la columna `sections` del job.
+
+NOTAS DE DESPLIEGUE
+- `modal deploy` diferido a Task 0.10 (smoke test con credenciales reales).
+- Los secrets Modal requeridos: hkn-webhook (MODAL_WEBHOOK_SECRET, MODAL_INBOUND_SECRET).
+  Los secrets hkn-supabase y hkn-hf ya NO son necesarios en este orquestador
+  (el upload se hace con signed PUT URLs pre-firmadas por Vercel).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import os
+
 from fastapi import Header, HTTPException
 import modal
 
+# Absolute imports: Modal runs stems_app.py from the `modal/` directory,
+# so `sections` is a top-level package relative to that working directory.
+from sections._common import extract_storage_key, post_webhook
+from sections.extract import run_extract as _run_extract_impl
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# App + imagen
+# ──────────────────────────────────────────────────────────────────────────────
+
 app = modal.App("hkn-stems")
 
+# Imagen GPU: necesaria sólo para S1 (demucs). S2/S3/S4 son CPU stubs pero
+# comparten la misma imagen para simplificar el despliegue en esta fase.
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("ffmpeg")
     .pip_install_from_requirements("requirements.txt")
 )
 
-# Secrets creados con `modal secret create` (ver Task B6).
-secrets = [
-    modal.Secret.from_name("hkn-supabase"),   # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-    modal.Secret.from_name("hkn-hf"),          # HF_TOKEN
-    modal.Secret.from_name("hkn-webhook"),     # MODAL_WEBHOOK_SECRET, MODAL_INBOUND_SECRET
+# Sólo necesitamos el secret de webhook en el orquestador principal.
+# S1 accede a él a través del payload; el secret de Supabase ya no hace falta
+# porque usamos signed PUT URLs pre-firmadas por Vercel (sin service role key).
+_webhook_secrets = [
+    modal.Secret.from_name("hkn-webhook"),  # MODAL_INBOUND_SECRET, MODAL_WEBHOOK_SECRET
 ]
 
-def _upload_to_supabase(local_path: str, key: str, content_type: str = "audio/mpeg") -> str:
-    """Sube un archivo al bucket privado stems-jobs con la service role key. Devuelve la key."""
-    import httpx
-    url = os.environ["SUPABASE_URL"]
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url  # la integración Supabase-Vercel guarda el host sin scheme
-    service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-    data = pathlib.Path(local_path).read_bytes()
-    r = httpx.post(
-        f"{url}/storage/v1/object/stems-jobs/{key}",
-        params={"upsert": "true"},
-        headers={"Authorization": f"Bearer {service_key}", "Content-Type": content_type},
-        content=data, timeout=120,
+
+# ──────────────────────────────────────────────────────────────────────────────
+# S1 — extracción de stems (GPU, htdemucs_6s)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.function(image=image, secrets=_webhook_secrets, gpu="T4", timeout=900)
+def s1_extract(payload: dict) -> str | None:
+    """
+    Descarga audio, corre demucs htdemucs_6s, sube 7 pistas (vocals/drums/bass/
+    guitar/piano/other/instrumental), postea webhook voiceInstrumental.
+
+    Devuelve la storage key de `vocals` para que S3/S4 puedan referenciarla,
+    o None si la sección falló.
+    """
+    _run_extract_impl(payload)
+    # Recuperar la key de vocals de los uploads para pasarla a S3/S4.
+    # Si run_extract lanzó, este código no se alcanza (la excepción sale).
+    uploads_vi = payload.get("uploads", {}).get("voiceInstrumental", {})
+    vocals_url = uploads_vi.get("vocals")
+    if vocals_url:
+        try:
+            return extract_storage_key(vocals_url)
+        except ValueError:
+            return None
+    return None
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# S2 — estructura (stub, CPU)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.function(image=image, secrets=_webhook_secrets, timeout=60)
+def s2_structure_stub(payload: dict) -> None:
+    """
+    Stub de S2: postea un resultado mínimo válido de estructura musical.
+    Phase 1 reemplaza esto con SongFormer.
+
+    Segmentos de ejemplo: intro (0–5 s) + verso (5–20 s).
+    El front sólo necesita que `sections.structure.status` pase a "done".
+    """
+    job_id: str = payload["jobId"]
+    webhook: dict = payload["webhook"]
+    try:
+        post_webhook(
+            webhook,
+            job_id,
+            section="structure",
+            result={
+                "status": "done",
+                "model": "stub",
+                "segments": [
+                    {"label": "intro", "start": 0.0, "end": 5.0},
+                    {"label": "verso", "start": 5.0, "end": 20.0},
+                ],
+            },
+        )
+    except Exception as exc:
+        # Intentar reportar el fallo; si el webhook mismo falla, loggear y seguir.
+        try:
+            post_webhook(
+                webhook,
+                job_id,
+                section="structure",
+                result={"status": "failed", "model": "stub", "segments": []},
+                error=str(exc)[:400],
+            )
+        except Exception:
+            pass
+        raise
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# S3 — lead / backing (stub, CPU)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.function(image=image, secrets=_webhook_secrets, timeout=60)
+def s3_lead_backing_stub(payload: dict, vocals_key: str | None) -> None:
+    """
+    Stub de S3: postea un resultado mínimo válido de lead/backing.
+    Phase 2 reemplaza esto con Medley Vox real.
+
+    Decisión de diseño para el stub: NO sube audio real (lead/backing).
+    En cambio reporta las keys que le corresponderían según los uploads
+    pre-firmados, para que el contrato con el front quede ejercitado.
+    Si no hay PUT URL para lead/backing, se reporta vocals_key como fallback.
+    """
+    job_id: str = payload["jobId"]
+    webhook: dict = payload["webhook"]
+    uploads_lb = payload.get("uploads", {}).get("leadBacking", {})
+
+    def _key_for(track: str) -> str:
+        url = uploads_lb.get(track)
+        if url:
+            try:
+                return extract_storage_key(url)
+            except ValueError:
+                pass
+        # Fallback: vocals_key o string vacío (el front ignorará si status=done/stub)
+        return vocals_key or ""
+
+    try:
+        post_webhook(
+            webhook,
+            job_id,
+            section="leadBacking",
+            result={
+                "status": "done",
+                "model": "stub",
+                "outputs": {
+                    "lead": _key_for("lead"),
+                    "backing": _key_for("backing"),
+                },
+            },
+        )
+    except Exception as exc:
+        try:
+            post_webhook(
+                webhook,
+                job_id,
+                section="leadBacking",
+                result={"status": "failed", "model": "stub", "outputs": {}},
+                error=str(exc)[:400],
+            )
+        except Exception:
+            pass
+        raise
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# S4 — clasificación de género vocal (stub, CPU)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.function(image=image, secrets=_webhook_secrets, timeout=60)
+def s4_gender_stub(payload: dict, vocals_key: str | None) -> None:
+    """
+    Stub de S4: postea un resultado mínimo válido de clasificación de género.
+    Phase 2 reemplaza esto con el clasificador real (ver feat/estudio-f1-gender-poc).
+
+    Sólo se llama si "gender" está en enabledSections.
+    """
+    job_id: str = payload["jobId"]
+    webhook: dict = payload["webhook"]
+    uploads_g = payload.get("uploads", {}).get("gender", {})
+
+    def _key_for(track: str) -> str:
+        url = uploads_g.get(track)
+        if url:
+            try:
+                return extract_storage_key(url)
+            except ValueError:
+                pass
+        return vocals_key or ""
+
+    try:
+        post_webhook(
+            webhook,
+            job_id,
+            section="gender",
+            result={
+                "status": "done",
+                "model": "stub",
+                "outputs": {
+                    "male": _key_for("male"),
+                    "female": _key_for("female"),
+                },
+            },
+        )
+    except Exception as exc:
+        try:
+            post_webhook(
+                webhook,
+                job_id,
+                section="gender",
+                result={"status": "failed", "model": "stub", "outputs": {}},
+                error=str(exc)[:400],
+            )
+        except Exception:
+            pass
+        raise
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Orquestador principal
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.function(image=image, secrets=_webhook_secrets, timeout=1200)
+def run_pipeline(payload: dict) -> None:
+    """
+    Orquestador DAG de las 4 secciones del Estudio.
+
+    DAG:
+      Fase A (paralelo): S1 (extract) + S2 (structure stub)
+      Fase B (tras S1):  S3 (leadBacking stub) + S4 (gender stub, si habilitado)
+
+    Cada nodo postea su webhook de forma independiente; un fallo en un nodo
+    no cancela los demás (Modal registra el error en el log del nodo).
+
+    Nota sobre S3/S4: si S1 lanza una excepción, el call de S1 también lanza
+    y los nodos S3/S4 recibirán vocals_key=None. El stub igual postea un
+    webhook done (con keys vacías) para que el front no quede esperando.
+    """
+    enabled: list[str] = payload.get("enabledSections", [])
+
+    # ── Fase A: S1 y S2 en paralelo ─────────────────────────────────────────
+    s1_call = s1_extract.spawn(payload)
+    s2_call = s2_structure_stub.spawn(payload) if "structure" in enabled else None
+
+    # Esperar S1 para obtener la vocals_key que necesitan S3 y S4.
+    # s1_call.get() propaga la excepción si S1 falló; capturamos para no matar el pipeline.
+    vocals_key: str | None = None
+    try:
+        vocals_key = s1_call.get()
+    except Exception:
+        # S1 ya posteó su webhook `failed`; continuamos para que S3/S4 también reporten.
+        pass
+
+    # Esperar S2 de forma no bloqueante (ya que la Fase B no depende de S2).
+    if s2_call is not None:
+        try:
+            s2_call.get(timeout=60)
+        except Exception:
+            pass  # S2 ya posteó su webhook de fallo
+
+    # ── Fase B: S3 y S4 (dependen de vocals_key de S1) ──────────────────────
+    s3_call = (
+        s3_lead_backing_stub.spawn(payload, vocals_key)
+        if "leadBacking" in enabled
+        else None
     )
-    r.raise_for_status()
-    return key
+    s4_call = (
+        s4_gender_stub.spawn(payload, vocals_key)
+        if "gender" in enabled
+        else None
+    )
 
-def _post_callback(callback_url: str, payload: dict) -> None:
-    """POST firmado al webhook de Vercel: hex(hmac-sha256(`${ts}.${body}`))."""
-    import httpx
-    secret = os.environ["MODAL_WEBHOOK_SECRET"].encode()
-    body = json.dumps(payload)
-    ts = str(int(time.time()))
-    sig = hmac.new(secret, f"{ts}.{body}".encode(), hashlib.sha256).hexdigest()
-    httpx.post(callback_url, content=body,
-               headers={"Content-Type": "application/json", "x-modal-timestamp": ts, "x-modal-signature": sig},
-               timeout=30)
-
-def _download(audio_url: str) -> str:
-    import httpx
-    fd, path = tempfile.mkstemp(suffix=".audio")
-    os.close(fd)
-    with httpx.stream("GET", audio_url, timeout=120, follow_redirects=True) as r:
-        r.raise_for_status()
-        with open(path, "wb") as f:
-            for chunk in r.iter_bytes():
-                f.write(chunk)
-    return path
+    # Esperar a que S3/S4 terminen (para que el orquestador no muera antes de
+    # que posteen sus webhooks; Modal cobra mientras el contenedor está vivo).
+    for call in (s3_call, s4_call):
+        if call is not None:
+            try:
+                call.get(timeout=120)
+            except Exception:
+                pass  # cada nodo ya posteó su propio webhook de fallo
 
 
-STEM_NAMES = ["vocals", "drums", "bass", "guitar", "piano", "other"]
+# ──────────────────────────────────────────────────────────────────────────────
+# Web endpoint — recibe la invocación de Vercel
+# ──────────────────────────────────────────────────────────────────────────────
 
-@app.function(image=image, secrets=secrets, gpu="T4", timeout=900)
-def run_demucs(audio_url: str, job_id: str, user_id: str, callback_url: str):
-    import subprocess
-    try:
-        src = _download(audio_url)
-        out_dir = tempfile.mkdtemp()
-        # htdemucs_6s = 6 stems; mp3 para storage liviano (igual que Replicate)
-        subprocess.run(
-            ["python", "-m", "demucs", "-n", "htdemucs_6s", "--mp3", "-o", out_dir, src],
-            check=True, env={**os.environ, "HF_HOME": "/root/.cache/huggingface"},
-        )
-        base = pathlib.Path(out_dir) / "htdemucs_6s" / pathlib.Path(src).stem
-        output = {}
-        for name in STEM_NAMES:
-            f = base / f"{name}.mp3"
-            if f.exists():
-                output[name] = _upload_to_supabase(str(f), f"{user_id}/{job_id}/stems/{name}.mp3")
-        _post_callback(callback_url, {"status": "succeeded", "output": output})
-    except Exception as e:
-        _post_callback(callback_url, {"status": "failed", "error": str(e)[:200]})
-        raise
-
-
-@app.function(image=image, secrets=secrets, gpu="T4", timeout=900)
-def run_diarization(audio_url: str, job_id: str, user_id: str, callback_url: str):
-    try:
-        from pyannote.audio import Pipeline
-        import torch, torchaudio
-        src = _download(audio_url)
-        pipe = Pipeline.from_pretrained(
-            "pyannote/speaker-diarization-3.1", use_auth_token=os.environ["HF_TOKEN"]
-        )
-        pipe.to(torch.device("cuda"))
-        # El stem vocal llega en MP3 (demucs --mp3): torchaudio reporta un num_frames
-        # que no calza con las muestras decodificadas, y pyannote arma su última ventana
-        # de embeddings corta → torch.vstack revienta ("Sizes of tensors must match").
-        # Cargamos en memoria, downmix a mono y resample a 16 kHz, y pasamos el waveform
-        # directo: así pyannote usa longitudes exactas y consistentes.
-        waveform, sr = torchaudio.load(src)
-        if waveform.shape[0] > 1:
-            waveform = waveform.mean(dim=0, keepdim=True)
-        if sr != 16000:
-            waveform = torchaudio.functional.resample(waveform, sr, 16000)
-            sr = 16000
-        dia = pipe({"waveform": waveform, "sample_rate": sr})
-        segments = [
-            {"speaker": label, "start": round(turn.start, 3), "stop": round(turn.end, 3)}
-            for turn, _, label in dia.itertracks(yield_label=True)
-        ]
-        _post_callback(callback_url, {"status": "succeeded", "output": {"segments": segments}})
-    except Exception as e:
-        _post_callback(callback_url, {"status": "failed", "error": str(e)[:200]})
-        raise
-
-
-@app.function(image=image, secrets=secrets, gpu="T4", timeout=900)
-def run_mdx23(audio_url: str, job_id: str, user_id: str, callback_url: str):
-    # TODO(B4): MDX23 no es pip-installable. Hay que vendorizar el repo que usa
-    # `lucataco/mvsep-mdx23-music-separation` (revisar su cog.yaml/predict.py) + sus pesos
-    # en la imagen (image.run_commands / image.add_local_dir, versiones fijadas), correr la
-    # inferencia, subir lead.mp3/backing.mp3 a `{user_id}/{job_id}/voices/` y postear el callback
-    # con {"output": {"lead": key, "backing": key}}.
-    # VÁLVULA: hasta entonces, mantener STEMS_PROVIDER_KARAOKE=replicate en Vercel; karaoke
-    # nunca se despacha a Modal, así que este stub no se invoca en producción.
-    _post_callback(callback_url, {"status": "failed", "error": "run_mdx23 no implementado todavía (ver TODO B4)"})
-    raise NotImplementedError("run_mdx23 pendiente: vendorizar MDX23. Usar STEMS_PROVIDER_KARAOKE=replicate.")
-
-
-DISPATCH = {"stems": run_demucs, "karaoke": run_mdx23, "diarization": run_diarization}
-
-@app.function(image=image, secrets=secrets)
+@app.function(image=image, secrets=_webhook_secrets)
 @modal.fastapi_endpoint(method="POST")
 def start(payload: dict, x_inbound_secret: str = Header(default="")):
-    if not hmac.compare_digest(x_inbound_secret, os.environ.get("MODAL_INBOUND_SECRET", "")):
+    """
+    Punto de entrada HTTP para el orquestador.
+
+    Verifica el header `x-inbound-secret` contra MODAL_INBOUND_SECRET.
+    Lanza el pipeline de forma asíncrona (.spawn) y devuelve el callId
+    inmediatamente para no bloquear el request de Vercel.
+
+    Respuesta: { "callId": "<modal call object_id>" }
+    """
+    if not hmac.compare_digest(
+        x_inbound_secret,
+        os.environ.get("MODAL_INBOUND_SECRET", ""),
+    ):
         raise HTTPException(status_code=401, detail="bad inbound secret")
-    kind = payload.get("kind")
-    fn = DISPATCH.get(kind)
-    if fn is None:
-        raise HTTPException(status_code=400, detail="bad kind")
-    call = fn.spawn(payload["audioUrl"], payload["jobId"], payload["userId"], payload["callbackUrl"])
+
+    call = run_pipeline.spawn(payload)
     return {"callId": call.object_id}

@@ -2,11 +2,7 @@ import sql from '../../_lib/db.js';
 import { requireUser } from '../../_lib/auth.js';
 import { allowMethods, withErrors } from '../../_lib/http.js';
 import { signStemsDownload } from '../../_lib/storage.js';
-import { getPrediction } from '../../_lib/replicate.js';
-import { processPredictionResult } from '../_process.js';
-import { providerFor } from '../_provider.js';
 
-const STALE_MS = 3 * 60 * 1000;
 const MODAL_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** Convierte paths de storage a signed URLs de descarga para la respuesta. */
@@ -34,33 +30,17 @@ export default withErrors(async (req, res) => {
   }
   let job = rows[0];
 
-  // Reconciliación: si está en proceso y sin avance > 3 min, consultar Replicate directo
-  const inProgress = ['separating_stems', 'separating_voices'].includes(job.status);
-  const elapsed = Date.now() - new Date(job.updated_at).getTime();
-  const stale = elapsed > STALE_MS;
-  const activeKinds = job.status === 'separating_stems' ? ['stems'] : ['karaoke', 'diarization'];
-  const anyModal = activeKinds.some((k) => providerFor(k) === 'modal');
-
-  if (inProgress && anyModal && elapsed > MODAL_TIMEOUT_MS) {
-    // Modal es fire-and-forget: si lleva >10 min sin avanzar, marcar como fallido
-    await sql`
-      UPDATE stem_jobs SET status = 'failed',
-        error = 'El procesamiento expiró. Intenta de nuevo (no consumió tu cuota).', updated_at = now()
-      WHERE id = ${job.id} AND status = ${job.status}
-    `;
-    rows = await sql`SELECT * FROM stem_jobs WHERE id = ${id} AND user_id = ${user.id}`;
-    job = rows[0];
-  } else if (inProgress && stale && job.predictions && !anyModal) {
-    const kinds = activeKinds;
-    for (const kind of kinds) {
-      const predId = job.predictions[kind];
-      if (!predId) continue;
-      const prediction = await getPrediction(predId);
-      if (['succeeded', 'failed', 'canceled'].includes(prediction.status)) {
-        await processPredictionResult(sql, job, kind, prediction);
-        rows = await sql`SELECT * FROM stem_jobs WHERE id = ${id} AND user_id = ${user.id}`;
-        job = rows[0];
-      }
+  // Modal es fire-and-forget: si el job lleva >10 min en processing sin avanzar, marcar failed.
+  if (job.status === 'processing') {
+    const elapsed = Date.now() - new Date(job.updated_at).getTime();
+    if (elapsed > MODAL_TIMEOUT_MS) {
+      await sql`
+        UPDATE stem_jobs SET status = 'failed',
+          error = 'El procesamiento expiró. Intenta de nuevo (no consumió tu cuota).', updated_at = now()
+        WHERE id = ${job.id} AND status = 'processing'
+      `;
+      rows = await sql`SELECT * FROM stem_jobs WHERE id = ${id} AND user_id = ${user.id}`;
+      job = rows[0];
     }
   }
 

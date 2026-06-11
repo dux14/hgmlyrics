@@ -30,7 +30,7 @@ export default withErrors(async (req, res) => {
     UPDATE stem_jobs SET status = 'failed',
       error = 'El procesamiento tardó demasiado y fue cancelado. Intenta de nuevo.',
       updated_at = now()
-    WHERE status IN ('separating_stems', 'separating_voices')
+    WHERE status = 'processing'
       AND updated_at < now() - interval '30 minutes'
     RETURNING id, user_id
   `;

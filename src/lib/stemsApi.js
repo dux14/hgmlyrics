@@ -81,7 +81,10 @@ export function readAudioDuration(file) {
  * Suscribe el estado de un job vía Realtime Broadcast (canal 'stems:job:{id}').
  * Modelado según worldRealtime.js: guard de SUBSCRIBED, leave() idempotente.
  *
- * @param {{ jobId: string, onStatus: (status: string) => void, onSubscribed?: () => void }} opts
+ * El payload del evento 'status' tiene forma { status, sections } desde la migración
+ * 20260611120100 — ambos campos se entregan al caller.
+ *
+ * @param {{ jobId: string, onStatus: (update: { status: string, sections?: object }) => void, onSubscribed?: () => void }} opts
  * @returns {{ leave: () => void }}
  */
 export function watchJobRealtime({ jobId, onStatus, onSubscribed }) {
@@ -91,7 +94,7 @@ export function watchJobRealtime({ jobId, onStatus, onSubscribed }) {
   });
   channel.on('broadcast', { event: 'status' }, ({ payload }) => {
     if (!payload || !payload.status) return;
-    onStatus(payload.status);
+    onStatus({ status: payload.status, sections: payload.sections ?? null });
   });
   channel.subscribe((status) => {
     if (status === 'SUBSCRIBED' && onSubscribed) onSubscribed();

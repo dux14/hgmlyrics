@@ -78,6 +78,19 @@ export async function createStemsUploadUrl(key) {
 }
 
 /**
+ * Signed PUT URL para que el orquestador de Modal suba un track procesado.
+ * A diferencia de createStemsUploadUrl (que devuelve {path, token} para el SDK del browser),
+ * este devuelve la signedUrl completa para que un proceso externo la use con HTTP PUT.
+ * @param {string} key - p.ej. `${userId}/${jobId}/${section}/${track}.mp3`
+ * @returns {Promise<string>} URL firmada (PUT)
+ */
+export async function createStemsSignedPutUrl(key) {
+  const { data, error } = await supabase.storage.from(STEMS_BUCKET).createSignedUploadUrl(key);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+/**
  * Copia un archivo remoto (output de Replicate) al bucket de stems.
  * @param {string} url - URL temporal de replicate.delivery
  * @param {string} key - destino en el bucket

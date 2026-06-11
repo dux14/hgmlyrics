@@ -41,12 +41,14 @@ describe('renderStudioPage', () => {
 
   it('retoma un job en proceso al entrar', async () => {
     stemsApi.listJobs.mockResolvedValueOnce({
-      jobs: [{ id: 'j1', status: 'separating_stems' }],
+      jobs: [{ id: 'j1', status: 'processing' }],
       quota: { used: 1, limit: 3 },
     });
-    stemsApi.getJob.mockResolvedValue({ job: { id: 'j1', status: 'separating_stems' } });
+    stemsApi.getJob.mockResolvedValue({ job: { id: 'j1', status: 'processing' } });
     renderStudioPage(container);
-    await vi.waitFor(() => expect(container.textContent).toContain('Separando pistas'));
+    // El render de procesamiento muestra las 4 secciones del DAG
+    await vi.waitFor(() => expect(container.textContent).toContain('Voz e instrumentos'));
+    expect(container.textContent).toContain('Secciones');
     expect(container.querySelector('[aria-live]')).not.toBeNull();
   });
 
@@ -81,10 +83,10 @@ describe('renderStudioPage', () => {
 
   it('FIX-7: el polling se detiene al cambiar el hash fuera de #/estudio', async () => {
     stemsApi.listJobs.mockResolvedValueOnce({
-      jobs: [{ id: 'j1', status: 'separating_stems' }],
+      jobs: [{ id: 'j1', status: 'processing' }],
       quota: { used: 1, limit: 3 },
     });
-    stemsApi.getJob.mockResolvedValue({ job: { id: 'j1', status: 'separating_stems' } });
+    stemsApi.getJob.mockResolvedValue({ job: { id: 'j1', status: 'processing' } });
 
     renderStudioPage(container);
     // Esperar a que watchJob arranque (tick inicial) y setInterval esté activo

@@ -1,6 +1,6 @@
 /**
  * modal.js — Cliente de la app de Modal del Estudio de pistas.
- * Espeja el rol de replicate.js: arrancar jobs y verificar el callback firmado.
+ * Espeja el rol de replicate.js: arrancar el orquestador DAG y verificar el callback firmado.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
@@ -19,11 +19,14 @@ export function verifyModalSignature({ timestamp, signature, body, secret }) {
 }
 
 /**
- * Arranca un modelo en Modal. `input.audio` es la signed URL del audio fuente.
- * @param {{ kind:string, input:object, jobId:string, userId:string, callbackUrl:string }} args
+ * Invoca el orquestador DAG `run_pipeline` en Modal.
+ * Payload de nueva generación: el orquestador corre las 4 secciones en paralelo
+ * y postea resultados por sección al webhook.
+ * @param {{ jobId:string, input:{ getUrl:string }, enabledSections:string[],
+ *           uploads:object, webhook:{ url:string, secret:string } }} payload
  * @returns {Promise<{ id:string }>}
  */
-export async function createModalJob({ kind, input, jobId, userId, callbackUrl }) {
+export async function invokeModalPipeline(payload) {
   const endpoint = process.env.MODAL_STEMS_ENDPOINT;
   const secret = process.env.MODAL_INBOUND_SECRET;
   if (!endpoint || !secret) {
@@ -34,7 +37,7 @@ export async function createModalJob({ kind, input, jobId, userId, callbackUrl }
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-inbound-secret': secret },
-    body: JSON.stringify({ kind, audioUrl: input.audio, jobId, userId, callbackUrl }),
+    body: JSON.stringify({ fn: 'run_pipeline', ...payload }),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => '');

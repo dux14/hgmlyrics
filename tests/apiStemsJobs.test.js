@@ -75,18 +75,28 @@ beforeEach(() => {
 });
 
 describe('POST /api/stems/jobs', () => {
+  it('403 si el perfil no está en beta ni es admin', async () => {
+    sqlResponses.push([{ is_admin: false, studio_beta: false }]); // perfil
+    const res = makeRes();
+    await handler(authedReq(), res);
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toEqual({ error: 'beta', reason: 'beta' });
+  });
+
   it('409 solo si hay un job realmente en proceso', async () => {
+    sqlResponses.push([{ is_admin: true, studio_beta: false }]); // perfil (admin pasa)
     sqlResponses.push([]); // reclamo de created/uploaded huérfanos
-    sqlResponses.push([{ id: 'job-activo' }]); // job en separating_*
+    sqlResponses.push([{ id: 'job-activo' }]); // job en processing
     const res = makeRes();
     await handler(authedReq(), res);
     expect(res.statusCode).toBe(409);
   });
 
   it('reclama un created huérfano y deja crear uno nuevo (regresión del 409)', async () => {
+    sqlResponses.push([{ is_admin: true, studio_beta: false }]); // perfil
     sqlResponses.push([{ id: 'old', input_path: 'u1/old/input/a.mp3' }]); // reclamo huérfano
     sqlResponses.push([]); // ya no hay job en proceso
-    sqlResponses.push([{ n: 0 }]); // cuota 0/3
+    sqlResponses.push([{ n: 0 }]); // cuota 0/1
     sqlResponses.push([{ id: 'j2', status: 'created' }]); // INSERT ... RETURNING
     const res = makeRes();
     await handler(authedReq(), res);
@@ -95,15 +105,18 @@ describe('POST /api/stems/jobs', () => {
   });
 
   it('429 si la cuota diaria está agotada', async () => {
+    sqlResponses.push([{ is_admin: true, studio_beta: false }]); // perfil
     sqlResponses.push([]); // reclamo
     sqlResponses.push([]); // sin job en proceso
-    sqlResponses.push([{ n: 3 }]); // cuota usada
+    sqlResponses.push([{ n: 1 }]); // cuota 1/1 — agotada
     const res = makeRes();
     await handler(authedReq(), res);
     expect(res.statusCode).toBe(429);
+    expect(res.body.reason).toBe('quota');
   });
 
   it('400 si el archivo no es audio', async () => {
+    sqlResponses.push([{ is_admin: true, studio_beta: false }]); // perfil
     sqlResponses.push([]); // reclamo
     sqlResponses.push([]); // sin job en proceso
     sqlResponses.push([{ n: 0 }]);
@@ -116,9 +129,10 @@ describe('POST /api/stems/jobs', () => {
   });
 
   it('crea el job y devuelve upload firmado', async () => {
+    sqlResponses.push([{ is_admin: false, studio_beta: true }]); // perfil beta
     sqlResponses.push([]); // reclamo
     sqlResponses.push([]); // sin job en proceso
-    sqlResponses.push([{ n: 1 }]); // cuota 1/3
+    sqlResponses.push([{ n: 0 }]); // cuota 0/1 — libre
     sqlResponses.push([{ id: 'j1', status: 'created' }]); // INSERT ... RETURNING
     const res = makeRes();
     await handler(authedReq(), res);
@@ -131,11 +145,11 @@ describe('POST /api/stems/jobs', () => {
 describe('GET /api/stems/jobs', () => {
   it('lista jobs vigentes + cuota', async () => {
     sqlResponses.push([{ id: 'j1', status: 'done' }]); // jobs
-    sqlResponses.push([{ n: 2 }]); // cuota usada
+    sqlResponses.push([{ n: 1 }]); // cuota usada
     const res = makeRes();
     await handler(authedReq({ method: 'GET', body: undefined }), res);
     expect(res.statusCode).toBe(200);
     expect(res.body.jobs).toHaveLength(1);
-    expect(res.body.quota).toEqual({ used: 2, limit: 3 });
+    expect(res.body.quota).toEqual({ used: 1, limit: 1 });
   });
 });

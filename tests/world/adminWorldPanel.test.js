@@ -232,4 +232,77 @@ describe('mountAdminWorldPanel — validación de map.json', () => {
     expect(zonesContainer.querySelectorAll('.wm-zone-name')).toHaveLength(1);
     expect(zonesContainer.querySelectorAll('.wm-zone-channel')).toHaveLength(1);
   });
+
+  it('la edición inline de zona escribe de vuelta en tiledJson antes de guardar', async () => {
+    mockListMaps.mockResolvedValue([]);
+    mockSaveMap.mockResolvedValue({ map: { name: 'test' }, zones: [] });
+
+    const container = makeContainer();
+    mountAdminWorldPanel(container);
+
+    const mapFileInput = container.querySelector('#wm-map-file');
+    const zonesContainer = container.querySelector('#wm-zones-container');
+    const nameInput = container.querySelector('#wm-name');
+    const tilesetFileInput = container.querySelector('#wm-tileset-file');
+    const saveBtn = container.querySelector('#wm-save-btn');
+
+    // Cargar un mapa válido con una zona
+    const validJson = JSON.stringify({
+      width: 2,
+      height: 2,
+      tilewidth: 32,
+      tileheight: 32,
+      layers: [
+        { type: 'tilelayer', name: 'suelo', data: [1, 1, 1, 1] },
+        { type: 'tilelayer', name: 'collision', data: [0, 0, 0, 0] },
+        {
+          type: 'objectgroup',
+          name: 'zones',
+          objects: [
+            {
+              properties: [
+                { name: 'name', value: 'Sala Original' },
+                { name: 'channelId', value: 'ch-original' },
+              ],
+            },
+          ],
+        },
+      ],
+      tilesets: [{ name: 'world-tileset' }],
+    });
+
+    const file = new File([validJson], 'good-map.json', { type: 'application/json' });
+    Object.defineProperty(mapFileInput, 'files', { value: [file], configurable: true });
+    mapFileInput.dispatchEvent(new Event('change'));
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Editar el nombre de la zona inline
+    const zoneNameInput = zonesContainer.querySelector('.wm-zone-name');
+    expect(zoneNameInput).not.toBeNull();
+    zoneNameInput.value = 'Sala Editada';
+    zoneNameInput.dispatchEvent(new Event('input'));
+
+    // Habilitar el botón: poner nombre del mapa y tileset
+    nameInput.value = 'Mi Mapa';
+    nameInput.dispatchEvent(new Event('input'));
+
+    const tilesetFile = new File(['fake'], 'tileset.png', { type: 'image/png' });
+    Object.defineProperty(tilesetFileInput, 'files', { value: [tilesetFile], configurable: true });
+    tilesetFileInput.dispatchEvent(new Event('change'));
+
+    expect(saveBtn.disabled).toBe(false);
+
+    // Guardar
+    saveBtn.click();
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Verificar que saveMap recibió el tiledJson con el valor editado
+    expect(mockSaveMap).toHaveBeenCalledOnce();
+    const { tiledJson } = mockSaveMap.mock.calls[0][0];
+    const zonesLayer = tiledJson.layers.find(
+      (l) => l.type === 'objectgroup' && l.name?.toLowerCase() === 'zones',
+    );
+    const nameProp = zonesLayer.objects[0].properties.find((p) => p.name === 'name');
+    expect(nameProp.value).toBe('Sala Editada');
+  });
 });

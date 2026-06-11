@@ -347,6 +347,7 @@ export function mountAdminWorldPanel(container) {
       saveStatus.textContent = `Error: ${msgs}`;
       saveStatus.style.color = 'var(--color-error)';
       saveBtn.disabled = false;
+      updateSaveEnabled();
     }
   });
 

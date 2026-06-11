@@ -46,7 +46,9 @@ describe('renderStudioPage', () => {
     });
     stemsApi.getJob.mockResolvedValue({ job: { id: 'j1', status: 'processing' } });
     renderStudioPage(container);
-    await vi.waitFor(() => expect(container.textContent).toContain('Separando pistas'));
+    // El render de procesamiento muestra las 4 secciones del DAG
+    await vi.waitFor(() => expect(container.textContent).toContain('Voz e instrumentos'));
+    expect(container.textContent).toContain('Secciones');
     expect(container.querySelector('[aria-live]')).not.toBeNull();
   });
 

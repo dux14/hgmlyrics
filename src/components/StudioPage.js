@@ -5,6 +5,7 @@
  */
 import { icon } from '../lib/icons.js';
 import { mergeSegments, segmentToPct, voiceColorVar } from '../lib/studioSegments.js';
+import { SECTION_KEYS, sectionLabel, sectionState } from '../lib/studioSections.js';
 import {
   createJob,
   uploadInput,
@@ -219,10 +220,17 @@ function watchJob(body, jobId, quota, filename) {
   };
 
   // Push: en cada cambio de estado refrescamos vía la API saneada.
+  // Si el payload trae sections, hacemos un render optimista inmediato antes de que
+  // llegue el HTTP GET, para que la UI reaccione visualmente en cuanto llega el push.
   let pushAlive = false;
   jobChannel = watchJobRealtime({
     jobId,
-    onStatus: () => void refresh(),
+    onStatus: ({ sections }) => {
+      if (sections) {
+        renderProcessing(body, { status: 'processing', sections }, filename);
+      }
+      void refresh();
+    },
     onSubscribed: () => {
       pushAlive = true;
     },
@@ -255,30 +263,29 @@ async function showJob(body, jobId, quota) {
 }
 
 function renderProcessing(body, job, filename) {
-  const status = job.status;
-  const stagesDone = false; // pipeline DAG: las secciones se siguen por sección, no por etapa global
-  const stage = (iconName, label, state) => {
-    const mark =
-      state === 'done'
-        ? icon('check-circle', { size: 18 })
-        : `<span class="studio-stage__dot studio-stage__dot--${state}"></span>`;
+  // Muestra las 4 secciones del DAG con su estado actual.
+  // La UI completa (acordeón, reproductores, timeline) llega en Fase 1 (Task 1.5).
+  const sections = job.sections ?? {};
+  const sectionRows = SECTION_KEYS.map((key) => {
+    const sec = sections[key] ?? { status: 'pending' };
+    const { status, label } = sectionState(sec);
+    const isSkipped = status === 'skipped';
     return `
-      <div class="studio-stage studio-stage--${state}" aria-label="${label}: ${state === 'done' ? 'completado' : state === 'active' ? 'en curso' : 'en espera'}">
-        ${mark}
-        ${icon(iconName, { size: 18 })}
-        <span class="studio-stage__label">${label}</span>
-        <span class="studio-stage__eta">~2 min</span>
+      <div class="studio-section-row studio-section-row--${status}" aria-label="${escHtml(sectionLabel(key))}: ${escHtml(label)}">
+        <span class="studio-section-row__dot studio-section-row__dot--${status}"></span>
+        <span class="studio-section-row__name${isSkipped ? ' studio-section-row__name--skipped' : ''}">${escHtml(sectionLabel(key))}</span>
+        <span class="studio-section-row__status">${escHtml(label)}</span>
       </div>`;
-  };
+  }).join('');
+
   body.innerHTML = `
     ${filename ? `<p class="studio__filename" title="${escHtml(filename)}">${icon('audio-lines', { size: 16 })} <span>${escHtml(filename)}</span></p>` : ''}
     <div class="studio-loader">
       <div class="studio-eq" aria-hidden="true">
         ${Array.from({ length: 7 }, (_, i) => `<span class="studio-eq__bar" style="--i:${i}"></span>`).join('')}
       </div>
-      <div class="studio-stages">
-        ${stage('layers', 'Separando pistas', stagesDone ? 'done' : 'active')}
-        ${stage('audio-lines', 'Separando voces', stagesDone ? 'active' : 'wait')}
+      <div class="studio-sections" aria-label="Estado del procesamiento">
+        ${sectionRows}
       </div>
       <p class="empty-state__text">Puedes salir de esta página; el proceso sigue solo.</p>
     </div>

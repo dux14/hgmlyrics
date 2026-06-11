@@ -6,12 +6,21 @@
 
 export const SECTION_KEYS = ['voiceInstrumental', 'structure', 'leadBacking', 'gender'];
 export const SECTION_STATUS = ['pending', 'running', 'done', 'failed', 'skipped'];
-export const JOB_STATUS = ['created','uploaded','processing','done','partial','failed','expired'];
+export const JOB_STATUS = [
+  'created',
+  'uploaded',
+  'processing',
+  'done',
+  'partial',
+  'failed',
+  'expired',
+];
 
-const OUTPUTS = {
-  voiceInstrumental: ['vocals','instrumental','drums','bass','guitar','piano','other'],
-  leadBacking: ['lead','backing'],
-  gender: ['male','female'],
+export const SECTION_OUTPUTS = {
+  voiceInstrumental: ['vocals', 'instrumental', 'drums', 'bass', 'guitar', 'piano', 'other'],
+  leadBacking: ['lead', 'backing'],
+  gender: ['male', 'female'],
+  // `structure` no genera archivos de audio; el orquestador postea segmentos por webhook.
 };
 
 export function initSections(enabled) {
@@ -20,7 +29,7 @@ export function initSections(enabled) {
     const base = { status: set.has(key) ? 'pending' : 'skipped', model: null, error: null };
     // `structure` no lleva `enabled` ni `outputs`: solo postea segmentos (forma canónica del spec).
     if (key === 'structure') return { ...base, segments: [] };
-    const outputs = Object.fromEntries(OUTPUTS[key].map((k) => [k, null]));
+    const outputs = Object.fromEntries(SECTION_OUTPUTS[key].map((k) => [k, null]));
     return { ...base, enabled: set.has(key), outputs };
   };
   return Object.fromEntries(SECTION_KEYS.map((k) => [k, mk(k)]));
@@ -29,7 +38,12 @@ export function initSections(enabled) {
 export function applySectionResult(sections, key, result) {
   const prev = sections[key];
   if (prev && prev.status === 'done') return sections; // idempotente
-  const next = { ...prev, status: result.status, model: result.model ?? prev.model, error: result.error ?? null };
+  const next = {
+    ...prev,
+    status: result.status,
+    model: result.model ?? prev.model,
+    error: result.error ?? null,
+  };
   if (key === 'structure') next.segments = result.segments ?? prev.segments ?? [];
   else next.outputs = { ...prev.outputs, ...(result.outputs ?? {}) };
   return { ...sections, [key]: next };

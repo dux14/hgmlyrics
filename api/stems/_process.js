@@ -7,6 +7,7 @@ import { MODELS } from './_models.js';
 import { startModel, providerFor, ingestResult } from './_provider.js';
 import { signStemsDownload } from '../_lib/storage.js';
 import { canTransition, expiresAt } from '../_lib/stems.js';
+import { SECTION_KEYS, applySectionResult, deriveJobStatus } from './_sections.js';
 
 const FRIENDLY_FAIL = 'El procesamiento falló. Intenta de nuevo (no consumió tu cuota).';
 
@@ -127,6 +128,58 @@ async function dispatchStage2(sql, job, kind, input) {
     const patch = kind === 'karaoke' ? { lead: null, backing: null } : { segments: [] };
     await applyStage2Patch(sql, job, patch);
   }
+}
+
+/**
+ * Aplica el resultado de una sección al job en una transacción con row-lock (FOR UPDATE).
+ * Serializa escrituras concurrentes: Modal puede postear las 4 secciones simultáneamente.
+ *
+ * @param {import('postgres').Sql} sql
+ * @param {string} jobId
+ * @param {string} section - clave de SECTION_KEYS
+ * @param {{ status:'done'|'failed', model?:string, outputs?:object, segments?:any[], error?:string }} result
+ * @returns {Promise<{ status:string, sections:object }|null>} null si el job no existe
+ */
+export async function applySectionWebhook(sql, jobId, section, result) {
+  if (!SECTION_KEYS.includes(section)) {
+    const e = new Error(`Sección desconocida: ${section}`);
+    e.status = 400;
+    throw e;
+  }
+
+  return sql.begin(async (sql) => {
+    // FOR UPDATE serializa las escrituras concurrentes de las 4 secciones del DAG.
+    // Sin este lock, dos webhooks simultáneos podrían leer el mismo `sections` y
+    // uno pisaría el resultado del otro (last-write-wins).
+    const [job] = await sql`
+      SELECT sections, status FROM stem_jobs WHERE id = ${jobId} FOR UPDATE
+    `;
+    if (!job) return null; // job desconocido
+
+    const nextSections = applySectionResult(job.sections, section, result);
+    const nextStatus = deriveJobStatus(nextSections);
+
+    if (result.status === 'failed') {
+      await sql`
+        UPDATE stem_jobs
+        SET sections = ${sql.json(nextSections)},
+            status = ${nextStatus},
+            error = ${result.error ?? 'section failed'},
+            updated_at = now()
+        WHERE id = ${jobId}
+      `;
+    } else {
+      await sql`
+        UPDATE stem_jobs
+        SET sections = ${sql.json(nextSections)},
+            status = ${nextStatus},
+            updated_at = now()
+        WHERE id = ${jobId}
+      `;
+    }
+
+    return { status: nextStatus, sections: nextSections };
+  });
 }
 
 /**

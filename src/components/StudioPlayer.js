@@ -21,6 +21,14 @@ export function fmtTimeCs(s) {
   return `${m}:${String(sec).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
 }
 
+/** Tiempo en formato m:ss (sin centésimas, para el display principal). */
+export function fmtTime(s) {
+  if (!Number.isFinite(s) || s < 0) s = 0;
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
+
 /** ratio 0..1 → segundos, acotado a [0,duration]. */
 export function posToTime(ratio, duration) {
   if (!(duration > 0)) return 0;
@@ -65,7 +73,7 @@ export function createStudioPlayer({ label, url }) {
         <div class="studio-player__mag-time">0:00.00</div>
       </div>
     </div>
-    <span class="studio-player__time" aria-hidden="true">0:00.00</span>
+    <span class="studio-player__time" aria-hidden="true">0:00 / 0:00</span>
     <audio preload="none" src="${url}"></audio>
     <a class="btn studio-player__dl" href="${url}" download aria-label="Descargar ${label}">${icon('download', { size: 16 })}</a>
   `;
@@ -87,7 +95,8 @@ export function createStudioPlayer({ label, url }) {
     const pos = timeToPos(audio.currentTime, dur());
     fill.style.width = `${pos * 100}%`;
     thumb.style.left = `${pos * 100}%`;
-    timeEl.textContent = fmtTimeCs(audio.currentTime);
+    const total = Number.isFinite(audio.duration) ? fmtTime(audio.duration) : '0:00';
+    timeEl.textContent = `${fmtTime(audio.currentTime)} / ${total}`;
     bar.setAttribute('aria-valuenow', String(Math.round(pos * 100)));
   };
   const setPlayIcon = () => {

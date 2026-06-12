@@ -2140,7 +2140,27 @@
   color: var(--color-text-secondary);
   flex-shrink: 0;
 }
-.studio-player__play,
+.studio-player__play {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  border-radius: 22px;
+  box-shadow: 0 2px 8px rgba(0, 151, 167, 0.35);
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.studio-player__play:hover,
+.studio-player__play:focus-visible {
+  background: var(--color-primary-dark);
+  box-shadow: 0 4px 12px rgba(0, 151, 167, 0.45);
+}
 .studio-player__dl {
   flex-shrink: 0;
   display: inline-flex;
@@ -2173,7 +2193,7 @@
   position: absolute;
   left: 0;
   height: 6px;
-  background: var(--color-accent);
+  background: var(--color-primary);
   border-radius: 3px;
   pointer-events: none;
 }
@@ -2192,7 +2212,7 @@
   font-size: var(--font-size-xs);
   font-variant-numeric: tabular-nums;
   color: var(--color-text-secondary);
-  min-width: 4.5rem;
+  min-width: 6.5rem;
   text-align: right;
 }
 /* Lupa del reproductor propio */

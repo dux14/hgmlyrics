@@ -65,7 +65,6 @@ def extract_vocals_stem(get_url: str) -> str:
     import tempfile
 
     import httpx  # disponible en la imagen Modal (ver nota arriba)
-    from audio_separator.separator import Separator  # solo en el contenedor
 
     # ── 1. Descargar audio original ──────────────────────────────────────────
     fd, src_path = tempfile.mkstemp(suffix=".audio")
@@ -76,12 +75,32 @@ def extract_vocals_stem(get_url: str) -> str:
             for chunk in r.iter_bytes():
                 f.write(chunk)
 
-    # ── 2. BS-RoFormer ep_317 → solo stem Vocals ────────────────────────────
+    # ── 2. Extraer vocal del archivo descargado ──────────────────────────────
+    return _extract_vocals_from_path(src_path)
+
+
+def _extract_vocals_from_path(src_path: str) -> str:
+    """
+    Corre BS-RoFormer ep_317 (output_single_stem="Vocals") sobre un archivo de
+    audio LOCAL y devuelve la ruta del `vocals.mp3` producido.
+
+    Separado de extract_vocals_stem para poder alimentar un archivo ya en disco
+    (p.ej. el smoke de S3 que parte de un original local, sin descargar por URL).
+    El comportamiento de extracción es idéntico al que usaba extract_vocals_stem.
+    """
+    import os
+    import tempfile
+
+    from audio_separator.separator import Separator  # solo en el contenedor
+
+    # ── BS-RoFormer ep_317 → solo stem Vocals ───────────────────────────────
     ep317_out = tempfile.mkdtemp()
     sep = Separator(output_dir=ep317_out, output_format="mp3")
     sep.load_model(model_filename="model_bs_roformer_ep_317_sdr_12.9755.ckpt")
-    # output_single_stem="Vocals" produce UN solo archivo con "(Vocals)" en el nombre.
-    out_files = sep.separate(src_path, output_single_stem="Vocals")
+    # En audio-separator 0.28.5 `output_single_stem` NO es kwarg de separate()
+    # (lanza TypeError). Se separan ambos stems (Vocals + Instrumental) y se
+    # localiza el "(Vocals)" por nombre — patrón idéntico al de extract.py (S1).
+    out_files = sep.separate(src_path)
 
     # Localizar el archivo producido (audio-separator puede devolver ruta
     # absoluta o solo el nombre base según la versión).

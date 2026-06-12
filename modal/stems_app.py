@@ -91,7 +91,7 @@ def s1_extract(payload: dict) -> str | None:
 # S2 — estructura (SongFormer, CPU)
 # ──────────────────────────────────────────────────────────────────────────────
 
-@app.function(image=image, secrets=_webhook_secrets, timeout=300)
+@app.function(image=image, secrets=_webhook_secrets, gpu="T4", timeout=900)
 def s2_structure(payload: dict) -> None:
     """
     S2: segmentacion de estructura musical con SongFormer (ASLP-lab).

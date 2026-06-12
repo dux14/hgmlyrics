@@ -42,6 +42,25 @@ export function segmentToPct(seg, durationS) {
 }
 
 /**
+ * Var CSS de color para un label de sección estructural (SongFormer).
+ * @param {string} label  uno de: intro|verso|coro|puente|instrumental|outro|silencio|pre-coro
+ * @returns {string}  var(--color-*)
+ */
+export function labelColor(label) {
+  switch (label) {
+    case 'verso':        return 'var(--color-primary)';
+    case 'coro':         return 'var(--color-accent)';
+    case 'puente':       return 'var(--color-voice-contralto)';
+    case 'instrumental': return 'var(--color-voice-bass)';
+    case 'pre-coro':     return 'var(--color-primary-light)';
+    case 'intro':
+    case 'outro':
+    case 'silencio':
+    default:             return 'var(--color-text-secondary)';
+  }
+}
+
+/**
  * Var CSS de color estable para un cantante, según su orden de aparición.
  * @param {string} voice
  * @param {string[]} order  lista ordenada de nombres de voz únicos

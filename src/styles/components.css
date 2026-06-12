@@ -2369,3 +2369,92 @@
     transition: none;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Estudio — timeline de secciones estructurales (SongFormer)          */
+/* Namespace: .studio-sectl*  (no colisiona con .studio-tl* de voces)  */
+/* ------------------------------------------------------------------ */
+.studio-sectl {
+  width: 100%;
+}
+
+.studio-sectl__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.studio-sectl__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: background 0.12s ease;
+}
+
+.studio-sectl__row:hover {
+  background: rgba(0, 151, 167, 0.06);
+}
+
+.studio-sectl__row--active {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(0, 151, 167, 0.18);
+  background: rgba(0, 151, 167, 0.06);
+}
+
+/* Barra de color vertical de 5px */
+.studio-sectl__bar {
+  flex-shrink: 0;
+  width: 5px;
+  height: 1.4em;
+  border-radius: 3px;
+  align-self: stretch;
+}
+
+.studio-sectl__label {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.studio-sectl__range {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Leyenda — sigue el mismo patrón visual de .studio-tl__legend */
+.studio-sectl__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.studio-sectl__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.studio-sectl__swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+@media (min-width: 768px) {
+  .studio-sectl__row {
+    padding: 0.4rem 0.75rem;
+  }
+}

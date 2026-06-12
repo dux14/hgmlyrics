@@ -25,13 +25,21 @@ CONTRATO DE SALIDA (webhook `structure`):
     "error": null
   }
 
-VERIFICACION PENDIENTE EN DEPLOY (smoke):
-  - SongFormer en HF usa AutoFeatureExtractor + AutoModelForAudioFrameClassification
-    (o un pipeline propio). Si el model card cambia la API de inferencia hay que
-    actualizar _run_inference(). El formato de salida que se asume es una lista de
-    dicts {label, start, end} o equivalente de timestamps; ver _parse_output().
-  - La lista exacta de etiquetas en ingles que emite el modelo se verifica en el
-    primer smoke. Las 8 del mapa son las documentadas en el paper (ISMIR 2024).
+API DE INFERENCIA (verificada en HF model card + GitHub README, jun 2026):
+  SongFormer usa trust_remote_code=True y expone un modelo callable:
+    songformer = AutoModel.from_pretrained(local_dir, trust_remote_code=True)
+    result = songformer("path/to/audio.wav")
+    # result: [{"start": float, "end": float, "label": str}, ...]  # segundos
+  El output es ya una lista de dicts {start, end, label} — no requiere
+  decodificacion de logits ni parseo de texto.
+
+VERIFICACION EN DEPLOY (concernimientos a validar en primer smoke):
+  - trust_remote_code=True puede importar dependencias adicionales (MuQ, MusicFM,
+    SSL backbones) que no estan en requirements.txt. Si el cold start falla con
+    ImportError, agregar los paquetes faltantes a requirements.txt.
+  - La lista exacta de etiquetas que emite el modelo se toma del GitHub README
+    (ISMIR 2024): intro, verse, chorus, bridge, inst, outro, silence, pre-chorus.
+    Si el modelo emite etiquetas nuevas, apareceran sin traducir (pass-through).
   - El sample rate de 24 kHz se toma del model card. Si el modelo acepta otra
     frecuencia, actualizar _TARGET_SR.
 """
@@ -39,6 +47,7 @@ VERIFICACION PENDIENTE EN DEPLOY (smoke):
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
 
 # Mapa EXACTO de etiquetas ingles → espanol (segun especificacion de tarea).
@@ -48,10 +57,12 @@ _LABEL_MAP: dict[str, str] = {
     "verse": "verso",
     "chorus": "coro",
     "bridge": "puente",
-    "instrumental": "instrumental",
+    "inst": "instrumental",         # etiqueta real del modelo (no "instrumental")
+    "instrumental": "instrumental",  # por si el modelo emite la forma larga
     "outro": "outro",
     "silence": "silencio",
     "pre-chorus": "pre-coro",
+    "pre_chorus": "pre-coro",        # variante con guion bajo
 }
 
 # Sample rate requerido por SongFormer segun el model card (24 kHz).
@@ -62,6 +73,10 @@ _HF_MODEL_ID: str = "ASLP-lab/SongFormer"
 
 # Etiqueta de modelo que se reporta en los webhooks.
 _MODEL_LABEL: str = "songformer"
+
+# Cache de la instancia del modelo (None hasta el primer uso).
+# Patron identico al que usa extract.py para los modelos de demucs/BSRoFormer.
+_songformer_instance = None
 
 
 def _normalize_label(raw: str) -> str:
@@ -104,115 +119,60 @@ def _resample_to_24k(src_path: str, dst_path: str) -> None:
         torchaudio.save(dst_path, waveform, _TARGET_SR)
 
 
+def _get_songformer():
+    """
+    Carga SongFormer una vez y cachea la instancia a nivel de modulo.
+    Usa snapshot_download para obtener el codigo remoto del modelo y luego
+    AutoModel.from_pretrained con trust_remote_code=True (requerido por el model card).
+
+    VERIFICACION EN DEPLOY:
+      - trust_remote_code descarga e importa el codigo custom del repo HF.
+        Si el modelo importa MuQ / MusicFM al cargarse y esos paquetes no
+        estan en la imagen, agregar a requirements.txt antes de re-desplegar.
+    """
+    global _songformer_instance
+    if _songformer_instance is not None:
+        return _songformer_instance
+
+    from huggingface_hub import snapshot_download
+    from transformers import AutoModel
+
+    local_dir = snapshot_download(
+        repo_id=_HF_MODEL_ID,
+        repo_type="model",
+    )
+    sys.path.append(local_dir)
+    os.environ["SONGFORMER_LOCAL_DIR"] = local_dir
+
+    model = AutoModel.from_pretrained(local_dir, trust_remote_code=True)
+    model.to("cuda:0").eval()
+
+    _songformer_instance = model
+    return _songformer_instance
+
+
 def _run_inference(audio_path: str) -> list[dict]:
     """
     Corre SongFormer sobre el archivo de audio (24 kHz WAV/mono) y devuelve
     una lista de dicts con {label:str, start:float, end:float}.
 
-    API asumida (model card ASLP-lab/SongFormer, consultado jun 2026):
-      - AutoFeatureExtractor + AutoModelForAudioSegmentation o equivalente.
-      - El modelo expone un pipeline "audio-segmentation" de transformers, o bien
-        acepta input via feature extractor + model.forward().
-      - La salida post-procesada es una lista de segmentos con timestamps.
-
-    VERIFICACION EN DEPLOY:
-      Si la API real difiere (p.ej. el repo clonable usa un script propio de
-      inferencia, o la clase del modelo es distinta), actualizar segun el README
-      del modelo. El contrato de salida de esta funcion NO cambia: siempre devuelve
-      [{label, start, end}, ...].
+    API real (model card ASLP-lab/SongFormer + GitHub README, jun 2026):
+      songformer(wav_path) devuelve directamente una lista de dicts
+      {start: float, end: float, label: str} en segundos.
+      No requiere decodificacion de logits ni parseo de texto adicional.
     """
-    import torch
-    import soundfile as sf
-    from transformers import pipeline as hf_pipeline
+    songformer = _get_songformer()
+    raw_result = songformer(audio_path)
 
-    # Intentar primero con el pipeline de alto nivel de transformers.
-    # SongFormer puede estar registrado como "audio-segmentation" o similar;
-    # si no, caemos al path manual de feature extractor + modelo.
-    try:
-        pipe = hf_pipeline(
-            "audio-segmentation",
-            model=_HF_MODEL_ID,
-            device=0 if torch.cuda.is_available() else -1,
-        )
-        raw_result = pipe(audio_path)
-        # transformers audio-segmentation pipeline devuelve lista de dicts
-        # con claves "label", "score", "timestamp" (tuple start/end en seg).
-        segments = []
-        for seg in raw_result:
-            label = seg.get("label", "")
-            ts = seg.get("timestamp", (0.0, 0.0))
-            start = float(ts[0]) if ts[0] is not None else 0.0
-            end = float(ts[1]) if ts[1] is not None else start
-            segments.append({"label": label, "start": start, "end": end})
-        return segments
-
-    except Exception:
-        # Fallback: feature extractor + forward manual si el pipeline no esta
-        # registrado para este modelo.
-        from transformers import AutoFeatureExtractor, AutoModel
-        import numpy as np
-
-        audio_array, sr = sf.read(audio_path, dtype="float32")
-        if audio_array.ndim > 1:
-            audio_array = audio_array.mean(axis=1)
-
-        feature_extractor = AutoFeatureExtractor.from_pretrained(_HF_MODEL_ID)
-        model = AutoModel.from_pretrained(_HF_MODEL_ID)
-        model.eval()
-
-        inputs = feature_extractor(
-            audio_array,
-            sampling_rate=sr,
-            return_tensors="pt",
-        )
-
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        # SongFormer (segun paper) devuelve logits de clasificacion por frame
-        # o una lista de boundary timestamps + labels en outputs.
-        # Asumimos que outputs tiene un atributo `segments` o similar;
-        # de lo contrario los logits se decodifican con argmax por frame.
-        if hasattr(outputs, "segments"):
-            raw_segments = outputs.segments
-        else:
-            # Decodificacion simple: argmax sobre logits frame a frame.
-            # Agrupar frames consecutivos con la misma clase.
-            logits = outputs.last_hidden_state  # (1, T, num_labels) o similar
-            label_ids = logits.squeeze(0).argmax(dim=-1).tolist()
-            id2label = getattr(model.config, "id2label", {})
-            hop_size_sec = 0.01  # asumido; verificar en model card
-
-            segments = []
-            if label_ids:
-                cur_label = id2label.get(label_ids[0], str(label_ids[0]))
-                cur_start = 0.0
-                for i, lid in enumerate(label_ids[1:], start=1):
-                    lbl = id2label.get(lid, str(lid))
-                    if lbl != cur_label:
-                        segments.append({
-                            "label": cur_label,
-                            "start": round(cur_start, 3),
-                            "end": round(i * hop_size_sec, 3),
-                        })
-                        cur_label = lbl
-                        cur_start = i * hop_size_sec
-                # Ultimo segmento
-                segments.append({
-                    "label": cur_label,
-                    "start": round(cur_start, 3),
-                    "end": round(len(label_ids) * hop_size_sec, 3),
-                })
-            return segments
-
-        # Si llegamos aqui es porque outputs.segments existia; normalizarlo.
-        segments = []
-        for seg in raw_segments:
-            label = seg.get("label", "") if isinstance(seg, dict) else str(seg)
-            start = float(seg.get("start", 0.0)) if isinstance(seg, dict) else 0.0
-            end = float(seg.get("end", start)) if isinstance(seg, dict) else start
-            segments.append({"label": label, "start": start, "end": end})
-        return segments
+    # Normalizar por si las claves difieren de la especificacion documentada.
+    # El contrato de salida de esta funcion siempre es [{label, start, end}, ...].
+    segments = []
+    for seg in raw_result:
+        label = seg.get("label", "")
+        start = float(seg.get("start", 0.0))
+        end = float(seg.get("end", start))
+        segments.append({"label": label, "start": start, "end": end})
+    return segments
 
 
 def run_songformer(payload: dict) -> None:

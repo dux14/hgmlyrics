@@ -4,10 +4,10 @@ Orquestador DAG del Estudio de pistas — HKN Lyrics.
 
 DAG:
   S1 (extract ep_317+htdemucs_6s) ─┐
-  S2 (structure stub)       ├─ paralelo al inicio
-                             │
-  S3 (leadBacking stub) ────┤ arranca cuando S1 termina (necesita vocals key)
-  S4 (gender stub)    ──────┘ arranca cuando S1 termina (idem)
+  S2 (structure SongFormer)  ├─ paralelo al inicio
+                              │
+  S3 (leadBacking MedleyVox) ┤ arranca cuando S1 termina (necesita vocals key)
+  S4 (gender stub)      ──────┘ arranca cuando S1 termina (idem)
 
 Cada nodo postea su propio webhook al terminar (éxito o fallo).
 La Vercel API acumula los resultados en la columna `sections` del job.
@@ -32,6 +32,7 @@ import modal
 # so `sections` is a top-level package relative to that working directory.
 from sections._common import extract_storage_key, post_webhook
 from sections.extract import run_extract as _run_extract_impl
+from sections.medley_vox import run_medley_vox as _run_medley_vox_impl
 from sections.songformer import run_songformer as _run_songformer_impl
 
 
@@ -41,12 +42,23 @@ from sections.songformer import run_songformer as _run_songformer_impl
 
 app = modal.App("hkn-stems")
 
-# Imagen GPU: necesaria sólo para S1 (demucs). S2/S3/S4 son CPU stubs pero
-# comparten la misma imagen para simplificar el despliegue en esta fase.
+# Imagen GPU: necesaria para S1 (demucs) y S3 (MedleyVox Conv-TasNet STFT).
+# S2/S4 también corren en esta imagen para simplificar el despliegue.
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("ffmpeg")
     .pip_install_from_requirements("requirements.txt")
+    # MedleyVox WebUI: clonamos el repo de inferencia para obtener los módulos
+    # `models/`, `functions/`, y `utils/` que usa run_medley_vox en tiempo de
+    # ejecución (asteroid_filterbanks + TDConvNet + loudnorm utils).
+    # SUPUESTO: el repo SUC-DriverOld/MedleyVox-Inference-WebUI es compatible
+    # con la versión de asteroid instalada vía requirements.txt (asteroid ≥ 0.4).
+    .run_commands(
+        "git clone --depth=1 https://github.com/SUC-DriverOld/MedleyVox-Inference-WebUI "
+        "/opt/medleyvox-webui",
+        "pip install pyloudnorm",  # no está en requirements.txt; solo lo necesita S3
+    )
+    .env({"PYTHONPATH": "/opt/medleyvox-webui"})
     # Modal 1.x ya no auto-monta los módulos locales hermanos: hay que incluir
     # explícitamente el paquete `sections` para que el contenedor pueda importarlo.
     .add_local_python_source("sections")
@@ -107,60 +119,25 @@ def s2_structure(payload: dict) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# S3 — lead / backing (stub, CPU)
+# S3 — lead / backing (MedleyVox real, GPU)
 # ──────────────────────────────────────────────────────────────────────────────
 
-@app.function(image=image, secrets=_webhook_secrets, timeout=60)
-def s3_lead_backing_stub(payload: dict, vocals_key: str | None) -> None:
+@app.function(image=image, secrets=_webhook_secrets, gpu="T4", timeout=900)
+def s3_lead_backing(payload: dict, vocals_key: str | None) -> None:
     """
-    Stub de S3: postea un resultado mínimo válido de lead/backing.
-    Phase 2 reemplaza esto con Medley Vox real.
+    S3: separa voz líder (lead) y coros (backing) con MedleyVox.
 
-    Decisión de diseño para el stub: NO sube audio real (lead/backing).
-    En cambio reporta las keys que le corresponderían según los uploads
-    pre-firmados, para que el contrato con el front quede ejercitado.
-    Si no hay PUT URL para lead/backing, se reporta vocals_key como fallback.
+    Usa el checkpoint Cyru5/MedleyVox@"vocals 238" (Conv-TasNet STFT, 24 kHz).
+    Re-extrae el stem vocal desde el audio original (payload["input"]["getUrl"])
+    porque Modal no tiene la service-role key de Supabase para firmar un GET
+    del objeto ya subido por S1. vocals_key se recibe por compatibilidad con el
+    spawn del orquestador pero NO se usa para descargar audio.
+
+    Timeout: 900 s para dar margen a la descarga de pesos desde HuggingFace
+    (~466 MB vocals.pth) en cold start + extracción vocal BS-RoFormer (~120 s)
+    + inferencia MedleyVox (~60-120 s en T4).
     """
-    job_id: str = payload["jobId"]
-    webhook: dict = payload["webhook"]
-    uploads_lb = payload.get("uploads", {}).get("leadBacking", {})
-
-    def _key_for(track: str) -> str:
-        url = uploads_lb.get(track)
-        if url:
-            try:
-                return extract_storage_key(url)
-            except ValueError:
-                pass
-        # Fallback: vocals_key o string vacío (el front ignorará si status=done/stub)
-        return vocals_key or ""
-
-    try:
-        post_webhook(
-            webhook,
-            job_id,
-            section="leadBacking",
-            result={
-                "status": "done",
-                "model": "stub",
-                "outputs": {
-                    "lead": _key_for("lead"),
-                    "backing": _key_for("backing"),
-                },
-            },
-        )
-    except Exception as exc:
-        try:
-            post_webhook(
-                webhook,
-                job_id,
-                section="leadBacking",
-                result={"status": "failed", "model": "stub", "outputs": {}},
-                error=str(exc)[:400],
-            )
-        except Exception:
-            pass
-        raise
+    _run_medley_vox_impl(payload)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -260,7 +237,7 @@ def run_pipeline(payload: dict) -> None:
 
     # ── Fase B: S3 y S4 (dependen de vocals_key de S1) ──────────────────────
     s3_call = (
-        s3_lead_backing_stub.spawn(payload, vocals_key)
+        s3_lead_backing.spawn(payload, vocals_key)
         if "leadBacking" in enabled
         else None
     )
@@ -272,10 +249,12 @@ def run_pipeline(payload: dict) -> None:
 
     # Esperar a que S3/S4 terminen (para que el orquestador no muera antes de
     # que posteen sus webhooks; Modal cobra mientras el contenedor está vivo).
+    # S3 (MedleyVox) puede tardar hasta ~900 s en cold start (descarga de pesos
+    # + extracción vocal + inferencia); el orquestador tiene timeout=1200 s.
     for call in (s3_call, s4_call):
         if call is not None:
             try:
-                call.get(timeout=120)
+                call.get(timeout=950)
             except Exception:
                 pass  # cada nodo ya posteó su propio webhook de fallo
 

@@ -3,7 +3,7 @@
 Orquestador DAG del Estudio de pistas — HKN Lyrics.
 
 DAG:
-  S1 (extract htdemucs_6s) ─┐
+  S1 (extract ep_317+htdemucs_6s) ─┐
   S2 (structure stub)       ├─ paralelo al inicio
                              │
   S3 (leadBacking stub) ────┤ arranca cuando S1 termina (necesita vocals key)
@@ -66,8 +66,9 @@ _webhook_secrets = [
 @app.function(image=image, secrets=_webhook_secrets, gpu="T4", timeout=900)
 def s1_extract(payload: dict) -> str | None:
     """
-    Descarga audio, corre demucs htdemucs_6s, sube 7 pistas (vocals/drums/bass/
-    guitar/piano/other/instrumental), postea webhook voiceInstrumental.
+    Descarga audio, corre BS-RoFormer ep_317 (vocals/instrumental) + demucs
+    htdemucs_6s (drums/bass/guitar/piano/other), sube las 7 pistas y postea
+    webhook voiceInstrumental.
 
     Devuelve la storage key de `vocals` para que S3/S4 puedan referenciarla,
     o None si la sección falló.

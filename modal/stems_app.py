@@ -47,7 +47,9 @@ app = modal.App("hkn-stems")
 # S2/S4 también corren en esta imagen para simplificar el despliegue.
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .apt_install("ffmpeg")
+    # git: requerido para instalar `asteroid` desde git+https (requirements.txt)
+    # y para el `git clone` del WebUI de MedleyVox más abajo.
+    .apt_install("ffmpeg", "git")
     .pip_install_from_requirements("requirements.txt")
     # MedleyVox WebUI: clonamos el repo de inferencia para obtener los módulos
     # `models/`, `functions/`, y `utils/` que usa run_medley_vox en tiempo de

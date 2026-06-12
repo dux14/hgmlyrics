@@ -32,6 +32,7 @@ import modal
 # so `sections` is a top-level package relative to that working directory.
 from sections._common import extract_storage_key, post_webhook
 from sections.extract import run_extract as _run_extract_impl
+from sections.songformer import run_songformer as _run_songformer_impl
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -87,47 +88,22 @@ def s1_extract(payload: dict) -> str | None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# S2 — estructura (stub, CPU)
+# S2 — estructura (SongFormer, CPU)
 # ──────────────────────────────────────────────────────────────────────────────
 
-@app.function(image=image, secrets=_webhook_secrets, timeout=60)
-def s2_structure_stub(payload: dict) -> None:
+@app.function(image=image, secrets=_webhook_secrets, timeout=300)
+def s2_structure(payload: dict) -> None:
     """
-    Stub de S2: postea un resultado mínimo válido de estructura musical.
-    Phase 1 reemplaza esto con SongFormer.
+    S2: segmentacion de estructura musical con SongFormer (ASLP-lab).
 
-    Segmentos de ejemplo: intro (0–5 s) + verso (5–20 s).
-    El front sólo necesita que `sections.structure.status` pase a "done".
+    Descarga el audio, infiere segmentos {label, start, end} con SongFormer,
+    normaliza las etiquetas a espanol y postea el webhook `structure`.
+    NO sube audio (S2 solo produce metadatos de estructura).
+
+    Timeout aumentado a 300 s (vs 60 del stub) para dar margen a la descarga
+    del modelo desde HuggingFace en el primer cold start.
     """
-    job_id: str = payload["jobId"]
-    webhook: dict = payload["webhook"]
-    try:
-        post_webhook(
-            webhook,
-            job_id,
-            section="structure",
-            result={
-                "status": "done",
-                "model": "stub",
-                "segments": [
-                    {"label": "intro", "start": 0.0, "end": 5.0},
-                    {"label": "verso", "start": 5.0, "end": 20.0},
-                ],
-            },
-        )
-    except Exception as exc:
-        # Intentar reportar el fallo; si el webhook mismo falla, loggear y seguir.
-        try:
-            post_webhook(
-                webhook,
-                job_id,
-                section="structure",
-                result={"status": "failed", "model": "stub", "segments": []},
-                error=str(exc)[:400],
-            )
-        except Exception:
-            pass
-        raise
+    _run_songformer_impl(payload)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -264,7 +240,7 @@ def run_pipeline(payload: dict) -> None:
 
     # ── Fase A: S1 y S2 en paralelo ─────────────────────────────────────────
     s1_call = s1_extract.spawn(payload)
-    s2_call = s2_structure_stub.spawn(payload) if "structure" in enabled else None
+    s2_call = s2_structure.spawn(payload) if "structure" in enabled else None
 
     # Esperar S1 para obtener la vocals_key que necesitan S3 y S4.
     # s1_call.get() propaga la excepción si S1 falló; capturamos para no matar el pipeline.

@@ -198,7 +198,7 @@ function watchJob(body, jobId, quota, filename) {
     try {
       const { job } = await getJob(jobId);
       if (finishIfDone(job)) return;
-      renderProcessing(body, job, job.input_meta?.filename ?? filename);
+      renderProcessing(body, job, job.input_meta?.filename ?? filename, quota);
     } catch {
       /* el siguiente tick reintenta */
     }
@@ -212,7 +212,7 @@ function watchJob(body, jobId, quota, filename) {
     jobId,
     onStatus: ({ sections }) => {
       if (sections) {
-        renderProcessing(body, { status: 'processing', sections }, filename);
+        renderProcessing(body, { status: 'processing', sections }, filename, quota);
       }
       void refresh();
     },
@@ -248,10 +248,90 @@ async function showJob(body, jobId, quota) {
 }
 
 /**
+ * Monta la UI viva de las tarjetas ya renderizadas en `body`: players de audio,
+ * timeline de structure (con seek + markActive) y botones de reintento por sección.
+ * Compartido por `renderProcessing` (revelado progresivo) y `renderJob` (terminal),
+ * así una sección que termina o falla mientras el job sigue 'processing' queda usable.
+ */
+function mountSectionUI(body, job, quota) {
+  // --- Montar players ---
+  let primaryAudio = null;
+  body.querySelectorAll('.studio-player-mount').forEach((mount) => {
+    const { el, audio } = createStudioPlayer({
+      label: mount.dataset.label,
+      url: mount.dataset.url,
+    });
+    if (mount.dataset.primary === '1' && !primaryAudio) {
+      primaryAudio = audio;
+    }
+    mount.replaceWith(el);
+  });
+
+  // --- Cablear timeline de structure ---
+  const sections = job.sections ?? {};
+  const tlMount = body.querySelector('.studio-sectl-mount');
+  if (tlMount) {
+    const structureSection = sections.structure ?? {};
+    const segments = Array.isArray(structureSection.segments) ? structureSection.segments : [];
+    if (segments.length > 0) {
+      const onSeek = primaryAudio
+        ? (t) => {
+            primaryAudio.currentTime = t;
+            void primaryAudio.play();
+          }
+        : () => {};
+      const tl = renderTimeline(segments, { onSeek });
+      tlMount.replaceWith(tl);
+
+      if (primaryAudio) {
+        primaryAudio.addEventListener('timeupdate', () => {
+          markActive(tl, primaryAudio.currentTime);
+        });
+      }
+    }
+  }
+
+  // --- Cablear retry por sección ---
+  body.querySelectorAll('.studio-section-card__retry').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const section = btn.dataset.section;
+      btn.disabled = true;
+      const originalText = btn.textContent;
+      btn.textContent = 'Reintentando…';
+      try {
+        const s = getSession();
+        const headers = s ? { Authorization: `Bearer ${s.access_token}` } : {};
+        const res = await fetch(`/api/stems/jobs/${job.id}/retry?section=${encodeURIComponent(section)}`, {
+          method: 'POST',
+          headers,
+        });
+        if (!res.ok) {
+          const body2 = await res.json().catch(() => ({}));
+          throw new Error(body2.error ?? `Error ${res.status}`);
+        }
+        // Re-arranca seguimiento
+        watchJob(body, job.id, quota, job.input_meta?.filename);
+      } catch (e) {
+        btn.textContent = originalText;
+        btn.disabled = false;
+        // Mostrar error cerca del botón
+        let errEl = btn.parentElement.querySelector('.studio__error');
+        if (!errEl) {
+          errEl = document.createElement('p');
+          errEl.className = 'studio__error';
+          btn.parentElement.appendChild(errEl);
+        }
+        errEl.textContent = e.message || 'No se pudo reintentar.';
+      }
+    });
+  });
+}
+
+/**
  * Renderiza las 4 tarjetas de sección con su estado actual.
  * Sirve tanto para 'processing' (estados parciales) como para 'done' (unificado con renderJob).
  */
-function renderProcessing(body, job, filename) {
+function renderProcessing(body, job, filename, quota) {
   const sections = job.sections ?? {};
   const stems = job.stems ?? {};
   const voices = job.voices ?? {};
@@ -287,6 +367,9 @@ function renderProcessing(body, job, filename) {
 
   body.innerHTML = '';
   body.appendChild(frag);
+
+  // Revelado progresivo: monta players/timeline/retry de las secciones ya terminadas o fallidas.
+  mountSectionUI(body, job, quota);
 }
 
 function renderJob(body, job, quota) {
@@ -364,76 +447,8 @@ function renderJob(body, job, quota) {
   body.innerHTML = '';
   body.appendChild(frag);
 
-  // --- Montar players ---
-  let primaryAudio = null;
-  body.querySelectorAll('.studio-player-mount').forEach((mount) => {
-    const { el, audio } = createStudioPlayer({
-      label: mount.dataset.label,
-      url: mount.dataset.url,
-    });
-    if (mount.dataset.primary === '1' && !primaryAudio) {
-      primaryAudio = audio;
-    }
-    mount.replaceWith(el);
-  });
-
-  // --- Cablear timeline de structure ---
-  const tlMount = body.querySelector('.studio-sectl-mount');
-  if (tlMount) {
-    const structureSection = sections.structure ?? {};
-    const segments = Array.isArray(structureSection.segments) ? structureSection.segments : [];
-    if (segments.length > 0) {
-      const onSeek = primaryAudio
-        ? (t) => {
-            primaryAudio.currentTime = t;
-            void primaryAudio.play();
-          }
-        : () => {};
-      const tl = renderTimeline(segments, { onSeek });
-      tlMount.replaceWith(tl);
-
-      if (primaryAudio) {
-        primaryAudio.addEventListener('timeupdate', () => {
-          markActive(tl, primaryAudio.currentTime);
-        });
-      }
-    }
-  }
-
-  // --- Cablear retry por sección ---
-  body.querySelectorAll('.studio-section-card__retry').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const section = btn.dataset.section;
-      btn.disabled = true;
-      const originalText = btn.textContent;
-      btn.textContent = 'Reintentando…';
-      try {
-        const s = getSession();
-        const headers = s ? { Authorization: `Bearer ${s.access_token}` } : {};
-        const res = await fetch(`/api/stems/jobs/${job.id}/retry?section=${encodeURIComponent(section)}`, {
-          method: 'POST',
-          headers,
-        });
-        if (!res.ok) {
-          const body2 = await res.json().catch(() => ({}));
-          throw new Error(body2.error ?? `Error ${res.status}`);
-        }
-        // Re-arranca seguimiento
-        watchJob(body, job.id, quota, job.input_meta?.filename);
-      } catch (e) {
-        btn.textContent = originalText;
-        btn.disabled = false;
-        // Mostrar error cerca del botón
-        let errEl = btn.parentElement.querySelector('.studio__error');
-        if (!errEl) {
-          errEl = document.createElement('p');
-          errEl.className = 'studio__error';
-          btn.parentElement.appendChild(errEl);
-        }
-        errEl.textContent = e.message || 'No se pudo reintentar.';
-      }
-    });
-  });
+  // Players + timeline de structure + retry por sección (compartido con renderProcessing).
+  mountSectionUI(body, job, quota);
 
   // --- ZIP ---
   const zipBtn = body.querySelector('#studio-zip');

@@ -175,4 +175,81 @@ describe('renderStudioPage', () => {
     await vi.waitFor(() => expect(container.textContent).toContain('falló'));
     expect(container.querySelector('#studio-retry')).not.toBeNull();
   });
+
+  it('partial es terminal: pistas listas + retry por sección fallida', async () => {
+    stemsApi.listJobs.mockResolvedValueOnce({
+      jobs: [{ id: 'j1', status: 'partial' }],
+      quota: { used: 1, limit: 3 },
+    });
+    stemsApi.getJob.mockResolvedValue({
+      job: {
+        id: 'j1',
+        status: 'partial',
+        stems: { vocals: 'https://s/vocals' },
+        voices: {},
+        sections: {
+          voiceInstrumental: { status: 'done' },
+          structure: { status: 'failed', error: 'falló' },
+          leadBacking: { status: 'pending' },
+          gender: { status: 'skipped' },
+        },
+        input_meta: { filename: 'x.mp3' },
+        expires_at: new Date(Date.now() + 47 * 3600e3).toISOString(),
+      },
+    });
+    renderStudioPage(container);
+
+    // partial es terminal: renderJob (no renderProcessing)
+    await vi.waitFor(() => expect(container.querySelector('#studio-zip')).not.toBeNull());
+    expect(container.textContent.toLowerCase()).toContain('disponible por');
+
+    // Botón retry para la sección fallida
+    const retryBtn = container.querySelector('.studio-section-card__retry');
+    expect(retryBtn).not.toBeNull();
+    expect(retryBtn.dataset.section).toBe('structure');
+  });
+
+  it('retry cableado en renderProcessing (sección falla mientras el job sigue processing)', async () => {
+    stemsApi.listJobs.mockResolvedValueOnce({
+      jobs: [{ id: 'j1', status: 'processing' }],
+      quota: { used: 1, limit: 3 },
+    });
+    stemsApi.getJob.mockResolvedValue({
+      job: {
+        id: 'j1',
+        status: 'processing',
+        input_meta: { filename: 'x.mp3' },
+        sections: {
+          voiceInstrumental: { status: 'failed', error: 'falló' },
+          structure: { status: 'running' },
+          leadBacking: { status: 'pending' },
+          gender: { status: 'skipped' },
+        },
+      },
+    });
+
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderStudioPage(container);
+
+    // renderProcessing: hay aria-live, no hay #studio-zip
+    await vi.waitFor(() =>
+      expect(container.querySelector('.studio-section-card__retry')).not.toBeNull(),
+    );
+    expect(container.querySelector('#studio-zip')).toBeNull();
+
+    // Click en el botón retry de voiceInstrumental
+    container.querySelector('.studio-section-card__retry').click();
+
+    // Esperar a que se llame fetch (la promesa del click handler es async)
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toContain('/api/stems/jobs/j1/retry?section=voiceInstrumental');
+    expect(opts.method).toBe('POST');
+    expect(opts.headers?.Authorization).toBe('Bearer tok');
+
+    vi.unstubAllGlobals();
+  });
 });

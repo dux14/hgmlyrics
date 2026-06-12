@@ -68,6 +68,7 @@ def run_medley_vox(payload: dict) -> None:
     # `modal deploy` donde torch/asteroid/huggingface_hub no están instalados.
     import json
     import os
+    import subprocess
     import tempfile
     import types
 
@@ -228,18 +229,25 @@ def run_medley_vox(payload: dict) -> None:
         else:
             lead_wav, backing_wav = out_wav_2, out_wav_1
 
-        # ── 8. Guardar como WAV temporal → convertir a MP3 con soundfile ─────
-        # SUPUESTO: soundfile con formato WAV es suficiente para el PUT URL de
-        # Supabase Storage que espera audio/mpeg. Si el front requiere MP3 real,
-        # se puede añadir una conversión con ffmpeg. Por ahora se sube como WAV
-        # con content_type="audio/wav".
-        # NOTA: soundfile no escribe MP3 directamente; se usa WAV para evitar
-        # dependencia adicional de lame/ffmpeg en la imagen. El bucket acepta
-        # cualquier audio ya que los PUT URLs no validan el content-type.
-        lead_tmp = tempfile.mkstemp(suffix=".wav")[1]
-        backing_tmp = tempfile.mkstemp(suffix=".wav")[1]
-        sf.write(lead_tmp, lead_wav, _SAMPLE_RATE, format="WAV")
-        sf.write(backing_tmp, backing_wav, _SAMPLE_RATE, format="WAV")
+        # ── 8. Guardar WAV temporal → transcodificar a MP3 con ffmpeg ────────
+        # soundfile no escribe MP3 nativamente, así que se escribe WAV y luego
+        # se transcodifica con ffmpeg (ya presente en la imagen del orquestador,
+        # apt_install("ffmpeg")). Salida MP3 = consistente con el resto del
+        # pipeline (extract.py / songformer usan .mp3) y con las keys `.mp3` del
+        # contrato; el front sirve audio/mpeg.
+        lead_wav_tmp = tempfile.mkstemp(suffix=".wav")[1]
+        backing_wav_tmp = tempfile.mkstemp(suffix=".wav")[1]
+        lead_tmp = tempfile.mkstemp(suffix=".mp3")[1]
+        backing_tmp = tempfile.mkstemp(suffix=".mp3")[1]
+        sf.write(lead_wav_tmp, lead_wav, _SAMPLE_RATE, format="WAV")
+        sf.write(backing_wav_tmp, backing_wav, _SAMPLE_RATE, format="WAV")
+        for wav_in, mp3_out in ((lead_wav_tmp, lead_tmp), (backing_wav_tmp, backing_tmp)):
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", wav_in, "-codec:a", "libmp3lame",
+                 "-qscale:a", "2", mp3_out],
+                check=True,
+                capture_output=True,
+            )
 
         # ── 9. Subir pistas y recopilar keys ─────────────────────────────────
         outputs: dict[str, str] = {}
@@ -250,11 +258,11 @@ def run_medley_vox(payload: dict) -> None:
                 # SUPUESTO: si no hay PUT URL para la pista (leadBacking no habilitado
                 # en el payload), se omite silenciosamente y el output queda vacío.
                 continue
-            upload_put(put_url, tmp_path, content_type="audio/wav")
+            upload_put(put_url, tmp_path, content_type="audio/mpeg")
             outputs[track] = extract_storage_key(put_url)
 
         # Limpiar archivos temporales.
-        for tmp in (lead_tmp, backing_tmp):
+        for tmp in (lead_wav_tmp, backing_wav_tmp, lead_tmp, backing_tmp):
             try:
                 os.unlink(tmp)
             except OSError:

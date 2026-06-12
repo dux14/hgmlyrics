@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   fmtTimeCs,
+  fmtTime,
   clamp,
   posToTime,
   timeToPos,
@@ -17,6 +18,18 @@ describe('fmtTimeCs', () => {
   it('no-finito o negativo → 0:00.00', () => {
     expect(fmtTimeCs(NaN)).toBe('0:00.00');
     expect(fmtTimeCs(-3)).toBe('0:00.00');
+  });
+});
+
+describe('fmtTime', () => {
+  it('formatea m:ss', () => {
+    expect(fmtTime(72)).toBe('1:12');
+    expect(fmtTime(5)).toBe('0:05');
+    expect(fmtTime(0)).toBe('0:00');
+  });
+  it('no-finito o negativo → 0:00', () => {
+    expect(fmtTime(NaN)).toBe('0:00');
+    expect(fmtTime(-3)).toBe('0:00');
   });
 });
 

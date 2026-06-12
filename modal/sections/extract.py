@@ -1,12 +1,19 @@
 # modal/sections/extract.py
 """
-S1 — extracción de stems con demucs htdemucs_6s.
+S1 — extracción de stems con BS-RoFormer ep_317 (vocal/instrumental) +
+     demucs htdemucs_6s (drums/bass/guitar/piano/other).
 
-htdemucs_6s produce 6 pistas: vocals / drums / bass / guitar / piano / other.
-La pista `instrumental` se construye como suma de las 5 pistas no vocales
-(drums + bass + guitar + piano + other) usando pydub.
+Pasos:
+  1. BS-RoFormer ep_317 sobre la mezcla original  →  vocals + instrumental
+     (model_bs_roformer_ep_317_sdr_12.9755.ckpt vía audio-separator).
+  2. Demucs htdemucs_6s sobre la mezcla original  →  drums/bass/guitar/piano/other
+     (la pista `vocals` de demucs se descarta; se usa la de ep_317).
+  3. Subir las 7 keys: vocals, instrumental, drums, bass, guitar, piano, other.
+  4. Reportar model='bs_roformer_ep_317+htdemucs_6s', status='done'.
 
-Phase 1 swapará S1_EXTRACTOR por "bs_roformer_ep_317" para mejor separación vocal.
+TODO (upgrade futuro): extractor 'ensemble' — combinar ep_317 con MVSEP-MDX23c
+  o similar para mayor SDR en mezclas con mucho reverb. NO implementar aún;
+  esperar evaluación auditiva de ep_317 en producción.
 """
 
 from __future__ import annotations
@@ -17,39 +24,50 @@ import subprocess
 import tempfile
 
 # ── Constante de extractor ───────────────────────────────────────────────────
-# Phase 1: cambiar por "bs_roformer_ep_317" (ver feat/estudio-fase1-*).
-S1_EXTRACTOR = "htdemucs_6s"
+# 'ep_317'  → BS-RoFormer ep_317 (vocal) + htdemucs_6s (percusión/bajo/etc.)
+# 'ensemble' → TODO: upgrade (ver docstring de módulo arriba). No implementado.
+S1_EXTRACTOR = "ep_317"
 
-# Pistas que produce htdemucs_6s (sin `instrumental` — la derivamos).
-_DEMUCS_STEMS = ["vocals", "drums", "bass", "guitar", "piano", "other"]
+# Modelo BS-RoFormer para separación vocal.
+_BS_ROFORMER_MODEL = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
+
+# Etiqueta de modelo que se reporta en los webhooks (éxito y fallo).
+_MODEL_LABEL = "bs_roformer_ep_317+htdemucs_6s"
+
+# Pistas de percusión/melodía que extraemos de demucs htdemucs_6s.
+# La pista `vocals` de demucs se descarta (usamos la de ep_317).
+_DEMUCS_INSTRUMENT_STEMS = ["drums", "bass", "guitar", "piano", "other"]
 
 # Pistas que reportamos al webhook / que el front espera para voiceInstrumental.
-_OUTPUT_STEMS = _DEMUCS_STEMS + ["instrumental"]
+# Documenta el contrato de 7 keys; no se itera directamente (los loops usan
+# ep317_stems + _DEMUCS_INSTRUMENT_STEMS por separado). No es código muerto.
+_OUTPUT_STEMS = ["vocals", "instrumental"] + _DEMUCS_INSTRUMENT_STEMS
 
 
-def _mix_non_vocal_stems(stem_dir: pathlib.Path, out_path: pathlib.Path) -> None:
+def _classify_ep317_stem(filename: str) -> "str | None":
     """
-    Suma drums+bass+guitar+piano+other en un solo MP3 (= instrumental).
-    Usa ffmpeg amix para no añadir pydub como dependencia.
+    Mapea el nombre de archivo de un stem de ep_317 a 'vocals' o 'instrumental'.
+
+    audio-separator produce nombres del tipo:
+      song_(Vocals)_model_bs_roformer_ep_317_sdr_12.9755.ckpt.mp3
+      song_(Instrumental)_model_bs_roformer_ep_317_sdr_12.9755.ckpt.mp3
+
+    Devuelve None si el nombre no es reconocido (el llamador lanzará).
     """
-    non_vocal = [stem_dir / f"{s}.mp3" for s in _DEMUCS_STEMS if s != "vocals"]
-    # ffmpeg amix normaliza por número de entradas; usamos sum con dropout_transition=0
-    inputs_args = []
-    for p in non_vocal:
-        inputs_args.extend(["-i", str(p)])
-    filter_graph = f"amix=inputs={len(non_vocal)}:duration=longest:dropout_transition=0:normalize=0"
-    subprocess.run(
-        ["ffmpeg", "-y", *inputs_args, "-filter_complex", filter_graph, str(out_path)],
-        check=True,
-    )
+    low = filename.lower()
+    if "(vocals)" in low:
+        return "vocals"
+    if "(instrumental)" in low:
+        return "instrumental"
+    return None
 
 
 def run_extract(payload: dict) -> None:
     """
-    Nodo S1: descarga el audio de entrada, corre demucs htdemucs_6s,
-    sube las 7 pistas (vocals/drums/bass/guitar/piano/other/instrumental)
-    a los signed PUT URLs de `uploads["voiceInstrumental"]`, y postea
-    el webhook de la sección.
+    Nodo S1: descarga el audio de entrada, corre BS-RoFormer ep_317 (vocals +
+    instrumental) y demucs htdemucs_6s (drums/bass/guitar/piano/other), sube
+    las 7 pistas a los signed PUT URLs de `uploads["voiceInstrumental"]`, y
+    postea el webhook de la sección.
 
     En caso de excepción posta un webhook `failed` para voiceInstrumental
     y propaga la excepción (Modal lo registrará como fallo de la función).
@@ -58,6 +76,13 @@ def run_extract(payload: dict) -> None:
     import httpx  # noqa: F401 — ya disponible en la imagen
     # Absolute import: cuando Modal ejecuta, `modal/` es el cwd y `sections` es top-level.
     from sections._common import extract_storage_key, upload_put, post_webhook
+    from audio_separator.separator import Separator  # noqa: E402 — solo en el contenedor
+
+    if S1_EXTRACTOR != "ep_317":
+        raise NotImplementedError(
+            f"S1_EXTRACTOR={S1_EXTRACTOR!r} no soportado; "
+            "solo 'ep_317' (rama 'ensemble' = TODO de upgrade)"
+        )
 
     job_id: str = payload["jobId"]
     get_url: str = payload["input"]["getUrl"]
@@ -74,43 +99,75 @@ def run_extract(payload: dict) -> None:
                 for chunk in r.iter_bytes():
                     f.write(chunk)
 
-        # ── 2. Correr demucs ─────────────────────────────────────────────────
-        out_dir = tempfile.mkdtemp()
+        # ── 2. BS-RoFormer ep_317: vocals + instrumental ─────────────────────
+        # Separamos ambos stems (sin output_single_stem) para obtener
+        # vocals e instrumental del mismo paso.
+        ep317_out = tempfile.mkdtemp()
+        ep317_sep = Separator(output_dir=ep317_out, output_format="mp3")
+        ep317_sep.load_model(model_filename=_BS_ROFORMER_MODEL)
+        ep317_files = ep317_sep.separate(src_path)
+
+        ep317_stems: dict[str, str] = {}
+        for fname in ep317_files:
+            fpath = fname if os.path.isabs(fname) else os.path.join(ep317_out, fname)
+            label = _classify_ep317_stem(os.path.basename(fpath))
+            if label is None:
+                raise RuntimeError(
+                    f"ep_317 produjo un stem inesperado: {os.path.basename(fpath)}"
+                )
+            ep317_stems[label] = fpath
+
+        for required in ("vocals", "instrumental"):
+            if required not in ep317_stems:
+                raise RuntimeError(
+                    f"ep_317 no produjo el stem requerido '{required}'. "
+                    f"Stems presentes: {list(ep317_stems.keys())}"
+                )
+
+        # ── 3. Demucs htdemucs_6s: drums/bass/guitar/piano/other ────────────
+        demucs_out = tempfile.mkdtemp()
         subprocess.run(
             [
                 "python", "-m", "demucs",
-                "-n", S1_EXTRACTOR,
+                "-n", "htdemucs_6s",
                 "--mp3",
-                "-o", out_dir,
+                "-o", demucs_out,
                 src_path,
             ],
             check=True,
             env={**os.environ, "HF_HOME": "/root/.cache/huggingface"},
         )
 
-        stem_dir = (
-            pathlib.Path(out_dir) / S1_EXTRACTOR / pathlib.Path(src_path).stem
+        demucs_stem_dir = (
+            pathlib.Path(demucs_out) / "htdemucs_6s" / pathlib.Path(src_path).stem
         )
 
-        # ── 3. Derivar instrumental ──────────────────────────────────────────
-        instrumental_path = stem_dir / "instrumental.mp3"
-        _mix_non_vocal_stems(stem_dir, instrumental_path)
+        # Verificar que los stems instrumentales de demucs existen.
+        for stem in _DEMUCS_INSTRUMENT_STEMS:
+            p = demucs_stem_dir / f"{stem}.mp3"
+            if not p.exists():
+                raise FileNotFoundError(
+                    f"demucs htdemucs_6s no produjo el stem esperado: {p}"
+                )
 
         # ── 4. Subir pistas + recopilar keys ────────────────────────────────
         outputs: dict[str, str] = {}
-        for track in _OUTPUT_STEMS:
+
+        # vocals e instrumental vienen de ep_317
+        for track in ("vocals", "instrumental"):
             put_url = uploads_vi.get(track)
             if not put_url:
-                # La sección no incluyó este track en sus uploads; omitir.
                 continue
-            file_path = stem_dir / f"{track}.mp3"
-            if not file_path.exists():
-                raise FileNotFoundError(
-                    f"demucs no produjo el stem esperado: {file_path}"
-                )
+            upload_put(put_url, ep317_stems[track])
+            outputs[track] = extract_storage_key(put_url)
+
+        # drums/bass/guitar/piano/other vienen de demucs
+        for track in _DEMUCS_INSTRUMENT_STEMS:
+            put_url = uploads_vi.get(track)
+            if not put_url:
+                continue
+            file_path = demucs_stem_dir / f"{track}.mp3"
             upload_put(put_url, str(file_path))
-            # La key se extrae del signed PUT URL (la misma que usó start.js
-            # para firmar: `{userId}/{jobId}/voiceInstrumental/{track}.mp3`).
             outputs[track] = extract_storage_key(put_url)
 
         # ── 5. Webhook de éxito ──────────────────────────────────────────────
@@ -120,7 +177,7 @@ def run_extract(payload: dict) -> None:
             section="voiceInstrumental",
             result={
                 "status": "done",
-                "model": S1_EXTRACTOR,
+                "model": _MODEL_LABEL,
                 "outputs": outputs,
             },
         )
@@ -132,7 +189,11 @@ def run_extract(payload: dict) -> None:
                 webhook,
                 job_id,
                 section="voiceInstrumental",
-                result={"status": "failed", "model": S1_EXTRACTOR, "outputs": {}},
+                result={
+                    "status": "failed",
+                    "model": _MODEL_LABEL,
+                    "outputs": {},
+                },
                 error=str(exc)[:400],
             )
         except Exception:

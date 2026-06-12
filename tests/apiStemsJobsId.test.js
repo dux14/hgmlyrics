@@ -1,0 +1,205 @@
+/**
+ * apiStemsJobsId.test.js — TDD para GET /api/stems/jobs/[id]
+ * Verifica aplanado de outputs firmados (done/partial) y paso en crudo (processing).
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// ── Mock de @supabase/supabase-js (necesario para que db.js importe) ──────────
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: () => ({
+    auth: { getUser: vi.fn() },
+    storage: {
+      from: () => ({
+        createSignedUrl: vi.fn().mockResolvedValue({ data: { signedUrl: 'https://x' }, error: null }),
+        createSignedUploadUrl: vi.fn(),
+        list: vi.fn().mockResolvedValue({ data: [], error: null }),
+        remove: vi.fn().mockResolvedValue({ data: [], error: null }),
+      }),
+    },
+  }),
+}));
+
+// ── Mock de sql ───────────────────────────────────────────────────────────────
+const sqlResponses = [];
+const sqlCalls = [];
+function sqlMock(strings, ...values) {
+  if (!strings?.raw) return strings;
+  sqlCalls.push({ text: strings.join('?').replace(/\s+/g, ' ').trim(), values });
+  return Promise.resolve(sqlResponses.shift() ?? []);
+}
+sqlMock.json = (v) => v;
+sqlMock.array = vi.fn((arr) => ({ __pgArray: arr }));
+vi.mock('postgres', () => ({ default: () => sqlMock }));
+
+// ── Mocks de helpers propios ──────────────────────────────────────────────────
+vi.mock('../api/_lib/auth.js', () => ({
+  requireUser: vi.fn(),
+}));
+
+vi.mock('../api/_lib/storage.js', () => ({
+  signStemsDownload: vi.fn((key) => Promise.resolve('signed://' + key)),
+}));
+
+// ── Env vars ──────────────────────────────────────────────────────────────────
+process.env.SUPABASE_URL = 'https://x.supabase.co';
+process.env.SUPABASE_SERVICE_ROLE_KEY = 'key';
+process.env.DATABASE_URL = 'postgresql://test';
+
+// Importar handler DESPUÉS de establecer mocks y env
+const handler = (await import('../api/stems/jobs/[id].js')).default;
+
+const { requireUser } = await import('../api/_lib/auth.js');
+const { signStemsDownload } = await import('../api/_lib/storage.js');
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function makeRes() {
+  return {
+    statusCode: 200,
+    body: null,
+    headers: {},
+    setHeader(k, v) {
+      this.headers[k] = v;
+    },
+    status(c) {
+      this.statusCode = c;
+      return this;
+    },
+    json(b) {
+      this.body = b;
+      return this;
+    },
+  };
+}
+
+function authedReq(over = {}) {
+  return {
+    method: 'GET',
+    headers: { authorization: 'Bearer tok' },
+    query: { id: 'j1' },
+    body: {},
+    ...over,
+  };
+}
+
+beforeEach(() => {
+  sqlResponses.length = 0;
+  sqlCalls.length = 0;
+  sqlMock.array.mockClear();
+  requireUser.mockClear().mockResolvedValue({ id: 'u1' });
+  signStemsDownload.mockClear().mockImplementation((key) => Promise.resolve('signed://' + key));
+});
+
+describe('GET /api/stems/jobs/[id]', () => {
+  it('404 cuando el SELECT devuelve fila vacía', async () => {
+    sqlResponses.push([]); // SELECT → sin resultados
+    const res = makeRes();
+    await handler(authedReq(), res);
+    expect(res.statusCode).toBe(404);
+    expect(res.body).toEqual({ error: 'Job no encontrado' });
+  });
+
+  it('done: aplana y firma outputs; omite valores nulos', async () => {
+    const job = {
+      id: 'j1',
+      user_id: 'u1',
+      status: 'done',
+      sections: {
+        voiceInstrumental: {
+          outputs: {
+            vocals: 'u1/j1/voiceInstrumental/vocals.mp3',
+            instrumental: 'u1/j1/voiceInstrumental/instrumental.mp3',
+            drums: null,
+          },
+        },
+        leadBacking: {
+          outputs: {
+            lead: 'u1/j1/leadBacking/lead.mp3',
+            backing: null,
+          },
+        },
+      },
+    };
+    sqlResponses.push([job]);
+    const res = makeRes();
+    await handler(authedReq(), res);
+
+    expect(res.statusCode).toBe(200);
+    const { job: result } = res.body;
+
+    // stems firmados
+    expect(result.stems.vocals).toBe('signed://u1/j1/voiceInstrumental/vocals.mp3');
+    expect(result.stems.instrumental).toBe('signed://u1/j1/voiceInstrumental/instrumental.mp3');
+    // null se omite
+    expect(result.stems.drums).toBeUndefined();
+
+    // voices firmados
+    expect(result.voices.lead).toBe('signed://u1/j1/leadBacking/lead.mp3');
+    // null se omite
+    expect(result.voices.backing).toBeUndefined();
+
+    // signStemsDownload llamado solo para los no nulos (vocals, instrumental, lead)
+    expect(signStemsDownload).toHaveBeenCalledTimes(3);
+    expect(signStemsDownload).toHaveBeenCalledWith('u1/j1/voiceInstrumental/vocals.mp3');
+    expect(signStemsDownload).toHaveBeenCalledWith('u1/j1/voiceInstrumental/instrumental.mp3');
+    expect(signStemsDownload).toHaveBeenCalledWith('u1/j1/leadBacking/lead.mp3');
+  });
+
+  it('partial también aplana y firma los outputs disponibles', async () => {
+    const job = {
+      id: 'j1',
+      user_id: 'u1',
+      status: 'partial',
+      sections: {
+        voiceInstrumental: {
+          outputs: {
+            vocals: 'u1/j1/voiceInstrumental/vocals.mp3',
+          },
+        },
+        leadBacking: {
+          outputs: {},
+        },
+      },
+    };
+    sqlResponses.push([job]);
+    const res = makeRes();
+    await handler(authedReq(), res);
+
+    expect(res.statusCode).toBe(200);
+    const { job: result } = res.body;
+
+    expect(result.stems.vocals).toBe('signed://u1/j1/voiceInstrumental/vocals.mp3');
+    expect(signStemsDownload).toHaveBeenCalledTimes(1);
+    expect(signStemsDownload).toHaveBeenCalledWith('u1/j1/voiceInstrumental/vocals.mp3');
+  });
+
+  it('processing reciente: devuelve job crudo sin aplanar (signStemsDownload no se llama)', async () => {
+    const job = {
+      id: 'j1',
+      user_id: 'u1',
+      status: 'processing',
+      updated_at: new Date(Date.now() - 60_000).toISOString(), // 1 min atrás, no expirado
+      sections: {
+        voiceInstrumental: {
+          outputs: {
+            vocals: 'u1/j1/voiceInstrumental/vocals.mp3',
+          },
+        },
+        leadBacking: {
+          outputs: {
+            lead: 'u1/j1/leadBacking/lead.mp3',
+          },
+        },
+      },
+    };
+    sqlResponses.push([job]);
+    const res = makeRes();
+    await handler(authedReq(), res);
+
+    expect(res.statusCode).toBe(200);
+    const { job: result } = res.body;
+
+    // No se aplanó: stems no existe como propiedad propia del job crudo
+    expect(result.stems).toBeUndefined();
+    expect(signStemsDownload).not.toHaveBeenCalled();
+  });
+});

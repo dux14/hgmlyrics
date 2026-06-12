@@ -4,8 +4,7 @@
  * Estados: idle → uploading → processing → done | failed.
  */
 import { icon } from '../lib/icons.js';
-import { mergeSegments, segmentToPct, voiceColorVar } from '../lib/studioSegments.js';
-import { SECTION_KEYS, sectionLabel, sectionState } from '../lib/studioSections.js';
+import { SECTION_KEYS } from '../lib/studioSections.js';
 import {
   createJob,
   uploadInput,
@@ -15,16 +14,13 @@ import {
   readAudioDuration,
   watchJobRealtime,
 } from '../lib/stemsApi.js';
+import { getSession } from '../lib/authStore.js';
 import { downloadAllZip, buildZipBlob } from '../lib/studioZip.js';
 import { getDriveToken } from '../lib/driveAuth.js';
 import { uploadZipToDrive } from '../lib/driveUpload.js';
-import {
-  createStudioPlayer,
-  clamp,
-  magnifyRange,
-  magnifyPosToTime,
-  fmtTimeCs,
-} from './StudioPlayer.js';
+import { createStudioPlayer } from './StudioPlayer.js';
+import { renderTimeline, markActive } from './StudioSectionTimeline.js';
+import { renderSectionCard } from './StudioSectionCard.js';
 
 const MAX_DURATION_S = 10.5 * 60;
 let pollTimer = null;
@@ -60,12 +56,6 @@ function startHashGuard() {
   window.addEventListener('hashchange', hashChangeHandler);
 }
 
-function fmtTime(s) {
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m}:${String(sec).padStart(2, '0')}`;
-}
-
 function escHtml(s) {
   return String(s).replace(
     /[&<>"']/g,
@@ -79,6 +69,7 @@ function hoursLeft(expiresAt) {
 
 const STEM_LABELS = {
   vocals: 'Voz',
+  instrumental: 'Instrumental',
   drums: 'Batería',
   bass: 'Bajo',
   guitar: 'Guitarra',
@@ -88,14 +79,6 @@ const STEM_LABELS = {
 
 const VOICE_LABELS = { lead: 'Voz líder', backing: 'Coros' };
 const ALL_LABELS = { ...STEM_LABELS, ...VOICE_LABELS };
-
-function voicesCopy(voices) {
-  const has = [];
-  if (voices.lead) has.push('voz líder');
-  if (voices.backing) has.push('coros');
-  if (has.length === 0) return '';
-  return `Separamos ${has.join(' y ')} de la mezcla; los segmentos alternados se reproducen sobre la pista de voz.`;
-}
 
 export function renderStudioPage(container) {
   stopPolling();
@@ -122,7 +105,7 @@ async function loadInitial(body) {
     // es una subida abandonada (el upload en memoria se perdió): no lo seguimos para no
     // dejar un spinner eterno; el backend lo reclama en la próxima subida.
     const active = jobs.find((j) => j.status === 'processing');
-    const recent = jobs.find((j) => ['done', 'failed'].includes(j.status));
+    const recent = jobs.find((j) => ['done', 'partial', 'failed'].includes(j.status));
     if (active) return watchJob(body, active.id, quota, active.input_meta?.filename);
     if (recent) return showJob(body, recent.id, quota);
     renderIdle(body, quota);
@@ -201,7 +184,9 @@ function watchJob(body, jobId, quota, filename) {
   startHashGuard();
 
   const finishIfDone = (job) => {
-    if (job.status === 'done' || job.status === 'failed') {
+    // `partial` (algunas secciones done, otras failed) también es terminal:
+    // renderJob muestra las pistas listas + el botón Reintentar por sección fallida.
+    if (job.status === 'done' || job.status === 'failed' || job.status === 'partial') {
       stopPolling();
       renderJob(body, job, quota);
       return true;
@@ -213,7 +198,7 @@ function watchJob(body, jobId, quota, filename) {
     try {
       const { job } = await getJob(jobId);
       if (finishIfDone(job)) return;
-      renderProcessing(body, job, job.input_meta?.filename ?? filename);
+      renderProcessing(body, job, job.input_meta?.filename ?? filename, quota);
     } catch {
       /* el siguiente tick reintenta */
     }
@@ -227,7 +212,7 @@ function watchJob(body, jobId, quota, filename) {
     jobId,
     onStatus: ({ sections }) => {
       if (sections) {
-        renderProcessing(body, { status: 'processing', sections }, filename);
+        renderProcessing(body, { status: 'processing', sections }, filename, quota);
       }
       void refresh();
     },
@@ -262,34 +247,129 @@ async function showJob(body, jobId, quota) {
   }
 }
 
-function renderProcessing(body, job, filename) {
-  // Muestra las 4 secciones del DAG con su estado actual.
-  // La UI completa (acordeón, reproductores, timeline) llega en Fase 1 (Task 1.5).
-  const sections = job.sections ?? {};
-  const sectionRows = SECTION_KEYS.map((key) => {
-    const sec = sections[key] ?? { status: 'pending' };
-    const { status, label } = sectionState(sec);
-    const isSkipped = status === 'skipped';
-    return `
-      <div class="studio-section-row studio-section-row--${status}" aria-label="${escHtml(sectionLabel(key))}: ${escHtml(label)}">
-        <span class="studio-section-row__dot studio-section-row__dot--${status}"></span>
-        <span class="studio-section-row__name${isSkipped ? ' studio-section-row__name--skipped' : ''}">${escHtml(sectionLabel(key))}</span>
-        <span class="studio-section-row__status">${escHtml(label)}</span>
-      </div>`;
-  }).join('');
+/**
+ * Monta la UI viva de las tarjetas ya renderizadas en `body`: players de audio,
+ * timeline de structure (con seek + markActive) y botones de reintento por sección.
+ * Compartido por `renderProcessing` (revelado progresivo) y `renderJob` (terminal),
+ * así una sección que termina o falla mientras el job sigue 'processing' queda usable.
+ */
+function mountSectionUI(body, job, quota) {
+  // --- Montar players ---
+  let primaryAudio = null;
+  body.querySelectorAll('.studio-player-mount').forEach((mount) => {
+    const { el, audio } = createStudioPlayer({
+      label: mount.dataset.label,
+      url: mount.dataset.url,
+    });
+    if (mount.dataset.primary === '1' && !primaryAudio) {
+      primaryAudio = audio;
+    }
+    mount.replaceWith(el);
+  });
 
-  body.innerHTML = `
-    ${filename ? `<p class="studio__filename" title="${escHtml(filename)}">${icon('audio-lines', { size: 16 })} <span>${escHtml(filename)}</span></p>` : ''}
-    <div class="studio-loader">
-      <div class="studio-eq" aria-hidden="true">
-        ${Array.from({ length: 7 }, (_, i) => `<span class="studio-eq__bar" style="--i:${i}"></span>`).join('')}
-      </div>
-      <div class="studio-sections" aria-label="Estado del procesamiento">
-        ${sectionRows}
-      </div>
-      <p class="empty-state__text">Puedes salir de esta página; el proceso sigue solo.</p>
-    </div>
-  `;
+  // --- Cablear timeline de structure ---
+  const sections = job.sections ?? {};
+  const tlMount = body.querySelector('.studio-sectl-mount');
+  if (tlMount) {
+    const structureSection = sections.structure ?? {};
+    const segments = Array.isArray(structureSection.segments) ? structureSection.segments : [];
+    if (segments.length > 0) {
+      const onSeek = primaryAudio
+        ? (t) => {
+            primaryAudio.currentTime = t;
+            void primaryAudio.play();
+          }
+        : () => {};
+      const tl = renderTimeline(segments, { onSeek });
+      tlMount.replaceWith(tl);
+
+      if (primaryAudio) {
+        primaryAudio.addEventListener('timeupdate', () => {
+          markActive(tl, primaryAudio.currentTime);
+        });
+      }
+    }
+  }
+
+  // --- Cablear retry por sección ---
+  body.querySelectorAll('.studio-section-card__retry').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const section = btn.dataset.section;
+      btn.disabled = true;
+      const originalText = btn.textContent;
+      btn.textContent = 'Reintentando…';
+      try {
+        const s = getSession();
+        const headers = s ? { Authorization: `Bearer ${s.access_token}` } : {};
+        const res = await fetch(`/api/stems/jobs/${job.id}/retry?section=${encodeURIComponent(section)}`, {
+          method: 'POST',
+          headers,
+        });
+        if (!res.ok) {
+          const body2 = await res.json().catch(() => ({}));
+          throw new Error(body2.error ?? `Error ${res.status}`);
+        }
+        // Re-arranca seguimiento
+        watchJob(body, job.id, quota, job.input_meta?.filename);
+      } catch (e) {
+        btn.textContent = originalText;
+        btn.disabled = false;
+        // Mostrar error cerca del botón
+        let errEl = btn.parentElement.querySelector('.studio__error');
+        if (!errEl) {
+          errEl = document.createElement('p');
+          errEl.className = 'studio__error';
+          btn.parentElement.appendChild(errEl);
+        }
+        errEl.textContent = e.message || 'No se pudo reintentar.';
+      }
+    });
+  });
+}
+
+/**
+ * Renderiza las 4 tarjetas de sección con su estado actual.
+ * Sirve tanto para 'processing' (estados parciales) como para 'done' (unificado con renderJob).
+ */
+function renderProcessing(body, job, filename, quota) {
+  const sections = job.sections ?? {};
+  const stems = job.stems ?? {};
+  const voices = job.voices ?? {};
+
+  const frag = document.createDocumentFragment();
+
+  if (filename) {
+    const filenameEl = document.createElement('p');
+    filenameEl.className = 'studio__filename';
+    filenameEl.title = filename;
+    filenameEl.innerHTML = `${icon('audio-lines', { size: 16 })} `;
+    const span = document.createElement('span');
+    span.textContent = filename;
+    filenameEl.appendChild(span);
+    frag.appendChild(filenameEl);
+  }
+
+  const cardsEl = document.createElement('div');
+  cardsEl.className = 'studio-sections';
+  cardsEl.setAttribute('aria-label', 'Estado del procesamiento');
+
+  for (const key of SECTION_KEYS) {
+    const section = sections[key] ?? { status: 'pending' };
+    const card = renderSectionCard({ key, section, stems, voices });
+    cardsEl.appendChild(card);
+  }
+  frag.appendChild(cardsEl);
+
+  const hint = document.createElement('p');
+  hint.className = 'empty-state__text';
+  hint.textContent = 'Puedes salir de esta página; el proceso sigue solo.';
+  frag.appendChild(hint);
+
+  body.innerHTML = '';
+  body.appendChild(frag);
+
+  // Revelado progresivo: monta players/timeline/retry de las secciones ya terminadas o fallidas.
+  mountSectionUI(body, job, quota);
 }
 
 function renderJob(body, job, quota) {
@@ -304,182 +384,73 @@ function renderJob(body, job, quota) {
 
   const stems = job.stems ?? {};
   const voices = job.voices ?? {};
-  const playerRow = (label, url) =>
-    `<div class="studio-player-mount" data-label="${escHtml(label)}" data-url="${escHtml(url)}"></div>`;
+  const sections = job.sections ?? {};
 
-  const segments = Array.isArray(voices.segments) ? voices.segments : [];
-  body.innerHTML = `
-    <p class="empty-state__text studio__expiry">Disponible por <strong>${hoursLeft(job.expires_at)} h</strong> más.</p>
-    ${job.input_meta?.filename ? `<p class="studio__filename" title="${escHtml(job.input_meta.filename)}">${icon('audio-lines', { size: 16 })} <span>${escHtml(job.input_meta.filename)}</span></p>` : ''}
-    <div class="studio-actions">
-      <button class="btn btn--primary studio-actions__zip" id="studio-zip">
-        ${icon('download', { size: 16 })} Descargar todo (ZIP)
-      </button>
-      <button class="btn studio-actions__drive" id="studio-drive">
-        ${icon('upload', { size: 16 })} Guardar en Drive
-      </button>
-    </div>
-    <h2 class="studio__section-title">Pistas</h2>
-    ${Object.entries(STEM_LABELS)
-      .filter(([k]) => stems[k])
-      .map(([k, label]) => playerRow(label, stems[k]))
-      .join('')}
-    ${
-      voices.lead || voices.backing || segments.length > 0
-        ? `<h2 class="studio__section-title">Voces</h2>`
-        : ''
-    }
-    ${voices.lead || voices.backing ? `<p class="empty-state__text">${voicesCopy(voices)}</p>` : ''}
-    ${voices.lead ? playerRow('Voz líder', voices.lead) : ''}
-    ${voices.backing ? playerRow('Coros', voices.backing) : ''}
-    ${
-      segments.length > 0
-        ? (() => {
-            const merged = mergeSegments(segments);
-            const order = [...new Set(merged.map((s) => s.voice))];
-            const fallbackDur = merged.reduce((m, s) => Math.max(m, s.end), 0);
-            const blocks = merged
-              .map((s) => {
-                const { left, width } = segmentToPct(s, fallbackDur);
-                const color = voiceColorVar(s.voice, order);
-                return `<button class="studio-tl__block" data-start="${s.start}"
-                          style="left:${left}%;width:${width}%;background:${color}"
-                          aria-label="${s.voice}, ${fmtTime(s.start)} a ${fmtTime(s.end)}"></button>`;
-              })
-              .join('');
-            const legend = order
-              .map(
-                (v) =>
-                  `<span class="studio-tl__legend-item"><span class="studio-tl__swatch" style="background:${voiceColorVar(v, order)}"></span>${v}</span>`,
-              )
-              .join('');
-            return `
-              <h3 class="studio__section-title studio__section-title--sm">Segmentos por cantante</h3>
-              <audio id="studio-vocal-seg" preload="metadata" src="${stems.vocals ?? voices.lead}"></audio>
-              <div class="studio-tl__legend">${legend}</div>
-              <div class="studio-tl" id="studio-tl" data-dur="${fallbackDur}">
-                <div class="studio-tl__track" id="studio-tl-track">
-                  ${blocks}
-                  <div class="studio-tl__playhead" id="studio-tl-playhead" style="left:0%"></div>
-                  <div class="studio-tl__mag" id="studio-tl-mag" hidden aria-hidden="true">
-                    <span class="studio-tl__mag-needle"></span>
-                    <span class="studio-tl__mag-time">0:00.00</span>
-                  </div>
-                </div>
-              </div>
-              <div class="studio-transport">
-                <button class="btn studio-transport__btn" id="studio-tl-play" aria-label="Reproducir">${icon('play', { size: 18 })}</button>
-                <button class="btn studio-transport__btn" id="studio-tl-restart" aria-label="Reiniciar">${icon('rotate-ccw', { size: 18 })}</button>
-                <span class="studio-transport__time"><span id="studio-tl-cur">0:00</span> / <span id="studio-tl-dur">${fmtTime(fallbackDur)}</span></span>
-              </div>`;
-          })()
-        : ''
-    }
-    <button class="btn btn--primary studio__new-btn" id="studio-new">Procesar otra canción</button>
-  `;
+  const frag = document.createDocumentFragment();
 
-  // Player de timeline: play/pausa, seek por click en pista o en bloque, playhead
-  const segAudio = body.querySelector('#studio-vocal-seg');
-  if (segAudio) {
-    const playBtn = body.querySelector('#studio-tl-play');
-    const restartBtn = body.querySelector('#studio-tl-restart');
-    const playhead = body.querySelector('#studio-tl-playhead');
-    const track = body.querySelector('#studio-tl-track');
-    const curEl = body.querySelector('#studio-tl-cur');
-    const durEl = body.querySelector('#studio-tl-dur');
-    const tl = body.querySelector('#studio-tl');
+  // Expiración
+  const expiry = document.createElement('p');
+  expiry.className = 'empty-state__text studio__expiry';
+  expiry.innerHTML = `Disponible por <strong>${hoursLeft(job.expires_at)} h</strong> más.`;
+  frag.appendChild(expiry);
 
-    const dur = () =>
-      Number.isFinite(segAudio.duration) ? segAudio.duration : Number(tl.dataset.dur) || 0;
-
-    segAudio.addEventListener('loadedmetadata', () => {
-      if (Number.isFinite(segAudio.duration)) durEl.textContent = fmtTime(segAudio.duration);
-    });
-    segAudio.addEventListener('timeupdate', () => {
-      const d = dur();
-      if (d > 0) playhead.style.left = `${Math.min(100, (segAudio.currentTime / d) * 100)}%`;
-      curEl.textContent = fmtTime(segAudio.currentTime);
-    });
-    const setPlayIcon = () => {
-      playBtn.innerHTML = icon(segAudio.paused ? 'play' : 'pause', { size: 18 });
-      playBtn.setAttribute('aria-label', segAudio.paused ? 'Reproducir' : 'Pausar');
-    };
-    segAudio.addEventListener('play', setPlayIcon);
-    segAudio.addEventListener('pause', setPlayIcon);
-
-    playBtn.addEventListener('click', () => {
-      if (segAudio.paused) void segAudio.play();
-      else segAudio.pause();
-    });
-    restartBtn.addEventListener('click', () => {
-      segAudio.currentTime = 0;
-    });
-    let tlJustMagnified = false;
-    track.addEventListener('click', (e) => {
-      if (e.target.classList.contains('studio-tl__block')) return;
-      if (tlJustMagnified) {
-        // Tras usar la lupa, el navegador emite un click sintético: no lo
-        // dejamos pisar la posición precisa que el usuario acaba de elegir.
-        tlJustMagnified = false;
-        return;
-      }
-      const rect = track.getBoundingClientRect();
-      const d = dur();
-      if (d > 0) segAudio.currentTime = ((e.clientX - rect.left) / rect.width) * d;
-    });
-    const tlMag = body.querySelector('#studio-tl-mag');
-    const tlNeedle = tlMag?.querySelector('.studio-tl__mag-needle');
-    const tlMagTime = tlMag?.querySelector('.studio-tl__mag-time');
-    let tlPress = null;
-    let tlMagOpen = false;
-    let tlRange = null;
-    const tlRatio = (clientX) => {
-      const rect = track.getBoundingClientRect();
-      return rect.width > 0 ? clamp((clientX - rect.left) / rect.width, 0, 1) : 0;
-    };
-    track.addEventListener('pointerdown', (e) => {
-      if (e.target.classList.contains('studio-tl__block')) return;
-      try {
-        track.setPointerCapture(e.pointerId);
-      } catch {
-        /* no soportado */
-      }
-      tlPress = setTimeout(() => {
-        tlRange = magnifyRange(segAudio.currentTime, dur());
-        tlMagOpen = true;
-        if (tlMag) tlMag.hidden = false;
-      }, 400);
-    });
-    track.addEventListener('pointermove', (e) => {
-      if (tlMagOpen && tlRange) {
-        const r = tlRatio(e.clientX);
-        const t = magnifyPosToTime(r, tlRange);
-        segAudio.currentTime = t;
-        if (tlNeedle) tlNeedle.style.left = `${r * 100}%`;
-        if (tlMagTime) tlMagTime.textContent = fmtTimeCs(t);
-      }
-    });
-    const tlEnd = () => {
-      if (tlPress) {
-        clearTimeout(tlPress);
-        tlPress = null;
-      }
-      if (tlMagOpen) {
-        tlMagOpen = false;
-        tlRange = null;
-        tlJustMagnified = true;
-        if (tlMag) tlMag.hidden = true;
-      }
-    };
-    track.addEventListener('pointerup', tlEnd);
-    track.addEventListener('pointercancel', tlEnd);
-    body.querySelectorAll('.studio-tl__block').forEach((b) => {
-      b.addEventListener('click', () => {
-        segAudio.currentTime = Number(b.dataset.start);
-        void segAudio.play();
-      });
-    });
+  // Nombre del archivo
+  if (job.input_meta?.filename) {
+    const filenameEl = document.createElement('p');
+    filenameEl.className = 'studio__filename';
+    filenameEl.title = job.input_meta.filename;
+    filenameEl.innerHTML = `${icon('audio-lines', { size: 16 })} `;
+    const span = document.createElement('span');
+    span.textContent = job.input_meta.filename;
+    filenameEl.appendChild(span);
+    frag.appendChild(filenameEl);
   }
+
+  // Acciones ZIP + Drive
+  const actions = document.createElement('div');
+  actions.className = 'studio-actions';
+  actions.innerHTML = `
+    <button class="btn btn--primary studio-actions__zip" id="studio-zip">
+      ${icon('download', { size: 16 })} Descargar todo (ZIP)
+    </button>
+    <button class="btn studio-actions__drive" id="studio-drive">
+      ${icon('upload', { size: 16 })} Guardar en Drive
+    </button>
+  `;
+  frag.appendChild(actions);
+
+  // 4 tarjetas de sección
+  const cardsEl = document.createElement('div');
+  cardsEl.className = 'studio-sections';
+
+  for (const key of SECTION_KEYS) {
+    const section = sections[key] ?? { status: 'done' };
+    const card = renderSectionCard({ key, section, stems, voices });
+    cardsEl.appendChild(card);
+  }
+  frag.appendChild(cardsEl);
+
+  // Atribución al pie
+  const attribution = document.createElement('p');
+  attribution.className = 'studio__attribution';
+  attribution.textContent = 'Secciones detectadas con SongFormer (CC-BY-4.0).';
+  frag.appendChild(attribution);
+
+  // Botón nueva canción
+  const newBtn = document.createElement('button');
+  newBtn.type = 'button';
+  newBtn.className = 'btn btn--primary studio__new-btn';
+  newBtn.id = 'studio-new';
+  newBtn.textContent = 'Procesar otra canción';
+  frag.appendChild(newBtn);
+
+  body.innerHTML = '';
+  body.appendChild(frag);
+
+  // Players + timeline de structure + retry por sección (compartido con renderProcessing).
+  mountSectionUI(body, job, quota);
+
+  // --- ZIP ---
   const zipBtn = body.querySelector('#studio-zip');
   if (zipBtn) {
     zipBtn.addEventListener('click', async () => {
@@ -491,26 +462,28 @@ function renderJob(body, job, quota) {
         zipBtn.innerHTML = original;
       } catch (e) {
         zipBtn.innerHTML = original;
-        const actions = zipBtn.closest('.studio-actions');
-        if (actions.nextElementSibling?.classList.contains('studio__error')) {
-          actions.nextElementSibling.remove();
+        const actionsEl = zipBtn.closest('.studio-actions');
+        if (actionsEl.nextElementSibling?.classList.contains('studio__error')) {
+          actionsEl.nextElementSibling.remove();
         }
         const err = document.createElement('p');
         err.className = 'studio__error';
         err.textContent = e.message || 'No pudimos generar el ZIP.';
-        actions.insertAdjacentElement('afterend', err);
+        actionsEl.insertAdjacentElement('afterend', err);
       } finally {
         zipBtn.disabled = false;
       }
     });
   }
+
+  // --- Drive ---
   const driveBtn = body.querySelector('#studio-drive');
   if (driveBtn) {
     driveBtn.addEventListener('click', async () => {
       const original = driveBtn.innerHTML;
-      const actions = driveBtn.closest('.studio-actions');
+      const actionsEl = driveBtn.closest('.studio-actions');
       const clearMsgs = () => {
-        actions.parentElement
+        actionsEl.parentElement
           .querySelectorAll('.studio__error, .studio__drive-link')
           .forEach((n) => n.remove());
       };
@@ -537,21 +510,18 @@ function renderJob(body, job, quota) {
         const link = document.createElement('p');
         link.className = 'studio__drive-link';
         link.innerHTML = `Guardado en Drive · <a href="${escHtml(result.folderUrl)}" target="_blank" rel="noopener">abrir carpeta</a>`;
-        actions.insertAdjacentElement('afterend', link);
+        actionsEl.insertAdjacentElement('afterend', link);
       } catch (e) {
         driveBtn.innerHTML = original;
         const err = document.createElement('p');
         err.className = 'studio__error';
         err.textContent = e.message || 'No pudimos guardar en Drive.';
-        actions.insertAdjacentElement('afterend', err);
+        actionsEl.insertAdjacentElement('afterend', err);
       } finally {
         driveBtn.disabled = false;
       }
     });
   }
-  body.querySelectorAll('.studio-player-mount').forEach((mount) => {
-    const { el } = createStudioPlayer({ label: mount.dataset.label, url: mount.dataset.url });
-    mount.replaceWith(el);
-  });
+
   body.querySelector('#studio-new').addEventListener('click', () => renderIdle(body, quota));
 }

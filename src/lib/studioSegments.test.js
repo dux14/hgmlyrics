@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeSegments, segmentToPct, voiceColorVar } from './studioSegments.js';
+import { mergeSegments, segmentToPct, voiceColorVar, labelColor } from './studioSegments.js';
 
 describe('mergeSegments', () => {
   it('fusiona tramos contiguos del mismo cantante bajo el umbral de hueco', () => {
@@ -72,5 +72,37 @@ describe('voiceColorVar', () => {
   });
   it('voz desconocida -> primer color', () => {
     expect(voiceColorVar('X', ['A', 'B'])).toBe('var(--color-voice-soprano)');
+  });
+});
+
+describe('labelColor', () => {
+  it('verso → --color-primary', () => {
+    expect(labelColor('verso')).toBe('var(--color-primary)');
+  });
+  it('coro → --color-accent', () => {
+    expect(labelColor('coro')).toBe('var(--color-accent)');
+  });
+  it('puente → --color-voice-contralto', () => {
+    expect(labelColor('puente')).toBe('var(--color-voice-contralto)');
+  });
+  it('intro → --color-text-secondary', () => {
+    expect(labelColor('intro')).toBe('var(--color-text-secondary)');
+  });
+  it('outro → --color-text-secondary', () => {
+    expect(labelColor('outro')).toBe('var(--color-text-secondary)');
+  });
+  it('silencio → --color-text-secondary', () => {
+    expect(labelColor('silencio')).toBe('var(--color-text-secondary)');
+  });
+  it('instrumental → --color-voice-bass', () => {
+    expect(labelColor('instrumental')).toBe('var(--color-voice-bass)');
+  });
+  it('pre-coro → --color-primary-light', () => {
+    expect(labelColor('pre-coro')).toBe('var(--color-primary-light)');
+  });
+  it('label desconocido → --color-text-secondary (fallback)', () => {
+    expect(labelColor('unknown')).toBe('var(--color-text-secondary)');
+    expect(labelColor('')).toBe('var(--color-text-secondary)');
+    expect(labelColor('CORO')).toBe('var(--color-text-secondary)'); // case-sensitive
   });
 });

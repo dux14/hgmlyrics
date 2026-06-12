@@ -46,6 +46,71 @@ def extract_storage_key(signed_put_url: str) -> str:
     return path[idx + len(marker):]
 
 
+def extract_vocals_stem(get_url: str) -> str:
+    """
+    Descarga el audio de `get_url` y corre BS-RoFormer ep_317 con
+    output_single_stem="Vocals" para obtener solo la pista vocal.
+
+    Devuelve la ruta local absoluta del archivo `vocals.mp3` producido.
+
+    Se importa httpx y audio_separator DENTRO de la función para no romper
+    `modal deploy` en el entorno local (donde esos paquetes no existen).
+
+    Uso típico: S3 y S4 llaman a este helper para re-extraer el vocal desde
+    el audio original en lugar de depender de la vocals_key de S1, porque
+    Modal no tiene la service-role key de Supabase para firmar un GET del
+    objeto ya subido.
+    """
+    import os
+    import tempfile
+
+    import httpx  # disponible en la imagen Modal (ver nota arriba)
+    from audio_separator.separator import Separator  # solo en el contenedor
+
+    # ── 1. Descargar audio original ──────────────────────────────────────────
+    fd, src_path = tempfile.mkstemp(suffix=".audio")
+    os.close(fd)
+    with httpx.stream("GET", get_url, timeout=120, follow_redirects=True) as r:
+        r.raise_for_status()
+        with open(src_path, "wb") as f:
+            for chunk in r.iter_bytes():
+                f.write(chunk)
+
+    # ── 2. BS-RoFormer ep_317 → solo stem Vocals ────────────────────────────
+    ep317_out = tempfile.mkdtemp()
+    sep = Separator(output_dir=ep317_out, output_format="mp3")
+    sep.load_model(model_filename="model_bs_roformer_ep_317_sdr_12.9755.ckpt")
+    # output_single_stem="Vocals" produce UN solo archivo con "(Vocals)" en el nombre.
+    out_files = sep.separate(src_path, output_single_stem="Vocals")
+
+    # Localizar el archivo producido (audio-separator puede devolver ruta
+    # absoluta o solo el nombre base según la versión).
+    vocals_path: str | None = None
+    for fname in out_files:
+        fpath = fname if os.path.isabs(fname) else os.path.join(ep317_out, fname)
+        if "(vocals)" in os.path.basename(fpath).lower():
+            vocals_path = fpath
+            break
+
+    if vocals_path is None:
+        # Fallback: tomar el primer archivo .mp3 que audio-separator produjo.
+        # SUPUESTO: audio-separator ≥ 0.27 siempre pone "(Vocals)" en el nombre
+        # cuando se usa output_single_stem="Vocals". Si la versión cambia el
+        # naming, este fallback garantiza que S3 no lanza con lista vacía.
+        mp3s = [
+            f for f in os.listdir(ep317_out)
+            if f.lower().endswith(".mp3")
+        ]
+        if not mp3s:
+            raise RuntimeError(
+                "extract_vocals_stem: BS-RoFormer ep_317 no produjo ningún .mp3 "
+                f"en {ep317_out}. Archivos presentes: {os.listdir(ep317_out)}"
+            )
+        vocals_path = os.path.join(ep317_out, mp3s[0])
+
+    return vocals_path
+
+
 def upload_put(put_url: str, file_path: str, content_type: str = "audio/mpeg") -> None:
     """HTTP PUT del archivo al signed URL. Lanza en non-2xx."""
     import httpx  # disponible en la imagen Modal (ver nota arriba)

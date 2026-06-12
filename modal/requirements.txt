@@ -11,3 +11,16 @@ soundfile==0.12.1
 librosa==0.10.2
 matplotlib==3.9.2
 fastapi[standard]==0.115.6
+# ── S3 MedleyVox (Cyru5/MedleyVox, Conv-TasNet STFT) ─────────────────────────
+# asteroid: framework de separación de fuentes; incluye TDConvNet, BaseEncoderMaskerDecoder.
+# SUPUESTO: asteroid ≥ 0.4 es compatible con la versión de torch 2.4.1 instalada.
+# Se instala desde git porque la versión PyPI puede no incluir asteroid_filterbanks.
+# El WebUI de SUC-DriverOld también usa "asteroid" sin fijar versión.
+git+https://github.com/asteroid-team/asteroid
+# asteroid_filterbanks: encoder/decoder STFT usado por Conv-TasNet STFT.
+# SUPUESTO: se instala como dependencia de asteroid; si no, añadir explícitamente.
+# asteroid-filterbanks
+# pyloudnorm: normalización LUFS en el preprocesado de audio de MedleyVox.
+# Se instala vía .run_commands en la imagen (ver stems_app.py) para que sea
+# visible en PYTHONPATH junto con el WebUI. Se lista aquí como referencia.
+# pyloudnorm

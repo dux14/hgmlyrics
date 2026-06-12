@@ -5,17 +5,24 @@ import { signStemsDownload } from '../../_lib/storage.js';
 
 const MODAL_TIMEOUT_MS = 10 * 60 * 1000;
 
-/** Convierte paths de storage a signed URLs de descarga para la respuesta. */
+/**
+ * Aplana las pistas reproducibles desde `sections[*].outputs` (storage keys crudas) a
+ * `stems`/`voices` con signed URLs de descarga. El DAG nunca puebla las columnas planas
+ * `stems`/`voices`; la fuente de verdad son los outputs por sección. Solo se incluyen las
+ * pistas ya producidas (valores no nulos), por lo que sirve igual para `done` y `partial`.
+ */
 async function withSignedUrls(job) {
   const sign = async (obj) => {
-    if (!obj) return obj;
     const out = {};
     for (const [k, v] of Object.entries(obj)) {
-      out[k] = typeof v === 'string' && v.includes('/') ? await signStemsDownload(v) : v;
+      if (typeof v === 'string' && v.includes('/')) out[k] = await signStemsDownload(v);
     }
     return out;
   };
-  return { ...job, stems: await sign(job.stems), voices: await sign(job.voices) };
+  const sections = job.sections ?? {};
+  const stems = sections.voiceInstrumental?.outputs ?? {};
+  const voices = sections.leadBacking?.outputs ?? {};
+  return { ...job, stems: await sign(stems), voices: await sign(voices) };
 }
 
 export default withErrors(async (req, res) => {
@@ -44,5 +51,7 @@ export default withErrors(async (req, res) => {
     }
   }
 
-  res.status(200).json({ job: job.status === 'done' ? await withSignedUrls(job) : job });
+  // `done` y `partial` exponen las pistas ya producidas (firmadas desde sections.outputs).
+  const ready = job.status === 'done' || job.status === 'partial';
+  res.status(200).json({ job: ready ? await withSignedUrls(job) : job });
 });

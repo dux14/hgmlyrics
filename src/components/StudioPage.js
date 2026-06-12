@@ -105,7 +105,7 @@ async function loadInitial(body) {
     // es una subida abandonada (el upload en memoria se perdió): no lo seguimos para no
     // dejar un spinner eterno; el backend lo reclama en la próxima subida.
     const active = jobs.find((j) => j.status === 'processing');
-    const recent = jobs.find((j) => ['done', 'failed'].includes(j.status));
+    const recent = jobs.find((j) => ['done', 'partial', 'failed'].includes(j.status));
     if (active) return watchJob(body, active.id, quota, active.input_meta?.filename);
     if (recent) return showJob(body, recent.id, quota);
     renderIdle(body, quota);
@@ -184,7 +184,9 @@ function watchJob(body, jobId, quota, filename) {
   startHashGuard();
 
   const finishIfDone = (job) => {
-    if (job.status === 'done' || job.status === 'failed') {
+    // `partial` (algunas secciones done, otras failed) también es terminal:
+    // renderJob muestra las pistas listas + el botón Reintentar por sección fallida.
+    if (job.status === 'done' || job.status === 'failed' || job.status === 'partial') {
       stopPolling();
       renderJob(body, job, quota);
       return true;

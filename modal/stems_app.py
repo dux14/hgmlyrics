@@ -60,7 +60,7 @@ _webhook_secrets = [
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# S1 — extracción de stems (GPU, htdemucs_6s)
+# S1 — extracción de stems (GPU, ep_317+htdemucs_6s)
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.function(image=image, secrets=_webhook_secrets, gpu="T4", timeout=900)

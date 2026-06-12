@@ -1,6 +1,6 @@
 # modal/requirements.txt
 demucs==4.0.1
-audio-separator[gpu]>=0.28
+audio-separator[gpu]==0.28.5
 pyannote.audio==3.3.2
 huggingface_hub==0.25.2
 torch==2.4.1

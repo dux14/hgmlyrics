@@ -31,11 +31,16 @@ S1_EXTRACTOR = "ep_317"
 # Modelo BS-RoFormer para separación vocal.
 _BS_ROFORMER_MODEL = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
 
+# Etiqueta de modelo que se reporta en los webhooks (éxito y fallo).
+_MODEL_LABEL = "bs_roformer_ep_317+htdemucs_6s"
+
 # Pistas de percusión/melodía que extraemos de demucs htdemucs_6s.
 # La pista `vocals` de demucs se descarta (usamos la de ep_317).
 _DEMUCS_INSTRUMENT_STEMS = ["drums", "bass", "guitar", "piano", "other"]
 
 # Pistas que reportamos al webhook / que el front espera para voiceInstrumental.
+# Documenta el contrato de 7 keys; no se itera directamente (los loops usan
+# ep317_stems + _DEMUCS_INSTRUMENT_STEMS por separado). No es código muerto.
 _OUTPUT_STEMS = ["vocals", "instrumental"] + _DEMUCS_INSTRUMENT_STEMS
 
 
@@ -73,7 +78,11 @@ def run_extract(payload: dict) -> None:
     from sections._common import extract_storage_key, upload_put, post_webhook
     from audio_separator.separator import Separator  # noqa: E402 — solo en el contenedor
 
-    _MODEL_LABEL = "bs_roformer_ep_317+htdemucs_6s"
+    if S1_EXTRACTOR != "ep_317":
+        raise NotImplementedError(
+            f"S1_EXTRACTOR={S1_EXTRACTOR!r} no soportado; "
+            "solo 'ep_317' (rama 'ensemble' = TODO de upgrade)"
+        )
 
     job_id: str = payload["jobId"]
     get_url: str = payload["input"]["getUrl"]
@@ -182,7 +191,7 @@ def run_extract(payload: dict) -> None:
                 section="voiceInstrumental",
                 result={
                     "status": "failed",
-                    "model": "bs_roformer_ep_317+htdemucs_6s",
+                    "model": _MODEL_LABEL,
                     "outputs": {},
                 },
                 error=str(exc)[:400],

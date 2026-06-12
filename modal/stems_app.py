@@ -7,7 +7,7 @@ DAG:
   S2 (structure SongFormer)  ├─ paralelo al inicio
                               │
   S3 (leadBacking MedleyVox) ┤ arranca cuando S1 termina (necesita vocals key)
-  S4 (gender stub)      ──────┘ arranca cuando S1 termina (idem)
+  S4 (gender chorus_bs_roformer) ┘ arranca cuando S1 termina (idem, flag OFF)
 
 Cada nodo postea su propio webhook al terminar (éxito o fallo).
 La Vercel API acumula los resultados en la columna `sections` del job.
@@ -32,6 +32,7 @@ import modal
 # so `sections` is a top-level package relative to that working directory.
 from sections._common import extract_storage_key, post_webhook
 from sections.extract import run_extract as _run_extract_impl
+from sections.gender import run_gender as _run_gender_impl
 from sections.medley_vox import run_medley_vox as _run_medley_vox_impl
 from sections.songformer import run_songformer as _run_songformer_impl
 
@@ -141,56 +142,28 @@ def s3_lead_backing(payload: dict, vocals_key: str | None) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# S4 — clasificación de género vocal (stub, CPU)
+# S4 — separación de voces por género (chorus_bs_roformer, GPU)
 # ──────────────────────────────────────────────────────────────────────────────
 
-@app.function(image=image, secrets=_webhook_secrets, timeout=60)
-def s4_gender_stub(payload: dict, vocals_key: str | None) -> None:
+@app.function(image=image, secrets=_webhook_secrets, gpu="T4", timeout=1200)
+def s4_gender(payload: dict, vocals_key: str | None) -> None:
     """
-    Stub de S4: postea un resultado mínimo válido de clasificación de género.
-    Phase 2 reemplaza esto con el clasificador real (ver feat/estudio-f1-gender-poc).
+    S4: separa la voz en male.mp3 / female.mp3 con chorus_bs_roformer (ep_267,
+    SDR 24.13) y overlap=16.
 
-    Sólo se llama si "gender" está en enabledSections.
+    Re-extrae el stem vocal desde payload["input"]["getUrl"] usando
+    extract_vocals_stem() de _common.py (BS-RoFormer ep_317). vocals_key se
+    recibe por compatibilidad con el spawn del orquestador pero NO se usa para
+    descargar audio (Modal no tiene la service-role key de Supabase).
+
+    Timeout: 1200 s — overlap=16 ~duplica el tiempo del paso de género vs el
+    default (overlap=8); igual que separate_by_gender_v2 en poc_gender.py.
+
+    Solo se activa si "gender" está en enabledSections. El flag STUDIO_GENDER_FLAG
+    controla si "gender" aparece en enabled (ver api/stems/jobs/[id]/start.js).
+    HOY el flag está OFF; este nodo no corre en producción.
     """
-    job_id: str = payload["jobId"]
-    webhook: dict = payload["webhook"]
-    uploads_g = payload.get("uploads", {}).get("gender", {})
-
-    def _key_for(track: str) -> str:
-        url = uploads_g.get(track)
-        if url:
-            try:
-                return extract_storage_key(url)
-            except ValueError:
-                pass
-        return vocals_key or ""
-
-    try:
-        post_webhook(
-            webhook,
-            job_id,
-            section="gender",
-            result={
-                "status": "done",
-                "model": "stub",
-                "outputs": {
-                    "male": _key_for("male"),
-                    "female": _key_for("female"),
-                },
-            },
-        )
-    except Exception as exc:
-        try:
-            post_webhook(
-                webhook,
-                job_id,
-                section="gender",
-                result={"status": "failed", "model": "stub", "outputs": {}},
-                error=str(exc)[:400],
-            )
-        except Exception:
-            pass
-        raise
+    _run_gender_impl(payload)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -242,7 +215,7 @@ def run_pipeline(payload: dict) -> None:
         else None
     )
     s4_call = (
-        s4_gender_stub.spawn(payload, vocals_key)
+        s4_gender.spawn(payload, vocals_key)
         if "gender" in enabled
         else None
     )

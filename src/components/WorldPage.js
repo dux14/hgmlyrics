@@ -15,7 +15,14 @@ import { ZoneChat } from './ZoneChat.js';
 import { AvatarCreator } from './AvatarCreator.js';
 import { WorldCredits } from './WorldCredits.js';
 import { Joystick } from './Joystick.js';
+import { VoiceControls } from './VoiceControls.js';
 import { joinZone } from '../lib/zoneChannel.js';
+import { joinSignaling } from '../lib/voiceSignaling.js';
+import { joinWorldAdmin } from '../lib/worldAdminChannel.js';
+import { createVoiceMesh } from '../world/voiceMesh.js';
+import { getIceServers } from '../world/iceConfig.js';
+import { capPublishers } from '../world/voicePolicy.js';
+import { loadActiveMap } from '../world/worldMapStore.js';
 
 // ---------------------------------------------------------------------------
 // Lógica pura — testeable con Vitest/jsdom sin Phaser
@@ -44,9 +51,21 @@ let _avatarCreator = null;
 let _worldCredits = null;
 let _overlayBtnsEl = null;
 let _zoneChannel = null;
+/** @type {{ broadcastMapUpdated: Function, onMapUpdated: Function, leave: Function }|null} */
+let _adminChannel = null;
 let _wrapperEl = null;
 let _joystick = null;
 let _reconnectEl = null;
+/** @type {{ el: HTMLElement, addRemotePeer: Function, removeRemotePeer: Function, clearRemotePeers: Function, destroy: Function }|null} */
+let _voiceControls = null;
+/** @type {{ setPeers: Function, onRemoteStream: Function, onPeerSpeaking: Function, closeAllPeers: Function, closeAll: Function }|null} */
+let _voiceMesh = null;
+/** @type {{ sendSignal: Function, onSignal: Function, leave: Function }|null} */
+let _voiceSignaling = null;
+/** @type {MediaStream|null} stream local de audio (usado para proveer al mesh) */
+let _localStream = null;
+/** @type {{ channelId: string, name: string }|null} zona activa al momento de la desconexion */
+let _currentZone = null;
 
 function teardown() {
   if (_game) {
@@ -57,6 +76,24 @@ function teardown() {
     _zoneChannel.leave();
     _zoneChannel = null;
   }
+  if (_adminChannel) {
+    _adminChannel.leave();
+    _adminChannel = null;
+  }
+  if (_voiceMesh) {
+    _voiceMesh.closeAll();
+    _voiceMesh = null;
+  }
+  if (_voiceSignaling) {
+    _voiceSignaling.leave();
+    _voiceSignaling = null;
+  }
+  if (_voiceControls) {
+    _voiceControls.destroy();
+    _voiceControls = null;
+  }
+  _localStream = null;
+  _currentZone = null;
   if (_avatarCreator) {
     _avatarCreator.destroy();
     _avatarCreator = null;
@@ -117,6 +154,13 @@ function startHashGuard() {
  * @param {HTMLElement} container
  */
 export async function renderWorldPage(container) {
+  // Guardia de re-entrada: si ya hay una instancia activa (SPA navegar fuera
+  // y volver), limpiar la anterior antes de montar la nueva para evitar
+  // canales Supabase huerfanos y closures obsoletos.
+  if (_game) {
+    teardown();
+  }
+
   container.innerHTML = '';
 
   const user = getSession()?.user ?? null;
@@ -244,11 +288,54 @@ export async function renderWorldPage(container) {
   _reconnectEl = reconnectEl;
   wrapper.appendChild(reconnectEl);
 
-  // Estado de conexión: muestra el overlay al caer, lo oculta al reconectar.
+  // Estado de conexión: muestra el overlay al caer; al reconectar, re-suscribe
+  // la señalizacion de voz y reconcilia el mesh con la presencia actual.
+  let _wasDisconnected = false;
   const onStatus = (state) => {
     if (!_reconnectEl) return;
     // Visible mientras NO esté conectado (disconnected o connecting).
     _reconnectEl.hidden = state === 'connected';
+
+    if (state === 'connected' && _wasDisconnected) {
+      // Re-suscribir señalizacion y reconciliar el mesh si habia zona y microfono.
+      // El canal de señalizacion Supabase se cierra al caer la conexion; hay que
+      // recrearlo. El mesh tambien se recrea para que su handler onSignal apunte
+      // al nuevo canal; diffPeers se encarga de solo abrir las conexiones nuevas.
+      if (_currentZone && _localStream) {
+        // Limpiar peers remotos anteriores para que el roster se reconstruya limpio.
+        _voiceControls?.clearRemotePeers();
+
+        // Solo cerrar las conexiones de peers (no detener el microfono local).
+        if (_voiceMesh) {
+          _voiceMesh.closeAllPeers();
+        }
+        if (_voiceSignaling) {
+          _voiceSignaling.leave();
+        }
+
+        _voiceSignaling = joinSignaling({
+          supabase,
+          channelId: _currentZone.channelId,
+          user: { id: me.id },
+        });
+
+        _voiceMesh = createVoiceMesh({
+          signaling: _voiceSignaling,
+          getLocalStream: () => _localStream,
+          iceServers: getIceServers(import.meta.env),
+          selfId: me.id,
+        });
+
+        _voiceMesh.onRemoteStream((peerId, stream) => {
+          _voiceControls?.addRemotePeer(peerId, stream);
+        });
+
+        // Reconciliar el mesh con el roster actual post-reconexion.
+        _voiceMesh.setPeers(capPublishers(_zonePeerIds));
+      }
+    }
+
+    _wasDisconnected = state === 'disconnected';
   };
 
   // ---- Joystick táctil (M5.1/5.2) — solo en dispositivos de puntero grueso ----
@@ -271,6 +358,51 @@ export async function renderWorldPage(container) {
     name: getProfile()?.username || 'Invitado',
   };
 
+  // ---- Panel de controles de voz (esquina inferior derecha) ----
+  // Nota de diseño: el peer set del mesh viene de WorldScene.peers (presencia
+  // global). El canal de señalizacion es por zona (signal:{channelId}); solo
+  // los peers que estén en la misma zona joinean ese canal, por lo que el
+  // filtrado real ocurre en la capa de señalizacion. No se duplica la logica
+  // de membresía por zona aquí (ver spec §Design note).
+  const voiceControls = VoiceControls({
+    selfId: me.id,
+    selfLabel: me.name,
+    onActivate(stream) {
+      _localStream = stream;
+      // Si ya habia un mesh activo (zona con voz), re-alimentar el stream.
+      // El mesh original fue creado con getLocalStream() === null; al tener
+      // el stream ahora, re-establecemos las conexiones para la zona actual
+      // llamando a setPeers con la lista ya registrada (si la hay).
+      // La renegociacion completa queda para A3; aqui nos limitamos a dar el
+      // stream al contexto del mesh.
+    },
+    onDeactivate() {
+      _localStream = null;
+      if (_voiceMesh) {
+        _voiceMesh.closeAll();
+        _voiceMesh = null;
+      }
+      if (_voiceSignaling) {
+        _voiceSignaling.leave();
+        _voiceSignaling = null;
+      }
+    },
+  });
+  _voiceControls = voiceControls;
+
+  voiceControls.el.style.cssText = [
+    'position:absolute',
+    'bottom:12px',
+    'right:12px',
+    'z-index:22',
+    'pointer-events:auto',
+    'background:rgba(0,0,0,0.55)',
+    'border:1px solid rgba(255,255,255,0.15)',
+    'border-radius:6px',
+    'padding:8px 10px',
+  ].join(';');
+  wrapper.appendChild(voiceControls.el);
+
   // Envío local: publica al canal de la zona y hace eco en la propia lista
   // (el canal usa broadcast { self:false }, así que no hay eco del servidor).
   chat.onSend((text) => {
@@ -279,8 +411,16 @@ export async function renderWorldPage(container) {
     chat.addMessage({ uid: me.id, name: me.name, text, ts: Date.now(), self: true });
   });
 
+  /**
+   * Peers de voz actuales (uid[] excluye self). Se actualizan en cada zonechange.
+   * @type {string[]}
+   */
+  let _zonePeerIds = [];
+
   // Transición de zona: salir del canal anterior, entrar al nuevo (o ninguno).
   const onZoneChange = (zone) => {
+    // Registrar la zona activa para poder re-suscribir la señalizacion en reconexion.
+    _currentZone = zone ?? null;
     if (_zoneChannel) {
       _zoneChannel.leave();
       _zoneChannel = null;
@@ -294,18 +434,110 @@ export async function renderWorldPage(container) {
       });
       _zoneChannel.onMessage((msg) => chat.addMessage(msg));
     }
+
+    // ---- Voz: cambiar de zona ----
+    // Limpiar peers remotos de la zona anterior antes de cerrar mesh/señalizacion.
+    _voiceControls?.clearRemotePeers();
+
+    // Solo cerrar las conexiones de peers: el microfono sigue activo entre zonas.
+    if (_voiceMesh) {
+      _voiceMesh.closeAllPeers();
+      _voiceMesh = null;
+    }
+    if (_voiceSignaling) {
+      _voiceSignaling.leave();
+      _voiceSignaling = null;
+    }
+
+    if (!zone || !_localStream) {
+      // Sin zona o sin microfono: no hay nada que conectar.
+      _zonePeerIds = [];
+      return;
+    }
+
+    // Crear nueva señalizacion para esta zona y un nuevo mesh.
+    // Peer set inicial: vacío — se actualiza al recibir onPeerJoin/onPeerLeave
+    // (ver _pushVoicePeers abajo).
+    _voiceSignaling = joinSignaling({
+      supabase,
+      channelId: zone.channelId,
+      user: { id: me.id },
+    });
+
+    _voiceMesh = createVoiceMesh({
+      signaling: _voiceSignaling,
+      getLocalStream: () => _localStream,
+      iceServers: getIceServers(import.meta.env),
+      selfId: me.id,
+    });
+
+    _voiceMesh.onRemoteStream((peerId, stream) => {
+      _voiceControls?.addRemotePeer(peerId, stream);
+    });
+
+    // Alimentar el mesh con los peers de zona actuales (respetando el cap).
+    _voiceMesh.setPeers(capPublishers(_zonePeerIds));
   };
 
+  /**
+   * Actualiza la lista de peers de voz para la zona actual.
+   * Aplica el cap de publicadores (max 8) antes de alimentar el mesh.
+   * La seleccion es determinista (orden lex), por lo que todos los clientes
+   * de la zona eligen el mismo subconjunto sin coordinacion central.
+   *
+   * @param {string[]} peerIds — uid[] de todos los peers en presencia (excluye self)
+   */
+  function _pushVoicePeers(peerIds) {
+    _zonePeerIds = peerIds;
+    if (_voiceMesh) {
+      _voiceMesh.setPeers(capPublishers(peerIds));
+    }
+  }
+
   try {
+    // Cargar el mapa activo ANTES de crear el juego Phaser para poder pasarle
+    // el descriptor ya resuelto. Si la DB no tiene mapa activo o falla, el
+    // descriptor de dev se usa transparentemente (sin cambio visual).
+    const mapDescriptor = await loadActiveMap({ supabase });
+
     const { createGame } = await import('../world/createGame.js');
     _game = createGame('world-canvas', {
       supabase,
       me,
-      onRoster: roster.setRoster,
+      mapDescriptor,
+      onRoster(entries) {
+        roster.setRoster(entries);
+        // Derivar lista de peers para el mesh (excluir self).
+        const peerIds = entries.filter((e) => e.uid !== me.id).map((e) => e.uid);
+        _pushVoicePeers(peerIds);
+      },
       onZoneChange,
       input: inputRef,
       onStatus,
     });
+
+    // Suscribir al canal de administración para recarga en caliente del mapa (E4.2).
+    // Cuando el admin activa un mapa nuevo, se recibe map-updated → cargar el nuevo
+    // descriptor y reiniciar la escena WorldScene sin perder la sesión de auth/presencia.
+    _adminChannel = joinWorldAdmin({ supabase });
+    _adminChannel.onMapUpdated(async () => {
+      try {
+        const newDescriptor = await loadActiveMap({ supabase });
+        // Actualizar el descriptor en el registry del juego para que la escena lo
+        // lea en preload() al reiniciarse.
+        _game?.registry.set('worldMapDescriptor', newDescriptor);
+        // Reiniciar la escena WorldScene: shutdown + create (preload re-corre).
+        // La conexión de presencia/realtime vive en el Game (no en la escena), así
+        // que sobrevive al restart. La sesión de auth del usuario no se toca.
+        const scene = _game?.scene.getScene('WorldScene');
+        if (scene) {
+          scene.scene.restart();
+        }
+      } catch (err) {
+        console.warn('[mundo] No se pudo recargar el mapa en caliente:', err);
+      }
+    });
+
     startHashGuard();
   } catch (err) {
     console.error('[mundo] no se pudo iniciar la escena Phaser', err);

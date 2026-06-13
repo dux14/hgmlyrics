@@ -1,7 +1,8 @@
 import { navigate } from '../router.js';
 import { getState } from '../lib/store.js';
 import { icon } from '../lib/icons.js';
-import { getSession } from '../lib/authStore.js';
+import { getSession, isAdmin } from '../lib/authStore.js';
+import { mountAdminWorldPanel } from './AdminWorldPanel.js';
 
 export function renderAdminDashboard(container) {
   container.innerHTML = `
@@ -21,6 +22,8 @@ export function renderAdminDashboard(container) {
         <h2 class="ff-section__title">${icon('flag', { size: 18 })} Feature Flags</h2>
         <div id="ff-list" class="ff-list"></div>
       </section>
+
+      <div id="wm-panel-mount"></div>
     </div>
   `;
 
@@ -34,6 +37,13 @@ export function renderAdminDashboard(container) {
 
   wireFeatureFlags(container);
   loadFlags(container);
+
+  // Panel de mundos: solo visible para admins (doble chequeo UX; el server
+  // también aplica requireAdmin en todos los endpoints de world-map).
+  if (isAdmin()) {
+    const wmMount = container.querySelector('#wm-panel-mount');
+    if (wmMount) mountAdminWorldPanel(wmMount);
+  }
 }
 
 function authHeader() {

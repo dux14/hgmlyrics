@@ -73,37 +73,58 @@ export async function compressImageToLimit(
 
   // Decode the image once.
   const bitmap = await createImageBitmap(file);
-  let { width, height } = computeTargetDimensions(bitmap.width, bitmap.height, maxDimension);
-
-  // We prefer WebP; fall back to JPEG if the browser returns a null blob for WebP.
-  const preferredFormat = 'image/webp';
-  const fallbackFormat = 'image/jpeg';
 
   let result = null;
-  let iterations = 0;
 
-  while (iterations < MAX_ITERATIONS) {
-    // Try at decreasing quality levels.
-    let quality = 0.9;
-    while (quality >= 0.4) {
-      const blob = await encodeCanvas(bitmap, width, height, preferredFormat, quality);
-      const candidate = blob ?? (await encodeCanvas(bitmap, width, height, fallbackFormat, quality));
-      if (candidate && candidate.size <= maxBytes) {
-        result = candidate;
-        break;
+  try {
+    const initial = computeTargetDimensions(bitmap.width, bitmap.height, maxDimension);
+    let width = initial.width;
+    let height = initial.height;
+
+    // Detect WebP encode support once: some browsers (Safari/iOS) silently return
+    // a PNG blob instead of null when asked for image/webp. We treat any response
+    // whose type is not 'image/webp' as "no WebP support" and use JPEG for all
+    // iterations — JPEG reliably respects the quality parameter.
+    const probeBlob = await encodeCanvas(bitmap, width, height, 'image/webp', 0.9);
+    const webpSupported = probeBlob !== null && probeBlob.type === 'image/webp';
+    const format = webpSupported ? 'image/webp' : 'image/jpeg';
+
+    // Reuse the probe result for the first quality step to avoid a wasted encode.
+    // It is only valid at the initial dimensions and quality 0.9.
+    let probeConsumed = false;
+
+    let iterations = 0;
+
+    while (iterations < MAX_ITERATIONS) {
+      // Try at decreasing quality levels (start at 0.9, down to 0.4).
+      let quality = 0.9;
+      while (quality >= 0.4) {
+        let candidate;
+        if (webpSupported && !probeConsumed && quality === 0.9) {
+          // Reuse the probe (same dimensions, same quality, same format).
+          candidate = probeBlob;
+          probeConsumed = true;
+        } else {
+          candidate = await encodeCanvas(bitmap, width, height, format, quality);
+        }
+        if (candidate && candidate.size <= maxBytes) {
+          result = candidate;
+          break;
+        }
+        quality = Math.round((quality - 0.1) * 10) / 10; // avoid float drift
       }
-      quality = Math.round((quality - 0.1) * 10) / 10; // avoid float drift
+
+      if (result) break;
+
+      // Still too large — shrink dimensions and retry.
+      width = Math.max(1, Math.round(width * 0.8));
+      height = Math.max(1, Math.round(height * 0.8));
+      iterations++;
     }
-
-    if (result) break;
-
-    // Still too large — shrink dimensions and retry.
-    width = Math.max(1, Math.round(width * 0.8));
-    height = Math.max(1, Math.round(height * 0.8));
-    iterations++;
+  } finally {
+    // Always release the ImageBitmap, even if an error is thrown above.
+    bitmap.close();
   }
-
-  bitmap.close();
 
   if (!result) {
     throw new Error('No se pudo reducir la imagen por debajo del limite de tamano.');
@@ -131,6 +152,9 @@ async function encodeCanvas(bitmap, width, height, format, quality) {
   if (useOffscreen) {
     const canvas = new OffscreenCanvas(width, height);
     const ctx = canvas.getContext('2d');
+    // Fill white so transparent PNG pixels don't turn black when encoded as JPEG.
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, width, height);
     ctx.drawImage(bitmap, 0, 0, width, height);
     try {
       return await canvas.convertToBlob({ type: format, quality });
@@ -144,6 +168,9 @@ async function encodeCanvas(bitmap, width, height, format, quality) {
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
+  // Fill white so transparent PNG pixels don't turn black when encoded as JPEG.
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, width, height);
   ctx.drawImage(bitmap, 0, 0, width, height);
 
   return new Promise((resolve) => {

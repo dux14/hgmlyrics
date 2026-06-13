@@ -738,7 +738,9 @@
   height: 0.9rem;
   border-radius: 50%;
   background: var(--color-border, rgba(255, 255, 255, 0.2));
-  transition: transform 0.06s ease, background 0.06s ease;
+  transition:
+    transform 0.06s ease,
+    background 0.06s ease;
 }
 .metro-dot--accent {
   outline: 2px solid var(--color-primary, #6c8cff);

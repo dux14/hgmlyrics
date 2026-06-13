@@ -39,13 +39,7 @@ import { buildScaleSequence, pickStartOctave, EXERCISE_PRESETS } from '../lib/sc
 import { buildWarmup } from '../lib/warmup.js';
 import { createExercise } from '../lib/exerciseEngine.js';
 import { get, set } from 'idb-keyval';
-import {
-  createMetronome,
-  TIME_SIGNATURES,
-  BPM_MIN,
-  BPM_MAX,
-  DEFAULT_BPM,
-} from '../lib/metronome.js';
+import { createMetronome, TIME_SIGNATURES, DEFAULT_BPM } from '../lib/metronome.js';
 
 /** Formatea un valor de cents con signo explícito: "+5¢", "-3¢", "0¢". */
 const fmtCents = (c) => `${c > 0 ? '+' : ''}${c}¢`;
@@ -1118,9 +1112,7 @@ export async function renderTuner(container, opts = {}) {
         shownBeat = metroQueue.shift().beat;
       }
       if (shownBeat >= 0) {
-        dots.forEach((d, i) =>
-          d.classList.toggle('metro-dot--on', i === shownBeat),
-        );
+        dots.forEach((d, i) => d.classList.toggle('metro-dot--on', i === shownBeat));
         if (countEl) countEl.textContent = String(shownBeat + 1);
       }
       metroRaf = requestAnimationFrame(draw);

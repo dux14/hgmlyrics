@@ -71,11 +71,9 @@ export function createMetronome(opts = {}) {
     scheduleAheadTime = 0.1, // s de ventana de agendado
   } = opts;
 
-  const AudioCtor =
-    AudioContextClass || globalThis.AudioContext || globalThis.webkitAudioContext;
+  const AudioCtor = AudioContextClass || globalThis.AudioContext || globalThis.webkitAudioContext;
   const WorkerCtor = WorkerClass || globalThis.Worker;
-  const clock =
-    now || (() => (globalThis.performance ? performance.now() : Date.now()));
+  const clock = now || (() => (globalThis.performance ? performance.now() : Date.now()));
 
   let ctx = null;
   let bpm = DEFAULT_BPM;

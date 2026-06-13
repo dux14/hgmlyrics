@@ -44,3 +44,92 @@ describe('TIME_SIGNATURES', () => {
     expect(TIME_SIGNATURES['6/8']).toEqual({ beats: 6, accents: [0, 3] });
   });
 });
+
+import { createMetronome } from '../src/lib/metronome.js';
+
+// Nodo de audio falso: connect(next) devuelve next para soportar el encadenado
+// osc.connect(gain).connect(destination).
+function makeMockAudio() {
+  let t = 0;
+  function node() {
+    return {
+      type: '',
+      frequency: { value: 0 },
+      gain: {
+        setValueAtTime: vi.fn(),
+        exponentialRampToValueAtTime: vi.fn(),
+        linearRampToValueAtTime: vi.fn(),
+      },
+      connect: vi.fn((next) => next),
+      start: vi.fn(),
+      stop: vi.fn(),
+      disconnect: vi.fn(),
+    };
+  }
+  const ctx = {
+    state: 'running',
+    destination: {},
+    createOscillator: vi.fn(() => node()),
+    createGain: vi.fn(() => node()),
+    resume: vi.fn(),
+    close: vi.fn(),
+    get currentTime() {
+      return t;
+    },
+  };
+  const AudioContextClass = vi.fn(() => ctx);
+  const setTime = (v) => {
+    t = v;
+  };
+  return { AudioContextClass, ctx, setTime };
+}
+
+describe('createMetronome — estado y BPM', () => {
+  it('arranca con defaults y recorta setBpm a rango', () => {
+    const { AudioContextClass } = makeMockAudio();
+    const m = createMetronome({ AudioContextClass });
+    expect(m.getBpm()).toBe(120);
+    expect(m.getSignature()).toBe('4/4');
+    expect(m.setBpm(10)).toBe(40);
+    expect(m.setBpm(999)).toBe(240);
+    expect(m.getBpm()).toBe(240);
+  });
+
+  it('setSignature acepta compases válidos e ignora inválidos', () => {
+    const { AudioContextClass } = makeMockAudio();
+    const m = createMetronome({ AudioContextClass });
+    expect(m.setSignature('3/4')).toBe('3/4');
+    expect(m.setSignature('7/16')).toBe('3/4');
+  });
+
+  it('no crea el AudioContext hasta arrancar', () => {
+    const { AudioContextClass } = makeMockAudio();
+    createMetronome({ AudioContextClass });
+    expect(AudioContextClass).not.toHaveBeenCalled();
+  });
+});
+
+describe('createMetronome — tap tempo', () => {
+  it('necesita ≥2 taps; calcula y aplica el BPM', () => {
+    const { AudioContextClass } = makeMockAudio();
+    let fakeNow = 0;
+    const m = createMetronome({ AudioContextClass, now: () => fakeNow });
+    expect(m.tap()).toBeNull();
+    fakeNow = 500;
+    expect(m.tap()).toBe(120);
+    fakeNow = 1000;
+    expect(m.tap()).toBe(120);
+    expect(m.getBpm()).toBe(120);
+  });
+
+  it('resetea el buffer si el gap supera 2s', () => {
+    const { AudioContextClass } = makeMockAudio();
+    let fakeNow = 0;
+    const m = createMetronome({ AudioContextClass, now: () => fakeNow });
+    m.tap();
+    fakeNow = 500;
+    expect(m.tap()).toBe(120);
+    fakeNow = 3000;
+    expect(m.tap()).toBeNull();
+  });
+});

@@ -1109,7 +1109,12 @@ export async function renderTuner(container, opts = {}) {
 
   // Sincroniza puntos + conteo al reloj de audio (patrón draw() de cwilso).
   function startMetroVisual() {
-    stopMetroVisual(); // idempotente: nunca dejar dos loops rAF vivos
+    // Idempotente: cancela un loop rAF previo para no dejar dos vivos, pero NO
+    // vacía metroQueue — start() ya encoló el primer beat antes de llamarnos.
+    if (metroRaf !== null) {
+      cancelAnimationFrame(metroRaf);
+      metroRaf = null;
+    }
     const dots = bodyEl.querySelectorAll('.metro-dot');
     const countEl = bodyEl.querySelector('#metro-count');
     let shownBeat = -1;

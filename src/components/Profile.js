@@ -3,6 +3,7 @@
  */
 import { getSession, getProfile, refreshProfile } from '../lib/authStore.js';
 import { icon } from '../lib/icons.js';
+import { compressImageToLimit } from '../lib/imageCompress.js';
 
 const VOICE_TYPES = [
   ['', '—'],
@@ -170,20 +171,35 @@ export async function renderProfile(container) {
   avatarInput.addEventListener('change', async () => {
     const file = avatarInput.files?.[0];
     if (!file) return;
-    avatarError.style.display = 'none';
-    if (file.size > 2 * 1024 * 1024) {
-      avatarError.textContent = 'Máximo 2 MB';
-      avatarError.style.display = 'block';
-      return;
-    }
+
+    // Show a neutral "processing" status (override the red error style temporarily).
+    avatarError.textContent = 'Procesando imagen…';
+    avatarError.style.color = 'var(--color-text-muted, #888)';
+    avatarError.style.display = 'block';
+    avatarBtn.disabled = true;
+
     try {
-      const url = await uploadAvatar(file);
+      const prepared = await compressImageToLimit(file);
+
+      if (prepared.size > 2 * 1024 * 1024) {
+        avatarError.textContent =
+          'No pudimos reducir la imagen por debajo de 2 MB. Intenta con otra foto.';
+        avatarError.style.color = '';
+        return;
+      }
+
+      const url = await uploadAvatar(prepared);
       await refreshProfile();
       avatarPreview.src = url;
       avatarRemoveBtn.style.display = 'flex';
+      avatarError.style.display = 'none';
+      avatarError.style.color = '';
     } catch (e) {
       avatarError.textContent = `Error: ${e.message}`;
+      avatarError.style.color = '';
       avatarError.style.display = 'block';
+    } finally {
+      avatarBtn.disabled = false;
     }
   });
 

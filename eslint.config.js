@@ -44,6 +44,10 @@ export default [
         requestIdleCallback: 'readonly',
         cancelIdleCallback: 'readonly',
         FormData: 'readonly',
+        File: 'readonly',
+        createImageBitmap: 'readonly',
+        OffscreenCanvas: 'readonly',
+        ImageBitmap: 'readonly',
         btoa: 'readonly',
         atob: 'readonly',
         confirm: 'readonly',
@@ -86,7 +90,8 @@ export default [
   {
     // Vitest test files use globals (`describe`, `it`, `expect`, `beforeEach`, …)
     // because `globals: true` is set in vitest.config.js.
-    files: ['tests/**/*.js'],
+    // Pattern covers both tests/ (integration) and src/**/*.test.js (unit).
+    files: ['tests/**/*.js', 'src/**/*.test.js'],
     languageOptions: {
       globals: {
         describe: 'readonly',

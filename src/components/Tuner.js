@@ -38,6 +38,8 @@ import { createTonePlayer } from '../lib/tonePlayer.js';
 import { buildScaleSequence, pickStartOctave, EXERCISE_PRESETS } from '../lib/scales.js';
 import { buildWarmup } from '../lib/warmup.js';
 import { createExercise } from '../lib/exerciseEngine.js';
+import { get, set } from 'idb-keyval';
+import { createMetronome, TIME_SIGNATURES, DEFAULT_BPM } from '../lib/metronome.js';
 
 /** Formatea un valor de cents con signo explícito: "+5¢", "-3¢", "0¢". */
 const fmtCents = (c) => `${c > 0 ? '+' : ''}${c}¢`;
@@ -49,6 +51,7 @@ const MODES = [
   { id: 'range', label: `${icon('ruler', { size: 15 })} Rango` },
   { id: 'calibrar', label: `${icon('settings', { size: 15 })} Calibrar` },
   { id: 'entrenar', label: `${icon('activity', { size: 15 })} Entrenar` },
+  { id: 'metronomo', label: 'Metrónomo' },
 ];
 
 const RANGE_STEP_MS = 10000;
@@ -348,6 +351,44 @@ export function bodyEntrenarPicker() {
   `;
 }
 
+/* ─── Modo Metrónomo ─── */
+
+function bodyMetronomo({ bpm, signature, running }) {
+  const sigs = Object.keys(TIME_SIGNATURES); // ['4/4','3/4','2/4','6/8']
+  const beats = TIME_SIGNATURES[signature].beats;
+  const dots = Array.from(
+    { length: beats },
+    (_, i) =>
+      `<span class="metro-dot${TIME_SIGNATURES[signature].accents.includes(i) ? ' metro-dot--accent' : ''}" data-beat="${i}"></span>`,
+  ).join('');
+  return `
+    <div class="metro" role="group" aria-label="Metrónomo">
+      <div class="metro-bpm">
+        <button class="metro-step" id="metro-down" aria-label="Bajar BPM">${icon('chevron-down', { size: 22 })}</button>
+        <div class="metro-bpm__val"><span id="metro-bpm-num">${bpm}</span><small>BPM</small></div>
+        <button class="metro-step" id="metro-up" aria-label="Subir BPM">${icon('chevron-up', { size: 22 })}</button>
+      </div>
+
+      <div class="metro-sig" role="tablist" aria-label="Compás">
+        ${sigs
+          .map(
+            (s) =>
+              `<button class="metro-sig__btn" data-sig="${s}" aria-selected="${s === signature}">${s}</button>`,
+          )
+          .join('')}
+      </div>
+
+      <div class="metro-beats" id="metro-beats" aria-hidden="true">${dots}</div>
+      <div class="metro-count" id="metro-count" aria-live="off">—</div>
+
+      <div class="metro-actions">
+        <button class="btn btn--primary metro-play" id="metro-play">${running ? 'Detener' : 'Iniciar'}</button>
+        <button class="btn btn--secondary metro-tap" id="metro-tap">Tap</button>
+      </div>
+    </div>
+  `;
+}
+
 /* ─── Mic permission gate ─── */
 
 function bodyPermissionGate(state) {
@@ -408,6 +449,47 @@ export async function renderTuner(container, opts = {}) {
   let exercise = null; // ReturnType<typeof createExercise> | null
   let exerciseDone = false;
   const tonePlayer = createTonePlayer({});
+
+  // Estado del modo Metrónomo.
+  let metronome = null; // ReturnType<typeof createMetronome> | null
+  let metroSig = '4/4';
+  let metroRaf = null; // id de requestAnimationFrame del loop visual
+  let metroQueue = []; // cola {beat, time} para sincronizar el visual al audio
+  let metroHoldTimer = null; // timer de hold-to-repeat en las flechas
+
+  async function ensureMetronome() {
+    if (metronome) return metronome;
+    metronome = createMetronome({
+      onBeat: (beat, _accent, time) => metroQueue.push({ beat, time }),
+    });
+    // Restaurar BPM + compás persistidos.
+    try {
+      const saved = await get('tuner:metronome');
+      if (saved && typeof saved === 'object') {
+        if (saved.bpm) metronome.setBpm(saved.bpm);
+        if (saved.signature && TIME_SIGNATURES[saved.signature]) {
+          metroSig = saved.signature;
+          metronome.setSignature(metroSig);
+        }
+      }
+    } catch (_e) {
+      /* idb no disponible: defaults */
+    }
+    return metronome;
+  }
+
+  function persistMetronome() {
+    if (!metronome) return;
+    set('tuner:metronome', { bpm: metronome.getBpm(), signature: metroSig }).catch(() => {});
+  }
+
+  function stopMetroVisual() {
+    if (metroRaf !== null) {
+      cancelAnimationFrame(metroRaf);
+      metroRaf = null;
+    }
+    metroQueue = [];
+  }
 
   function startExercise(sequence) {
     if (!sequence || sequence.length === 0) {
@@ -472,6 +554,16 @@ export async function renderTuner(container, opts = {}) {
   }
 
   function paintBody() {
+    if (mode === 'metronomo') {
+      bodyEl.innerHTML = bodyMetronomo({
+        bpm: metronome ? metronome.getBpm() : DEFAULT_BPM,
+        signature: metroSig,
+        running: metronome ? metronome.isRunning() : false,
+      });
+      bindMetronomo();
+      return;
+    }
+
     if (micState !== 'running' && micState !== 'requesting') {
       bodyEl.innerHTML = bodyPermissionGate(micState);
       const grantBtn = bodyEl.querySelector('#tuner-grant');
@@ -926,6 +1018,121 @@ export async function renderTuner(container, opts = {}) {
     });
   }
 
+  /* ─── metrónomo binder + visual ─── */
+
+  function bindMetronomo() {
+    const numEl = bodyEl.querySelector('#metro-bpm-num');
+    const countEl = bodyEl.querySelector('#metro-count');
+    const playBtn = bodyEl.querySelector('#metro-play');
+
+    // El motor puede no existir todavía (primer pintado): créalo y refresca.
+    // Guarda: la promesa de idb puede resolver tras cambiar de pestaña; solo
+    // repintar si seguimos en el modo metrónomo.
+    if (!metronome) {
+      ensureMetronome().then(() => {
+        if (mode === 'metronomo') paintBody();
+      });
+      return;
+    }
+
+    const stepBpm = (delta) => {
+      const next = metronome.setBpm(metronome.getBpm() + delta);
+      if (numEl) numEl.textContent = String(next);
+      persistMetronome();
+    };
+
+    // Hold-to-repeat en las flechas: primer paso inmediato, luego repetición.
+    const holdStart = (delta) => {
+      stepBpm(delta);
+      clearTimeout(metroHoldTimer);
+      let speed = 300;
+      const tick = () => {
+        stepBpm(delta);
+        speed = Math.max(40, speed - 30);
+        metroHoldTimer = setTimeout(tick, speed);
+      };
+      metroHoldTimer = setTimeout(tick, 400);
+    };
+    const holdStop = () => clearTimeout(metroHoldTimer);
+
+    const upBtn = bodyEl.querySelector('#metro-up');
+    const downBtn = bodyEl.querySelector('#metro-down');
+    for (const [btn, d] of [
+      [upBtn, 1],
+      [downBtn, -1],
+    ]) {
+      btn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        holdStart(d);
+      });
+      for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) {
+        btn.addEventListener(ev, holdStop);
+      }
+    }
+
+    // Selector de compás.
+    for (const sb of bodyEl.querySelectorAll('.metro-sig__btn')) {
+      sb.addEventListener('click', () => {
+        metroSig = sb.dataset.sig;
+        metronome.setSignature(metroSig);
+        persistMetronome();
+        paintBody(); // re-renderiza los puntos del nuevo compás
+        // paintBody reemplazó el DOM: si sonaba, reengancha el visual a los
+        // puntos nuevos (startMetroVisual cancela el loop previo).
+        if (metronome.isRunning()) startMetroVisual();
+      });
+    }
+
+    // Play / Stop.
+    playBtn.addEventListener('click', () => {
+      if (metronome.isRunning()) {
+        metronome.stop();
+        stopMetroVisual();
+        playBtn.textContent = 'Iniciar';
+        if (countEl) countEl.textContent = '—';
+      } else {
+        metronome.start();
+        playBtn.textContent = 'Detener';
+        startMetroVisual();
+      }
+    });
+
+    // Tap tempo (aplica al instante).
+    bodyEl.querySelector('#metro-tap').addEventListener('click', () => {
+      const est = metronome.tap();
+      if (est !== null) {
+        if (numEl) numEl.textContent = String(est);
+        persistMetronome();
+      }
+    });
+  }
+
+  // Sincroniza puntos + conteo al reloj de audio (patrón draw() de cwilso).
+  function startMetroVisual() {
+    // Idempotente: cancela un loop rAF previo para no dejar dos vivos, pero NO
+    // vacía metroQueue — start() ya encoló el primer beat antes de llamarnos.
+    if (metroRaf !== null) {
+      cancelAnimationFrame(metroRaf);
+      metroRaf = null;
+    }
+    const dots = bodyEl.querySelectorAll('.metro-dot');
+    const countEl = bodyEl.querySelector('#metro-count');
+    let shownBeat = -1;
+    const draw = () => {
+      if (!metronome || !metronome.isRunning()) return;
+      const t = metronome.audioTime();
+      while (metroQueue.length && metroQueue[0].time <= t) {
+        shownBeat = metroQueue.shift().beat;
+      }
+      if (shownBeat >= 0) {
+        dots.forEach((d, i) => d.classList.toggle('metro-dot--on', i === shownBeat));
+        if (countEl) countEl.textContent = String(shownBeat + 1);
+      }
+      metroRaf = requestAnimationFrame(draw);
+    };
+    metroRaf = requestAnimationFrame(draw);
+  }
+
   /* ─── mic lifecycle ─── */
 
   function requestMic() {
@@ -977,6 +1184,8 @@ export async function renderTuner(container, opts = {}) {
     exercise = null;
     exerciseDone = false;
     tonePlayer.stop();
+    if (metronome) metronome.stop();
+    stopMetroVisual();
     paintTabs();
     paintBody();
   });
@@ -994,6 +1203,12 @@ export async function renderTuner(container, opts = {}) {
       // recursos de audio al abandonar la ruta.
       calPlayer.close();
       tonePlayer.close();
+      if (metronome) {
+        metronome.dispose();
+        metronome = null;
+      }
+      stopMetroVisual();
+      clearTimeout(metroHoldTimer);
       window.removeEventListener('hashchange', cleanupOnHashChange);
     }
   };

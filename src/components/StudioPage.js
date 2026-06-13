@@ -18,6 +18,8 @@ import { getSession } from '../lib/authStore.js';
 import { downloadAllZip, buildZipBlob } from '../lib/studioZip.js';
 import { getDriveToken } from '../lib/driveAuth.js';
 import { uploadZipToDrive } from '../lib/driveUpload.js';
+import { isMp3File } from '../lib/studioFile.js';
+export { isMp3File };
 import { createStudioPlayer } from './StudioPlayer.js';
 import { renderTimeline, markActive } from './StudioSectionTimeline.js';
 import { renderSectionCard } from './StudioSectionCard.js';
@@ -123,13 +125,13 @@ function renderIdle(body, quota) {
     <div class="studio-dropzone" role="button" tabindex="0" aria-label="Subir archivo de audio">
       ${icon('upload', { size: 32 })}
       <p class="studio-dropzone__hint"><strong>Arrastra tu audio aquí</strong> o toca para elegir</p>
-      <p class="empty-state__text studio-dropzone__sub">MP3, WAV, M4A · máx 25 MB / 10 min</p>
+      <p class="empty-state__text studio-dropzone__sub">MP3 · máx 25 MB / 10 min</p>
     </div>
     <p class="empty-state__text studio__quota">
       Te quedan <strong>${left} de ${quota.limit}</strong> canciones hoy.
       Los resultados expiran a las 48 h.
     </p>
-    <input type="file" id="studio-file" accept="audio/*" hidden />
+    <input type="file" id="studio-file" accept=".mp3,audio/mpeg" hidden />
   `;
   const drop = body.querySelector('.studio-dropzone');
   const input = body.querySelector('#studio-file');
@@ -139,13 +141,22 @@ function renderIdle(body, quota) {
     if (e.key === 'Enter' || e.key === ' ') pick();
   });
   drop.addEventListener('dragover', (e) => e.preventDefault());
+  const rejectNonMp3 = () => {
+    renderIdle(body, quota);
+    body.insertAdjacentHTML('afterbegin', `<p class="studio__error">Solo aceptamos archivos MP3.</p>`);
+  };
   drop.addEventListener('drop', (e) => {
     e.preventDefault();
     const file = e.dataTransfer?.files?.[0];
-    if (file) void handleFile(body, file, quota);
+    if (!file) return;
+    if (!isMp3File(file)) { rejectNonMp3(); return; }
+    void handleFile(body, file, quota);
   });
   input.addEventListener('change', () => {
-    if (input.files?.[0]) void handleFile(body, input.files[0], quota);
+    const file = input.files?.[0];
+    if (!file) return;
+    if (!isMp3File(file)) { rejectNonMp3(); return; }
+    void handleFile(body, file, quota);
   });
 }
 

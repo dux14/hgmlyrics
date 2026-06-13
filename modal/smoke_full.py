@@ -69,7 +69,6 @@ def smoke_full(name: str, original_bytes: bytes) -> dict:
     # Helpers REALES del pipeline desplegado.
     from sections.extract import extract_all_stems
     from sections.songformer import (
-        _resample_to_24k,
         _run_inference,
         _normalize_label,
     )
@@ -101,10 +100,9 @@ def smoke_full(name: str, original_bytes: bytes) -> dict:
     s2_segments: list[dict] = []
     s2_error: str | None = None
     try:
-        fd2, wav_path = tempfile.mkstemp(suffix=".wav")
-        os.close(fd2)
-        _resample_to_24k(src, wav_path)
-        raw_segments = _run_inference(wav_path)
+        # SongFormer carga y resamplea a 24 kHz mono por su cuenta (librosa);
+        # se le pasa el mp3 original directamente.
+        raw_segments = _run_inference(src)
         s2_segments = [
             {
                 "label": _normalize_label(seg["label"]),

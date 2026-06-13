@@ -25,29 +25,31 @@ CONTRATO DE SALIDA (webhook `structure`):
     "error": null
   }
 
-API DE INFERENCIA (verificada en HF model card + GitHub README, jun 2026):
-  SongFormer usa trust_remote_code=True y expone un modelo callable:
-    songformer = AutoModel.from_pretrained(local_dir, trust_remote_code=True)
-    result = songformer("path/to/audio.wav")
-    # result: [{"start": float, "end": float, "label": str}, ...]  # segundos
-  El output es ya una lista de dicts {start, end, label} — no requiere
-  decodificacion de logits ni parseo de texto.
+INFERENCIA (repo SongFormer directo — NO trust_remote_code):
+  El modeling file de HuggingFace (trust_remote_code=True) NO es cargable: su
+  codigo importa de forma ABSOLUTA un stack de investigacion (model, musicfm,
+  x_transformers, msaf, dataset, postprocessing) que no son paquetes pip. Por eso
+  corremos el infer/infer.py ORIGINAL del repo ASLP-lab/SongFormer como subproceso
+  (ver _run_inference) — su entrypoint testeado, en vez de reimplementar su
+  ventaneo MuQ+MusicFM. El repo + submodulos (MuQ, musicfm) + pesos se hornean en
+  una imagen dedicada (songformer_image en smoke_full.py).
+    infer.py -i <scp> -o <dir> --model SongFormer
+             --checkpoint SongFormer.safetensors --config_path SongFormer.yaml
+    → <dir>/<stem>.json = [{"label","start","end"}, ...]  (labels en ingles)
 
-VERIFICACION EN DEPLOY (concernimientos a validar en primer smoke):
-  - trust_remote_code=True puede importar dependencias adicionales (MuQ, MusicFM,
-    SSL backbones) que no estan en requirements.txt. Si el cold start falla con
-    ImportError, agregar los paquetes faltantes a requirements.txt.
-  - La lista exacta de etiquetas que emite el modelo se toma del GitHub README
-    (ISMIR 2024): intro, verse, chorus, bridge, inst, outro, silence, pre-chorus.
-    Si el modelo emite etiquetas nuevas, apareceran sin traducir (pass-through).
-  - El sample rate de 24 kHz se toma del model card. Si el modelo acepta otra
-    frecuencia, actualizar _TARGET_SR.
+  Etiquetas (8-class): intro, verse, chorus, bridge, inst, outro, silence,
+  pre-chorus → mapeadas a ES por _LABEL_MAP. infer.py carga el audio a 24 kHz
+  mono por su cuenta (librosa); no hace falta pre-resamplear.
+
+  NOTA PROD: run_songformer corre en la imagen de prod (stems_app.py), que aun
+  NO incluye el stack de SongFormer. Para desplegar S2 en prod hay que darle a
+  esta seccion su propia imagen/funcion Modal (pendiente). Este modulo ya tiene
+  la inferencia correcta; el smoke la verifica via songformer_image.
 """
 
 from __future__ import annotations
 
 import os
-import sys
 import tempfile
 
 # Mapa EXACTO de etiquetas ingles → espanol (segun especificacion de tarea).
@@ -65,18 +67,17 @@ _LABEL_MAP: dict[str, str] = {
     "pre_chorus": "pre-coro",        # variante con guion bajo
 }
 
-# Sample rate requerido por SongFormer segun el model card (24 kHz).
-_TARGET_SR: int = 24_000
-
-# Identificador del modelo en HuggingFace Hub.
-_HF_MODEL_ID: str = "ASLP-lab/SongFormer"
-
 # Etiqueta de modelo que se reporta en los webhooks.
 _MODEL_LABEL: str = "songformer"
 
-# Cache de la instancia del modelo (None hasta el primer uso).
-# Patron identico al que usa extract.py para los modelos de demucs/BSRoFormer.
-_songformer_instance = None
+# ── Rutas del repo SongFormer dentro de la imagen dedicada ───────────────────
+# El repo se clona con submodulos (MuQ, musicfm) en /opt/songformer y los pesos
+# (MusicFM + SongFormer.safetensors) viven en ckpts/. Todas las rutas que usa
+# infer.py son RELATIVAS a _SONGFORMER_DIR, por eso se corre con cwd alli.
+_SONGFORMER_DIR: str = "/opt/songformer/src/SongFormer"
+_SONGFORMER_THIRD_PARTY: str = "/opt/songformer/src/third_party"
+_SONGFORMER_CHECKPOINT: str = "SongFormer.safetensors"
+_SONGFORMER_CONFIG: str = "SongFormer.yaml"
 
 
 def _normalize_label(raw: str) -> str:
@@ -87,85 +88,84 @@ def _normalize_label(raw: str) -> str:
     return _LABEL_MAP.get(raw.lower().strip(), raw)
 
 
-def _resample_to_24k(src_path: str, dst_path: str) -> None:
-    """
-    Resamplea el audio de src_path a _TARGET_SR Hz mono y lo escribe en dst_path
-    como WAV. Usa librosa (incluido via audio-separator o como dep directa).
-
-    VERIFICACION EN DEPLOY: si librosa no esta disponible en la imagen, usar
-    torchaudio.transforms.Resample que ya esta en la imagen (torch dep de demucs).
-    """
-    import numpy as np  # noqa: F401 — transitivo via torch/librosa
-
-    try:
-        import librosa
-        import soundfile as sf
-
-        audio, _ = librosa.load(src_path, sr=_TARGET_SR, mono=True)
-        sf.write(dst_path, audio, _TARGET_SR)
-    except ImportError:
-        # Fallback: torchaudio (siempre disponible en la imagen porque demucs lo usa).
-        import torchaudio
-        import torch
-
-        waveform, orig_sr = torchaudio.load(src_path)
-        if waveform.shape[0] > 1:
-            waveform = waveform.mean(dim=0, keepdim=True)
-        if orig_sr != _TARGET_SR:
-            resampler = torchaudio.transforms.Resample(
-                orig_freq=orig_sr, new_freq=_TARGET_SR
-            )
-            waveform = resampler(waveform)
-        torchaudio.save(dst_path, waveform, _TARGET_SR)
-
-
-def _get_songformer():
-    """
-    Carga SongFormer una vez y cachea la instancia a nivel de modulo.
-    Usa snapshot_download para obtener el codigo remoto del modelo y luego
-    AutoModel.from_pretrained con trust_remote_code=True (requerido por el model card).
-
-    VERIFICACION EN DEPLOY:
-      - trust_remote_code descarga e importa el codigo custom del repo HF.
-        Si el modelo importa MuQ / MusicFM al cargarse y esos paquetes no
-        estan en la imagen, agregar a requirements.txt antes de re-desplegar.
-    """
-    global _songformer_instance
-    if _songformer_instance is not None:
-        return _songformer_instance
-
-    from huggingface_hub import snapshot_download
-    from transformers import AutoModel
-
-    local_dir = snapshot_download(
-        repo_id=_HF_MODEL_ID,
-        repo_type="model",
-    )
-    sys.path.append(local_dir)
-    os.environ["SONGFORMER_LOCAL_DIR"] = local_dir
-
-    model = AutoModel.from_pretrained(local_dir, trust_remote_code=True)
-    model.to("cuda:0").eval()
-
-    _songformer_instance = model
-    return _songformer_instance
-
-
 def _run_inference(audio_path: str) -> list[dict]:
     """
-    Corre SongFormer sobre el archivo de audio (24 kHz WAV/mono) y devuelve
-    una lista de dicts con {label:str, start:float, end:float}.
+    Corre la inferencia de estructura de SongFormer sobre `audio_path` invocando
+    el infer/infer.py ORIGINAL del repo como subproceso (cwd=_SONGFORMER_DIR,
+    PYTHONPATH con los submodulos MuQ+musicfm). Usa el codigo testeado del repo
+    en lugar de reimplementar su ventaneo.
 
-    API real (model card ASLP-lab/SongFormer + GitHub README, jun 2026):
-      songformer(wav_path) devuelve directamente una lista de dicts
-      {start: float, end: float, label: str} en segundos.
-      No requiere decodificacion de logits ni parseo de texto adicional.
+    infer.py:
+      - lee un .scp con una ruta de audio por linea,
+      - carga el audio a 24 kHz mono (librosa) por su cuenta,
+      - escribe <out_dir>/<stem>.json con [{"label","start","end"}, ...]
+        (labels en ingles: intro/verse/chorus/bridge/inst/outro/silence/pre-chorus).
+
+    Devuelve los segmentos {label,start,end} SIN normalizar (el llamador aplica
+    _normalize_label).
     """
-    songformer = _get_songformer()
-    raw_result = songformer(audio_path)
+    import json
+    import subprocess
+    from pathlib import Path
 
-    # Normalizar por si las claves difieren de la especificacion documentada.
-    # El contrato de salida de esta funcion siempre es [{label, start, end}, ...].
+    out_dir = tempfile.mkdtemp()
+    fd, scp_path = tempfile.mkstemp(suffix=".scp")
+    with os.fdopen(fd, "w") as f:
+        f.write(f"{audio_path}\n")
+
+    env = dict(os.environ)
+    # infer.py importa paquetes LOCALES del repo (dataset, postprocessing, model)
+    # que viven en _SONGFORMER_DIR, ademas de los submodulos MuQ/musicfm en
+    # third_party. Como el script esta en infer/infer.py, sys.path[0] es infer/
+    # (no el cwd), asi que hay que poner ambos dirs en el PYTHONPATH explicito.
+    env["PYTHONPATH"] = os.pathsep.join(
+        p for p in (_SONGFORMER_DIR, _SONGFORMER_THIRD_PARTY, env.get("PYTHONPATH", "")) if p
+    )
+
+    proc = subprocess.run(
+        [
+            "python", "infer/infer.py",
+            "-i", scp_path,
+            "-o", out_dir,
+            "--model", "SongFormer",
+            "--checkpoint", _SONGFORMER_CHECKPOINT,
+            "--config_path", _SONGFORMER_CONFIG,
+            "-gn", "1",
+            "-tn", "1",
+        ],
+        cwd=_SONGFORMER_DIR,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            "SongFormer infer.py fallo "
+            f"(rc={proc.returncode}).\nSTDERR:\n{proc.stderr[-2000:]}\n"
+            f"STDOUT:\n{proc.stdout[-1000:]}"
+        )
+
+    # infer.py escribe <out_dir>/<stem>.json (stem del path en el .scp).
+    stem = Path(audio_path).stem
+    out_json = os.path.join(out_dir, f"{stem}.json")
+    if not os.path.isfile(out_json):
+        # Fallback: cualquier .json producido (por si el stem/subdir difiere).
+        found = [
+            os.path.join(root, fn)
+            for root, _, files in os.walk(out_dir)
+            for fn in files
+            if fn.endswith(".json")
+        ]
+        if not found:
+            raise RuntimeError(
+                f"SongFormer no produjo JSON en {out_dir}. "
+                f"STDOUT:\n{proc.stdout[-1000:]}"
+            )
+        out_json = found[0]
+
+    with open(out_json) as f:
+        raw_result = json.load(f)
+
     segments = []
     for seg in raw_result:
         label = seg.get("label", "")
@@ -211,13 +211,8 @@ def run_songformer(payload: dict) -> None:
                 for chunk in r.iter_bytes():
                     f.write(chunk)
 
-        # ── 2. Resamplear a 24 kHz mono (requisito de SongFormer) ────────────
-        fd2, wav_path = tempfile.mkstemp(suffix=".wav")
-        os.close(fd2)
-        _resample_to_24k(src_path, wav_path)
-
-        # ── 3. Inferencia SongFormer ─────────────────────────────────────────
-        raw_segments = _run_inference(wav_path)
+        # ── 2. Inferencia SongFormer (infer.py carga el audio a 24 kHz solo) ─
+        raw_segments = _run_inference(src_path)
 
         # ── 4. Normalizar etiquetas a espanol ────────────────────────────────
         segments = [

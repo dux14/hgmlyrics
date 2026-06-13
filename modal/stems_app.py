@@ -67,6 +67,22 @@ image = (
     .add_local_python_source("sections")
 )
 
+# Imagen DEDICADA de S2 (SongFormer). NO se comparte con S1/S3/S4 porque su stack
+# (repo ASLP-lab/SongFormer + submódulos MuQ/musicfm + pesos) es pesado e
+# independiente. Verificada con smoke_s2.py (build + inferencia GPU en verde:
+# intro/verso/coro). Mismo hash que smoke_s2.py → `modal deploy` reusa las capas.
+songformer_image = (
+    modal.Image.debian_slim(python_version="3.10")
+    .apt_install("git", "ffmpeg", "build-essential")
+    .run_commands(
+        "git clone --recursive https://github.com/ASLP-lab/SongFormer.git /opt/songformer",
+        "pip install -r /opt/songformer/requirements.txt",
+        "pip install httpx==0.27.2",  # _common.py (download/post_webhook); no en su requirements
+        "cd /opt/songformer/src/SongFormer && python utils/fetch_pretrained.py",
+    )
+    .add_local_python_source("sections")
+)
+
 # Sólo necesitamos el secret de webhook en el orquestador principal.
 # S1 accede a él a través del payload; el secret de Supabase ya no hace falta
 # porque usamos signed PUT URLs pre-firmadas por Vercel (sin service role key).
@@ -106,7 +122,7 @@ def s1_extract(payload: dict) -> str | None:
 # S2 — estructura (SongFormer, CPU)
 # ──────────────────────────────────────────────────────────────────────────────
 
-@app.function(image=image, secrets=_webhook_secrets, gpu="T4", timeout=900)
+@app.function(image=songformer_image, secrets=_webhook_secrets, gpu="T4", timeout=900)
 def s2_structure(payload: dict) -> None:
     """
     S2: segmentacion de estructura musical con SongFormer (ASLP-lab).

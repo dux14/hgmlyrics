@@ -7,9 +7,13 @@ const MODAL_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
  * Aplana las pistas reproducibles desde `sections[*].outputs` (storage keys crudas) a
- * `stems`/`voices` con signed URLs de descarga. El DAG nunca puebla las columnas planas
- * `stems`/`voices`; la fuente de verdad son los outputs por sección. Solo se incluyen las
+ * `stems`/`voices`/`genderVoices` con signed URLs de descarga. El DAG nunca puebla las
+ * columnas planas; la fuente de verdad son los outputs por sección. Solo se incluyen las
  * pistas ya producidas (valores no nulos), por lo que sirve igual para `done` y `partial`.
+ *
+ * Para gender, los outputs tienen estructura anidada:
+ *   { chorus: { male: key, female: key }, aufr33: { male: key, female: key } }
+ * Se preserva esa estructura en genderVoices con URLs firmadas.
  */
 async function withSignedUrls(job) {
   const sign = async (obj) => {
@@ -19,10 +23,34 @@ async function withSignedUrls(job) {
     }
     return out;
   };
+
+  // gender: outputs anidados { chorus: {male,female}, aufr33: {male,female} }
+  const signNested = async (obj) => {
+    const out = {};
+    for (const [modelKey, tracks] of Object.entries(obj)) {
+      if (tracks && typeof tracks === 'object') {
+        out[modelKey] = await sign(tracks);
+      }
+    }
+    return out;
+  };
+
   const sections = job.sections ?? {};
   const stems = sections.voiceInstrumental?.outputs ?? {};
   const voices = sections.leadBacking?.outputs ?? {};
-  return { ...job, stems: await sign(stems), voices: await sign(voices) };
+  const genderOutputs = sections.gender?.outputs ?? {};
+
+  // genderVoices solo se popula si el section está done (outputs son objetos anidados).
+  // Si los outputs son el shape antiguo plano {male, female} (filas pre-fase4), sign() los maneja.
+  const hasNestedGender =
+    genderOutputs &&
+    Object.values(genderOutputs).some((v) => v && typeof v === 'object' && !Array.isArray(v));
+
+  const genderVoices = hasNestedGender
+    ? await signNested(genderOutputs)
+    : await sign(genderOutputs);
+
+  return { ...job, stems: await sign(stems), voices: await sign(voices), genderVoices };
 }
 
 export default withErrors(async (req, res) => {

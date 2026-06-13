@@ -137,6 +137,61 @@ describe('renderStudioPage', () => {
     expect(container.textContent).toContain('SongFormer');
   });
 
+  it('gender done: tarjeta muestra dos modelos lado a lado con players de audio', async () => {
+    const jobWithGender = {
+      ...JOB_DONE_FIXTURE,
+      sections: {
+        ...JOB_DONE_FIXTURE.sections,
+        gender: {
+          status: 'done',
+          outputs: { chorus: { male: 'k1', female: 'k2' }, aufr33: { male: 'k3', female: 'k4' } },
+        },
+      },
+      genderVoices: {
+        chorus: {
+          male: 'https://s/gender/chorus/male',
+          female: 'https://s/gender/chorus/female',
+        },
+        aufr33: {
+          male: 'https://s/gender/aufr33/male',
+          female: 'https://s/gender/aufr33/female',
+        },
+      },
+    };
+    stemsApi.listJobs.mockResolvedValueOnce({
+      jobs: [{ id: 'j1', status: 'done' }],
+      quota: { used: 1, limit: 3 },
+    });
+    stemsApi.getJob.mockResolvedValue({ job: jobWithGender });
+    renderStudioPage(container);
+
+    await vi.waitFor(() =>
+      expect(container.querySelectorAll('.studio-section-card').length).toBe(4),
+    );
+
+    const genderCard = container.querySelector('.studio-section-card--gender');
+    expect(genderCard).not.toBeNull();
+    expect(genderCard.classList.contains('studio-section-card--done')).toBe(true);
+
+    // Grid de dos modelos
+    expect(genderCard.querySelector('.studio-gender-grid')).not.toBeNull();
+    expect(genderCard.querySelectorAll('.studio-gender-grid__col').length).toBe(2);
+
+    // Encabezados de modelo
+    const modelLabels = [...genderCard.querySelectorAll('.studio-gender-grid__model-label')].map(
+      (el) => el.textContent,
+    );
+    expect(modelLabels[0]).toContain('Modelo A');
+    expect(modelLabels[1]).toContain('Modelo B');
+
+    // 4 players (2 por modelo)
+    expect(genderCard.querySelectorAll('audio').length).toBe(4);
+
+    // Etiquetas de track
+    expect(genderCard.textContent).toContain('Voz masculina');
+    expect(genderCard.textContent).toContain('Voz femenina');
+  });
+
   it('FIX-7: el polling se detiene al cambiar el hash fuera de #/estudio', async () => {
     stemsApi.listJobs.mockResolvedValueOnce({
       jobs: [{ id: 'j1', status: 'processing' }],

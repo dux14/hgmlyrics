@@ -16,6 +16,11 @@ const STEM_LABELS = {
   other: 'Otros',
 };
 const VOICE_LABELS = { lead: 'Voz líder', backing: 'Coros' };
+const GENDER_MODEL_LABELS = {
+  chorus: 'Modelo A — Chorus BS-RoFormer',
+  aufr33: 'Modelo B — aufr33',
+};
+const GENDER_TRACK_LABELS = { male: 'Voz masculina', female: 'Voz femenina' };
 
 const SECTION_ICONS = {
   voiceInstrumental: 'music',
@@ -27,10 +32,10 @@ const SECTION_ICONS = {
 /**
  * Tarjeta acordeón para una sección del Estudio.
  *
- * @param {{ key: string, section: object, stems?: object, voices?: object }} opts
+ * @param {{ key: string, section: object, stems?: object, voices?: object, genderVoices?: object }} opts
  * @returns {HTMLElement}
  */
-export function renderSectionCard({ key, section, stems = {}, voices = {} }) {
+export function renderSectionCard({ key, section, stems = {}, voices = {}, genderVoices = {} }) {
   const { status } = sectionState(section);
   const label = sectionLabel(key);
 
@@ -65,7 +70,7 @@ export function renderSectionCard({ key, section, stems = {}, voices = {} }) {
   // --- Cuerpo ---
   const body = document.createElement('div');
   body.className = 'studio-section-card__body';
-  buildBody(body, key, status, section, stems, voices);
+  buildBody(body, key, status, section, stems, voices, genderVoices);
   card.appendChild(body);
 
   // --- Acordeón toggle ---
@@ -94,7 +99,7 @@ function chipText(status) {
   }
 }
 
-function buildBody(body, key, status, section, stems, voices) {
+function buildBody(body, key, status, section, stems, voices, genderVoices) {
   if (status === 'pending') {
     const sk = document.createElement('div');
     sk.className = 'studio-section-card__skeleton';
@@ -130,7 +135,7 @@ function buildBody(body, key, status, section, stems, voices) {
     return;
   }
 
-  if (status === 'skipped' || key === 'gender') {
+  if (status === 'skipped') {
     const lock = document.createElement('div');
     lock.className = 'studio-section-card__locked';
     lock.innerHTML = `${icon('lock', { size: 20 })} `;
@@ -147,6 +152,8 @@ function buildBody(body, key, status, section, stems, voices) {
     buildStructureBody(body, section);
   } else if (key === 'leadBacking') {
     buildLeadBackingBody(body, voices);
+  } else if (key === 'gender') {
+    buildGenderBody(body, genderVoices);
   }
 }
 
@@ -218,4 +225,56 @@ function buildLeadBackingBody(body, voices) {
     }
     body.appendChild(mount);
   }
+}
+
+/**
+ * Renderiza la tarjeta de voces por género con los DOS modelos lado a lado.
+ * genderVoices tiene forma { chorus: { male: url, female: url }, aufr33: { male: url, female: url } }.
+ * Cada modelo aparece como un bloque independiente con su encabezado y sus dos players.
+ */
+function buildGenderBody(body, genderVoices) {
+  const models = Object.keys(GENDER_MODEL_LABELS);
+  const hasAny = models.some(
+    (m) => genderVoices[m] && Object.values(genderVoices[m]).some(Boolean),
+  );
+
+  if (!hasAny) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-state__text';
+    empty.textContent = 'Sin voces de género disponibles';
+    body.appendChild(empty);
+    return;
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'studio-gender-grid';
+
+  for (const modelKey of models) {
+    const tracks = genderVoices[modelKey] ?? {};
+    const col = document.createElement('div');
+    col.className = 'studio-gender-grid__col';
+
+    const heading = document.createElement('p');
+    heading.className = 'studio-gender-grid__model-label';
+    heading.textContent = GENDER_MODEL_LABELS[modelKey] ?? modelKey;
+    col.appendChild(heading);
+
+    let primaryMounted = false;
+    for (const [trackKey, trackLabel] of Object.entries(GENDER_TRACK_LABELS)) {
+      if (!tracks[trackKey]) continue;
+      const mount = document.createElement('div');
+      mount.className = 'studio-player-mount';
+      mount.dataset.label = trackLabel;
+      mount.dataset.url = tracks[trackKey];
+      if (!primaryMounted) {
+        mount.dataset.primary = '1';
+        primaryMounted = true;
+      }
+      col.appendChild(mount);
+    }
+
+    grid.appendChild(col);
+  }
+
+  body.appendChild(grid);
 }

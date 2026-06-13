@@ -301,10 +301,13 @@ function mountSectionUI(body, job, quota) {
       try {
         const s = getSession();
         const headers = s ? { Authorization: `Bearer ${s.access_token}` } : {};
-        const res = await fetch(`/api/stems/jobs/${job.id}/retry?section=${encodeURIComponent(section)}`, {
-          method: 'POST',
-          headers,
-        });
+        const res = await fetch(
+          `/api/stems/jobs/${job.id}/retry?section=${encodeURIComponent(section)}`,
+          {
+            method: 'POST',
+            headers,
+          },
+        );
         if (!res.ok) {
           const body2 = await res.json().catch(() => ({}));
           throw new Error(body2.error ?? `Error ${res.status}`);
@@ -335,6 +338,7 @@ function renderProcessing(body, job, filename, quota) {
   const sections = job.sections ?? {};
   const stems = job.stems ?? {};
   const voices = job.voices ?? {};
+  const genderVoices = job.genderVoices ?? {};
 
   const frag = document.createDocumentFragment();
 
@@ -355,7 +359,7 @@ function renderProcessing(body, job, filename, quota) {
 
   for (const key of SECTION_KEYS) {
     const section = sections[key] ?? { status: 'pending' };
-    const card = renderSectionCard({ key, section, stems, voices });
+    const card = renderSectionCard({ key, section, stems, voices, genderVoices });
     cardsEl.appendChild(card);
   }
   frag.appendChild(cardsEl);
@@ -384,6 +388,7 @@ function renderJob(body, job, quota) {
 
   const stems = job.stems ?? {};
   const voices = job.voices ?? {};
+  const genderVoices = job.genderVoices ?? {};
   const sections = job.sections ?? {};
 
   const frag = document.createDocumentFragment();
@@ -425,7 +430,7 @@ function renderJob(body, job, quota) {
 
   for (const key of SECTION_KEYS) {
     const section = sections[key] ?? { status: 'done' };
-    const card = renderSectionCard({ key, section, stems, voices });
+    const card = renderSectionCard({ key, section, stems, voices, genderVoices });
     cardsEl.appendChild(card);
   }
   frag.appendChild(cardsEl);

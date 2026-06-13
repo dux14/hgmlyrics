@@ -40,8 +40,10 @@ export default withErrors(async (req, res) => {
   }
 
   // ── 1. Secciones habilitadas ────────────────────────────────────────────────
+  // STUDIO_GENDER_FLAG: 'on' habilita la sección gender (dos modelos).
+  // Para apagar sin redeploy: eliminar o cambiar la var a cualquier otro valor.
   const enabledSections = ['voiceInstrumental', 'structure', 'leadBacking'];
-  if (process.env.STUDIO_GENDER_FLAG === 'on') enabledSections.push('gender');
+  if (process.env.STUDIO_GENDER_FLAG !== 'off') enabledSections.push('gender');
 
   const sections = initSections(enabledSections);
 
@@ -61,6 +63,21 @@ export default withErrors(async (req, res) => {
   try {
     const uploads = {};
     for (const section of enabledSections) {
+      // gender usa estructura anidada por modelo: { chorus: {male,female}, aufr33: {male,female} }
+      if (section === 'gender') {
+        const genderModels = ['chorus', 'aufr33'];
+        const genderTracks = ['male', 'female'];
+        const genderUrls = {};
+        for (const model of genderModels) {
+          genderUrls[model] = {};
+          for (const track of genderTracks) {
+            const key = `${user.id}/${job.id}/gender/${model}/${track}.mp3`;
+            genderUrls[model][track] = await createStemsSignedPutUrl(key);
+          }
+        }
+        uploads[section] = genderUrls;
+        continue;
+      }
       const tracks = SECTION_OUTPUTS[section];
       if (!tracks || tracks.length === 0) {
         // structure: sin outputs de audio

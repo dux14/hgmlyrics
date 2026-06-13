@@ -138,7 +138,7 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
     expect(mockInvokeModalPipeline).not.toHaveBeenCalled();
   });
 
-  it('actualiza el job a status=processing con sections inicializadas (sin gender)', async () => {
+  it('actualiza el job a status=processing con sections inicializadas (gender ON por defecto)', async () => {
     sqlResponses.push([jobCreated()]); // SELECT job
     sqlResponses.push([]); // UPDATE job
 
@@ -163,11 +163,33 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
     expect(sectionsArg).toHaveProperty('gender');
     expect(sectionsArg).toHaveProperty('structure');
 
-    // voiceInstrumental y leadBacking → pending; gender → skipped (flag off)
+    // gender habilitado por defecto (sin STUDIO_GENDER_FLAG=off) → pending
     expect(sectionsArg.voiceInstrumental.status).toBe('pending');
     expect(sectionsArg.leadBacking.status).toBe('pending');
     expect(sectionsArg.structure.status).toBe('pending');
+    expect(sectionsArg.gender.status).toBe('pending');
+  });
+
+  it('con STUDIO_GENDER_FLAG=off excluye gender de enabledSections', async () => {
+    process.env.STUDIO_GENDER_FLAG = 'off';
+    sqlResponses.push([jobCreated()]);
+    sqlResponses.push([]);
+
+    const res = makeRes();
+    await handler(authedReq(), res);
+
+    expect(res.statusCode).toBe(200);
+
+    const updateCall = sqlCalls.find(
+      (c) => c.text.includes('processing') && c.text.includes('stem_jobs'),
+    );
+    const sectionsArg = updateCall.values.find(
+      (v) => v && typeof v === 'object' && 'voiceInstrumental' in v,
+    );
     expect(sectionsArg.gender.status).toBe('skipped');
+
+    const payload = mockInvokeModalPipeline.mock.calls[0][0];
+    expect(payload.enabledSections).not.toContain('gender');
   });
 
   it('usa sql.array() para serializar enabled_sections en el UPDATE de processing', async () => {
@@ -183,8 +205,8 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
     expect(arg).toContain('voiceInstrumental');
     expect(arg).toContain('structure');
     expect(arg).toContain('leadBacking');
-    // gender no habilitado (flag off)
-    expect(arg).not.toContain('gender');
+    // gender habilitado por defecto
+    expect(arg).toContain('gender');
 
     // El valor resultante (__pgArray wrapper) debe aparecer en los valores del UPDATE.
     const updateCall = sqlCalls.find(
@@ -210,7 +232,8 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
     expect(payload.enabledSections).toContain('voiceInstrumental');
     expect(payload.enabledSections).toContain('structure');
     expect(payload.enabledSections).toContain('leadBacking');
-    expect(payload.enabledSections).not.toContain('gender');
+    // gender habilitado por defecto
+    expect(payload.enabledSections).toContain('gender');
     expect(payload.webhook.url).toContain('/api/stems/webhook');
     expect(payload.webhook.secret).toBe('whsecret');
   });
@@ -255,8 +278,8 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
     expect(payload.uploads.structure).toEqual({});
   });
 
-  it('con STUDIO_GENDER_FLAG=on incluye gender en enabledSections y uploads', async () => {
-    process.env.STUDIO_GENDER_FLAG = 'on';
+  it('payload.uploads.gender tiene estructura anidada { chorus:{male,female}, aufr33:{male,female} }', async () => {
+    // gender habilitado por defecto (sin STUDIO_GENDER_FLAG=off)
     sqlResponses.push([jobCreated()]);
     sqlResponses.push([]);
 
@@ -264,8 +287,22 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
 
     const payload = mockInvokeModalPipeline.mock.calls[0][0];
     expect(payload.enabledSections).toContain('gender');
-    expect(payload.uploads.gender.male).toMatch(/^https:\/\/signed-put\//);
-    expect(payload.uploads.gender.female).toMatch(/^https:\/\/signed-put\//);
+
+    // Estructura anidada: dos modelos, cada uno con male y female
+    const g = payload.uploads.gender;
+    expect(g).toBeDefined();
+    expect(g.chorus).toBeDefined();
+    expect(g.aufr33).toBeDefined();
+    expect(g.chorus.male).toMatch(/^https:\/\/signed-put\//);
+    expect(g.chorus.female).toMatch(/^https:\/\/signed-put\//);
+    expect(g.aufr33.male).toMatch(/^https:\/\/signed-put\//);
+    expect(g.aufr33.female).toMatch(/^https:\/\/signed-put\//);
+
+    // Las keys de storage deben incluir el modelo y el track
+    expect(g.chorus.male).toContain('gender/chorus/male');
+    expect(g.chorus.female).toContain('gender/chorus/female');
+    expect(g.aufr33.male).toContain('gender/aufr33/male');
+    expect(g.aufr33.female).toContain('gender/aufr33/female');
 
     // Las sections deben tener gender=pending
     const updateCall = sqlCalls.find(

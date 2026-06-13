@@ -10,7 +10,9 @@ vi.mock('@supabase/supabase-js', () => ({
     auth: { getUser: vi.fn() },
     storage: {
       from: () => ({
-        createSignedUrl: vi.fn().mockResolvedValue({ data: { signedUrl: 'https://x' }, error: null }),
+        createSignedUrl: vi
+          .fn()
+          .mockResolvedValue({ data: { signedUrl: 'https://x' }, error: null }),
         createSignedUploadUrl: vi.fn(),
         list: vi.fn().mockResolvedValue({ data: [], error: null }),
         remove: vi.fn().mockResolvedValue({ data: [], error: null }),
@@ -170,6 +172,47 @@ describe('GET /api/stems/jobs/[id]', () => {
     expect(result.stems.vocals).toBe('signed://u1/j1/voiceInstrumental/vocals.mp3');
     expect(signStemsDownload).toHaveBeenCalledTimes(1);
     expect(signStemsDownload).toHaveBeenCalledWith('u1/j1/voiceInstrumental/vocals.mp3');
+  });
+
+  it('done con gender: genderVoices anidado tiene URLs firmadas por modelo y track', async () => {
+    const job = {
+      id: 'j1',
+      user_id: 'u1',
+      status: 'done',
+      sections: {
+        voiceInstrumental: { outputs: {} },
+        leadBacking: { outputs: {} },
+        gender: {
+          status: 'done',
+          outputs: {
+            chorus: {
+              male: 'u1/j1/gender/chorus/male.mp3',
+              female: 'u1/j1/gender/chorus/female.mp3',
+            },
+            aufr33: {
+              male: 'u1/j1/gender/aufr33/male.mp3',
+              female: 'u1/j1/gender/aufr33/female.mp3',
+            },
+          },
+        },
+      },
+    };
+    sqlResponses.push([job]);
+    const res = makeRes();
+    await handler(authedReq(), res);
+
+    expect(res.statusCode).toBe(200);
+    const { job: result } = res.body;
+
+    // genderVoices debe existir con la estructura anidada firmada
+    expect(result.genderVoices).toBeDefined();
+    expect(result.genderVoices.chorus.male).toBe('signed://u1/j1/gender/chorus/male.mp3');
+    expect(result.genderVoices.chorus.female).toBe('signed://u1/j1/gender/chorus/female.mp3');
+    expect(result.genderVoices.aufr33.male).toBe('signed://u1/j1/gender/aufr33/male.mp3');
+    expect(result.genderVoices.aufr33.female).toBe('signed://u1/j1/gender/aufr33/female.mp3');
+
+    // 4 llamadas para los 4 stems de gender
+    expect(signStemsDownload).toHaveBeenCalledTimes(4);
   });
 
   it('processing reciente: devuelve job crudo sin aplanar (signStemsDownload no se llama)', async () => {

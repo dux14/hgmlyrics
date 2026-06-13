@@ -662,3 +662,116 @@
   gap: var(--space-sm);
   margin-top: var(--space-sm);
 }
+
+/* ─── Modo Metrónomo ─── */
+.metro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1rem 0;
+}
+.metro-bpm {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.metro-bpm__val {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 5.5rem;
+}
+.metro-bpm__val span {
+  font-size: clamp(3rem, 14vw, 4.5rem);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.metro-bpm__val small {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+}
+.metro-step {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.15));
+  background: var(--color-surface, rgba(255, 255, 255, 0.05));
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+}
+.metro-step:active {
+  transform: scale(0.94);
+}
+.metro-sig {
+  display: flex;
+  gap: 0.5rem;
+}
+.metro-sig__btn {
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.15));
+  background: transparent;
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.metro-sig__btn[aria-selected='true'] {
+  background: var(--color-primary, #6c8cff);
+  border-color: transparent;
+  color: #fff;
+}
+.metro-beats {
+  display: flex;
+  gap: 0.75rem;
+  min-height: 1.25rem;
+  align-items: center;
+}
+.metro-dot {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  background: var(--color-border, rgba(255, 255, 255, 0.2));
+  transition: transform 0.06s ease, background 0.06s ease;
+}
+.metro-dot--accent {
+  outline: 2px solid var(--color-primary, #6c8cff);
+  outline-offset: 2px;
+}
+.metro-dot--on {
+  background: var(--color-primary, #6c8cff);
+  transform: scale(1.35);
+}
+.metro-count {
+  font-size: 2rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-height: 2.4rem;
+  opacity: 0.85;
+}
+.metro-actions {
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 22rem;
+}
+.metro-actions .btn {
+  flex: 1;
+  padding: 0.9rem;
+  font-size: 1.05rem;
+}
+.metro-tap {
+  min-height: 3.25rem; /* área generosa para el pulgar en móvil */
+}
+
+@media (min-width: 640px) {
+  .metro {
+    gap: 1.5rem;
+  }
+}

@@ -198,3 +198,31 @@ describe('createMetronome — scheduler y ciclo de vida', () => {
     expect(beats.length).toBe(frozen);
   });
 });
+
+describe('createMetronome — ticker en Web Worker', () => {
+  it('usa el Worker inyectado y lo termina en dispose()', () => {
+    const { AudioContextClass } = makeMockAudio();
+    const posted = [];
+    const terminate = vi.fn();
+    function FakeWorker() {
+      this.onmessage = null;
+      this.postMessage = (msg) => posted.push(msg);
+      this.terminate = terminate;
+    }
+    const origCreate = globalThis.URL.createObjectURL;
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:fake');
+    try {
+      const m = createMetronome({
+        AudioContextClass,
+        WorkerClass: FakeWorker,
+        useWorker: true,
+      });
+      m.start();
+      expect(posted.some((p) => p && p.cmd === 'start')).toBe(true);
+      m.dispose();
+      expect(terminate).toHaveBeenCalled();
+    } finally {
+      globalThis.URL.createObjectURL = origCreate;
+    }
+  });
+});

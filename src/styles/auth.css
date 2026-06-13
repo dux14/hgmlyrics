@@ -309,8 +309,13 @@
 /* Mobile: cap más estrecho para que menú + logo + acciones entren en una fila
    en viewports de 360–414px. ~5rem ≈ 80px, suficiente para ~8–10 caracteres. */
 @media (max-width: 767px) {
+  /* Cap adaptativo al ancho del viewport: el nombre absorbe solo el espacio
+     que sobra tras menú + logo + íconos + avatar, de modo que la fila superior
+     (menú · logo · acciones) no salte de renglón en teléfonos ≥360px. En
+     pantallas muy angostas (≤320px) el nombre se trunca al mínimo; si aun así
+     no cabe, envuelve sin romper la UI (no hay overflow horizontal). */
   .auth-button > span {
-    max-width: 5rem;
+    max-width: clamp(2rem, calc(100vw - 20.5rem), 9rem);
   }
 }
 

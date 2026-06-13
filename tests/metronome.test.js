@@ -210,7 +210,10 @@ describe('createMetronome — ticker en Web Worker', () => {
       this.terminate = terminate;
     }
     const origCreate = globalThis.URL.createObjectURL;
+    const origRevoke = globalThis.URL.revokeObjectURL;
     globalThis.URL.createObjectURL = vi.fn(() => 'blob:fake');
+    const revoke = vi.fn();
+    globalThis.URL.revokeObjectURL = revoke;
     try {
       const m = createMetronome({
         AudioContextClass,
@@ -221,8 +224,11 @@ describe('createMetronome — ticker en Web Worker', () => {
       expect(posted.some((p) => p && p.cmd === 'start')).toBe(true);
       m.dispose();
       expect(terminate).toHaveBeenCalled();
+      // La objectURL del worker se libera (sin fuga de memoria).
+      expect(revoke).toHaveBeenCalledWith('blob:fake');
     } finally {
       globalThis.URL.createObjectURL = origCreate;
+      globalThis.URL.revokeObjectURL = origRevoke;
     }
   });
 });

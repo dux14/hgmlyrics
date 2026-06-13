@@ -1026,8 +1026,12 @@ export async function renderTuner(container, opts = {}) {
     const playBtn = bodyEl.querySelector('#metro-play');
 
     // El motor puede no existir todavía (primer pintado): créalo y refresca.
+    // Guarda: la promesa de idb puede resolver tras cambiar de pestaña; solo
+    // repintar si seguimos en el modo metrónomo.
     if (!metronome) {
-      ensureMetronome().then(() => paintBody());
+      ensureMetronome().then(() => {
+        if (mode === 'metronomo') paintBody();
+      });
       return;
     }
 
@@ -1073,6 +1077,9 @@ export async function renderTuner(container, opts = {}) {
         metronome.setSignature(metroSig);
         persistMetronome();
         paintBody(); // re-renderiza los puntos del nuevo compás
+        // paintBody reemplazó el DOM: si sonaba, reengancha el visual a los
+        // puntos nuevos (startMetroVisual cancela el loop previo).
+        if (metronome.isRunning()) startMetroVisual();
       });
     }
 
@@ -1102,6 +1109,7 @@ export async function renderTuner(container, opts = {}) {
 
   // Sincroniza puntos + conteo al reloj de audio (patrón draw() de cwilso).
   function startMetroVisual() {
+    stopMetroVisual(); // idempotente: nunca dejar dos loops rAF vivos
     const dots = bodyEl.querySelectorAll('.metro-dot');
     const countEl = bodyEl.querySelector('#metro-count');
     let shownBeat = -1;

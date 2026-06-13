@@ -82,6 +82,7 @@ export function createMetronome(opts = {}) {
   let currentBeat = 0; // próximo beat a agendar (mod beats)
   let nextNoteTime = 0; // tiempo de audio del próximo beat
   let worker = null;
+  let workerUrl = null;
   let intervalId = null;
   let tapTimes = [];
 
@@ -174,8 +175,8 @@ export function createMetronome(opts = {}) {
     if (useWorker && WorkerCtor) {
       try {
         const blob = new Blob([WORKER_SRC], { type: 'application/javascript' });
-        const url = URL.createObjectURL(blob);
-        worker = new WorkerCtor(url);
+        workerUrl = URL.createObjectURL(blob);
+        worker = new WorkerCtor(workerUrl);
         worker.onmessage = () => scheduler();
         worker.postMessage({ cmd: 'start', interval: lookahead });
         return;
@@ -195,6 +196,10 @@ export function createMetronome(opts = {}) {
         /* noop */
       }
       worker = null;
+    }
+    if (workerUrl) {
+      URL.revokeObjectURL(workerUrl);
+      workerUrl = null;
     }
     if (intervalId !== null) {
       clearInterval(intervalId);

@@ -53,6 +53,17 @@ const { mountAdminWorldPanel } = await import('../../src/components/AdminWorldPa
 // Helpers
 // ---------------------------------------------------------------------------
 
+// Espera a que una condición se cumpla mediante polling. Sustituye a los
+// `setTimeout` fijos tras FileReader/promesas, que son flaky bajo carga de la
+// suite completa (el onload del FileReader puede tardar más que el delay fijo).
+async function waitFor(predicate, { tries = 200, interval = 5 } = {}) {
+  for (let i = 0; i < tries; i++) {
+    if (predicate()) return;
+    await new Promise((r) => setTimeout(r, interval));
+  }
+  throw new Error('waitFor: la condición no se cumplió en el tiempo esperado');
+}
+
 function makeContainer() {
   const div = document.createElement('div');
   document.body.appendChild(div);
@@ -187,8 +198,8 @@ describe('mountAdminWorldPanel — validación de map.json', () => {
     Object.defineProperty(mapFileInput, 'files', { value: [file], configurable: true });
 
     mapFileInput.dispatchEvent(new Event('change'));
-    // Esperar al FileReader (se resuelve en microtask)
-    await new Promise((r) => setTimeout(r, 10));
+    // Esperar al FileReader (onload asíncrono)
+    await waitFor(() => validationErrors.style.display !== 'none');
 
     expect(validationErrors.style.display).not.toBe('none');
     expect(validationErrors.textContent).toMatch(/layers|capas|tilesets/i);
@@ -228,7 +239,7 @@ describe('mountAdminWorldPanel — validación de map.json', () => {
     const file = new File([validJson], 'good-map.json', { type: 'application/json' });
     Object.defineProperty(mapFileInput, 'files', { value: [file], configurable: true });
     mapFileInput.dispatchEvent(new Event('change'));
-    await new Promise((r) => setTimeout(r, 10));
+    await waitFor(() => zonesContainer.style.display !== 'none');
 
     expect(zonesContainer.style.display).not.toBe('none');
     // Los valores de zona se renderizan en inputs editables (no texto plano)
@@ -284,7 +295,7 @@ describe('mountAdminWorldPanel — validación de map.json', () => {
     const file = new File([validJson], 'good-map.json', { type: 'application/json' });
     Object.defineProperty(mapFileInput, 'files', { value: [file], configurable: true });
     mapFileInput.dispatchEvent(new Event('change'));
-    await new Promise((r) => setTimeout(r, 10));
+    await waitFor(() => zonesContainer.querySelector('.wm-zone-name') !== null);
 
     // Editar el nombre de la zona inline
     const zoneNameInput = zonesContainer.querySelector('.wm-zone-name');
@@ -304,7 +315,7 @@ describe('mountAdminWorldPanel — validación de map.json', () => {
 
     // Guardar
     saveBtn.click();
-    await new Promise((r) => setTimeout(r, 10));
+    await waitFor(() => mockSaveMap.mock.calls.length > 0);
 
     // Verificar que saveMap recibió el tiledJson con el valor editado
     expect(mockSaveMap).toHaveBeenCalledOnce();

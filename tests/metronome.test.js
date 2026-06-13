@@ -133,3 +133,68 @@ describe('createMetronome — tap tempo', () => {
     expect(m.tap()).toBeNull();
   });
 });
+
+describe('createMetronome — scheduler y ciclo de vida', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('agenda la secuencia de beats con el patrón de acento de 4/4', () => {
+    const { AudioContextClass, setTime } = makeMockAudio();
+    const beats = [];
+    const m = createMetronome({
+      AudioContextClass,
+      useWorker: false,
+      lookahead: 25,
+      scheduleAheadTime: 0.1,
+      onBeat: (beat, accent) => beats.push({ beat, accent }),
+    });
+    m.setBpm(120);
+    m.start();
+    setTime(0.45);
+    vi.advanceTimersByTime(25);
+    setTime(0.95);
+    vi.advanceTimersByTime(25);
+    setTime(1.45);
+    vi.advanceTimersByTime(25);
+    setTime(1.95);
+    vi.advanceTimersByTime(25);
+    expect(beats.map((b) => b.beat)).toEqual([0, 1, 2, 3, 0]);
+    expect(beats.map((b) => b.accent)).toEqual([true, false, false, false, true]);
+    m.dispose();
+  });
+
+  it('start() es idempotente y stop() no lanza si no corre', () => {
+    const { AudioContextClass } = makeMockAudio();
+    const beats = [];
+    const m = createMetronome({
+      AudioContextClass,
+      useWorker: false,
+      onBeat: () => beats.push(1),
+    });
+    m.start();
+    const after1 = beats.length;
+    m.start();
+    expect(beats.length).toBe(after1);
+    expect(() => m.stop()).not.toThrow();
+    expect(() => m.stop()).not.toThrow();
+    m.dispose();
+  });
+
+  it('dispose() detiene el ticker: no se agendan más beats', () => {
+    const { AudioContextClass, setTime } = makeMockAudio();
+    const beats = [];
+    const m = createMetronome({
+      AudioContextClass,
+      useWorker: false,
+      lookahead: 25,
+      scheduleAheadTime: 0.1,
+      onBeat: () => beats.push(1),
+    });
+    m.start();
+    m.dispose();
+    const frozen = beats.length;
+    setTime(5);
+    vi.advanceTimersByTime(200);
+    expect(beats.length).toBe(frozen);
+  });
+});

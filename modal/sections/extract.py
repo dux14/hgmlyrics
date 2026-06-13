@@ -62,6 +62,85 @@ def _classify_ep317_stem(filename: str) -> "str | None":
     return None
 
 
+def extract_all_stems(src_path: str) -> dict:
+    """
+    Inferencia PURA de S1 sobre un archivo de audio LOCAL.
+
+    Corre BS-RoFormer ep_317 (vocals + instrumental) + demucs htdemucs_6s
+    (drums/bass/guitar/piano/other) sobre `src_path` y devuelve un dict con la
+    ruta local de cada una de las 7 pistas:
+
+      { "vocals": <path>, "instrumental": <path>, "drums": <path>,
+        "bass": <path>, "guitar": <path>, "piano": <path>, "other": <path> }
+
+    NO descarga audio, NO sube nada, NO postea webhook. Reusado por run_extract
+    (producción, que descarga y luego sube) y por el smoke full (validación
+    local), de modo que la separación que Samu escucha es exactamente la
+    desplegada. El llamador es responsable de los archivos temporales.
+    """
+    # Import aquí (solo existe en el contenedor Modal), igual que run_extract.
+    from audio_separator.separator import Separator  # noqa: E402
+
+    # ── BS-RoFormer ep_317: vocals + instrumental ────────────────────────────
+    # Separamos ambos stems (sin output_single_stem) para obtener
+    # vocals e instrumental del mismo paso.
+    ep317_out = tempfile.mkdtemp()
+    ep317_sep = Separator(output_dir=ep317_out, output_format="mp3")
+    ep317_sep.load_model(model_filename=_BS_ROFORMER_MODEL)
+    ep317_files = ep317_sep.separate(src_path)
+
+    ep317_stems: dict[str, str] = {}
+    for fname in ep317_files:
+        fpath = fname if os.path.isabs(fname) else os.path.join(ep317_out, fname)
+        label = _classify_ep317_stem(os.path.basename(fpath))
+        if label is None:
+            raise RuntimeError(
+                f"ep_317 produjo un stem inesperado: {os.path.basename(fpath)}"
+            )
+        ep317_stems[label] = fpath
+
+    for required in ("vocals", "instrumental"):
+        if required not in ep317_stems:
+            raise RuntimeError(
+                f"ep_317 no produjo el stem requerido '{required}'. "
+                f"Stems presentes: {list(ep317_stems.keys())}"
+            )
+
+    # ── Demucs htdemucs_6s: drums/bass/guitar/piano/other ────────────────────
+    demucs_out = tempfile.mkdtemp()
+    subprocess.run(
+        [
+            "python", "-m", "demucs",
+            "-n", "htdemucs_6s",
+            "--mp3",
+            "-o", demucs_out,
+            src_path,
+        ],
+        check=True,
+        env={**os.environ, "HF_HOME": "/root/.cache/huggingface"},
+    )
+
+    demucs_stem_dir = (
+        pathlib.Path(demucs_out) / "htdemucs_6s" / pathlib.Path(src_path).stem
+    )
+
+    # Verificar que los stems instrumentales de demucs existen.
+    for stem in _DEMUCS_INSTRUMENT_STEMS:
+        p = demucs_stem_dir / f"{stem}.mp3"
+        if not p.exists():
+            raise FileNotFoundError(
+                f"demucs htdemucs_6s no produjo el stem esperado: {p}"
+            )
+
+    stems: dict[str, str] = {
+        "vocals": ep317_stems["vocals"],
+        "instrumental": ep317_stems["instrumental"],
+    }
+    for stem in _DEMUCS_INSTRUMENT_STEMS:
+        stems[stem] = str(demucs_stem_dir / f"{stem}.mp3")
+    return stems
+
+
 def run_extract(payload: dict) -> None:
     """
     Nodo S1: descarga el audio de entrada, corre BS-RoFormer ep_317 (vocals +
@@ -76,7 +155,6 @@ def run_extract(payload: dict) -> None:
     import httpx  # noqa: F401 — ya disponible en la imagen
     # Absolute import: cuando Modal ejecuta, `modal/` es el cwd y `sections` es top-level.
     from sections._common import extract_storage_key, upload_put, post_webhook
-    from audio_separator.separator import Separator  # noqa: E402 — solo en el contenedor
 
     if S1_EXTRACTOR != "ep_317":
         raise NotImplementedError(
@@ -99,75 +177,17 @@ def run_extract(payload: dict) -> None:
                 for chunk in r.iter_bytes():
                     f.write(chunk)
 
-        # ── 2. BS-RoFormer ep_317: vocals + instrumental ─────────────────────
-        # Separamos ambos stems (sin output_single_stem) para obtener
-        # vocals e instrumental del mismo paso.
-        ep317_out = tempfile.mkdtemp()
-        ep317_sep = Separator(output_dir=ep317_out, output_format="mp3")
-        ep317_sep.load_model(model_filename=_BS_ROFORMER_MODEL)
-        ep317_files = ep317_sep.separate(src_path)
+        # ── 2-3. Separación S1 (ep_317 vocals/instrumental + demucs 6s) ──────
+        # Inferencia pura compartida con el smoke full (mismo código que prod).
+        stems = extract_all_stems(src_path)
 
-        ep317_stems: dict[str, str] = {}
-        for fname in ep317_files:
-            fpath = fname if os.path.isabs(fname) else os.path.join(ep317_out, fname)
-            label = _classify_ep317_stem(os.path.basename(fpath))
-            if label is None:
-                raise RuntimeError(
-                    f"ep_317 produjo un stem inesperado: {os.path.basename(fpath)}"
-                )
-            ep317_stems[label] = fpath
-
-        for required in ("vocals", "instrumental"):
-            if required not in ep317_stems:
-                raise RuntimeError(
-                    f"ep_317 no produjo el stem requerido '{required}'. "
-                    f"Stems presentes: {list(ep317_stems.keys())}"
-                )
-
-        # ── 3. Demucs htdemucs_6s: drums/bass/guitar/piano/other ────────────
-        demucs_out = tempfile.mkdtemp()
-        subprocess.run(
-            [
-                "python", "-m", "demucs",
-                "-n", "htdemucs_6s",
-                "--mp3",
-                "-o", demucs_out,
-                src_path,
-            ],
-            check=True,
-            env={**os.environ, "HF_HOME": "/root/.cache/huggingface"},
-        )
-
-        demucs_stem_dir = (
-            pathlib.Path(demucs_out) / "htdemucs_6s" / pathlib.Path(src_path).stem
-        )
-
-        # Verificar que los stems instrumentales de demucs existen.
-        for stem in _DEMUCS_INSTRUMENT_STEMS:
-            p = demucs_stem_dir / f"{stem}.mp3"
-            if not p.exists():
-                raise FileNotFoundError(
-                    f"demucs htdemucs_6s no produjo el stem esperado: {p}"
-                )
-
-        # ── 4. Subir pistas + recopilar keys ────────────────────────────────
+        # ── 4. Subir las 7 pistas + recopilar keys ──────────────────────────
         outputs: dict[str, str] = {}
-
-        # vocals e instrumental vienen de ep_317
-        for track in ("vocals", "instrumental"):
+        for track, file_path in stems.items():
             put_url = uploads_vi.get(track)
             if not put_url:
                 continue
-            upload_put(put_url, ep317_stems[track])
-            outputs[track] = extract_storage_key(put_url)
-
-        # drums/bass/guitar/piano/other vienen de demucs
-        for track in _DEMUCS_INSTRUMENT_STEMS:
-            put_url = uploads_vi.get(track)
-            if not put_url:
-                continue
-            file_path = demucs_stem_dir / f"{track}.mp3"
-            upload_put(put_url, str(file_path))
+            upload_put(put_url, file_path)
             outputs[track] = extract_storage_key(put_url)
 
         # ── 5. Webhook de éxito ──────────────────────────────────────────────

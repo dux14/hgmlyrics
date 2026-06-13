@@ -107,13 +107,24 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  flex-shrink: 0;
+  /* min-width:0 permite que el bloque se encoja en mobile para que los
+     botones + nombre del usuario no salten a un segundo renglón. */
+  min-width: 0;
   margin-left: auto;
+}
+
+/* Contenedor del AuthButton dentro de .header__actions. Necesita min-width:0
+   para que el flex shrink se propague hasta el span del nombre. */
+#auth-button-mount {
+  min-width: 0;
 }
 
 .header__btn {
   width: 40px;
   height: 40px;
+  /* flex-shrink:0 evita que los íconos se aplasten cuando .header__actions
+     se encoge para dejar espacio al nombre del usuario. */
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;

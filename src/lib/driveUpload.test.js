@@ -65,6 +65,7 @@ describe('uploadMedia', () => {
     const p = uploadMedia('tok', body, 'BOUND', (pct) => seen.push(pct));
     const xhr = instances[0];
     expect(xhr.headers.Authorization).toBe('Bearer tok');
+    expect(xhr.headers['Content-Type']).toBe('multipart/related; boundary=BOUND');
     xhr.upload.onprogress({ lengthComputable: true, loaded: 50, total: 200 });
     xhr.upload.onprogress({ lengthComputable: true, loaded: 200, total: 200 });
     xhr.status = 200;
@@ -72,6 +73,14 @@ describe('uploadMedia', () => {
     xhr.onload();
     await expect(p).resolves.toEqual({ id: 'file123' });
     expect(seen).toEqual([25, 100]);
+  });
+
+  it('rechaza con err.status 0 en error de red', async () => {
+    const instances = installFakeXHR();
+    const p = uploadMedia('tok', new Blob(['x']), 'BOUND');
+    const xhr = instances[0];
+    xhr.onerror();
+    await expect(p).rejects.toMatchObject({ status: 0 });
   });
 
   it('rechaza con err.status cuando el status es >= 400', async () => {

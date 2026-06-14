@@ -84,7 +84,13 @@ export function uploadMedia(token, body, boundary, onProgress) {
     };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 400) {
-        resolve(JSON.parse(xhr.responseText));
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          const err = new Error('Respuesta inválida de Drive al subir el ZIP.');
+          err.status = xhr.status;
+          reject(err);
+        }
       } else {
         const err = new Error(`Drive respondió ${xhr.status} al subir el ZIP.`);
         err.status = xhr.status;

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { buildSearchQuery, buildMultipartBody } from './driveUpload.js';
+import { describe, it, expect, afterEach } from 'vitest';
+import { buildSearchQuery, buildMultipartBody, uploadMedia } from './driveUpload.js';
 
 describe('buildSearchQuery', () => {
   it('arma el q de carpeta con parent y filtros', () => {
@@ -25,5 +25,62 @@ describe('buildMultipartBody', () => {
     expect(text).toContain('"parents":["folder1"]');
     expect(text).toContain('ZIPDATA');
     expect(text.trimEnd().endsWith('--BOUNDARY--')).toBe(true);
+  });
+});
+
+describe('uploadMedia', () => {
+  function installFakeXHR() {
+    const instances = [];
+    class FakeXHR {
+      constructor() {
+        this.upload = {};
+        this.headers = {};
+        this.status = 0;
+        this.responseText = '';
+        instances.push(this);
+      }
+      open(method, url) {
+        this.method = method;
+        this.url = url;
+      }
+      setRequestHeader(k, v) {
+        this.headers[k] = v;
+      }
+      send(body) {
+        this.body = body;
+      }
+    }
+    globalThis.XMLHttpRequest = FakeXHR;
+    return instances;
+  }
+
+  afterEach(() => {
+    delete globalThis.XMLHttpRequest;
+  });
+
+  it('resuelve con el JSON parseado y reporta progreso en %', async () => {
+    const instances = installFakeXHR();
+    const body = new Blob(['x']);
+    const seen = [];
+    const p = uploadMedia('tok', body, 'BOUND', (pct) => seen.push(pct));
+    const xhr = instances[0];
+    expect(xhr.headers.Authorization).toBe('Bearer tok');
+    xhr.upload.onprogress({ lengthComputable: true, loaded: 50, total: 200 });
+    xhr.upload.onprogress({ lengthComputable: true, loaded: 200, total: 200 });
+    xhr.status = 200;
+    xhr.responseText = '{"id":"file123"}';
+    xhr.onload();
+    await expect(p).resolves.toEqual({ id: 'file123' });
+    expect(seen).toEqual([25, 100]);
+  });
+
+  it('rechaza con err.status cuando el status es >= 400', async () => {
+    const instances = installFakeXHR();
+    const p = uploadMedia('tok', new Blob(['x']), 'BOUND');
+    const xhr = instances[0];
+    xhr.status = 401;
+    xhr.responseText = '';
+    xhr.onload();
+    await expect(p).rejects.toMatchObject({ status: 401 });
   });
 });

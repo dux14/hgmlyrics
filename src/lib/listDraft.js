@@ -55,7 +55,15 @@ function isoFromDays(days) {
  */
 export function resolveExpiresAt({ days, dateValue, current }) {
   if (dateValue) {
+    const hasTime = String(dateValue).includes('T');
     const chosen = new Date(dateValue);
+    if (Number.isNaN(chosen.getTime())) throw new Error('Fecha inválida.');
+    if (hasTime) {
+      // datetime-local: respeta la hora elegida
+      if (chosen <= new Date()) throw new Error('La fecha y hora deben ser futuras.');
+      return chosen.toISOString();
+    }
+    // solo fecha (degradado): fin de día como antes
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     if (chosen <= today) throw new Error('La fecha debe ser futura.');

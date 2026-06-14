@@ -79,7 +79,7 @@ function buildFriendItem(item, viewerId, kind) {
 
   return `
     <li class="friend-item">
-      <img class="profile-avatar" style="width:40px;height:40px;" src="${other.avatarUrl || ''}" alt="" />
+      <img class="profile-avatar" style="width:40px;height:40px;" src="${other.avatarUrl || ''}" alt="" width="40" height="40" loading="lazy" decoding="async" />
       <div>
         <a href="#/u/${other.username}" style="color:inherit;text-decoration:none;font-weight:600;">${other.displayName || other.username}</a>
         <div style="font-size:0.8em;color:var(--color-text-secondary);">@${other.username}</div>

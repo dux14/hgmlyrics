@@ -250,6 +250,9 @@ export async function renderSongView(container, songIdOrData) {
           class="song-view__cover"
           src="${coverUrl}"
           alt="Portada de ${escapeHtml(song.album || '')}"
+          width="80"
+          height="80"
+          decoding="async"
           onerror="this.src='${COVER_PLACEHOLDER}'"
         />
         `

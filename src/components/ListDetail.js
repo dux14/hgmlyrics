@@ -537,7 +537,7 @@ function renderEditor(container, listData) {
         .map(
           (f) => `
         <div class="list-detail__invitee-row" data-id="${escapeHtml(f.id)}">
-          <img class="list-detail__invitee-avatar" src="${escapeHtml(f.avatarUrl || '')}" alt="" onerror="this.style.visibility='hidden'" />
+          <img class="list-detail__invitee-avatar" src="${escapeHtml(f.avatarUrl || '')}" alt="" width="40" height="40" loading="lazy" decoding="async" onerror="this.style.visibility='hidden'" />
           <span class="list-detail__invitee-name">${escapeHtml(f.displayName || f.username)}</span>
           <button class="list-detail__row-btn list-detail__row-btn--danger" data-action="uninvite" title="Quitar">${icon('close', { size: 14 })}</button>
         </div>`,
@@ -559,7 +559,7 @@ function renderEditor(container, listData) {
         .map(
           (f) => `
         <div class="list-detail__friend-result" data-id="${escapeHtml(f.id)}">
-          <img class="list-detail__friend-result-avatar" src="${escapeHtml(f.avatarUrl || '')}" alt="" onerror="this.style.visibility='hidden'" />
+          <img class="list-detail__friend-result-avatar" src="${escapeHtml(f.avatarUrl || '')}" alt="" width="40" height="40" loading="lazy" decoding="async" onerror="this.style.visibility='hidden'" />
           <div class="list-detail__friend-result-info">
             <span class="list-detail__friend-result-name">${escapeHtml(f.displayName || f.username)}</span>
             <span class="list-detail__friend-result-handle">@${escapeHtml(f.username)}</span>

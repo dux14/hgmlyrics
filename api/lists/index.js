@@ -33,9 +33,12 @@ export default withErrors(async (req, res) => {
     const rows = await sql`
       SELECT l.id, l.name, l.expires_at, l.owner_id,
              (l.owner_id = ${user.id}) AS is_owner,
-             (SELECT count(*) FROM ephemeral_list_songs s WHERE s.list_id = l.id) AS song_count
+             (SELECT count(*) FROM ephemeral_list_songs s WHERE s.list_id = l.id) AS song_count,
+             (SELECT count(*) FROM ephemeral_lists c
+              WHERE c.parent_id = l.id AND c.expires_at > now()) AS child_count
       FROM ephemeral_lists l
-      WHERE l.expires_at > now()
+      WHERE l.parent_id IS NULL
+        AND l.expires_at > now()
         AND (l.owner_id = ${user.id}
              OR EXISTS (SELECT 1 FROM ephemeral_list_members m
                         WHERE m.list_id = l.id AND m.user_id = ${user.id}))
@@ -53,10 +56,35 @@ export default withErrors(async (req, res) => {
     throw e;
   }
   const expiresAt = validateExpiry(req.body?.expires_at);
+
+  const parentId = req.body?.parent_id || null;
+  if (parentId) {
+    const parents = await sql`
+      SELECT id, owner_id, parent_id, expires_at
+      FROM ephemeral_lists WHERE id = ${parentId} AND owner_id = ${user.id}
+    `;
+    const parent = parents[0];
+    if (!parent) {
+      const e = new Error('Evento padre no encontrado');
+      e.status = 404;
+      throw e;
+    }
+    if (parent.parent_id) {
+      const e = new Error('No se puede anidar más de 2 niveles');
+      e.status = 400;
+      throw e;
+    }
+    if (new Date(expiresAt) > new Date(parent.expires_at)) {
+      const e = new Error('La sub-lista no puede caducar después del evento');
+      e.status = 400;
+      throw e;
+    }
+  }
+
   const rows = await sql`
-    INSERT INTO ephemeral_lists (owner_id, name, expires_at)
-    VALUES (${user.id}, ${name}, ${expiresAt})
-    RETURNING id, name, expires_at
+    INSERT INTO ephemeral_lists (owner_id, name, expires_at, parent_id)
+    VALUES (${user.id}, ${name}, ${expiresAt}, ${parentId})
+    RETURNING id, name, expires_at, parent_id
   `;
   res.status(201).json(rows[0]);
 });

@@ -47,6 +47,66 @@ beforeEach(() => {
 });
 
 describe('POST /api/lists', () => {
+  it('crea sub-lista válida bajo un evento del usuario', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([
+      { id: 'evt1', owner_id: 'u1', parent_id: null, expires_at: '2026-06-20T00:00:00Z' },
+    ]); // SELECT padre
+    sqlResponses.push([{ id: 'sub1', name: 'Ensayo', expires_at: '2026-06-18T00:00:00Z' }]); // INSERT
+    const req = {
+      method: 'POST',
+      headers: { authorization: 'Bearer t' },
+      body: { name: 'Ensayo', expires_at: '2026-06-18T00:00:00Z', parent_id: 'evt1' },
+    };
+    const res = makeRes();
+    await indexHandler(req, res);
+    expect(res.statusCode).toBe(201);
+    expect(res.body.id).toBe('sub1');
+  });
+
+  it('rechaza sub-lista cuya caducidad excede al evento (400)', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([
+      { id: 'evt1', owner_id: 'u1', parent_id: null, expires_at: '2026-06-15T00:00:00Z' },
+    ]);
+    const req = {
+      method: 'POST',
+      headers: { authorization: 'Bearer t' },
+      body: { name: 'Ensayo', expires_at: '2026-06-20T00:00:00Z', parent_id: 'evt1' },
+    };
+    const res = makeRes();
+    await indexHandler(req, res);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('rechaza colgar de una sub-lista (profundidad, 400)', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([
+      { id: 'sub1', owner_id: 'u1', parent_id: 'evt1', expires_at: '2026-06-18T00:00:00Z' },
+    ]);
+    const req = {
+      method: 'POST',
+      headers: { authorization: 'Bearer t' },
+      body: { name: 'Sub-sub', expires_at: '2026-06-17T00:00:00Z', parent_id: 'sub1' },
+    };
+    const res = makeRes();
+    await indexHandler(req, res);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('404 si el evento padre no es del usuario', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([]); // SELECT padre vacío
+    const req = {
+      method: 'POST',
+      headers: { authorization: 'Bearer t' },
+      body: { name: 'Ensayo', expires_at: '2026-06-18T00:00:00Z', parent_id: 'ajeno' },
+    };
+    const res = makeRes();
+    await indexHandler(req, res);
+    expect(res.statusCode).toBe(404);
+  });
+
   it('crea una lista para el usuario', async () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'u1', email: 'a@b.co' } }, error: null });
     sqlResponses.push([{ id: 'list1', name: 'Mi lista', expires_at: '2026-06-20T00:00:00Z' }]);
@@ -94,6 +154,24 @@ describe('GET /api/lists', () => {
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body).toHaveLength(1);
     expect(res.body[0].name).toBe('hora santa');
+  });
+
+  it('incluye child_count y solo primer nivel', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([
+      {
+        id: 'evt1',
+        name: 'Concierto',
+        expires_at: '2026-06-20T00:00:00Z',
+        is_owner: true,
+        child_count: 2,
+      },
+    ]);
+    const req = { method: 'GET', headers: { authorization: 'Bearer t' } };
+    const res = makeRes();
+    await indexHandler(req, res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body[0].child_count).toBe(2);
   });
 });
 

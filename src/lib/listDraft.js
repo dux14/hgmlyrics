@@ -45,10 +45,15 @@ function isoFromDays(days) {
 }
 
 /**
- * Resuelve la fecha de caducidad. Fecha exacta (si se dio) gana al preset.
+ * Resuelve la fecha de caducidad. Prioridad: fecha exacta > preset de días >
+ * caducidad existente (al editar sin re-elegir) > default de 1 día.
+ *
+ * El fallback a `current` es clave: al editar una lista existente sin tocar los
+ * controles de caducidad, `days` es null y `dateValue` vacío; sin este fallback
+ * se reescribía `expires_at` a "ahora + 1 día" en cada guardado.
  * @throws {Error} 'La fecha debe ser futura.'
  */
-export function resolveExpiresAt({ days, dateValue }) {
+export function resolveExpiresAt({ days, dateValue, current }) {
   if (dateValue) {
     const chosen = new Date(dateValue);
     const today = new Date();
@@ -57,5 +62,36 @@ export function resolveExpiresAt({ days, dateValue }) {
     chosen.setHours(23, 59, 59, 999);
     return chosen.toISOString();
   }
-  return isoFromDays(days ?? 1);
+  if (Number.isFinite(days)) return isoFromDays(days);
+  if (current) return current;
+  return isoFromDays(1);
+}
+
+/** Días calendario (zona local) entre hoy y la fecha de caducidad. */
+function calendarDaysUntil(expiresAt) {
+  const startToday = new Date();
+  startToday.setHours(0, 0, 0, 0);
+  const startExp = new Date(expiresAt);
+  startExp.setHours(0, 0, 0, 0);
+  return Math.round((startExp - startToday) / 86400000);
+}
+
+/**
+ * Texto legible de caducidad por día calendario, no por ventana de 24h:
+ * "caduca hoy" solo si vence el mismo día, "caduca mañana" para el siguiente.
+ */
+export function formatExpiry(expiresAt) {
+  if (!expiresAt) return '';
+  if (new Date(expiresAt) <= new Date()) return 'caducada';
+  const dias = calendarDaysUntil(expiresAt);
+  if (dias <= 0) return 'caduca hoy';
+  if (dias === 1) return 'caduca mañana';
+  return `caduca en ${dias}d`;
+}
+
+/** Urgente si caduca hoy o mañana (o ya caducó). */
+export function isUrgent(expiresAt) {
+  if (!expiresAt) return false;
+  if (new Date(expiresAt) <= new Date()) return true;
+  return calendarDaysUntil(expiresAt) <= 1;
 }

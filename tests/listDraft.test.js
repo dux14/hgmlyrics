@@ -1,6 +1,11 @@
 // tests/listDraft.test.js
 import { describe, it, expect } from 'vitest';
-import { filterFriends, diffMembers, resolveExpiresAt } from '../src/lib/listDraft.js';
+import {
+  filterFriends,
+  diffMembers,
+  resolveExpiresAt,
+  formatExpiry,
+} from '../src/lib/listDraft.js';
 
 const friends = [
   { id: 'u1', username: 'andres', displayName: 'Andrés Gómez' },
@@ -58,5 +63,45 @@ describe('resolveExpiresAt', () => {
     const future = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
     const iso = resolveExpiresAt({ days: 1, dateValue: future });
     expect(iso.slice(0, 10)).toBe(future);
+  });
+
+  it('editar sin re-elegir caducidad conserva la fecha existente (no la pisa a +1 día)', () => {
+    const current = new Date(Date.now() + 30 * 86400000).toISOString();
+    const iso = resolveExpiresAt({ days: null, dateValue: '', current });
+    expect(iso).toBe(current);
+  });
+
+  it('sin días, sin fecha y sin current cae al default de 1 día', () => {
+    const iso = resolveExpiresAt({ days: null, dateValue: '' });
+    const dias = (new Date(iso).getTime() - Date.now()) / 86400000;
+    expect(dias).toBeGreaterThan(0.99);
+    expect(dias).toBeLessThan(1.01);
+  });
+});
+
+describe('formatExpiry', () => {
+  it('"caduca hoy" solo si vence el mismo día calendario', () => {
+    const hoy = new Date();
+    hoy.setHours(23, 59, 59, 999);
+    expect(formatExpiry(hoy.toISOString())).toBe('caduca hoy');
+  });
+
+  it('preset de 1 día (~24h) dice "caduca mañana", no "caduca hoy"', () => {
+    const iso = resolveExpiresAt({ days: 1, dateValue: '' });
+    expect(formatExpiry(iso)).toBe('caduca mañana');
+  });
+
+  it('fecha lejana muestra los días restantes', () => {
+    const iso = resolveExpiresAt({ days: 7, dateValue: '' });
+    expect(formatExpiry(iso)).toBe('caduca en 7d');
+  });
+
+  it('fecha pasada muestra "caducada"', () => {
+    const past = new Date(Date.now() - 3600000).toISOString();
+    expect(formatExpiry(past)).toBe('caducada');
+  });
+
+  it('sin valor devuelve cadena vacía', () => {
+    expect(formatExpiry(null)).toBe('');
   });
 });

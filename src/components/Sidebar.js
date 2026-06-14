@@ -9,6 +9,7 @@ import { getAlbums, filterByAlbum, getState } from '../lib/store.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { listMyLists } from '../lib/lists.js';
+import { formatExpiry } from '../lib/listDraft.js';
 
 let sidebarEl = null;
 let overlayEl = null;
@@ -240,19 +241,6 @@ export function closeSidebar() {
   if (overlayEl) {
     overlayEl.classList.remove('active');
   }
-}
-
-/**
- * Formatea la fecha de caducidad de una lista.
- * @param {string} expiresAt - ISO date string
- * @returns {string}
- */
-function formatExpiry(expiresAt) {
-  if (!expiresAt) return '';
-  const diff = Math.ceil((new Date(expiresAt) - Date.now()) / 86400000);
-  if (diff <= 0) return 'caducada';
-  if (diff === 1) return 'caduca hoy';
-  return `caduca en ${diff}d`;
 }
 
 /**

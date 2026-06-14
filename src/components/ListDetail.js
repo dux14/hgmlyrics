@@ -21,7 +21,13 @@ import {
 import { getSongById } from '../lib/store.js';
 import { searchSongs } from '../lib/search.js';
 import { getAcceptedFriends } from '../lib/friends.js';
-import { filterFriends, diffMembers, resolveExpiresAt } from '../lib/listDraft.js';
+import {
+  filterFriends,
+  diffMembers,
+  resolveExpiresAt,
+  formatExpiry,
+  isUrgent,
+} from '../lib/listDraft.js';
 import { songRowCompact } from './songRow.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
@@ -36,18 +42,6 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = String(str ?? '');
   return div.innerHTML;
-}
-
-function formatExpiry(expiresAt) {
-  if (!expiresAt) return '';
-  const diff = Math.ceil((new Date(expiresAt) - Date.now()) / 86400000);
-  if (diff <= 0) return 'caducada';
-  if (diff === 1) return 'caduca hoy';
-  return `caduca en ${diff}d`;
-}
-
-function isUrgent(expiresAt) {
-  return expiresAt && Math.ceil((new Date(expiresAt) - Date.now()) / 86400000) <= 1;
 }
 
 function expiryChipHtml(expiresAt) {
@@ -447,7 +441,11 @@ function renderEditor(container, listData) {
 
     let expiresAt;
     try {
-      expiresAt = resolveExpiresAt({ days: draft.days, dateValue: draft.dateValue });
+      expiresAt = resolveExpiresAt({
+        days: draft.days,
+        dateValue: draft.dateValue,
+        current: draft.expiresAt,
+      });
     } catch (err) {
       errorEl.textContent = err.message;
       return;

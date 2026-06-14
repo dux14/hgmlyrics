@@ -27,6 +27,7 @@ import {
   resolveExpiresAt,
   formatExpiry,
   isUrgent,
+  reorder,
 } from '../lib/listDraft.js';
 import { songRowCompact } from './songRow.js';
 import { navigate } from '../router.js';
@@ -34,9 +35,6 @@ import { icon } from '../lib/icons.js';
 import { updateSidebarContent } from './Sidebar.js';
 
 /* global CSS */
-
-// Listener global para cerrar el dropdown de búsqueda al clicar fuera.
-let dismissSearchHandler = null;
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -131,261 +129,373 @@ function renderEditor(container, listData) {
       displayName: m.displayName || m.username || m.user_id || m.id,
       avatarUrl: m.avatarUrl || '',
     })),
-    days: isNew ? 7 : null,
-    dateValue: '',
+    days: null,
+    dateValue: '', // 'YYYY-MM-DDTHH:mm' (datetime-local)
   };
 
+  const pad = (n) => String(n).padStart(2, '0');
+  if (isNew) {
+    const def = new Date(Date.now() + 7 * 86400000);
+    def.setHours(23, 59, 0, 0);
+    draft.dateValue = `${def.getFullYear()}-${pad(def.getMonth() + 1)}-${pad(def.getDate())}T${pad(def.getHours())}:${pad(def.getMinutes())}`;
+  } else if (listData.expires_at) {
+    const d = new Date(listData.expires_at);
+    draft.dateValue = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
   let friendsCache = [];
+  const state = { step: 0 };
+  const STEPS = [
+    {
+      n: '01',
+      title: '¿Cuándo desaparece?',
+      sub: 'Las listas son efímeras. Ponle nombre y elige cuándo caduca.',
+    },
+    { n: '02', title: '¿Qué suena?', sub: 'Busca y arrastra para ordenar las canciones.' },
+    { n: '03', title: '¿Con quién?', sub: 'Invita amigos a tu lista efímera (opcional).' },
+  ];
 
   container.innerHTML = `
-    <div class="list-detail__container">
-      <div class="list-detail__section">
-        <div class="list-detail__header">
-          <div style="flex:1;min-width:0">
-            <input
-              class="list-detail__title-input"
-              type="text"
-              id="list-detail-name"
-              value="${escapeHtml(draft.name)}"
-              maxlength="80"
-              placeholder="Nombre de la lista"
-              aria-label="Nombre de la lista"
-            />
-          </div>
-          <div class="list-detail__header-actions">
-            ${
-              isNew
-                ? ''
-                : `<button class="list-detail__icon-btn list-detail__icon-btn--danger" id="list-detail-delete" title="Borrar lista">${icon('trash', { size: 18 })}</button>`
-            }
-          </div>
+    <div class="list-detail__container list-wizard">
+      <div class="list-wizard__rail" id="list-wizard-rail"></div>
+      <div class="list-wizard__panel">
+        <div class="list-wizard__head">
+          <h2 class="list-wizard__title" id="list-wizard-title"></h2>
+          <p class="list-wizard__sub" id="list-wizard-sub"></p>
         </div>
-        <div class="list-detail__expiry">
-          <div class="list-detail__segmented" id="list-detail-presets">
-            <button class="list-detail__segmented-btn ${draft.days === 1 ? 'list-detail__segmented-btn--active' : ''}" data-days="1">1 día</button>
-            <button class="list-detail__segmented-btn ${draft.days === 7 ? 'list-detail__segmented-btn--active' : ''}" data-days="7">7 días</button>
-            <button class="list-detail__segmented-btn ${draft.days === 30 ? 'list-detail__segmented-btn--active' : ''}" data-days="30">30 días</button>
-          </div>
-          <button class="list-detail__expiry-toggle" id="list-detail-date-toggle" type="button">Fecha exacta</button>
-          <input class="list-detail__date-input" type="date" id="list-detail-date" style="display:none" />
-        </div>
-      </div>
-
-      <div class="list-detail__section">
-        <h2 class="list-detail__section-heading">Canciones</h2>
-        <div class="list-detail__search-wrap">
-          <input
-            class="list-detail__search-input"
-            type="search"
-            id="list-detail-search"
-            placeholder="Buscar y agregar canciones…"
-            autocomplete="off"
-          />
-          <div class="list-detail__search-results" id="list-detail-results" style="display:none"></div>
-        </div>
-        <div class="list-detail__songs" id="list-detail-songs"></div>
-      </div>
-
-      <div class="list-detail__section">
-        <h2 class="list-detail__section-heading">Invitados</h2>
-        <input
-          class="list-detail__search-input"
-          type="search"
-          id="list-detail-friend-search"
-          placeholder="Buscar entre tus amigos…"
-          autocomplete="off"
-        />
-        <div class="list-detail__friend-results" id="list-detail-friend-results"></div>
-        <div class="list-detail__invitees" id="list-detail-invitees"></div>
-      </div>
-
-      <div class="list-detail__section">
-        <button class="btn btn--primary" id="list-detail-save">${icon('check-circle', { size: 16 })} Guardar</button>
+        <div class="list-wizard__body" id="list-wizard-body"></div>
         <p class="list-detail__error" id="list-detail-error" aria-live="polite"></p>
+        <div class="list-wizard__foot">
+          <button class="btn btn--secondary" id="list-wizard-back" type="button">← Atrás</button>
+          <button class="btn btn--primary" id="list-wizard-next" type="button">Siguiente →</button>
+        </div>
       </div>
     </div>
   `;
 
+  const railEl = container.querySelector('#list-wizard-rail');
+  const titleEl = container.querySelector('#list-wizard-title');
+  const subEl = container.querySelector('#list-wizard-sub');
+  const bodyEl = container.querySelector('#list-wizard-body');
   const errorEl = container.querySelector('#list-detail-error');
+  const backBtn = container.querySelector('#list-wizard-back');
+  const nextBtn = container.querySelector('#list-wizard-next');
 
-  container.querySelector('#list-detail-name')?.addEventListener('input', (e) => {
-    draft.name = e.target.value;
-  });
+  function renderRail() {
+    railEl.innerHTML = STEPS.map((s, i) => {
+      const cls =
+        i === state.step ? 'list-wizard__num--act' : i < state.step ? 'list-wizard__num--done' : '';
+      return `<div class="list-wizard__num ${cls}">${s.n}</div>`;
+    }).join('');
+  }
 
-  const presetsEl = container.querySelector('#list-detail-presets');
-  const dateToggle = container.querySelector('#list-detail-date-toggle');
-  const dateInput = container.querySelector('#list-detail-date');
+  function renderStep() {
+    errorEl.textContent = '';
+    renderRail();
+    titleEl.textContent = STEPS[state.step].title;
+    subEl.textContent = STEPS[state.step].sub;
+    backBtn.style.visibility = 'visible';
+    backBtn.textContent = state.step === 0 ? 'Cancelar' : '← Atrás';
+    nextBtn.innerHTML =
+      state.step === STEPS.length - 1
+        ? `${icon('check-circle', { size: 16 })} ${isNew ? 'Crear lista' : 'Guardar cambios'}`
+        : 'Siguiente →';
+    if (state.step === 0) renderStep0(bodyEl);
+    else if (state.step === 1) renderStep1(bodyEl);
+    else renderStep2(bodyEl);
+  }
 
-  presetsEl?.querySelectorAll('.list-detail__segmented-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      presetsEl
-        .querySelectorAll('.list-detail__segmented-btn')
-        .forEach((b) => b.classList.remove('list-detail__segmented-btn--active'));
-      btn.classList.add('list-detail__segmented-btn--active');
-      draft.days = Number(btn.dataset.days);
-      draft.dateValue = '';
-      dateInput.value = '';
-    });
-  });
-
-  dateToggle?.addEventListener('click', () => {
-    const showing = dateInput.style.display !== 'none';
-    dateInput.style.display = showing ? 'none' : 'block';
-    if (!showing) dateInput.focus();
-  });
-
-  dateInput?.addEventListener('input', () => {
-    draft.dateValue = dateInput.value;
-    if (dateInput.value) {
-      draft.days = null;
-      presetsEl
-        .querySelectorAll('.list-detail__segmented-btn')
-        .forEach((b) => b.classList.remove('list-detail__segmented-btn--active'));
+  function validateStep0() {
+    if (!draft.name.trim()) {
+      errorEl.textContent = 'El nombre no puede estar vacío.';
+      return false;
     }
+    try {
+      resolveExpiresAt({ days: draft.days, dateValue: draft.dateValue, current: draft.expiresAt });
+    } catch (err) {
+      errorEl.textContent = err.message;
+      return false;
+    }
+    return true;
+  }
+
+  backBtn.addEventListener('click', () => {
+    if (state.step === 0) {
+      navigate('/');
+      return;
+    }
+    state.step -= 1;
+    renderStep();
   });
 
-  const songsEl = container.querySelector('#list-detail-songs');
+  nextBtn.addEventListener('click', async () => {
+    if (state.step === 0 && !validateStep0()) return;
+    if (state.step < STEPS.length - 1) {
+      state.step += 1;
+      renderStep();
+      return;
+    }
+    await commit();
+  });
 
-  function rowActions(idx) {
-    return `
-      <button class="list-detail__row-btn" data-action="up" title="Subir" ${idx === 0 ? 'disabled' : ''}>${icon('chevron-up', { size: 14 })}</button>
-      <button class="list-detail__row-btn" data-action="down" title="Bajar" ${idx === draft.order.length - 1 ? 'disabled' : ''}>${icon('chevron-down', { size: 14 })}</button>
-      <button class="list-detail__row-btn list-detail__row-btn--danger" data-action="remove" title="Quitar">${icon('close', { size: 14 })}</button>
+  function renderStep0(el) {
+    const lifeChip = expiresPreview();
+    el.innerHTML = `
+      <input class="list-detail__title-input" type="text" id="list-detail-name"
+        value="${escapeHtml(draft.name)}" maxlength="80" placeholder="Nombre de la lista" aria-label="Nombre de la lista" />
+      <label class="list-wizard__label" for="list-detail-datetime">Caduca el</label>
+      <input class="list-wizard__datetime" type="datetime-local" id="list-detail-datetime"
+        value="${escapeHtml(draft.dateValue)}" />
+      <div class="list-wizard__life-row">
+        <span>vida de la lista</span>
+        <span class="lists__expiry-chip ${lifeChip.urgent ? 'lists__expiry-chip--urgent' : ''}" id="list-detail-lifechip">${escapeHtml(lifeChip.text)}</span>
+      </div>
+      <div class="list-wizard__life"><i id="list-detail-lifebar" style="width:${lifeChip.pct}%"></i></div>
+      ${isNew ? '' : `<button class="btn btn--secondary list-wizard__delete" id="list-detail-delete" type="button">${icon('trash', { size: 14 })} Borrar lista</button>`}
     `;
-  }
-
-  function renderSongs(enteringId = null) {
-    if (draft.order.length === 0) {
-      songsEl.innerHTML = `<p class="list-detail__empty">Busca arriba para agregar canciones.</p>`;
-      return;
-    }
-    songsEl.innerHTML = draft.order
-      .map((sid, idx) =>
-        songRowCompact(songForRender(sid), { index: idx + 1, actions: rowActions(idx) }),
-      )
-      .join('');
-    if (enteringId) {
-      songsEl
-        .querySelector(`[data-song-id="${CSS.escape(enteringId)}"]`)
-        ?.classList.add('is-entering');
-    }
-    bindSongRows();
-  }
-
-  function bindSongRows() {
-    songsEl.querySelectorAll('.song-row-compact').forEach((row, idx) => {
-      const songId = row.dataset.songId;
-      row.querySelector('[data-action="up"]')?.addEventListener('click', () => {
-        if (idx === 0) return;
-        [draft.order[idx - 1], draft.order[idx]] = [draft.order[idx], draft.order[idx - 1]];
-        renderSongs();
-      });
-      row.querySelector('[data-action="down"]')?.addEventListener('click', () => {
-        if (idx === draft.order.length - 1) return;
-        [draft.order[idx], draft.order[idx + 1]] = [draft.order[idx + 1], draft.order[idx]];
-        renderSongs();
-      });
-      row.querySelector('[data-action="remove"]')?.addEventListener('click', () => {
-        draft.order = draft.order.filter((sid) => sid !== songId);
-        renderSongs();
-      });
+    el.querySelector('#list-detail-name').addEventListener('input', (e) => {
+      draft.name = e.target.value;
     });
+    const dt = el.querySelector('#list-detail-datetime');
+    dt.addEventListener('input', () => {
+      draft.dateValue = dt.value;
+      draft.days = null;
+      updateLife(el);
+    });
+    el.querySelector('#list-detail-delete')?.addEventListener('click', onDelete);
   }
 
-  renderSongs();
-
-  const searchInput = container.querySelector('#list-detail-search');
-  const resultsEl = container.querySelector('#list-detail-results');
-  let searchTimer = null;
-
-  searchInput?.addEventListener('input', () => {
-    clearTimeout(searchTimer);
-    const q = searchInput.value.trim();
-    if (!q) {
-      resultsEl.style.display = 'none';
-      resultsEl.innerHTML = '';
-      return;
+  function expiresPreview() {
+    let iso;
+    try {
+      iso = resolveExpiresAt({
+        days: draft.days,
+        dateValue: draft.dateValue,
+        current: draft.expiresAt,
+      });
+    } catch {
+      return { text: 'fecha inválida', urgent: true, pct: 0 };
     }
-    searchTimer = setTimeout(() => {
-      const hits = searchSongs(q, 8).filter((s) => !draft.order.includes(s.id));
-      if (!hits.length) {
-        resultsEl.style.display = 'none';
+    const days = Math.max(0, Math.round((new Date(iso) - Date.now()) / 86400000));
+    const pct = Math.min(100, Math.round((days / 30) * 100));
+    return { text: formatExpiry(iso) || 'caduca hoy', urgent: isUrgent(iso), pct };
+  }
+
+  function updateLife(el) {
+    const p = expiresPreview();
+    const chip = el.querySelector('#list-detail-lifechip');
+    const bar = el.querySelector('#list-detail-lifebar');
+    if (chip) {
+      chip.textContent = p.text;
+      chip.classList.toggle('lists__expiry-chip--urgent', p.urgent);
+    }
+    if (bar) bar.style.width = `${p.pct}%`;
+  }
+
+  async function onDelete() {
+    if (!confirm('¿Borrar esta lista? Esta acción no se puede deshacer.')) return;
+    try {
+      await deleteList(listData.id);
+      updateSidebarContent();
+      navigate('/');
+    } catch (err) {
+      errorEl.textContent = err.message;
+    }
+  }
+  function renderStep1(el) {
+    el.innerHTML = `
+      <div class="list-detail__search-wrap">
+        <input class="list-detail__search-input" type="search" id="list-detail-search" placeholder="Buscar y agregar canciones…" autocomplete="off" />
+        <div class="list-detail__search-results" id="list-detail-results" style="display:none"></div>
+      </div>
+      <div class="list-detail__songs" id="list-detail-songs"></div>
+    `;
+    const songsEl = el.querySelector('#list-detail-songs');
+    const searchInput = el.querySelector('#list-detail-search');
+    const resultsEl = el.querySelector('#list-detail-results');
+    let searchTimer = null;
+
+    function renderSongs(enteringId = null) {
+      if (draft.order.length === 0) {
+        songsEl.innerHTML = `<p class="list-detail__empty">Busca arriba para agregar canciones.</p>`;
         return;
       }
-      resultsEl.innerHTML = hits.map((s) => songRowCompact(s, {})).join('');
-      resultsEl.style.display = 'block';
-      resultsEl.querySelectorAll('.song-row-compact').forEach((item) => {
-        item.addEventListener('click', () => {
-          const sid = item.dataset.songId;
-          if (!draft.order.includes(sid)) {
-            draft.order.push(sid);
-            renderSongs(sid);
-          }
-          searchInput.value = '';
-          resultsEl.style.display = 'none';
-          resultsEl.innerHTML = '';
+      songsEl.innerHTML = draft.order
+        .map((sid, idx) =>
+          songRowCompact(songForRender(sid), {
+            index: idx + 1,
+            dragHandle: true,
+            actions: `<button class="list-detail__row-btn list-detail__row-btn--danger" data-action="remove" title="Quitar">${icon('close', { size: 14 })}</button>`,
+          }),
+        )
+        .join('');
+      if (enteringId) {
+        const escaped =
+          typeof CSS !== 'undefined' && CSS.escape
+            ? CSS.escape(enteringId)
+            : enteringId.replace(/[^\w-]/g, '\\$&');
+        songsEl.querySelector(`[data-song-id="${escaped}"]`)?.classList.add('is-entering');
+      }
+      bindRows();
+    }
+
+    function bindRows() {
+      songsEl.querySelectorAll('.song-row-compact').forEach((row) => {
+        const songId = row.dataset.songId;
+        row.querySelector('[data-action="remove"]')?.addEventListener('click', () => {
+          draft.order = draft.order.filter((sid) => sid !== songId);
+          renderSongs();
         });
+        setupDragHandle(row, songsEl, renderSongs);
       });
-    }, 200);
-  });
-
-  if (dismissSearchHandler) document.removeEventListener('click', dismissSearchHandler);
-  dismissSearchHandler = (e) => {
-    if (!container.querySelector('.list-detail__search-wrap')?.contains(e.target)) {
-      if (resultsEl) resultsEl.style.display = 'none';
     }
-  };
-  document.addEventListener('click', dismissSearchHandler);
 
-  const inviteesEl = container.querySelector('#list-detail-invitees');
-  const friendSearch = container.querySelector('#list-detail-friend-search');
-  const friendResultsEl = container.querySelector('#list-detail-friend-results');
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      const q = searchInput.value.trim();
+      if (!q) {
+        resultsEl.style.display = 'none';
+        resultsEl.innerHTML = '';
+        return;
+      }
+      searchTimer = setTimeout(() => {
+        const hits = searchSongs(q, 8).filter((s) => !draft.order.includes(s.id));
+        if (!hits.length) {
+          resultsEl.style.display = 'none';
+          return;
+        }
+        resultsEl.innerHTML = hits.map((s) => songRowCompact(s, {})).join('');
+        resultsEl.style.display = 'block';
+        resultsEl.querySelectorAll('.song-row-compact').forEach((item) => {
+          item.addEventListener('click', () => {
+            const sid = item.dataset.songId;
+            if (!draft.order.includes(sid)) {
+              draft.order.push(sid);
+              renderSongs(sid);
+            }
+            searchInput.value = '';
+            resultsEl.style.display = 'none';
+            resultsEl.innerHTML = '';
+          });
+        });
+      }, 200);
+    });
 
-  function renderInvitees() {
-    if (draft.invitees.length === 0) {
-      inviteesEl.innerHTML = `<p class="list-detail__empty">Sin invitados.</p>`;
-      return;
-    }
-    inviteesEl.innerHTML = draft.invitees
-      .map(
-        (f) => `
+    renderSongs();
+  }
+
+  // Drag & drop por Pointer Events (táctil + mouse). Reordena draft.order.
+  function setupDragHandle(row, listEl, rerender) {
+    const handle = row.querySelector('.song-row-compact__grip');
+    if (!handle) return;
+    handle.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const rows = [...listEl.querySelectorAll('.song-row-compact')];
+      const fromIdx = rows.indexOf(row);
+      row.classList.add('is-dragging');
+      handle.setPointerCapture(e.pointerId);
+      let toIdx = fromIdx;
+      function onMove(ev) {
+        const ys = rows.map((r) => r.getBoundingClientRect());
+        toIdx = ys.findIndex((b) => ev.clientY < b.top + b.height / 2);
+        if (toIdx === -1) toIdx = rows.length - 1;
+      }
+      function onCancel() {
+        handle.releasePointerCapture(e.pointerId);
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup', onUp);
+        handle.removeEventListener('pointercancel', onCancel);
+        row.classList.remove('is-dragging');
+      }
+      function onUp() {
+        handle.releasePointerCapture(e.pointerId);
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup', onUp);
+        handle.removeEventListener('pointercancel', onCancel);
+        row.classList.remove('is-dragging');
+        if (toIdx !== fromIdx) {
+          draft.order = reorder(draft.order, fromIdx, toIdx);
+          rerender();
+        }
+      }
+      handle.addEventListener('pointermove', onMove);
+      handle.addEventListener('pointerup', onUp);
+      handle.addEventListener('pointercancel', onCancel);
+    });
+    // Accesibilidad: reordenar con teclado desde el asa.
+    handle.setAttribute('role', 'button');
+    handle.setAttribute('tabindex', '0');
+    handle.setAttribute('aria-label', 'Reordenar (flechas arriba/abajo)');
+    handle.addEventListener('keydown', (ev) => {
+      const rows = [...listEl.querySelectorAll('.song-row-compact')];
+      const i = rows.indexOf(row);
+      if (ev.key === 'ArrowUp' && i > 0) {
+        draft.order = reorder(draft.order, i, i - 1);
+        rerender();
+        listEl.querySelectorAll('.song-row-compact__grip')[i - 1]?.focus();
+      }
+      if (ev.key === 'ArrowDown' && i < rows.length - 1) {
+        draft.order = reorder(draft.order, i, i + 1);
+        rerender();
+        listEl.querySelectorAll('.song-row-compact__grip')[i + 1]?.focus();
+      }
+    });
+  }
+
+  function renderStep2(el) {
+    el.innerHTML = `
+      <input class="list-detail__search-input" type="search" id="list-detail-friend-search" placeholder="Buscar entre tus amigos…" autocomplete="off" />
+      <div class="list-detail__friend-results" id="list-detail-friend-results"></div>
+      <div class="list-detail__invitees" id="list-detail-invitees"></div>
+    `;
+    const inviteesEl = el.querySelector('#list-detail-invitees');
+    const friendSearch = el.querySelector('#list-detail-friend-search');
+    const friendResultsEl = el.querySelector('#list-detail-friend-results');
+
+    function renderInvitees() {
+      if (draft.invitees.length === 0) {
+        inviteesEl.innerHTML = `<p class="list-detail__empty">Sin invitados.</p>`;
+        return;
+      }
+      inviteesEl.innerHTML = draft.invitees
+        .map(
+          (f) => `
         <div class="list-detail__invitee-row" data-id="${escapeHtml(f.id)}">
           <img class="list-detail__invitee-avatar" src="${escapeHtml(f.avatarUrl || '')}" alt="" onerror="this.style.visibility='hidden'" />
           <span class="list-detail__invitee-name">${escapeHtml(f.displayName || f.username)}</span>
           <button class="list-detail__row-btn list-detail__row-btn--danger" data-action="uninvite" title="Quitar">${icon('close', { size: 14 })}</button>
-        </div>
-      `,
-      )
-      .join('');
-    inviteesEl.querySelectorAll('[data-action="uninvite"]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = btn.closest('[data-id]')?.dataset.id;
-        draft.invitees = draft.invitees.filter((f) => f.id !== id);
-        renderInvitees();
-        renderFriendResults();
+        </div>`,
+        )
+        .join('');
+      inviteesEl.querySelectorAll('[data-action="uninvite"]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.closest('[data-id]')?.dataset.id;
+          draft.invitees = draft.invitees.filter((f) => f.id !== id);
+          renderInvitees();
+          renderFriendResults();
+        });
       });
-    });
-  }
+    }
 
-  function renderFriendResults() {
-    const q = friendSearch.value.trim();
-    if (!q) {
-      friendResultsEl.innerHTML = '';
-      return;
-    }
-    if (friendsCache.length === 0) {
-      friendResultsEl.innerHTML = `<p class="list-detail__empty">No tienes amigos. <a href="#/amigos">Agregar amigos</a></p>`;
-      return;
-    }
-    const excluded = new Set(draft.invitees.map((f) => f.id));
-    const matches = filterFriends(friendsCache, q, excluded);
-    if (matches.length === 0) {
-      friendResultsEl.innerHTML = `<p class="list-detail__empty">No tienes amigos que coincidan.</p>`;
-      return;
-    }
-    friendResultsEl.innerHTML = matches
-      .map(
-        (f) => `
+    function renderFriendResults() {
+      const q = friendSearch.value.trim();
+      if (!q) {
+        friendResultsEl.innerHTML = '';
+        return;
+      }
+      if (friendsCache.length === 0) {
+        friendResultsEl.innerHTML = `<p class="list-detail__empty">No tienes amigos. <a href="#/amigos">Agregar amigos</a></p>`;
+        return;
+      }
+      const excluded = new Set(draft.invitees.map((f) => f.id));
+      const matches = filterFriends(friendsCache, q, excluded);
+      if (matches.length === 0) {
+        friendResultsEl.innerHTML = `<p class="list-detail__empty">No tienes amigos que coincidan.</p>`;
+        return;
+      }
+      friendResultsEl.innerHTML = matches
+        .map(
+          (f) => `
         <div class="list-detail__friend-result" data-id="${escapeHtml(f.id)}">
           <img class="list-detail__friend-result-avatar" src="${escapeHtml(f.avatarUrl || '')}" alt="" onerror="this.style.visibility='hidden'" />
           <div class="list-detail__friend-result-info">
@@ -393,52 +503,29 @@ function renderEditor(container, listData) {
             <span class="list-detail__friend-result-handle">@${escapeHtml(f.username)}</span>
           </div>
           <button class="btn btn--secondary" data-action="invite">${icon('plus', { size: 14 })} Invitar</button>
-        </div>
-      `,
-      )
-      .join('');
-    friendResultsEl.querySelectorAll('[data-action="invite"]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const id = btn.closest('[data-id]')?.dataset.id;
-        const friend = friendsCache.find((f) => f.id === id);
-        if (friend && !draft.invitees.some((f) => f.id === id)) {
-          draft.invitees.push(friend);
-          renderInvitees();
-          renderFriendResults();
-        }
+        </div>`,
+        )
+        .join('');
+      friendResultsEl.querySelectorAll('[data-action="invite"]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.closest('[data-id]')?.dataset.id;
+          const friend = friendsCache.find((f) => f.id === id);
+          if (friend && !draft.invitees.some((f) => f.id === id)) {
+            draft.invitees.push(friend);
+            renderInvitees();
+            renderFriendResults();
+          }
+        });
       });
-    });
+    }
+
+    friendSearch.addEventListener('input', renderFriendResults);
+    renderInvitees();
   }
 
-  friendSearch?.addEventListener('input', renderFriendResults);
-  renderInvitees();
-
-  getAcceptedFriends().then((friends) => {
-    if (!inviteesEl?.isConnected) return;
-    friendsCache = friends;
-    renderFriendResults();
-  });
-
-  container.querySelector('#list-detail-delete')?.addEventListener('click', async () => {
-    if (!confirm('¿Borrar esta lista? Esta acción no se puede deshacer.')) return;
-    try {
-      await deleteList(listData.id);
-      updateSidebarContent();
-      navigate('/');
-    } catch (err) {
-      if (errorEl) errorEl.textContent = err.message;
-    }
-  });
-
-  const saveBtn = container.querySelector('#list-detail-save');
-  saveBtn?.addEventListener('click', async () => {
+  async function commit() {
     errorEl.textContent = '';
     const name = draft.name.trim();
-    if (!name) {
-      errorEl.textContent = 'El nombre no puede estar vacío.';
-      return;
-    }
-
     let expiresAt;
     try {
       expiresAt = resolveExpiresAt({
@@ -450,14 +537,11 @@ function renderEditor(container, listData) {
       errorEl.textContent = err.message;
       return;
     }
-
-    saveBtn.disabled = true;
-    const original = saveBtn.innerHTML;
-    saveBtn.textContent = 'Guardando…';
-
+    nextBtn.disabled = true;
+    const original = nextBtn.innerHTML;
+    nextBtn.textContent = 'Guardando…';
     try {
       let listId = listData.id;
-
       if (isNew) {
         const created = await createList(name, expiresAt);
         listId = created.id;
@@ -474,15 +558,21 @@ function renderEditor(container, listData) {
         for (const username of toInvite) await inviteMember(listId, username);
         for (const userId of toRemove) await removeMember(listId, userId);
       }
-
       updateSidebarContent();
       navigate(`/lista/${listId}`);
     } catch (err) {
-      if (errorEl) errorEl.textContent = err.message;
-      saveBtn.disabled = false;
-      saveBtn.innerHTML = original;
+      errorEl.textContent = err.message;
+      nextBtn.disabled = false;
+      nextBtn.innerHTML = original;
     }
-  });
+  }
+
+  getAcceptedFriends()
+    .then((friends) => {
+      friendsCache = friends;
+    })
+    .catch(() => {});
+  renderStep();
 }
 
 /* ── Solo lectura (vista) ───────────────────────────────────────── */

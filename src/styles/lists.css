@@ -18,9 +18,9 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   padding: 2px 4px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--border-radius-sm);
   line-height: 1;
   transition:
     color 0.15s,
@@ -29,7 +29,7 @@
 
 .sidebar__add-btn:hover {
   color: var(--color-text);
-  background: var(--color-surface-alt);
+  background: var(--color-surface-hover);
 }
 
 /* Botón + y chevron de la sección Listas, agrupados a la derecha del título. */
@@ -42,7 +42,7 @@
 .sidebar__empty {
   padding: var(--space-xs) var(--space-md);
   font-size: 0.8rem;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
 }
 
 .sidebar__list-item {
@@ -51,13 +51,13 @@
   justify-content: space-between;
   padding: var(--space-xs) var(--space-md);
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: var(--border-radius-sm);
   gap: var(--space-sm);
   transition: background 0.15s;
 }
 
 .sidebar__list-item:hover {
-  background: var(--color-surface-alt);
+  background: var(--color-surface-hover);
 }
 
 .sidebar__list-item-name {
@@ -74,8 +74,8 @@
   font-size: 0.7rem;
   padding: 2px 6px;
   border-radius: 999px;
-  background: var(--color-surface-alt);
-  color: var(--color-text-muted);
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -136,11 +136,11 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   display: flex;
   align-items: center;
   padding: 4px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--border-radius-sm);
   transition: color 0.15s;
 }
 
@@ -162,7 +162,7 @@
   padding: var(--space-sm) var(--space-md);
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--border-radius-md);
   color: var(--color-text);
   font-size: 0.9rem;
   box-sizing: border-box;
@@ -180,7 +180,7 @@
   right: 0;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--border-radius-md);
   z-index: 10;
   max-height: 200px;
   overflow-y: auto;
@@ -197,7 +197,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   display: flex;
   align-items: center;
   padding: 2px;
@@ -218,7 +218,7 @@
 .list-detail__section-title {
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   display: flex;
   align-items: center;
   gap: var(--space-xs);
@@ -232,7 +232,7 @@
 }
 
 .list-detail__empty {
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-size: 0.875rem;
   padding: var(--space-sm) 0;
 }
@@ -243,8 +243,8 @@
   align-items: center;
   gap: var(--space-sm);
   padding: var(--space-sm);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-alt);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface-hover);
 }
 
 .song-row-compact__index {
@@ -260,7 +260,7 @@
   flex-shrink: 0;
   width: 44px;
   height: 44px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--border-radius-sm);
   object-fit: cover;
 }
 
@@ -302,7 +302,7 @@
 }
 
 .song-row-compact--clickable:hover {
-  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-alt));
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-hover));
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -321,82 +321,6 @@
   }
 }
 
-/* ── Secciones del editor ── */
-.list-detail__section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  padding-top: var(--space-md);
-  border-top: 1px solid var(--color-border);
-}
-
-.list-detail__section:first-of-type {
-  border-top: none;
-  padding-top: 0;
-}
-
-.list-detail__section-heading {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0;
-}
-
-/* ── Caducidad: segmented control + fecha exacta revelable ── */
-.list-detail__expiry {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
-
-.list-detail__segmented {
-  display: inline-flex;
-  gap: 4px;
-  padding: 3px;
-  background: var(--color-surface-alt);
-  border-radius: var(--radius-md);
-  width: fit-content;
-}
-
-.list-detail__segmented-btn {
-  border: none;
-  background: none;
-  cursor: pointer;
-  padding: var(--space-xs) var(--space-md);
-  border-radius: var(--radius-sm);
-  font-size: 0.82rem;
-  color: var(--color-text-secondary);
-  transition:
-    background 0.15s,
-    color 0.15s;
-}
-
-.list-detail__segmented-btn--active {
-  background: var(--color-accent);
-  color: #fff;
-}
-
-.list-detail__expiry-toggle {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--color-accent);
-  font-size: 0.8rem;
-  padding: 0;
-  width: fit-content;
-  text-align: left;
-}
-
-.list-detail__date-input {
-  width: fit-content;
-  padding: var(--space-xs) var(--space-sm);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text);
-  font-size: 0.85rem;
-}
-
 /* ── Dropdown de búsqueda con portada ── */
 .list-detail__search-results .song-row-compact {
   border-radius: 0;
@@ -405,7 +329,7 @@
 }
 
 .list-detail__search-results .song-row-compact:hover {
-  background: var(--color-surface-alt);
+  background: var(--color-surface-hover);
 }
 
 /* ── Buscador social (solo amigos) ── */
@@ -420,7 +344,7 @@
   align-items: center;
   gap: var(--space-sm);
   padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-md);
+  border-radius: var(--border-radius-md);
 }
 
 .list-detail__friend-result-avatar {
@@ -429,7 +353,7 @@
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
-  background: var(--color-surface-alt);
+  background: var(--color-surface-hover);
 }
 
 .list-detail__friend-result-info {
@@ -461,8 +385,8 @@
   align-items: center;
   gap: var(--space-sm);
   padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--radius-md);
-  background: var(--color-surface-alt);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface-hover);
 }
 
 .list-detail__invitee-avatar {
@@ -484,4 +408,144 @@
 
 .list-detail__edit-btn {
   flex-shrink: 0;
+}
+
+/* ── Wizard de creación/edición ── */
+.list-wizard {
+  display: flex;
+  gap: var(--space-lg);
+  align-items: flex-start;
+}
+.list-wizard__rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding-top: 4px;
+  flex-shrink: 0;
+}
+.list-wizard__num {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--color-border);
+  line-height: 1;
+}
+.list-wizard__num--act {
+  color: var(--color-primary);
+}
+.list-wizard__num--done {
+  color: var(--color-primary-dark);
+}
+.list-wizard__panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+.list-wizard__title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin: 0;
+}
+.list-wizard__sub {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  margin: 2px 0 0;
+}
+.list-wizard__head {
+  display: flex;
+  flex-direction: column;
+}
+.list-wizard__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+.list-wizard__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+}
+.list-wizard__datetime {
+  padding: var(--space-sm) var(--space-md);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.9rem;
+  width: fit-content;
+}
+.list-wizard__datetime:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+.list-wizard__life-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.72rem;
+  color: var(--color-text-secondary);
+  margin-top: var(--space-xs);
+}
+.list-wizard__life {
+  height: 8px;
+  border-radius: var(--border-radius-full);
+  background: var(--color-surface-hover);
+  overflow: hidden;
+}
+.list-wizard__life i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+  transition: width 0.25s ease;
+}
+.list-wizard__delete {
+  width: fit-content;
+  margin-top: var(--space-sm);
+}
+.list-wizard__foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-sm);
+}
+
+/* Asa de arrastre + estados DnD */
+.song-row-compact__grip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+  width: 22px;
+  flex-shrink: 0;
+  cursor: grab;
+  color: var(--color-text-secondary);
+  touch-action: none;
+}
+.song-row-compact__grip i {
+  width: 14px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.song-row-compact.is-dragging {
+  background: var(--color-bg);
+  border: 1.5px solid var(--color-accent);
+  box-shadow: 0 8px 20px var(--color-shadow);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .song-row-compact.is-dragging {
+    transform: scale(1.015);
+  }
+}
+
+@media (max-width: 560px) {
+  .list-wizard {
+    gap: var(--space-md);
+  }
+  .list-wizard__num {
+    font-size: 1.2rem;
+  }
 }

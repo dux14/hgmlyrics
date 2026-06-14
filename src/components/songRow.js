@@ -25,17 +25,18 @@ export function voiceBadge(song) {
 }
 
 /**
- * Fila compacta: [índice] portada · título · álbum · badge · [acciones].
+ * Fila compacta: [grip] [índice] portada · título · álbum · badge · [acciones].
  * @param {object} song - forma de /api/songs
- * @param {{index?:number, actions?:string}} [opts]
+ * @param {{index?:number, actions?:string, dragHandle?:boolean}} [opts]
  * @returns {string} HTML
  */
-export function songRowCompact(song, { index, actions } = {}) {
+export function songRowCompact(song, { index, actions, dragHandle } = {}) {
   const cover = resolveCoverUrl(song);
   const vb = voiceBadge(song);
   const albumLine = [song.album, song.year].filter(Boolean).join(' · ');
   return `
     <div class="song-row-compact" data-song-id="${escapeHtml(song.id)}">
+      ${dragHandle ? '<span class="song-row-compact__grip"><i></i><i></i><i></i></span>' : ''}
       ${index !== null && index !== undefined ? `<span class="song-row-compact__index">${index}</span>` : ''}
       <img class="song-row-compact__cover" src="${cover}" alt="" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'" />
       <div class="song-row-compact__info">

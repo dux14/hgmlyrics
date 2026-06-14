@@ -71,4 +71,17 @@ describe('wizard de listas', () => {
     container.querySelector('#list-detail-results .song-row-compact').click();
     expect(container.querySelectorAll('#list-detail-songs .song-row-compact').length).toBe(1);
   });
+
+  it('crea la lista llamando a la API con el draft', async () => {
+    const lists = await import('../src/lib/lists.js');
+    await renderListDetail(container, 'nueva', { mode: 'edit' });
+    const name = container.querySelector('#list-detail-name');
+    name.value = 'Mi lista';
+    name.dispatchEvent(new Event('input'));
+    container.querySelector('#list-wizard-next').click(); // a paso 2
+    container.querySelector('#list-wizard-next').click(); // a paso 3
+    container.querySelector('#list-wizard-next').click(); // crear
+    await new Promise((r) => setTimeout(r, 10));
+    expect(lists.createList).toHaveBeenCalledWith('Mi lista', expect.any(String));
+  });
 });

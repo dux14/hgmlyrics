@@ -437,7 +437,84 @@ function renderEditor(container, listData) {
   }
 
   function renderStep2(el) {
-    el.innerHTML = `<input class="list-detail__search-input" type="search" id="list-detail-friend-search" placeholder="Buscar entre tus amigos…" autocomplete="off" />`;
+    el.innerHTML = `
+      <input class="list-detail__search-input" type="search" id="list-detail-friend-search" placeholder="Buscar entre tus amigos…" autocomplete="off" />
+      <div class="list-detail__friend-results" id="list-detail-friend-results"></div>
+      <div class="list-detail__invitees" id="list-detail-invitees"></div>
+    `;
+    const inviteesEl = el.querySelector('#list-detail-invitees');
+    const friendSearch = el.querySelector('#list-detail-friend-search');
+    const friendResultsEl = el.querySelector('#list-detail-friend-results');
+
+    function renderInvitees() {
+      if (draft.invitees.length === 0) {
+        inviteesEl.innerHTML = `<p class="list-detail__empty">Sin invitados.</p>`;
+        return;
+      }
+      inviteesEl.innerHTML = draft.invitees
+        .map(
+          (f) => `
+        <div class="list-detail__invitee-row" data-id="${escapeHtml(f.id)}">
+          <img class="list-detail__invitee-avatar" src="${escapeHtml(f.avatarUrl || '')}" alt="" onerror="this.style.visibility='hidden'" />
+          <span class="list-detail__invitee-name">${escapeHtml(f.displayName || f.username)}</span>
+          <button class="list-detail__row-btn list-detail__row-btn--danger" data-action="uninvite" title="Quitar">${icon('close', { size: 14 })}</button>
+        </div>`,
+        )
+        .join('');
+      inviteesEl.querySelectorAll('[data-action="uninvite"]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.closest('[data-id]')?.dataset.id;
+          draft.invitees = draft.invitees.filter((f) => f.id !== id);
+          renderInvitees();
+          renderFriendResults();
+        });
+      });
+    }
+
+    function renderFriendResults() {
+      const q = friendSearch.value.trim();
+      if (!q) {
+        friendResultsEl.innerHTML = '';
+        return;
+      }
+      if (friendsCache.length === 0) {
+        friendResultsEl.innerHTML = `<p class="list-detail__empty">No tienes amigos. <a href="#/amigos">Agregar amigos</a></p>`;
+        return;
+      }
+      const excluded = new Set(draft.invitees.map((f) => f.id));
+      const matches = filterFriends(friendsCache, q, excluded);
+      if (matches.length === 0) {
+        friendResultsEl.innerHTML = `<p class="list-detail__empty">No tienes amigos que coincidan.</p>`;
+        return;
+      }
+      friendResultsEl.innerHTML = matches
+        .map(
+          (f) => `
+        <div class="list-detail__friend-result" data-id="${escapeHtml(f.id)}">
+          <img class="list-detail__friend-result-avatar" src="${escapeHtml(f.avatarUrl || '')}" alt="" onerror="this.style.visibility='hidden'" />
+          <div class="list-detail__friend-result-info">
+            <span class="list-detail__friend-result-name">${escapeHtml(f.displayName || f.username)}</span>
+            <span class="list-detail__friend-result-handle">@${escapeHtml(f.username)}</span>
+          </div>
+          <button class="btn btn--secondary" data-action="invite">${icon('plus', { size: 14 })} Invitar</button>
+        </div>`,
+        )
+        .join('');
+      friendResultsEl.querySelectorAll('[data-action="invite"]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = btn.closest('[data-id]')?.dataset.id;
+          const friend = friendsCache.find((f) => f.id === id);
+          if (friend && !draft.invitees.some((f) => f.id === id)) {
+            draft.invitees.push(friend);
+            renderInvitees();
+            renderFriendResults();
+          }
+        });
+      });
+    }
+
+    friendSearch.addEventListener('input', renderFriendResults);
+    renderInvitees();
   }
 
   async function commit() {

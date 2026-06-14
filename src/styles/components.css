@@ -1893,7 +1893,8 @@
 .studio {
   max-width: var(--max-content-width);
   margin: 0 auto;
-  padding: var(--space-md) var(--space-lg) var(--space-2xl);
+  /* Sin padding horizontal: el gutter lo aporta .main__content */
+  padding: var(--space-md) 0 var(--space-2xl);
 }
 
 .studio__title {
@@ -2154,7 +2155,9 @@
   border-radius: 22px;
   box-shadow: 0 2px 8px rgba(0, 151, 167, 0.35);
   cursor: pointer;
-  transition: background 0.15s, box-shadow 0.15s;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
 }
 .studio-player__play:hover,
 .studio-player__play:focus-visible {
@@ -2566,8 +2569,12 @@
 }
 
 @keyframes skeleton-shimmer {
-  0% { background-position: 200% center; }
-  100% { background-position: -200% center; }
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
 }
 
 /* EQ animado dentro de la tarjeta (running) */

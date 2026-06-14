@@ -163,7 +163,8 @@
 .friends-page {
   max-width: 720px;
   margin: 0 auto;
-  padding: var(--space-lg);
+  /* Sin padding horizontal: el gutter lo aporta .main__content */
+  padding: var(--space-lg) 0;
 }
 
 .profile-header {

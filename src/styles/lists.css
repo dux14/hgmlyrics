@@ -415,7 +415,10 @@
    panel que crece y footer anclado abajo. En desktop pasa a rail vertical + panel. */
 .list-detail__container.list-wizard {
   gap: var(--space-lg);
-  min-height: calc(100svh - 7rem);
+  /* Reserva la chrome superior (header + buscador) y el safe-area inferior para
+     que el footer anclado quede dentro del viewport y no lo tape el home indicator. */
+  min-height: calc(100svh - 7rem - env(safe-area-inset-bottom));
+  padding-bottom: max(var(--space-md), calc(env(safe-area-inset-bottom) + var(--space-xs)));
 }
 
 /* Stepper horizontal con conectores (móvil) */
@@ -552,6 +555,20 @@
   flex: 1;
 }
 
+/* Rótulo "modo admin" en el paso de invitados */
+.list-detail__admin-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: calc(-1 * var(--space-xs)) 0 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+.list-detail__admin-hint svg {
+  flex-shrink: 0;
+}
+
 /* Asa de arrastre + estados DnD */
 .song-row-compact__grip {
   display: flex;
@@ -571,13 +588,20 @@
   background: currentColor;
 }
 .song-row-compact.is-dragging {
+  position: relative;
+  z-index: 5;
   background: var(--color-bg);
   border: 1.5px solid var(--color-accent);
-  box-shadow: 0 8px 20px var(--color-shadow);
+  box-shadow: 0 12px 28px var(--color-shadow);
+  cursor: grabbing;
+}
+.song-row-compact__grip:active {
+  cursor: grabbing;
 }
 @media (prefers-reduced-motion: no-preference) {
+  /* Lift inicial al agarrar (antes del primer move el transform inline lo releva). */
   .song-row-compact.is-dragging {
-    transform: scale(1.015);
+    transform: scale(1.03);
   }
 }
 

@@ -41,6 +41,25 @@ export async function requireUser(req) {
 }
 
 /**
+ * Non-throwing admin check: ADMIN_EMAILS env (re-evaluated each call) with fallback
+ * to profiles.is_admin. Returns a boolean; use when admin status changes behavior
+ * rather than gating the whole endpoint.
+ * @param {{id: string, email?: string}} user
+ * @param {import('postgres').Sql} sql
+ * @returns {Promise<boolean>}
+ */
+export async function isAdminUser(user, sql) {
+  const adminEmails = (process.env.ADMIN_EMAILS || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (user.email && adminEmails.includes(user.email.toLowerCase())) return true;
+
+  const rows = await sql`SELECT is_admin FROM profiles WHERE id = ${user.id}`;
+  return !!rows[0]?.is_admin;
+}
+
+/**
  * Require admin: validates user, then checks ADMIN_EMAILS env (re-evaluated each call)
  * and falls back to profiles.is_admin. Throws { status: 403 } if not admin.
  * @param {object} req
@@ -49,19 +68,10 @@ export async function requireUser(req) {
  */
 export async function requireAdmin(req, sql) {
   const user = await requireUser(req);
-  const adminEmails = (process.env.ADMIN_EMAILS || '')
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  if (user.email && adminEmails.includes(user.email.toLowerCase())) return user;
-
-  const rows = await sql`SELECT is_admin FROM profiles WHERE id = ${user.id}`;
-  if (!rows[0]?.is_admin) {
-    const e = new Error('Forbidden');
-    e.status = 403;
-    throw e;
-  }
-  return user;
+  if (await isAdminUser(user, sql)) return user;
+  const e = new Error('Forbidden');
+  e.status = 403;
+  throw e;
 }
 
 /**

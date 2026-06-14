@@ -1,5 +1,5 @@
 import sql from '../_lib/db.js';
-import { requireUser } from '../_lib/auth.js';
+import { requireUser, isAdminUser } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 
 export default withErrors(async (req, res) => {
@@ -15,8 +15,18 @@ export default withErrors(async (req, res) => {
   }
   const pattern = `%${q.replace(/[%_\\]/g, '\\$&')}%`;
 
+  // scope=all: solo admin. Quita el filtro de visibilidad para poder invitar a
+  // listas efímeras a cualquier usuario (no solo públicos/amigos).
+  const wantsAll = String(req.query.scope ?? '') === 'all';
+  const isAdmin = wantsAll && (await isAdminUser(viewer, sql));
+  if (wantsAll && !isAdmin) {
+    const e = new Error('Forbidden');
+    e.status = 403;
+    throw e;
+  }
+
   // Friend search must surface other people only — never the viewer's own profile.
-  // Visibility: is_public OR an already-accepted friend.
+  // Visibility: admin scope=all ve a todos; el resto solo is_public OR amigo aceptado.
   const rows = await sql`
     SELECT p.id, p.username, p.display_name AS "displayName", p.avatar_url AS "avatarUrl"
     FROM profiles p
@@ -24,7 +34,8 @@ export default withErrors(async (req, res) => {
       AND p.id <> ${viewer.id}
       AND (lower(p.username) LIKE ${pattern} OR lower(p.display_name) LIKE ${pattern})
       AND (
-        p.is_public = true
+        ${isAdmin}
+        OR p.is_public = true
         OR EXISTS (
           SELECT 1 FROM friendships
           WHERE status = 'accepted'

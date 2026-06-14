@@ -34,6 +34,23 @@ export const inviteMember = (id, username) =>
 export const removeMember = (id, userId) =>
   req(`/api/lists/${id}/members/${userId}`, { method: 'DELETE' });
 
+/**
+ * Busca usuarios para invitar. scope='all' (solo admin en backend) devuelve a
+ * cualquier usuario, no solo públicos/amigos. Devuelve [] ante error o query corta.
+ * @param {string} q
+ * @returns {Promise<Array<{id:string,username:string,displayName:string,avatarUrl:string}>>}
+ */
+export async function searchUsers(q) {
+  const term = (q || '').trim();
+  if (term.length < 2) return [];
+  try {
+    const body = await req(`/api/social/search?scope=all&q=${encodeURIComponent(term)}`);
+    return body?.results || [];
+  } catch {
+    return [];
+  }
+}
+
 // ---- Contexto de reproducción activo (en memoria) ----
 let activeContext = null; // { listId, name, orderedSongIds }
 export function setActiveContext(ctx) {

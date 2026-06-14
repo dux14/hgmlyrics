@@ -1,5 +1,5 @@
 import sql from '../../_lib/db.js';
-import { requireUser } from '../../_lib/auth.js';
+import { requireUser, isAdminUser } from '../../_lib/auth.js';
 import { allowMethods, withErrors } from '../../_lib/http.js';
 
 async function assertOwner(id, userId) {
@@ -35,6 +35,23 @@ export default withErrors(async (req, res) => {
     const e = new Error('No puedes invitarte a ti mismo');
     e.status = 400;
     throw e;
+  }
+
+  // Regla de invitación: solo los admin pueden invitar a cualquiera. Un dueño
+  // no-admin queda limitado a sus amigos aceptados (la UI lo refleja, pero la
+  // regla se hace cumplir aquí — defensa en profundidad).
+  if (!(await isAdminUser(user, sql))) {
+    const friendship = await sql`
+      SELECT 1 FROM friendships
+      WHERE status = 'accepted'
+        AND ((requester_id = ${user.id} AND addressee_id = ${target.id})
+         OR  (requester_id = ${target.id} AND addressee_id = ${user.id}))
+      LIMIT 1`;
+    if (!friendship[0]) {
+      const e = new Error('Solo puedes invitar a tus amigos');
+      e.status = 403;
+      throw e;
+    }
   }
 
   await sql`INSERT INTO ephemeral_list_members (list_id, user_id)

@@ -17,10 +17,12 @@ import {
   inviteMember,
   removeMember,
   setActiveContext,
+  searchUsers,
 } from '../lib/lists.js';
 import { getSongById } from '../lib/store.js';
 import { searchSongs } from '../lib/search.js';
 import { getAcceptedFriends } from '../lib/friends.js';
+import { isAdmin } from '../lib/authStore.js';
 import {
   filterFriends,
   diffMembers,
@@ -385,38 +387,107 @@ function renderEditor(container, listData) {
   }
 
   // Drag & drop por Pointer Events (táctil + mouse). Reordena draft.order.
+  // La fila agarrada se levanta y sigue al dedo (translate en vivo, solo GPU); las
+  // demás se deslizan para abrir hueco mediante transforms (técnica FLIP, sin tocar
+  // el DOM hasta soltar). Respeta prefers-reduced-motion.
+  const DRAG_EASE = 'cubic-bezier(0.23, 1, 0.32, 1)'; // ease-out fuerte (Emil)
   function setupDragHandle(row, listEl, rerender) {
     const handle = row.querySelector('.song-row-compact__grip');
     if (!handle) return;
+    const reduce =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
     handle.addEventListener('pointerdown', (e) => {
       e.preventDefault();
+      if (listEl.querySelector('.is-dragging')) return; // un solo arrastre a la vez (multi-touch)
       const rows = [...listEl.querySelectorAll('.song-row-compact')];
       const fromIdx = rows.indexOf(row);
+      if (fromIdx === -1) return;
+      const rects = rows.map((r) => r.getBoundingClientRect());
+      // Paso vertical entre filas (alto + gap); uniforme en esta lista.
+      const step = rows.length > 1 ? rects[1].top - rects[0].top : rects[0].height + 8;
+      const startY = e.clientY;
+      let toIdx = fromIdx;
+
       row.classList.add('is-dragging');
       handle.setPointerCapture(e.pointerId);
-      let toIdx = fromIdx;
+      if (!reduce) {
+        row.style.transition = 'none';
+        row.style.zIndex = '5';
+        rows.forEach((r, i) => {
+          if (i === fromIdx) return;
+          r.style.transition = `transform 180ms ${DRAG_EASE}`;
+          r.style.willChange = 'transform';
+        });
+      }
+
+      function shiftOthers() {
+        rows.forEach((r, i) => {
+          if (i === fromIdx) return;
+          let dy = 0;
+          if (toIdx > fromIdx && i > fromIdx && i <= toIdx) dy = -step;
+          else if (toIdx < fromIdx && i >= toIdx && i < fromIdx) dy = step;
+          r.style.transform = dy ? `translateY(${dy}px)` : '';
+        });
+      }
+
       function onMove(ev) {
-        const ys = rows.map((r) => r.getBoundingClientRect());
-        toIdx = ys.findIndex((b) => ev.clientY < b.top + b.height / 2);
-        if (toIdx === -1) toIdx = rows.length - 1;
+        const delta = ev.clientY - startY;
+        if (reduce) {
+          // Sin animación: solo recalcula el destino por punto medio.
+          toIdx = rects.findIndex((b) => ev.clientY < b.top + b.height / 2);
+          if (toIdx === -1) toIdx = rows.length - 1;
+          return;
+        }
+        row.style.transform = `translateY(${delta}px) scale(1.03)`;
+        const next = Math.min(rows.length - 1, Math.max(0, fromIdx + Math.round(delta / step)));
+        if (next !== toIdx) {
+          toIdx = next;
+          shiftOthers();
+        }
       }
-      function onCancel() {
+
+      function teardown() {
         handle.releasePointerCapture(e.pointerId);
         handle.removeEventListener('pointermove', onMove);
         handle.removeEventListener('pointerup', onUp);
         handle.removeEventListener('pointercancel', onCancel);
-        row.classList.remove('is-dragging');
       }
-      function onUp() {
-        handle.releasePointerCapture(e.pointerId);
-        handle.removeEventListener('pointermove', onMove);
-        handle.removeEventListener('pointerup', onUp);
-        handle.removeEventListener('pointercancel', onCancel);
-        row.classList.remove('is-dragging');
+      function commitAndRerender() {
         if (toIdx !== fromIdx) {
           draft.order = reorder(draft.order, fromIdx, toIdx);
-          rerender();
         }
+        rerender(); // reconstruye el DOM en el orden final (resetea transforms)
+      }
+      function onCancel() {
+        teardown();
+        row.classList.remove('is-dragging');
+        rerender();
+      }
+      function onUp() {
+        teardown();
+        if (reduce) {
+          row.classList.remove('is-dragging');
+          commitAndRerender();
+          return;
+        }
+        // Asentamiento: la fila cae a su slot final y, al terminar, se reconstruye.
+        const settled = `translateY(${(toIdx - fromIdx) * step}px) scale(1)`;
+        row.style.transition = `transform 160ms ${DRAG_EASE}`;
+        // Forzar reflow para que la transición tome el valor previo del move.
+        void row.offsetWidth;
+        row.style.transform = settled;
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          row.removeEventListener('transitionend', finish);
+          row.classList.remove('is-dragging');
+          commitAndRerender();
+        };
+        row.addEventListener('transitionend', finish);
+        setTimeout(finish, 220); // red de seguridad si no dispara transitionend
       }
       handle.addEventListener('pointermove', onMove);
       handle.addEventListener('pointerup', onUp);
@@ -443,14 +514,19 @@ function renderEditor(container, listData) {
   }
 
   function renderStep2(el) {
+    const admin = isAdmin();
     el.innerHTML = `
-      <input class="list-detail__search-input" type="search" id="list-detail-friend-search" placeholder="Buscar entre tus amigos…" autocomplete="off" />
+      <input class="list-detail__search-input" type="search" id="list-detail-friend-search"
+        placeholder="${admin ? 'Buscar entre todos los usuarios…' : 'Buscar entre tus amigos…'}" autocomplete="off" />
+      ${admin ? `<p class="list-detail__admin-hint">${icon('users', { size: 13 })} Modo admin · puedes invitar a cualquier usuario</p>` : ''}
       <div class="list-detail__friend-results" id="list-detail-friend-results"></div>
       <div class="list-detail__invitees" id="list-detail-invitees"></div>
     `;
     const inviteesEl = el.querySelector('#list-detail-invitees');
     const friendSearch = el.querySelector('#list-detail-friend-search');
     const friendResultsEl = el.querySelector('#list-detail-friend-results');
+    let searchTimer = null;
+    let searchSeq = 0; // descarta respuestas server fuera de orden
 
     function renderInvitees() {
       if (draft.invitees.length === 0) {
@@ -472,27 +548,13 @@ function renderEditor(container, listData) {
           const id = btn.closest('[data-id]')?.dataset.id;
           draft.invitees = draft.invitees.filter((f) => f.id !== id);
           renderInvitees();
-          renderFriendResults();
+          onSearch();
         });
       });
     }
 
-    function renderFriendResults() {
-      const q = friendSearch.value.trim();
-      if (!q) {
-        friendResultsEl.innerHTML = '';
-        return;
-      }
-      if (friendsCache.length === 0) {
-        friendResultsEl.innerHTML = `<p class="list-detail__empty">No tienes amigos. <a href="#/amigos">Agregar amigos</a></p>`;
-        return;
-      }
-      const excluded = new Set(draft.invitees.map((f) => f.id));
-      const matches = filterFriends(friendsCache, q, excluded);
-      if (matches.length === 0) {
-        friendResultsEl.innerHTML = `<p class="list-detail__empty">No tienes amigos que coincidan.</p>`;
-        return;
-      }
+    // Pinta una lista de candidatos (amigos o usuarios) con botón Invitar.
+    function paintResults(matches) {
       friendResultsEl.innerHTML = matches
         .map(
           (f) => `
@@ -509,17 +571,51 @@ function renderEditor(container, listData) {
       friendResultsEl.querySelectorAll('[data-action="invite"]').forEach((btn) => {
         btn.addEventListener('click', () => {
           const id = btn.closest('[data-id]')?.dataset.id;
-          const friend = friendsCache.find((f) => f.id === id);
-          if (friend && !draft.invitees.some((f) => f.id === id)) {
-            draft.invitees.push(friend);
+          const person = matches.find((f) => f.id === id);
+          if (person && !draft.invitees.some((f) => f.id === id)) {
+            draft.invitees.push(person);
             renderInvitees();
-            renderFriendResults();
+            onSearch();
           }
         });
       });
     }
 
-    friendSearch.addEventListener('input', renderFriendResults);
+    // Admin: busca en todo el servidor (debounced). No-admin: filtra amigos en local.
+    function onSearch() {
+      const q = friendSearch.value.trim();
+      clearTimeout(searchTimer);
+      if (!q) {
+        searchSeq++;
+        friendResultsEl.innerHTML = '';
+        return;
+      }
+      const excluded = new Set(draft.invitees.map((f) => f.id));
+      if (admin) {
+        const seq = ++searchSeq;
+        searchTimer = setTimeout(async () => {
+          const results = await searchUsers(q);
+          if (seq !== searchSeq) return; // llegó una respuesta vieja
+          const matches = results.filter((u) => !excluded.has(u.id));
+          friendResultsEl.innerHTML = matches.length
+            ? ''
+            : `<p class="list-detail__empty">Sin usuarios que coincidan.</p>`;
+          if (matches.length) paintResults(matches);
+        }, 220);
+        return;
+      }
+      if (friendsCache.length === 0) {
+        friendResultsEl.innerHTML = `<p class="list-detail__empty">No tienes amigos. <a href="#/amigos">Agregar amigos</a></p>`;
+        return;
+      }
+      const matches = filterFriends(friendsCache, q, excluded);
+      friendResultsEl.innerHTML = matches.length
+        ? ''
+        : `<p class="list-detail__empty">No tienes amigos que coincidan.</p>`;
+      if (matches.length) paintResults(matches);
+    }
+
+    friendSearch.addEventListener('input', onSearch);
     renderInvitees();
   }
 

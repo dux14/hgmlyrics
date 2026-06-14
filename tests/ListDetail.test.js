@@ -9,10 +9,12 @@ vi.mock('../src/lib/lists.js', () => ({
   inviteMember: vi.fn(async () => {}),
   removeMember: vi.fn(),
   setActiveContext: vi.fn(),
+  searchUsers: vi.fn(async () => []),
 }));
 vi.mock('../src/lib/store.js', () => ({ getSongById: vi.fn(() => null) }));
 vi.mock('../src/lib/search.js', () => ({ searchSongs: vi.fn(() => []) }));
 vi.mock('../src/lib/friends.js', () => ({ getAcceptedFriends: vi.fn(async () => []) }));
+vi.mock('../src/lib/authStore.js', () => ({ isAdmin: vi.fn(() => false) }));
 vi.mock('../src/router.js', () => ({ navigate: vi.fn() }));
 vi.mock('./Sidebar.js', () => ({ updateSidebarContent: vi.fn() }), { virtual: true });
 vi.mock('../src/components/Sidebar.js', () => ({ updateSidebarContent: vi.fn() }));

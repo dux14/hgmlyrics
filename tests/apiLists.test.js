@@ -180,10 +180,47 @@ describe('PUT /api/lists/:id/songs', () => {
 const membersHandler = (await import('../api/lists/[id]/members.js')).default;
 
 describe('POST /api/lists/:id/members', () => {
-  it('invita por username (solo dueño)', async () => {
+  it('admin invita a cualquiera por username', async () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
     sqlResponses.push([{ id: 'list1' }]); // ownership
     sqlResponses.push([{ id: 'u2', username: 'bob' }]); // profile por username
+    sqlResponses.push([{ is_admin: true }]); // isAdminUser → admin, salta check de amistad
+    sqlResponses.push([]); // INSERT member (ON CONFLICT)
+    const req = {
+      method: 'POST',
+      headers: { authorization: 'Bearer t' },
+      query: { id: 'list1' },
+      body: { username: 'bob' },
+    };
+    const res = makeRes();
+    await membersHandler(req, res);
+    expect(res.statusCode).toBe(201);
+    expect(res.body.user_id).toBe('u2');
+  });
+
+  it('no-admin no puede invitar a un no-amigo (403)', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([{ id: 'list1' }]); // ownership
+    sqlResponses.push([{ id: 'u2', username: 'bob' }]); // profile por username
+    sqlResponses.push([{ is_admin: false }]); // isAdminUser → no admin
+    sqlResponses.push([]); // friendship → sin amistad aceptada
+    const req = {
+      method: 'POST',
+      headers: { authorization: 'Bearer t' },
+      query: { id: 'list1' },
+      body: { username: 'bob' },
+    };
+    const res = makeRes();
+    await membersHandler(req, res);
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('no-admin sí puede invitar a un amigo aceptado', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([{ id: 'list1' }]); // ownership
+    sqlResponses.push([{ id: 'u2', username: 'bob' }]); // profile por username
+    sqlResponses.push([{ is_admin: false }]); // isAdminUser → no admin
+    sqlResponses.push([{ ok: 1 }]); // friendship → amistad aceptada
     sqlResponses.push([]); // INSERT member (ON CONFLICT)
     const req = {
       method: 'POST',

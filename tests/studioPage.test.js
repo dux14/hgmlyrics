@@ -69,6 +69,20 @@ describe('renderStudioPage', () => {
     expect(container.textContent).toContain('2 de 3'); // cuota restante hoy
   });
 
+  it('estado idle admin: muestra "Sin límite diario" en vez del contador', async () => {
+    stemsApi.listJobs.mockResolvedValueOnce({
+      jobs: [],
+      quota: { used: 5, limit: null, unlimited: true },
+    });
+    renderStudioPage(container);
+    await vi.waitFor(() => expect(container.querySelector('.studio-dropzone')).not.toBeNull());
+    expect(container.textContent).toContain('Sin límite diario');
+    expect(container.textContent).toContain('48 h');
+    // No debe mostrar "NaN" ni "null"
+    expect(container.textContent).not.toContain('NaN');
+    expect(container.textContent).not.toContain('null');
+  });
+
   it('retoma un job en proceso al entrar', async () => {
     stemsApi.listJobs.mockResolvedValueOnce({
       jobs: [{ id: 'j1', status: 'processing' }],
@@ -132,9 +146,6 @@ describe('renderStudioPage', () => {
 
     // Género bloqueado (candado / locked)
     expect(container.textContent).toContain('Disponible pronto');
-
-    // Atribución
-    expect(container.textContent).toContain('SongFormer');
   });
 
   it('gender done: tarjeta muestra dos modelos lado a lado con players de audio', async () => {

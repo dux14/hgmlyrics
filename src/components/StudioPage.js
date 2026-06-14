@@ -117,7 +117,10 @@ async function loadInitial(body) {
 }
 
 function renderIdle(body, quota) {
-  const left = quota.limit - quota.used;
+  const quotaText =
+    quota.unlimited || quota.limit === null
+      ? `Sin límite diario de canciones. Los resultados expiran a las 48 h.`
+      : `Te quedan <strong>${quota.limit - quota.used} de ${quota.limit}</strong> canciones hoy. Los resultados expiran a las 48 h.`;
   body.innerHTML = `
     <p class="studio__desc">Sube una canción y te la devolvemos separada en pistas (voz, batería,
     bajo, guitarra, piano y otros) más la voz dividida en <strong>líder/coros</strong> y segmentos
@@ -128,8 +131,7 @@ function renderIdle(body, quota) {
       <p class="empty-state__text studio-dropzone__sub">MP3 · máx 25 MB / 10 min</p>
     </div>
     <p class="empty-state__text studio__quota">
-      Te quedan <strong>${left} de ${quota.limit}</strong> canciones hoy.
-      Los resultados expiran a las 48 h.
+      ${quotaText}
     </p>
     <input type="file" id="studio-file" accept=".mp3,audio/mpeg" hidden />
   `;
@@ -453,12 +455,6 @@ function renderJob(body, job, quota) {
     cardsEl.appendChild(card);
   }
   frag.appendChild(cardsEl);
-
-  // Atribución al pie
-  const attribution = document.createElement('p');
-  attribution.className = 'studio__attribution';
-  attribution.textContent = 'Secciones detectadas con SongFormer (CC-BY-4.0).';
-  frag.appendChild(attribution);
 
   // Botón nueva canción
   const newBtn = document.createElement('button');

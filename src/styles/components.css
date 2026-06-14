@@ -2224,9 +2224,16 @@
   width: 38px;
   height: 38px;
   padding: 0;
+  /* Área de toque extendida ≥40px sin agrandar el visual */
+  position: relative;
   transition:
     transform 0.12s,
     box-shadow 0.12s;
+}
+.studio-player__dl::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
 }
 .studio-player__dl:hover {
   transform: translateY(-1px);

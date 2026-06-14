@@ -36,7 +36,7 @@ export function songRowCompact(song, { index, actions, dragHandle } = {}) {
   const albumLine = [song.album, song.year].filter(Boolean).join(' · ');
   return `
     <div class="song-row-compact" data-song-id="${escapeHtml(song.id)}">
-      ${dragHandle ? '<span class="song-row-compact__grip" aria-hidden="false"><i></i><i></i><i></i></span>' : ''}
+      ${dragHandle ? '<span class="song-row-compact__grip"><i></i><i></i><i></i></span>' : ''}
       ${index !== null && index !== undefined ? `<span class="song-row-compact__index">${index}</span>` : ''}
       <img class="song-row-compact__cover" src="${cover}" alt="" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'" />
       <div class="song-row-compact__info">

@@ -133,14 +133,13 @@ function renderEditor(container, listData) {
     dateValue: '', // 'YYYY-MM-DDTHH:mm' (datetime-local)
   };
 
+  const pad = (n) => String(n).padStart(2, '0');
   if (isNew) {
     const def = new Date(Date.now() + 7 * 86400000);
     def.setHours(23, 59, 0, 0);
-    const pad = (n) => String(n).padStart(2, '0');
     draft.dateValue = `${def.getFullYear()}-${pad(def.getMonth() + 1)}-${pad(def.getDate())}T${pad(def.getHours())}:${pad(def.getMinutes())}`;
   } else if (listData.expires_at) {
     const d = new Date(listData.expires_at);
-    const pad = (n) => String(n).padStart(2, '0');
     draft.dateValue = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
@@ -195,9 +194,8 @@ function renderEditor(container, listData) {
     renderRail();
     titleEl.textContent = STEPS[state.step].title;
     subEl.textContent = STEPS[state.step].sub;
-    backBtn.style.visibility = state.step === 0 ? 'hidden' : 'visible';
-    if (state.step === 0) backBtn.textContent = 'Cancelar';
-    else backBtn.textContent = '← Atrás';
+    backBtn.style.visibility = 'visible';
+    backBtn.textContent = state.step === 0 ? 'Cancelar' : '← Atrás';
     nextBtn.innerHTML =
       state.step === STEPS.length - 1
         ? `${icon('check-circle', { size: 16 })} ${isNew ? 'Crear lista' : 'Guardar cambios'}`
@@ -240,7 +238,6 @@ function renderEditor(container, listData) {
     await commit();
   });
 
-  // Placeholders rellenados en Tasks 5-7:
   function renderStep0(el) {
     const lifeChip = expiresPreview();
     el.innerHTML = `
@@ -403,10 +400,18 @@ function renderEditor(container, listData) {
         toIdx = ys.findIndex((b) => ev.clientY < b.top + b.height / 2);
         if (toIdx === -1) toIdx = rows.length - 1;
       }
+      function onCancel() {
+        handle.releasePointerCapture(e.pointerId);
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup', onUp);
+        handle.removeEventListener('pointercancel', onCancel);
+        row.classList.remove('is-dragging');
+      }
       function onUp() {
         handle.releasePointerCapture(e.pointerId);
         handle.removeEventListener('pointermove', onMove);
         handle.removeEventListener('pointerup', onUp);
+        handle.removeEventListener('pointercancel', onCancel);
         row.classList.remove('is-dragging');
         if (toIdx !== fromIdx) {
           draft.order = reorder(draft.order, fromIdx, toIdx);
@@ -415,6 +420,7 @@ function renderEditor(container, listData) {
       }
       handle.addEventListener('pointermove', onMove);
       handle.addEventListener('pointerup', onUp);
+      handle.addEventListener('pointercancel', onCancel);
     });
     // Accesibilidad: reordenar con teclado desde el asa.
     handle.setAttribute('role', 'button');
@@ -561,9 +567,11 @@ function renderEditor(container, listData) {
     }
   }
 
-  getAcceptedFriends().then((friends) => {
-    friendsCache = friends;
-  });
+  getAcceptedFriends()
+    .then((friends) => {
+      friendsCache = friends;
+    })
+    .catch(() => {});
   renderStep();
 }
 

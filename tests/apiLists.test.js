@@ -217,6 +217,85 @@ describe('GET /api/lists/:id', () => {
     await idHandler(req, res);
     expect(res.statusCode).toBe(204);
   });
+
+  it('incluye children y parent', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([
+      {
+        id: 'evt1',
+        name: 'Concierto',
+        owner_id: 'u1',
+        expires_at: '2026-06-20T00:00:00Z',
+        parent_id: null,
+      },
+    ]); // list
+    sqlResponses.push([{ song_id: 's1', position: 0 }]); // songs
+    sqlResponses.push([{ user_id: 'u2', username: 'bob' }]); // members
+    sqlResponses.push([
+      { id: 'sub1', name: 'Ensayo', expires_at: '2026-06-18T00:00:00Z', song_count: 3 },
+    ]); // children
+    const req = { method: 'GET', headers: { authorization: 'Bearer t' }, query: { id: 'evt1' } };
+    const res = makeRes();
+    await idHandler(req, res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.children).toHaveLength(1);
+    expect(res.body.children[0].id).toBe('sub1');
+    expect(res.body.parent).toBeNull();
+  });
+});
+
+describe('PATCH /api/lists/:id (jerarquía)', () => {
+  it('rechaza poner la caducidad del hijo por encima del padre (400)', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([
+      { id: 'sub1', owner_id: 'u1', parent_id: 'evt1', expires_at: '2026-06-18T00:00:00Z' },
+    ]); // SELECT actual
+    sqlResponses.push([{ expires_at: '2026-06-20T00:00:00Z' }]); // SELECT padre
+    const req = {
+      method: 'PATCH',
+      headers: { authorization: 'Bearer t' },
+      query: { id: 'sub1' },
+      body: { expires_at: '2026-06-25T00:00:00Z' },
+    };
+    const res = makeRes();
+    await idHandler(req, res);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('rechaza adelantar el evento por debajo de un hijo vivo (400)', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([
+      { id: 'evt1', owner_id: 'u1', parent_id: null, expires_at: '2026-06-20T00:00:00Z' },
+    ]); // SELECT actual
+    sqlResponses.push([{ m: '2026-06-19T00:00:00Z' }]); // max hijo vivo
+    const req = {
+      method: 'PATCH',
+      headers: { authorization: 'Bearer t' },
+      query: { id: 'evt1' },
+      body: { expires_at: '2026-06-15T00:00:00Z' },
+    };
+    const res = makeRes();
+    await idHandler(req, res);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('actualiza nombre sin tocar caducidad', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([
+      { id: 'evt1', owner_id: 'u1', parent_id: null, expires_at: '2026-06-20T00:00:00Z' },
+    ]); // SELECT actual
+    sqlResponses.push([{ id: 'evt1', name: 'Nuevo', expires_at: '2026-06-20T00:00:00Z' }]); // UPDATE
+    const req = {
+      method: 'PATCH',
+      headers: { authorization: 'Bearer t' },
+      query: { id: 'evt1' },
+      body: { name: 'Nuevo' },
+    };
+    const res = makeRes();
+    await idHandler(req, res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.name).toBe('Nuevo');
+  });
 });
 
 const songsHandler = (await import('../api/lists/[id]/songs.js')).default;

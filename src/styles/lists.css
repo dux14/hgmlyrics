@@ -410,31 +410,59 @@
   flex-shrink: 0;
 }
 
-/* ── Wizard de creación/edición ── */
-.list-wizard {
-  display: flex;
+/* ── Wizard de creación/edición (mobile-first) ── */
+/* En móvil el contenedor es una columna a pantalla completa: stepper arriba,
+   panel que crece y footer anclado abajo. En desktop pasa a rail vertical + panel. */
+.list-detail__container.list-wizard {
   gap: var(--space-lg);
-  align-items: flex-start;
+  min-height: calc(100svh - 7rem);
 }
+
+/* Stepper horizontal con conectores (móvil) */
 .list-wizard__rail {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-  padding-top: 4px;
-  flex-shrink: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
 }
 .list-wizard__num {
-  font-size: 1.5rem;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 1.05rem;
   font-weight: 800;
-  color: var(--color-border);
   line-height: 1;
+  color: var(--color-border);
+  letter-spacing: 0.02em;
+  transition: color 0.2s ease;
+}
+.list-wizard__num::after {
+  content: '';
+  flex: 1;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--color-border);
+  transition: background 0.2s ease;
+}
+.list-wizard__num:last-child {
+  flex: 0 0 auto;
+}
+.list-wizard__num:last-child::after {
+  display: none;
 }
 .list-wizard__num--act {
   color: var(--color-primary);
+  font-size: 1.35rem;
 }
 .list-wizard__num--done {
-  color: var(--color-primary-dark);
+  color: var(--color-primary);
 }
+.list-wizard__num--done::after {
+  background: var(--color-primary);
+}
+
 .list-wizard__panel {
   flex: 1;
   min-width: 0;
@@ -442,24 +470,28 @@
   flex-direction: column;
   gap: var(--space-md);
 }
-.list-wizard__title {
-  font-size: 1.25rem;
-  font-weight: 800;
-  margin: 0;
-}
-.list-wizard__sub {
-  font-size: 0.8rem;
-  color: var(--color-text-secondary);
-  margin: 2px 0 0;
-}
 .list-wizard__head {
   display: flex;
   flex-direction: column;
+  gap: 2px;
+}
+.list-wizard__title {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.list-wizard__sub {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  margin: 0;
 }
 .list-wizard__body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: var(--space-md);
 }
 .list-wizard__label {
   font-size: 0.72rem;
@@ -467,6 +499,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--color-text-secondary);
+  margin-bottom: calc(-1 * var(--space-sm));
 }
 .list-wizard__datetime {
   padding: var(--space-sm) var(--space-md);
@@ -475,8 +508,8 @@
   background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
-  font-size: 0.9rem;
-  width: fit-content;
+  font-size: 1rem;
+  width: 100%;
 }
 .list-wizard__datetime:focus {
   outline: none;
@@ -508,8 +541,15 @@
 }
 .list-wizard__foot {
   display: flex;
-  justify-content: space-between;
-  margin-top: var(--space-sm);
+  gap: var(--space-sm);
+  margin-top: auto;
+  padding-top: var(--space-lg);
+}
+.list-wizard__foot .btn {
+  min-height: 48px;
+}
+.list-wizard__foot #list-wizard-next {
+  flex: 1;
 }
 
 /* Asa de arrastre + estados DnD */
@@ -541,11 +581,41 @@
   }
 }
 
-@media (max-width: 560px) {
-  .list-wizard {
-    gap: var(--space-md);
+/* Desktop: rail vertical editorial a la izquierda + panel a la derecha */
+@media (min-width: 720px) {
+  .list-detail__container.list-wizard {
+    max-width: 760px;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: var(--space-2xl);
+    min-height: 0;
+  }
+  .list-wizard__rail {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-lg);
+    width: auto;
+    flex-shrink: 0;
+    padding-top: 4px;
   }
   .list-wizard__num {
-    font-size: 1.2rem;
+    flex: 0 0 auto;
+    font-size: 1.5rem;
+  }
+  .list-wizard__num::after {
+    display: none;
+  }
+  .list-wizard__num--act {
+    font-size: 1.6rem;
+  }
+  .list-wizard__datetime {
+    width: fit-content;
+    min-width: 300px;
+  }
+  .list-wizard__foot {
+    margin-top: var(--space-lg);
+  }
+  .list-wizard__foot #list-wizard-next {
+    flex: 0 0 auto;
   }
 }

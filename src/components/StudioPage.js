@@ -18,6 +18,7 @@ import { getSession } from '../lib/authStore.js';
 import { downloadAllZip, buildZipBlob } from '../lib/studioZip.js';
 import { getDriveToken } from '../lib/driveAuth.js';
 import { uploadZipToDrive } from '../lib/driveUpload.js';
+import { createActionButton } from '../lib/studioActionButton.js';
 import { isMp3File } from '../lib/studioFile.js';
 export { isMp3File };
 import { createStudioPlayer } from './StudioPlayer.js';
@@ -473,19 +474,25 @@ function renderJob(body, job, quota) {
   // --- ZIP ---
   const zipBtn = body.querySelector('#studio-zip');
   if (zipBtn) {
+    const ctrl = createActionButton(zipBtn, {
+      idle: { icon: 'download', label: 'Descargar todo (ZIP)' },
+    });
+    const clearErr = () => {
+      const actionsEl = zipBtn.closest('.studio-actions');
+      if (actionsEl.nextElementSibling?.classList.contains('studio__error')) {
+        actionsEl.nextElementSibling.remove();
+      }
+    };
     zipBtn.addEventListener('click', async () => {
-      const original = zipBtn.innerHTML;
       zipBtn.disabled = true;
-      zipBtn.textContent = 'Empaquetando…';
+      clearErr();
+      ctrl.busy('Empaquetando');
       try {
-        await downloadAllZip(job, ALL_LABELS);
-        zipBtn.innerHTML = original;
+        await downloadAllZip(job, ALL_LABELS, (k, n) => ctrl.progress(k / n));
+        ctrl.done('Listo');
       } catch (e) {
-        zipBtn.innerHTML = original;
+        ctrl.error();
         const actionsEl = zipBtn.closest('.studio-actions');
-        if (actionsEl.nextElementSibling?.classList.contains('studio__error')) {
-          actionsEl.nextElementSibling.remove();
-        }
         const err = document.createElement('p');
         err.className = 'studio__error';
         err.textContent = e.message || 'No pudimos generar el ZIP.';
@@ -499,40 +506,45 @@ function renderJob(body, job, quota) {
   // --- Drive ---
   const driveBtn = body.querySelector('#studio-drive');
   if (driveBtn) {
+    const ctrl = createActionButton(driveBtn, {
+      idle: { icon: 'upload', label: 'Guardar en Drive' },
+    });
+    const actionsEl = driveBtn.closest('.studio-actions');
+    const clearMsgs = () => {
+      actionsEl.parentElement
+        .querySelectorAll('.studio__error, .studio__drive-link')
+        .forEach((n) => n.remove());
+    };
     driveBtn.addEventListener('click', async () => {
-      const original = driveBtn.innerHTML;
-      const actionsEl = driveBtn.closest('.studio-actions');
-      const clearMsgs = () => {
-        actionsEl.parentElement
-          .querySelectorAll('.studio__error, .studio__drive-link')
-          .forEach((n) => n.remove());
-      };
       driveBtn.disabled = true;
       clearMsgs();
       try {
-        driveBtn.textContent = 'Autorizando…';
+        ctrl.busy('Autorizando…');
         let token = await getDriveToken();
-        driveBtn.textContent = 'Empaquetando…';
-        const { blob, base } = await buildZipBlob(job, ALL_LABELS);
-        driveBtn.textContent = 'Subiendo a Drive…';
+        ctrl.busy('Empaquetando');
+        const { blob, base } = await buildZipBlob(job, ALL_LABELS, (k, n) =>
+          ctrl.progress((k / n) * 0.5),
+        );
+        ctrl.busy('Subiendo a Drive…');
+        const onUp = (p) => ctrl.progress(0.5 + (p / 100) * 0.5);
         let result;
         try {
-          result = await uploadZipToDrive(token, blob, base);
+          result = await uploadZipToDrive(token, blob, base, onUp);
         } catch (e) {
           if (e.status === 401) {
             token = await getDriveToken();
-            result = await uploadZipToDrive(token, blob, base);
+            result = await uploadZipToDrive(token, blob, base, onUp);
           } else {
             throw e;
           }
         }
-        driveBtn.innerHTML = `${icon('check-circle', { size: 16 })} Guardado`;
+        ctrl.done('Guardado');
         const link = document.createElement('p');
         link.className = 'studio__drive-link';
         link.innerHTML = `Guardado en Drive · <a href="${escHtml(result.folderUrl)}" target="_blank" rel="noopener">abrir carpeta</a>`;
         actionsEl.insertAdjacentElement('afterend', link);
       } catch (e) {
-        driveBtn.innerHTML = original;
+        ctrl.error();
         const err = document.createElement('p');
         err.className = 'studio__error';
         err.textContent = e.message || 'No pudimos guardar en Drive.';

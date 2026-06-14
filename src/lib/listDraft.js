@@ -97,6 +97,17 @@ export function formatExpiry(expiresAt) {
   return `caduca en ${dias}d`;
 }
 
+/** Mueve el elemento en `from` a la posición `to`. Devuelve copia nueva. */
+export function reorder(arr, from, to) {
+  const copy = arr.slice();
+  if (from === to || from < 0 || to < 0 || from >= copy.length || to >= copy.length) {
+    return copy;
+  }
+  const [item] = copy.splice(from, 1);
+  copy.splice(to, 0, item);
+  return copy;
+}
+
 /** Urgente si caduca hoy o mañana (o ya caducó). */
 export function isUrgent(expiresAt) {
   if (!expiresAt) return false;

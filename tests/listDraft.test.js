@@ -5,6 +5,7 @@ import {
   diffMembers,
   resolveExpiresAt,
   formatExpiry,
+  reorder,
 } from '../src/lib/listDraft.js';
 
 const friends = [
@@ -126,5 +127,22 @@ describe('formatExpiry', () => {
 
   it('sin valor devuelve cadena vacía', () => {
     expect(formatExpiry(null)).toBe('');
+  });
+});
+
+describe('reorder', () => {
+  it('mueve un elemento de un índice a otro', () => {
+    expect(reorder(['a', 'b', 'c', 'd'], 0, 2)).toEqual(['b', 'c', 'a', 'd']);
+  });
+  it('mueve hacia arriba', () => {
+    expect(reorder(['a', 'b', 'c'], 2, 0)).toEqual(['c', 'a', 'b']);
+  });
+  it('no muta el array original', () => {
+    const src = ['a', 'b', 'c'];
+    reorder(src, 0, 1);
+    expect(src).toEqual(['a', 'b', 'c']);
+  });
+  it('devuelve copia igual si from === to', () => {
+    expect(reorder(['a', 'b'], 1, 1)).toEqual(['a', 'b']);
   });
 });

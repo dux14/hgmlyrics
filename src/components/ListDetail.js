@@ -111,7 +111,9 @@ export async function renderListDetail(container, id, { mode = 'view' } = {}) {
 
 /* ── Editor (owner) ────────────────────────────────────────────── */
 
-function renderEditor(container, listData) {
+function renderEditor(container, listData, opts = {}) {
+  const parentCtx = opts.parent || null; // { id, name, expires_at, songs[] }
+  const maxExpiresAt = parentCtx?.expires_at || null;
   const isNew = !listData.id;
 
   // Estado original (para el diff de miembros al guardar)
@@ -134,6 +136,16 @@ function renderEditor(container, listData) {
     days: null,
     dateValue: '', // 'YYYY-MM-DDTHH:mm' (datetime-local)
   };
+
+  // Sub-lista nueva: hereda miembros del evento y topa la caducidad al padre.
+  if (isNew && parentCtx) {
+    draft.invitees = (listData.members || []).map((m) => ({
+      id: m.user_id ?? m.id,
+      username: m.username ?? m.user_id ?? m.id,
+      displayName: m.displayName || m.username || m.user_id || m.id,
+      avatarUrl: m.avatarUrl || '',
+    }));
+  }
 
   const pad = (n) => String(n).padStart(2, '0');
   if (isNew) {
@@ -213,7 +225,12 @@ function renderEditor(container, listData) {
       return false;
     }
     try {
-      resolveExpiresAt({ days: draft.days, dateValue: draft.dateValue, current: draft.expiresAt });
+      resolveExpiresAt({
+        days: draft.days,
+        dateValue: draft.dateValue,
+        current: draft.expiresAt,
+        maxExpiresAt,
+      });
     } catch (err) {
       errorEl.textContent = err.message;
       return false;
@@ -247,7 +264,16 @@ function renderEditor(container, listData) {
         value="${escapeHtml(draft.name)}" maxlength="80" placeholder="Nombre de la lista" aria-label="Nombre de la lista" />
       <label class="list-wizard__label" for="list-detail-datetime">Caduca el</label>
       <input class="list-wizard__datetime" type="datetime-local" id="list-detail-datetime"
-        value="${escapeHtml(draft.dateValue)}" />
+        value="${escapeHtml(draft.dateValue)}"
+        ${
+          maxExpiresAt
+            ? `max="${(() => {
+                const d = new Date(maxExpiresAt);
+                const p = (x) => String(x).padStart(2, '0');
+                return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+              })()}"`
+            : ''
+        } />
       <div class="list-wizard__life-row">
         <span>vida de la lista</span>
         <span class="lists__expiry-chip ${lifeChip.urgent ? 'lists__expiry-chip--urgent' : ''}" id="list-detail-lifechip">${escapeHtml(lifeChip.text)}</span>
@@ -306,6 +332,11 @@ function renderEditor(container, listData) {
   }
   function renderStep1(el) {
     el.innerHTML = `
+      ${
+        parentCtx?.songs?.length
+          ? `<button class="btn btn--secondary list-detail__from-setlist" id="list-detail-from-setlist" type="button">Tomar del setlist (${parentCtx.songs.length})</button>`
+          : ''
+      }
       <div class="list-detail__search-wrap">
         <input class="list-detail__search-input" type="search" id="list-detail-search" placeholder="Buscar y agregar canciones…" autocomplete="off" />
         <div class="list-detail__search-results" id="list-detail-results" style="display:none"></div>
@@ -316,6 +347,12 @@ function renderEditor(container, listData) {
     const searchInput = el.querySelector('#list-detail-search');
     const resultsEl = el.querySelector('#list-detail-results');
     let searchTimer = null;
+
+    el.querySelector('#list-detail-from-setlist')?.addEventListener('click', () => {
+      const existing = new Set(draft.order);
+      for (const sid of parentCtx.songs) if (!existing.has(sid)) draft.order.push(sid);
+      renderSongs();
+    });
 
     function renderSongs(enteringId = null) {
       if (draft.order.length === 0) {
@@ -628,6 +665,7 @@ function renderEditor(container, listData) {
         days: draft.days,
         dateValue: draft.dateValue,
         current: draft.expiresAt,
+        maxExpiresAt,
       });
     } catch (err) {
       errorEl.textContent = err.message;
@@ -639,7 +677,7 @@ function renderEditor(container, listData) {
     try {
       let listId = listData.id;
       if (isNew) {
-        const created = await createList(name, expiresAt);
+        const created = await createList(name, expiresAt, parentCtx?.id || null);
         listId = created.id;
         await setListSongs(listId, draft.order);
         for (const username of draft.invitees.map((f) => f.username)) {
@@ -789,3 +827,6 @@ function renderReadonly(container, listData, { isOwner } = {}) {
     });
   });
 }
+
+/* ── Test helper ────────────────────────────────────────────────── */
+export const __renderEditorForTest = renderEditor;

@@ -19,7 +19,7 @@ vi.mock('../src/router.js', () => ({ navigate: vi.fn() }));
 vi.mock('./Sidebar.js', () => ({ updateSidebarContent: vi.fn() }), { virtual: true });
 vi.mock('../src/components/Sidebar.js', () => ({ updateSidebarContent: vi.fn() }));
 
-import { renderListDetail } from '../src/components/ListDetail.js';
+import { renderListDetail, __renderEditorForTest } from '../src/components/ListDetail.js';
 
 describe('wizard de listas', () => {
   let container;
@@ -84,7 +84,7 @@ describe('wizard de listas', () => {
     container.querySelector('#list-wizard-next').click(); // a paso 3
     container.querySelector('#list-wizard-next').click(); // crear
     await new Promise((r) => setTimeout(r, 10));
-    expect(lists.createList).toHaveBeenCalledWith('Mi lista', expect.any(String));
+    expect(lists.createList).toHaveBeenCalledWith('Mi lista', expect.any(String), null);
   });
 
   it('renderiza segmented control y filas de ensayos para un evento', async () => {
@@ -126,5 +126,43 @@ describe('wizard de listas', () => {
     await renderListDetail(el, 'sub1', { mode: 'view' });
     expect(el.querySelector('.list-detail__crumb')).toBeTruthy();
     expect(el.textContent).toContain('Concierto');
+  });
+
+  it('crea un ensayo pasando parentId y miembros heredados', async () => {
+    const { createList, setListSongs, inviteMember } = await import('../src/lib/lists.js');
+    createList.mockResolvedValue({ id: 'sub1' });
+    setListSongs.mockResolvedValue(null);
+    inviteMember.mockResolvedValue(null);
+    const el = document.createElement('div');
+    __renderEditorForTest(
+      el,
+      {
+        id: null,
+        name: '',
+        expires_at: null,
+        songs: [],
+        members: [{ user_id: 'u2', username: 'bob' }],
+        role: 'owner',
+      },
+      {
+        parent: {
+          id: 'evt1',
+          name: 'Concierto',
+          expires_at: '2026-06-20T00:00:00Z',
+          songs: ['s1', 's2'],
+        },
+      },
+    );
+    el.querySelector('#list-detail-name').value = 'Ensayo general';
+    el.querySelector('#list-detail-name').dispatchEvent(new Event('input'));
+    el.querySelector('#list-detail-datetime').value = '2026-06-18T20:00';
+    el.querySelector('#list-detail-datetime').dispatchEvent(new Event('input'));
+    const nextBtn = el.querySelector('#list-wizard-next');
+    nextBtn.click(); // paso 2
+    nextBtn.click(); // paso 3
+    nextBtn.click(); // commit
+    await new Promise((r) => setTimeout(r, 0));
+    expect(createList).toHaveBeenCalledWith('Ensayo general', expect.any(String), 'evt1');
+    expect(inviteMember).toHaveBeenCalledWith('sub1', 'bob');
   });
 });

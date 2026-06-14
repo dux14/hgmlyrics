@@ -676,9 +676,44 @@ function renderEditor(container, listData) {
 function renderReadonly(container, listData, { isOwner } = {}) {
   const songs = listData.songs || [];
   const orderedSongIds = songs.map((s) => s.song_id ?? s.id ?? s);
+  const children = listData.children || [];
+  const parent = listData.parent || null;
+  const showSeg = !parent && (children.length > 0 || isOwner);
+
+  const songsPaneHtml =
+    orderedSongIds.length === 0
+      ? `<p class="list-detail__empty">Esta lista no tiene canciones aún.</p>`
+      : orderedSongIds
+          .map((sid, idx) => {
+            const row = songRowCompact(songForRender(sid), { index: idx + 1 });
+            return row.replace(
+              'class="song-row-compact"',
+              'class="song-row-compact song-row-compact--clickable"',
+            );
+          })
+          .join('');
+
+  const childrenPaneHtml = `
+    ${
+      children.length === 0
+        ? `<p class="list-detail__empty">Aún no hay ensayos.</p>`
+        : children
+            .map(
+              (c) => `
+        <div class="list-detail__child" data-child-id="${escapeHtml(c.id)}">
+          <span class="list-detail__child-name">${escapeHtml(c.name)}</span>
+          <span class="list-detail__child-meta">${Number(c.song_count) || 0} temas · ${escapeHtml(formatExpiry(c.expires_at))}</span>
+          <span class="list-detail__child-chevron">${icon('chevron-right', { size: 16 })}</span>
+        </div>`,
+            )
+            .join('')
+    }
+    ${isOwner ? `<button class="btn btn--secondary list-detail__add-child" id="list-detail-add-child" type="button">${icon('plus', { size: 14 })} Ensayo</button>` : ''}
+  `;
 
   container.innerHTML = `
     <div class="list-detail__container">
+      ${parent ? `<button class="list-detail__crumb" id="list-detail-crumb" type="button">${icon('chevron-left', { size: 14 })} ${escapeHtml(parent.name)}</button>` : ''}
       <div class="list-detail__header">
         <h1 class="list-detail__title">${escapeHtml(listData.name)}</h1>
         ${expiryChipHtml(listData.expires_at)}
@@ -688,26 +723,62 @@ function renderReadonly(container, listData, { isOwner } = {}) {
             : ''
         }
       </div>
-      <div class="list-detail__songs">
-        ${
-          orderedSongIds.length === 0
-            ? `<p class="list-detail__empty">Esta lista no tiene canciones aún.</p>`
-            : orderedSongIds
-                .map((sid, idx) => {
-                  const row = songRowCompact(songForRender(sid), { index: idx + 1 });
-                  return row.replace(
-                    'class="song-row-compact"',
-                    'class="song-row-compact song-row-compact--clickable"',
-                  );
-                })
-                .join('')
-        }
-      </div>
+      ${
+        showSeg
+          ? `<div class="list-detail__seg" role="tablist">
+               <button class="list-detail__seg-tab is-active" data-pane="songs" role="tab" type="button">Setlist · ${orderedSongIds.length}</button>
+               <button class="list-detail__seg-tab" data-pane="children" role="tab" type="button">Ensayos · ${children.length}</button>
+             </div>`
+          : ''
+      }
+      <div class="list-detail__songs" data-pane-body="songs">${songsPaneHtml}</div>
+      ${showSeg ? `<div class="list-detail__children" data-pane-body="children" hidden>${childrenPaneHtml}</div>` : ''}
     </div>
   `;
 
   container.querySelector('#list-detail-edit')?.addEventListener('click', () => {
     renderEditor(container, listData);
+  });
+
+  container.querySelector('#list-detail-crumb')?.addEventListener('click', () => {
+    navigate(`/lista/${parent.id}`);
+  });
+
+  const tabs = container.querySelectorAll('.list-detail__seg-tab');
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      tabs.forEach((t) => t.classList.toggle('is-active', t === tab));
+      const target = tab.dataset.pane;
+      container.querySelectorAll('[data-pane-body]').forEach((body) => {
+        body.hidden = body.dataset.paneBody !== target;
+      });
+    });
+  });
+
+  container.querySelectorAll('.list-detail__child').forEach((row) => {
+    row.addEventListener('click', () => navigate(`/lista/${row.dataset.childId}`));
+  });
+
+  container.querySelector('#list-detail-add-child')?.addEventListener('click', () => {
+    renderEditor(
+      container,
+      {
+        id: null,
+        name: '',
+        expires_at: null,
+        songs: [],
+        members: listData.members || [],
+        role: 'owner',
+      },
+      {
+        parent: {
+          id: listData.id,
+          name: listData.name,
+          expires_at: listData.expires_at,
+          songs: orderedSongIds,
+        },
+      },
+    );
   });
 
   container.querySelectorAll('.song-row-compact--clickable').forEach((row) => {

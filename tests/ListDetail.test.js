@@ -86,4 +86,45 @@ describe('wizard de listas', () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(lists.createList).toHaveBeenCalledWith('Mi lista', expect.any(String));
   });
+
+  it('renderiza segmented control y filas de ensayos para un evento', async () => {
+    const { getList } = await import('../src/lib/lists.js');
+    getList.mockResolvedValue({
+      id: 'evt1',
+      name: 'Concierto',
+      expires_at: '2026-06-20T00:00:00Z',
+      role: 'owner',
+      parent_id: null,
+      parent: null,
+      songs: [],
+      members: [],
+      children: [
+        { id: 'sub1', name: 'Ensayo general', expires_at: '2026-06-18T00:00:00Z', song_count: 3 },
+      ],
+    });
+    const el = document.createElement('div');
+    await renderListDetail(el, 'evt1', { mode: 'view' });
+    expect(el.querySelector('.list-detail__seg')).toBeTruthy();
+    expect(el.textContent).toContain('Ensayos');
+    expect(el.textContent).toContain('Ensayo general');
+  });
+
+  it('muestra migaja al ver una sub-lista', async () => {
+    const { getList } = await import('../src/lib/lists.js');
+    getList.mockResolvedValue({
+      id: 'sub1',
+      name: 'Ensayo general',
+      expires_at: '2026-06-18T00:00:00Z',
+      role: 'member',
+      parent_id: 'evt1',
+      parent: { id: 'evt1', name: 'Concierto' },
+      songs: [],
+      members: [],
+      children: [],
+    });
+    const el = document.createElement('div');
+    await renderListDetail(el, 'sub1', { mode: 'view' });
+    expect(el.querySelector('.list-detail__crumb')).toBeTruthy();
+    expect(el.textContent).toContain('Concierto');
+  });
 });

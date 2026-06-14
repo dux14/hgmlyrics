@@ -8,7 +8,6 @@ import {
   magnifyRange,
   magnifyPosToTime,
   commitPreview,
-  cancelPreview,
 } from './StudioPlayer.js';
 
 describe('fmtTimeCs', () => {
@@ -76,24 +75,15 @@ describe('magnifyPosToTime', () => {
 });
 
 describe('commitPreview', () => {
-  it('retorna previewTime cuando scrubbing es true', () => {
-    expect(commitPreview({ scrubbing: true, previewTime: 42.5, audioTime: 10 })).toBe(42.5);
-  });
-  it('retorna audioTime cuando scrubbing es false (no arrastre activo)', () => {
-    expect(commitPreview({ scrubbing: false, previewTime: 42.5, audioTime: 10 })).toBe(10);
+  it('retorna previewTime cuando es un tiempo válido', () => {
+    expect(commitPreview({ previewTime: 42.5 })).toBe(42.5);
+    expect(commitPreview({ previewTime: 0 })).toBe(0);
   });
   it('retorna 0 cuando previewTime no es finito', () => {
-    expect(commitPreview({ scrubbing: true, previewTime: NaN, audioTime: 5 })).toBe(0);
+    expect(commitPreview({ previewTime: NaN })).toBe(0);
+    expect(commitPreview({ previewTime: Infinity })).toBe(0);
   });
-});
-
-describe('cancelPreview', () => {
-  it('retorna audioTime ignorando previewTime', () => {
-    expect(cancelPreview({ audioTime: 30.1 })).toBe(30.1);
-    expect(cancelPreview({ audioTime: 0 })).toBe(0);
-  });
-  it('retorna 0 cuando audioTime no es finito', () => {
-    expect(cancelPreview({ audioTime: NaN })).toBe(0);
-    expect(cancelPreview({ audioTime: -1 })).toBe(0);
+  it('retorna 0 cuando previewTime es negativo', () => {
+    expect(commitPreview({ previewTime: -1 })).toBe(0);
   });
 });

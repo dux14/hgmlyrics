@@ -54,24 +54,12 @@ export function magnifyPosToTime(ratio, range) {
 
 /**
  * Helper puro: devuelve el tiempo a aplicar al commit (pointerup).
- * Si scrubbing es true retorna previewTime; si no, retorna audioTime.
- * Normaliza no-finitos a 0.
- * @param {{ scrubbing: boolean, previewTime: number, audioTime: number }} state
+ * Clampea previewTime a [0, ∞); normaliza no-finitos y negativos a 0.
+ * @param {{ previewTime: number }} state
  * @returns {number}
  */
-export function commitPreview({ scrubbing, previewTime, audioTime }) {
-  const t = scrubbing ? previewTime : audioTime;
-  return Number.isFinite(t) && t >= 0 ? t : 0;
-}
-
-/**
- * Helper puro: devuelve el tiempo de audio real al cancelar un scrub.
- * Siempre ignora previewTime y devuelve audioTime, normalizado a 0 si no finito.
- * @param {{ audioTime: number }} state
- * @returns {number}
- */
-export function cancelPreview({ audioTime }) {
-  return Number.isFinite(audioTime) && audioTime >= 0 ? audioTime : 0;
+export function commitPreview({ previewTime }) {
+  return Number.isFinite(previewTime) && previewTime >= 0 ? previewTime : 0;
 }
 
 /**
@@ -131,8 +119,9 @@ export function createStudioPlayer({ label, url }) {
     const pos = timeToPos(time, dur());
     fill.style.width = `${pos * 100}%`;
     thumb.style.left = `${pos * 100}%`;
-    const thumbPct = pos * 100;
-    previewBubble.style.left = `${thumbPct}%`;
+    // Burbuja: confinada al rango [5%,95%] para no recortarse en los bordes
+    const bubblePct = clamp(pos * 100, 5, 95);
+    previewBubble.style.left = `${bubblePct}%`;
   };
 
   const paint = () => {
@@ -221,17 +210,16 @@ export function createStudioPlayer({ label, url }) {
   /** Entra en modo scrubbing: muestra thumb escalado y burbuja de preview. */
   const enterScrub = (ratio) => {
     scrubbing = true;
-    previewTime = posToTime(ratio, dur());
     thumb.classList.add('studio-player__thumb--grabbing');
     previewBubble.hidden = false;
-    applyPreviewVisual(previewTime);
+    applyPreviewVisual(posToTime(ratio, dur()));
   };
 
   /** Confirma el scrub: escribe audio.currentTime SOLO aquí (commit-on-release). */
   const commitScrub = () => {
     if (!scrubbing) return;
     // --- ÚNICO LUGAR donde audio.currentTime se escribe desde el scrubber ---
-    const t = commitPreview({ scrubbing: true, previewTime, audioTime: audio.currentTime });
+    const t = commitPreview({ previewTime });
     audio.currentTime = t;
     // Si estaba reproduciendo, continuar desde la nueva posición
     // (el audio mantiene su estado play/pause; el seek lo reanuda solo)
@@ -291,18 +279,7 @@ export function createStudioPlayer({ label, url }) {
     clearPress();
     closeMag();
     // Cancel: descarta previewTime, vuelve a la posición real sin commit
-    scrubbing = false;
-    thumb.classList.remove('studio-player__thumb--grabbing');
-    previewBubble.hidden = true;
-    // Restaura visual a la posición real del audio (sin tocar audio.currentTime)
-    const t = cancelPreview({ audioTime: audio.currentTime });
-    paintAt(t);
-    const total = Number.isFinite(audio.duration) ? fmtTime(audio.duration) : '0:00';
-    timeEl.textContent = `${fmtTime(audio.currentTime)} / ${total}`;
-    bar.setAttribute(
-      'aria-valuenow',
-      String(Math.round(timeToPos(audio.currentTime, dur()) * 100)),
-    );
+    exitScrub();
   });
 
   return { el: root, audio };

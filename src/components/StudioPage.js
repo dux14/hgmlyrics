@@ -143,19 +143,28 @@ function renderIdle(body, quota) {
   drop.addEventListener('dragover', (e) => e.preventDefault());
   const rejectNonMp3 = () => {
     renderIdle(body, quota);
-    body.insertAdjacentHTML('afterbegin', `<p class="studio__error">Solo aceptamos archivos MP3.</p>`);
+    body.insertAdjacentHTML(
+      'afterbegin',
+      `<p class="studio__error">Solo aceptamos archivos MP3.</p>`,
+    );
   };
   drop.addEventListener('drop', (e) => {
     e.preventDefault();
     const file = e.dataTransfer?.files?.[0];
     if (!file) return;
-    if (!isMp3File(file)) { rejectNonMp3(); return; }
+    if (!isMp3File(file)) {
+      rejectNonMp3();
+      return;
+    }
     void handleFile(body, file, quota);
   });
   input.addEventListener('change', () => {
     const file = input.files?.[0];
     if (!file) return;
-    if (!isMp3File(file)) { rejectNonMp3(); return; }
+    if (!isMp3File(file)) {
+      rejectNonMp3();
+      return;
+    }
     void handleFile(body, file, quota);
   });
 }
@@ -216,15 +225,14 @@ function watchJob(body, jobId, quota, filename) {
   };
 
   // Push: en cada cambio de estado refrescamos vía la API saneada.
-  // Si el payload trae sections, hacemos un render optimista inmediato antes de que
-  // llegue el HTTP GET, para que la UI reaccione visualmente en cuanto llega el push.
+  // No hacemos render optimista con datos parciales del push: el payload del canal
+  // no trae stems/voices firmados, así que pintar desde él dejaría los players vacíos
+  // (chip "Listo" sin contenido). Dejamos que refresh() — única fuente con URLs firmadas —
+  // sea quien actualice la UI; el push solo sirve de señal para disparar ese GET.
   let pushAlive = false;
   jobChannel = watchJobRealtime({
     jobId,
-    onStatus: ({ sections }) => {
-      if (sections) {
-        renderProcessing(body, { status: 'processing', sections }, filename, quota);
-      }
+    onStatus: () => {
       void refresh();
     },
     onSubscribed: () => {

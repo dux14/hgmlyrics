@@ -55,4 +55,20 @@ describe('wizard de listas', () => {
     expect(container.querySelector('#list-detail-datetime')).toBeTruthy();
     expect(container.querySelector('.list-wizard__life')).toBeTruthy();
   });
+
+  it('agrega una canción desde el buscador en el paso 2', async () => {
+    const { searchSongs } = await import('../src/lib/search.js');
+    searchSongs.mockReturnValue([{ id: 's1', title: 'Tema', album: 'A' }]);
+    await renderListDetail(container, 'nueva', { mode: 'edit' });
+    const name = container.querySelector('#list-detail-name');
+    name.value = 'L';
+    name.dispatchEvent(new Event('input'));
+    container.querySelector('#list-wizard-next').click();
+    const search = container.querySelector('#list-detail-search');
+    search.value = 'tema';
+    search.dispatchEvent(new Event('input'));
+    await new Promise((r) => setTimeout(r, 250));
+    container.querySelector('#list-detail-results .song-row-compact').click();
+    expect(container.querySelectorAll('#list-detail-songs .song-row-compact').length).toBe(1);
+  });
 });

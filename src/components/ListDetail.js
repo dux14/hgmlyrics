@@ -27,6 +27,7 @@ import {
   resolveExpiresAt,
   formatExpiry,
   isUrgent,
+  reorder,
 } from '../lib/listDraft.js';
 import { songRowCompact } from './songRow.js';
 import { navigate } from '../router.js';
@@ -34,9 +35,6 @@ import { icon } from '../lib/icons.js';
 import { updateSidebarContent } from './Sidebar.js';
 
 /* global CSS */
-
-// Listener global para cerrar el dropdown de búsqueda al clicar fuera.
-const dismissSearchHandler = null;
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -308,8 +306,136 @@ function renderEditor(container, listData) {
     }
   }
   function renderStep1(el) {
-    el.innerHTML = `<input class="list-detail__search-input" type="search" id="list-detail-search" placeholder="Buscar y agregar canciones…" autocomplete="off" />`;
+    el.innerHTML = `
+      <div class="list-detail__search-wrap">
+        <input class="list-detail__search-input" type="search" id="list-detail-search" placeholder="Buscar y agregar canciones…" autocomplete="off" />
+        <div class="list-detail__search-results" id="list-detail-results" style="display:none"></div>
+      </div>
+      <div class="list-detail__songs" id="list-detail-songs"></div>
+    `;
+    const songsEl = el.querySelector('#list-detail-songs');
+    const searchInput = el.querySelector('#list-detail-search');
+    const resultsEl = el.querySelector('#list-detail-results');
+    let searchTimer = null;
+
+    function renderSongs(enteringId = null) {
+      if (draft.order.length === 0) {
+        songsEl.innerHTML = `<p class="list-detail__empty">Busca arriba para agregar canciones.</p>`;
+        return;
+      }
+      songsEl.innerHTML = draft.order
+        .map((sid, idx) =>
+          songRowCompact(songForRender(sid), {
+            index: idx + 1,
+            dragHandle: true,
+            actions: `<button class="list-detail__row-btn list-detail__row-btn--danger" data-action="remove" title="Quitar">${icon('close', { size: 14 })}</button>`,
+          }),
+        )
+        .join('');
+      if (enteringId) {
+        const escaped =
+          typeof CSS !== 'undefined' && CSS.escape
+            ? CSS.escape(enteringId)
+            : enteringId.replace(/[^\w-]/g, '\\$&');
+        songsEl.querySelector(`[data-song-id="${escaped}"]`)?.classList.add('is-entering');
+      }
+      bindRows();
+    }
+
+    function bindRows() {
+      songsEl.querySelectorAll('.song-row-compact').forEach((row) => {
+        const songId = row.dataset.songId;
+        row.querySelector('[data-action="remove"]')?.addEventListener('click', () => {
+          draft.order = draft.order.filter((sid) => sid !== songId);
+          renderSongs();
+        });
+        setupDragHandle(row, songsEl, renderSongs);
+      });
+    }
+
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      const q = searchInput.value.trim();
+      if (!q) {
+        resultsEl.style.display = 'none';
+        resultsEl.innerHTML = '';
+        return;
+      }
+      searchTimer = setTimeout(() => {
+        const hits = searchSongs(q, 8).filter((s) => !draft.order.includes(s.id));
+        if (!hits.length) {
+          resultsEl.style.display = 'none';
+          return;
+        }
+        resultsEl.innerHTML = hits.map((s) => songRowCompact(s, {})).join('');
+        resultsEl.style.display = 'block';
+        resultsEl.querySelectorAll('.song-row-compact').forEach((item) => {
+          item.addEventListener('click', () => {
+            const sid = item.dataset.songId;
+            if (!draft.order.includes(sid)) {
+              draft.order.push(sid);
+              renderSongs(sid);
+            }
+            searchInput.value = '';
+            resultsEl.style.display = 'none';
+            resultsEl.innerHTML = '';
+          });
+        });
+      }, 200);
+    });
+
+    renderSongs();
   }
+
+  // Drag & drop por Pointer Events (táctil + mouse). Reordena draft.order.
+  function setupDragHandle(row, listEl, rerender) {
+    const handle = row.querySelector('.song-row-compact__grip');
+    if (!handle) return;
+    handle.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const rows = [...listEl.querySelectorAll('.song-row-compact')];
+      const fromIdx = rows.indexOf(row);
+      row.classList.add('is-dragging');
+      handle.setPointerCapture(e.pointerId);
+      let toIdx = fromIdx;
+      function onMove(ev) {
+        const ys = rows.map((r) => r.getBoundingClientRect());
+        toIdx = ys.findIndex((b) => ev.clientY < b.top + b.height / 2);
+        if (toIdx === -1) toIdx = rows.length - 1;
+      }
+      function onUp() {
+        handle.releasePointerCapture(e.pointerId);
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup', onUp);
+        row.classList.remove('is-dragging');
+        if (toIdx !== fromIdx) {
+          draft.order = reorder(draft.order, fromIdx, toIdx);
+          rerender();
+        }
+      }
+      handle.addEventListener('pointermove', onMove);
+      handle.addEventListener('pointerup', onUp);
+    });
+    // Accesibilidad: reordenar con teclado desde el asa.
+    handle.setAttribute('role', 'button');
+    handle.setAttribute('tabindex', '0');
+    handle.setAttribute('aria-label', 'Reordenar (flechas arriba/abajo)');
+    handle.addEventListener('keydown', (ev) => {
+      const rows = [...listEl.querySelectorAll('.song-row-compact')];
+      const i = rows.indexOf(row);
+      if (ev.key === 'ArrowUp' && i > 0) {
+        draft.order = reorder(draft.order, i, i - 1);
+        rerender();
+        listEl.querySelectorAll('.song-row-compact__grip')[i - 1]?.focus();
+      }
+      if (ev.key === 'ArrowDown' && i < rows.length - 1) {
+        draft.order = reorder(draft.order, i, i + 1);
+        rerender();
+        listEl.querySelectorAll('.song-row-compact__grip')[i + 1]?.focus();
+      }
+    });
+  }
+
   function renderStep2(el) {
     el.innerHTML = `<input class="list-detail__search-input" type="search" id="list-detail-friend-search" placeholder="Buscar entre tus amigos…" autocomplete="off" />`;
   }

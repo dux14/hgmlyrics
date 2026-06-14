@@ -326,9 +326,18 @@
 }
 
 .main__content {
-  padding: var(--space-lg);
+  /* Gutter base: ajustado en mobile (--space-md lateral) para no desperdiciar
+     espacio en pantallas pequeñas. El padding vertical se mantiene en --space-lg.
+     Las páginas individuales NO deben añadir su propio padding horizontal. */
+  padding: var(--space-lg) var(--space-md);
   max-width: 1200px;
   margin: 0 auto;
+}
+
+@media (min-width: 768px) {
+  .main__content {
+    padding: var(--space-lg);
+  }
 }
 
 /* === Song Grid === */

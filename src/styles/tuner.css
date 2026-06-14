@@ -4,7 +4,8 @@
    ============================================ */
 
 .tuner-page {
-  padding: var(--space-md) var(--space-lg) var(--space-2xl);
+  /* Sin padding horizontal: el gutter lo aporta .main__content */
+  padding: var(--space-md) 0 var(--space-2xl);
   max-width: 640px;
   margin: 0 auto;
 }

@@ -232,6 +232,12 @@ async function boot() {
     renderStudioPage(mainContent);
   });
 
+  guardedRoute('/licencias', async () => {
+    hideFilterBar();
+    const { renderLicenses } = await import('./components/LicensesPage.js');
+    renderLicenses(mainContent);
+  });
+
   guardedRoute('/mundo', async () => {
     hideFilterBar();
     const { renderWorldPage } = await import('./components/WorldPage.js');

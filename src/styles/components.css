@@ -1893,7 +1893,8 @@
 .studio {
   max-width: var(--max-content-width);
   margin: 0 auto;
-  padding: var(--space-md) var(--space-lg) var(--space-2xl);
+  /* Sin padding horizontal: el gutter lo aporta .main__content */
+  padding: var(--space-md) 0 var(--space-2xl);
 }
 
 .studio__title {
@@ -2127,53 +2128,126 @@
   cursor: default;
 }
 
-/* Reproductor propio */
+/* -----------------------------------------------------------------------
+   Reproductor propio — Dirección A (Apilado claro)
+   Mobile-first: dos renglones por pista.
+     Renglón 1 (.studio-player__row1): [play][label flex][tiempo][descarga]
+     Renglón 2 (.studio-player__row2): scrubber full-width
+   Desktop (≥640px): colapsa a una sola fila elegante.
+   ----------------------------------------------------------------------- */
 .studio-player {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: var(--space-sm) 0;
+}
+
+/* Renglón 1: controles e info */
+.studio-player__row1 {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  margin: var(--space-sm) 0;
+  min-height: 40px;
 }
+
+/* Renglón 2: scrubber full-width; nunca colapsa en mobile */
+.studio-player__row2 {
+  display: flex;
+  align-items: center;
+  padding-top: 4px;
+}
+
 .studio-player__label {
-  min-width: 5.5rem;
+  flex: 1;
+  min-width: 0;
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
-  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
+/* Play: 38px visual, touch target ≥40px vía padding extendido */
 .studio-player__play {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   padding: 0;
   background: var(--color-primary);
   color: #fff;
   border: none;
-  border-radius: 22px;
-  box-shadow: 0 2px 8px rgba(0, 151, 167, 0.35);
+  border-radius: 19px;
+  box-shadow: 0 2px 6px rgba(0, 151, 167, 0.3);
   cursor: pointer;
-  transition: background 0.15s, box-shadow 0.15s;
+  /* Área de toque extendida ≥40px sin agrandar el visual */
+  position: relative;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s,
+    transform 0.12s;
 }
-.studio-player__play:hover,
-.studio-player__play:focus-visible {
+.studio-player__play::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+}
+.studio-player__play:hover {
   background: var(--color-primary-dark);
-  box-shadow: 0 4px 12px rgba(0, 151, 167, 0.45);
+  box-shadow: 0 4px 10px rgba(0, 151, 167, 0.4);
+  transform: translateY(-1px);
 }
+.studio-player__play:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(0, 151, 167, 0.3);
+}
+.studio-player__play:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+.studio-player__time {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
 .studio-player__dl {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   padding: 0;
+  /* Área de toque extendida ≥40px sin agrandar el visual */
+  position: relative;
+  transition:
+    transform 0.12s,
+    box-shadow 0.12s;
 }
+.studio-player__dl::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+}
+.studio-player__dl:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+}
+.studio-player__dl:active {
+  transform: translateY(0);
+}
+
+/* Barra de scrubbing — full-width en mobile */
 .studio-player__bar {
   position: relative;
   flex: 1;
-  min-width: 0;
+  width: 100%;
   height: 44px;
   display: flex;
   align-items: center;
@@ -2185,36 +2259,55 @@
   position: absolute;
   left: 0;
   right: 0;
-  height: 6px;
+  height: 5px;
   background: var(--color-border);
   border-radius: 3px;
 }
 .studio-player__fill {
   position: absolute;
   left: 0;
-  height: 6px;
+  height: 5px;
   background: var(--color-primary);
   border-radius: 3px;
   pointer-events: none;
 }
+
+/* Thumb: escala en estado grabbing (spring-like via cubic-bezier) */
 .studio-player__thumb {
   position: absolute;
   top: 50%;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: var(--color-text);
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) scale(1);
   pointer-events: none;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.studio-player__time {
-  flex-shrink: 0;
-  font-size: var(--font-size-xs);
+.studio-player__thumb--grabbing {
+  transform: translate(-50%, -50%) scale(1.45);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Burbuja de preview: aparece solo durante scrubbing */
+.studio-player__preview-bubble {
+  position: absolute;
+  bottom: calc(100% - 4px);
+  transform: translateX(-50%);
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
-  color: var(--color-text-secondary);
-  min-width: 6.5rem;
-  text-align: right;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 6;
 }
+.studio-player__preview-bubble[hidden] {
+  display: none;
+}
+
 /* Lupa del reproductor propio */
 .studio-player__mag {
   position: absolute;
@@ -2256,6 +2349,67 @@
   margin-top: 6px;
 }
 
+/* Desktop (≥640px): colapsa a una sola fila */
+@media (min-width: 640px) {
+  .studio-player {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .studio-player__row1 {
+    display: contents; /* los hijos se reordenan en el flex padre */
+  }
+
+  .studio-player__row2 {
+    flex: 1;
+    min-width: 180px;
+    padding-top: 0;
+  }
+
+  /* En desktop el label va primero (orden visual: label | play | bar | time | dl).
+     Usamos order para reordenar sin cambiar el DOM. */
+  .studio-player__label {
+    order: 0;
+    flex: 0 0 auto;
+    min-width: 5.5rem;
+    max-width: 8rem;
+  }
+  .studio-player__play {
+    order: 1;
+  }
+  .studio-player__row2 {
+    order: 2;
+  }
+  .studio-player__time {
+    order: 3;
+    min-width: 6rem;
+    text-align: right;
+  }
+  .studio-player__dl {
+    order: 4;
+  }
+}
+
+@media (min-width: 768px) {
+  .studio-player__label {
+    min-width: 7rem;
+    max-width: 10rem;
+  }
+}
+
+/* Sin animaciones de escala/pulso en reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .studio-player__thumb,
+  .studio-player__thumb--grabbing {
+    transition: none;
+  }
+  .studio-player__play,
+  .studio-player__dl {
+    transition: none;
+  }
+}
+
 /* Lupa de la timeline de segmentos */
 .studio-tl__mag {
   position: absolute;
@@ -2279,13 +2433,6 @@
   background: var(--color-bg);
   padding: 0 4px;
   border-radius: 3px;
-}
-
-/* Desktop: el label cabe holgado, el tiempo con más aire */
-@media (min-width: 768px) {
-  .studio-player__label {
-    min-width: 7rem;
-  }
 }
 
 /* Estudio — línea de tiempo de voces + transporte */
@@ -2566,8 +2713,12 @@
 }
 
 @keyframes skeleton-shimmer {
-  0% { background-position: 200% center; }
-  100% { background-position: -200% center; }
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
 }
 
 /* EQ animado dentro de la tarjeta (running) */

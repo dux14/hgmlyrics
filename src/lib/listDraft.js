@@ -120,3 +120,13 @@ export function isUrgent(expiresAt) {
   if (new Date(expiresAt) <= new Date()) return true;
   return calendarDaysUntil(expiresAt) <= 1;
 }
+
+/** Banda de proximidad a la caducidad para color. */
+export function expiryBand(expiresAt) {
+  if (!expiresAt) return null;
+  if (new Date(expiresAt) <= new Date()) return 'expired';
+  const dias = calendarDaysUntil(expiresAt);
+  if (dias <= 7) return 'urgent';
+  if (dias <= 30) return 'soon';
+  return 'far';
+}

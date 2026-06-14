@@ -6,6 +6,7 @@ import {
   resolveExpiresAt,
   formatExpiry,
   reorder,
+  expiryBand,
 } from '../src/lib/listDraft.js';
 
 const friends = [
@@ -156,6 +157,43 @@ describe('resolveExpiresAt maxExpiresAt (tope del padre)', () => {
   it('sin maxExpiresAt se comporta como antes', () => {
     const dateValue = localValue(inDays(3));
     expect(resolveExpiresAt({ days: null, dateValue, current: null })).toBeTruthy();
+  });
+});
+
+describe('expiryBand', () => {
+  const isoInDays = (days) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.toISOString();
+  };
+
+  it('null → null', () => {
+    expect(expiryBand(null)).toBeNull();
+  });
+
+  it('fecha pasada → "expired"', () => {
+    const past = new Date(Date.now() - 3600000).toISOString();
+    expect(expiryBand(past)).toBe('expired');
+  });
+
+  it('+3 días → "urgent"', () => {
+    expect(expiryBand(isoInDays(3))).toBe('urgent');
+  });
+
+  it('+7 días (borde) → "urgent"', () => {
+    expect(expiryBand(isoInDays(7))).toBe('urgent');
+  });
+
+  it('+8 días → "soon"', () => {
+    expect(expiryBand(isoInDays(8))).toBe('soon');
+  });
+
+  it('+30 días (borde) → "soon"', () => {
+    expect(expiryBand(isoInDays(30))).toBe('soon');
+  });
+
+  it('+31 días → "far"', () => {
+    expect(expiryBand(isoInDays(31))).toBe('far');
   });
 });
 

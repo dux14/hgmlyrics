@@ -149,16 +149,7 @@ function bindSidebarEvents() {
           listsContentEl.innerHTML = `<div class="sidebar__empty">Sin listas aún.</div>`;
           return;
         }
-        listsContentEl.innerHTML = lists
-          .map(
-            (l) => `
-            <div class="sidebar__list-item" data-lista-id="${escapeHtml(l.id)}">
-              <span class="sidebar__list-item-name">${escapeHtml(l.name)}</span>
-              ${l.expires_at ? `<span class="lists__expiry-chip">${escapeHtml(formatExpiry(l.expires_at))}</span>` : ''}
-            </div>
-          `,
-          )
-          .join('');
+        listsContentEl.innerHTML = lists.map(listItemHtml).join('');
 
         listsContentEl.querySelectorAll('[data-lista-id]').forEach((item) => {
           item.addEventListener('click', () => {
@@ -250,4 +241,26 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+/**
+ * Generate HTML for a single list row in the sidebar.
+ * Pure function — no side effects; used in render and unit tests.
+ * @param {{ id: string, name: string, expires_at: string|null, child_count?: number }} l
+ * @returns {string}
+ */
+export function listItemHtml(l) {
+  const badge =
+    Number(l.child_count) > 0
+      ? `<span class="sidebar__list-badge" aria-label="${Number(l.child_count)} sub-listas">${Number(l.child_count)}</span>`
+      : '';
+  const chip = l.expires_at
+    ? `<span class="lists__expiry-chip">${escapeHtml(formatExpiry(l.expires_at))}</span>`
+    : '';
+  return `
+    <div class="sidebar__list-item" data-lista-id="${escapeHtml(l.id)}">
+      <span class="sidebar__list-item-name">${escapeHtml(l.name)}</span>
+      ${badge}${chip}
+    </div>
+  `;
 }

@@ -85,6 +85,22 @@
   color: var(--color-error, #e53935);
 }
 
+/* ── Badge de sub-listas ── */
+.sidebar__list-badge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--border-radius-full);
+  background: var(--color-primary);
+  color: #fff;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* ── Detalle de lista ── */
 .list-detail__container {
   max-width: 680px;

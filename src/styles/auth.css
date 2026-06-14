@@ -14,7 +14,7 @@
      reserved 48px filter slot + main__content padding. */
   min-height: calc(100dvh - var(--header-height, 64px) - 56px);
   margin-top: calc(-48px - var(--space-lg));
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-md) 0;
   gap: var(--space-md);
 }
 

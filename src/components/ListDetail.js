@@ -131,9 +131,20 @@ function renderEditor(container, listData) {
       displayName: m.displayName || m.username || m.user_id || m.id,
       avatarUrl: m.avatarUrl || '',
     })),
-    days: isNew ? 7 : null,
-    dateValue: '',
+    days: null,
+    dateValue: '', // 'YYYY-MM-DDTHH:mm' (datetime-local)
   };
+
+  if (isNew) {
+    const def = new Date(Date.now() + 7 * 86400000);
+    def.setHours(23, 59, 0, 0);
+    const pad = (n) => String(n).padStart(2, '0');
+    draft.dateValue = `${def.getFullYear()}-${pad(def.getMonth() + 1)}-${pad(def.getDate())}T${pad(def.getHours())}:${pad(def.getMinutes())}`;
+  } else if (listData.expires_at) {
+    const d = new Date(listData.expires_at);
+    const pad = (n) => String(n).padStart(2, '0');
+    draft.dateValue = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
 
   let friendsCache = [];
   const state = { step: 0 };
@@ -233,10 +244,68 @@ function renderEditor(container, listData) {
 
   // Placeholders rellenados en Tasks 5-7:
   function renderStep0(el) {
-    el.innerHTML = `<input class="list-detail__title-input" id="list-detail-name" value="${escapeHtml(draft.name)}" maxlength="80" placeholder="Nombre de la lista" />`;
+    const lifeChip = expiresPreview();
+    el.innerHTML = `
+      <input class="list-detail__title-input" type="text" id="list-detail-name"
+        value="${escapeHtml(draft.name)}" maxlength="80" placeholder="Nombre de la lista" aria-label="Nombre de la lista" />
+      <label class="list-wizard__label" for="list-detail-datetime">Caduca el</label>
+      <input class="list-wizard__datetime" type="datetime-local" id="list-detail-datetime"
+        value="${escapeHtml(draft.dateValue)}" />
+      <div class="list-wizard__life-row">
+        <span>vida de la lista</span>
+        <span class="lists__expiry-chip ${lifeChip.urgent ? 'lists__expiry-chip--urgent' : ''}" id="list-detail-lifechip">${escapeHtml(lifeChip.text)}</span>
+      </div>
+      <div class="list-wizard__life"><i id="list-detail-lifebar" style="width:${lifeChip.pct}%"></i></div>
+      ${isNew ? '' : `<button class="btn btn--secondary list-wizard__delete" id="list-detail-delete" type="button">${icon('trash', { size: 14 })} Borrar lista</button>`}
+    `;
     el.querySelector('#list-detail-name').addEventListener('input', (e) => {
       draft.name = e.target.value;
     });
+    const dt = el.querySelector('#list-detail-datetime');
+    dt.addEventListener('input', () => {
+      draft.dateValue = dt.value;
+      draft.days = null;
+      updateLife(el);
+    });
+    el.querySelector('#list-detail-delete')?.addEventListener('click', onDelete);
+  }
+
+  function expiresPreview() {
+    let iso;
+    try {
+      iso = resolveExpiresAt({
+        days: draft.days,
+        dateValue: draft.dateValue,
+        current: draft.expiresAt,
+      });
+    } catch {
+      return { text: 'fecha inválida', urgent: true, pct: 0 };
+    }
+    const days = Math.max(0, Math.round((new Date(iso) - Date.now()) / 86400000));
+    const pct = Math.min(100, Math.round((days / 30) * 100));
+    return { text: formatExpiry(iso) || 'caduca hoy', urgent: isUrgent(iso), pct };
+  }
+
+  function updateLife(el) {
+    const p = expiresPreview();
+    const chip = el.querySelector('#list-detail-lifechip');
+    const bar = el.querySelector('#list-detail-lifebar');
+    if (chip) {
+      chip.textContent = p.text;
+      chip.classList.toggle('lists__expiry-chip--urgent', p.urgent);
+    }
+    if (bar) bar.style.width = `${p.pct}%`;
+  }
+
+  async function onDelete() {
+    if (!confirm('¿Borrar esta lista? Esta acción no se puede deshacer.')) return;
+    try {
+      await deleteList(listData.id);
+      updateSidebarContent();
+      navigate('/');
+    } catch (err) {
+      errorEl.textContent = err.message;
+    }
   }
   function renderStep1(el) {
     el.innerHTML = `<input class="list-detail__search-input" type="search" id="list-detail-search" placeholder="Buscar y agregar canciones…" autocomplete="off" />`;
@@ -268,8 +337,9 @@ function renderEditor(container, listData) {
         const created = await createList(name, expiresAt);
         listId = created.id;
         await setListSongs(listId, draft.order);
-        for (const username of draft.invitees.map((f) => f.username))
-          {await inviteMember(listId, username);}
+        for (const username of draft.invitees.map((f) => f.username)) {
+          await inviteMember(listId, username);
+        }
       } else {
         if (name !== listData.name || expiresAt !== listData.expires_at) {
           await updateList(listId, { name, expires_at: expiresAt });

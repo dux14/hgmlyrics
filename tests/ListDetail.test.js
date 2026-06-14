@@ -49,4 +49,10 @@ describe('wizard de listas', () => {
     container.querySelector('#list-wizard-next').click();
     expect(container.querySelector('#list-detail-search')).toBeTruthy();
   });
+
+  it('el paso 1 muestra selector de fecha+hora y barra de vida', async () => {
+    await renderListDetail(container, 'nueva', { mode: 'edit' });
+    expect(container.querySelector('#list-detail-datetime')).toBeTruthy();
+    expect(container.querySelector('.list-wizard__life')).toBeTruthy();
+  });
 });

@@ -9,11 +9,7 @@ vi.mock('../src/lib/store.js', () => ({
 vi.mock('../src/lib/lists.js', () => ({ listMyLists: vi.fn(async () => []) }));
 vi.mock('../src/lib/listDraft.js', () => ({
   formatExpiry: vi.fn((s) => s),
-  expiryBand: vi.fn((expiresAt) => {
-    if (!expiresAt) return null;
-    // Devuelve banda según el valor stub del test
-    return expiresAt.__band ?? null;
-  }),
+  expiryBand: vi.fn(),
 }));
 vi.mock('../src/router.js', () => ({ navigate: vi.fn() }));
 vi.mock('../src/lib/icons.js', () => ({ icon: vi.fn(() => '') }));
@@ -114,5 +110,21 @@ describe('sortListsByExpiry', () => {
         .map((l) => l.id)
         .sort(),
     ).toEqual(['x', 'y']);
+  });
+
+  it('fecha inválida queda al final junto a las sin fecha', () => {
+    const lists = [
+      { id: 'inv', name: 'Inv', expires_at: 'not-a-date' },
+      { id: 'a', name: 'A', expires_at: '2026-06-01T00:00:00Z' },
+      { id: 'n', name: 'N', expires_at: null },
+    ];
+    const sorted = sortListsByExpiry(lists);
+    expect(sorted[0].id).toBe('a');
+    expect(
+      sorted
+        .slice(1)
+        .map((l) => l.id)
+        .sort(),
+    ).toEqual(['inv', 'n']);
   });
 });

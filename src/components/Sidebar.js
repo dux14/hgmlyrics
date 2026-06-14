@@ -243,11 +243,11 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-/** Ordena listas: por expires_at ascendente; sin fecha al final. No muta. */
+/** Ordena listas: por expires_at ascendente; sin fecha o fecha inválida al final. No muta. */
 export function sortListsByExpiry(lists) {
   return [...lists].sort((a, b) => {
-    const ta = a.expires_at ? new Date(a.expires_at).getTime() : Infinity;
-    const tb = b.expires_at ? new Date(b.expires_at).getTime() : Infinity;
+    const ta = a.expires_at ? new Date(a.expires_at).getTime() || Infinity : Infinity;
+    const tb = b.expires_at ? new Date(b.expires_at).getTime() || Infinity : Infinity;
     return ta - tb;
   });
 }

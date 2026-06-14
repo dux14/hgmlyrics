@@ -43,7 +43,7 @@ export default withErrors(async (req, res) => {
     `;
     const children = await sql`
       SELECT c.id, c.name, c.expires_at,
-             (SELECT count(*) FROM ephemeral_list_songs s WHERE s.list_id = c.id) AS song_count
+             (SELECT count(*)::int FROM ephemeral_list_songs s WHERE s.list_id = c.id) AS song_count
       FROM ephemeral_lists c
       WHERE c.parent_id = ${id} AND c.expires_at > now()
       ORDER BY c.expires_at ASC
@@ -51,7 +51,7 @@ export default withErrors(async (req, res) => {
     let parent = null;
     if (list.parent_id) {
       const prows = await sql`
-        SELECT id, name FROM ephemeral_lists WHERE id = ${list.parent_id}
+        SELECT id, name, expires_at FROM ephemeral_lists WHERE id = ${list.parent_id}
       `;
       parent = prows[0] || null;
     }
@@ -124,6 +124,11 @@ export default withErrors(async (req, res) => {
       WHERE id = ${id} AND owner_id = ${user.id}
       RETURNING id, name, expires_at
     `;
+    if (!rows[0]) {
+      const e = new Error('Lista no encontrada');
+      e.status = 404;
+      throw e;
+    }
     res.status(200).json(rows[0]);
     return;
   }

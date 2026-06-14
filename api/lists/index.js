@@ -33,8 +33,8 @@ export default withErrors(async (req, res) => {
     const rows = await sql`
       SELECT l.id, l.name, l.expires_at, l.owner_id,
              (l.owner_id = ${user.id}) AS is_owner,
-             (SELECT count(*) FROM ephemeral_list_songs s WHERE s.list_id = l.id) AS song_count,
-             (SELECT count(*) FROM ephemeral_lists c
+             (SELECT count(*)::int FROM ephemeral_list_songs s WHERE s.list_id = l.id) AS song_count,
+             (SELECT count(*)::int FROM ephemeral_lists c
               WHERE c.parent_id = l.id AND c.expires_at > now()) AS child_count
       FROM ephemeral_lists l
       WHERE l.parent_id IS NULL
@@ -61,7 +61,8 @@ export default withErrors(async (req, res) => {
   if (parentId) {
     const parents = await sql`
       SELECT id, owner_id, parent_id, expires_at
-      FROM ephemeral_lists WHERE id = ${parentId} AND owner_id = ${user.id}
+      FROM ephemeral_lists
+      WHERE id = ${parentId} AND owner_id = ${user.id} AND expires_at > now()
     `;
     const parent = parents[0];
     if (!parent) {

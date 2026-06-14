@@ -128,6 +128,26 @@ describe('wizard de listas', () => {
     expect(el.textContent).toContain('Concierto');
   });
 
+  it('al editar una sub-lista, el input de fecha lleva el tope del evento', () => {
+    const el = document.createElement('div');
+    __renderEditorForTest(
+      el,
+      {
+        id: 'sub1',
+        name: 'Ensayo',
+        expires_at: '2026-06-18T00:00:00Z',
+        role: 'owner',
+        parent_id: 'evt1',
+        parent: { id: 'evt1', name: 'Concierto', expires_at: '2026-06-20T00:00:00Z' },
+        songs: [],
+        members: [],
+      },
+      { parent: { id: 'evt1', name: 'Concierto', expires_at: '2026-06-20T00:00:00Z' } },
+    );
+    const dt = el.querySelector('#list-detail-datetime');
+    expect(dt.getAttribute('max')).toBeTruthy();
+  });
+
   it('crea un ensayo pasando parentId y miembros heredados', async () => {
     const { createList, setListSongs, inviteMember } = await import('../src/lib/lists.js');
     createList.mockResolvedValue({ id: 'sub1' });

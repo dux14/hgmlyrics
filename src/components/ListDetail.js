@@ -775,7 +775,19 @@ function renderReadonly(container, listData, { isOwner } = {}) {
   `;
 
   container.querySelector('#list-detail-edit')?.addEventListener('click', () => {
-    renderEditor(container, listData);
+    renderEditor(
+      container,
+      listData,
+      listData.parent
+        ? {
+            parent: {
+              id: listData.parent.id,
+              name: listData.parent.name,
+              expires_at: listData.parent.expires_at,
+            },
+          }
+        : {},
+    );
   });
 
   container.querySelector('#list-detail-crumb')?.addEventListener('click', () => {

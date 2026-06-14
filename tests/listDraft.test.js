@@ -130,6 +130,35 @@ describe('formatExpiry', () => {
   });
 });
 
+describe('resolveExpiresAt maxExpiresAt (tope del padre)', () => {
+  const inDays = (n) => new Date(Date.now() + n * 86400000);
+  const localValue = (d) => {
+    const p = (x) => String(x).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+
+  it('acepta una fecha anterior o igual al tope del padre', () => {
+    const max = inDays(5).toISOString();
+    const dateValue = localValue(inDays(3));
+    expect(
+      resolveExpiresAt({ days: null, dateValue, current: null, maxExpiresAt: max }),
+    ).toBeTruthy();
+  });
+
+  it('rechaza una fecha posterior al tope del padre', () => {
+    const max = inDays(2).toISOString();
+    const dateValue = localValue(inDays(6));
+    expect(() =>
+      resolveExpiresAt({ days: null, dateValue, current: null, maxExpiresAt: max }),
+    ).toThrow(/no puede caducar después/i);
+  });
+
+  it('sin maxExpiresAt se comporta como antes', () => {
+    const dateValue = localValue(inDays(3));
+    expect(resolveExpiresAt({ days: null, dateValue, current: null })).toBeTruthy();
+  });
+});
+
 describe('reorder', () => {
   it('mueve un elemento de un índice a otro', () => {
     expect(reorder(['a', 'b', 'c', 'd'], 0, 2)).toEqual(['b', 'c', 'a', 'd']);

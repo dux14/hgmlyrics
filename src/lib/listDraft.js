@@ -53,7 +53,13 @@ function isoFromDays(days) {
  * se reescribía `expires_at` a "ahora + 1 día" en cada guardado.
  * @throws {Error} 'La fecha debe ser futura.'
  */
-export function resolveExpiresAt({ days, dateValue, current }) {
+export function resolveExpiresAt({ days, dateValue, current, maxExpiresAt = null }) {
+  const cap = (iso) => {
+    if (maxExpiresAt && new Date(iso) > new Date(maxExpiresAt)) {
+      throw new Error('La sub-lista no puede caducar después del evento.');
+    }
+    return iso;
+  };
   if (dateValue) {
     const hasTime = String(dateValue).includes('T');
     const chosen = new Date(dateValue);
@@ -61,18 +67,18 @@ export function resolveExpiresAt({ days, dateValue, current }) {
     if (hasTime) {
       // datetime-local: respeta la hora elegida
       if (chosen <= new Date()) throw new Error('La fecha y hora deben ser futuras.');
-      return chosen.toISOString();
+      return cap(chosen.toISOString());
     }
     // solo fecha (degradado): fin de día como antes
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     if (chosen <= today) throw new Error('La fecha debe ser futura.');
     chosen.setHours(23, 59, 59, 999);
-    return chosen.toISOString();
+    return cap(chosen.toISOString());
   }
-  if (Number.isFinite(days)) return isoFromDays(days);
-  if (current) return current;
-  return isoFromDays(1);
+  if (Number.isFinite(days)) return cap(isoFromDays(days));
+  if (current) return cap(current);
+  return cap(isoFromDays(1));
 }
 
 /** Días calendario (zona local) entre hoy y la fecha de caducidad. */

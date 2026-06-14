@@ -96,7 +96,7 @@ describe('POST /api/stems/jobs', () => {
     sqlResponses.push([{ is_admin: true, studio_beta: false }]); // perfil
     sqlResponses.push([{ id: 'old', input_path: 'u1/old/input/a.mp3' }]); // reclamo huérfano
     sqlResponses.push([]); // ya no hay job en proceso
-    sqlResponses.push([{ n: 0 }]); // cuota 0/1
+    // admin: no consulta cuota
     sqlResponses.push([{ id: 'j2', status: 'created' }]); // INSERT ... RETURNING
     const res = makeRes();
     await handler(authedReq(), res);
@@ -104,8 +104,8 @@ describe('POST /api/stems/jobs', () => {
     expect(res.body.job.id).toBe('j2');
   });
 
-  it('429 si la cuota diaria está agotada', async () => {
-    sqlResponses.push([{ is_admin: true, studio_beta: false }]); // perfil
+  it('429 si la cuota diaria está agotada (no-admin)', async () => {
+    sqlResponses.push([{ is_admin: false, studio_beta: true }]); // perfil no-admin beta
     sqlResponses.push([]); // reclamo
     sqlResponses.push([]); // sin job en proceso
     sqlResponses.push([{ n: 1 }]); // cuota 1/1 — agotada
@@ -113,6 +113,27 @@ describe('POST /api/stems/jobs', () => {
     await handler(authedReq(), res);
     expect(res.statusCode).toBe(429);
     expect(res.body.reason).toBe('quota');
+  });
+
+  it('admin: no devuelve 429 aunque used >= DAILY_QUOTA', async () => {
+    sqlResponses.push([{ is_admin: true, studio_beta: false }]); // perfil admin
+    sqlResponses.push([]); // reclamo
+    sqlResponses.push([]); // sin job en proceso
+    // no se llama a quotaUsedToday para admin
+    sqlResponses.push([{ id: 'j-admin', status: 'created' }]); // INSERT ... RETURNING
+    const res = makeRes();
+    await handler(authedReq(), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.job.id).toBe('j-admin');
+  });
+
+  it('admin: lock de concurrencia (409) aplica igual', async () => {
+    sqlResponses.push([{ is_admin: true, studio_beta: false }]); // perfil admin
+    sqlResponses.push([]); // reclamo
+    sqlResponses.push([{ id: 'job-activo' }]); // job en processing
+    const res = makeRes();
+    await handler(authedReq(), res);
+    expect(res.statusCode).toBe(409);
   });
 
   it('400 si el archivo no es audio', async () => {
@@ -143,13 +164,24 @@ describe('POST /api/stems/jobs', () => {
 });
 
 describe('GET /api/stems/jobs', () => {
-  it('lista jobs vigentes + cuota', async () => {
+  it('lista jobs vigentes + cuota (no-admin)', async () => {
     sqlResponses.push([{ id: 'j1', status: 'done' }]); // jobs
     sqlResponses.push([{ n: 1 }]); // cuota usada
+    sqlResponses.push([{ is_admin: false }]); // perfil
     const res = makeRes();
     await handler(authedReq({ method: 'GET', body: undefined }), res);
     expect(res.statusCode).toBe(200);
     expect(res.body.jobs).toHaveLength(1);
     expect(res.body.quota).toEqual({ used: 1, limit: 1 });
+  });
+
+  it('GET admin: quota con unlimited:true y limit:null', async () => {
+    sqlResponses.push([{ id: 'j1', status: 'done' }]); // jobs
+    sqlResponses.push([{ n: 3 }]); // cuota usada (informativo)
+    sqlResponses.push([{ is_admin: true }]); // perfil admin
+    const res = makeRes();
+    await handler(authedReq({ method: 'GET', body: undefined }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.quota).toEqual({ used: 3, limit: null, unlimited: true });
   });
 });

@@ -117,7 +117,10 @@ async function loadInitial(body) {
 }
 
 function renderIdle(body, quota) {
-  const left = quota.limit - quota.used;
+  const quotaText =
+    quota.unlimited || quota.limit === null
+      ? `Sin límite diario de canciones. Los resultados expiran a las 48 h.`
+      : `Te quedan <strong>${quota.limit - quota.used} de ${quota.limit}</strong> canciones hoy. Los resultados expiran a las 48 h.`;
   body.innerHTML = `
     <p class="studio__desc">Sube una canción y te la devolvemos separada en pistas (voz, batería,
     bajo, guitarra, piano y otros) más la voz dividida en <strong>líder/coros</strong> y segmentos
@@ -128,8 +131,7 @@ function renderIdle(body, quota) {
       <p class="empty-state__text studio-dropzone__sub">MP3 · máx 25 MB / 10 min</p>
     </div>
     <p class="empty-state__text studio__quota">
-      Te quedan <strong>${left} de ${quota.limit}</strong> canciones hoy.
-      Los resultados expiran a las 48 h.
+      ${quotaText}
     </p>
     <input type="file" id="studio-file" accept=".mp3,audio/mpeg" hidden />
   `;
@@ -143,19 +145,28 @@ function renderIdle(body, quota) {
   drop.addEventListener('dragover', (e) => e.preventDefault());
   const rejectNonMp3 = () => {
     renderIdle(body, quota);
-    body.insertAdjacentHTML('afterbegin', `<p class="studio__error">Solo aceptamos archivos MP3.</p>`);
+    body.insertAdjacentHTML(
+      'afterbegin',
+      `<p class="studio__error">Solo aceptamos archivos MP3.</p>`,
+    );
   };
   drop.addEventListener('drop', (e) => {
     e.preventDefault();
     const file = e.dataTransfer?.files?.[0];
     if (!file) return;
-    if (!isMp3File(file)) { rejectNonMp3(); return; }
+    if (!isMp3File(file)) {
+      rejectNonMp3();
+      return;
+    }
     void handleFile(body, file, quota);
   });
   input.addEventListener('change', () => {
     const file = input.files?.[0];
     if (!file) return;
-    if (!isMp3File(file)) { rejectNonMp3(); return; }
+    if (!isMp3File(file)) {
+      rejectNonMp3();
+      return;
+    }
     void handleFile(body, file, quota);
   });
 }
@@ -216,15 +227,14 @@ function watchJob(body, jobId, quota, filename) {
   };
 
   // Push: en cada cambio de estado refrescamos vía la API saneada.
-  // Si el payload trae sections, hacemos un render optimista inmediato antes de que
-  // llegue el HTTP GET, para que la UI reaccione visualmente en cuanto llega el push.
+  // No hacemos render optimista con datos parciales del push: el payload del canal
+  // no trae stems/voices firmados, así que pintar desde él dejaría los players vacíos
+  // (chip "Listo" sin contenido). Dejamos que refresh() — única fuente con URLs firmadas —
+  // sea quien actualice la UI; el push solo sirve de señal para disparar ese GET.
   let pushAlive = false;
   jobChannel = watchJobRealtime({
     jobId,
-    onStatus: ({ sections }) => {
-      if (sections) {
-        renderProcessing(body, { status: 'processing', sections }, filename, quota);
-      }
+    onStatus: () => {
       void refresh();
     },
     onSubscribed: () => {
@@ -445,12 +455,6 @@ function renderJob(body, job, quota) {
     cardsEl.appendChild(card);
   }
   frag.appendChild(cardsEl);
-
-  // Atribución al pie
-  const attribution = document.createElement('p');
-  attribution.className = 'studio__attribution';
-  attribution.textContent = 'Secciones detectadas con SongFormer (CC-BY-4.0).';
-  frag.appendChild(attribution);
 
   // Botón nueva canción
   const newBtn = document.createElement('button');

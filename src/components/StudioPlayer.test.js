@@ -7,6 +7,7 @@ import {
   timeToPos,
   magnifyRange,
   magnifyPosToTime,
+  commitPreview,
 } from './StudioPlayer.js';
 
 describe('fmtTimeCs', () => {
@@ -70,5 +71,19 @@ describe('magnifyPosToTime', () => {
     expect(magnifyPosToTime(0.5, { start: 47, end: 53 })).toBe(50);
     expect(magnifyPosToTime(0, { start: 47, end: 53 })).toBe(47);
     expect(magnifyPosToTime(1, { start: 47, end: 53 })).toBe(53);
+  });
+});
+
+describe('commitPreview', () => {
+  it('retorna previewTime cuando es un tiempo válido', () => {
+    expect(commitPreview({ previewTime: 42.5 })).toBe(42.5);
+    expect(commitPreview({ previewTime: 0 })).toBe(0);
+  });
+  it('retorna 0 cuando previewTime no es finito', () => {
+    expect(commitPreview({ previewTime: NaN })).toBe(0);
+    expect(commitPreview({ previewTime: Infinity })).toBe(0);
+  });
+  it('retorna 0 cuando previewTime es negativo', () => {
+    expect(commitPreview({ previewTime: -1 })).toBe(0);
   });
 });

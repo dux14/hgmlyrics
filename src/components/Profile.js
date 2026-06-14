@@ -87,6 +87,7 @@ export async function renderProfile(container) {
       <div style="display:flex; gap:var(--space-sm); flex-wrap:wrap; margin-bottom:var(--space-lg);">
         <a class="auth-btn" href="#/favoritos" style="flex:1; min-width:160px; text-decoration:none; text-align:center;">${icon('heart', { size: 16, fill: true })} Mis favoritos</a>
         <a class="auth-btn" href="#/amigos" style="flex:1; min-width:160px; text-decoration:none; text-align:center;">Amigos</a>
+        <a class="auth-btn" href="#/licencias" style="flex:1; min-width:160px; text-decoration:none; text-align:center;">Licencias y créditos</a>
       </div>
 
       <input type="file" id="avatar-input" accept="image/webp,image/png,image/jpeg" style="display:none;" />

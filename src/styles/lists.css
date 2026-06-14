@@ -89,7 +89,8 @@
 .list-detail__container {
   max-width: 680px;
   margin: 0 auto;
-  padding: var(--space-md);
+  /* Sin padding horizontal: el gutter lo aporta .main__content */
+  padding: var(--space-md) 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-md);

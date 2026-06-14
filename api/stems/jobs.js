@@ -29,7 +29,10 @@ export default withErrors(async (req, res) => {
       ORDER BY created_at DESC
     `;
     const used = await quotaUsedToday(user.id);
-    res.status(200).json({ jobs, quota: { used, limit: DAILY_QUOTA } });
+    const getProfileRows = await sql`SELECT is_admin FROM profiles WHERE id = ${user.id}`;
+    const isAdmin = getProfileRows[0]?.is_admin ?? false;
+    const quota = isAdmin ? { used, limit: null, unlimited: true } : { used, limit: DAILY_QUOTA };
+    res.status(200).json({ jobs, quota });
     return;
   }
 
@@ -68,10 +71,12 @@ export default withErrors(async (req, res) => {
     throw e;
   }
 
-  const used = await quotaUsedToday(user.id);
-  if (used >= DAILY_QUOTA) {
-    res.status(429).json({ error: 'quota', reason: 'quota' });
-    return;
+  if (!profile.is_admin) {
+    const used = await quotaUsedToday(user.id);
+    if (used >= DAILY_QUOTA) {
+      res.status(429).json({ error: 'quota', reason: 'quota' });
+      return;
+    }
   }
 
   const { filename, size, mime } = req.body ?? {};

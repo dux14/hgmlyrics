@@ -181,8 +181,8 @@ describe('renderStudioPage', () => {
     const modelLabels = [...genderCard.querySelectorAll('.studio-gender-grid__model-label')].map(
       (el) => el.textContent,
     );
-    expect(modelLabels[0]).toContain('Modelo A');
-    expect(modelLabels[1]).toContain('Modelo B');
+    expect(modelLabels[0]).toContain('Opción A');
+    expect(modelLabels[1]).toContain('Opción B');
 
     // 4 players (2 por modelo)
     expect(genderCard.querySelectorAll('audio').length).toBe(4);

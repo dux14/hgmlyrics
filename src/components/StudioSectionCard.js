@@ -17,8 +17,8 @@ const STEM_LABELS = {
 };
 const VOICE_LABELS = { lead: 'Voz líder', backing: 'Coros' };
 const GENDER_MODEL_LABELS = {
-  chorus: 'Modelo A — Chorus BS-RoFormer',
-  aufr33: 'Modelo B — aufr33',
+  chorus: 'Opción A',
+  aufr33: 'Opción B',
 };
 const GENDER_TRACK_LABELS = { male: 'Voz masculina', female: 'Voz femenina' };
 

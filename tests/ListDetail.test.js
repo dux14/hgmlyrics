@@ -1,0 +1,52 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+vi.mock('../src/lib/lists.js', () => ({
+  getList: vi.fn(),
+  createList: vi.fn(async () => ({ id: 'L1' })),
+  updateList: vi.fn(),
+  deleteList: vi.fn(),
+  setListSongs: vi.fn(async () => {}),
+  inviteMember: vi.fn(async () => {}),
+  removeMember: vi.fn(),
+  setActiveContext: vi.fn(),
+}));
+vi.mock('../src/lib/store.js', () => ({ getSongById: vi.fn(() => null) }));
+vi.mock('../src/lib/search.js', () => ({ searchSongs: vi.fn(() => []) }));
+vi.mock('../src/lib/friends.js', () => ({ getAcceptedFriends: vi.fn(async () => []) }));
+vi.mock('../src/router.js', () => ({ navigate: vi.fn() }));
+vi.mock('./Sidebar.js', () => ({ updateSidebarContent: vi.fn() }), { virtual: true });
+vi.mock('../src/components/Sidebar.js', () => ({ updateSidebarContent: vi.fn() }));
+
+import { renderListDetail } from '../src/components/ListDetail.js';
+
+describe('wizard de listas', () => {
+  let container;
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+  });
+  afterEach(() => {
+    container.remove();
+  });
+
+  it('arranca en el paso 1 (lo básico)', async () => {
+    await renderListDetail(container, 'nueva', { mode: 'edit' });
+    expect(container.querySelector('#list-detail-name')).toBeTruthy();
+    expect(container.querySelector('.list-wizard__rail')).toBeTruthy();
+  });
+
+  it('no avanza al paso 2 si el nombre está vacío', async () => {
+    await renderListDetail(container, 'nueva', { mode: 'edit' });
+    container.querySelector('#list-wizard-next').click();
+    expect(container.querySelector('#list-detail-error').textContent).toMatch(/nombre/i);
+  });
+
+  it('avanza al paso 2 con nombre válido', async () => {
+    await renderListDetail(container, 'nueva', { mode: 'edit' });
+    const name = container.querySelector('#list-detail-name');
+    name.value = 'Mi lista';
+    name.dispatchEvent(new Event('input'));
+    container.querySelector('#list-wizard-next').click();
+    expect(container.querySelector('#list-detail-search')).toBeTruthy();
+  });
+});

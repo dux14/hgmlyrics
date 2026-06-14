@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createActionButton } from './studioActionButton.js';
+import { createActionButton, RESTORE_MS } from './studioActionButton.js';
 
 function mountButton() {
   document.body.innerHTML = '<button id="b"></button>';
@@ -50,7 +50,9 @@ describe('createActionButton', () => {
     expect(btn.classList.contains('is-done')).toBe(true);
     expect(btn.classList.contains('is-busy')).toBe(false);
     expect(btn.querySelector('.studio-action__lbl').textContent).toBe('Listo');
-    vi.advanceTimersByTime(2000);
+    // check-circle tiene un <circle>; confirma que el icono cambió
+    expect(btn.querySelector('.studio-action__ico circle')).toBeTruthy();
+    vi.advanceTimersByTime(RESTORE_MS + 1);
     expect(btn.classList.contains('is-done')).toBe(false);
     expect(btn.querySelector('.studio-action__lbl').textContent).toBe('ZIP');
   });
@@ -63,6 +65,9 @@ describe('createActionButton', () => {
     expect(btn.classList.contains('is-error')).toBe(true);
     expect(btn.classList.contains('is-busy')).toBe(false);
     expect(btn.querySelector('.studio-action__lbl').textContent).toBe('Reintentar');
+    // rotate-ccw no tiene <circle>; el svg de icono debe estar presente igual
+    expect(btn.querySelector('.studio-action__ico circle')).toBeNull();
+    expect(btn.querySelector('.studio-action__ico svg')).toBeTruthy();
   });
 
   it('.reset() vuelve a idle limpiando estado y fill', () => {

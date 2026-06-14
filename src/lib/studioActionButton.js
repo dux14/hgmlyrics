@@ -8,10 +8,11 @@
 import { icon } from './icons.js';
 
 const STATE_CLASSES = ['is-busy', 'is-done', 'is-error'];
-const RESTORE_MS = 1400;
+export const RESTORE_MS = 1400;
 
 /**
- * @param {HTMLButtonElement} btnEl
+ * @param {HTMLButtonElement} btnEl — toma ownership de className; cualquier clase
+ *   previa se reemplaza. Pasa un <button> sin clases propias.
  * @param {{ idle: { icon: string, label: string } }} config
  */
 export function createActionButton(btnEl, { idle }) {
@@ -69,7 +70,7 @@ export function createActionButton(btnEl, { idle }) {
       fill.style.width = '100%';
       setIcon('check-circle');
       lbl.textContent = label;
-      restoreTimer = setTimeout(() => this.reset(), RESTORE_MS);
+      restoreTimer = setTimeout(paintIdle, RESTORE_MS);
     },
     error(label = 'Reintentar') {
       clearTimer();

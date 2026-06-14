@@ -21,8 +21,11 @@ async function req(path, opts = {}) {
 }
 
 export const listMyLists = () => req('/api/lists');
-export const createList = (name, expiresAt) =>
-  req('/api/lists', { method: 'POST', body: JSON.stringify({ name, expires_at: expiresAt }) });
+export const createList = (name, expiresAt, parentId = null) =>
+  req('/api/lists', {
+    method: 'POST',
+    body: JSON.stringify({ name, expires_at: expiresAt, parent_id: parentId }),
+  });
 export const getList = (id) => req(`/api/lists/${id}`);
 export const updateList = (id, fields) =>
   req(`/api/lists/${id}`, { method: 'PATCH', body: JSON.stringify(fields) });

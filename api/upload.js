@@ -10,6 +10,8 @@ export const config = {
   api: { bodyParser: false },
 };
 
+const ALLOWED = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
 export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['POST'])) return;
   await requireAdmin(req, sql);
@@ -26,10 +28,16 @@ export default withErrors(async (req, res) => {
     return;
   }
 
+  const contentType = file.mimetype || 'application/octet-stream';
+  if (!ALLOWED.has(contentType)) {
+    res.status(400).json({ error: 'Tipo no permitido' });
+    return;
+  }
+
   // formidable buffers to /tmp on Vercel (the only writable path). Stream it to Storage.
   const url = await uploadCover({
     filename: file.originalFilename ?? 'upload.bin',
-    contentType: file.mimetype ?? 'application/octet-stream',
+    contentType,
     body: createReadStream(file.filepath),
   });
 

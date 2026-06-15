@@ -373,7 +373,21 @@ function renderEditor(container, listData, opts = {}) {
           typeof CSS !== 'undefined' && CSS.escape
             ? CSS.escape(enteringId)
             : enteringId.replace(/[^\w-]/g, '\\$&');
-        songsEl.querySelector(`[data-song-id="${escaped}"]`)?.classList.add('is-entering');
+        const enteringEl = songsEl.querySelector(`[data-song-id="${escaped}"]`);
+        if (enteringEl) {
+          enteringEl.classList.add('is-entering');
+          // La animación list-row-in usa fill-mode: both; si la clase queda puesta,
+          // la animación retiene transform:none y, por prioridad de cascada, anula el
+          // transform inline del drag (FLIP), bloqueando el reacomodo de esa fila.
+          // La quitamos al terminar para liberar el transform inline.
+          enteringEl.addEventListener(
+            'animationend',
+            () => enteringEl.classList.remove('is-entering'),
+            {
+              once: true,
+            },
+          );
+        }
       }
       bindRows();
     }

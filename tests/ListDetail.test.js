@@ -76,6 +76,27 @@ describe('wizard de listas', () => {
     expect(container.querySelectorAll('#list-detail-songs .song-row-compact').length).toBe(1);
   });
 
+  it('quita is-entering al terminar la animación (no bloquea el transform del drag)', async () => {
+    const { searchSongs } = await import('../src/lib/search.js');
+    searchSongs.mockReturnValue([{ id: 's1', title: 'Tema', album: 'A' }]);
+    await renderListDetail(container, 'nueva', { mode: 'edit' });
+    const name = container.querySelector('#list-detail-name');
+    name.value = 'L';
+    name.dispatchEvent(new Event('input'));
+    container.querySelector('#list-wizard-next').click();
+    const search = container.querySelector('#list-detail-search');
+    search.value = 'tema';
+    search.dispatchEvent(new Event('input'));
+    await new Promise((r) => setTimeout(r, 250));
+    container.querySelector('#list-detail-results .song-row-compact').click();
+    const row = container.querySelector('#list-detail-songs .song-row-compact');
+    // recién agregada: tiene la clase de entrada
+    expect(row.classList.contains('is-entering')).toBe(true);
+    // al terminar la animación, la clase debe removerse para liberar el transform inline (FLIP)
+    row.dispatchEvent(new Event('animationend'));
+    expect(row.classList.contains('is-entering')).toBe(false);
+  });
+
   it('crea la lista llamando a la API con el draft', async () => {
     const lists = await import('../src/lib/lists.js');
     await renderListDetail(container, 'nueva', { mode: 'edit' });

@@ -245,6 +245,13 @@
   gap: 4px;
 }
 
+/* El atributo [hidden] del user-agent (display:none) pierde contra display:flex
+   de la regla anterior; este override restaura el comportamiento esperado
+   cuando el tab activo NO es "songs". */
+.list-detail__songs[hidden] {
+  display: none;
+}
+
 .list-detail__row-btn {
   background: none;
   border: none;

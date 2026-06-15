@@ -24,7 +24,7 @@ export { isMp3File };
 import { createStudioPlayer } from './StudioPlayer.js';
 import { renderTimeline, markActive } from './StudioSectionTimeline.js';
 import { renderSectionCard } from './StudioSectionCard.js';
-import { escapeHtml as escHtml } from '../lib/escape.js';
+import { escapeHtml as escHtml, safeUrl } from '../lib/escape.js';
 
 const MAX_DURATION_S = 10.5 * 60;
 let pollTimer = null;
@@ -535,7 +535,7 @@ function renderJob(body, job, quota) {
         ctrl.done('Guardado');
         const link = document.createElement('p');
         link.className = 'studio__drive-link';
-        link.innerHTML = `Guardado en Drive · <a href="${escHtml(result.folderUrl)}" target="_blank" rel="noopener">abrir carpeta</a>`;
+        link.innerHTML = `Guardado en Drive · <a href="${safeUrl(result.folderUrl)}" target="_blank" rel="noopener">abrir carpeta</a>`;
         actionsEl.insertAdjacentElement('afterend', link);
       } catch (e) {
         ctrl.error();

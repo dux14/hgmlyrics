@@ -2,6 +2,15 @@ import sql from '../../_lib/db.js';
 import { requireAdmin } from '../../_lib/auth.js';
 import { allowMethods, withErrors } from '../../_lib/http.js';
 
+function isHttpUrl(v) {
+  try {
+    const u = new URL(String(v));
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 async function getLinks(_req, res, songId) {
   // Sequential queries — transaction pooler max:1 (see api/auth/me.js ~L72)
   const platforms =
@@ -21,10 +30,20 @@ async function putLinks(req, res, songId) {
 
     for (const p of platforms) {
       if (!p.platform || !p.url) continue;
+      if (!isHttpUrl(p.url)) {
+        const e = new Error('url_invalida');
+        e.status = 400;
+        throw e;
+      }
       await tx`INSERT INTO song_platform_links (song_id, platform, url) VALUES (${songId}, ${p.platform}, ${p.url})`;
     }
     for (const v of voices) {
       if (!v.voiceType || !v.url) continue;
+      if (!isHttpUrl(v.url)) {
+        const e = new Error('url_invalida');
+        e.status = 400;
+        throw e;
+      }
       await tx`INSERT INTO song_voice_links (song_id, voice_type, url, label) VALUES (${songId}, ${v.voiceType}, ${v.url}, ${v.label || null})`;
     }
   });

@@ -50,7 +50,9 @@ export function validateAndNormalize(input) {
       out.avatar_url = null;
     } else {
       const url = String(v);
-      const ok = /^https:\/\/[a-z0-9.-]*\.supabase\.co\/storage\//i.test(url);
+      const ok = /^https:\/\/[a-z0-9-]+\.supabase\.co\/storage\/v1\/object\/(public|sign)\//i.test(
+        url,
+      );
       if (!ok) {
         const e = new Error('avatar_url_invalida');
         e.status = 400;

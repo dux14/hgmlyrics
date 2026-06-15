@@ -117,4 +117,34 @@ describe('validateAndNormalize', () => {
     expect(errs).toEqual([]);
     expect(out.avatar_url).toBeNull();
   });
+
+  // Hardened regex — canonical Storage path required
+  it('SEC-05: accepts canonical signed path (sign/)', () => {
+    const url = 'https://abc.supabase.co/storage/v1/object/sign/avatars/x.png?token=t';
+    const { out, errs } = validateAndNormalize({ avatarUrl: url });
+    expect(errs).toEqual([]);
+    expect(out.avatar_url).toBe(url);
+  });
+
+  it('SEC-05: rejects non-canonical storage path (/storage/otracosa)', () => {
+    expect(() =>
+      validateAndNormalize({ avatarUrl: 'https://x.supabase.co/storage/otracosa' }),
+    ).toThrow('avatar_url_invalida');
+  });
+
+  it('SEC-05: rejects subdomain-spoofing (evil.supabase.co.attacker.com)', () => {
+    expect(() =>
+      validateAndNormalize({
+        avatarUrl: 'https://evil.supabase.co.attacker.com/storage/v1/object/public/x',
+      }),
+    ).toThrow('avatar_url_invalida');
+  });
+
+  it('SEC-05: accepts public URL with cache-buster query param (uploadAvatar shape)', () => {
+    const url =
+      'https://abc.supabase.co/storage/v1/object/public/avatars/uid/avatar.webp?t=1718000000000';
+    const { out, errs } = validateAndNormalize({ avatarUrl: url });
+    expect(errs).toEqual([]);
+    expect(out.avatar_url).toBe(url);
+  });
 });

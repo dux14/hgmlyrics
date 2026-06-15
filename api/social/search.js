@@ -2,6 +2,9 @@ import sql from '../_lib/db.js';
 import { requireUser, isAdminUser } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 
+/** Escapa metacaracteres LIKE de Postgres (%  _  \) dentro de un valor parametrizado. */
+const escapeLike = (s) => String(s).replace(/[\\%_]/g, '\\$&');
+
 export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['GET'])) return;
   const viewer = await requireUser(req);
@@ -13,7 +16,8 @@ export default withErrors(async (req, res) => {
     res.status(200).json({ results: [] });
     return;
   }
-  const pattern = `%${q.replace(/[%_\\]/g, '\\$&')}%`;
+  const escaped = escapeLike(q);
+  const pattern = `%${escaped}%`;
 
   // scope=all: solo admin. Quita el filtro de visibilidad para poder invitar a
   // listas efímeras a cualquier usuario (no solo públicos/amigos).
@@ -45,8 +49,8 @@ export default withErrors(async (req, res) => {
       )
     ORDER BY
       CASE WHEN lower(p.username) = ${q} THEN 0
-           WHEN lower(p.username) LIKE ${q + '%'} THEN 1
-           WHEN lower(p.display_name) LIKE ${q + '%'} THEN 2
+           WHEN lower(p.username) LIKE ${escaped + '%'} THEN 1
+           WHEN lower(p.display_name) LIKE ${escaped + '%'} THEN 2
            ELSE 3 END,
       p.username
     LIMIT 20

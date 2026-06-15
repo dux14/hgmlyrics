@@ -66,11 +66,53 @@ export async function findOrCreateFolder(token, name, parentId) {
 }
 
 /**
+ * Sube el cuerpo multipart a Drive vía XHR para exponer progreso de subida.
+ * @param {string} token @param {Blob} body @param {string} boundary
+ * @param {(percent:number)=>void} [onProgress]
+ * @returns {Promise<{id:string}>}
+ */
+export function uploadMedia(token, body, boundary, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${UPLOAD_URL}&fields=id`);
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.setRequestHeader('Content-Type', `multipart/related; boundary=${boundary}`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 400) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          const err = new Error('Respuesta inválida de Drive al subir el ZIP.');
+          err.status = xhr.status;
+          reject(err);
+        }
+      } else {
+        const err = new Error(`Drive respondió ${xhr.status} al subir el ZIP.`);
+        err.status = xhr.status;
+        reject(err);
+      }
+    };
+    xhr.onerror = () => {
+      const err = new Error('Error de red al subir el ZIP a Drive.');
+      err.status = 0;
+      reject(err);
+    };
+    xhr.send(body);
+  });
+}
+
+/**
  * Sube el ZIP a Pistas Hakuna/{songBase}/{songBase} - pistas.zip.
  * @param {string} token @param {Blob} blob @param {string} songBase
+ * @param {(percent:number)=>void} [onProgress]
  * @returns {Promise<{fileId: string, folderUrl: string}>}
  */
-export async function uploadZipToDrive(token, blob, songBase) {
+export async function uploadZipToDrive(token, blob, songBase, onProgress) {
   const rootId = await findOrCreateFolder(token, 'Pistas Hakuna', 'root');
   const songFolderId = await findOrCreateFolder(token, songBase, rootId);
 
@@ -78,20 +120,7 @@ export async function uploadZipToDrive(token, blob, songBase) {
   const metadata = { name: `${songBase} - pistas.zip`, parents: [songFolderId] };
   const body = buildMultipartBody(metadata, blob, boundary);
 
-  const res = await fetch(`${UPLOAD_URL}&fields=id`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': `multipart/related; boundary=${boundary}`,
-    },
-    body,
-  });
-  if (!res.ok) {
-    const err = new Error(`Drive respondió ${res.status} al subir el ZIP.`);
-    err.status = res.status;
-    throw err;
-  }
-  const data = await res.json();
+  const data = await uploadMedia(token, body, boundary, onProgress);
   const folder = await driveFetchJson(token, `${FILES_URL}/${songFolderId}?fields=webViewLink`);
   return { fileId: data.id, folderUrl: folder.webViewLink };
 }

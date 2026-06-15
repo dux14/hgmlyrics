@@ -73,4 +73,24 @@ describe('buildZipBlob', () => {
   it('sin pistas → lanza', async () => {
     await expect(buildZipBlob({ input_meta: {} }, labels)).rejects.toThrow('No hay pistas');
   });
+  it('reporta onProgress(k, total) una vez por pista descargada', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+    }));
+    const job = {
+      input_meta: { filename: 'colombia.mp3' },
+      stems: { drums: 'u/drums', bass: 'u/bass' },
+      voices: { lead: 'u/lead' },
+    };
+    const calls = [];
+    await buildZipBlob(job, { drums: 'Batería', bass: 'Bajo', lead: 'Voz líder' }, (k, total) =>
+      calls.push([k, total]),
+    );
+    expect(calls).toEqual([
+      [1, 3],
+      [2, 3],
+      [3, 3],
+    ]);
+  });
 });

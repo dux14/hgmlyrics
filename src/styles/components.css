@@ -2128,6 +2128,118 @@
   cursor: default;
 }
 
+/* Botón de acción con máquina de estados (ZIP / Drive) */
+.studio-action {
+  /* base button look (reproducido de .btn / .btn--primary) */
+  padding: var(--space-sm) var(--space-xl);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  border: none;
+  background: var(--color-primary);
+  color: #fff;
+  transition:
+    background-color var(--transition-fast),
+    transform var(--transition-fast);
+  /* layout */
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.studio-action:hover {
+  background: var(--color-primary-dark);
+  transform: translateY(-1px);
+}
+.studio-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+.studio-action__fill {
+  position: absolute;
+  inset: 0;
+  width: 0;
+  z-index: 1;
+  background: var(--color-primary-dark);
+  transition: width 0.25s ease;
+}
+.studio-action__ico,
+.studio-action__lbl {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+}
+.studio-action__lbl {
+  transition: opacity 0.2s ease;
+}
+.studio-action.is-busy {
+  color: #fff;
+  background: var(--color-primary);
+}
+.studio-action.is-done {
+  color: #fff;
+  background: var(--color-success);
+}
+.studio-action.is-done .studio-action__ico svg {
+  animation: studio-action-pop 0.42s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.studio-action.is-error {
+  color: #fff;
+  background: var(--color-error);
+  animation: studio-action-shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+@keyframes studio-action-pop {
+  0% {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes studio-action-shake {
+  10%,
+  90% {
+    transform: translateX(-1px);
+  }
+  20%,
+  80% {
+    transform: translateX(2px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-4px);
+  }
+  40%,
+  60% {
+    transform: translateX(4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .studio-action__fill,
+  .studio-action__lbl {
+    transition: none;
+  }
+  .studio-action:hover {
+    transform: none;
+  }
+  .studio-action.is-done .studio-action__ico svg {
+    animation: none;
+  }
+  .studio-action.is-error {
+    animation: none;
+  }
+}
+
 /* -----------------------------------------------------------------------
    Reproductor propio — Dirección A (Apilado claro)
    Mobile-first: dos renglones por pista.
@@ -2761,15 +2873,6 @@
 
 .studio-section-card__more-summary:hover {
   color: var(--color-text);
-}
-
-/* Atribución discreta al pie */
-.studio__attribution {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-  opacity: 0.65;
-  margin-top: var(--space-lg);
-  text-align: center;
 }
 
 @media (prefers-reduced-motion: reduce) {

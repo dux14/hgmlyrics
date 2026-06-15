@@ -51,15 +51,17 @@ export function buildTrackList(job, labels) {
  * @param {object} job @param {Record<string,string>} labels
  * @returns {Promise<{blob: Blob, count: number, base: string}>}
  */
-export async function buildZipBlob(job, labels) {
+export async function buildZipBlob(job, labels, onProgress) {
   const tracks = buildTrackList(job, labels);
   if (tracks.length === 0) throw new Error('No hay pistas para descargar.');
 
   const files = {};
+  let done = 0;
   for (const { url, filename } of tracks) {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`No pudimos descargar "${filename}".`);
     files[filename] = new Uint8Array(await res.arrayBuffer());
+    onProgress?.(++done, tracks.length);
   }
 
   const zipped = zipSync(files, { level: 0 }); // MP3 ya está comprimido → sin recompresión
@@ -74,8 +76,8 @@ export async function buildZipBlob(job, labels) {
  * @param {object} job @param {Record<string,string>} labels
  * @returns {Promise<number>} número de pistas empaquetadas
  */
-export async function downloadAllZip(job, labels) {
-  const { blob, count, base } = await buildZipBlob(job, labels);
+export async function downloadAllZip(job, labels, onProgress) {
+  const { blob, count, base } = await buildZipBlob(job, labels, onProgress);
   const href = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = href;

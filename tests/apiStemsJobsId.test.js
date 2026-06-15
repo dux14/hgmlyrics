@@ -215,6 +215,38 @@ describe('GET /api/stems/jobs/[id]', () => {
     expect(signStemsDownload).toHaveBeenCalledTimes(4);
   });
 
+  it('SEC-07: key con prefijo ajeno NO se firma; key legítima sí se firma', async () => {
+    const job = {
+      id: 'job1',
+      user_id: 'victima_legit',
+      status: 'done',
+      sections: {
+        voiceInstrumental: {
+          outputs: {
+            vocals: 'victima_legit/job1/stems/vocals.mp3', // legítima
+            evil: 'atacante/otrojob/stems/x.mp3', // inyectada
+          },
+        },
+        leadBacking: { outputs: {} },
+      },
+    };
+    sqlResponses.push([job]);
+    const res = makeRes();
+    await handler(authedReq({ query: { id: 'job1' } }), res);
+
+    expect(res.statusCode).toBe(200);
+    const { job: result } = res.body;
+
+    // La key legítima debe estar firmada
+    expect(result.stems.vocals).toBe('signed://victima_legit/job1/stems/vocals.mp3');
+    // La key inyectada NO debe generar signed URL
+    expect(result.stems.evil).toBeUndefined();
+    // signStemsDownload nunca se llama para la key ajena
+    expect(signStemsDownload).toHaveBeenCalledTimes(1);
+    expect(signStemsDownload).toHaveBeenCalledWith('victima_legit/job1/stems/vocals.mp3');
+    expect(signStemsDownload).not.toHaveBeenCalledWith('atacante/otrojob/stems/x.mp3');
+  });
+
   it('processing reciente: devuelve job crudo sin aplanar (signStemsDownload no se llama)', async () => {
     const job = {
       id: 'j1',

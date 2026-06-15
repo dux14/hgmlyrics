@@ -16,10 +16,14 @@ const MODAL_TIMEOUT_MS = 10 * 60 * 1000;
  * Se preserva esa estructura en genderVoices con URLs firmadas.
  */
 async function withSignedUrls(job) {
+  // SEC-07: solo firmar keys que pertenezcan al propio job.
+  // Keys con prefijo ajeno (inyectadas vía webhook comprometido) no deben generar signed URL.
+  const prefix = `${job.user_id}/${job.id}/`;
+
   const sign = async (obj) => {
     const out = {};
     for (const [k, v] of Object.entries(obj)) {
-      if (typeof v === 'string' && v.includes('/')) out[k] = await signStemsDownload(v);
+      if (typeof v === 'string' && v.startsWith(prefix)) out[k] = await signStemsDownload(v);
     }
     return out;
   };

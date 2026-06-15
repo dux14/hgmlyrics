@@ -6,7 +6,8 @@ import { deleteStemsPrefix } from '../_lib/storage.js';
 export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['GET'])) return;
   const auth = req.headers?.authorization ?? '';
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || auth !== `Bearer ${secret}`) {
     res.status(401).json({ error: 'No autorizado' });
     return;
   }

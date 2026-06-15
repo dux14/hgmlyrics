@@ -40,4 +40,25 @@ describe('buildButton', () => {
     el.innerHTML = buildButton({ displayName: 'Ana', username: 'ana', avatarUrl: '' }, 1);
     expect(el.querySelector('.auth-button__dot')).toBeTruthy();
   });
+
+  it('SEC-04: escapa displayName con payload XSS', () => {
+    const payload = '<img src=x onerror=alert(1)>';
+    const el = document.createElement('div');
+    el.innerHTML = buildButton({ displayName: payload, username: 'u', avatarUrl: '' }, 0);
+    // El <img> malicioso no debe aparecer como elemento img dentro del span
+    const span = el.querySelector('.auth-button span');
+    expect(span.querySelector('img')).toBeNull();
+    expect(span.textContent).toContain('<img');
+  });
+
+  it('SEC-04: escapa avatarUrl con payload XSS', () => {
+    const payload = '" onerror="alert(1)';
+    const el = document.createElement('div');
+    el.innerHTML = buildButton({ displayName: 'Ana', username: 'ana', avatarUrl: payload }, 0);
+    // Al parsear el HTML, jsdom no debe haber creado un atributo onerror ejecutable en img
+    const img = el.querySelector('.auth-button__avatar');
+    expect(img.hasAttribute('onerror')).toBe(false);
+    // La comilla doble del payload no rompió el atributo src — src contiene el payload sin ejecutar
+    expect(img.getAttribute('src')).toContain(' onerror=');
+  });
 });

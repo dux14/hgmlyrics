@@ -147,7 +147,7 @@ export async function renderSongLinks(container, songId) {
         <div class="slinks__meta">
           <h1 class="slinks__title">${escapeHtml(song.title)}</h1>
           <p class="slinks__artist">${escapeHtml(song.artist || '')} — ${escapeHtml(song.album || '')}</p>
-          <p class="slinks__year">${song.year || ''} ${song.genre ? `· ${song.genre}` : ''} ${song.key ? `· ${song.key}` : ''}</p>
+          <p class="slinks__year">${escapeHtml(String(song.year || ''))} ${song.genre ? `· ${escapeHtml(song.genre)}` : ''} ${song.key ? `· ${escapeHtml(song.key)}` : ''}</p>
         </div>
       </div>
 

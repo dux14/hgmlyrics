@@ -155,3 +155,6 @@ describe('onStatus — sin render optimista parcial', () => {
     expect(mountsAfterPush).toBe(mountsBefore);
   });
 });
+
+// SEC-09: Tests de escape para e.message y job.error están en tests/studioPage.test.js
+// (que tiene la infraestructura de mocks correcta para StudioPage).

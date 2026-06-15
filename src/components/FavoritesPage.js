@@ -10,6 +10,7 @@ import { renderSongList } from './SongList.js';
 import { navigate, getCurrentPath } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { resolveCoverUrl } from './songRow.js';
+import { escapeHtml } from '../lib/escape.js';
 
 let unsubFav = null;
 let unsubStore = null;
@@ -39,11 +40,11 @@ function buildFavGrid(mount, favs) {
   mount.innerHTML = `<div class="fav-grid">${favs
     .map(
       (s) => `
-      <a class="fav-cover" href="#/song/${s.id}" aria-label="${(s.title || '').replace(/"/g, '&quot;')}">
+      <a class="fav-cover" href="#/song/${s.id}" aria-label="${escapeHtml(s.title || '')}">
         <img class="fav-cover__img" src="${resolveCoverUrl(s)}" alt="" loading="lazy" decoding="async" />
         <span class="fav-cover__veil"></span>
         <button class="fav-cover__heart is-on" data-fav-id="${s.id}" aria-label="Quitar de favoritos">♥</button>
-        <span class="fav-cover__title">${s.title || ''}</span>
+        <span class="fav-cover__title">${escapeHtml(s.title || '')}</span>
       </a>`,
     )
     .join('')}</div>`;

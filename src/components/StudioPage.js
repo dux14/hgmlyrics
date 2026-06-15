@@ -184,7 +184,7 @@ async function handleFile(body, file, quota) {
     watchJob(body, job.id, quota, file.name);
   } catch (e) {
     body.innerHTML = `
-      <p class="studio__error">${e.message}</p>
+      <p class="studio__error">${escHtml(e.message)}</p>
       <button class="btn btn--primary" id="studio-retry">Volver a intentar</button>
     `;
     body.querySelector('#studio-retry').addEventListener('click', () => renderIdle(body, quota));
@@ -395,7 +395,7 @@ function renderProcessing(body, job, filename, quota) {
 function renderJob(body, job, quota) {
   if (job.status === 'failed') {
     body.innerHTML = `
-      <p class="studio__error">${job.error ?? 'El procesamiento falló.'}</p>
+      <p class="studio__error">${escHtml(job.error ?? 'El procesamiento falló.')}</p>
       <button class="btn btn--primary" id="studio-retry">Procesar otra canción</button>
     `;
     body.querySelector('#studio-retry').addEventListener('click', () => renderIdle(body, quota));

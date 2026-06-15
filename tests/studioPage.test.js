@@ -318,4 +318,57 @@ describe('renderStudioPage', () => {
 
     vi.unstubAllGlobals();
   });
+
+  // SEC-09: sinks e.message y job.error no aterrizan crudos en innerHTML
+  it('SEC-09: escapa job.error con payload XSS en renderJob (failed)', async () => {
+    const xssPayload = '<img src=x onerror=alert(1)>';
+    stemsApi.listJobs.mockResolvedValueOnce({
+      jobs: [{ id: 'j1', status: 'failed', error: xssPayload }],
+      quota: { used: 0, limit: 3 },
+    });
+    stemsApi.getJob.mockResolvedValue({
+      job: { id: 'j1', status: 'failed', error: xssPayload },
+    });
+    renderStudioPage(container);
+
+    await vi.waitFor(() => expect(container.querySelector('.studio__error')).not.toBeNull());
+
+    // No debe existir <img> con onerror como elemento real del DOM
+    expect(container.querySelector('img[onerror]')).toBeNull();
+    const errEl = container.querySelector('.studio__error');
+    // El texto debe contener el payload crudo (como texto, no ejecutable)
+    expect(errEl.textContent).toContain('<img');
+    // La representación HTML del elemento debe estar escapada
+    expect(errEl.innerHTML).toContain('&lt;img');
+  });
+
+  it('SEC-09: escapa e.message con payload XSS cuando createJob lanza', async () => {
+    const xssPayload = '<script>evil()</script>';
+    stemsApi.listJobs.mockResolvedValueOnce({
+      jobs: [],
+      quota: { used: 0, limit: 3 },
+    });
+    stemsApi.createJob.mockRejectedValue(new Error(xssPayload));
+    renderStudioPage(container);
+
+    // Esperar el estado idle (dropzone)
+    await vi.waitFor(() => expect(container.querySelector('.studio-dropzone')).not.toBeNull());
+
+    // Disparar drop con un archivo MP3 simulado
+    const drop = container.querySelector('.studio-dropzone');
+    const fakeFile = new File([''], 'song.mp3', { type: 'audio/mpeg' });
+    const dropEvent = new Event('drop');
+    dropEvent.preventDefault = vi.fn();
+    Object.defineProperty(dropEvent, 'dataTransfer', { value: { files: [fakeFile] } });
+    drop.dispatchEvent(dropEvent);
+
+    // Esperar a que createJob rechace y aparezca el error
+    await vi.waitFor(() => expect(container.querySelector('.studio__error')).not.toBeNull());
+
+    // No debe haber <script> ejecutable en el DOM
+    expect(container.querySelector('script')).toBeNull();
+    const errEl = container.querySelector('.studio__error');
+    expect(errEl.textContent).toContain('<script>');
+    expect(errEl.innerHTML).toContain('&lt;script&gt;');
+  });
 });

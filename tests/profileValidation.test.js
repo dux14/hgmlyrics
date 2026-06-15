@@ -90,4 +90,31 @@ describe('validateAndNormalize', () => {
     const { out } = validateAndNormalize({ unknownField: 'x' });
     expect(out).toEqual({});
   });
+
+  // SEC-01 / SEC-05 — avatarUrl backend validation
+  it('SEC-05: rejects avatarUrl with external domain', () => {
+    expect(() => validateAndNormalize({ avatarUrl: 'https://evil.com/x.png' })).toThrow(
+      'avatar_url_invalida',
+    );
+  });
+
+  it('SEC-05: rejects avatarUrl with javascript: scheme', () => {
+    expect(() => validateAndNormalize({ avatarUrl: 'javascript:alert(1)' })).toThrow(
+      'avatar_url_invalida',
+    );
+  });
+
+  it('SEC-05: accepts valid Supabase Storage URL', () => {
+    const { out, errs } = validateAndNormalize({
+      avatarUrl: 'https://abc.supabase.co/storage/v1/object/public/avatars/x.png',
+    });
+    expect(errs).toEqual([]);
+    expect(out.avatar_url).toBe('https://abc.supabase.co/storage/v1/object/public/avatars/x.png');
+  });
+
+  it('SEC-05: accepts avatarUrl = null (clear avatar)', () => {
+    const { out, errs } = validateAndNormalize({ avatarUrl: null });
+    expect(errs).toEqual([]);
+    expect(out.avatar_url).toBeNull();
+  });
 });

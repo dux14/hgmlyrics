@@ -45,4 +45,22 @@ describe('buildFriendItem', () => {
     el.innerHTML = buildFriendItem(item, 'me', 'accepted');
     expect(el.querySelector('.friend-card__avatar')).toBeTruthy();
   });
+
+  it('SEC-01: avatarUrl XSS payload no produce atributo onerror en el DOM', () => {
+    const maliciousItem = {
+      requesterId: 'attacker',
+      requesterUsername: 'attacker',
+      requesterDisplayName: 'Attacker',
+      requesterAvatarUrl: '" onerror="alert(1)" x="',
+    };
+    const el = document.createElement('div');
+    el.innerHTML = buildFriendItem(maliciousItem, 'me', 'incoming');
+    const img = el.querySelector('img.friend-card__avatar');
+    // The img must exist (avatar was non-empty) and must NOT have an onerror attribute
+    expect(img).toBeTruthy();
+    expect(img.getAttribute('onerror')).toBeNull();
+    // The src attribute value must contain the literal payload text (escaped), not execute it
+    // i.e. the double-quote in the payload must have been escaped to &quot; so the attribute
+    // boundary was never broken — confirmed by the absence of the onerror DOM attribute above.
+  });
 });

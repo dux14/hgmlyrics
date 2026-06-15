@@ -45,8 +45,19 @@ export function validateAndNormalize(input) {
     else out.bio = v;
   }
   if ('avatarUrl' in input) {
-    out.avatar_url =
-      input.avatarUrl === null || input.avatarUrl === undefined ? null : String(input.avatarUrl);
+    const v = input.avatarUrl;
+    if (v === null || v === undefined) {
+      out.avatar_url = null;
+    } else {
+      const url = String(v);
+      const ok = /^https:\/\/[a-z0-9.-]*\.supabase\.co\/storage\//i.test(url);
+      if (!ok) {
+        const e = new Error('avatar_url_invalida');
+        e.status = 400;
+        throw e;
+      }
+      out.avatar_url = url;
+    }
   }
   if ('voiceType' in input) {
     const v = input.voiceType;

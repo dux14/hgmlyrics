@@ -88,7 +88,7 @@ export function buildFriendItem(item, viewerId, kind) {
       };
   const initial = (other.displayName || other.username || '?').trim().charAt(0).toUpperCase();
   const avatar = other.avatarUrl
-    ? `<img class="friend-card__avatar" src="${other.avatarUrl}" alt="" width="44" height="44" loading="lazy" decoding="async" />`
+    ? `<img class="friend-card__avatar" src="${escapeHtml(other.avatarUrl || '')}" alt="" width="44" height="44" loading="lazy" decoding="async" />`
     : `<span class="friend-card__avatar friend-card__avatar--initial">${initial}</span>`;
   const actions =
     kind === 'incoming'
@@ -203,7 +203,7 @@ export async function renderFriendsPanel(container) {
         .map(
           (u) => `
         <li class="friend-item">
-          <img class="profile-avatar" style="width:40px;height:40px;" src="${u.avatarUrl || ''}" alt="" />
+          <img class="profile-avatar" style="width:40px;height:40px;" src="${escapeHtml(u.avatarUrl || '')}" alt="" />
           <div>
             <a href="#/u/${encodeURIComponent(u.username)}" style="color:inherit;text-decoration:none;font-weight:600;">${escapeHtml(u.displayName || u.username)}</a>
             <div style="font-size:0.8em;color:var(--color-text-secondary);">@${escapeHtml(u.username)}</div>

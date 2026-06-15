@@ -5,6 +5,7 @@
  * Soprano/Contralto (female) + Tenor/Bass (male).
  * Used by both the Block Editor and SongView Reader.
  */
+import { escapeHtml } from './escape.js';
 
 /**
  * Voice groups organized by gender
@@ -268,16 +269,6 @@ export function buildAnnotatedLineHTML(text, options = {}) {
     html += `<span class="line-seg">${labelHtml(labelByPos.get(len))}</span>`;
   }
   return html;
-}
-
-function escapeHtml(str) {
-  if (str === '' || str === null || str === undefined) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 const NOTE_RE = /^[A-G][#b]?[0-7]$/;

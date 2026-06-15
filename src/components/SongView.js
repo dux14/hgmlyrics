@@ -25,6 +25,7 @@ import {
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { presetToSpeed, stepToward, shouldShowFab } from '../lib/autoscroll.js';
+import { escapeHtml } from '../lib/escape.js';
 
 const FONT_SIZE_KEY = 'hkn-lyrics-font-size';
 const FONT_STEP = 0.125; // rem
@@ -930,15 +931,6 @@ function applyFontSize(size) {
       line.style.fontSize = `${size}rem`;
     });
   }
-}
-
-/**
- * Escape HTML
- */
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
 }
 
 /* ─── Feature 1: Autoscroll ─── */

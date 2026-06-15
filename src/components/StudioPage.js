@@ -24,6 +24,7 @@ export { isMp3File };
 import { createStudioPlayer } from './StudioPlayer.js';
 import { renderTimeline, markActive } from './StudioSectionTimeline.js';
 import { renderSectionCard } from './StudioSectionCard.js';
+import { escapeHtml as escHtml } from '../lib/escape.js';
 
 const MAX_DURATION_S = 10.5 * 60;
 let pollTimer = null;
@@ -57,13 +58,6 @@ function startHashGuard() {
     }
   };
   window.addEventListener('hashchange', hashChangeHandler);
-}
-
-function escHtml(s) {
-  return String(s).replace(
-    /[&<>"']/g,
-    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
-  );
 }
 
 function hoursLeft(expiresAt) {

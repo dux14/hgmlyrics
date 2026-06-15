@@ -3,12 +3,7 @@
  */
 import { getSession } from '../lib/authStore.js';
 import { emitPendingChanged } from '../lib/friends.js';
-
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = String(str ?? '');
-  return div.innerHTML;
-}
+import { escapeHtml } from '../lib/escape.js';
 
 let searchTimer = null;
 

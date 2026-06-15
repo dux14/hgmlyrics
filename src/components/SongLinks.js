@@ -11,6 +11,9 @@ import { navigate } from '../router.js';
 import { VOICE_TYPES, getVoiceColor } from '../lib/voiceSystem.js';
 import { isAdmin } from '../lib/authStore.js';
 import { icon } from '../lib/icons.js';
+import { escapeHtml } from '../lib/escape.js';
+
+const escapeAttr = escapeHtml;
 
 const API_URL = '/api';
 
@@ -184,21 +187,4 @@ export async function renderSongLinks(container, songId) {
       ${isAdmin() && !isEmpty ? `<div class="slinks__admin"><a href="#/admin/edit/${escapeAttr(songId)}" class="btn btn--secondary">Editar links</a></div>` : ''}
     </div>
   `;
-}
-
-function escapeHtml(str) {
-  if (!str) return '';
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-function escapeAttr(str) {
-  if (!str) return '';
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
 }

@@ -14,16 +14,7 @@ import { validateTiledMap } from '../../api/_lib/validateTiledMap.js';
 import { listMaps, saveMap, activate } from '../world/worldMapStore.js';
 import { joinWorldAdmin } from '../lib/worldAdminChannel.js';
 import { diffZoneChannels } from '../world/zoneChannelsDiff.js';
-
-// ---------------------------------------------------------------------------
-// Pequeño helper HTML-escape (consistente con AdminDashboard)
-// ---------------------------------------------------------------------------
-function esc(str) {
-  if (!str) return '';
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
+import { escapeHtml as esc } from '../lib/escape.js';
 
 // ---------------------------------------------------------------------------
 // Formatear fecha ISO a local legible

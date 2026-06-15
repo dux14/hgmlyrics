@@ -3,6 +3,7 @@ import { getState } from '../lib/store.js';
 import { icon } from '../lib/icons.js';
 import { getSession, isAdmin } from '../lib/authStore.js';
 import { mountAdminWorldPanel } from './AdminWorldPanel.js';
+import { escapeHtml as escapeHtmlLocal } from '../lib/escape.js';
 
 export function renderAdminDashboard(container) {
   container.innerHTML = `
@@ -205,11 +206,4 @@ export function renderAdminEditList(container) {
   searchInput.addEventListener('input', (e) => {
     renderList(e.target.value);
   });
-}
-
-function escapeHtmlLocal(str) {
-  if (!str) return '';
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
 }

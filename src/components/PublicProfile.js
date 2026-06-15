@@ -2,6 +2,7 @@
  * PublicProfile.js — /u/:username (lectura, dentro del login wall).
  */
 import { getSession } from '../lib/authStore.js';
+import { escapeHtml } from '../lib/escape.js';
 
 async function fetchProfile(username) {
   const token = getSession()?.access_token;
@@ -10,12 +11,6 @@ async function fetchProfile(username) {
   });
   if (!res.ok) return null;
   return res.json();
-}
-
-function escapeHtml(s) {
-  const div = document.createElement('div');
-  div.textContent = s ?? '';
-  return div.innerHTML;
 }
 
 /**

@@ -4,6 +4,7 @@
 import { getSession, getProfile, refreshProfile } from '../lib/authStore.js';
 import { icon } from '../lib/icons.js';
 import { compressImageToLimit } from '../lib/imageCompress.js';
+import { escapeHtml } from '../lib/escape.js';
 
 const VOICE_TYPES = [
   ['', '—'],
@@ -19,12 +20,6 @@ const VOICE_SUBTYPES = [
 ];
 
 const VOICE_LABELS = { soprano: 'Soprano', contralto: 'Contralto', tenor: 'Tenor', bass: 'Bajo' };
-
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = String(str ?? '');
-  return div.innerHTML;
-}
 
 /** Etiqueta + clase de color de cuerda para la píldora de voz. null si no hay voz. */
 export function voiceLabel(voiceType, voiceSubtype) {

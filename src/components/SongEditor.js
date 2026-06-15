@@ -24,6 +24,7 @@ import {
   applyGroupsForRange,
 } from '../lib/editorSelection.js';
 import { icon } from '../lib/icons.js';
+import { escapeHtml } from '../lib/escape.js';
 
 const API_URL = '/api';
 
@@ -1520,10 +1521,4 @@ function showToast(message) {
   toast.textContent = message;
   toast.classList.add('visible');
   setTimeout(() => toast.classList.remove('visible'), 3000);
-}
-
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
 }

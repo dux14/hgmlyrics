@@ -8,6 +8,7 @@
 import { getAlbums, filterByAlbum, getState } from '../lib/store.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
+import { escapeHtml } from '../lib/escape.js';
 import { listMyLists } from '../lib/lists.js';
 import { expiryBand } from '../lib/listDraft.js';
 
@@ -237,12 +238,6 @@ export function closeSidebar() {
 /**
  * Escape HTML
  */
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
 /** Ordena listas: por expires_at ascendente; sin fecha o fecha inválida al final. No muta. */
 export function sortListsByExpiry(lists) {
   return [...lists].sort((a, b) => {

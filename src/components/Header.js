@@ -9,6 +9,7 @@ import { navigate } from '../router.js';
 import { renderThemeToggle } from './ThemeToggle.js';
 import { renderAuthButton } from './AuthButton.js';
 import { icon } from '../lib/icons.js';
+import { escapeHtml } from '../lib/escape.js';
 
 let searchTimeout = null;
 
@@ -215,15 +216,4 @@ function showToast(message) {
   toast.textContent = message;
   toast.classList.add('visible');
   setTimeout(() => toast.classList.remove('visible'), 2500);
-}
-
-/**
- * Escape HTML to prevent XSS
- * @param {string} str
- * @returns {string}
- */
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
 }

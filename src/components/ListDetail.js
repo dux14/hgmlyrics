@@ -35,14 +35,9 @@ import { songRowCompact } from './songRow.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { updateSidebarContent } from './Sidebar.js';
+import { escapeHtml } from '../lib/escape.js';
 
 /* global CSS */
-
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = String(str ?? '');
-  return div.innerHTML;
-}
 
 function expiryChipHtml(expiresAt) {
   const text = formatExpiry(expiresAt);

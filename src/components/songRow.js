@@ -4,12 +4,7 @@
  * Devuelve HTML string; el binding de eventos lo hace el consumidor.
  */
 import { COVER_PLACEHOLDER } from '../lib/icons.js';
-
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = String(str ?? '');
-  return div.innerHTML;
-}
+import { escapeHtml } from '../lib/escape.js';
 
 /** Resuelve la URL de portada (absoluta/http tal cual; nombre suelto → /covers/). */
 export function resolveCoverUrl(song) {

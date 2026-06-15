@@ -10,6 +10,7 @@ import { isAuthenticated } from '../lib/authStore.js';
 import { isFavorite, toggleFavorite, subscribe as subscribeFavorites } from '../lib/favorites.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { resolveCoverUrl, voiceBadge } from './songRow.js';
+import { escapeHtml } from '../lib/escape.js';
 
 let currentViewMode = localStorage.getItem('hkn-view-mode') || 'grid';
 let favUnsubscribe = null;
@@ -265,13 +266,4 @@ function createSongTable(songs) {
   });
 
   return table;
-}
-
-/**
- * Escape HTML
- */
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
 }

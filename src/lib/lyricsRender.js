@@ -6,6 +6,7 @@
  * Sin DOM → testeable como string.
  */
 import { buildAnnotatedLineHTML, groupsForVoice } from './voiceSystem.js';
+import { escapeHtml as esc } from './escape.js';
 
 /**
  * Modo Letra (GA): texto blanco plano, escapado, sin etiquetas ni color.
@@ -84,15 +85,6 @@ const hasNote = (g) => g.note !== null && g.note !== undefined && g.note !== '';
  * @param {string|null|undefined} str
  * @returns {string}
  */
-function esc(str) {
-  if (str === '' || str === null || str === undefined) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
 
 /**
  * Modo Tono (flag voz_tono): la letra cantada por la voz activa va neutra

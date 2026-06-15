@@ -8,6 +8,7 @@ import {
   magnifyRange,
   magnifyPosToTime,
   commitPreview,
+  createStudioPlayer,
 } from './StudioPlayer.js';
 
 describe('fmtTimeCs', () => {
@@ -85,5 +86,28 @@ describe('commitPreview', () => {
   });
   it('retorna 0 cuando previewTime es negativo', () => {
     expect(commitPreview({ previewTime: -1 })).toBe(0);
+  });
+});
+
+describe('createStudioPlayer — SEC-X1: safeUrl bloquea javascript: en href y src', () => {
+  it('url javascript: produce href y src vacíos', () => {
+    const { el } = createStudioPlayer({ label: 'Voz', url: 'javascript:alert(1)' });
+    const dlLink = el.querySelector('.studio-player__dl');
+    expect(dlLink).not.toBeNull();
+    expect(dlLink.getAttribute('href')).toBe('');
+
+    const audio = el.querySelector('audio');
+    expect(audio).not.toBeNull();
+    expect(audio.getAttribute('src')).toBe('');
+  });
+
+  it('url https: legítima se preserva en href y src', () => {
+    const url = 'https://storage.example.com/stems/vocals.mp3';
+    const { el } = createStudioPlayer({ label: 'Voz', url });
+    const dlLink = el.querySelector('.studio-player__dl');
+    expect(dlLink.getAttribute('href')).toBe(url);
+
+    const audio = el.querySelector('audio');
+    expect(audio.getAttribute('src')).toBe(url);
   });
 });

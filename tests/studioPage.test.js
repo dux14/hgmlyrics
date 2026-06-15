@@ -371,4 +371,35 @@ describe('renderStudioPage', () => {
     expect(errEl.textContent).toContain('<script>');
     expect(errEl.innerHTML).toContain('&lt;script&gt;');
   });
+
+  // SEC-X1: file.name en innerHTML durante la subida
+  it('SEC-X1: file.name con payload XSS no produce elemento ejecutable durante subida', async () => {
+    stemsApi.listJobs.mockResolvedValueOnce({
+      jobs: [],
+      quota: { used: 0, limit: 3 },
+    });
+    // createJob cuelga indefinidamente (simula subida lenta) para poder inspeccionar el DOM
+    stemsApi.createJob.mockReturnValue(new Promise(() => {}));
+    renderStudioPage(container);
+
+    await vi.waitFor(() => expect(container.querySelector('.studio-dropzone')).not.toBeNull());
+
+    const drop = container.querySelector('.studio-dropzone');
+    const maliciousName = '<img src=x onerror=alert(1)>.mp3';
+    const fakeFile = new File([''], maliciousName, { type: 'audio/mpeg' });
+    const dropEvent = new Event('drop');
+    dropEvent.preventDefault = vi.fn();
+    Object.defineProperty(dropEvent, 'dataTransfer', { value: { files: [fakeFile] } });
+    drop.dispatchEvent(dropEvent);
+
+    // Esperar a que se muestre el mensaje "Subiendo..."
+    await vi.waitFor(() => expect(container.querySelector('[aria-busy]')).not.toBeNull());
+
+    // No debe existir <img> con onerror ejecutable
+    expect(container.querySelector('img[onerror]')).toBeNull();
+    // El texto debe aparecer como texto plano
+    expect(container.querySelector('[aria-busy]').textContent).toContain('<img');
+    // El innerHTML del párrafo debe estar escapado
+    expect(container.querySelector('[aria-busy]').innerHTML).toContain('&lt;img');
+  });
 });

@@ -52,7 +52,7 @@ export function buildProfileHeader(profile) {
   return `
     <div class="profile-banner">
       ${voicePill}
-      <img class="profile-banner__avatar" id="avatar-preview" src="${avatarUrl}" alt="Avatar" />
+      <img class="profile-banner__avatar" id="avatar-preview" src="${escapeHtml(avatarUrl)}" alt="Avatar" />
       <div class="profile-banner__id">
         <h1 class="profile-banner__name">${escapeHtml(profile.displayName || profile.username)}</h1>
         <div class="profile-username">@${escapeHtml(profile.username)}</div>

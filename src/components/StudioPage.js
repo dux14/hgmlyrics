@@ -115,7 +115,7 @@ function renderIdle(body, quota) {
   const quotaText =
     quota.unlimited || quota.limit === null
       ? `Sin límite diario de canciones. Los resultados expiran a las 48 h.`
-      : `Te quedan <strong>${quota.limit - quota.used} de ${quota.limit}</strong> canciones hoy. Los resultados expiran a las 48 h.`;
+      : `Te quedan <strong>${Number(quota.limit) - Number(quota.used)} de ${Number(quota.limit)}</strong> canciones hoy. Los resultados expiran a las 48 h.`;
   body.innerHTML = `
     <p class="studio__desc">Sube una canción y te la devolvemos separada en pistas (voz, batería,
     bajo, guitarra, piano y otros) más la voz dividida en <strong>líder/coros</strong> y segmentos
@@ -176,7 +176,7 @@ async function handleFile(body, file, quota) {
     );
     return;
   }
-  body.innerHTML = `<p aria-busy="true">Subiendo <strong>${file.name}</strong>…</p>`;
+  body.innerHTML = `<p aria-busy="true">Subiendo <strong>${escHtml(file.name)}</strong>…</p>`;
   try {
     const { job, upload } = await createJob(file);
     await uploadInput(upload, file);

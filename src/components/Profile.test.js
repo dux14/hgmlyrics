@@ -53,4 +53,21 @@ describe('buildProfileHeader', () => {
     expect(el.textContent).toContain('C3');
     expect(el.textContent).toContain('A5');
   });
+
+  it('SEC-X1: avatarUrl con payload XSS no crea atributo onerror ejecutable', () => {
+    const profile = {
+      ...base,
+      avatarUrl: '" onerror="alert(1)" x="',
+    };
+    const el = document.createElement('div');
+    el.innerHTML = buildProfileHeader(profile);
+
+    // No debe existir ningún <img> con atributo onerror en el DOM
+    expect(el.querySelector('img[onerror]')).toBeNull();
+
+    // La imagen debe existir pero sin el atributo onerror
+    const img = el.querySelector('#avatar-preview');
+    expect(img).not.toBeNull();
+    expect(img.hasAttribute('onerror')).toBe(false);
+  });
 });

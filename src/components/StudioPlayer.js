@@ -4,6 +4,7 @@
  * createStudioPlayer cablea un <audio> y no se testea en jsdom.
  */
 import { icon } from '../lib/icons.js';
+import { safeUrl } from '../lib/escape.js';
 
 const MAG_WINDOW_S = 3; // lupa ±3 s
 const LONGPRESS_MS = 400;
@@ -79,7 +80,7 @@ export function createStudioPlayer({ label, url }) {
       <button class="studio-player__play" type="button" aria-label="Reproducir ${label}">${icon('play', { size: 16 })}</button>
       <span class="studio-player__label">${label}</span>
       <span class="studio-player__time" aria-hidden="true">0:00 / 0:00</span>
-      <a class="btn studio-player__dl" href="${url}" download aria-label="Descargar ${label}">${icon('download', { size: 16 })}</a>
+      <a class="btn studio-player__dl" href="${safeUrl(url)}" download aria-label="Descargar ${label}">${icon('download', { size: 16 })}</a>
     </div>
     <div class="studio-player__row2">
       <div class="studio-player__bar" role="slider" tabindex="0"
@@ -94,7 +95,7 @@ export function createStudioPlayer({ label, url }) {
         </div>
       </div>
     </div>
-    <audio preload="none" src="${url}"></audio>
+    <audio preload="none" src="${safeUrl(url)}"></audio>
   `;
 
   const audio = root.querySelector('audio');

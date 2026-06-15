@@ -11,7 +11,7 @@ import { navigate } from '../router.js';
 import { VOICE_TYPES, getVoiceColor } from '../lib/voiceSystem.js';
 import { isAdmin } from '../lib/authStore.js';
 import { icon } from '../lib/icons.js';
-import { escapeHtml } from '../lib/escape.js';
+import { escapeHtml, safeUrl } from '../lib/escape.js';
 
 const escapeAttr = escapeHtml;
 
@@ -93,7 +93,7 @@ export async function renderSongLinks(container, songId) {
       if (!meta) return '';
       const icon = PLATFORM_ICONS[link.platform] || '';
       return `
-        <a class="slinks-platform-card" href="${escapeAttr(link.url)}" target="_blank" rel="noopener" style="--platform-color: ${meta.color}">
+        <a class="slinks-platform-card" href="${safeUrl(link.url)}" target="_blank" rel="noopener" style="--platform-color: ${meta.color}">
           <span class="slinks-platform-card__icon">${icon}</span>
           <span class="slinks-platform-card__label">${escapeHtml(meta.label)}</span>
         </a>
@@ -113,7 +113,7 @@ export async function renderSongLinks(container, songId) {
       const linksHtml = links
         .map(
           (l) => `
-          <a class="slinks-voice-link" href="${escapeAttr(l.url)}" target="_blank" rel="noopener">
+          <a class="slinks-voice-link" href="${safeUrl(l.url)}" target="_blank" rel="noopener">
             <span class="slinks-voice-link__icon">${DRIVE_ICON}</span>
             <span class="slinks-voice-link__text">${escapeHtml(l.label || 'Partitura')}</span>
           </a>

@@ -38,7 +38,7 @@ export async function renderPublicProfile(container, username) {
   container.innerHTML = `
     <div class="profile-page fade-in">
       <div class="profile-header">
-        ${avatar ? `<img class="profile-avatar" src="${avatar}" alt="" />` : `<div class="profile-avatar"></div>`}
+        ${avatar ? `<img class="profile-avatar" src="${escapeHtml(avatar)}" alt="" />` : `<div class="profile-avatar"></div>`}
         <div>
           <h1>${escapeHtml(profile.displayName || profile.username)}</h1>
           <div class="profile-username">@${escapeHtml(profile.username)}</div>

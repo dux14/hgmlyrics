@@ -1,5 +1,5 @@
 /**
- * SEC-03: Tests de escape XSS para SongLinks (year, genre, key)
+ * SEC-03: Tests de escape XSS para SongLinks (year, genre, key, href javascript:)
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -19,6 +19,17 @@ vi.mock('../lib/icons.js', () => ({ icon: vi.fn(() => '') }));
 
 import { renderSongLinks } from './SongLinks.js';
 import { fetchSongDetail } from '../lib/store.js';
+
+const BASE_SONG = {
+  id: 'song-1',
+  title: 'Mi cancion',
+  artist: 'Artista',
+  album: 'Album',
+  year: '',
+  genre: '',
+  key: '',
+  coverImage: '',
+};
 
 describe('renderSongLinks — SEC-03: year, genre, key escapados', () => {
   beforeEach(() => {
@@ -53,5 +64,53 @@ describe('renderSongLinks — SEC-03: year, genre, key escapados', () => {
     expect(yearEl).toBeTruthy();
     expect(yearEl.textContent).toContain('<img');
     expect(yearEl.innerHTML).toContain('&lt;img');
+  });
+});
+
+describe('renderSongLinks — SEC-X1: javascript: href bloqueado en platform links y voice links', () => {
+  it('plataforma con url javascript: queda con href vacío', async () => {
+    vi.mocked(fetchSongDetail).mockResolvedValue({ ...BASE_SONG });
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            platforms: [{ platform: 'youtube', url: 'javascript:alert(1)' }],
+            voices: [],
+          }),
+      }),
+    );
+
+    // VOICE_TYPES vacío → no voice cards; necesitamos PLATFORMS con youtube definido
+    const container = document.createElement('div');
+    await renderSongLinks(container, 'song-1');
+
+    const link = container.querySelector('.slinks-platform-card');
+    // safeUrl devuelve '' para javascript: → href queda vacío
+    expect(link).not.toBeNull();
+    expect(link.getAttribute('href')).toBe('');
+    expect(link.getAttribute('href')).not.toContain('javascript');
+  });
+
+  it('plataforma con url https: queda con href intacto', async () => {
+    vi.mocked(fetchSongDetail).mockResolvedValue({ ...BASE_SONG });
+    const legitUrl = 'https://youtube.com/watch?v=abc123';
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            platforms: [{ platform: 'youtube', url: legitUrl }],
+            voices: [],
+          }),
+      }),
+    );
+
+    const container = document.createElement('div');
+    await renderSongLinks(container, 'song-1');
+
+    const link = container.querySelector('.slinks-platform-card');
+    expect(link).not.toBeNull();
+    expect(link.getAttribute('href')).toBe(legitUrl);
   });
 });

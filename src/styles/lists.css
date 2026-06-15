@@ -101,6 +101,41 @@
   justify-content: center;
 }
 
+/* ── Badge teñido por banda de caducidad ── */
+.sidebar__list-badge--urgent {
+  background: var(--color-error);
+}
+.sidebar__list-badge--soon {
+  background: var(--color-warning);
+}
+.sidebar__list-badge--far {
+  background: var(--color-success);
+}
+.sidebar__list-badge--expired {
+  background: var(--color-text-secondary);
+}
+
+/* ── Dot de caducidad (listas sin ensayos) ── */
+.sidebar__list-dot {
+  margin-left: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--border-radius-full);
+  flex-shrink: 0;
+}
+.sidebar__list-dot--urgent {
+  background: var(--color-error);
+}
+.sidebar__list-dot--soon {
+  background: var(--color-warning);
+}
+.sidebar__list-dot--far {
+  background: var(--color-success);
+}
+.sidebar__list-dot--expired {
+  background: var(--color-text-secondary);
+}
+
 /* ── Detalle de lista ── */
 .list-detail__container {
   max-width: 680px;
@@ -208,6 +243,13 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+/* El atributo [hidden] del user-agent (display:none) pierde contra display:flex
+   de la regla anterior; este override restaura el comportamiento esperado
+   cuando el tab activo NO es "songs". */
+.list-detail__songs[hidden] {
+  display: none;
 }
 
 .list-detail__row-btn {

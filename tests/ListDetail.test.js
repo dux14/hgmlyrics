@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 vi.mock('../src/lib/lists.js', () => ({
   getList: vi.fn(),
@@ -184,5 +186,18 @@ describe('wizard de listas', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(createList).toHaveBeenCalledWith('Ensayo general', expect.any(String), 'evt1');
     expect(inviteMember).toHaveBeenCalledWith('sub1', 'bob');
+  });
+});
+
+// Candado de especificidad CSS: jsdom no computa estilos de hojas externas,
+// así que no podemos probar el comportamiento visual directamente. En su lugar
+// verificamos que la regla override exista en el CSS fuente. Sin ella,
+// `.list-detail__songs { display:flex }` gana sobre el `[hidden]` del user-agent
+// y el tracklist aparece aunque el tab activo sea "Ensayos".
+describe('CSS especificidad: .list-detail__songs[hidden]', () => {
+  const css = readFileSync(resolve(process.cwd(), 'src/styles/lists.css'), 'utf8');
+
+  it('contiene override [hidden] para .list-detail__songs', () => {
+    expect(css).toMatch(/\.list-detail__songs\[hidden\]\s*\{[^}]*display\s*:\s*none/);
   });
 });

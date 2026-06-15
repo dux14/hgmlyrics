@@ -9,7 +9,7 @@ import { getAlbums, filterByAlbum, getState } from '../lib/store.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { listMyLists } from '../lib/lists.js';
-import { formatExpiry } from '../lib/listDraft.js';
+import { expiryBand } from '../lib/listDraft.js';
 
 let sidebarEl = null;
 let overlayEl = null;
@@ -149,7 +149,7 @@ function bindSidebarEvents() {
           listsContentEl.innerHTML = `<div class="sidebar__empty">Sin listas aún.</div>`;
           return;
         }
-        listsContentEl.innerHTML = lists.map(listItemHtml).join('');
+        listsContentEl.innerHTML = sortListsByExpiry(lists).map(listItemHtml).join('');
 
         listsContentEl.querySelectorAll('[data-lista-id]').forEach((item) => {
           item.addEventListener('click', () => {
@@ -243,6 +243,15 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+/** Ordena listas: por expires_at ascendente; sin fecha o fecha inválida al final. No muta. */
+export function sortListsByExpiry(lists) {
+  return [...lists].sort((a, b) => {
+    const ta = a.expires_at ? new Date(a.expires_at).getTime() || Infinity : Infinity;
+    const tb = b.expires_at ? new Date(b.expires_at).getTime() || Infinity : Infinity;
+    return ta - tb;
+  });
+}
+
 /**
  * Generate HTML for a single list row in the sidebar.
  * Pure function — no side effects; used in render and unit tests.
@@ -250,17 +259,18 @@ function escapeHtml(str) {
  * @returns {string}
  */
 export function listItemHtml(l) {
-  const badge =
-    Number(l.child_count) > 0
-      ? `<span class="sidebar__list-badge" aria-label="${Number(l.child_count)} sub-listas">${Number(l.child_count)}</span>`
-      : '';
-  const chip = l.expires_at
-    ? `<span class="lists__expiry-chip">${escapeHtml(formatExpiry(l.expires_at))}</span>`
-    : '';
+  const band = expiryBand(l.expires_at);
+  let indicator = '';
+  if (Number(l.child_count) > 0) {
+    const bandClass = band ? ` sidebar__list-badge--${band}` : '';
+    indicator = `<span class="sidebar__list-badge${bandClass}" aria-label="${Number(l.child_count)} sub-listas">${Number(l.child_count)}</span>`;
+  } else if (band !== null) {
+    indicator = `<span class="sidebar__list-dot sidebar__list-dot--${band}" aria-hidden="true"></span>`;
+  }
   return `
     <div class="sidebar__list-item" data-lista-id="${escapeHtml(l.id)}">
       <span class="sidebar__list-item-name">${escapeHtml(l.name)}</span>
-      ${badge}${chip}
+      ${indicator}
     </div>
   `;
 }

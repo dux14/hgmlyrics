@@ -18,6 +18,60 @@ const VOICE_SUBTYPES = [
   ['baja', 'Baja'],
 ];
 
+const VOICE_LABELS = { soprano: 'Soprano', contralto: 'Contralto', tenor: 'Tenor', bass: 'Bajo' };
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = String(str ?? '');
+  return div.innerHTML;
+}
+
+/** Etiqueta + clase de color de cuerda para la píldora de voz. null si no hay voz. */
+export function voiceLabel(voiceType, voiceSubtype) {
+  if (!voiceType || !VOICE_LABELS[voiceType]) return null;
+  const sub = voiceSubtype
+    ? ` ${voiceSubtype.charAt(0).toUpperCase()}${voiceSubtype.slice(1)}`
+    : '';
+  return { text: `${VOICE_LABELS[voiceType]}${sub}`, cls: `voice-pill--${voiceType}` };
+}
+
+/** Cabecera Variante C: banner + avatar + nombre/@ + voz + viz rango + quick-buttons + chips. */
+export function buildProfileHeader(profile) {
+  const avatarUrl = profile.avatarUrl || '';
+  const voice = voiceLabel(profile.voiceType, profile.voiceSubtype);
+  const voicePill = voice ? `<span class="voice-pill ${voice.cls}">${voice.text}</span>` : '';
+  const hasRange = profile.vocalRangeLow || profile.vocalRangeHigh;
+  const rangeViz = hasRange
+    ? `<div class="range-viz">
+         <div class="range-viz__bars" aria-hidden="true">${Array.from({ length: 7 })
+           .map((_, i) => `<span style="height:${30 + ((i * 11) % 70)}%"></span>`)
+           .join('')}</div>
+         <span class="range-viz__label">Rango vocal · ${escapeHtml(profile.vocalRangeLow || '?')} — ${escapeHtml(profile.vocalRangeHigh || '?')}</span>
+       </div>`
+    : '';
+  const chips = (profile.instrumentRoles || [])
+    .filter(Boolean)
+    .map((r) => `<span class="profile-chip">${escapeHtml(r)}</span>`)
+    .join('');
+  const chipsRow = chips ? `<div class="profile-chips">${chips}</div>` : '';
+  return `
+    <div class="profile-banner">
+      ${voicePill}
+      <img class="profile-banner__avatar" id="avatar-preview" src="${avatarUrl}" alt="Avatar" />
+      <div class="profile-banner__id">
+        <h1 class="profile-banner__name">${escapeHtml(profile.displayName || profile.username)}</h1>
+        <div class="profile-username">@${escapeHtml(profile.username)}</div>
+      </div>
+      ${rangeViz}
+    </div>
+    <div class="profile-quick">
+      <a class="profile-quick__btn" href="#/favoritos">Mis favoritos</a>
+      <a class="profile-quick__btn" href="#/amigos">Amigos</a>
+    </div>
+    ${chipsRow}
+  `;
+}
+
 async function patchProfile(payload) {
   const token = getSession()?.access_token;
   const res = await fetch('/api/profile/me', {
@@ -76,19 +130,7 @@ export async function renderProfile(container) {
 
   container.innerHTML = `
     <div class="profile-page fade-in">
-      <div class="profile-header">
-        <img class="profile-avatar" id="avatar-preview" src="${profile.avatarUrl || ''}" alt="Avatar" />
-        <div>
-          <h1>${profile.displayName || profile.username}</h1>
-          <div class="profile-username">@${profile.username}</div>
-        </div>
-      </div>
-
-      <div style="display:flex; gap:var(--space-sm); flex-wrap:wrap; margin-bottom:var(--space-lg);">
-        <a class="auth-btn" href="#/favoritos" style="flex:1; min-width:160px; text-decoration:none; text-align:center;">${icon('heart', { size: 16, fill: true })} Mis favoritos</a>
-        <a class="auth-btn" href="#/amigos" style="flex:1; min-width:160px; text-decoration:none; text-align:center;">Amigos</a>
-        <a class="auth-btn" href="#/licencias" style="flex:1; min-width:160px; text-decoration:none; text-align:center;">Licencias y créditos</a>
-      </div>
+      ${buildProfileHeader(profile)}
 
       <input type="file" id="avatar-input" accept="image/webp,image/png,image/jpeg" style="display:none;" />
       <div style="display:flex; gap:var(--space-sm); flex-wrap:wrap; max-width:480px;">
@@ -97,7 +139,8 @@ export async function renderProfile(container) {
       </div>
       <div class="auth-error" id="avatar-error" style="display:none;"></div>
 
-      <form id="profile-form" style="margin-top:var(--space-xl);">
+      <div class="profile-edit-card">
+      <form id="profile-form">
         <div class="profile-field">
           <label class="profile-field__label" for="display-input">Nombre a mostrar</label>
           <input type="text" class="auth-input" id="display-input" maxlength="32" value="${profile.displayName || ''}" />
@@ -159,6 +202,8 @@ export async function renderProfile(container) {
         <div class="auth-success" id="form-success" style="display:none;"></div>
         <button type="submit" class="auth-btn" id="submit-btn">Guardar</button>
       </form>
+      </div>
+      <a class="profile-licenses-link" href="#/licencias">Licencias y créditos</a>
     </div>
   `;
 

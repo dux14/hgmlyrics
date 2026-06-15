@@ -5,13 +5,55 @@
  * "remove from favorites" affordance the user already knows.
  */
 import { getState, subscribe as subscribeStore } from '../lib/store.js';
-import { subscribe as subscribeFavorites, isFavorite } from '../lib/favorites.js';
+import { subscribe as subscribeFavorites, isFavorite, toggleFavorite } from '../lib/favorites.js';
 import { renderSongList } from './SongList.js';
 import { navigate, getCurrentPath } from '../router.js';
 import { icon } from '../lib/icons.js';
+import { resolveCoverUrl } from './songRow.js';
 
 let unsubFav = null;
 let unsubStore = null;
+
+export const FAV_VIEW_KEY = 'hkn:fav-view';
+
+export function getFavView() {
+  const v = (() => {
+    try {
+      return localStorage.getItem(FAV_VIEW_KEY);
+    } catch {
+      return null;
+    }
+  })();
+  return v === 'list' ? 'list' : 'grid';
+}
+
+export function setFavView(view) {
+  try {
+    localStorage.setItem(FAV_VIEW_KEY, view === 'list' ? 'list' : 'grid');
+  } catch {
+    /* localStorage no disponible (modo privado / cuota): la preferencia no persiste */
+  }
+}
+
+function buildFavGrid(mount, favs) {
+  mount.innerHTML = `<div class="fav-grid">${favs
+    .map(
+      (s) => `
+      <a class="fav-cover" href="#/song/${s.id}" aria-label="${(s.title || '').replace(/"/g, '&quot;')}">
+        <img class="fav-cover__img" src="${resolveCoverUrl(s)}" alt="" loading="lazy" decoding="async" />
+        <span class="fav-cover__veil"></span>
+        <button class="fav-cover__heart is-on" data-fav-id="${s.id}" aria-label="Quitar de favoritos">♥</button>
+        <span class="fav-cover__title">${s.title || ''}</span>
+      </a>`,
+    )
+    .join('')}</div>`;
+  mount.querySelectorAll('.fav-cover__heart').forEach((b) => {
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleFavorite(b.dataset.favId);
+    });
+  });
+}
 
 function favoriteSongs() {
   const { songs } = getState();
@@ -50,17 +92,28 @@ export function renderFavoritesPage(container) {
     }
 
     const favs = favoriteSongs();
+    const view = getFavView();
     container.innerHTML = `
       <div class="profile-page fade-in">
-        <div style="display:flex; align-items:center; gap:var(--space-sm); margin-bottom:var(--space-lg);">
-          <button class="auth-btn" id="back-btn" style="max-width:140px;">← Volver</button>
+        <div class="fav-header">
+          <button class="auth-btn" id="back-btn" style="max-width:120px;">← Volver</button>
           <h1 style="margin:0;">Mis favoritos</h1>
+          <div class="seg-tabs fav-toggle" role="tablist" style="margin:0 0 0 auto;">
+            <button class="seg-tab${view === 'grid' ? ' seg-tab--active' : ''}" role="tab" aria-selected="${view === 'grid'}" data-view="grid">Grid</button>
+            <button class="seg-tab${view === 'list' ? ' seg-tab--active' : ''}" role="tab" aria-selected="${view === 'list'}" data-view="list">Lista</button>
+          </div>
         </div>
         <p class="profile-username" style="margin-bottom:var(--space-md);">${favs.length} canciones</p>
         <div id="fav-list"></div>
       </div>
     `;
     container.querySelector('#back-btn').addEventListener('click', () => navigate('/perfil'));
+    container.querySelectorAll('.fav-toggle .seg-tab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        setFavView(btn.dataset.view);
+        paint();
+      });
+    });
 
     const listMount = container.querySelector('#fav-list');
     if (favs.length === 0) {
@@ -73,7 +126,8 @@ export function renderFavoritesPage(container) {
       `;
       return;
     }
-    renderSongList(listMount, favs);
+    if (view === 'grid') buildFavGrid(listMount, favs);
+    else renderSongList(listMount, favs);
   }
 
   paint();

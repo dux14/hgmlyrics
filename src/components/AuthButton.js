@@ -2,8 +2,9 @@
  * AuthButton.js — Header button showing avatar + dropdown.
  */
 import { getProfile, signOut, subscribe } from '../lib/authStore.js';
-import { navigate } from '../router.js';
+import { navigate, getCurrentPath } from '../router.js';
 import { icon } from '../lib/icons.js';
+import { getPendingIncomingCount, onPendingChanged } from '../lib/friends.js';
 
 function defaultAvatarUrl(displayName) {
   const initial = (displayName || '?').trim().charAt(0).toUpperCase();
@@ -14,26 +15,38 @@ function defaultAvatarUrl(displayName) {
   return 'data:image/svg+xml;base64,' + btoa(svg);
 }
 
-function buildButton(profile) {
+export function buildButton(profile, pendingCount = 0) {
   const avatarUrl =
     profile?.avatarUrl || defaultAvatarUrl(profile?.displayName || profile?.username);
+  const dot = pendingCount > 0 ? '<span class="auth-button__dot" aria-hidden="true"></span>' : '';
   return `
-    <button class="auth-button" id="auth-button" aria-label="Menú de usuario">
+    <button class="auth-button" id="auth-button" aria-label="Menú de usuario${pendingCount > 0 ? ' (tienes solicitudes pendientes)' : ''}">
       <span>${profile?.displayName || profile?.username || ''}</span>
-      <img class="auth-button__avatar" src="${avatarUrl}" alt="" />
+      <span class="auth-button__avatar-wrap">
+        <img class="auth-button__avatar" src="${avatarUrl}" alt="" />${dot}
+      </span>
     </button>
   `;
 }
 
-function buildMenu() {
+export function buildMenu(currentPath = '/', pendingCount = 0) {
+  const norm = (currentPath || '/').split('?')[0];
+  const item = (href, ic, label, extra = '') => {
+    const active = norm === href.slice(1) ? ' aria-current="page"' : '';
+    return `<a class="auth-menu__item" href="${href}"${active}>${icon(ic, { size: 16 })} ${label}${extra}</a>`;
+  };
+  const beta = '<span class="badge--beta">BETA</span>';
+  const dot = pendingCount > 0 ? '<span class="auth-menu__dot" aria-hidden="true"></span>' : '';
   return `
-    <div class="auth-menu" id="auth-menu">
-      <a class="auth-menu__item" href="#/perfil">${icon('user', { size: 16 })} Perfil</a>
-      <a class="auth-menu__item" href="#/favoritos">${icon('heart', { size: 16 })} Favoritos</a>
-      <a class="auth-menu__item" href="#/amigos">${icon('users', { size: 16 })} Amigos</a>
-      <a class="auth-menu__item" href="#/afinador">${icon('audio-lines', { size: 16 })} Afinador <span class="badge--beta">BETA</span></a>
-      <a class="auth-menu__item" href="#/recomendador">${icon('sparkles', { size: 16 })} Recomendador <span class="badge--beta">BETA</span></a>
-      <a class="auth-menu__item" href="#/estudio">${icon('layers', { size: 16 })} Estudio <span class="badge--beta">BETA</span></a>
+    <div class="auth-menu" id="auth-menu" role="menu">
+      ${item('#/perfil', 'user', 'Perfil')}
+      ${item('#/favoritos', 'heart', 'Favoritos')}
+      ${item('#/amigos', 'users', 'Amigos', dot)}
+      <div class="auth-menu__sep" role="separator"></div>
+      ${item('#/afinador', 'audio-lines', 'Afinador', beta)}
+      ${item('#/recomendador', 'sparkles', 'Recomendador', beta)}
+      ${item('#/estudio', 'layers', 'Estudio', beta)}
+      <div class="auth-menu__sep" role="separator"></div>
       <button class="auth-menu__item auth-menu__item--danger" id="logout-btn">${icon('log-out', { size: 16 })} Cerrar sesión</button>
     </div>
   `;
@@ -44,14 +57,28 @@ function buildMenu() {
  * @param {HTMLElement} mount
  */
 export function renderAuthButton(mount) {
+  let pendingCount = 0;
+
   function update() {
     const profile = getProfile();
     if (!profile) {
       mount.innerHTML = '';
       return;
     }
-    mount.innerHTML = buildButton(profile);
+    mount.innerHTML = buildButton(profile, pendingCount);
+    wireButton();
+  }
 
+  function refreshPending() {
+    getPendingIncomingCount().then((n) => {
+      if (n !== pendingCount) {
+        pendingCount = n;
+        update();
+      }
+    });
+  }
+
+  function wireButton() {
     const btn = mount.querySelector('#auth-button');
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -60,7 +87,7 @@ export function renderAuthButton(mount) {
         menu.remove();
         return;
       }
-      document.body.insertAdjacentHTML('beforeend', buildMenu());
+      document.body.insertAdjacentHTML('beforeend', buildMenu(getCurrentPath(), pendingCount));
       menu = document.querySelector('#auth-menu');
 
       const reposition = () => {
@@ -110,4 +137,9 @@ export function renderAuthButton(mount) {
 
   update();
   subscribe(update);
+  refreshPending();
+  onPendingChanged((n) => {
+    pendingCount = n;
+    update();
+  });
 }

@@ -60,7 +60,16 @@ export default withErrors(async (req, res) => {
   if (rows.length === 0) {
     // Trigger should have inserted; if missing, create now.
     await sql`INSERT INTO profiles (id) VALUES (${user.id}) ON CONFLICT DO NOTHING`;
-    const retry = await sql`SELECT * FROM profiles WHERE id = ${user.id}`;
+    const retry = await sql`
+      SELECT id, username, display_name AS "displayName", bio, avatar_url AS "avatarUrl",
+             voice_type AS "voiceType", voice_subtype AS "voiceSubtype",
+             vocal_range_low AS "vocalRangeLow", vocal_range_high AS "vocalRangeHigh",
+             vocal_range_notes AS "vocalRangeNotes",
+             instrument_roles AS "instrumentRoles",
+             is_admin AS "isAdmin", is_public AS "isPublic",
+             created_at AS "createdAt", updated_at AS "updatedAt"
+      FROM profiles WHERE id = ${user.id}
+    `;
     if (retry.length === 0) {
       res.status(500).json({ error: 'Could not create or fetch profile' });
       return;

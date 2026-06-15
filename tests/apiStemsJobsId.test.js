@@ -278,3 +278,58 @@ describe('GET /api/stems/jobs/[id]', () => {
     expect(signStemsDownload).not.toHaveBeenCalled();
   });
 });
+
+describe('SEC-15: DTO omite columnas internas del payload al cliente', () => {
+  it('done: input_path y predictions NO se exponen al cliente', async () => {
+    const job = {
+      id: 'j1',
+      user_id: 'u1',
+      status: 'done',
+      input_path: 'u1/j1/input.mp3', // columna interna — no debe salir
+      predictions: { someKey: 'internal' }, // columna interna — no debe salir
+      input_meta: { filename: 'cancion.mp3' }, // sí la usa el front
+      sections: {
+        voiceInstrumental: { outputs: { vocals: 'u1/j1/voiceInstrumental/vocals.mp3' } },
+        leadBacking: { outputs: {} },
+      },
+    };
+    sqlResponses.push([job]);
+    const res = makeRes();
+    await handler(authedReq(), res);
+
+    expect(res.statusCode).toBe(200);
+    const { job: result } = res.body;
+
+    expect(result.input_path).toBeUndefined();
+    expect(result.predictions).toBeUndefined();
+    // input_meta sí debe estar (el front la usa para el nombre de archivo)
+    expect(result.input_meta).toEqual({ filename: 'cancion.mp3' });
+    // status e id deben seguir presentes
+    expect(result.status).toBe('done');
+    expect(result.id).toBe('j1');
+  });
+
+  it('processing: input_path y predictions NO se exponen al cliente', async () => {
+    const job = {
+      id: 'j1',
+      user_id: 'u1',
+      status: 'processing',
+      updated_at: new Date(Date.now() - 60_000).toISOString(),
+      input_path: 'u1/j1/input.mp3',
+      predictions: { step: 1 },
+      input_meta: { filename: 'tema.mp3' },
+      sections: { voiceInstrumental: { outputs: {} }, leadBacking: { outputs: {} } },
+    };
+    sqlResponses.push([job]);
+    const res = makeRes();
+    await handler(authedReq(), res);
+
+    expect(res.statusCode).toBe(200);
+    const { job: result } = res.body;
+
+    expect(result.input_path).toBeUndefined();
+    expect(result.predictions).toBeUndefined();
+    expect(result.input_meta).toEqual({ filename: 'tema.mp3' });
+    expect(result.status).toBe('processing');
+  });
+});

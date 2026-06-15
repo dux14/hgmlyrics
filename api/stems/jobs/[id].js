@@ -83,7 +83,16 @@ export default withErrors(async (req, res) => {
     }
   }
 
+  // SEC-15: DTO explícito — omite columnas internas que el cliente no consume.
+  // `input_path` expone claves de Storage internas; `predictions` es interno del pipeline.
+  // `input_meta` se CONSERVA: el front lo usa para mostrar el nombre del archivo.
+  function toClientJob(j) {
+    const { input_path: _ip, predictions: _pr, ...rest } = j;
+    return rest;
+  }
+
   // `done` y `partial` exponen las pistas ya producidas (firmadas desde sections.outputs).
   const ready = job.status === 'done' || job.status === 'partial';
-  res.status(200).json({ job: ready ? await withSignedUrls(job) : job });
+  const enriched = ready ? await withSignedUrls(job) : job;
+  res.status(200).json({ job: toClientJob(enriched) });
 });

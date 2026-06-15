@@ -3,10 +3,11 @@ import { requireAdmin } from '../../_lib/auth.js';
 import { allowMethods, withErrors } from '../../_lib/http.js';
 
 async function getLinks(_req, res, songId) {
-  const [platforms, voices] = await Promise.all([
-    sql`SELECT id, platform, url FROM song_platform_links WHERE song_id = ${songId} ORDER BY platform`,
-    sql`SELECT id, voice_type AS "voiceType", url, label FROM song_voice_links WHERE song_id = ${songId} ORDER BY voice_type, created_at`,
-  ]);
+  // Sequential queries — transaction pooler max:1 (see api/auth/me.js ~L72)
+  const platforms =
+    await sql`SELECT id, platform, url FROM song_platform_links WHERE song_id = ${songId} ORDER BY platform`;
+  const voices =
+    await sql`SELECT id, voice_type AS "voiceType", url, label FROM song_voice_links WHERE song_id = ${songId} ORDER BY voice_type, created_at`;
   res.status(200).json({ platforms, voices });
 }
 

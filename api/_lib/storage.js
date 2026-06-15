@@ -114,27 +114,6 @@ export async function createStemsSignedPutUrl(key) {
 }
 
 /**
- * Copia un archivo remoto (output de Replicate) al bucket de stems.
- * @param {string} url - URL temporal de replicate.delivery
- * @param {string} key - destino en el bucket
- */
-export async function copyUrlToStems(url, key) {
-  const res = await fetch(url);
-  if (!res.ok) {
-    const e = new Error(`No se pudo descargar el resultado (${res.status})`);
-    e.status = 502;
-    throw e;
-  }
-  const body = Buffer.from(await res.arrayBuffer());
-  const contentType = res.headers.get('content-type') ?? 'audio/wav';
-  const { error } = await supabase.storage
-    .from(STEMS_BUCKET)
-    .upload(key, body, { contentType, upsert: true });
-  if (error) throw error;
-  return key;
-}
-
-/**
  * Signed URL de descarga (6h por defecto).
  * Los resultados se prometen disponibles 48h; 6h reduce la probabilidad de que un audio
  * en pestaña abierta expire antes de que el usuario lo descargue.

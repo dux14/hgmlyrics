@@ -18,6 +18,21 @@ function getNextParam() {
 }
 
 /**
+ * Returns true only for relative internal paths.
+ * Rejects //evil.com and /\evil open-redirect patterns.
+ * @param {string|null} next
+ * @returns {boolean}
+ */
+export function isSafeRedirect(next) {
+  return (
+    typeof next === 'string' &&
+    next.startsWith('/') &&
+    !next.startsWith('//') &&
+    !next.startsWith('/\\')
+  );
+}
+
+/**
  * Render the auth callback screen.
  * @param {HTMLElement} container
  */
@@ -42,5 +57,5 @@ export async function renderAuthCallback(container) {
   }
 
   const next = getNextParam();
-  navigate(next && next.startsWith('/') ? next : '/');
+  navigate(isSafeRedirect(next) ? next : '/');
 }

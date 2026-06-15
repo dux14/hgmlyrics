@@ -21,8 +21,12 @@ export function withErrors(handler) {
       await handler(req, res);
     } catch (e) {
       const status = e?.status ?? 500;
-      const message = e?.message ?? 'Internal error';
-      res.status(status).json({ error: message });
+      if (status >= 500) {
+        console.error(e); // log server-side, NO al cliente
+        res.status(status).json({ error: 'Internal error' });
+        return;
+      }
+      res.status(status).json({ error: e?.message ?? 'Error' });
     }
   };
 }

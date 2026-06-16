@@ -62,7 +62,7 @@ export async function renderVozEditor(container, wordId = null) {
   let word = null;
 
   if (wordId) {
-    container.innerHTML = `<div class="empty-state fade-in"><div class="empty-state__icon">🕊</div><h2>Cargando…</h2></div>`;
+    container.innerHTML = `<div class="empty-state fade-in"><div class="empty-state__icon">${icon('gospel', { size: 40 })}</div><h2>Cargando…</h2></div>`;
     try {
       const res = await fetch(`/api/weekly-words/${wordId}`, { headers: authHeader() });
       if (res.ok) word = await res.json();
@@ -175,7 +175,7 @@ export async function renderVozEditor(container, wordId = null) {
     const gospelRef = refInput.value.trim();
     previewEl.innerHTML = `
       <div style="background: ${gradient}; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; color: ${palette.text};">
-        <p style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.8; margin: 0 0 0.25rem;">🕊 Palabra de la semana</p>
+        <p style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.8; margin: 0 0 0.25rem; display: inline-flex; align-items: center; gap: 0.4em;">${icon('gospel', { size: 13 })} Palabra de la semana</p>
         <h2 style="font-size: 1.4rem; margin: 0;">${escapeHtml(gospelRef || 'Referencia del evangelio')}</h2>
         ${titleInput.value ? `<p style="font-size: 0.8rem; opacity: 0.8; margin: 0.5rem 0 0;">${escapeHtml(titleInput.value)}</p>` : ''}
       </div>

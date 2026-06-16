@@ -85,7 +85,7 @@ export function updateSidebarContent() {
       </div>
       <div class="sidebar__section-content">
         <div class="sidebar__album-item" data-nav="voces">
-          <span style="font-size: 1.1rem;">🕊</span>
+          <span style="display: inline-flex; align-items: center;">${icon('gospel', { size: 18 })}</span>
           <span>Voces en off</span>
         </div>
         <div class="sidebar__album-item ${!activeAlbum ? 'active' : ''}" data-album="">

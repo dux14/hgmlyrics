@@ -18,7 +18,7 @@ export function renderAdminDashboard(container) {
           ${icon('pencil', { size: 20 })} Modificar canción existente
         </button>
         <button class="btn btn--secondary" id="btn-voz" style="padding: 1.5rem; font-size: 1.2rem;">
-          🕊 Voces en off
+          ${icon('gospel', { size: 20 })} Voces en off
         </button>
       </div>
 

@@ -4,10 +4,12 @@ vi.mock('../lib/authStore.js', () => ({
   getProfile: vi.fn(() => ({ displayName: 'Ana', username: 'ana', avatarUrl: '' })),
   signOut: vi.fn(),
   subscribe: vi.fn(),
+  isAdmin: vi.fn(() => false),
 }));
 vi.mock('../router.js', () => ({ navigate: vi.fn() }));
 
 import { buildMenu, buildButton } from './AuthButton.js';
+import { isAdmin } from '../lib/authStore.js';
 
 describe('buildMenu', () => {
   it('marca el item activo con aria-current', () => {
@@ -31,6 +33,20 @@ describe('buildMenu', () => {
     el.innerHTML = buildMenu('/perfil', 0);
     const amigos = el.querySelector('a[href="#/amigos"]');
     expect(amigos.querySelector('.auth-menu__dot')).toBeFalsy();
+  });
+
+  it('muestra el enlace Admin cuando isAdmin() es true', () => {
+    vi.mocked(isAdmin).mockReturnValueOnce(true);
+    const el = document.createElement('div');
+    el.innerHTML = buildMenu('/perfil', 0);
+    expect(el.querySelector('a[href="#/admin"]')).toBeTruthy();
+  });
+
+  it('omite el enlace Admin cuando isAdmin() es false', () => {
+    vi.mocked(isAdmin).mockReturnValueOnce(false);
+    const el = document.createElement('div');
+    el.innerHTML = buildMenu('/perfil', 0);
+    expect(el.querySelector('a[href="#/admin"]')).toBeNull();
   });
 });
 

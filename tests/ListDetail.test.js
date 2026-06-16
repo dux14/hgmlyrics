@@ -8,6 +8,7 @@ vi.mock('../src/lib/lists.js', () => ({
   updateList: vi.fn(),
   deleteList: vi.fn(),
   setListSongs: vi.fn(async () => {}),
+  setListItems: vi.fn(async () => {}),
   inviteMember: vi.fn(async () => {}),
   removeMember: vi.fn(),
   setActiveContext: vi.fn(),

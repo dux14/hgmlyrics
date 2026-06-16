@@ -201,14 +201,18 @@ export async function renderSongView(container, songIdOrData) {
     // Carga lists.js dinámicamente para no añadir supabase al bundle de tests
     const listsLib = await import('../lib/lists.js');
     // Intenta usar el contexto en memoria; si no existe (recarga), lo rehidrata
-    let adj = listsLib.getAdjacentInList(listId, songId);
+    let adj = listsLib.getAdjacentInList(listId, 'song', songId);
     if (!adj) {
       try {
         const listData = await listsLib.getList(listId);
-        const orderedSongIds = (listData.songs || []).map((s) => s.song_id ?? s.id ?? s);
-        listsLib.setActiveContext({ listId, name: listData.name, orderedSongIds });
+        const orderedItems = (listData.items ?? listData.songs ?? []).map((it) => {
+          if (typeof it === 'string') return { item_type: 'song', item_id: it };
+          if (it.item_type) return { item_type: it.item_type, item_id: it.item_id };
+          return { item_type: 'song', item_id: it.song_id ?? it.id ?? it };
+        });
+        listsLib.setActiveContext({ listId, name: listData.name, orderedItems });
         listName = listData.name;
-        adj = listsLib.getAdjacentInList(listId, songId);
+        adj = listsLib.getAdjacentInList(listId, 'song', songId);
       } catch (_e) {
         // Si falla la carga de lista, caer al comportamiento normal
       }
@@ -717,10 +721,12 @@ export async function renderSongView(container, songIdOrData) {
   if (hasNav) {
     const listSuffix = listId ? `?lista=${listId}` : '';
     container.querySelector('#nav-prev')?.addEventListener('click', () => {
-      if (adjacent.prev) navigate(`/song/${adjacent.prev.id}${listSuffix}`);
+      if (adjacent.prev)
+        {navigate(`/song/${adjacent.prev.item_id ?? adjacent.prev.id}${listSuffix}`);}
     });
     container.querySelector('#nav-next')?.addEventListener('click', () => {
-      if (adjacent.next) navigate(`/song/${adjacent.next.id}${listSuffix}`);
+      if (adjacent.next)
+        {navigate(`/song/${adjacent.next.item_id ?? adjacent.next.id}${listSuffix}`);}
     });
   }
 

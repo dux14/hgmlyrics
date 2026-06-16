@@ -32,6 +32,14 @@ export const updateList = (id, fields) =>
 export const deleteList = (id) => req(`/api/lists/${id}`, { method: 'DELETE' });
 export const setListSongs = (id, songIds) =>
   req(`/api/lists/${id}/songs`, { method: 'PUT', body: JSON.stringify({ songIds }) });
+
+/**
+ * Reemplaza los items tipados de una lista.
+ * @param {string} id - list id
+ * @param {Array<{ item_type: 'song'|'weekly_word', item_id: string }>} items
+ */
+export const setListItems = (id, items) =>
+  req(`/api/lists/${id}/songs`, { method: 'PUT', body: JSON.stringify({ items }) });
 export const inviteMember = (id, username) =>
   req(`/api/lists/${id}/members`, { method: 'POST', body: JSON.stringify({ username }) });
 export const removeMember = (id, userId) =>
@@ -55,7 +63,9 @@ export async function searchUsers(q) {
 }
 
 // ---- Contexto de reproducción activo (en memoria) ----
-let activeContext = null; // { listId, name, orderedSongIds }
+// Shape: { listId, name, orderedItems: [{ item_type, item_id }] }
+// Legacy shape: { listId, name, orderedSongIds: string[] }
+let activeContext = null;
 export function setActiveContext(ctx) {
   activeContext = ctx;
 }
@@ -65,20 +75,56 @@ export function getActiveContext() {
 
 /**
  * Adyacentes circulares dentro de una lista. Devuelve {prev,next,currentIndex,total}
- * con prev/next como {id}, o null si el contexto no corresponde a listId.
+ * o null si el contexto no corresponde a listId.
+ *
+ * Soporta dos formas:
+ *  - getAdjacentInList(listId, itemType, itemId) — forma tipada; prev/next son
+ *    { item_type, item_id }.
+ *  - getAdjacentInList(listId, songId) — forma legacy (2 args); prev/next son
+ *    { id }, usa orderedSongIds del contexto.
  */
-export function getAdjacentInList(listId, songId) {
+export function getAdjacentInList(listId, itemTypeOrSongId, itemId) {
   if (!activeContext || activeContext.listId !== listId) return null;
-  const ids = activeContext.orderedSongIds;
-  const idx = ids.indexOf(songId);
-  if (idx === -1 || ids.length === 0) return null;
-  if (ids.length === 1) return { prev: null, next: null, currentIndex: 0, total: 1 };
-  const prevIdx = (idx - 1 + ids.length) % ids.length;
-  const nextIdx = (idx + 1) % ids.length;
+
+  // Detectar forma legacy (2 args): no hay itemId
+  if (itemId === undefined) {
+    // Legacy: usa orderedSongIds
+    const ids = activeContext.orderedSongIds ?? [];
+    const songId = itemTypeOrSongId;
+    const idx = ids.indexOf(songId);
+    if (idx === -1 || ids.length === 0) return null;
+    if (ids.length === 1) return { prev: null, next: null, currentIndex: 0, total: 1 };
+    const prevIdx = (idx - 1 + ids.length) % ids.length;
+    const nextIdx = (idx + 1) % ids.length;
+    return {
+      prev: { id: ids[prevIdx] },
+      next: { id: ids[nextIdx] },
+      currentIndex: idx,
+      total: ids.length,
+    };
+  }
+
+  // Forma tipada (3 args): itemTypeOrSongId es itemType
+  const itemType = itemTypeOrSongId;
+  let items;
+  if (activeContext.orderedItems) {
+    items = activeContext.orderedItems;
+  } else if (activeContext.orderedSongIds) {
+    // legacy context used with typed call
+    items = activeContext.orderedSongIds.map((id) => ({ item_type: 'song', item_id: id }));
+  } else {
+    return null;
+  }
+
+  const idx = items.findIndex((it) => it.item_type === itemType && it.item_id === itemId);
+  if (idx === -1 || items.length === 0) return null;
+  if (items.length === 1) return { prev: null, next: null, currentIndex: 0, total: 1 };
+  const prevIdx = (idx - 1 + items.length) % items.length;
+  const nextIdx = (idx + 1) % items.length;
   return {
-    prev: { id: ids[prevIdx] },
-    next: { id: ids[nextIdx] },
+    prev: items[prevIdx],
+    next: items[nextIdx],
     currentIndex: idx,
-    total: ids.length,
+    total: items.length,
   };
 }

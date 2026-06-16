@@ -14,6 +14,7 @@ import {
   updateList,
   deleteList,
   setListSongs,
+  setListItems,
   inviteMember,
   removeMember,
   setActiveContext,
@@ -121,7 +122,15 @@ function renderEditor(container, listData, opts = {}) {
   const draft = {
     name: listData.name || '',
     expiresAt: listData.expires_at || null,
-    order: (listData.songs || []).map((s) => s.song_id ?? s.id ?? s),
+    // order: array de { item_type, item_id } para listas polimórficas.
+    // Si la API ya devuelve items tipados (campo items), los usamos; si no,
+    // construimos desde songs (retrocompat).
+    order:
+      listData.items ??
+      (listData.songs || []).map((s) => ({
+        item_type: 'song',
+        item_id: s.song_id ?? s.id ?? s,
+      })),
     invitees: (listData.members || []).map((m) => ({
       id: m.user_id ?? m.id,
       username: m.username ?? m.user_id ?? m.id,
@@ -344,10 +353,17 @@ function renderEditor(container, listData, opts = {}) {
     let searchTimer = null;
 
     el.querySelector('#list-detail-from-setlist')?.addEventListener('click', () => {
-      const existing = new Set(draft.order);
-      for (const sid of parentCtx.songs) if (!existing.has(sid)) draft.order.push(sid);
+      const existingIds = new Set(draft.order.map((it) => it.item_id));
+      for (const sid of parentCtx.songs) {
+        if (!existingIds.has(sid)) draft.order.push({ item_type: 'song', item_id: sid });
+      }
       renderSongs();
     });
+
+    // Helper: obtiene el item_id de una entrada del draft (typed object)
+    function itemId(it) {
+      return it.item_id ?? it;
+    }
 
     function renderSongs(enteringId = null) {
       if (draft.order.length === 0) {
@@ -355,8 +371,8 @@ function renderEditor(container, listData, opts = {}) {
         return;
       }
       songsEl.innerHTML = draft.order
-        .map((sid, idx) =>
-          songRowCompact(songForRender(sid), {
+        .map((it, idx) =>
+          songRowCompact(songForRender(itemId(it)), {
             index: idx + 1,
             dragHandle: true,
             actions: `<button class="list-detail__row-btn list-detail__row-btn--danger" data-action="remove" title="Quitar">${icon('close', { size: 14 })}</button>`,
@@ -391,7 +407,7 @@ function renderEditor(container, listData, opts = {}) {
       songsEl.querySelectorAll('.song-row-compact').forEach((row) => {
         const songId = row.dataset.songId;
         row.querySelector('[data-action="remove"]')?.addEventListener('click', () => {
-          draft.order = draft.order.filter((sid) => sid !== songId);
+          draft.order = draft.order.filter((it) => itemId(it) !== songId);
           renderSongs();
         });
         setupDragHandle(row, songsEl, renderSongs);
@@ -407,7 +423,8 @@ function renderEditor(container, listData, opts = {}) {
         return;
       }
       searchTimer = setTimeout(() => {
-        const hits = searchSongs(q, 8).filter((s) => !draft.order.includes(s.id));
+        const existingIds = new Set(draft.order.map((it) => itemId(it)));
+        const hits = searchSongs(q, 8).filter((s) => !existingIds.has(s.id));
         if (!hits.length) {
           resultsEl.style.display = 'none';
           return;
@@ -417,8 +434,8 @@ function renderEditor(container, listData, opts = {}) {
         resultsEl.querySelectorAll('.song-row-compact').forEach((item) => {
           item.addEventListener('click', () => {
             const sid = item.dataset.songId;
-            if (!draft.order.includes(sid)) {
-              draft.order.push(sid);
+            if (!existingIds.has(sid)) {
+              draft.order.push({ item_type: 'song', item_id: sid });
               renderSongs(sid);
             }
             searchInput.value = '';
@@ -688,7 +705,7 @@ function renderEditor(container, listData, opts = {}) {
       if (isNew) {
         const created = await createList(name, expiresAt, parentCtx?.id || null);
         listId = created.id;
-        await setListSongs(listId, draft.order);
+        await setListItems(listId, draft.order);
         for (const username of draft.invitees.map((f) => f.username)) {
           await inviteMember(listId, username);
         }
@@ -696,7 +713,7 @@ function renderEditor(container, listData, opts = {}) {
         if (name !== listData.name || expiresAt !== listData.expires_at) {
           await updateList(listId, { name, expires_at: expiresAt });
         }
-        await setListSongs(listId, draft.order);
+        await setListItems(listId, draft.order);
         const { toInvite, toRemove } = diffMembers(originalMembers, draft.invitees);
         for (const username of toInvite) await inviteMember(listId, username);
         for (const userId of toRemove) await removeMember(listId, userId);
@@ -843,7 +860,10 @@ function renderReadonly(container, listData, { isOwner } = {}) {
   container.querySelectorAll('.song-row-compact--clickable').forEach((row) => {
     row.addEventListener('click', () => {
       const songId = row.dataset.songId;
-      setActiveContext({ listId: listData.id, name: listData.name, orderedSongIds });
+      // orderedItems from API (typed) or built from legacy songs field
+      const orderedItems =
+        listData.items ?? orderedSongIds.map((sid) => ({ item_type: 'song', item_id: sid }));
+      setActiveContext({ listId: listData.id, name: listData.name, orderedItems });
       navigate(`/song/${songId}?lista=${listData.id}`);
     });
   });

@@ -29,7 +29,10 @@ function getVozFontSize() {
  */
 function formatSundayDate(isoDate) {
   if (!isoDate) return '';
-  const [y, m, d] = isoDate.split('-').map(Number);
+  // La columna es DATE pero la API puede devolver un timestamp ISO completo
+  // ("2026-06-14T00:00:00.000Z"); nos quedamos con la parte YYYY-MM-DD.
+  const [y, m, d] = String(isoDate).slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return '';
   return new Date(y, m - 1, d).toLocaleDateString('es', {
     day: 'numeric',
     month: 'long',

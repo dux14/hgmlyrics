@@ -27,9 +27,11 @@ describe('WeeklyWordView', () => {
     container.remove();
   });
 
-  it('renderiza el hero con gospel_ref y eyebrow 🕊', async () => {
+  it('renderiza el hero con gospel_ref y eyebrow (logo gospel, sin paloma)', async () => {
     await renderWeeklyWordView(container, SAMPLE_WORD);
-    expect(container.innerHTML).toContain('🕊');
+    expect(container.innerHTML).not.toContain('🕊');
+    expect(container.innerHTML).toContain('Palabra de la semana');
+    expect(container.innerHTML).toContain('<svg');
     expect(container.innerHTML).toContain('Jn 14,6');
   });
 

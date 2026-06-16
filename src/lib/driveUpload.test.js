@@ -1,5 +1,11 @@
-import { describe, it, expect, afterEach } from 'vitest';
-import { buildSearchQuery, buildMultipartBody, uploadMedia } from './driveUpload.js';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import {
+  buildSearchQuery,
+  buildFileQuery,
+  buildMultipartBody,
+  findFileInFolder,
+  uploadMedia,
+} from './driveUpload.js';
 
 describe('buildSearchQuery', () => {
   it('arma el q de carpeta con parent y filtros', () => {
@@ -25,6 +31,40 @@ describe('buildMultipartBody', () => {
     expect(text).toContain('"parents":["folder1"]');
     expect(text).toContain('ZIPDATA');
     expect(text.trimEnd().endsWith('--BOUNDARY--')).toBe(true);
+  });
+  it('usa el mime indicado en la parte binaria (default zip)', async () => {
+    const def = buildMultipartBody({ name: 'x' }, new Blob(['D']), 'B');
+    expect(await def.text()).toContain('Content-Type: application/zip');
+    const mp3 = buildMultipartBody({ name: 'x' }, new Blob(['D']), 'B', 'audio/mpeg');
+    expect(await mp3.text()).toContain('Content-Type: audio/mpeg');
+  });
+});
+
+describe('buildFileQuery', () => {
+  it('arma el q por nombre dentro de la carpeta (sin filtro de mime)', () => {
+    expect(buildFileQuery('colombia - Bajo.mp3', 'fold1')).toBe(
+      "name='colombia - Bajo.mp3' and 'fold1' in parents and trashed=false",
+    );
+  });
+  it('escapa comillas simples', () => {
+    expect(buildFileQuery("O'x.mp3", 'f')).toContain("name='O\\'x.mp3'");
+  });
+});
+
+describe('findFileInFolder', () => {
+  afterEach(() => {
+    delete globalThis.fetch;
+  });
+  it('devuelve el id del primer match', async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ files: [{ id: 'EXIST', name: 'a.mp3' }] }),
+    }));
+    expect(await findFileInFolder('tok', 'a.mp3', 'F')).toBe('EXIST');
+  });
+  it('devuelve null si no hay match', async () => {
+    globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ files: [] }) }));
+    expect(await findFileInFolder('tok', 'a.mp3', 'F')).toBe(null);
   });
 });
 
@@ -62,8 +102,10 @@ describe('uploadMedia', () => {
     const instances = installFakeXHR();
     const body = new Blob(['x']);
     const seen = [];
-    const p = uploadMedia('tok', body, 'BOUND', (pct) => seen.push(pct));
+    const p = uploadMedia('tok', 'http://up', body, 'BOUND', (pct) => seen.push(pct));
     const xhr = instances[0];
+    expect(xhr.method).toBe('POST');
+    expect(xhr.url).toBe('http://up');
     expect(xhr.headers.Authorization).toBe('Bearer tok');
     expect(xhr.headers['Content-Type']).toBe('multipart/related; boundary=BOUND');
     xhr.upload.onprogress({ lengthComputable: true, loaded: 50, total: 200 });
@@ -75,9 +117,20 @@ describe('uploadMedia', () => {
     expect(seen).toEqual([25, 100]);
   });
 
+  it('usa el method indicado (PATCH para sobrescribir)', async () => {
+    const instances = installFakeXHR();
+    const p = uploadMedia('tok', 'http://up/ID', new Blob(['x']), 'BOUND', undefined, 'PATCH');
+    const xhr = instances[0];
+    expect(xhr.method).toBe('PATCH');
+    xhr.status = 200;
+    xhr.responseText = '{"id":"ID"}';
+    xhr.onload();
+    await expect(p).resolves.toEqual({ id: 'ID' });
+  });
+
   it('rechaza con err.status 0 en error de red', async () => {
     const instances = installFakeXHR();
-    const p = uploadMedia('tok', new Blob(['x']), 'BOUND');
+    const p = uploadMedia('tok', 'http://up', new Blob(['x']), 'BOUND');
     const xhr = instances[0];
     xhr.onerror();
     await expect(p).rejects.toMatchObject({ status: 0 });
@@ -85,7 +138,7 @@ describe('uploadMedia', () => {
 
   it('rechaza con err.status cuando el status es >= 400', async () => {
     const instances = installFakeXHR();
-    const p = uploadMedia('tok', new Blob(['x']), 'BOUND');
+    const p = uploadMedia('tok', 'http://up', new Blob(['x']), 'BOUND');
     const xhr = instances[0];
     xhr.status = 401;
     xhr.responseText = '';

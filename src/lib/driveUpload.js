@@ -1,10 +1,10 @@
 /**
- * driveUpload.js — Subida del ZIP del Estudio a Google Drive (client-side).
+ * driveUpload.js — Subida del Estudio a Google Drive (client-side).
  * Helpers puros (query, multipart) testeables; el IO (fetch a Drive) no se testea en jsdom.
  */
 
 const FILES_URL = 'https://www.googleapis.com/drive/v3/files';
-const UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+const UPLOAD_BASE = 'https://www.googleapis.com/upload/drive/v3/files';
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 
 /**
@@ -17,15 +17,26 @@ export function buildSearchQuery(name, parentId) {
 }
 
 /**
- * Arma el cuerpo multipart/related (RFC 2387): parte JSON + parte binaria.
- * @param {object} metadata @param {Blob} fileBlob @param {string} boundary @returns {Blob}
+ * Arma el `q` de files.list para encontrar un archivo por nombre dentro de una carpeta.
+ * @param {string} name @param {string} folderId @returns {string}
  */
-export function buildMultipartBody(metadata, fileBlob, boundary) {
+export function buildFileQuery(name, folderId) {
+  const escaped = String(name).replace(/'/g, "\\'");
+  return `name='${escaped}' and '${folderId}' in parents and trashed=false`;
+}
+
+/**
+ * Arma el cuerpo multipart/related (RFC 2387): parte JSON + parte binaria.
+ * @param {object} metadata @param {Blob} fileBlob @param {string} boundary
+ * @param {string} [mime] MIME del archivo (default: application/zip)
+ * @returns {Blob}
+ */
+export function buildMultipartBody(metadata, fileBlob, boundary, mime = 'application/zip') {
   const metaPart =
     `--${boundary}\r\n` +
     `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
     `${JSON.stringify(metadata)}\r\n`;
-  const mediaHeader = `--${boundary}\r\nContent-Type: application/zip\r\n\r\n`;
+  const mediaHeader = `--${boundary}\r\nContent-Type: ${mime}\r\n\r\n`;
   const closing = `\r\n--${boundary}--`;
   return new Blob([metaPart, mediaHeader, fileBlob, closing], {
     type: `multipart/related; boundary=${boundary}`,
@@ -66,15 +77,30 @@ export async function findOrCreateFolder(token, name, parentId) {
 }
 
 /**
+ * Busca un archivo por nombre dentro de folderId. Con scope drive.file solo ve
+ * lo que la app creó. @returns {Promise<string|null>} id o null.
+ */
+export async function findFileInFolder(token, name, folderId) {
+  const q = buildFileQuery(name, folderId);
+  const found = await driveFetchJson(
+    token,
+    `${FILES_URL}?q=${encodeURIComponent(q)}&fields=files(id,name)`,
+  );
+  return found.files && found.files.length > 0 ? found.files[0].id : null;
+}
+
+/**
  * Sube el cuerpo multipart a Drive vía XHR para exponer progreso de subida.
- * @param {string} token @param {Blob} body @param {string} boundary
+ * @param {string} token @param {string} url URL de subida (upload o update)
+ * @param {Blob} body @param {string} boundary
  * @param {(percent:number)=>void} [onProgress]
+ * @param {string} [method] Método HTTP (POST para crear, PATCH para sobrescribir)
  * @returns {Promise<{id:string}>}
  */
-export function uploadMedia(token, body, boundary, onProgress) {
+export function uploadMedia(token, url, body, boundary, onProgress, method = 'POST') {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${UPLOAD_URL}&fields=id`);
+    xhr.open(method, url);
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.setRequestHeader('Content-Type', `multipart/related; boundary=${boundary}`);
     xhr.upload.onprogress = (e) => {
@@ -87,18 +113,18 @@ export function uploadMedia(token, body, boundary, onProgress) {
         try {
           resolve(JSON.parse(xhr.responseText));
         } catch {
-          const err = new Error('Respuesta inválida de Drive al subir el ZIP.');
+          const err = new Error('Respuesta inválida de Drive al subir el archivo.');
           err.status = xhr.status;
           reject(err);
         }
       } else {
-        const err = new Error(`Drive respondió ${xhr.status} al subir el ZIP.`);
+        const err = new Error(`Drive respondió ${xhr.status} al subir el archivo.`);
         err.status = xhr.status;
         reject(err);
       }
     };
     xhr.onerror = () => {
-      const err = new Error('Error de red al subir el ZIP a Drive.');
+      const err = new Error('Error de red al subir el archivo a Drive.');
       err.status = 0;
       reject(err);
     };
@@ -120,7 +146,13 @@ export async function uploadZipToDrive(token, blob, songBase, onProgress) {
   const metadata = { name: `${songBase} - pistas.zip`, parents: [songFolderId] };
   const body = buildMultipartBody(metadata, blob, boundary);
 
-  const data = await uploadMedia(token, body, boundary, onProgress);
+  const data = await uploadMedia(
+    token,
+    `${UPLOAD_BASE}?uploadType=multipart&fields=id`,
+    body,
+    boundary,
+    onProgress,
+  );
   const folder = await driveFetchJson(token, `${FILES_URL}/${songFolderId}?fields=webViewLink`);
   return { fileId: data.id, folderUrl: folder.webViewLink };
 }

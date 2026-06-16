@@ -64,6 +64,65 @@ describe('buildTrackList', () => {
     const job = { stems: { other: 'u/o' } };
     expect(buildTrackList(job, labels)).toEqual([{ url: 'u/o', filename: 'audio - Otros.mp3' }]);
   });
+
+  it('genderVoices completo: incluye ambos modelos en orden chorus.male, chorus.female, aufr33.male, aufr33.female', () => {
+    const job = {
+      input_meta: { filename: 'colombia.mp3' },
+      genderVoices: {
+        chorus: { male: 'u/ch-male', female: 'u/ch-female' },
+        aufr33: { male: 'u/a-male', female: 'u/a-female' },
+      },
+    };
+    expect(buildTrackList(job, labels)).toEqual([
+      { url: 'u/ch-male', filename: 'colombia - Voz masculina (Opción A).mp3' },
+      { url: 'u/ch-female', filename: 'colombia - Voz femenina (Opción A).mp3' },
+      { url: 'u/a-male', filename: 'colombia - Voz masculina (Opción B).mp3' },
+      { url: 'u/a-female', filename: 'colombia - Voz femenina (Opción B).mp3' },
+    ]);
+  });
+
+  it('genderVoices parcial: solo incluye pistas con url truthy', () => {
+    const job = {
+      input_meta: { filename: 'colombia.mp3' },
+      genderVoices: {
+        chorus: { male: 'u/ch-male', female: null },
+        aufr33: { male: undefined, female: 'u/a-female' },
+      },
+    };
+    expect(buildTrackList(job, labels)).toEqual([
+      { url: 'u/ch-male', filename: 'colombia - Voz masculina (Opción A).mp3' },
+      { url: 'u/a-female', filename: 'colombia - Voz femenina (Opción B).mp3' },
+    ]);
+  });
+
+  it('stems + voices + genderVoices: género aparece al final', () => {
+    const job = {
+      input_meta: { filename: 'colombia.mp3' },
+      stems: { drums: 'u/drums' },
+      voices: { lead: 'u/lead' },
+      genderVoices: {
+        chorus: { male: 'u/ch-male', female: null },
+      },
+    };
+    expect(buildTrackList(job, labels)).toEqual([
+      { url: 'u/drums', filename: 'colombia - Batería.mp3' },
+      { url: 'u/lead', filename: 'colombia - Voz líder.mp3' },
+      { url: 'u/ch-male', filename: 'colombia - Voz masculina (Opción A).mp3' },
+    ]);
+  });
+
+  it('sin genderVoices → comportamiento idéntico al actual', () => {
+    const job = {
+      input_meta: { filename: 'colombia.mp3' },
+      stems: { drums: 'u/drums', bass: 'u/bass' },
+      voices: { lead: 'u/lead', backing: null },
+    };
+    expect(buildTrackList(job, labels)).toEqual([
+      { url: 'u/drums', filename: 'colombia - Batería.mp3' },
+      { url: 'u/bass', filename: 'colombia - Bajo.mp3' },
+      { url: 'u/lead', filename: 'colombia - Voz líder.mp3' },
+    ]);
+  });
 });
 
 describe('buildZipBlob', () => {

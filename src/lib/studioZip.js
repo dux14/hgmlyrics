@@ -34,10 +34,17 @@ export function zipFilename(originalFilename, label) {
 const STEM_ORDER = ['vocals', 'drums', 'bass', 'guitar', 'piano', 'other'];
 const VOICE_ORDER = ['lead', 'backing'];
 
+// Etiquetas internas para la sección 4 (voces por género).
+// Orden canónico: chorus primero, aufr33 segundo; male antes que female.
+const GENDER_MODEL_ORDER = ['chorus', 'aufr33'];
+const GENDER_MODEL_LABELS = { chorus: 'Opción A', aufr33: 'Opción B' };
+const GENDER_TRACK_ORDER = ['male', 'female'];
+const GENDER_TRACK_LABELS = { male: 'Voz masculina', female: 'Voz femenina' };
+
 /**
  * Construye la lista de pistas { url, filename } presentes en el job.
- * @param {object} job  con stems/voices/input_meta
- * @param {Record<string,string>} labels  mapa key→etiqueta (stems + voces)
+ * @param {object} job  con stems/voices/genderVoices/input_meta
+ * @param {Record<string,string>} labels  mapa key→etiqueta (stems + voces; las de género son internas)
  * @returns {{url:string, filename:string}[]}
  */
 export function buildTrackList(job, labels) {
@@ -50,6 +57,17 @@ export function buildTrackList(job, labels) {
   for (const k of VOICE_ORDER) {
     const url = job?.voices?.[k];
     if (url && labels[k]) out.push({ url, filename: zipFilename(filename, labels[k]) });
+  }
+  for (const model of GENDER_MODEL_ORDER) {
+    const modelVoices = job?.genderVoices?.[model];
+    if (!modelVoices) continue;
+    for (const track of GENDER_TRACK_ORDER) {
+      const url = modelVoices[track];
+      if (url) {
+        const label = `${GENDER_TRACK_LABELS[track]} (${GENDER_MODEL_LABELS[model]})`;
+        out.push({ url, filename: zipFilename(filename, label) });
+      }
+    }
   }
   return out;
 }

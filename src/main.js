@@ -52,6 +52,28 @@ initTheme();
 let mainContent;
 
 /**
+ * Carga weekly_words publicadas para incluirlas en el índice de búsqueda.
+ * @returns {Promise<Array>}
+ */
+async function loadWeeklyWordsForIndex() {
+  try {
+    const { supabase } = await import('./lib/supabase.js');
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    const res = await fetch('/api/weekly-words', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (res.ok) {
+      const body = await res.json();
+      return body.weeklyWords ?? [];
+    }
+  } catch (_e) {
+    /* ignore */
+  }
+  return [];
+}
+
+/**
  * Boot the app
  */
 async function boot() {
@@ -84,7 +106,8 @@ async function boot() {
   if (isAuthenticated()) {
     await initStore();
     const { songs } = getState();
-    buildIndex(songs);
+    const weeklyWords = await loadWeeklyWordsForIndex();
+    buildIndex(songs, weeklyWords);
     updateSidebarContent();
     updateFilterBar();
   }
@@ -93,8 +116,9 @@ async function boot() {
   await initFavorites();
 
   // Subscribe to state changes — re-render song list when on home page
-  subscribe((state) => {
-    buildIndex(state.songs);
+  subscribe(async (state) => {
+    const weeklyWords = await loadWeeklyWordsForIndex();
+    buildIndex(state.songs, weeklyWords);
     updateSidebarContent();
     updateFilterBar();
 

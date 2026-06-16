@@ -8,6 +8,9 @@
 /** @type {Array} */
 let songList = [];
 
+/** @type {Array} */
+let weeklyWordList = [];
+
 /**
  * Normalize text: strip accents + lowercase for accent-insensitive comparison
  * @param {string} str
@@ -21,11 +24,14 @@ function normalize(str) {
 }
 
 /**
- * Build the search index from a song array
+ * Build the search index from songs and optional weekly_words.
+ * Backward-compatible: buildIndex(songs) still works.
  * @param {Array} songs
+ * @param {Array} [weeklyWords]
  */
-export function buildIndex(songs) {
+export function buildIndex(songs, weeklyWords = []) {
   songList = songs;
+  weeklyWordList = weeklyWords;
 }
 
 /**
@@ -82,8 +88,53 @@ export function searchSongs(query, limit = 10) {
 }
 
 /**
- * Clear the search index
+ * Search songs AND weekly_words matching a query.
+ * Returns array of { type: 'song'|'weekly_word', item, score }.
+ * @param {string} query
+ * @param {number} [limit=10]
+ * @returns {Array<{ type: string, item: object, score: number }>}
+ */
+export function searchAll(query, limit = 10) {
+  if (!query?.trim()) return [];
+  const q = normalize(query.trim());
+  const scored = [];
+
+  for (const song of songList) {
+    let score = 0;
+    const t = normalize(song.title || '');
+    const al = normalize(song.album || '');
+    const ar = normalize(song.artist || '');
+    if (t.includes(q)) {
+      score += 100;
+      if (t.startsWith(q)) score += 50;
+    }
+    if (al.includes(q)) score += 30;
+    if (ar.includes(q)) score += 10;
+    if (score > 0) scored.push({ type: 'song', item: song, score });
+  }
+
+  for (const ww of weeklyWordList) {
+    let score = 0;
+    const ref = normalize(ww.gospel_ref || '');
+    const title = normalize(ww.liturgical_title || '');
+    const body = normalize(ww.voiceover_body || '');
+    if (ref.includes(q)) {
+      score += 100;
+      if (ref.startsWith(q)) score += 50;
+    }
+    if (title.includes(q)) score += 60;
+    if (body.includes(q)) score += 20;
+    if (score > 0) scored.push({ type: 'weekly_word', item: ww, score });
+  }
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit);
+}
+
+/**
+ * Clear the search index (songs + weekly words).
  */
 export function clearIndex() {
   songList = [];
+  weeklyWordList = [];
 }

@@ -4,7 +4,7 @@
  * Logo, search bar with real-time results, theme toggle, menu button, and cache clear.
  */
 
-import { searchSongs } from '../lib/search.js';
+import { searchAll } from '../lib/search.js';
 import { navigate } from '../router.js';
 import { renderThemeToggle } from './ThemeToggle.js';
 import { renderAuthButton } from './AuthButton.js';
@@ -124,7 +124,7 @@ function handleSearch(query, resultsEl) {
     return;
   }
 
-  const results = searchSongs(query, 8);
+  const results = searchAll(query, 8);
 
   if (results.length === 0) {
     resultsEl.innerHTML = `
@@ -137,23 +137,38 @@ function handleSearch(query, resultsEl) {
   }
 
   resultsEl.innerHTML = results
-    .map((song) => {
-      const coverUrl =
-        song.coverImage.startsWith('/') || song.coverImage.startsWith('http')
-          ? song.coverImage
-          : `/covers/${song.coverImage}`;
-      return `
-    <div class="search-results__item" data-song-id="${song.id}">
+    .map(({ type, item }) => {
+      if (type === 'song') {
+        const coverUrl =
+          item.coverImage.startsWith('/') || item.coverImage.startsWith('http')
+            ? item.coverImage
+            : `/covers/${item.coverImage}`;
+        return `
+    <div class="search-results__item" data-song-id="${escapeHtml(item.id)}">
       <img
         class="sidebar__album-thumb"
         src="${coverUrl}"
-        alt="${escapeHtml(song.album)}"
+        alt="${escapeHtml(item.album)}"
         loading="lazy"
         onerror="this.style.display='none'"
       />
       <div>
-        <div style="font-weight: 600; font-size: 0.875rem;">${escapeHtml(song.title)}</div>
-        <div style="font-size: 0.75rem; color: var(--color-text-secondary);">${escapeHtml(song.album)}</div>
+        <div style="font-weight: 600; font-size: 0.875rem;">${escapeHtml(item.title)}</div>
+        <div style="font-size: 0.75rem; color: var(--color-text-secondary);">${escapeHtml(item.album)}</div>
+      </div>
+    </div>
+  `;
+      }
+      // weekly_word
+      return `
+    <div class="search-results__item" data-voz-id="${escapeHtml(item.id)}">
+      <div style="width: 32px; height: 32px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">🕊</div>
+      <div>
+        <div style="font-weight: 600; font-size: 0.875rem;">${escapeHtml(item.gospel_ref)}</div>
+        <div style="display: flex; align-items: center; gap: 0.4rem;">
+          <span style="font-size: 0.75rem; color: var(--color-text-secondary);">${escapeHtml(item.liturgical_title || 'Voz en off')}</span>
+          <span style="background: #2563eb; color: #fff; border-radius: 999px; padding: 0.1em 0.5em; font-size: 0.65rem; font-weight: 700;">VOZ EN OFF</span>
+        </div>
       </div>
     </div>
   `;
@@ -163,10 +178,17 @@ function handleSearch(query, resultsEl) {
   resultsEl.style.display = 'block';
 
   // Click handlers for search results
-  resultsEl.querySelectorAll('.search-results__item').forEach((item) => {
+  resultsEl.querySelectorAll('[data-song-id]').forEach((item) => {
     item.addEventListener('click', () => {
-      const songId = item.dataset.songId;
-      navigate(`/song/${songId}`);
+      navigate(`/song/${item.dataset.songId}`);
+      resultsEl.style.display = 'none';
+      document.querySelector('#search-input').value = '';
+    });
+  });
+
+  resultsEl.querySelectorAll('[data-voz-id]').forEach((item) => {
+    item.addEventListener('click', () => {
+      navigate(`/voz/${item.dataset.vozId}`);
       resultsEl.style.display = 'none';
       document.querySelector('#search-input').value = '';
     });

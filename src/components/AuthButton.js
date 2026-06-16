@@ -6,6 +6,7 @@ import { navigate, getCurrentPath } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { getPendingIncomingCount, onPendingChanged } from '../lib/friends.js';
 import { escapeHtml } from '../lib/escape.js';
+import { isFounder, founderCrownHtml } from '../lib/founders.js';
 
 function defaultAvatarUrl(displayName) {
   const initial = (displayName || '?').trim().charAt(0).toUpperCase();
@@ -20,11 +21,12 @@ export function buildButton(profile, pendingCount = 0) {
   const avatarUrl =
     profile?.avatarUrl || defaultAvatarUrl(profile?.displayName || profile?.username);
   const dot = pendingCount > 0 ? '<span class="auth-button__dot" aria-hidden="true"></span>' : '';
+  const crown = isFounder(profile?.username) ? founderCrownHtml() : '';
   return `
     <button class="auth-button" id="auth-button" aria-label="Menú de usuario${pendingCount > 0 ? ' (tienes solicitudes pendientes)' : ''}">
       <span>${escapeHtml(profile?.displayName || profile?.username || '')}</span>
       <span class="auth-button__avatar-wrap">
-        <img class="auth-button__avatar" src="${escapeHtml(avatarUrl)}" alt="" />${dot}
+        <img class="auth-button__avatar" src="${escapeHtml(avatarUrl)}" alt="" />${dot}${crown}
       </span>
     </button>
   `;

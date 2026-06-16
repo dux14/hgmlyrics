@@ -5,6 +5,7 @@ import { getSession, getProfile, refreshProfile } from '../lib/authStore.js';
 import { icon } from '../lib/icons.js';
 import { compressImageToLimit } from '../lib/imageCompress.js';
 import { escapeHtml } from '../lib/escape.js';
+import { isFounder, founderCrownHtml } from '../lib/founders.js';
 
 const VOICE_TYPES = [
   ['', '—'],
@@ -49,10 +50,13 @@ export function buildProfileHeader(profile) {
     .map((r) => `<span class="profile-chip">${escapeHtml(r)}</span>`)
     .join('');
   const chipsRow = chips ? `<div class="profile-chips">${chips}</div>` : '';
+  const crown = isFounder(profile.username) ? founderCrownHtml() : '';
   return `
     <div class="profile-banner">
       ${voicePill}
-      <img class="profile-banner__avatar" id="avatar-preview" src="${escapeHtml(avatarUrl)}" alt="Avatar" />
+      <span class="avatar-wrap">
+        <img class="profile-banner__avatar" id="avatar-preview" src="${escapeHtml(avatarUrl)}" alt="Avatar" />${crown}
+      </span>
       <div class="profile-banner__id">
         <h1 class="profile-banner__name">${escapeHtml(profile.displayName || profile.username)}</h1>
         <div class="profile-username">@${escapeHtml(profile.username)}</div>

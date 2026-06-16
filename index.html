@@ -63,6 +63,26 @@
     </noscript>
   </head>
   <body>
+    <!-- Sprite SVG global: gradiente y símbolo de corona fundadora -->
+    <svg width="0" height="0" aria-hidden="true" style="position: absolute" focusable="false">
+      <defs>
+        <linearGradient id="founder-gold" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#FFE89A" />
+          <stop offset=".45" stop-color="#FFD24A" />
+          <stop offset="1" stop-color="#E8A317" />
+        </linearGradient>
+        <symbol id="founder-crown" viewBox="0 0 24 24">
+          <path
+            d="M12 6l4 6l5 -4l-2 10h-14l-2 -10l5 4z"
+            fill="url(#founder-gold)"
+            stroke="#B8860B"
+            stroke-width="1.1"
+            stroke-linejoin="round"
+          />
+          <circle cx="12" cy="5" r="1.5" fill="#FF7A9C" stroke="#B8860B" stroke-width=".7" />
+        </symbol>
+      </defs>
+    </svg>
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
   </body>

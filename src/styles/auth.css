@@ -404,6 +404,8 @@
   background: var(--color-accent);
 }
 /* Punto en el avatar del header */
+/* NOTA: .auth-button__avatar-wrap actúa como contenedor posicionado de .avatar-crown
+   (distintivo de corona del header). No cambiar a position:static sin reubicar .avatar-crown. */
 .auth-button__avatar-wrap {
   position: relative;
   display: inline-flex;
@@ -740,6 +742,23 @@
   .profile-quick__btn {
     transition: none;
   }
+}
+
+/* === Distintivo de corona (fundadores) === */
+.avatar-wrap {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+}
+.avatar-crown {
+  position: absolute;
+  width: 40%;
+  height: auto;
+  top: -15%;
+  right: 11%;
+  transform: rotate(18deg);
+  pointer-events: none;
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.4));
 }
 
 /* === Rediseño: Favoritos grid === */

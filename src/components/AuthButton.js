@@ -1,11 +1,12 @@
 /**
  * AuthButton.js — Header button showing avatar + dropdown.
  */
-import { getProfile, signOut, subscribe } from '../lib/authStore.js';
+import { getProfile, signOut, subscribe, isAdmin } from '../lib/authStore.js';
 import { navigate, getCurrentPath } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { getPendingIncomingCount, onPendingChanged } from '../lib/friends.js';
 import { escapeHtml } from '../lib/escape.js';
+import { isFounder, founderCrownHtml } from '../lib/founders.js';
 
 function defaultAvatarUrl(displayName) {
   const initial = (displayName || '?').trim().charAt(0).toUpperCase();
@@ -20,11 +21,12 @@ export function buildButton(profile, pendingCount = 0) {
   const avatarUrl =
     profile?.avatarUrl || defaultAvatarUrl(profile?.displayName || profile?.username);
   const dot = pendingCount > 0 ? '<span class="auth-button__dot" aria-hidden="true"></span>' : '';
+  const crown = isFounder(profile?.username) ? founderCrownHtml() : '';
   return `
     <button class="auth-button" id="auth-button" aria-label="Menú de usuario${pendingCount > 0 ? ' (tienes solicitudes pendientes)' : ''}">
       <span>${escapeHtml(profile?.displayName || profile?.username || '')}</span>
       <span class="auth-button__avatar-wrap">
-        <img class="auth-button__avatar" src="${escapeHtml(avatarUrl)}" alt="" />${dot}
+        <img class="auth-button__avatar" src="${escapeHtml(avatarUrl)}" alt="" />${dot}${crown}
       </span>
     </button>
   `;
@@ -38,6 +40,9 @@ export function buildMenu(currentPath = '/', pendingCount = 0) {
   };
   const beta = '<span class="badge--beta">BETA</span>';
   const dot = pendingCount > 0 ? '<span class="auth-menu__dot" aria-hidden="true"></span>' : '';
+  const adminItem = isAdmin()
+    ? `<div class="auth-menu__sep" role="separator"></div>${item('#/admin', 'settings', 'Admin')}`
+    : '';
   return `
     <div class="auth-menu" id="auth-menu" role="menu">
       ${item('#/perfil', 'user', 'Perfil')}
@@ -47,6 +52,7 @@ export function buildMenu(currentPath = '/', pendingCount = 0) {
       ${item('#/afinador', 'audio-lines', 'Afinador', beta)}
       ${item('#/recomendador', 'sparkles', 'Recomendador', beta)}
       ${item('#/estudio', 'layers', 'Estudio', beta)}
+      ${adminItem}
       <div class="auth-menu__sep" role="separator"></div>
       <button class="auth-menu__item auth-menu__item--danger" id="logout-btn">${icon('log-out', { size: 16 })} Cerrar sesión</button>
     </div>

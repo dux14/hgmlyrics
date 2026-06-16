@@ -52,19 +52,73 @@ function authHeader() {
   return { Authorization: `Bearer ${session?.access_token ?? ''}` };
 }
 
+// Cache de perfiles cargados una sola vez por sesión del panel.
+let _profilesCache = null;
+
+/** Solo para tests: reinicia el cache de perfiles entre casos. */
+export function __resetProfilesCache() {
+  _profilesCache = null;
+}
+
+async function loadProfiles() {
+  if (_profilesCache) return _profilesCache;
+  try {
+    const res = await fetch('/api/admin/profiles', { headers: authHeader() });
+    if (!res.ok) return [];
+    const { users } = await res.json();
+    _profilesCache = users;
+    return users;
+  } catch {
+    return [];
+  }
+}
+
+function buildSelectHtml(allUsers, assignedUsernames) {
+  const assigned = new Set(assignedUsernames.map((u) => u.toLowerCase()));
+  const available = allUsers.filter((u) => !assigned.has((u.username ?? '').toLowerCase()));
+
+  if (available.length === 0) {
+    return `
+      <select class="ff-select" disabled>
+        <option value="">Todos agregados</option>
+      </select>
+      <button class="btn btn--primary btn--sm ff-add" disabled>Agregar</button>`;
+  }
+
+  const options = available
+    .map((u) => {
+      const label = u.displayName
+        ? `${escapeHtmlLocal(u.displayName)} (@${escapeHtmlLocal(u.username)})`
+        : `@${escapeHtmlLocal(u.username)}`;
+      return `<option value="${escapeHtmlLocal(u.username)}">${label}</option>`;
+    })
+    .join('');
+
+  return `
+    <select class="ff-select">
+      <option value="" disabled selected>Selecciona un usuario…</option>
+      ${options}
+    </select>
+    <button class="btn btn--primary btn--sm ff-add">Agregar</button>`;
+}
+
 async function loadFlags(root) {
   const listEl = root.querySelector('#ff-list');
   if (!listEl) return;
   try {
-    const res = await fetch('/api/admin/feature-flags', { headers: authHeader() });
-    if (!res.ok) {
+    const [flagsRes, allUsers] = await Promise.all([
+      fetch('/api/admin/feature-flags', { headers: authHeader() }),
+      loadProfiles(),
+    ]);
+    if (!flagsRes.ok) {
       listEl.textContent = 'No se pudieron cargar los flags.';
       return;
     }
-    const { flags } = await res.json();
+    const { flags } = await flagsRes.json();
     listEl.innerHTML = flags
-      .map(
-        (f) => `
+      .map((f) => {
+        const assignedUsernames = f.users.map((u) => u.username).filter(Boolean);
+        return `
       <div class="ff-item" data-flag="${escapeHtmlLocal(f.key)}">
         <div class="ff-item__head"><strong>${escapeHtmlLocal(f.key)}</strong><span>${escapeHtmlLocal(f.description ?? '')}</span></div>
         <ul class="ff-item__users">
@@ -78,11 +132,10 @@ async function loadFlags(root) {
             .join('')}
         </ul>
         <div class="ff-item__add">
-          <input class="ff-input" type="text" placeholder="email o usuario" />
-          <button class="btn btn--primary btn--sm ff-add">Agregar</button>
+          ${buildSelectHtml(allUsers, assignedUsernames)}
         </div>
-      </div>`,
-      )
+      </div>`;
+      })
       .join('');
   } catch (e) {
     console.warn('loadFlags failed', e);
@@ -102,15 +155,14 @@ function wireFeatureFlags(root) {
     const flagKey = item.dataset.flag;
 
     if (addBtn) {
-      const input = item.querySelector('.ff-input');
-      const value = (input?.value ?? '').trim();
-      if (!value) return;
-      const body = value.includes('@') ? { flagKey, email: value } : { flagKey, username: value };
+      const select = item.querySelector('.ff-select');
+      const username = (select?.value ?? '').trim();
+      if (!username) return;
       try {
         await fetch('/api/admin/feature-flags', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeader() },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ flagKey, username }),
         });
         await loadFlags(root);
       } catch (err) {

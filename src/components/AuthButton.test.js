@@ -4,10 +4,12 @@ vi.mock('../lib/authStore.js', () => ({
   getProfile: vi.fn(() => ({ displayName: 'Ana', username: 'ana', avatarUrl: '' })),
   signOut: vi.fn(),
   subscribe: vi.fn(),
+  isAdmin: vi.fn(() => false),
 }));
 vi.mock('../router.js', () => ({ navigate: vi.fn() }));
 
 import { buildMenu, buildButton } from './AuthButton.js';
+import { isAdmin } from '../lib/authStore.js';
 
 describe('buildMenu', () => {
   it('marca el item activo con aria-current', () => {
@@ -31,6 +33,20 @@ describe('buildMenu', () => {
     el.innerHTML = buildMenu('/perfil', 0);
     const amigos = el.querySelector('a[href="#/amigos"]');
     expect(amigos.querySelector('.auth-menu__dot')).toBeFalsy();
+  });
+
+  it('muestra el enlace Admin cuando isAdmin() es true', () => {
+    vi.mocked(isAdmin).mockReturnValueOnce(true);
+    const el = document.createElement('div');
+    el.innerHTML = buildMenu('/perfil', 0);
+    expect(el.querySelector('a[href="#/admin"]')).toBeTruthy();
+  });
+
+  it('omite el enlace Admin cuando isAdmin() es false', () => {
+    vi.mocked(isAdmin).mockReturnValueOnce(false);
+    const el = document.createElement('div');
+    el.innerHTML = buildMenu('/perfil', 0);
+    expect(el.querySelector('a[href="#/admin"]')).toBeNull();
   });
 });
 
@@ -60,5 +76,21 @@ describe('buildButton', () => {
     expect(img.hasAttribute('onerror')).toBe(false);
     // La comilla doble del payload no rompió el atributo src — src contiene el payload sin ejecutar
     expect(img.getAttribute('src')).toContain(' onerror=');
+  });
+
+  it('inserta la corona en el avatar cuando el username es fundador', () => {
+    const el = document.createElement('div');
+    el.innerHTML = buildButton({ displayName: 'Mari', username: 'mari', avatarUrl: '' }, 0);
+    const wrap = el.querySelector('.auth-button__avatar-wrap');
+    // La corona debe aparecer dentro del wrap del avatar
+    expect(wrap.querySelector('.avatar-crown')).toBeTruthy();
+    expect(wrap.querySelector('use[href="#founder-crown"]')).toBeTruthy();
+  });
+
+  it('no inserta la corona cuando el username no es fundador', () => {
+    const el = document.createElement('div');
+    el.innerHTML = buildButton({ displayName: 'Ana', username: 'ana', avatarUrl: '' }, 0);
+    const wrap = el.querySelector('.auth-button__avatar-wrap');
+    expect(wrap.querySelector('.avatar-crown')).toBeNull();
   });
 });

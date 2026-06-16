@@ -75,6 +75,26 @@ export function renderLicenses(container) {
       </section>
 
       <section style="border-top:1px solid var(--color-border, #333); padding-top:var(--space-lg); margin-bottom:var(--space-xl);">
+        <h2 style="margin-bottom:var(--space-sm);">Créditos y referencias</h2>
+
+        <div class="profile-field">
+          <p><strong>Mariana Medina</strong></p>
+          <p>Referencia de diseño y concepto. Su página fue base fundamental de este proyecto:</p>
+          <p><a href="https://bymarianamedinaugc.my.canva.site/pagina-coro-hkn" target="_blank" rel="noopener noreferrer">Página Coro HKN (Canva)</a></p>
+        </div>
+
+        <div class="profile-field">
+          <p><strong>Hakuna Group Music</strong></p>
+          <p>Grupo e intérpretes oficiales de las canciones:</p>
+          <p><a href="https://hakuna.org/hakuna-group-music/" target="_blank" rel="noopener noreferrer">hakuna.org/hakuna-group-music</a></p>
+        </div>
+
+        <p style="color:var(--color-text-muted); margin-top:var(--space-md); font-size:0.9em;">
+          Todos los derechos reservados a sus respectivos autores.
+        </p>
+      </section>
+
+      <section style="border-top:1px solid var(--color-border, #333); padding-top:var(--space-lg); margin-bottom:var(--space-xl);">
         <h2 style="margin-bottom:var(--space-sm);">Nota de monetización</h2>
         <p>
           La app HKN Lyrics no está monetizada, por lo que las licencias NonCommercial (NC)

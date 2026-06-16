@@ -3,6 +3,7 @@
  */
 import { getSession } from '../lib/authStore.js';
 import { escapeHtml } from '../lib/escape.js';
+import { isFounder, founderCrownHtml } from '../lib/founders.js';
 
 async function fetchProfile(username) {
   const token = getSession()?.access_token;
@@ -34,11 +35,14 @@ export async function renderPublicProfile(container, username) {
 
   const { profile, favorites, friendCount, isOwn } = data;
   const avatar = profile.avatarUrl || '';
+  const crown = isFounder(profile.username) ? founderCrownHtml() : '';
 
   container.innerHTML = `
     <div class="profile-page fade-in">
       <div class="profile-header">
-        ${avatar ? `<img class="profile-avatar" src="${escapeHtml(avatar)}" alt="" />` : `<div class="profile-avatar"></div>`}
+        <span class="avatar-wrap">
+          ${avatar ? `<img class="profile-avatar" src="${escapeHtml(avatar)}" alt="" />` : `<div class="profile-avatar"></div>`}${crown}
+        </span>
         <div>
           <h1>${escapeHtml(profile.displayName || profile.username)}</h1>
           <div class="profile-username">@${escapeHtml(profile.username)}</div>

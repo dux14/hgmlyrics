@@ -4,6 +4,7 @@
 import { getSession } from '../lib/authStore.js';
 import { emitPendingChanged } from '../lib/friends.js';
 import { escapeHtml } from '../lib/escape.js';
+import { isFounder, founderCrownHtml } from '../lib/founders.js';
 
 let searchTimer = null;
 
@@ -87,9 +88,11 @@ export function buildFriendItem(item, viewerId, kind) {
         avatarUrl: item.addresseeAvatarUrl,
       };
   const initial = (other.displayName || other.username || '?').trim().charAt(0).toUpperCase();
-  const avatar = other.avatarUrl
+  const crown = isFounder(other.username) ? founderCrownHtml() : '';
+  const avatarInner = other.avatarUrl
     ? `<img class="friend-card__avatar" src="${escapeHtml(other.avatarUrl || '')}" alt="" width="44" height="44" loading="lazy" decoding="async" />`
     : `<span class="friend-card__avatar friend-card__avatar--initial">${initial}</span>`;
+  const avatar = `<span class="avatar-wrap">${avatarInner}${crown}</span>`;
   const actions =
     kind === 'incoming'
       ? `<button class="pill pill--primary" data-act="accept" data-id="${other.id}">Aceptar</button>
@@ -203,7 +206,9 @@ export async function renderFriendsPanel(container) {
         .map(
           (u) => `
         <li class="friend-item">
-          <img class="profile-avatar" style="width:40px;height:40px;" src="${escapeHtml(u.avatarUrl || '')}" alt="" />
+          <span class="avatar-wrap">
+            <img class="profile-avatar" style="width:40px;height:40px;" src="${escapeHtml(u.avatarUrl || '')}" alt="" />${isFounder(u.username) ? founderCrownHtml() : ''}
+          </span>
           <div>
             <a href="#/u/${encodeURIComponent(u.username)}" style="color:inherit;text-decoration:none;font-weight:600;">${escapeHtml(u.displayName || u.username)}</a>
             <div style="font-size:0.8em;color:var(--color-text-secondary);">@${escapeHtml(u.username)}</div>

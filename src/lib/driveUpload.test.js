@@ -4,6 +4,7 @@ import {
   buildFileQuery,
   buildMultipartBody,
   findFileInFolder,
+  uploadTracksToDrive,
   uploadMedia,
 } from './driveUpload.js';
 
@@ -144,5 +145,130 @@ describe('uploadMedia', () => {
     xhr.responseText = '';
     xhr.onload();
     await expect(p).rejects.toMatchObject({ status: 401 });
+  });
+});
+
+describe('uploadTracksToDrive', () => {
+  // fetch fake: enruta llamadas a la API de Drive (json) y descargas de pista (blob).
+  function installFetch({ fileSearch = [] } = {}) {
+    globalThis.fetch = vi.fn(async (url) => {
+      const u = String(url);
+      if (u.includes('googleapis.com/drive/v3/files')) {
+        if (u.includes('fields=webViewLink')) {
+          return { ok: true, json: async () => ({ webViewLink: 'https://drive/folder' }) };
+        }
+        if (u.includes('vnd.google-apps.folder')) {
+          return { ok: true, json: async () => ({ files: [{ id: 'FOLDER' }] }) };
+        }
+        // búsqueda de archivo (findFileInFolder)
+        return { ok: true, json: async () => ({ files: fileSearch }) };
+      }
+      // descarga de la pista de origen
+      return { ok: true, blob: async () => new Blob(['mp3']) };
+    });
+  }
+
+  // XHR fake: cada send() consume el siguiente comportamiento del guion y
+  // auto-dispara onload/onerror en un microtask.
+  function installAutoXHR(script) {
+    const sends = [];
+    let i = 0;
+    class FakeXHR {
+      constructor() {
+        this.upload = {};
+        this.headers = {};
+      }
+      open(method, url) {
+        this.method = method;
+        this.url = url;
+      }
+      setRequestHeader(k, v) {
+        this.headers[k] = v;
+      }
+      send() {
+        const b = script[i++] ?? { status: 200 };
+        sends.push({ method: this.method, url: this.url });
+        queueMicrotask(() => {
+          if (b.net) return this.onerror();
+          this.status = b.status;
+          this.responseText = b.status < 400 ? '{"id":"file"}' : '';
+          this.onload();
+        });
+      }
+    }
+    globalThis.XMLHttpRequest = FakeXHR;
+    return sends;
+  }
+
+  afterEach(() => {
+    delete globalThis.fetch;
+    delete globalThis.XMLHttpRequest;
+  });
+
+  const tracks2 = [
+    { url: 'u/a', filename: 'a.mp3' },
+    { url: 'u/b', filename: 'b.mp3' },
+  ];
+
+  it('sube todas y crea (POST) cuando no existen', async () => {
+    installFetch({ fileSearch: [] });
+    const sends = installAutoXHR([{ status: 200 }, { status: 200 }]);
+    const getToken = vi.fn(async () => 'tok');
+    const res = await uploadTracksToDrive(getToken, tracks2, 'colombia');
+    expect(res.uploaded.map((u) => u.name)).toEqual(['a.mp3', 'b.mp3']);
+    expect(res.failed).toEqual([]);
+    expect(res.folderUrl).toBe('https://drive/folder');
+    expect(sends.every((s) => s.method === 'POST')).toBe(true);
+  });
+
+  it('sobrescribe (PATCH) cuando el archivo ya existe', async () => {
+    installFetch({ fileSearch: [{ id: 'EXIST' }] });
+    const sends = installAutoXHR([{ status: 200 }, { status: 200 }]);
+    const res = await uploadTracksToDrive(async () => 'tok', tracks2, 'colombia');
+    expect(res.uploaded.length).toBe(2);
+    expect(sends.every((s) => s.method === 'PATCH')).toBe(true);
+    expect(sends[0].url).toContain('/EXIST?');
+  });
+
+  it('reintenta una vez ante fallo transitorio y se recupera', async () => {
+    installFetch({ fileSearch: [] });
+    const sends = installAutoXHR([{ status: 500 }, { status: 200 }]);
+    const res = await uploadTracksToDrive(
+      async () => 'tok',
+      [{ url: 'u/a', filename: 'a.mp3' }],
+      'colombia',
+    );
+    expect(res.uploaded.map((u) => u.name)).toEqual(['a.mp3']);
+    expect(res.failed).toEqual([]);
+    expect(sends.length).toBe(2); // intento + reintento
+  });
+
+  it('un fallo persistente cae a failed[] sin abortar las demás', async () => {
+    installFetch({ fileSearch: [] });
+    // a.mp3: 500 + 500 (falla); b.mp3: 200 (sube)
+    installAutoXHR([{ status: 500 }, { status: 500 }, { status: 200 }]);
+    const progress = [];
+    const res = await uploadTracksToDrive(
+      async () => 'tok',
+      tracks2,
+      'colombia',
+      (p) => progress.push(p),
+    );
+    expect(res.uploaded.map((u) => u.name)).toEqual(['b.mp3']);
+    expect(res.failed.map((f) => f.name)).toEqual(['a.mp3']);
+    expect(progress).toEqual([0.5, 1]);
+  });
+
+  it('refresca el token ante 401 y reintenta', async () => {
+    installFetch({ fileSearch: [] });
+    installAutoXHR([{ status: 401 }, { status: 200 }]);
+    const getToken = vi.fn(async () => 'tok');
+    const res = await uploadTracksToDrive(
+      getToken,
+      [{ url: 'u/a', filename: 'a.mp3' }],
+      'colombia',
+    );
+    expect(res.uploaded.length).toBe(1);
+    expect(getToken).toHaveBeenCalledTimes(2); // inicial + refresh por 401
   });
 });

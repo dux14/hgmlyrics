@@ -111,6 +111,7 @@ export default [
         Request: 'readonly',
         Headers: 'readonly',
         KeyboardEvent: 'readonly',
+        queueMicrotask: 'readonly',
       },
     },
   },

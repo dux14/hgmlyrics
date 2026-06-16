@@ -133,26 +133,68 @@ export function uploadMedia(token, url, body, boundary, onProgress, method = 'PO
 }
 
 /**
- * Sube el ZIP a Pistas Hakuna/{songBase}/{songBase} - pistas.zip.
- * @param {string} token @param {Blob} blob @param {string} songBase
+ * Sube (o sobrescribe) un único archivo a una carpeta de Drive vía multipart.
+ * @param {string} token @param {Blob} blob @param {string} name
+ * @param {string} folderId @param {string|null} existingId
  * @param {(percent:number)=>void} [onProgress]
- * @returns {Promise<{fileId: string, folderUrl: string}>}
+ * @returns {Promise<{id:string}>}
  */
-export async function uploadZipToDrive(token, blob, songBase, onProgress) {
+export function uploadFileToDrive(token, blob, name, folderId, existingId, onProgress) {
+  const boundary = `hknDrive${Math.random().toString(16).slice(2)}`;
+  if (existingId) {
+    const body = buildMultipartBody({ name }, blob, boundary, 'audio/mpeg');
+    const url = `${UPLOAD_BASE}/${existingId}?uploadType=multipart&fields=id`;
+    return uploadMedia(token, url, body, boundary, onProgress, 'PATCH');
+  }
+  const body = buildMultipartBody({ name, parents: [folderId] }, blob, boundary, 'audio/mpeg');
+  const url = `${UPLOAD_BASE}?uploadType=multipart&fields=id`;
+  return uploadMedia(token, url, body, boundary, onProgress, 'POST');
+}
+
+/**
+ * Sube cada pista como archivo individual a Pistas Hakuna/{songBase}/.
+ * Secuencial; reintenta ×1 por pista (refresca token ante 401); no aborta el lote.
+ * @param {() => Promise<string>} getToken  devuelve/refresca el access_token
+ * @param {{url:string, filename:string}[]} tracks
+ * @param {string} songBase
+ * @param {(fraction:number)=>void} [onProgress]
+ * @returns {Promise<{uploaded:{name:string}[], failed:{name:string,message:string}[], folderUrl:string}>}
+ */
+export async function uploadTracksToDrive(getToken, tracks, songBase, onProgress) {
+  let token = await getToken();
   const rootId = await findOrCreateFolder(token, 'Pistas Hakuna', 'root');
   const songFolderId = await findOrCreateFolder(token, songBase, rootId);
 
-  const boundary = `hknDrive${Math.random().toString(16).slice(2)}`;
-  const metadata = { name: `${songBase} - pistas.zip`, parents: [songFolderId] };
-  const body = buildMultipartBody(metadata, blob, boundary);
+  const uploaded = [];
+  const failed = [];
+  const total = tracks.length;
+  let done = 0;
 
-  const data = await uploadMedia(
-    token,
-    `${UPLOAD_BASE}?uploadType=multipart&fields=id`,
-    body,
-    boundary,
-    onProgress,
-  );
+  for (const { url, filename } of tracks) {
+    let lastErr = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          const e = new Error(`No pudimos descargar "${filename}".`);
+          e.status = res.status;
+          throw e;
+        }
+        const blob = await res.blob();
+        const existingId = await findFileInFolder(token, filename, songFolderId);
+        await uploadFileToDrive(token, blob, filename, songFolderId, existingId);
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e;
+        if (e.status === 401) token = await getToken();
+      }
+    }
+    if (lastErr) failed.push({ name: filename, message: lastErr.message });
+    else uploaded.push({ name: filename });
+    onProgress?.(++done / total);
+  }
+
   const folder = await driveFetchJson(token, `${FILES_URL}/${songFolderId}?fields=webViewLink`);
-  return { fileId: data.id, folderUrl: folder.webViewLink };
+  return { uploaded, failed, folderUrl: folder.webViewLink };
 }

@@ -33,7 +33,7 @@ export default withErrors(async (req, res) => {
     const rows = await sql`
       SELECT l.id, l.name, l.expires_at, l.owner_id,
              (l.owner_id = ${user.id}) AS is_owner,
-             (SELECT count(*)::int FROM ephemeral_list_songs s WHERE s.list_id = l.id) AS song_count,
+             (SELECT count(*)::int FROM ephemeral_list_items s WHERE s.list_id = l.id) AS song_count,
              (SELECT count(*)::int FROM ephemeral_lists c
               WHERE c.parent_id = l.id AND c.expires_at > now()) AS child_count
       FROM ephemeral_lists l

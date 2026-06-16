@@ -9,7 +9,7 @@ export default withErrors(async (req, res) => {
   if (req.method === 'GET') {
     await requireUser(req);
     const rows = await sql`
-      SELECT id, sunday_date, gospel_ref, liturgical_title, liturgical_color, published, created_at
+      SELECT id, sunday_date, gospel_ref, title, liturgical_title, liturgical_color, published, created_at
       FROM weekly_words
       WHERE published = true
       ORDER BY sunday_date DESC

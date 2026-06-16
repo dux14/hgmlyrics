@@ -1,6 +1,5 @@
 // Usuarios reconocidos como fundadores (badge de corona en su avatar).
-// 'samu' es temporal para pruebas; se quita en un commit posterior.
-export const FOUNDER_USERNAMES = ['mari', 'samu'];
+export const FOUNDER_USERNAMES = ['mari'];
 
 export function isFounder(username) {
   if (!username) return false;

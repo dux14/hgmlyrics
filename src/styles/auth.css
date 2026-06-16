@@ -404,6 +404,8 @@
   background: var(--color-accent);
 }
 /* Punto en el avatar del header */
+/* NOTA: .auth-button__avatar-wrap actúa como contenedor posicionado de .avatar-crown
+   (distintivo de corona del header). No cambiar a position:static sin reubicar .avatar-crown. */
 .auth-button__avatar-wrap {
   position: relative;
   display: inline-flex;

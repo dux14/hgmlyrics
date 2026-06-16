@@ -77,4 +77,20 @@ describe('buildButton', () => {
     // La comilla doble del payload no rompió el atributo src — src contiene el payload sin ejecutar
     expect(img.getAttribute('src')).toContain(' onerror=');
   });
+
+  it('inserta la corona en el avatar cuando el username es fundador', () => {
+    const el = document.createElement('div');
+    el.innerHTML = buildButton({ displayName: 'Mari', username: 'mari', avatarUrl: '' }, 0);
+    const wrap = el.querySelector('.auth-button__avatar-wrap');
+    // La corona debe aparecer dentro del wrap del avatar
+    expect(wrap.querySelector('.avatar-crown')).toBeTruthy();
+    expect(wrap.querySelector('use[href="#founder-crown"]')).toBeTruthy();
+  });
+
+  it('no inserta la corona cuando el username no es fundador', () => {
+    const el = document.createElement('div');
+    el.innerHTML = buildButton({ displayName: 'Ana', username: 'ana', avatarUrl: '' }, 0);
+    const wrap = el.querySelector('.auth-button__avatar-wrap');
+    expect(wrap.querySelector('.avatar-crown')).toBeNull();
+  });
 });

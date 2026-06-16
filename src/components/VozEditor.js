@@ -93,6 +93,11 @@ export async function renderVozEditor(container, wordId = null) {
           </div>
 
           <div>
+            <label class="editor__label" for="voz-title">Título (para búsqueda)</label>
+            <input type="text" id="voz-title" class="editor__input" placeholder="Ej. La vid y los sarmientos" value="${escapeHtml(word?.title ?? '')}">
+          </div>
+
+          <div>
             <label class="editor__label" for="voz-gospel-ref">Referencia del evangelio</label>
             <input type="text" id="voz-gospel-ref" class="editor__input" placeholder="Jn 14,6" value="${escapeHtml(word?.gospel_ref ?? '')}">
           </div>
@@ -148,6 +153,7 @@ export async function renderVozEditor(container, wordId = null) {
   `;
 
   const dateInput = container.querySelector('#voz-sunday-date');
+  const titleSearchInput = container.querySelector('#voz-title');
   const refInput = container.querySelector('#voz-gospel-ref');
   const titleInput = container.querySelector('#voz-liturgical-title');
   const colorSelect = container.querySelector('#voz-liturgical-color');
@@ -249,6 +255,7 @@ export async function renderVozEditor(container, wordId = null) {
       const saved = await saveWord(wordId, {
         sunday_date,
         gospel_ref,
+        title: titleSearchInput.value.trim() || null,
         liturgical_title: titleInput.value.trim() || null,
         liturgical_color: colorSelect.value || null,
         voiceover_body,

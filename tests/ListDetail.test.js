@@ -15,7 +15,7 @@ vi.mock('../src/lib/lists.js', () => ({
   searchUsers: vi.fn(async () => []),
 }));
 vi.mock('../src/lib/store.js', () => ({ getSongById: vi.fn(() => null) }));
-vi.mock('../src/lib/search.js', () => ({ searchSongs: vi.fn(() => []) }));
+vi.mock('../src/lib/search.js', () => ({ searchAll: vi.fn(() => []) }));
 vi.mock('../src/lib/friends.js', () => ({ getAcceptedFriends: vi.fn(async () => []) }));
 vi.mock('../src/lib/authStore.js', () => ({ isAdmin: vi.fn(() => false) }));
 vi.mock('../src/router.js', () => ({ navigate: vi.fn() }));
@@ -62,8 +62,10 @@ describe('wizard de listas', () => {
   });
 
   it('agrega una canción desde el buscador en el paso 2', async () => {
-    const { searchSongs } = await import('../src/lib/search.js');
-    searchSongs.mockReturnValue([{ id: 's1', title: 'Tema', album: 'A' }]);
+    const { searchAll } = await import('../src/lib/search.js');
+    searchAll.mockReturnValue([
+      { type: 'song', item: { id: 's1', title: 'Tema', album: 'A' }, score: 100 },
+    ]);
     await renderListDetail(container, 'nueva', { mode: 'edit' });
     const name = container.querySelector('#list-detail-name');
     name.value = 'L';
@@ -77,9 +79,66 @@ describe('wizard de listas', () => {
     expect(container.querySelectorAll('#list-detail-songs .song-row-compact').length).toBe(1);
   });
 
+  it('agrega una voz en off desde el buscador en el paso 2', async () => {
+    const { searchAll } = await import('../src/lib/search.js');
+    searchAll.mockReturnValue([
+      {
+        type: 'weekly_word',
+        item: { id: 'ww1', gospel_ref: 'Jn 14,6', liturgical_title: 'XI Domingo', title: null },
+        score: 100,
+      },
+    ]);
+    await renderListDetail(container, 'nueva', { mode: 'edit' });
+    const name = container.querySelector('#list-detail-name');
+    name.value = 'L';
+    name.dispatchEvent(new Event('input'));
+    container.querySelector('#list-wizard-next').click();
+    const search = container.querySelector('#list-detail-search');
+    search.value = 'jn';
+    search.dispatchEvent(new Event('input'));
+    await new Promise((r) => setTimeout(r, 250));
+    // El resultado muestra el badge "Voz en off"
+    expect(container.querySelector('#list-detail-results .list-detail__ww-row')).toBeTruthy();
+    container.querySelector('#list-detail-results .list-detail__ww-row').click();
+    // La voz en off aparece en el borrador
+    const rows = container.querySelectorAll('#list-detail-songs .song-row-compact');
+    expect(rows.length).toBe(1);
+    expect(rows[0].dataset.songId).toBe('ww1');
+    expect(container.querySelector('#list-detail-songs .list-detail__ww-badge')).toBeTruthy();
+  });
+
+  it('al crear lista con voz en off, setListItems recibe item_type weekly_word', async () => {
+    const { searchAll } = await import('../src/lib/search.js');
+    const lists = await import('../src/lib/lists.js');
+    searchAll.mockReturnValue([
+      {
+        type: 'weekly_word',
+        item: { id: 'ww1', gospel_ref: 'Jn 14,6', liturgical_title: 'XI Domingo', title: null },
+        score: 100,
+      },
+    ]);
+    await renderListDetail(container, 'nueva', { mode: 'edit' });
+    container.querySelector('#list-detail-name').value = 'Lista';
+    container.querySelector('#list-detail-name').dispatchEvent(new Event('input'));
+    container.querySelector('#list-wizard-next').click(); // paso 2
+    const search = container.querySelector('#list-detail-search');
+    search.value = 'jn';
+    search.dispatchEvent(new Event('input'));
+    await new Promise((r) => setTimeout(r, 250));
+    container.querySelector('#list-detail-results .list-detail__ww-row').click();
+    container.querySelector('#list-wizard-next').click(); // paso 3
+    container.querySelector('#list-wizard-next').click(); // commit
+    await new Promise((r) => setTimeout(r, 10));
+    expect(lists.setListItems).toHaveBeenCalledWith('L1', [
+      { item_type: 'weekly_word', item_id: 'ww1' },
+    ]);
+  });
+
   it('quita is-entering al terminar la animación (no bloquea el transform del drag)', async () => {
-    const { searchSongs } = await import('../src/lib/search.js');
-    searchSongs.mockReturnValue([{ id: 's1', title: 'Tema', album: 'A' }]);
+    const { searchAll } = await import('../src/lib/search.js');
+    searchAll.mockReturnValue([
+      { type: 'song', item: { id: 's1', title: 'Tema', album: 'A' }, score: 100 },
+    ]);
     await renderListDetail(container, 'nueva', { mode: 'edit' });
     const name = container.querySelector('#list-detail-name');
     name.value = 'L';

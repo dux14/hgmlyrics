@@ -300,4 +300,62 @@ describe('VozEditor', () => {
     const errorEl = container.querySelector('#voz-error');
     expect(errorEl.style.display).not.toBe('none');
   });
+
+  it('renderiza el campo de título para búsqueda', async () => {
+    await renderVozEditor(container, null);
+    const titleInput = container.querySelector('#voz-title');
+    expect(titleInput).toBeTruthy();
+    expect(titleInput.placeholder).toContain('La vid');
+  });
+
+  it('carga el title existente al editar una voz', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id: 'ww1',
+        sunday_date: '2026-06-15',
+        gospel_ref: 'Jn 14,6',
+        liturgical_title: 'XI Domingo',
+        liturgical_color: 'green',
+        voiceover_body: 'Texto',
+        gospel_body: '',
+        published: false,
+        title: 'La vid y los sarmientos',
+      }),
+    });
+    await renderVozEditor(container, 'ww1');
+    expect(container.querySelector('#voz-title').value).toBe('La vid y los sarmientos');
+  });
+
+  it('envía title en el cuerpo del POST al guardar borrador', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 'ww-new', published: false }),
+    });
+    await renderVozEditor(container, null);
+    container.querySelector('#voz-sunday-date').value = '2026-06-15';
+    container.querySelector('#voz-gospel-ref').value = 'Jn 14,6';
+    container.querySelector('#voz-body').value = 'Voz de prueba';
+    container.querySelector('#voz-title').value = 'El camino la verdad y la vida';
+    container.querySelector('#voz-save-draft').click();
+    await new Promise((r) => setTimeout(r, 0));
+    const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(callBody.title).toBe('El camino la verdad y la vida');
+  });
+
+  it('envía title null cuando el campo está vacío', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 'ww-new', published: false }),
+    });
+    await renderVozEditor(container, null);
+    container.querySelector('#voz-sunday-date').value = '2026-06-15';
+    container.querySelector('#voz-gospel-ref').value = 'Jn 14,6';
+    container.querySelector('#voz-body').value = 'Voz de prueba';
+    container.querySelector('#voz-title').value = '';
+    container.querySelector('#voz-save-draft').click();
+    await new Promise((r) => setTimeout(r, 0));
+    const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(callBody.title).toBeNull();
+  });
 });

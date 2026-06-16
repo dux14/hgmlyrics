@@ -92,7 +92,7 @@ export async function renderWeeklyWordView(container, word) {
       <!-- Hero -->
       <div class="voz-view__hero" style="background: ${gradient}; border-radius: var(--border-radius-lg); padding: 2rem 1.5rem; margin: 1rem 0 1.5rem; color: ${palette.text};">
         <p class="voz-view__eyebrow" style="font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.85; margin: 0 0 0.5rem;">
-          🕊 Palabra de la semana
+          <span style="display:inline-flex; align-items:center; gap:0.4em; color: inherit;">${icon('gospel', { size: 15 })} Palabra de la semana</span>
         </p>
         <h1 class="voz-view__title" style="font-size: 1.8rem; font-weight: 700; margin: 0 0 0.75rem; color: inherit;">
           ${escapeHtml(word.gospel_ref)}
@@ -202,7 +202,7 @@ export async function renderWeeklyWordView(container, word) {
 export async function renderWeeklyWordById(container, id) {
   container.innerHTML = `
     <div class="empty-state fade-in">
-      <div class="empty-state__icon">🕊</div>
+      <div class="empty-state__icon">${icon('gospel', { size: 40 })}</div>
       <h2 class="empty-state__title">Cargando...</h2>
     </div>
   `;

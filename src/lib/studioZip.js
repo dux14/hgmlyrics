@@ -12,6 +12,14 @@ function sanitize(part) {
 }
 
 /**
+ * Nombre base (carpeta/archivo) de la canción: sin extensión y saneado.
+ * @param {object} job @returns {string}
+ */
+export function songBaseName(job) {
+  return sanitize((job?.input_meta?.filename ?? 'audio').replace(/\.[^/.]+$/, '') || 'audio');
+}
+
+/**
  * Nombre de archivo de una pista dentro del ZIP.
  * @param {string} originalFilename  ej. "colombia.mp3"
  * @param {string} label             ej. "Batería"
@@ -66,7 +74,7 @@ export async function buildZipBlob(job, labels, onProgress) {
 
   const zipped = zipSync(files, { level: 0 }); // MP3 ya está comprimido → sin recompresión
   const blob = new Blob([zipped], { type: 'application/zip' });
-  const base = sanitize((job?.input_meta?.filename ?? 'audio').replace(/\.[^/.]+$/, '') || 'audio');
+  const base = songBaseName(job);
   return { blob, count: tracks.length, base };
 }
 

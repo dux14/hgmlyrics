@@ -104,7 +104,7 @@ describe('wizard de listas', () => {
     const rows = container.querySelectorAll('#list-detail-songs .song-row-compact');
     expect(rows.length).toBe(1);
     expect(rows[0].dataset.songId).toBe('ww1');
-    expect(container.querySelector('#list-detail-songs .list-detail__ww-badge')).toBeTruthy();
+    expect(container.querySelector('#list-detail-songs .voice-badge--voz')).toBeTruthy();
   });
 
   it('al crear lista con voz en off, setListItems recibe item_type weekly_word', async () => {

@@ -393,7 +393,7 @@ function renderEditor(container, listData, opts = {}) {
             <span class="song-row-compact__title">${escapeHtml(label)}</span>
             <span class="song-row-compact__album">${escapeHtml(sub)}</span>
           </div>
-          <span class="list-detail__ww-badge">Voz en off</span>
+          <span class="voice-badge voice-badge--voz">Voz en off</span>
           <div class="song-row-compact__actions">${removeBtn}</div>
         </div>`;
       }
@@ -821,7 +821,7 @@ function renderReadonly(container, listData, { isOwner } = {}) {
                   <span class="song-row-compact__title">${escapeHtml(label)}</span>
                   <span class="song-row-compact__album">${escapeHtml(sub)}</span>
                 </div>
-                <span class="list-detail__ww-badge">Voz en off</span>
+                <span class="voice-badge voice-badge--voz">Voz en off</span>
               </div>`;
             }
             const row = songRowCompact(songForRender(it.item_id), { index: idx + 1 });

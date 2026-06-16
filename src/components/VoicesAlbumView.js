@@ -15,7 +15,7 @@ import { supabase } from '../lib/supabase.js';
  * @returns {boolean}
  */
 export function isVigente(sundayDate, today = new Date().toISOString().slice(0, 10)) {
-  return sundayDate <= today;
+  return String(sundayDate).slice(0, 10) <= today;
 }
 
 /**
@@ -24,7 +24,8 @@ export function isVigente(sundayDate, today = new Date().toISOString().slice(0, 
  * @returns {string}
  */
 function formatShortDate(isoDate) {
-  const [y, m, d] = isoDate.split('-').map(Number);
+  // La API puede devolver un timestamp ISO completo; tomamos YYYY-MM-DD.
+  const [y, m, d] = String(isoDate).slice(0, 10).split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('es', {
     day: 'numeric',
     month: 'short',
@@ -61,7 +62,7 @@ export async function renderVoicesAlbumView(container) {
 
   const today = new Date().toISOString().slice(0, 10);
   // La más reciente publicada que sea ≤ hoy es la "vigente".
-  const vigenteId = words.find((w) => w.sunday_date <= today)?.id ?? null;
+  const vigenteId = words.find((w) => isVigente(w.sunday_date, today))?.id ?? null;
 
   if (words.length === 0) {
     container.innerHTML = `

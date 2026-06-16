@@ -23,6 +23,26 @@ function getVozFontSize() {
 }
 
 /**
+ * El título litúrgico del ordo suele traer la fecha y el color
+ * ("14 Junio, Domingo. 11ª Sem. del Tiempo Ordinario, Verde"), redundantes con
+ * la fecha formateada y el chip de color. Deja solo la descripción litúrgica.
+ * @param {string|null|undefined} title
+ * @returns {string}
+ */
+function cleanLiturgicalTitle(title) {
+  if (!title) return '';
+  let t = String(title).trim();
+  // Quita el prefijo de fecha/día si lo hay: todo lo previo al primer ". "
+  // cuando ese prefijo contiene un número (la fecha).
+  const dotIdx = t.indexOf('. ');
+  if (dotIdx !== -1 && /\d/.test(t.slice(0, dotIdx))) {
+    t = t.slice(dotIdx + 2);
+  }
+  // Quita el color litúrgico al final (ya está en el chip).
+  return t.replace(/,\s*(verde|morado|blanco|rojo|rosa|rosáceo|púrpura|violeta)\s*$/i, '').trim();
+}
+
+/**
  * Formatea una fecha ISO (YYYY-MM-DD) como "15 de junio de 2026".
  * @param {string} isoDate
  * @returns {string}
@@ -50,6 +70,7 @@ export async function renderWeeklyWordView(container, word) {
   const gradient = coverGradient(palette);
   const { scripture, reflection } = splitVoiceover(word.voiceover_body, word.gospel_body);
   const dateLabel = formatSundayDate(word.sunday_date);
+  const cleanTitle = cleanLiturgicalTitle(word.liturgical_title);
   const fontSize = getVozFontSize();
 
   // Estilos compartidos por los bloques de texto: color pleno + buen interlineado.
@@ -77,8 +98,7 @@ export async function renderWeeklyWordView(container, word) {
           ${escapeHtml(word.gospel_ref)}
         </h1>
         <p style="margin: 0; opacity: 0.92; font-size: 0.9rem;">
-          ${escapeHtml(dateLabel)}
-          ${word.liturgical_title ? ` · ${escapeHtml(word.liturgical_title)}` : ''}
+          ${escapeHtml(dateLabel)}${cleanTitle ? ` · ${escapeHtml(cleanTitle)}` : ''}
         </p>
         ${word.liturgical_color ? `<span class="voz-view__color-chip" style="display: inline-block; margin-top: 0.75rem; background: ${palette.accent}; color: ${palette.bg}; border-radius: 999px; padding: 0.2em 0.75em; font-size: 0.75rem; font-weight: 600;">${escapeHtml(palette.label)}</span>` : ''}
       </div>

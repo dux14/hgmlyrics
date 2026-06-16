@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isFounder } from './founders.js';
+import { isFounder, founderCrownHtml } from './founders.js';
 
 describe('isFounder', () => {
   it('returns true for mari', () => expect(isFounder('mari')).toBe(true));
@@ -9,4 +9,11 @@ describe('isFounder', () => {
   it('returns false for empty string', () => expect(isFounder('')).toBe(false));
   it('returns false for null', () => expect(isFounder(null)).toBe(false));
   it('returns false for undefined', () => expect(isFounder(undefined)).toBe(false));
+});
+
+describe('founderCrownHtml', () => {
+  it('contains href="#founder-crown" sprite reference', () =>
+    expect(founderCrownHtml()).toContain('href="#founder-crown"'));
+  it('contains avatar-crown class', () => expect(founderCrownHtml()).toContain('avatar-crown'));
+  it('has aria-hidden="true"', () => expect(founderCrownHtml()).toContain('aria-hidden="true"'));
 });

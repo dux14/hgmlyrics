@@ -250,6 +250,7 @@ describe('GET /api/weekly-words/[id]', () => {
       data: { user: { id: 'u1', email: 'user@test.com' } },
       error: null,
     });
+    sqlResponses.push([{ is_admin: false }]); // isAdminUser → profiles (no admin)
     sqlResponses.push([
       {
         id: 'ww1',
@@ -274,6 +275,7 @@ describe('GET /api/weekly-words/[id]', () => {
       data: { user: { id: 'u1', email: 'user@test.com' } },
       error: null,
     });
+    sqlResponses.push([{ is_admin: false }]); // isAdminUser → profiles (no admin)
     sqlResponses.push([]);
     const req = { method: 'GET', headers: { authorization: 'Bearer t' }, query: { id: 'nope' } };
     const res = makeRes();

@@ -1,6 +1,6 @@
 // api/weekly-words/[id].js
 import sql from '../_lib/db.js';
-import { requireUser, requireAdmin } from '../_lib/auth.js';
+import { requireUser, requireAdmin, isAdminUser } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 
 export default withErrors(async (req, res) => {
@@ -8,10 +8,13 @@ export default withErrors(async (req, res) => {
   const id = req.query.id;
 
   if (req.method === 'GET') {
-    await requireUser(req);
-    const rows = await sql`
-      SELECT * FROM weekly_words WHERE id = ${id} AND published = true
-    `;
+    const user = await requireUser(req);
+    // El admin puede ver borradores (no publicadas) para preview/edición;
+    // el resto solo ve publicadas.
+    const admin = await isAdminUser(user, sql);
+    const rows = admin
+      ? await sql`SELECT * FROM weekly_words WHERE id = ${id}`
+      : await sql`SELECT * FROM weekly_words WHERE id = ${id} AND published = true`;
     if (!rows[0]) {
       const e = new Error('Voz en off no encontrada');
       e.status = 404;

@@ -41,13 +41,24 @@ export default withErrors(async (req, res) => {
     throw e;
   }
 
-  const rows = await sql`
-    INSERT INTO weekly_words
-      (sunday_date, gospel_ref, liturgical_title, liturgical_color, voiceover_body, gospel_body)
-    VALUES
-      (${sunday_date}, ${gospel_ref}, ${b.liturgical_title ?? null},
-       ${b.liturgical_color ?? null}, ${voiceover_body}, ${b.gospel_body ?? null})
-    RETURNING *
-  `;
+  let rows;
+  try {
+    rows = await sql`
+      INSERT INTO weekly_words
+        (sunday_date, gospel_ref, liturgical_title, liturgical_color, voiceover_body, gospel_body)
+      VALUES
+        (${sunday_date}, ${gospel_ref}, ${b.liturgical_title ?? null},
+         ${b.liturgical_color ?? null}, ${voiceover_body}, ${b.gospel_body ?? null})
+      RETURNING *
+    `;
+  } catch (err) {
+    // 23505 = unique_violation: ya hay una voz en off para ese domingo.
+    if (err?.code === '23505') {
+      const e = new Error('Ya existe una voz en off para ese domingo. Edítala desde el archivo.');
+      e.status = 409;
+      throw e;
+    }
+    throw err;
+  }
   res.status(201).json(rows[0]);
 });

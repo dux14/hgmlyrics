@@ -55,6 +55,11 @@ function authHeader() {
 // Cache de perfiles cargados una sola vez por sesión del panel.
 let _profilesCache = null;
 
+/** Solo para tests: reinicia el cache de perfiles entre casos. */
+export function __resetProfilesCache() {
+  _profilesCache = null;
+}
+
 async function loadProfiles() {
   if (_profilesCache) return _profilesCache;
   try {

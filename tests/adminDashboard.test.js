@@ -31,7 +31,8 @@ vi.mock('../src/components/AdminWorldPanel.js', () => ({
 // Importamos solo buildSelectHtml y loadFlags indirectamente a través del render.
 // renderAdminDashboard invoca loadFlags que llama a fetch.
 
-const { renderAdminDashboard } = await import('../src/components/AdminDashboard.js');
+const { renderAdminDashboard, __resetProfilesCache } =
+  await import('../src/components/AdminDashboard.js');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -46,6 +47,7 @@ function makeContainer() {
 afterEach(() => {
   document.body.innerHTML = '';
   vi.restoreAllMocks();
+  __resetProfilesCache();
 });
 
 // ---------------------------------------------------------------------------

@@ -1049,7 +1049,6 @@
     flex-direction: row;
   }
 
-  .ff-input,
   .ff-select {
     flex: 1;
   }

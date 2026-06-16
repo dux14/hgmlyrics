@@ -114,6 +114,40 @@
   margin-bottom: var(--space-md);
 }
 
+/* Campos del editor de voces en off (VozEditor). Mismos tokens que
+   .form-group__input para respetar el dark mode. */
+.editor__label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+.editor__input {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text);
+  font-size: var(--font-size-base);
+  font-family: inherit;
+  transition: border-color var(--transition-fast);
+  /* Controles nativos (date picker, dropdown del select) en tema oscuro. */
+  color-scheme: dark;
+}
+
+.editor__input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.editor__input::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+}
+
 .editor__section {
   background: var(--color-surface);
   border: 1px solid var(--color-border);

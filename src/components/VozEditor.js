@@ -87,10 +87,10 @@ export async function renderVozEditor(container, wordId = null) {
             <label class="editor__label" for="voz-liturgical-color">Color litúrgico</label>
             <select id="voz-liturgical-color" class="editor__input">
               <option value="">— sin color —</option>
-              ${['green', 'purple', 'white', 'red']
+              ${Object.entries({ green: 'Verde', purple: 'Morado', white: 'Blanco', red: 'Rojo' })
                 .map(
-                  (c) =>
-                    `<option value="${c}"${word?.liturgical_color === c ? ' selected' : ''}>${c}</option>`,
+                  ([c, label]) =>
+                    `<option value="${c}"${word?.liturgical_color === c ? ' selected' : ''}>${label}</option>`,
                 )
                 .join('')}
             </select>

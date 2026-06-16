@@ -7,6 +7,7 @@ import { isAdmin } from '../lib/authStore.js';
 import { liturgicalPalette, coverGradient } from '../lib/liturgicalColor.js';
 import { escapeHtml } from '../lib/escape.js';
 import { supabase } from '../lib/supabase.js';
+import { icon } from '../lib/icons.js';
 
 /**
  * Dado un sunday_date (YYYY-MM-DD), ¿es la del domingo más reciente (≤ hoy)?
@@ -40,7 +41,7 @@ function formatShortDate(isoDate) {
 export async function renderVoicesAlbumView(container) {
   container.innerHTML = `
     <div class="empty-state fade-in">
-      <div class="empty-state__icon">🕊</div>
+      <div class="empty-state__icon">${icon('gospel', { size: 40 })}</div>
       <h2 class="empty-state__title">Cargando Voces en off…</h2>
     </div>
   `;
@@ -67,7 +68,7 @@ export async function renderVoicesAlbumView(container) {
   if (words.length === 0) {
     container.innerHTML = `
       <div class="empty-state fade-in" style="padding: 3rem 1rem; text-align: center;">
-        <div style="font-size: 3rem;">🕊</div>
+        <div>${icon('gospel', { size: 40 })}</div>
         <h2 class="empty-state__title">Aún no hay voces en off</h2>
         <p class="empty-state__text">Cada domingo se publica una reflexión sobre el evangelio.</p>
         ${isAdmin() ? `<button class="btn btn--primary" id="voz-create-btn" style="margin-top: 1rem;">Crear voz en off</button>` : ''}
@@ -95,7 +96,7 @@ export async function renderVoicesAlbumView(container) {
 
       <!-- Hero portada álbum -->
       <div class="voz-album__hero" style="background: ${heroGradient}; border-radius: var(--border-radius-lg); padding: 2.5rem 1.5rem; margin: 1rem 0 1.5rem; color: ${heroPalette.text}; text-align: center;">
-        <div style="font-size: 3.5rem; margin-bottom: 0.5rem;">🕊</div>
+        <div style="margin-bottom: 0.5rem; color: ${heroPalette.accent};">${icon('gospel', { size: 48 })}</div>
         <h1 style="font-size: 1.6rem; font-weight: 700; margin: 0 0 0.25rem; color: inherit;">Voces en off</h1>
         <p style="margin: 0; opacity: 0.8; font-size: 0.9rem;">${words.length} entrada${words.length !== 1 ? 's' : ''}</p>
         ${isAdmin() ? `<button class="btn btn--sm" id="voz-create-btn" style="margin-top: 1rem;">+ Nueva voz en off</button>` : ''}
@@ -110,7 +111,7 @@ export async function renderVoicesAlbumView(container) {
             return `
           <li class="voz-album__item" data-voz-id="${escapeHtml(w.id)}" style="display: flex; align-items: center; gap: 1rem; padding: 0.875rem 0.75rem; border-radius: var(--border-radius); cursor: pointer; border-bottom: 1px solid var(--color-border);">
             <!-- Mini portada generativa -->
-            <div style="width: 48px; height: 48px; flex-shrink: 0; border-radius: 8px; background: ${coverGradient(palette)}; display: flex; align-items: center; justify-content: center; font-size: 1.4rem;">🕊</div>
+            <div style="width: 48px; height: 48px; flex-shrink: 0; border-radius: 8px; background: ${coverGradient(palette)}; display: flex; align-items: center; justify-content: center; color: ${palette.accent};">${icon('gospel', { size: 26 })}</div>
             <div style="flex: 1; min-width: 0;">
               <div style="font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(w.gospel_ref)}</div>
               <div style="font-size: 0.8rem; color: var(--color-text-secondary);">${escapeHtml(formatShortDate(w.sunday_date))}</div>

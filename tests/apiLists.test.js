@@ -184,9 +184,9 @@ describe('GET /api/lists/:id', () => {
       { id: 'list1', name: 'L', owner_id: 'u1', expires_at: '2026-06-20T00:00:00Z' },
     ]); // list
     sqlResponses.push([
-      { song_id: 's1', position: 0 },
-      { song_id: 's2', position: 1 },
-    ]); // songs
+      { item_type: 'song', item_id: 's1', position: 0 },
+      { item_type: 'song', item_id: 's2', position: 1 },
+    ]); // items (ephemeral_list_items)
     sqlResponses.push([{ user_id: 'u2', username: 'bob' }]); // members
     const req = { method: 'GET', headers: { authorization: 'Bearer t' }, query: { id: 'list1' } };
     const res = makeRes();
@@ -229,7 +229,7 @@ describe('GET /api/lists/:id', () => {
         parent_id: null,
       },
     ]); // list
-    sqlResponses.push([{ song_id: 's1', position: 0 }]); // songs
+    sqlResponses.push([{ item_type: 'song', item_id: 's1', position: 0 }]); // items
     sqlResponses.push([{ user_id: 'u2', username: 'bob' }]); // members
     sqlResponses.push([
       { id: 'sub1', name: 'Ensayo', expires_at: '2026-06-18T00:00:00Z', song_count: 3 },

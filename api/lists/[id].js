@@ -33,8 +33,8 @@ export default withErrors(async (req, res) => {
       e.status = 404;
       throw e;
     }
-    const songs = await sql`
-      SELECT song_id, position FROM ephemeral_list_songs
+    const itemRows = await sql`
+      SELECT item_type, item_id, position FROM ephemeral_list_items
       WHERE list_id = ${id} ORDER BY position ASC
     `;
     const members = await sql`
@@ -43,7 +43,7 @@ export default withErrors(async (req, res) => {
     `;
     const children = await sql`
       SELECT c.id, c.name, c.expires_at,
-             (SELECT count(*)::int FROM ephemeral_list_songs s WHERE s.list_id = c.id) AS song_count
+             (SELECT count(*)::int FROM ephemeral_list_items i WHERE i.list_id = c.id) AS song_count
       FROM ephemeral_lists c
       WHERE c.parent_id = ${id} AND c.expires_at > now()
       ORDER BY c.expires_at ASC
@@ -63,7 +63,10 @@ export default withErrors(async (req, res) => {
       parent,
       children,
       role: list.owner_id === user.id ? 'owner' : 'member',
-      songs: songs.map((s) => s.song_id),
+      // items: typed array for new consumers
+      items: itemRows,
+      // songs: backward-compat (song item_ids only, as before)
+      songs: itemRows.filter((r) => r.item_type === 'song').map((r) => r.item_id),
       members,
     });
     return;

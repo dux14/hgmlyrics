@@ -38,6 +38,7 @@ import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { updateSidebarContent } from './Sidebar.js';
 import { escapeHtml } from '../lib/escape.js';
+import { voiceoverCoverHtml } from '../lib/voiceoverCover.js';
 
 /* global CSS */
 
@@ -388,7 +389,7 @@ function renderEditor(container, listData, opts = {}) {
         return `<div class="song-row-compact" data-song-id="${escapeHtml(id)}">
           <span class="song-row-compact__grip"><i></i><i></i><i></i></span>
           <span class="song-row-compact__index">${idx + 1}</span>
-          <span class="list-detail__ww-icon">🕊</span>
+          ${voiceoverCoverHtml(ww?.liturgical_color, { size: 40 })}
           <div class="song-row-compact__info">
             <span class="song-row-compact__title">${escapeHtml(label)}</span>
             <span class="song-row-compact__album">${escapeHtml(sub)}</span>
@@ -816,7 +817,7 @@ function renderReadonly(container, listData, { isOwner } = {}) {
               const sub = w.liturgical_title || w.gospel_ref || '';
               return `<div class="song-row-compact song-row-compact--clickable list-detail__voz-row" data-voz-id="${escapeHtml(String(it.item_id))}">
                 <span class="song-row-compact__index">${idx + 1}</span>
-                <span class="list-detail__ww-icon">🕊</span>
+                ${voiceoverCoverHtml(w.liturgical_color, { size: 40 })}
                 <div class="song-row-compact__info">
                   <span class="song-row-compact__title">${escapeHtml(label)}</span>
                   <span class="song-row-compact__album">${escapeHtml(sub)}</span>

@@ -5,6 +5,7 @@
 // que ambos buscadores diverjan visualmente.
 
 import { escapeHtml } from './escape.js';
+import { voiceoverCoverHtml } from './voiceoverCover.js';
 
 /**
  * Devuelve el HTML de una fila de resultado para una voz en off.
@@ -15,7 +16,7 @@ import { escapeHtml } from './escape.js';
 export function weeklyWordSearchRow(item) {
   return `
     <div class="search-results__item" data-voz-id="${escapeHtml(item.id)}">
-      <div style="width: 32px; height: 32px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">🕊</div>
+      ${voiceoverCoverHtml(item.liturgical_color, { size: 32, radius: 6 })}
       <div>
         <div style="font-weight: 600; font-size: 0.875rem;">${escapeHtml(item.gospel_ref)}</div>
         <div style="display: flex; align-items: center; gap: 0.4rem;">

@@ -116,13 +116,18 @@ export function searchAll(query, limit = 10) {
   for (const ww of weeklyWordList) {
     let score = 0;
     const ref = normalize(ww.gospel_ref || '');
-    const title = normalize(ww.liturgical_title || '');
+    const searchTitle = normalize(ww.title || '');
+    const litTitle = normalize(ww.liturgical_title || '');
     const body = normalize(ww.voiceover_body || '');
+    if (searchTitle.includes(q)) {
+      score += 120;
+      if (searchTitle.startsWith(q)) score += 50;
+    }
     if (ref.includes(q)) {
       score += 100;
       if (ref.startsWith(q)) score += 50;
     }
-    if (title.includes(q)) score += 60;
+    if (litTitle.includes(q)) score += 60;
     if (body.includes(q)) score += 20;
     if (score > 0) scored.push({ type: 'weekly_word', item: ww, score });
   }

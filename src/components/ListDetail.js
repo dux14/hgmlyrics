@@ -21,7 +21,7 @@ import {
   searchUsers,
 } from '../lib/lists.js';
 import { getSongById } from '../lib/store.js';
-import { searchSongs } from '../lib/search.js';
+import { searchAll } from '../lib/search.js';
 import { getAcceptedFriends } from '../lib/friends.js';
 import { isAdmin } from '../lib/authStore.js';
 import {
@@ -365,20 +365,42 @@ function renderEditor(container, listData, opts = {}) {
       return it.item_id ?? it;
     }
 
+    // Cache de voces en off seleccionadas en esta sesión (id → item)
+    const wwCache = {};
+
+    /** Devuelve HTML de fila para un item del draft (canción o voz en off). */
+    function draftItemRow(it, idx) {
+      const id = itemId(it);
+      const removeBtn = `<button class="list-detail__row-btn list-detail__row-btn--danger" data-action="remove" title="Quitar">${icon('close', { size: 14 })}</button>`;
+      if (it.item_type === 'weekly_word') {
+        const ww = wwCache[id];
+        const label = ww ? ww.title || ww.gospel_ref : id;
+        const sub = ww ? ww.liturgical_title || ww.gospel_ref || '' : '';
+        return `<div class="song-row-compact" data-song-id="${escapeHtml(id)}">
+          <span class="song-row-compact__grip"><i></i><i></i><i></i></span>
+          <span class="song-row-compact__index">${idx + 1}</span>
+          <span class="list-detail__ww-icon">🕊</span>
+          <div class="song-row-compact__info">
+            <span class="song-row-compact__title">${escapeHtml(label)}</span>
+            <span class="song-row-compact__album">${escapeHtml(sub)}</span>
+          </div>
+          <span class="list-detail__ww-badge">Voz en off</span>
+          <div class="song-row-compact__actions">${removeBtn}</div>
+        </div>`;
+      }
+      return songRowCompact(songForRender(id), {
+        index: idx + 1,
+        dragHandle: true,
+        actions: removeBtn,
+      });
+    }
+
     function renderSongs(enteringId = null) {
       if (draft.order.length === 0) {
         songsEl.innerHTML = `<p class="list-detail__empty">Busca arriba para agregar canciones.</p>`;
         return;
       }
-      songsEl.innerHTML = draft.order
-        .map((it, idx) =>
-          songRowCompact(songForRender(itemId(it)), {
-            index: idx + 1,
-            dragHandle: true,
-            actions: `<button class="list-detail__row-btn list-detail__row-btn--danger" data-action="remove" title="Quitar">${icon('close', { size: 14 })}</button>`,
-          }),
-        )
-        .join('');
+      songsEl.innerHTML = draft.order.map((it, idx) => draftItemRow(it, idx)).join('');
       if (enteringId) {
         const escaped =
           typeof CSS !== 'undefined' && CSS.escape
@@ -424,19 +446,54 @@ function renderEditor(container, listData, opts = {}) {
       }
       searchTimer = setTimeout(() => {
         const existingIds = new Set(draft.order.map((it) => itemId(it)));
-        const hits = searchSongs(q, 8).filter((s) => !existingIds.has(s.id));
+        const hits = searchAll(q, 8).filter(
+          ({ type, item }) => !existingIds.has(type === 'song' ? item.id : String(item.id)),
+        );
         if (!hits.length) {
           resultsEl.style.display = 'none';
           return;
         }
-        resultsEl.innerHTML = hits.map((s) => songRowCompact(s, {})).join('');
+        resultsEl.innerHTML = hits
+          .map(({ type, item }) => {
+            if (type === 'song') return songRowCompact(item, {});
+            // weekly_word row
+            const label = item.title || item.gospel_ref;
+            const sub = item.liturgical_title || item.gospel_ref;
+            return `<div class="list-detail__ww-row" data-ww-id="${escapeHtml(String(item.id))}">
+              <span class="list-detail__ww-icon">🕊</span>
+              <div class="list-detail__ww-info">
+                <span class="list-detail__ww-title">${escapeHtml(label)}</span>
+                <span class="list-detail__ww-sub">${escapeHtml(sub)}</span>
+              </div>
+              <span class="list-detail__ww-badge">Voz en off</span>
+            </div>`;
+          })
+          .join('');
         resultsEl.style.display = 'block';
+        // Song click handlers
         resultsEl.querySelectorAll('.song-row-compact').forEach((item) => {
           item.addEventListener('click', () => {
             const sid = item.dataset.songId;
             if (!existingIds.has(sid)) {
               draft.order.push({ item_type: 'song', item_id: sid });
               renderSongs(sid);
+            }
+            searchInput.value = '';
+            resultsEl.style.display = 'none';
+            resultsEl.innerHTML = '';
+          });
+        });
+        // Weekly word click handlers
+        resultsEl.querySelectorAll('.list-detail__ww-row').forEach((item) => {
+          item.addEventListener('click', () => {
+            const wwId = item.dataset.wwId;
+            const wwItem = hits.find(
+              ({ type, item: i }) => type === 'weekly_word' && String(i.id) === wwId,
+            )?.item;
+            if (!existingIds.has(wwId)) {
+              if (wwItem) wwCache[wwId] = wwItem;
+              draft.order.push({ item_type: 'weekly_word', item_id: wwId });
+              renderSongs(wwId);
             }
             searchInput.value = '';
             resultsEl.style.display = 'none';

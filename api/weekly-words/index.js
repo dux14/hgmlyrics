@@ -45,10 +45,11 @@ export default withErrors(async (req, res) => {
   try {
     rows = await sql`
       INSERT INTO weekly_words
-        (sunday_date, gospel_ref, liturgical_title, liturgical_color, voiceover_body, gospel_body, published)
+        (sunday_date, gospel_ref, liturgical_title, liturgical_color, voiceover_body, gospel_body, published, title)
       VALUES
         (${sunday_date}, ${gospel_ref}, ${b.liturgical_title ?? null},
-         ${b.liturgical_color ?? null}, ${voiceover_body}, ${b.gospel_body ?? null}, ${b.published === true})
+         ${b.liturgical_color ?? null}, ${voiceover_body}, ${b.gospel_body ?? null}, ${b.published === true},
+         ${typeof b.title === 'string' ? b.title.trim() || null : null})
       RETURNING *
     `;
   } catch (err) {

@@ -37,6 +37,7 @@ export default withErrors(async (req, res) => {
     if (typeof b.gospel_body === 'string') fields.gospel_body = b.gospel_body;
     if (typeof b.published === 'boolean') fields.published = b.published;
     if (typeof b.sunday_date === 'string') fields.sunday_date = b.sunday_date;
+    if (typeof b.title === 'string') fields.title = b.title.trim() || null;
 
     if (Object.keys(fields).length === 0) {
       const e = new Error('Nada que actualizar');

@@ -37,6 +37,21 @@ export default withErrors(async (req, res) => {
       SELECT item_type, item_id, position FROM ephemeral_list_items
       WHERE list_id = ${id} ORDER BY position ASC
     `;
+    // Las voces en off no viven en el catálogo local del cliente (a diferencia
+    // de las canciones), así que adjuntamos su metadata para que la vista y el
+    // editor puedan mostrar título/referencia sin un fetch por item.
+    const wwIds = itemRows.filter((r) => r.item_type === 'weekly_word').map((r) => r.item_id);
+    let wwMap = {};
+    if (wwIds.length) {
+      const wws = await sql`
+        SELECT id, gospel_ref, title, liturgical_title, liturgical_color
+        FROM weekly_words WHERE id::text = ANY(${wwIds})
+      `;
+      wwMap = Object.fromEntries(wws.map((w) => [String(w.id), w]));
+    }
+    const items = itemRows.map((r) =>
+      r.item_type === 'weekly_word' ? { ...r, word: wwMap[String(r.item_id)] ?? null } : r,
+    );
     const members = await sql`
       SELECT m.user_id, p.username FROM ephemeral_list_members m
       JOIN profiles p ON p.id = m.user_id WHERE m.list_id = ${id}
@@ -63,8 +78,8 @@ export default withErrors(async (req, res) => {
       parent,
       children,
       role: list.owner_id === user.id ? 'owner' : 'member',
-      // items: typed array for new consumers
-      items: itemRows,
+      // items: typed array for new consumers (weekly_word incluye `word`)
+      items,
       // songs: backward-compat (song item_ids only, as before)
       songs: itemRows.filter((r) => r.item_type === 'song').map((r) => r.item_id),
       members,

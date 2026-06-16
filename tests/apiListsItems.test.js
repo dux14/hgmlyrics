@@ -64,6 +64,16 @@ describe('GET /api/lists/[id] — typed items', () => {
       { item_type: 'song', item_id: 's1', position: 0 },
       { item_type: 'weekly_word', item_id: 'ww1', position: 1 },
     ]);
+    // SELECT weekly_words metadata (para las voces en off de los items)
+    sqlResponses.push([
+      {
+        id: 'ww1',
+        gospel_ref: 'Jn 14,6',
+        title: 'XI Domingo',
+        liturgical_title: 'XI TO',
+        liturgical_color: 'green',
+      },
+    ]);
     // SELECT members
     sqlResponses.push([]);
     // SELECT children
@@ -75,7 +85,19 @@ describe('GET /api/lists/[id] — typed items', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.items).toHaveLength(2);
     expect(res.body.items[0]).toEqual({ item_type: 'song', item_id: 's1', position: 0 });
-    expect(res.body.items[1]).toEqual({ item_type: 'weekly_word', item_id: 'ww1', position: 1 });
+    // La voz en off se enriquece con su metadata (word) para vista/editor.
+    expect(res.body.items[1]).toEqual({
+      item_type: 'weekly_word',
+      item_id: 'ww1',
+      position: 1,
+      word: {
+        id: 'ww1',
+        gospel_ref: 'Jn 14,6',
+        title: 'XI Domingo',
+        liturgical_title: 'XI TO',
+        liturgical_color: 'green',
+      },
+    });
     // songs field maintained for backward compat (song ids only)
     expect(res.body.songs).toEqual(['s1']);
   });

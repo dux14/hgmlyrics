@@ -366,8 +366,16 @@ function renderEditor(container, listData, opts = {}) {
       return it.item_id ?? it;
     }
 
-    // Cache de voces en off seleccionadas en esta sesión (id → item)
+    // Cache de voces en off (id → item). Se siembra con la metadata que la API
+    // adjunta a cada voz ya guardada (item.word) para que las filas del borrador
+    // muestren título/referencia y no el UUID; las búsquedas de esta sesión la
+    // van completando.
     const wwCache = {};
+    (listData.items || []).forEach((it) => {
+      if (it.item_type === 'weekly_word' && it.word) {
+        wwCache[String(it.item_id)] = it.word;
+      }
+    });
 
     /** Devuelve HTML de fila para un item del draft (canción o voz en off). */
     function draftItemRow(it, idx) {
@@ -789,16 +797,34 @@ function renderEditor(container, listData, opts = {}) {
 function renderReadonly(container, listData, { isOwner } = {}) {
   const songs = listData.songs || [];
   const orderedSongIds = songs.map((s) => s.song_id ?? s.id ?? s);
+  // Items tipados (canciones + voces en off) en orden. Retrocompat: si la API
+  // no trae items, se reconstruye desde songs.
+  const orderedItems =
+    listData.items ?? orderedSongIds.map((sid) => ({ item_type: 'song', item_id: sid }));
   const children = listData.children || [];
   const parent = listData.parent || null;
   const showSeg = !parent && (children.length > 0 || isOwner);
 
   const songsPaneHtml =
-    orderedSongIds.length === 0
+    orderedItems.length === 0
       ? `<p class="list-detail__empty">Esta lista no tiene canciones aún.</p>`
-      : orderedSongIds
-          .map((sid, idx) => {
-            const row = songRowCompact(songForRender(sid), { index: idx + 1 });
+      : orderedItems
+          .map((it, idx) => {
+            if (it.item_type === 'weekly_word') {
+              const w = it.word || {};
+              const label = w.title || w.gospel_ref || it.item_id;
+              const sub = w.liturgical_title || w.gospel_ref || '';
+              return `<div class="song-row-compact song-row-compact--clickable list-detail__voz-row" data-voz-id="${escapeHtml(String(it.item_id))}">
+                <span class="song-row-compact__index">${idx + 1}</span>
+                <span class="list-detail__ww-icon">🕊</span>
+                <div class="song-row-compact__info">
+                  <span class="song-row-compact__title">${escapeHtml(label)}</span>
+                  <span class="song-row-compact__album">${escapeHtml(sub)}</span>
+                </div>
+                <span class="list-detail__ww-badge">Voz en off</span>
+              </div>`;
+            }
+            const row = songRowCompact(songForRender(it.item_id), { index: idx + 1 });
             return row.replace(
               'class="song-row-compact"',
               'class="song-row-compact song-row-compact--clickable"',
@@ -839,7 +865,7 @@ function renderReadonly(container, listData, { isOwner } = {}) {
       ${
         showSeg
           ? `<div class="list-detail__seg" role="tablist">
-               <button class="list-detail__seg-tab is-active" data-pane="songs" role="tab" type="button">Setlist · ${orderedSongIds.length}</button>
+               <button class="list-detail__seg-tab is-active" data-pane="songs" role="tab" type="button">Setlist · ${orderedItems.length}</button>
                <button class="list-detail__seg-tab" data-pane="children" role="tab" type="button">Ensayos · ${children.length}</button>
              </div>`
           : ''
@@ -909,11 +935,16 @@ function renderReadonly(container, listData, { isOwner } = {}) {
   container.querySelectorAll('.song-row-compact--clickable').forEach((row) => {
     row.addEventListener('click', () => {
       const songId = row.dataset.songId;
-      // orderedItems from API (typed) or built from legacy songs field
-      const orderedItems =
-        listData.items ?? orderedSongIds.map((sid) => ({ item_type: 'song', item_id: sid }));
+      if (!songId) return; // fila de voz en off → la maneja su propio handler
       setActiveContext({ listId: listData.id, name: listData.name, orderedItems });
       navigate(`/song/${songId}?lista=${listData.id}`);
+    });
+  });
+
+  container.querySelectorAll('.list-detail__voz-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      setActiveContext({ listId: listData.id, name: listData.name, orderedItems });
+      navigate(`/voz/${row.dataset.vozId}`);
     });
   });
 }

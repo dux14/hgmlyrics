@@ -192,6 +192,43 @@ describe('wizard de listas', () => {
     expect(el.textContent).toContain('Ensayo general');
   });
 
+  it('en la vista, una voz en off del setlist muestra su título y navega a /voz', async () => {
+    const { getList } = await import('../src/lib/lists.js');
+    const { navigate } = await import('../src/router.js');
+    getList.mockResolvedValue({
+      id: 'l1',
+      name: 'HS 16 de junio',
+      expires_at: '2099-01-01T00:00:00Z',
+      role: 'owner',
+      parent_id: null,
+      parent: null,
+      children: [],
+      members: [],
+      // items tipados como los devuelve la API (voz en off con metadata `word`)
+      items: [
+        { item_type: 'song', item_id: 's1', position: 0 },
+        {
+          item_type: 'weekly_word',
+          item_id: 'ww1',
+          position: 1,
+          word: { id: 'ww1', gospel_ref: 'Mt 9,36', title: '¡Mírame!', liturgical_title: 'XI TO' },
+        },
+      ],
+      songs: ['s1'],
+    });
+    const el = document.createElement('div');
+    await renderListDetail(el, 'l1', { mode: 'view' });
+    const vozRow = el.querySelector('.list-detail__voz-row');
+    expect(vozRow).toBeTruthy();
+    // muestra el título, no el UUID
+    expect(vozRow.textContent).toContain('¡Mírame!');
+    expect(vozRow.textContent).not.toContain('ww1');
+    // el setlist cuenta canciones + voces
+    expect(el.textContent).toContain('Setlist · 2');
+    vozRow.click();
+    expect(navigate).toHaveBeenCalledWith('/voz/ww1');
+  });
+
   it('muestra migaja al ver una sub-lista', async () => {
     const { getList } = await import('../src/lib/lists.js');
     getList.mockResolvedValue({

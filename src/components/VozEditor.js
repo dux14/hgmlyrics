@@ -20,6 +20,25 @@ async function fetchOrdo(date) {
   return res.json();
 }
 
+/**
+ * Ajusta una fecha YYYY-MM-DD al domingo de su semana (el domingo anterior o
+ * el mismo día si ya es domingo). La voz en off siempre se ancla al domingo.
+ * @param {string} value - YYYY-MM-DD
+ * @returns {string} YYYY-MM-DD del domingo
+ */
+function snapToSunday(value) {
+  if (!value) return value;
+  const [y, m, d] = value.split('-').map(Number);
+  if (!y || !m || !d) return value;
+  const dt = new Date(y, m - 1, d);
+  const day = dt.getDay(); // 0 = domingo
+  if (day !== 0) dt.setDate(dt.getDate() - day);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
 async function saveWord(id, fields) {
   const url = id ? `/api/weekly-words/${id}` : '/api/weekly-words';
   const method = id ? 'PATCH' : 'POST';
@@ -170,6 +189,15 @@ export async function renderVozEditor(container, wordId = null) {
     el.addEventListener('input', updatePreview);
   });
   updatePreview();
+
+  // La voz en off es "de la semana": ancla cualquier fecha elegida al domingo.
+  dateInput.addEventListener('change', () => {
+    const snapped = snapToSunday(dateInput.value);
+    if (snapped && snapped !== dateInput.value) {
+      dateInput.value = snapped;
+      statusEl.textContent = 'Ajustado al domingo de esa semana';
+    }
+  });
 
   container.querySelector('#voz-ed-admin')?.addEventListener('click', (e) => {
     e.preventDefault();

@@ -58,10 +58,11 @@ vi.mock('../lib/stemsApi.js', () => {
 vi.mock('../lib/authStore.js', () => ({ getSession: vi.fn() }));
 vi.mock('../lib/studioZip.js', () => ({
   downloadAllZip: vi.fn(),
-  buildZipBlob: vi.fn(),
+  buildTrackList: vi.fn(() => []),
+  songBaseName: vi.fn(() => 'audio'),
 }));
 vi.mock('../lib/driveAuth.js', () => ({ getDriveToken: vi.fn() }));
-vi.mock('../lib/driveUpload.js', () => ({ uploadZipToDrive: vi.fn() }));
+vi.mock('../lib/driveUpload.js', () => ({ uploadTracksToDrive: vi.fn() }));
 vi.mock('./StudioPlayer.js', () => ({
   createStudioPlayer: vi.fn(() => {
     const el = document.createElement('div');

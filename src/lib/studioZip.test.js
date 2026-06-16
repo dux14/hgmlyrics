@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { vi } from 'vitest';
-import { zipFilename, buildTrackList, buildZipBlob } from './studioZip.js';
+import { zipFilename, buildTrackList, buildZipBlob, songBaseName } from './studioZip.js';
 
 describe('zipFilename', () => {
   it('usa el nombre original sin extensión + label + .mp3', () => {
@@ -18,6 +18,19 @@ describe('zipFilename', () => {
   it('cae a "audio" si el nombre original es vacío o no string', () => {
     expect(zipFilename('', 'Bajo')).toBe('audio - Bajo.mp3');
     expect(zipFilename(undefined, 'Bajo')).toBe('audio - Bajo.mp3');
+  });
+});
+
+describe('songBaseName', () => {
+  it('sanitiza y quita la extensión', () => {
+    expect(songBaseName({ input_meta: { filename: 'colombia.mp3' } })).toBe('colombia');
+  });
+  it('sanea caracteres ilegales y quita extensión .wav', () => {
+    expect(songBaseName({ input_meta: { filename: 'a/b:c.wav' } })).toBe('a_b_c');
+  });
+  it('sin filename → "audio"', () => {
+    expect(songBaseName({})).toBe('audio');
+    expect(songBaseName({ input_meta: {} })).toBe('audio');
   });
 });
 

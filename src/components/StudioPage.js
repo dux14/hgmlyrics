@@ -15,9 +15,9 @@ import {
   watchJobRealtime,
 } from '../lib/stemsApi.js';
 import { getSession } from '../lib/authStore.js';
-import { downloadAllZip, buildZipBlob } from '../lib/studioZip.js';
+import { downloadAllZip, buildTrackList, songBaseName } from '../lib/studioZip.js';
 import { getDriveToken } from '../lib/driveAuth.js';
-import { uploadZipToDrive } from '../lib/driveUpload.js';
+import { uploadTracksToDrive } from '../lib/driveUpload.js';
 import { createActionButton } from '../lib/studioActionButton.js';
 import { isMp3File } from '../lib/studioFile.js';
 export { isMp3File };
@@ -497,7 +497,7 @@ function renderJob(body, job, quota) {
     });
   }
 
-  // --- Drive ---
+  // --- Drive (archivos sueltos) ---
   const driveBtn = body.querySelector('#studio-drive');
   if (driveBtn) {
     const ctrl = createActionButton(driveBtn, {
@@ -513,30 +513,35 @@ function renderJob(body, job, quota) {
       driveBtn.disabled = true;
       clearMsgs();
       try {
-        ctrl.busy('Autorizando…');
-        let token = await getDriveToken();
-        ctrl.busy('Empaquetando');
-        const { blob, base } = await buildZipBlob(job, ALL_LABELS, (k, n) =>
-          ctrl.progress((k / n) * 0.5),
-        );
         ctrl.busy('Subiendo a Drive…');
-        const onUp = (p) => ctrl.progress(0.5 + (p / 100) * 0.5);
-        let result;
-        try {
-          result = await uploadZipToDrive(token, blob, base, onUp);
-        } catch (e) {
-          if (e.status === 401) {
-            token = await getDriveToken();
-            result = await uploadZipToDrive(token, blob, base, onUp);
-          } else {
-            throw e;
-          }
+        const tracks = buildTrackList(job, ALL_LABELS);
+        const base = songBaseName(job);
+        const { uploaded, failed, folderUrl } = await uploadTracksToDrive(
+          getDriveToken,
+          tracks,
+          base,
+          (p) => ctrl.progress(p),
+        );
+
+        if (uploaded.length === 0) {
+          throw new Error(failed[0]?.message || 'No pudimos subir las pistas.');
         }
+
         ctrl.done('Guardado');
+        const total = uploaded.length + failed.length;
+        const label =
+          failed.length === 0 ? 'Guardado en Drive' : `Subimos ${uploaded.length} de ${total}`;
         const link = document.createElement('p');
         link.className = 'studio__drive-link';
-        link.innerHTML = `Guardado en Drive · <a href="${safeUrl(result.folderUrl)}" target="_blank" rel="noopener">abrir carpeta</a>`;
+        link.innerHTML = `${label} · <a href="${safeUrl(folderUrl)}" target="_blank" rel="noopener">abrir carpeta</a>`;
         actionsEl.insertAdjacentElement('afterend', link);
+
+        if (failed.length > 0) {
+          const err = document.createElement('p');
+          err.className = 'studio__error';
+          err.textContent = `No subimos: ${failed.map((f) => f.name).join(', ')}.`;
+          link.insertAdjacentElement('afterend', err);
+        }
       } catch (e) {
         ctrl.error();
         const err = document.createElement('p');

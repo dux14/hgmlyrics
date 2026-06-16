@@ -33,6 +33,7 @@ import {
   reorder,
 } from '../lib/listDraft.js';
 import { songRowCompact } from './songRow.js';
+import { weeklyWordSearchRow } from '../lib/searchRow.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { updateSidebarContent } from './Sidebar.js';
@@ -456,17 +457,8 @@ function renderEditor(container, listData, opts = {}) {
         resultsEl.innerHTML = hits
           .map(({ type, item }) => {
             if (type === 'song') return songRowCompact(item, {});
-            // weekly_word row
-            const label = item.title || item.gospel_ref;
-            const sub = item.liturgical_title || item.gospel_ref;
-            return `<div class="list-detail__ww-row" data-ww-id="${escapeHtml(String(item.id))}">
-              <span class="list-detail__ww-icon">🕊</span>
-              <div class="list-detail__ww-info">
-                <span class="list-detail__ww-title">${escapeHtml(label)}</span>
-                <span class="list-detail__ww-sub">${escapeHtml(sub)}</span>
-              </div>
-              <span class="list-detail__ww-badge">Voz en off</span>
-            </div>`;
+            // weekly_word row — mismo markup que el buscador del header.
+            return weeklyWordSearchRow(item);
           })
           .join('');
         resultsEl.style.display = 'block';
@@ -484,9 +476,9 @@ function renderEditor(container, listData, opts = {}) {
           });
         });
         // Weekly word click handlers
-        resultsEl.querySelectorAll('.list-detail__ww-row').forEach((item) => {
+        resultsEl.querySelectorAll('[data-voz-id]').forEach((item) => {
           item.addEventListener('click', () => {
-            const wwId = item.dataset.wwId;
+            const wwId = item.dataset.vozId;
             const wwItem = hits.find(
               ({ type, item: i }) => type === 'weekly_word' && String(i.id) === wwId,
             )?.item;

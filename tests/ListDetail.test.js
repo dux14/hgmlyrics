@@ -98,8 +98,8 @@ describe('wizard de listas', () => {
     search.dispatchEvent(new Event('input'));
     await new Promise((r) => setTimeout(r, 250));
     // El resultado muestra el badge "Voz en off"
-    expect(container.querySelector('#list-detail-results .list-detail__ww-row')).toBeTruthy();
-    container.querySelector('#list-detail-results .list-detail__ww-row').click();
+    expect(container.querySelector('#list-detail-results [data-voz-id]')).toBeTruthy();
+    container.querySelector('#list-detail-results [data-voz-id]').click();
     // La voz en off aparece en el borrador
     const rows = container.querySelectorAll('#list-detail-songs .song-row-compact');
     expect(rows.length).toBe(1);
@@ -125,7 +125,7 @@ describe('wizard de listas', () => {
     search.value = 'jn';
     search.dispatchEvent(new Event('input'));
     await new Promise((r) => setTimeout(r, 250));
-    container.querySelector('#list-detail-results .list-detail__ww-row').click();
+    container.querySelector('#list-detail-results [data-voz-id]').click();
     container.querySelector('#list-wizard-next').click(); // paso 3
     container.querySelector('#list-wizard-next').click(); // commit
     await new Promise((r) => setTimeout(r, 10));

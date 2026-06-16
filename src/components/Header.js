@@ -10,6 +10,7 @@ import { renderThemeToggle } from './ThemeToggle.js';
 import { renderAuthButton } from './AuthButton.js';
 import { icon } from '../lib/icons.js';
 import { escapeHtml } from '../lib/escape.js';
+import { weeklyWordSearchRow } from '../lib/searchRow.js';
 
 let searchTimeout = null;
 
@@ -160,18 +161,7 @@ function handleSearch(query, resultsEl) {
   `;
       }
       // weekly_word
-      return `
-    <div class="search-results__item" data-voz-id="${escapeHtml(item.id)}">
-      <div style="width: 32px; height: 32px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">🕊</div>
-      <div>
-        <div style="font-weight: 600; font-size: 0.875rem;">${escapeHtml(item.gospel_ref)}</div>
-        <div style="display: flex; align-items: center; gap: 0.4rem;">
-          <span style="font-size: 0.75rem; color: var(--color-text-secondary);">${escapeHtml(item.liturgical_title || 'Voz en off')}</span>
-          <span style="background: #2563eb; color: #fff; border-radius: 999px; padding: 0.1em 0.5em; font-size: 0.65rem; font-weight: 700;">VOZ EN OFF</span>
-        </div>
-      </div>
-    </div>
-  `;
+      return weeklyWordSearchRow(item);
     })
     .join('');
 

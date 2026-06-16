@@ -84,6 +84,10 @@ export function updateSidebarContent() {
         </svg>
       </div>
       <div class="sidebar__section-content">
+        <div class="sidebar__album-item" data-nav="voces">
+          <span style="font-size: 1.1rem;">🕊</span>
+          <span>Voces en off</span>
+        </div>
         <div class="sidebar__album-item ${!activeAlbum ? 'active' : ''}" data-album="">
           <span>${icon('music', { size: 16 })}</span>
           <span>Todas las canciones</span>
@@ -173,6 +177,9 @@ function bindSidebarEvents() {
       const dest = item.dataset.nav;
       if (dest === 'oracion') {
         navigate('/oracion');
+      }
+      if (dest === 'voces') {
+        navigate('/voces');
       }
       if (window.innerWidth < 768) {
         closeSidebar();

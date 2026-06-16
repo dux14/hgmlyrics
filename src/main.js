@@ -216,6 +216,18 @@ async function boot() {
     renderPrayerPage(mainContent);
   });
 
+  guardedRoute('/voces', async () => {
+    hideFilterBar();
+    const { renderVoicesAlbumView } = await import('./components/VoicesAlbumView.js');
+    renderVoicesAlbumView(mainContent);
+  });
+
+  guardedRoute('/voz/:id', async ({ params }) => {
+    hideFilterBar();
+    const { renderWeeklyWordById } = await import('./components/WeeklyWordView.js');
+    renderWeeklyWordById(mainContent, params.id);
+  });
+
   guardedRoute('/lista/nueva', () => {
     hideFilterBar();
     renderListDetail(mainContent, null, { mode: 'edit' });

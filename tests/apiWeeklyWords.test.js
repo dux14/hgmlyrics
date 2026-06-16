@@ -85,7 +85,7 @@ describe('GET /api/ordo/[date]', () => {
             fecha: '2026-06-15',
             evangelio: '<strong>Jn 14,6</strong><p>Yo soy el camino.</p>',
             tiempo_liturgico: 'TIEMPO ORDINARIO',
-            colores_dia: 'green',
+            colores_dia: 'Verde', // el ordo lo manda en español; se mapea a 'green'
             encabezado: 'XI Domingo del Tiempo Ordinario',
             celebracion: '',
           },

@@ -41,6 +41,23 @@ function isValidDate(s) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
 }
 
+/**
+ * El ordo reporta el color en español ("Verde", "Morado", …). El sistema usa
+ * claves en inglés ('green'|'purple'|'white'|'red') en LITURGICAL_PALETTES.
+ * Mapea español → clave; null si no reconoce (cae en paleta neutra).
+ */
+function mapLiturgicalColor(raw) {
+  const s = (raw ?? '').toLowerCase();
+  if (s.includes('verde')) return 'green';
+  if (s.includes('morad') || s.includes('púrpur') || s.includes('purpur') || s.includes('violet'))
+    {return 'purple';}
+  if (s.includes('blanc')) return 'white';
+  if (s.includes('rojo') || s.includes('roja')) return 'red';
+  // Rosa (domingos Gaudete/Laetare): pertenece a tiempos morados.
+  if (s.includes('rosa') || s.includes('rosác')) return 'purple';
+  return null;
+}
+
 export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['GET'])) return;
   await requireAdmin(req, sql);

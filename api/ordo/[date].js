@@ -49,8 +49,9 @@ function isValidDate(s) {
 function mapLiturgicalColor(raw) {
   const s = (raw ?? '').toLowerCase();
   if (s.includes('verde')) return 'green';
-  if (s.includes('morad') || s.includes('púrpur') || s.includes('purpur') || s.includes('violet'))
-    {return 'purple';}
+  if (s.includes('morad') || s.includes('púrpur') || s.includes('purpur') || s.includes('violet')) {
+    return 'purple';
+  }
   if (s.includes('blanc')) return 'white';
   if (s.includes('rojo') || s.includes('roja')) return 'red';
   // Rosa (domingos Gaudete/Laetare): pertenece a tiempos morados.
@@ -86,7 +87,7 @@ export default withErrors(async (req, res) => {
   const gospelRef = extractReadingRef(entry.evangelio ?? '');
   const gospelBody = stripHtml(entry.evangelio ?? '');
   const liturgicalTitle = entry.encabezado || entry.celebracion || '';
-  const liturgicalColor = (entry.colores_dia ?? '').toLowerCase() || null;
+  const liturgicalColor = mapLiturgicalColor(entry.colores_dia);
 
   res.status(200).json({ gospelRef, gospelBody, liturgicalTitle, liturgicalColor });
 });

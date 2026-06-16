@@ -180,6 +180,26 @@ async function boot() {
     { adminOnly: true },
   );
 
+  guardedRoute(
+    '/admin/voz/nueva',
+    async () => {
+      hideFilterBar();
+      const { renderVozEditor } = await import('./components/VozEditor.js');
+      renderVozEditor(mainContent, null);
+    },
+    { adminOnly: true },
+  );
+
+  guardedRoute(
+    '/admin/voz/:id',
+    async ({ params }) => {
+      hideFilterBar();
+      const { renderVozEditor } = await import('./components/VozEditor.js');
+      renderVozEditor(mainContent, params.id);
+    },
+    { adminOnly: true },
+  );
+
   guardedRoute('/perfil', () => {
     hideFilterBar();
     renderProfile(mainContent);

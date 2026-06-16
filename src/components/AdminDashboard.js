@@ -17,6 +17,9 @@ export function renderAdminDashboard(container) {
         <button class="btn btn--secondary" id="btn-edit" style="padding: 1.5rem; font-size: 1.2rem;">
           ${icon('pencil', { size: 20 })} Modificar canción existente
         </button>
+        <button class="btn btn--secondary" id="btn-voz" style="padding: 1.5rem; font-size: 1.2rem;">
+          🕊 Voces en off
+        </button>
       </div>
 
       <section class="ff-section" id="ff-section">
@@ -34,6 +37,10 @@ export function renderAdminDashboard(container) {
 
   container.querySelector('#btn-edit').addEventListener('click', () => {
     navigate('/admin/edit');
+  });
+
+  container.querySelector('#btn-voz')?.addEventListener('click', () => {
+    navigate('/admin/voz/nueva');
   });
 
   wireFeatureFlags(container);

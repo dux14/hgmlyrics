@@ -12,6 +12,7 @@ vi.mock('../lib/store.js', () => ({
 vi.mock('../router.js', () => ({ navigate: vi.fn() }));
 vi.mock('../lib/voiceSystem.js', () => ({
   VOICE_TYPES: [],
+  VOICE_LINK_TYPES: [],
   getVoiceColor: vi.fn(() => '#000'),
 }));
 vi.mock('../lib/authStore.js', () => ({ isAdmin: vi.fn(() => false) }));

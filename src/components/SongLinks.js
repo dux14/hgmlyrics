@@ -8,7 +8,7 @@
 import '../styles/song-links.css';
 import { fetchSongDetail } from '../lib/store.js';
 import { navigate } from '../router.js';
-import { VOICE_TYPES, getVoiceColor } from '../lib/voiceSystem.js';
+import { VOICE_LINK_TYPES, getVoiceColor } from '../lib/voiceSystem.js';
 import { isAdmin } from '../lib/authStore.js';
 import { icon } from '../lib/icons.js';
 import { escapeHtml, safeUrl } from '../lib/escape.js';
@@ -107,7 +107,7 @@ export async function renderSongLinks(container, songId) {
     voiceGroupsMap[v.voiceType].push(v);
   }
 
-  const voiceCardsHtml = VOICE_TYPES.filter((vt) => voiceGroupsMap[vt.id])
+  const voiceCardsHtml = VOICE_LINK_TYPES.filter((vt) => voiceGroupsMap[vt.id])
     .map((vt) => {
       const links = voiceGroupsMap[vt.id];
       const linksHtml = links

@@ -33,6 +33,8 @@
   --color-voice-contralto-bg: rgba(106, 27, 154, 0.12);
   --color-voice-tenor-bg: rgba(181, 137, 0, 0.12);
   --color-voice-bass-bg: rgba(21, 101, 192, 0.12);
+  --color-voice-extra-bg: rgba(171, 71, 188, 0.12);
+  --color-voice-chorus-bg: rgba(171, 71, 188, 0.12);
 
   /* Chord color — verde para diferenciar del Bajo (azul) */
   --color-chord: #2e7d32;
@@ -140,6 +142,8 @@
   --color-voice-contralto-bg: rgba(206, 147, 216, 0.15);
   --color-voice-tenor-bg: rgba(255, 224, 130, 0.15);
   --color-voice-bass-bg: rgba(144, 202, 249, 0.15);
+  --color-voice-extra-bg: rgba(206, 147, 216, 0.15);
+  --color-voice-chorus-bg: rgba(206, 147, 216, 0.15);
 
   /* Chord color — verde pastel para dark mode */
   --color-chord: #a5d6a7;

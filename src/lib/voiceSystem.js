@@ -64,9 +64,32 @@ export const VOICE_TYPES = VOICE_GROUPS.flatMap((group) =>
 );
 
 /**
- * Valid voice IDs
+ * Valid voice IDs (solo las 4 voces SATB cantadas). Gatea el editor de letras y
+ * la validación de rangos/roster — NO incluye categorías de solo-link como 'extra'.
  */
 export const VALID_VOICE_IDS = VOICE_TYPES.map((v) => v.id);
+
+/**
+ * Categoría exclusiva de los links de Drive (song_voice_links): pistas colectivas
+ * (Todos / Coros / Solista / Voces negras). NO es una voz cantable: queda fuera de
+ * VOICE_TYPES / VALID_VOICE_IDS / CANONICAL_VOICE_ORDER para no contaminar el editor
+ * de letras ni la validación de canciones.
+ */
+export const EXTRA_VOICE_TYPE = {
+  id: 'extra',
+  label: 'Coros / Todos',
+  sublabel: 'Colectivo',
+  cssColor: '--color-voice-chorus',
+  cssBg: '--color-voice-chorus-bg',
+  gender: 'collective',
+};
+
+/**
+ * Voces seleccionables en los links de Drive: las 4 SATB + 'extra' (colectivo).
+ * Úsala SOLO en SongLinks (render) y SongEditor (dropdown de links), nunca en el
+ * modelo de voces cantadas.
+ */
+export const VOICE_LINK_TYPES = [...VOICE_TYPES, EXTRA_VOICE_TYPE];
 
 /**
  * Get the CSS custom property for a voice color
@@ -74,7 +97,7 @@ export const VALID_VOICE_IDS = VOICE_TYPES.map((v) => v.id);
  * @returns {string} CSS var() value
  */
 export function getVoiceColor(voiceId) {
-  const voice = VOICE_TYPES.find((v) => v.id === voiceId);
+  const voice = VOICE_LINK_TYPES.find((v) => v.id === voiceId);
   return voice ? `var(${voice.cssColor})` : 'inherit';
 }
 
@@ -84,17 +107,17 @@ export function getVoiceColor(voiceId) {
  * @returns {string} CSS var() value
  */
 export function getVoiceBgColor(voiceId) {
-  const voice = VOICE_TYPES.find((v) => v.id === voiceId);
+  const voice = VOICE_LINK_TYPES.find((v) => v.id === voiceId);
   return voice ? `var(${voice.cssBg})` : 'transparent';
 }
 
 /**
- * Get display label for a voice: "Soprano", "Contralto", "Tenor", "Bajo"
+ * Get display label for a voice: "Soprano", "Contralto", "Tenor", "Bajo", "Coros / Todos"
  * @param {string} voiceId
  * @returns {string}
  */
 export function getVoiceLabel(voiceId) {
-  const voice = VOICE_TYPES.find((v) => v.id === voiceId);
+  const voice = VOICE_LINK_TYPES.find((v) => v.id === voiceId);
   return voice ? voice.label : voiceId;
 }
 

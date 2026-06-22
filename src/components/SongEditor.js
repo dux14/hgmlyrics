@@ -12,7 +12,7 @@ import { getSession, isFeatureEnabled } from '../lib/authStore.js';
 import { renderSongView } from './SongView.js';
 import {
   CANONICAL_VOICE_ORDER,
-  VOICE_TYPES,
+  VOICE_LINK_TYPES,
   validateSongV3,
   getVoiceLabel,
   isValidNote,
@@ -419,7 +419,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
           <div class="form-group" style="flex: 1;">
             <label class="form-group__label">Voz</label>
             <select class="form-group__input" data-action="vlink-voice" data-idx="${i}">
-              ${VOICE_TYPES.map((v) => `<option value="${v.id}" ${item.voiceType === v.id ? 'selected' : ''}>${v.label}</option>`).join('')}
+              ${VOICE_LINK_TYPES.map((v) => `<option value="${v.id}" ${item.voiceType === v.id ? 'selected' : ''}>${v.label}</option>`).join('')}
             </select>
           </div>
           <div class="form-group" style="flex: 2;">

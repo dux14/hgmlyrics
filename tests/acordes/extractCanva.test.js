@@ -44,3 +44,24 @@ describe('joinContinuations', () => {
     expect(songs[1].title).toBe('Madre')
   })
 })
+
+import { splitArrangementPreamble, splitEmojiGlossary } from '../../scripts/acordes/lib/extractCanva.mjs'
+
+describe('splitArrangementPreamble', () => {
+  it('separa el preámbulo de arreglo del cuerpo', () => {
+    const body = ['Base mujeres', 'Completa', 'Segundas hombres', '🎸🌻', 'HOMBRES', 'Basta de preguntarse']
+    const r = splitArrangementPreamble(body)
+    expect(r.preamble).toEqual(['Base mujeres', 'Completa', 'Segundas hombres'])
+    expect(r.body[0]).toBe('🎸🌻')
+  })
+})
+
+describe('splitEmojiGlossary', () => {
+  it('separa el glosario final emoji→significado', () => {
+    const lines = ['letra real', '🛸-> inicio disco', '👽 -> fin disco']
+    const r = splitEmojiGlossary(lines)
+    expect(r.body).toEqual(['letra real'])
+    expect(r.glossary['🛸']).toBe('inicio disco')
+    expect(r.glossary['👽']).toBe('fin disco')
+  })
+})

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseVoiceMarker, parseStretches, parseBends, parseDirectives } from '../../scripts/acordes/lib/parseCanvaLine.mjs'
+import { parseVoiceMarker, parseStretches, parseBends, parseDirectives, parseCanvaLine } from '../../scripts/acordes/lib/parseCanvaLine.mjs'
 
 describe('parseVoiceMarker', () => {
   it('marcador en línea sola → block', () => {
@@ -92,5 +92,104 @@ describe('parseDirectives', () => {
     const r = parseDirectives('uno [silencio 2] dos 🛸 tres', gloss)
     expect(r.clean).toBe('uno dos tres')
     expect(r.clean).not.toMatch(/ {2,}/)
+  })
+})
+
+describe('parseBends — map de deleción', () => {
+  it('a↗️b → map lleva índice de b al índice correcto en "ab"', () => {
+    const r = parseBends('a↗️b')
+    // input: 'a'=0, '↗'=1, '️'=2(VS16), 'b'=3 → clean: 'a'=0, 'b'=1
+    // map[0]=0 (a→a), map[3]=1 (b→b en clean)
+    expect(r.clean).toBe('ab')
+    expect(r.map).toBeDefined()
+    // índice 0 ('a') → 0 en clean
+    expect(r.map[0]).toBe(0)
+    // índice de 'b' en el input (3) → 1 en clean
+    const bIdx = 'a↗️'.length // posición de 'b' en la cadena original
+    expect(r.map[bIdx]).toBe(1)
+  })
+
+  it('map es monótono no decreciente', () => {
+    const r = parseBends('do↘️↗️re')
+    expect(r.clean).toBe('dore')
+    for (let i = 1; i < r.map.length; i++) {
+      expect(r.map[i]).toBeGreaterThanOrEqual(r.map[i - 1])
+    }
+  })
+})
+
+describe('parseCanvaLine — composición con reenvío de coordenadas', () => {
+  it('desfase de coords: [REPITE] sal de tiii-iiii → pos del stretch apunta a la i final', () => {
+    const r = parseCanvaLine('[REPITE] sal de tiii-iiii')
+    expect(r.clean).toBe('sal de ti')
+    // directiva repite en pos 0 del clean
+    const repite = r.directives.find(d => d.kind === 'repite')
+    expect(repite).toBeDefined()
+    expect(repite.pos).toBe(0)
+    // stretch debe apuntar a la 'i' de 'ti' en el clean final
+    expect(r.stretches).toHaveLength(1)
+    expect(r.stretches[0].pos).toBe(8)
+    expect(r.clean[r.stretches[0].pos]).toBe('i')
+  })
+
+  it('stretch + bend + directiva coexistiendo con clamp en [0, clean.length]', () => {
+    // clean esperado: "gloria" (stretch→ "tiii-iiii"→"ti" pero luego todo se quita con SILENCIO y 🎹→"piano")
+    // Línea: "[SILENCIO] tiii-iiii↗️ gloria 🎹"
+    // 1. parseVoiceMarker → null (no hay marcador de voz)
+    // 2. parseStretches("[SILENCIO] tiii-iiii↗️ gloria 🎹") → stretch pos en "[SILENCIO] ti↗️ gloria 🎹"
+    // 3. parseBends → remueve ↗️
+    // 4. parseDirectives("[SILENCIO] ti gloria 🎹", {'🎹':'piano'}) → remueve [SILENCIO] y 🎹
+    //    clean = "ti gloria"... pero [SILENCIO] + espacios colapsados → clean = "ti gloria"
+    // Recheck: parseDirectives quita [SILENCIO] al inicio → "ti gloria" luego quita 🎹 → "ti gloria"
+    // clean final = "ti gloria"
+    const r = parseCanvaLine('[SILENCIO] tiii-iiii↗️ gloria 🎹', { '🎹': 'piano' })
+    // Verificar clean razonable (sin directivas ni flechas ni stretch)
+    expect(r.clean).not.toMatch(/↗|↘|〰|➡/)
+    expect(r.clean).not.toMatch(/\[/)
+    expect(r.clean).not.toMatch(/🎹/)
+    // Todas las pos dentro de [0, clean.length]
+    for (const s of r.stretches) {
+      expect(s.pos).toBeGreaterThanOrEqual(0)
+      expect(s.pos).toBeLessThanOrEqual(r.clean.length)
+    }
+    for (const b of r.bends) {
+      expect(b.pos).toBeGreaterThanOrEqual(0)
+      expect(b.pos).toBeLessThanOrEqual(r.clean.length)
+    }
+    for (const d of r.directives) {
+      expect(d.pos).toBeGreaterThanOrEqual(0)
+      expect(d.pos).toBeLessThanOrEqual(r.clean.length)
+    }
+    // El stretch debe apuntar a un índice válido con contenido real o al borde
+    if (r.stretches.length > 0) {
+      const pos = r.stretches[0].pos
+      const ch = r.clean[pos]
+      // si apunta dentro del string, debe ser letra o estar en el borde
+      if (pos < r.clean.length) {
+        expect(ch).toMatch(/\S/)
+      }
+    }
+    // directives incluye silencio y piano
+    expect(r.directives.some(d => d.kind === 'silencio')).toBe(true)
+    expect(r.directives.some(d => d.kind === 'piano')).toBe(true)
+  })
+
+  it('marcador de voz + stretch: TODOS sal de tiii-iiii → marker inline, clean "sal de ti", stretch pos 8', () => {
+    const r = parseCanvaLine('TODOS sal de tiii-iiii')
+    expect(r.marker).not.toBeNull()
+    expect(r.marker.mode).toBe('inline')
+    expect(r.clean).toBe('sal de ti')
+    expect(r.stretches).toHaveLength(1)
+    expect(r.stretches[0].pos).toBe(8)
+    expect(r.clean[r.stretches[0].pos]).toBe('i')
+  })
+
+  it('línea sin anotaciones → pasa limpia', () => {
+    const r = parseCanvaLine('basta de quererla comprender')
+    expect(r.clean).toBe('basta de quererla comprender')
+    expect(r.stretches).toEqual([])
+    expect(r.bends).toEqual([])
+    expect(r.directives).toEqual([])
+    expect(r.marker).toBeNull()
   })
 })

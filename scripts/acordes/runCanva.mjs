@@ -10,12 +10,7 @@ import {
   splitArrangementPreamble,
   splitEmojiGlossary,
 } from './lib/extractCanva.mjs'
-import {
-  parseVoiceMarker,
-  parseStretches,
-  parseBends,
-  parseDirectives,
-} from './lib/parseCanvaLine.mjs'
+import { parseCanvaLine } from './lib/parseCanvaLine.mjs'
 import { alignLines, remapPositions } from './lib/alignCanva.mjs'
 import { applyVoiceBlocks, mergeLayers } from './lib/buildLayers.mjs'
 import { buildSongJson } from './lib/emitSongJson.mjs'
@@ -33,14 +28,7 @@ function slug(title) {
 function parseCanvaSong(rawLines) {
   const { body: b1 } = splitArrangementPreamble(rawLines.slice(1)) // [0] = título
   const { body, glossary } = splitEmojiGlossary(b1)
-  return body.map(line => {
-    const marker = parseVoiceMarker(line)
-    let text = marker ? marker.clean : line
-    const s = parseStretches(text); text = s.clean
-    const b = parseBends(text); text = b.clean
-    const d = parseDirectives(text, glossary); text = d.clean
-    return { marker, clean: text, stretches: s.stretches, bends: b.bends, directives: d.directives }
-  })
+  return body.map(line => parseCanvaLine(line, glossary))
 }
 
 // ¿La línea Canva trae capas que se perderían al no alinear? Sólo cuentan las líneas

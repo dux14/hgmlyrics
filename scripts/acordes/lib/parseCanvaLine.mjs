@@ -61,15 +61,25 @@ const BEND_RE = /([↗↘〰➡])️?/gu
 
 export function parseBends(line) {
   const bends = []
+  // map[i] = índice en clean correspondiente al índice i en line.
+  // Para índices borrados (dentro de una flecha), apunta al borde derecho (monótono no decreciente).
+  const map = new Array(line.length + 1)
   let result = '', last = 0, m
   BEND_RE.lastIndex = 0
   while ((m = BEND_RE.exec(line))) {
-    result += line.slice(last, m.index)
+    const chunk = line.slice(last, m.index)
+    for (let i = 0; i < chunk.length; i++) map[last + i] = result.length + i
+    result += chunk
     bends.push({ pos: result.length, dir: BEND[m[1]] })
+    // índices del span de la flecha → apuntan al borde derecho (= result.length, la pos post-flecha)
+    for (let i = 0; i < m[0].length; i++) map[m.index + i] = result.length
     last = m.index + m[0].length
   }
-  result += line.slice(last)
-  return { clean: result, bends }
+  const tail = line.slice(last)
+  for (let i = 0; i < tail.length; i++) map[last + i] = result.length + i
+  result += tail
+  map[line.length] = result.length
+  return { clean: result, bends, map }
 }
 
 // Escaneo único: directiva entre corchetes | palabra-marcador | emoji de producción.
@@ -100,16 +110,21 @@ function collapseWithPositions(s, positions) {
   map[s.length] = out.length
   out = out.replace(/\s+$/, '')
   const remap = positions.map(p => Math.min(map[p] ?? out.length, out.length))
-  return { text: out, positions: remap }
+  return { text: out, positions: remap, map }
 }
 
 export function parseDirectives(line, glossary = {}) {
   const raw = []
+  // deletionMap[i] = índice en `result` correspondiente al índice i en `line`
+  // (índices dentro de directivas borradas apuntan al borde derecho — monótono no decreciente)
+  const deletionMap = new Array(line.length + 1)
   let result = '', last = 0, m
   DIRECTIVE_SCAN.lastIndex = 0
   while ((m = DIRECTIVE_SCAN.exec(line))) {
     const [full, , bracketInner, word, emoji] = m
-    result += line.slice(last, m.index)
+    const chunk = line.slice(last, m.index)
+    for (let i = 0; i < chunk.length; i++) deletionMap[last + i] = result.length + i
+    result += chunk
     const pos = result.length // posición en la cadena que estamos construyendo (consistente)
     if (emoji) {
       raw.push({ kind: glossary[emoji] ?? 'instrumental', pos, raw: emoji })
@@ -117,10 +132,62 @@ export function parseDirectives(line, glossary = {}) {
       const kind = (bracketInner ?? word).toLowerCase().replace(/\s*\d+$/, '').trim()
       raw.push({ kind, pos, raw: full })
     }
+    // índices del span borrado → borde derecho (= result.length, la pos post-directiva)
+    for (let i = 0; i < full.length; i++) deletionMap[m.index + i] = result.length
     last = m.index + full.length
   }
-  result += line.slice(last)
-  const { text, positions } = collapseWithPositions(result, raw.map(d => d.pos))
+  const tail = line.slice(last)
+  for (let i = 0; i < tail.length; i++) deletionMap[last + i] = result.length + i
+  result += tail
+  deletionMap[line.length] = result.length
+
+  const { text, positions, map: collapseMap } = collapseWithPositions(result, raw.map(d => d.pos))
   const directives = raw.map((d, i) => ({ ...d, pos: positions[i] }))
-  return { clean: text, directives }
+
+  // map compuesto: índice en `line` → índice en `text` (clean final)
+  // Para cada índice i en line: primero deletionMap[i] → posición en result,
+  // luego collapseMap[pos en result] → posición en text.
+  const map = deletionMap.map(p => Math.min(collapseMap[p] ?? text.length, text.length))
+
+  return { clean: text, directives, map }
+}
+
+// Aplica un mapa de deleción/colapso a una posición, clampando al último valor si pos >= map.length.
+function applyMap(pos, map) {
+  return map[Math.min(pos, map.length - 1)] ?? map[map.length - 1] ?? 0
+}
+
+/**
+ * Centraliza el parseo de una línea Canva: marcador de voz → stretches → bends → directivas,
+ * reenviando las coordenadas de stretches y bends al espacio del clean final.
+ */
+export function parseCanvaLine(line, glossary = {}) {
+  const marker = parseVoiceMarker(line)
+  const text0 = marker ? marker.clean : line
+
+  // (1) Stretches — pos en coords de s.clean
+  const s = parseStretches(text0)
+
+  // (2) Bends — reenvía stretch.pos a través del mapa de deleción de bends
+  const b = parseBends(s.clean)
+  const stretchesAfterBends = s.stretches.map(st => ({
+    ...st,
+    pos: applyMap(st.pos, b.map),
+  }))
+
+  // (3) Directivas — reenvía stretch.pos y bend.pos a través del mapa compuesto de directivas
+  const d = parseDirectives(b.clean, glossary)
+  const clean = d.clean
+  const len = clean.length
+
+  const stretches = stretchesAfterBends.map(st => ({
+    ...st,
+    pos: Math.min(applyMap(st.pos, d.map), len),
+  }))
+  const bends = b.bends.map(bd => ({
+    ...bd,
+    pos: Math.min(applyMap(bd.pos, d.map), len),
+  }))
+
+  return { marker, clean, stretches, bends, directives: d.directives }
 }

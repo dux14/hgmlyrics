@@ -108,10 +108,15 @@ async function main() {
   }
 
   // ── Modo barrida completa ─────────────────────────────────────────────────
-  const { default: sql } = await import('../../api/_lib/db.js')
+  // Fuente de songs: BD vía db.js (requiere DATABASE_URL) o, si SONGS_JSON apunta a
+  // un dump local [{id,title,sections,cejilla,key}], desde ese archivo (sin BD).
+  const songsJsonPath = process.env.SONGS_JSON
+  const sql = songsJsonPath ? null : (await import('../../api/_lib/db.js')).default
 
   try {
-    const dbSongs = await sql`SELECT id, title, sections, cejilla, key FROM songs`
+    const dbSongs = songsJsonPath
+      ? JSON.parse(readFileSync(songsJsonPath, 'utf8'))
+      : await sql`SELECT id, title, sections, cejilla, key FROM songs`
     const { pairs, unmatchedPdf, unmatchedDb } = matchByTitle(pdfSongsAll, dbSongs)
 
     // Índice rápido: normalizedTitle → par {pdf, db}. Detecta colisiones de título
@@ -244,7 +249,7 @@ ${unmatchedRows || '_Ninguna_'}
     console.log('Resumen:', byState)
     console.log(`JSONs en ${OUT}/json/ · reporte en ${OUT}/report-canva.md`)
   } finally {
-    await sql.end()
+    if (sql) await sql.end()
   }
 }
 

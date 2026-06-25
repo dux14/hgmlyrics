@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseVoiceMarker, parseStretches } from '../../scripts/acordes/lib/parseCanvaLine.mjs'
+import { parseVoiceMarker, parseStretches, parseBends } from '../../scripts/acordes/lib/parseCanvaLine.mjs'
 
 describe('parseVoiceMarker', () => {
   it('marcador en línea sola → block', () => {
@@ -40,5 +40,23 @@ describe('parseStretches', () => {
   })
   it('sin alargamiento → stretches vacío', () => {
     expect(parseStretches('basta de quererla').stretches).toEqual([])
+  })
+})
+
+describe('parseBends', () => {
+  it('↘️ al final → down y se quita del texto', () => {
+    const r = parseBends('sal de ti↘️')
+    expect(r.clean).toBe('sal de ti')
+    expect(r.bends).toEqual([{ pos: 9, dir: 'down' }])
+  })
+  it('mapea las 4 flechas', () => {
+    expect(parseBends('a↗️').bends[0].dir).toBe('up')
+    expect(parseBends('a〰️').bends[0].dir).toBe('wave')
+    expect(parseBends('a➡️').bends[0].dir).toBe('flat')
+  })
+  it('no confunde emojis de producción (🛸👽) con bends', () => {
+    const r = parseBends('La vida pasa.👽')
+    expect(r.bends).toEqual([])
+    expect(r.clean).toBe('La vida pasa.👽') // 👽 lo maneja parseDirectives, no bends
   })
 })

@@ -55,3 +55,19 @@ export function parseStretches(line) {
 }
 
 function countLen(s) { return (s.match(/[aeiou]/giu) || []).length }
+
+const BEND = { '↗': 'up', '↘': 'down', '〰': 'wave', '➡': 'flat' }
+const BEND_RE = /([↗↘〰➡])️?/gu
+
+export function parseBends(line) {
+  const bends = []
+  let result = '', last = 0, m
+  BEND_RE.lastIndex = 0
+  while ((m = BEND_RE.exec(line))) {
+    result += line.slice(last, m.index)
+    bends.push({ pos: result.length, dir: BEND[m[1]] })
+    last = m.index + m[0].length
+  }
+  result += line.slice(last)
+  return { clean: result, bends }
+}

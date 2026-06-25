@@ -71,3 +71,26 @@ export function parseBends(line) {
   result += line.slice(last)
   return { clean: result, bends }
 }
+
+const TEXT_DIRECTIVE = /\[([^\]]+?)\s*\d*\]|\b(TIEMPOS?|VUELTAS|SILENCIO|PAUSA|MELOD[IÍ]A|INSTRUMENTAL|INSTRUMENTOS|GUITARRA|PIANO|ENTRAN|REPITE|SEGUNDO)\b/giu
+const EMOJI_RE = /\p{Extended_Pictographic}[\p{Emoji_Modifier}️‍\p{Extended_Pictographic}]*/gu
+
+export function parseDirectives(line, glossary = {}) {
+  const directives = []
+  // 1) marcadores de texto (no se borran del clean si son inline de letra; se borran si es marcador solo)
+  let clean = line.replace(TEXT_DIRECTIVE, (mm, br, word, off) => {
+    directives.push({ kind: (br ?? word).toLowerCase().replace(/\s*\d+$/, '').trim(), pos: off, raw: mm })
+    return ''
+  })
+  // 2) emojis (excepto bends, ya consumidos): kind desde el glosario de la canción
+  let result = '', last = 0, m
+  EMOJI_RE.lastIndex = 0
+  while ((m = EMOJI_RE.exec(clean))) {
+    result += clean.slice(last, m.index)
+    const raw = m[0]
+    directives.push({ kind: glossary[raw] ?? 'instrumental', pos: result.length, raw })
+    last = m.index + m[0].length
+  }
+  result += clean.slice(last)
+  return { clean: result.replace(/\s{2,}/g, ' ').trim(), directives }
+}

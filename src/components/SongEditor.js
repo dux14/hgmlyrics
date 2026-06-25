@@ -7,7 +7,7 @@
  */
 
 import { fetchSongDetail, refreshData, invalidateSongDetailCache } from '../lib/store.js';
-import { parseImportText, parseLineChords, guessType } from '../lib/importParse.js';
+import { parseImportText } from '../lib/importParse.js';
 import { navigate } from '../router.js';
 import { getSession, isFeatureEnabled } from '../lib/authStore.js';
 import { renderSongView } from './SongView.js';

@@ -43,6 +43,15 @@ function parseCanvaSong(rawLines) {
   })
 }
 
+// ¿La línea Canva trae capas que se perderían al no alinear? Sólo cuentan las líneas
+// con texto real: sin letra que anclar no hay alineación posible (los marcadores de
+// bloque propagan sus voces a las líneas siguientes, y un renglón que se reduce a
+// vacío no tiene dónde remapear sus posiciones).
+function hasLayers(cl) {
+  if (!cl.clean) return false
+  return Boolean(cl.stretches?.length || cl.bends?.length || cl.directives?.length || cl.voices?.length)
+}
+
 function processSong(canvaLines, baseSong) {
   const withVoices = applyVoiceBlocks(canvaLines)
   const baseFlat = []
@@ -51,8 +60,13 @@ function processSong(canvaLines, baseSong) {
   )
   const pairs = alignLines(withVoices, baseFlat.map(x => x.text))
   const layersByBaseLine = {}
+  const dropped = [] // líneas Canva con capas que no alinearon (pérdida silenciosa → se reporta)
   withVoices.forEach((cl, i) => {
-    const p = pairs[i]; if (p.baseIndex == null) return
+    const p = pairs[i]
+    if (p.baseIndex == null) {
+      if (hasLayers(cl)) dropped.push(cl.clean || cl.marker?.clean || '(marcador)')
+      return
+    }
     const { si, li, text } = baseFlat[p.baseIndex]
     layersByBaseLine[`${si}:${li}`] = {
       voices: cl.voices,
@@ -61,7 +75,7 @@ function processSong(canvaLines, baseSong) {
       directives: remapPositions(cl.directives, cl.clean, text),
     }
   })
-  return buildSongJson(mergeLayers(baseSong, layersByBaseLine))
+  return { json: buildSongJson(mergeLayers(baseSong, layersByBaseLine)), dropped }
 }
 
 async function main() {
@@ -95,8 +109,9 @@ async function main() {
     if (!base)  { console.error(`Piloto: canción "${pilot}" no encontrada en PDF.`);  process.exit(1) }
 
     const canvaLines = parseCanvaSong(canva.lines)
-    const json = processSong(canvaLines, base)
+    const { json, dropped } = processSong(canvaLines, base)
     json.dbId = null
+    if (dropped.length) console.warn(`Piloto: ${dropped.length} línea(s) con capas sin alinear:`, dropped)
 
     const outPath = `${OUT}/json/${slug(canva.title)}.json`
     writeFileSync(outPath, JSON.stringify(json, null, 2), 'utf8')
@@ -111,9 +126,19 @@ async function main() {
     const dbSongs = await sql`SELECT id, title, sections, cejilla, key FROM songs`
     const { pairs, unmatchedPdf, unmatchedDb } = matchByTitle(pdfSongsAll, dbSongs)
 
-    // Índice rápido: normalizedTitle → par {pdf, db}
+    // Índice rápido: normalizedTitle → par {pdf, db}. Detecta colisiones de título
+    // normalizado (dos canciones que normalizan igual → una se perdería en silencio).
     const pairByKey = new Map()
-    for (const p of pairs) pairByKey.set(normalizeTitle(p.pdf.title), p)
+    const collisions = []
+    for (const p of pairs) {
+      const k = normalizeTitle(p.pdf.title)
+      if (pairByKey.has(k)) collisions.push({ title: p.pdf.title, key: k, prev: pairByKey.get(k).pdf.title })
+      pairByKey.set(k, p)
+    }
+    if (collisions.length) {
+      console.warn(`⚠ ${collisions.length} colisión(es) de título normalizado (revisa el reporte):`)
+      for (const c of collisions) console.warn(`  "${c.prev}" ⇄ "${c.title}" → ${c.key}`)
+    }
 
     const status = []
 
@@ -128,7 +153,7 @@ async function main() {
 
       try {
         const canvaLines = parseCanvaSong(canva.lines)
-        const json = processSong(canvaLines, pair.pdf)
+        const { json, dropped } = processSong(canvaLines, pair.pdf)
         json.dbId = pair.db.id
 
         const groups = json.sections?.reduce(
@@ -153,6 +178,8 @@ async function main() {
           stretches,
           bends,
           directives,
+          dropped: dropped.length,
+          ...(dropped.length ? { droppedLines: dropped } : {}),
         })
       } catch (e) {
         status.push({ title: canva.title, dbId: pair.db.id, state: 'error', error: String(e) })
@@ -177,7 +204,11 @@ async function main() {
 
     const rows = status
       .filter(s => s.dbId != null)
-      .map(s => `| ${s.title} | ${s.dbId} | ${s.state} | ${s.groups ?? '-'} | ${s.stretches ?? '-'} | ${s.bends ?? '-'} | ${s.directives ?? '-'} |`)
+      .map(s => `| ${s.title} | ${s.dbId} | ${s.state} | ${s.groups ?? '-'} | ${s.stretches ?? '-'} | ${s.bends ?? '-'} | ${s.directives ?? '-'} | ${s.dropped || '-'} |`)
+      .join('\n')
+
+    const collisionRows = collisions
+      .map(c => `- "${c.prev}" ⇄ "${c.title}" → \`${c.key}\``)
       .join('\n')
 
     const unmatchedRows = status
@@ -198,9 +229,21 @@ async function main() {
 
 ## Canciones procesadas
 
-| Título | DB id | Estado | Grupos | Stretches | Bends | Directivas |
-|--------|-------|--------|--------|-----------|-------|------------|
+| Título | DB id | Estado | Grupos | Stretches | Bends | Directivas | Descartadas |
+|--------|-------|--------|--------|-----------|-------|------------|-------------|
 ${rows}
+
+## Líneas descartadas
+
+> "Descartadas" = líneas Canva con capas (voces/stretches/bends/directivas) que no
+> alinearon con ninguna línea base y se perdieron. Revisar las canciones con valor > 0.
+
+## Colisiones de título normalizado
+
+> Dos canciones que normalizan al mismo título: una pisa a la otra y queda sin
+> procesar. Resolver manualmente antes de aplicar.
+
+${collisionRows || '_Ninguna_'}
 
 ## No emparejadas
 

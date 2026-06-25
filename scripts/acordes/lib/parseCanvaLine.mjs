@@ -72,25 +72,55 @@ export function parseBends(line) {
   return { clean: result, bends }
 }
 
-const TEXT_DIRECTIVE = /\[([^\]]+?)\s*\d*\]|\b(TIEMPOS?|VUELTAS|SILENCIO|PAUSA|MELOD[IÍ]A|INSTRUMENTAL|INSTRUMENTOS|GUITARRA|PIANO|ENTRAN|REPITE|SEGUNDO)\b/giu
-const EMOJI_RE = /\p{Extended_Pictographic}[\p{Emoji_Modifier}️‍\p{Extended_Pictographic}]*/gu
+// Escaneo único: directiva entre corchetes | palabra-marcador | emoji de producción.
+// (1)=corchete completo, (2)=interior del corchete, (3)=palabra, (4)=emoji.
+const DIRECTIVE_SCAN =
+  /(\[([^\]]+?)\s*\d*\])|\b(TIEMPOS?|VUELTAS|SILENCIO|PAUSA|MELOD[IÍ]A|INSTRUMENTAL|INSTRUMENTOS|GUITARRA|PIANO|ENTRAN|REPITE|SEGUNDO)\b|(\p{Extended_Pictographic}[\p{Emoji_Modifier}️‍\p{Extended_Pictographic}]*)/giu
+
+/**
+ * Colapsa espacios repetidos + recorta, remapeando cada posición a través de la
+ * transformación (vía mapa de índices) para que `pos` siga apuntando al carácter
+ * correcto del texto resultante. Sin esto, las directivas quedaban en coordenadas
+ * de la cadena pre-colapso y se desalineaban.
+ */
+function collapseWithPositions(s, positions) {
+  let out = ''
+  const map = new Array(s.length + 1)
+  let prevSpace = true // arranca como espacio → descarta espacios líderes
+  for (let i = 0; i < s.length; i++) {
+    map[i] = out.length
+    if (/\s/.test(s[i])) {
+      if (!prevSpace) out += ' '
+      prevSpace = true
+    } else {
+      out += s[i]
+      prevSpace = false
+    }
+  }
+  map[s.length] = out.length
+  out = out.replace(/\s+$/, '')
+  const remap = positions.map(p => Math.min(map[p] ?? out.length, out.length))
+  return { text: out, positions: remap }
+}
 
 export function parseDirectives(line, glossary = {}) {
-  const directives = []
-  // 1) marcadores de texto (no se borran del clean si son inline de letra; se borran si es marcador solo)
-  let clean = line.replace(TEXT_DIRECTIVE, (mm, br, word, off) => {
-    directives.push({ kind: (br ?? word).toLowerCase().replace(/\s*\d+$/, '').trim(), pos: off, raw: mm })
-    return ''
-  })
-  // 2) emojis (excepto bends, ya consumidos): kind desde el glosario de la canción
+  const raw = []
   let result = '', last = 0, m
-  EMOJI_RE.lastIndex = 0
-  while ((m = EMOJI_RE.exec(clean))) {
-    result += clean.slice(last, m.index)
-    const raw = m[0]
-    directives.push({ kind: glossary[raw] ?? 'instrumental', pos: result.length, raw })
-    last = m.index + m[0].length
+  DIRECTIVE_SCAN.lastIndex = 0
+  while ((m = DIRECTIVE_SCAN.exec(line))) {
+    const [full, , bracketInner, word, emoji] = m
+    result += line.slice(last, m.index)
+    const pos = result.length // posición en la cadena que estamos construyendo (consistente)
+    if (emoji) {
+      raw.push({ kind: glossary[emoji] ?? 'instrumental', pos, raw: emoji })
+    } else {
+      const kind = (bracketInner ?? word).toLowerCase().replace(/\s*\d+$/, '').trim()
+      raw.push({ kind, pos, raw: full })
+    }
+    last = m.index + full.length
   }
-  result += clean.slice(last)
-  return { clean: result.replace(/\s{2,}/g, ' ').trim(), directives }
+  result += line.slice(last)
+  const { text, positions } = collapseWithPositions(result, raw.map(d => d.pos))
+  const directives = raw.map((d, i) => ({ ...d, pos: positions[i] }))
+  return { clean: text, directives }
 }

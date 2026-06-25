@@ -75,4 +75,22 @@ describe('parseDirectives', () => {
   it('línea sin directiva → vacío', () => {
     expect(parseDirectives('basta de quererla', gloss).directives).toEqual([])
   })
+  it('directiva de texto a mitad de línea + emoji: cada pos cae en el borde correcto del clean', () => {
+    const r = parseDirectives('Sal de ti REPITE gloria 🎹 final', gloss)
+    expect(r.clean).toBe('Sal de ti gloria final')
+    // pos de cada directiva debe ubicarse en un borde de palabra del clean, no a mitad
+    for (const d of r.directives) {
+      const before = r.clean.slice(0, d.pos)
+      expect(before === '' || /\s$/.test(before) || /\w$/.test(r.clean[d.pos] ?? '') === false).toBe(true)
+    }
+    const repite = r.directives.find(d => d.kind === 'repite')
+    const piano = r.directives.find(d => d.kind === 'piano')
+    expect(r.clean.slice(repite.pos).startsWith('gloria')).toBe(true)
+    expect(r.clean.slice(0, piano.pos).trimEnd()).toBe('Sal de ti gloria')
+  })
+  it('no deja espacios dobles tras quitar directivas', () => {
+    const r = parseDirectives('uno [silencio 2] dos 🛸 tres', gloss)
+    expect(r.clean).toBe('uno dos tres')
+    expect(r.clean).not.toMatch(/ {2,}/)
+  })
 })

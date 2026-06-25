@@ -20,3 +20,27 @@ describe('splitSections', () => {
     expect(splitSections(olor)).toHaveLength(1)
   })
 })
+
+import { detectSongTitle, joinContinuations } from '../../scripts/acordes/lib/extractCanva.mjs'
+
+describe('detectSongTitle', () => {
+  it('reconoce título de canción (emoji + nombre)', () => {
+    expect(detectSongTitle(['🍞Olor a tostadas', 'HOMBRES'])).toEqual({ title: 'Olor a tostadas', isSong: true })
+  })
+  it('marca separadores/carpetas como no-canción', () => {
+    expect(detectSongTitle(['Carpeta audios']).isSong).toBe(false)
+    expect(detectSongTitle(['Canciones al Espíritu Santo']).isSong).toBe(false)
+    expect(detectSongTitle(['🙏🏻']).isSong).toBe(false) // solo emoji
+  })
+})
+
+describe('joinContinuations', () => {
+  it('fusiona sections sin título nuevo en la canción anterior', () => {
+    const secs = [['🦋 Libertad', 'verso A'], ['continuación sin título'], ['🤱 Madre', 'verso B']]
+    const songs = joinContinuations(secs)
+    expect(songs).toHaveLength(2)
+    expect(songs[0].title).toBe('Libertad')
+    expect(songs[0].lines).toContain('continuación sin título')
+    expect(songs[1].title).toBe('Madre')
+  })
+})

@@ -12,8 +12,13 @@ export function isChord(str) {
   return t.length > 0 && CHORD_RE.test(t);
 }
 
-/** @param {{text:string}} line */
+/** @param {{text:string, items?:Array<{str:string}>}} line */
 export function isChordLine(line) {
+  // Prefer checking items individually (avoids false negatives when items are concatenated without spaces).
+  if (line && Array.isArray(line.items) && line.items.length > 0) {
+    const tokens = line.items.map((i) => (i.str || '').trim()).filter(Boolean);
+    return tokens.length > 0 && tokens.every(isChord);
+  }
   const tokens = ((line && line.text) || '').trim().split(/\s+/).filter(Boolean);
   return tokens.length > 0 && tokens.every(isChord);
 }

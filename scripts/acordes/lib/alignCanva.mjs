@@ -1,14 +1,20 @@
 // scripts/acordes/lib/alignCanva.mjs
 import { normalizeLyric } from './audit.mjs'
 
-/** Jaccard sobre palabras normalizadas. */
+/**
+ * Similitud por contención sobre palabras normalizadas: inter / |conjunto menor|.
+ * Las líneas Canva suelen ser un fragmento del texto base (melismas, vocalizaciones
+ * tipo "sal de ti" ⊂ "Sal de ti, que todo te afecte"). La contención reconoce ese
+ * subconjunto donde Jaccard lo penalizaba por la diferencia de longitud.
+ */
 function sim(a, b) {
   const na = normalizeLyric(a), nb = normalizeLyric(b)
   if (!na && !nb) return 1
   if (na === nb) return 1
-  const ta = new Set(na.split(/\s+/)), tb = new Set(nb.split(/\s+/))
+  const ta = new Set(na.split(/\s+/).filter(Boolean)), tb = new Set(nb.split(/\s+/).filter(Boolean))
+  if (!ta.size || !tb.size) return 0
   let inter = 0; for (const t of ta) if (tb.has(t)) inter++
-  return inter / Math.max(ta.size, tb.size, 1)
+  return inter / Math.min(ta.size, tb.size)
 }
 
 /**

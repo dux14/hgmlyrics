@@ -58,6 +58,7 @@ function processSong(canvaLines, baseSong) {
       voices: cl.voices,
       stretches: remapPositions(cl.stretches, cl.clean, text),
       bends: remapPositions(cl.bends, cl.clean, text),
+      directives: remapPositions(cl.directives, cl.clean, text),
     }
   })
   return buildSongJson(mergeLayers(baseSong, layersByBaseLine))

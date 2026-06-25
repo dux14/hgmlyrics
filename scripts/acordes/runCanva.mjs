@@ -131,7 +131,9 @@ async function main() {
         const json = processSong(canvaLines, pair.pdf)
         json.dbId = pair.db.id
 
-        const groups = json.sections?.length ?? 0
+        const groups = json.sections?.reduce(
+          (acc, s) => acc + (s.lines?.reduce((a, l) => a + (l.groups?.length ?? 0), 0) ?? 0), 0
+        ) ?? 0
         const stretches = json.sections?.reduce(
           (acc, s) => acc + (s.lines?.reduce((a, l) => a + (l.stretches?.length ?? 0), 0) ?? 0), 0
         ) ?? 0
@@ -139,7 +141,7 @@ async function main() {
           (acc, s) => acc + (s.lines?.reduce((a, l) => a + (l.bends?.length ?? 0), 0) ?? 0), 0
         ) ?? 0
         const directives = json.sections?.reduce(
-          (acc, s) => acc + (s.lines?.reduce((a, l) => a + (l.directives?.length ?? 0), 0) ?? 0), 0
+          (acc, s) => acc + (s.directives?.length ?? 0), 0
         ) ?? 0
 
         writeFileSync(`${OUT}/json/${slug(canva.title)}.json`, JSON.stringify(json, null, 2), 'utf8')

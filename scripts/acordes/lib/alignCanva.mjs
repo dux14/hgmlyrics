@@ -2,37 +2,102 @@
 import { normalizeLyric } from './audit.mjs'
 
 /**
+ * Similitud detallada por contención sobre palabras normalizadas.
+ * Devuelve { conf, inter } donde:
+ *   inter = nº de palabras normalizadas en común
+ *   conf  = inter / min(|ta|, |tb|)
+ * Casos borde: ambos vacíos → {conf:1, inter:0}; uno vacío → {conf:0, inter:0}.
+ */
+function simDetail(a, b) {
+  const na = normalizeLyric(a), nb = normalizeLyric(b)
+  if (!na && !nb) return { conf: 1, inter: 0 }
+  if (na === nb) {
+    const size = na.split(/\s+/).filter(Boolean).length
+    return { conf: 1, inter: size }
+  }
+  const ta = new Set(na.split(/\s+/).filter(Boolean)), tb = new Set(nb.split(/\s+/).filter(Boolean))
+  if (!ta.size || !tb.size) return { conf: 0, inter: 0 }
+  let inter = 0; for (const t of ta) if (tb.has(t)) inter++
+  return { conf: inter / Math.min(ta.size, tb.size), inter }
+}
+
+/**
  * Similitud por contención sobre palabras normalizadas: inter / |conjunto menor|.
  * Las líneas Canva suelen ser un fragmento del texto base (melismas, vocalizaciones
  * tipo "sal de ti" ⊂ "Sal de ti, que todo te afecte"). La contención reconoce ese
  * subconjunto donde Jaccard lo penalizaba por la diferencia de longitud.
  */
 function sim(a, b) {
-  const na = normalizeLyric(a), nb = normalizeLyric(b)
-  if (!na && !nb) return 1
-  if (na === nb) return 1
-  const ta = new Set(na.split(/\s+/).filter(Boolean)), tb = new Set(nb.split(/\s+/).filter(Boolean))
-  if (!ta.size || !tb.size) return 0
-  let inter = 0; for (const t of ta) if (tb.has(t)) inter++
-  return inter / Math.min(ta.size, tb.size)
+  return simDetail(a, b).conf
 }
 
 /**
- * Empareja cada línea Canva con la línea base más similar.
- * Conservador: si la mejor similitud es < minConf, devuelve baseIndex null.
+ * Empareja cada línea Canva con la línea base más similar usando asignación global.
+ *
+ * Algoritmo:
+ * 1. Genera todos los pares (ci, bj) con conf >= minConf.
+ * 2. Ordena globalmente por: conf desc, inter desc (la línea más completa gana ante
+ *    un fragmento), lenDiff asc (longitud más parecida), ci asc, bj asc (determinista).
+ * 3. Recorre los pares asignando de forma codiciosa: si ni ci ni bj están usados, asigna.
+ * 4. Líneas Canva sin asignar quedan {baseIndex: null, confidence: mejor conf observada}.
+ *
+ * Complejidad O(C*B) con C líneas Canva y B líneas base.
  */
 export function alignLines(canvaLines, baseLines, minConf = 0.6) {
-  const used = new Set()
-  return canvaLines.map(cl => {
-    let best = -1, bestConf = 0
-    baseLines.forEach((b, i) => {
-      if (used.has(i)) return
-      const c = sim(cl.clean, b)
-      if (c > bestConf) { bestConf = c; best = i }
-    })
-    if (bestConf >= minConf) { used.add(best); return { baseIndex: best, confidence: bestConf } }
-    return { baseIndex: null, confidence: bestConf }
+  // Normaliza todos los textos base una sola vez
+  const baseNormLen = baseLines.map(b => {
+    const nb = normalizeLyric(b)
+    return nb ? nb.split(/\s+/).filter(Boolean).length : 0
   })
+
+  // Recoge todos los pares candidatos con conf >= minConf
+  const candidates = []
+  // También recoge el mejor conf por ci (incluyendo pares < minConf) para el fallback
+  const bestConfByCi = new Array(canvaLines.length).fill(0)
+
+  canvaLines.forEach((cl, ci) => {
+    const na = normalizeLyric(cl.clean)
+    const canvaLen = na ? na.split(/\s+/).filter(Boolean).length : 0
+
+    baseLines.forEach((b, bj) => {
+      const { conf, inter } = simDetail(cl.clean, b)
+      if (conf > bestConfByCi[ci]) bestConfByCi[ci] = conf
+      if (conf >= minConf) {
+        const lenDiff = Math.abs(canvaLen - baseNormLen[bj])
+        candidates.push({ ci, bj, conf, inter, lenDiff })
+      }
+    })
+  })
+
+  // Ordena: conf desc, inter desc, lenDiff asc, ci asc, bj asc
+  candidates.sort((a, b) =>
+    b.conf - a.conf ||
+    b.inter - a.inter ||
+    a.lenDiff - b.lenDiff ||
+    a.ci - b.ci ||
+    a.bj - b.bj
+  )
+
+  // Asignación codiciosa global
+  const usedCi = new Set()
+  const usedBj = new Set()
+  const result = new Array(canvaLines.length).fill(null)
+
+  for (const { ci, bj, conf } of candidates) {
+    if (usedCi.has(ci) || usedBj.has(bj)) continue
+    result[ci] = { baseIndex: bj, confidence: conf }
+    usedCi.add(ci)
+    usedBj.add(bj)
+  }
+
+  // Rellena los no asignados con baseIndex null + mejor conf observada
+  for (let ci = 0; ci < canvaLines.length; ci++) {
+    if (result[ci] === null) {
+      result[ci] = { baseIndex: null, confidence: bestConfByCi[ci] }
+    }
+  }
+
+  return result
 }
 
 /**

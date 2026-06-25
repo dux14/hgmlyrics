@@ -22,3 +22,29 @@ export function isChordLine(line) {
 export function isInlineableChord(ch) {
   return INLINE_CHORD_RE.test((ch || '').trim());
 }
+
+/**
+ * Mapea la x de un acorde al índice de carácter más cercano dentro de la línea de letra.
+ * Asume ancho/char ~constante dentro de cada item (ancho del item / nº chars).
+ * El índice resultante ES chords[].pos (mismo contrato que render e importador).
+ * @param {number} chordX
+ * @param {{items:Array<{str:string,x:number,width:number}>}} lyricLine
+ * @returns {number}
+ */
+export function xToCharIndex(chordX, lyricLine) {
+  const items = (lyricLine && lyricLine.items) || [];
+  if (items.length === 0) return 0;
+  let best = { idx: 0, dist: Infinity };
+  let globalIdx = 0;
+  for (const it of items) {
+    const n = (it.str || '').length;
+    const charW = n > 0 ? it.width / n : 0;
+    for (let i = 0; i <= n; i++) {
+      const x = it.x + i * charW;
+      const dist = Math.abs(x - chordX);
+      if (dist < best.dist) best = { idx: globalIdx + i, dist };
+    }
+    globalIdx += n;
+  }
+  return best.idx;
+}

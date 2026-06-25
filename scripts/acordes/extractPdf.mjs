@@ -5,6 +5,7 @@ import { splitColumns } from './lib/columns.mjs';
 import { groupLines } from './lib/lines.mjs';
 import { pairChordLines } from './lib/pair.mjs';
 import { classifySections } from './lib/sections.mjs';
+import { normalizeTitle } from './lib/titles.mjs';
 
 /** Carga el PDF y devuelve items normalizados por página. */
 export async function loadPdfItems(path) {
@@ -69,7 +70,16 @@ export async function extractSongs(path, { columnThreshold = 290, deltaY = 14 } 
     }
   }
   const rawSongs = detectSongBoundaries(allColumnLines);
-  return rawSongs.map((song) => {
+  // Deduplicar: el índice/TOC genera entradas vacías (0 líneas) para cada canción antes
+  // de que aparezca su contenido real. Conservar sólo la instancia con más líneas.
+  const best = new Map(); // normTitle → rawSong con más líneas
+  for (const song of rawSongs) {
+    const key = normalizeTitle(song.title);
+    if (!best.has(key) || song.lines.length > best.get(key).lines.length) {
+      best.set(key, song);
+    }
+  }
+  return [...best.values()].map((song) => {
     const positioned = pairChordLines(song.lines, deltaY);
     // Agrupar líneas en secciones por bloques separados (línea vacía) — simplificación inicial.
     const sections = [{ label: undefined, lines: positioned }];

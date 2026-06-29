@@ -15,6 +15,7 @@
     "format:check": "prettier --check 'src/**/*.{js,css,html,json}'",
     "optimize:covers": "node scripts/optimize-covers.mjs",
     "dev:vercel": "vercel dev --listen 3000",
+    "test:e2e:offline": "pnpm build && start-server-and-test 'pnpm preview --port 4173' http://localhost:4173 'playwright test e2e/offline.spec.js'",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -26,6 +27,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.0",
     "@lhci/cli": "^0.13.0",
+    "@playwright/test": "^1.61.1",
     "@vitest/coverage-v8": "^4.1.0",
     "eslint": "^10.0.3",
     "husky": "^9.1.7",
@@ -34,6 +36,7 @@
     "pdfjs-dist": "^6.0.227",
     "prettier": "^3.8.1",
     "sharp": "^0.34.5",
+    "start-server-and-test": "^3.0.11",
     "vite": "^7.3.1",
     "vite-plugin-pwa": "^1.2.0",
     "vitest": "^4.1.0"

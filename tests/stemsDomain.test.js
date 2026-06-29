@@ -5,6 +5,7 @@ import {
   ACTIVE_STATUSES,
   expiresAt,
   validateUploadMeta,
+  sanitizeTitle,
 } from '../api/_lib/stems.js';
 
 describe('canTransition', () => {
@@ -63,6 +64,23 @@ describe('validateUploadMeta', () => {
     expect(() => validateUploadMeta({ ...ok, filename: '' })).toThrow(
       expect.objectContaining({ status: 400 }),
     );
+  });
+});
+
+describe('sanitizeTitle', () => {
+  it('recorta espacios y respeta el título dado', () => {
+    expect(sanitizeTitle('  Mi canción  ', 'archivo.mp3')).toBe('Mi canción');
+  });
+  it('cae al filename sin extensión si el título es vacío', () => {
+    expect(sanitizeTitle('   ', 'colombia.mp3')).toBe('colombia');
+    expect(sanitizeTitle(undefined, 'colombia.mp3')).toBe('colombia');
+  });
+  it('cae a "Audio" si no hay título ni filename', () => {
+    expect(sanitizeTitle('', '')).toBe('Audio');
+  });
+  it('recorta a 120 caracteres', () => {
+    const long = 'x'.repeat(200);
+    expect(sanitizeTitle(long, 'a.mp3').length).toBe(120);
   });
 });
 

@@ -78,3 +78,19 @@ export function validateUploadMeta({ filename, size, mime } = {}) {
   if (size > MAX_FILE_BYTES) fail('El archivo supera el máximo de 25 MB');
   if (!mime || !AUDIO_MIMES.has(mime)) fail('Formato no soportado: sube MP3, WAV, M4A, FLAC u OGG');
 }
+
+const MAX_TITLE_LEN = 120;
+
+/**
+ * Sanea un título de canción: recorta espacios y longitud; si queda vacío, cae al
+ * nombre del archivo sin extensión; si tampoco hay, "Audio".
+ * @param {unknown} raw
+ * @param {string} [fallbackFilename]
+ * @returns {string}
+ */
+export function sanitizeTitle(raw, fallbackFilename = '') {
+  const trimmed = typeof raw === 'string' ? raw.trim() : '';
+  if (trimmed) return trimmed.slice(0, MAX_TITLE_LEN);
+  const fromFile = String(fallbackFilename).replace(/\.[^/.]+$/, '').trim();
+  return (fromFile || 'Audio').slice(0, MAX_TITLE_LEN);
+}

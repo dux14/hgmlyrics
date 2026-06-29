@@ -2,7 +2,7 @@ import sql from '../_lib/db.js';
 import { requireUser } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { createStemsUploadUrl, deleteStemsPrefix } from '../_lib/storage.js';
-import { DAILY_QUOTA, validateUploadMeta, checkStudioAccess } from '../_lib/stems.js';
+import { DAILY_QUOTA, validateUploadMeta, checkStudioAccess, sanitizeTitle } from '../_lib/stems.js';
 
 async function quotaUsedToday(userId) {
   // Solo cuenta jobs que realmente entraron a procesamiento o terminaron OK.
@@ -79,13 +79,14 @@ export default withErrors(async (req, res) => {
     }
   }
 
-  const { filename, size, mime } = req.body ?? {};
+  const { filename, size, mime, title } = req.body ?? {};
   validateUploadMeta({ filename, size, mime });
 
   const safe = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80);
+  const cleanTitle = sanitizeTitle(title, filename);
   const rows = await sql`
     INSERT INTO stem_jobs (user_id, status, input_meta)
-    VALUES (${user.id}, 'created', ${sql.json({ filename: safe, size, mime })})
+    VALUES (${user.id}, 'created', ${sql.json({ filename: safe, title: cleanTitle, size, mime })})
     RETURNING id, status, created_at
   `;
   const job = rows[0];

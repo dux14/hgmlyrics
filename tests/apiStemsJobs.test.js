@@ -149,6 +149,33 @@ describe('POST /api/stems/jobs', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('guarda title saneado en input_meta', async () => {
+    sqlResponses.push([{ is_admin: false, studio_beta: true }]); // perfil
+    sqlResponses.push([]); // reclamo
+    sqlResponses.push([]); // sin job en proceso
+    sqlResponses.push([{ n: 0 }]); // cuota
+    sqlResponses.push([{ id: 'j1', status: 'created' }]); // INSERT
+    const res = makeRes();
+    await handler(authedReq({ body: { filename: 'a.mp3', size: 1024, mime: 'audio/mpeg', title: '  Mi tema  ' } }), res);
+    expect(res.statusCode).toBe(200);
+    const insertCall = sqlCalls.find((c) => c.text.includes('INSERT INTO stem_jobs'));
+    const meta = insertCall.values.find((v) => v && typeof v === 'object' && 'filename' in v);
+    expect(meta.title).toBe('Mi tema');
+  });
+
+  it('title vacío cae al filename sin extensión', async () => {
+    sqlResponses.push([{ is_admin: false, studio_beta: true }]);
+    sqlResponses.push([]);
+    sqlResponses.push([]);
+    sqlResponses.push([{ n: 0 }]);
+    sqlResponses.push([{ id: 'j2', status: 'created' }]);
+    const res = makeRes();
+    await handler(authedReq({ body: { filename: 'colombia.mp3', size: 1024, mime: 'audio/mpeg', title: '   ' } }), res);
+    const insertCall = sqlCalls.find((c) => c.text.includes('INSERT INTO stem_jobs'));
+    const meta = insertCall.values.find((v) => v && typeof v === 'object' && 'filename' in v);
+    expect(meta.title).toBe('colombia');
+  });
+
   it('crea el job y devuelve upload firmado', async () => {
     sqlResponses.push([{ is_admin: false, studio_beta: true }]); // perfil beta
     sqlResponses.push([]); // reclamo

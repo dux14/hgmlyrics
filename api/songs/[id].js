@@ -38,6 +38,7 @@ async function getOne(req, res, id) {
   }
   const r = rows[0];
   const { voicePercentMale, voicePercentFemale, ...rest } = r;
+  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=86400');
   res
     .status(200)
     .json({ ...rest, voicePercent: { male: voicePercentMale, female: voicePercentFemale } });

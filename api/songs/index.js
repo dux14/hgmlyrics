@@ -26,6 +26,7 @@ export function invalidateListCache() {
 }
 
 async function listSongs(_req, res) {
+  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=86400, stale-if-error=86400');
   if (listCache && Date.now() - listCacheAt < TTL_MS) {
     res.status(200).json(listCache);
     return;

@@ -19,12 +19,12 @@ async function jsonOrThrow(res) {
   return body;
 }
 
-/** Crea el job y devuelve { job, upload } */
-export async function createJob(file) {
+/** Crea el job y devuelve { job, upload }. `title` opcional → input_meta.title */
+export async function createJob(file, title) {
   const res = await fetch('/api/stems/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ filename: file.name, size: file.size, mime: file.type }),
+    body: JSON.stringify({ filename: file.name, size: file.size, mime: file.type, title }),
   });
   return jsonOrThrow(res);
 }
@@ -37,10 +37,22 @@ export async function uploadInput(upload, file) {
   if (error) throw new Error('La subida falló. Revisa tu conexión e intenta de nuevo.');
 }
 
-export async function startJob(id) {
+/** Arranca el procesamiento. `enabledSections` es un array de claves de sección. */
+export async function startJob(id, enabledSections) {
   const res = await fetch(`/api/stems/jobs/${id}/start`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ enabledSections }),
+  });
+  return jsonOrThrow(res);
+}
+
+/** Edita el título mostrado del job. Devuelve { job }. */
+export async function updateJobTitle(id, title) {
+  const res = await fetch(`/api/stems/jobs/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ title }),
   });
   return jsonOrThrow(res);
 }

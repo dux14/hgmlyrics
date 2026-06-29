@@ -58,3 +58,28 @@ export function deriveJobStatus(sections) {
   if (done === 0) return 'failed';
   return 'partial';
 }
+
+/**
+ * Sanea el conjunto de secciones pedido por el cliente.
+ * Filtra a SECTION_KEYS, deduplica, respeta el orden canónico y aplica el gate de gender.
+ * Lanza { status: 400 } si el resultado queda vacío o el input no es un arreglo.
+ * @param {unknown} input
+ * @param {{ genderEnabled: boolean }} opts
+ * @returns {string[]}
+ */
+export function validateEnabledSections(input, { genderEnabled } = {}) {
+  const fail = (msg) => {
+    const e = new Error(msg);
+    e.status = 400;
+    throw e;
+  };
+  if (!Array.isArray(input)) fail('enabledSections debe ser un arreglo');
+  const requested = new Set(input);
+  const result = SECTION_KEYS.filter((key) => {
+    if (!requested.has(key)) return false;
+    if (key === 'gender' && !genderEnabled) return false;
+    return true;
+  });
+  if (result.length === 0) fail('Selecciona al menos una sección para procesar');
+  return result;
+}

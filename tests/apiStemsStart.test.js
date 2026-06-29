@@ -2,7 +2,7 @@
  * apiStemsStart.test.js — TDD para POST /api/stems/jobs/[id]/start
  * Fase 0 DAG: inicializa secciones, pre-firma URLs de upload/download, invoca run_pipeline.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ── Mocks de storage ──────────────────────────────────────────────────────────
 const mockCreateSignedUrl = vi.fn();
@@ -358,5 +358,58 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
 
     expect(res.statusCode).toBe(500);
     expect(mockInvokeModalPipeline).not.toHaveBeenCalled();
+  });
+
+  it('toma enabledSections del body y marca el resto como skipped', async () => {
+    sqlResponses.push([jobCreated()]); // SELECT
+    sqlResponses.push([]); // UPDATE
+    const res = makeRes();
+    await handler(authedReq({ body: { enabledSections: ['voiceInstrumental', 'structure'] } }), res);
+
+    expect(res.statusCode).toBe(200);
+    const payload = mockInvokeModalPipeline.mock.calls[0][0];
+    expect(payload.enabledSections).toEqual(['voiceInstrumental', 'structure']);
+
+    const updateCall = sqlCalls.find(
+      (c) => c.text.includes('processing') && c.text.includes('stem_jobs'),
+    );
+    const sectionsArg = updateCall.values.find(
+      (v) => v && typeof v === 'object' && 'voiceInstrumental' in v,
+    );
+    expect(sectionsArg.voiceInstrumental.status).toBe('pending');
+    expect(sectionsArg.structure.status).toBe('pending');
+    expect(sectionsArg.leadBacking.status).toBe('skipped');
+    expect(sectionsArg.gender.status).toBe('skipped');
+  });
+
+  it('400 si enabledSections viene vacío', async () => {
+    sqlResponses.push([jobCreated()]); // SELECT
+    const res = makeRes();
+    await handler(authedReq({ body: { enabledSections: [] } }), res);
+    expect(res.statusCode).toBe(400);
+    expect(mockInvokeModalPipeline).not.toHaveBeenCalled();
+  });
+
+  it('gender pedido con STUDIO_GENDER_FLAG=off se elimina del set', async () => {
+    process.env.STUDIO_GENDER_FLAG = 'off';
+    sqlResponses.push([jobCreated()]);
+    sqlResponses.push([]);
+    const res = makeRes();
+    await handler(authedReq({ body: { enabledSections: ['voiceInstrumental', 'gender'] } }), res);
+    expect(res.statusCode).toBe(200);
+    const payload = mockInvokeModalPipeline.mock.calls[0][0];
+    expect(payload.enabledSections).not.toContain('gender');
+  });
+
+  it('400 si enabledSections es un string (no-array presente)', async () => {
+    sqlResponses.push([jobCreated()]); // SELECT
+    const res = makeRes();
+    await handler(authedReq({ body: { enabledSections: 'voiceInstrumental' } }), res);
+    expect(res.statusCode).toBe(400);
+    expect(mockInvokeModalPipeline).not.toHaveBeenCalled();
+  });
+
+  afterEach(() => {
+    delete process.env.STUDIO_GENDER_FLAG;
   });
 });

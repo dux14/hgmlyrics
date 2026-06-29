@@ -3,7 +3,7 @@ import { requireUser } from '../../../_lib/auth.js';
 import { allowMethods, withErrors } from '../../../_lib/http.js';
 import { signStemsDownload, createStemsSignedPutUrl } from '../../../_lib/storage.js';
 import { invokeModalPipeline } from '../../../_lib/modal.js';
-import { initSections, SECTION_OUTPUTS } from '../../_sections.js';
+import { initSections, SECTION_KEYS, SECTION_OUTPUTS, validateEnabledSections } from '../../_sections.js';
 
 export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['POST'])) return;
@@ -40,10 +40,17 @@ export default withErrors(async (req, res) => {
   }
 
   // ── 1. Secciones habilitadas ────────────────────────────────────────────────
-  // STUDIO_GENDER_FLAG: 'on' habilita la sección gender (dos modelos).
-  // Para apagar sin redeploy: eliminar o cambiar la var a cualquier otro valor.
-  const enabledSections = ['voiceInstrumental', 'structure', 'leadBacking'];
-  if (process.env.STUDIO_GENDER_FLAG !== 'off') enabledSections.push('gender');
+  // El cliente elige qué secciones procesar (mínimo 1). Sin selección explícita,
+  // se procesan las 4 (compatibilidad con el flujo anterior).
+  // STUDIO_GENDER_FLAG: 'off' apaga gender sin redeploy.
+  const genderEnabled = process.env.STUDIO_GENDER_FLAG !== 'off';
+  const raw = req.body?.enabledSections;
+  if (raw !== undefined && !Array.isArray(raw)) {
+    res.status(400).json({ error: 'enabledSections debe ser un arreglo' });
+    return;
+  }
+  const requested = Array.isArray(raw) ? raw : SECTION_KEYS;
+  const enabledSections = validateEnabledSections(requested, { genderEnabled });
 
   const sections = initSections(enabledSections);
 

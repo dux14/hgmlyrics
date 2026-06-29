@@ -22,20 +22,32 @@ export function isPWA() {
 }
 
 /**
- * Start background pre-caching during idle time
+ * Start background pre-caching during idle time.
+ * Runs for all visitors (not only installed PWA).
  */
 export function startBackgroundCache() {
-  if (!isPWA() || isCaching) return;
+  if (isCaching) return;
 
   if ('requestIdleCallback' in globalThis) {
-    requestIdleCallback(() => prefetchAllSongs(), { timeout: 10000 });
+    requestIdleCallback(() => ensureSongsCached(), { timeout: 10000 });
   } else {
     // Fallback: wait 3 seconds after load
-    setTimeout(() => prefetchAllSongs(), 3000);
+    setTimeout(() => ensureSongsCached(), 3000);
   }
 }
 
-async function prefetchAllSongs() {
+/**
+ * Cache songs if not already cached (or force-refresh on version change / online event).
+ * @param {boolean} [force=false] — skip version check and always re-fetch
+ */
+export async function ensureSongsCached(force = false) {
+  if (isCaching) return;
+  const cachedVersion = await get(OFFLINE_VERSION_KEY);
+  if (!force && cachedVersion) return; // already cached; re-validate via online/force only
+  return prefetchAllSongs(cachedVersion);
+}
+
+async function prefetchAllSongs(cachedVersion) {
   if (isCaching) return;
   isCaching = true;
 
@@ -45,6 +57,10 @@ async function prefetchAllSongs() {
     if (!res.ok) return;
 
     const data = await res.json();
+
+    // Skip write if server version matches what we already have
+    if (cachedVersion && data.version === cachedVersion) return;
+
     await set(OFFLINE_CACHE_KEY, data.songs);
     await set(OFFLINE_VERSION_KEY, data.version);
 
@@ -59,6 +75,13 @@ async function prefetchAllSongs() {
   } finally {
     isCaching = false;
   }
+}
+
+// Re-trigger on reconnect so stale caches get refreshed when coming back online
+if (typeof globalThis.addEventListener === 'function') {
+  globalThis.addEventListener('online', () => {
+    ensureSongsCached(true);
+  });
 }
 
 /**

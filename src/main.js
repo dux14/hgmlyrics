@@ -319,12 +319,10 @@ async function boot() {
   // F1: Initialize update notifier
   initUpdateNotifier();
 
-  // F8: Start background caching for PWA
+  // F8: Start background caching for all visitors (not only installed PWA)
   try {
-    const { startBackgroundCache, isPWA } = await import('./lib/offlineCache.js');
-    if (isPWA()) {
-      startBackgroundCache();
-    }
+    const { startBackgroundCache } = await import('./lib/offlineCache.js');
+    startBackgroundCache();
   } catch (_) {
     // offlineCache module not critical
   }

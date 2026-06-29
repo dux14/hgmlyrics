@@ -14,3 +14,13 @@ export function isMp3File(file) {
   if (file.type === 'audio/mpeg') return true;
   return /\.mp3$/i.test(file.name);
 }
+
+/**
+ * Deriva un título por defecto a partir del nombre de archivo: sin extensión, recortado.
+ * @param {string} name
+ * @returns {string}
+ */
+export function deriveTitleFromFilename(name) {
+  if (typeof name !== 'string') return '';
+  return name.replace(/\.[^/.]+$/, '').trim().slice(0, 120);
+}

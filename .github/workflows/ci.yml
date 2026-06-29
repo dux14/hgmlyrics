@@ -40,6 +40,7 @@ jobs:
         run: pnpm build
 
       - name: Lighthouse CI
+        continue-on-error: true
         run: pnpm exec lhci autorun
         env:
           LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}

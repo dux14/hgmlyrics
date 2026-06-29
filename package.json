@@ -16,6 +16,7 @@
     "optimize:covers": "node scripts/optimize-covers.mjs",
     "dev:vercel": "vercel dev --listen 3000",
     "test:e2e:offline": "pnpm build && start-server-and-test 'pnpm preview --port 4173' http://localhost:4173 'playwright test e2e/offline.spec.js'",
+    "lhci": "pnpm build && lhci autorun",
     "prepare": "husky"
   },
   "lint-staged": {

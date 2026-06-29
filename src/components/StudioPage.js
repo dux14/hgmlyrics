@@ -138,7 +138,17 @@ function renderIdle(body, quota) {
   drop.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') pick();
   });
-  drop.addEventListener('dragover', (e) => e.preventDefault());
+  drop.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    drop.classList.add('is-dragover');
+  });
+  drop.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    drop.classList.add('is-dragover');
+  });
+  drop.addEventListener('dragleave', (e) => {
+    if (!drop.contains(e.relatedTarget)) drop.classList.remove('is-dragover');
+  });
   const rejectNonMp3 = () => {
     renderIdle(body, quota);
     body.insertAdjacentHTML(
@@ -148,6 +158,7 @@ function renderIdle(body, quota) {
   };
   drop.addEventListener('drop', (e) => {
     e.preventDefault();
+    drop.classList.remove('is-dragover');
     const file = e.dataTransfer?.files?.[0];
     if (!file) return;
     if (!isMp3File(file)) {

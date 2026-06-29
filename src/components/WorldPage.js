@@ -301,7 +301,8 @@ export async function renderWorldPage(container) {
       _reconnectEl.hidden = false;
     } else {
       _reconnectEl.textContent = 'Reconectando…';
-      // No forzar hidden: onStatus gestiona la visibilidad cuando el canal Supabase reconecta.
+      _reconnectEl.hidden = true;
+      // onStatus volverá a mostrar el banner si el canal Supabase está desconectado.
     }
   });
 

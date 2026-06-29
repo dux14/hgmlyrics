@@ -10,7 +10,9 @@ export function mountOfflineChip(root = document.body) {
   root.appendChild(chip);
 
   let offlineSince = 0;
+  let hideTimer = null;
   const render = (online) => {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
     if (!online) {
       chip.hidden = false;
       chip.textContent = 'Sin conexión';
@@ -20,9 +22,7 @@ export function mountOfflineChip(root = document.body) {
     if (offlineSince && performance.now() - offlineSince > 2000) {
       chip.hidden = false;
       chip.textContent = 'Conexión restaurada';
-      setTimeout(() => {
-        chip.hidden = true;
-      }, 3500);
+      hideTimer = setTimeout(() => { chip.hidden = true; hideTimer = null; }, 3500);
     } else {
       chip.hidden = true;
     }

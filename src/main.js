@@ -319,6 +319,14 @@ async function boot() {
   // F1: Initialize update notifier
   initUpdateNotifier();
 
+  // Evita evicción del cache offline (clave en iOS pestaña).
+  try {
+    if (navigator.storage?.persist) {
+      const persisted = await navigator.storage.persisted();
+      if (!persisted) await navigator.storage.persist();
+    }
+  } catch (_) { /* no critico */ }
+
   // F8: Start background caching for all visitors (not only installed PWA)
   try {
     const { startBackgroundCache } = await import('./lib/offlineCache.js');

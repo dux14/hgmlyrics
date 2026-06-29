@@ -4,7 +4,7 @@
  * Estados: idle → uploading → processing → done | failed.
  */
 import { icon } from '../lib/icons.js';
-import { SECTION_KEYS } from '../lib/studioSections.js';
+import { SECTION_KEYS, sectionLabel } from '../lib/studioSections.js';
 import {
   createJob,
   uploadInput,
@@ -19,7 +19,7 @@ import { downloadAllZip, buildTrackList, songBaseName } from '../lib/studioZip.j
 import { getDriveToken } from '../lib/driveAuth.js';
 import { uploadTracksToDrive } from '../lib/driveUpload.js';
 import { createActionButton } from '../lib/studioActionButton.js';
-import { isMp3File } from '../lib/studioFile.js';
+import { isMp3File, deriveTitleFromFilename } from '../lib/studioFile.js';
 export { isMp3File };
 import { createStudioPlayer } from './StudioPlayer.js';
 import { renderTimeline, markActive } from './StudioSectionTimeline.js';
@@ -176,11 +176,71 @@ async function handleFile(body, file, quota) {
     );
     return;
   }
+  renderReviewPanel(body, file, quota);
+}
+
+function renderReviewPanel(body, file, quota) {
+  const defaultTitle = deriveTitleFromFilename(file.name);
+  const sectionRows = SECTION_KEYS.map(
+    (key) => `
+      <label class="studio-review__section">
+        <input type="checkbox" class="studio-review__section-check" data-section="${key}" checked />
+        <span class="studio-review__section-label">${escHtml(sectionLabel(key))}</span>
+      </label>`,
+  ).join('');
+
+  body.innerHTML = `
+    <div class="studio-review">
+      <p class="studio-review__filename">${icon('audio-lines', { size: 16 })} <span>${escHtml(file.name)}</span></p>
+      <label class="studio-review__field">
+        <span class="studio-review__field-label">Título</span>
+        <input type="text" class="studio-review__title-input" maxlength="120" value="${escHtml(defaultTitle)}" />
+      </label>
+      <fieldset class="studio-review__sections">
+        <legend class="studio-review__legend">Qué procesar</legend>
+        ${sectionRows}
+      </fieldset>
+      <div class="studio-review__actions">
+        <button type="button" class="btn studio-review__cancel">Cancelar</button>
+        <button type="button" class="btn btn--primary studio-review__submit">
+          ${icon('play', { size: 16 })} <span class="studio-review__submit-label"></span>
+        </button>
+      </div>
+    </div>
+  `;
+
+  const submit = body.querySelector('.studio-review__submit');
+  const submitLabel = body.querySelector('.studio-review__submit-label');
+  const titleInput = body.querySelector('.studio-review__title-input');
+  const checks = [...body.querySelectorAll('.studio-review__section-check')];
+
+  const selected = () => checks.filter((c) => c.checked).map((c) => c.dataset.section);
+  const syncSubmit = () => {
+    const n = selected().length;
+    submit.disabled = n === 0;
+    submitLabel.textContent =
+      n === 0 ? 'Elige una sección' : `Procesar ${n} ${n === 1 ? 'sección' : 'secciones'}`;
+  };
+  checks.forEach((c) => c.addEventListener('change', syncSubmit));
+  syncSubmit();
+
+  body.querySelector('.studio-review__cancel').addEventListener('click', () =>
+    renderIdle(body, quota),
+  );
+  submit.addEventListener('click', () => {
+    const sections = selected();
+    if (sections.length === 0) return;
+    const title = titleInput.value.trim() || deriveTitleFromFilename(file.name);
+    void startUpload(body, file, title, sections, quota);
+  });
+}
+
+async function startUpload(body, file, title, enabledSections, quota) {
   body.innerHTML = `<p aria-busy="true">Subiendo <strong>${escHtml(file.name)}</strong>…</p>`;
   try {
-    const { job, upload } = await createJob(file);
+    const { job, upload } = await createJob(file, title);
     await uploadInput(upload, file);
-    await startJob(job.id);
+    await startJob(job.id, enabledSections);
     watchJob(body, job.id, quota, file.name);
   } catch (e) {
     body.innerHTML = `

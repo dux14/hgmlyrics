@@ -362,6 +362,11 @@ describe('renderStudioPage', () => {
     Object.defineProperty(dropEvent, 'dataTransfer', { value: { files: [fakeFile] } });
     drop.dispatchEvent(dropEvent);
 
+    await vi.waitFor(() =>
+      expect(container.querySelector('.studio-review__submit')).not.toBeNull(),
+    );
+    container.querySelector('.studio-review__submit').click();
+
     // Esperar a que createJob rechace y aparezca el error
     await vi.waitFor(() => expect(container.querySelector('.studio__error')).not.toBeNull());
 
@@ -370,6 +375,78 @@ describe('renderStudioPage', () => {
     const errEl = container.querySelector('.studio__error');
     expect(errEl.textContent).toContain('<script>');
     expect(errEl.innerHTML).toContain('&lt;script&gt;');
+  });
+
+  it('al elegir archivo muestra el panel de revision (titulo prellenado + selector de 4 secciones)', async () => {
+    stemsApi.listJobs.mockResolvedValueOnce({ jobs: [], quota: { used: 0, limit: 3 } });
+    stemsApi.createJob.mockReturnValue(new Promise(() => {})); // no debe llamarse aun
+    renderStudioPage(container);
+    await vi.waitFor(() => expect(container.querySelector('.studio-dropzone')).not.toBeNull());
+
+    const drop = container.querySelector('.studio-dropzone');
+    const file = new File([''], 'colombia.mp3', { type: 'audio/mpeg' });
+    const ev = new Event('drop');
+    ev.preventDefault = vi.fn();
+    Object.defineProperty(ev, 'dataTransfer', { value: { files: [file] } });
+    drop.dispatchEvent(ev);
+
+    await vi.waitFor(() => expect(container.querySelector('.studio-review')).not.toBeNull());
+    const titleInput = container.querySelector('.studio-review__title-input');
+    expect(titleInput.value).toBe('colombia');
+    const checks = container.querySelectorAll('.studio-review__section-check');
+    expect(checks.length).toBe(4);
+    expect([...checks].every((c) => c.checked)).toBe(true);
+    expect(stemsApi.createJob).not.toHaveBeenCalled();
+  });
+
+  it('boton de procesar se deshabilita con 0 secciones y al confirmar llama createJob+startJob con la seleccion', async () => {
+    stemsApi.listJobs.mockResolvedValueOnce({ jobs: [], quota: { used: 0, limit: 3 } });
+    stemsApi.createJob.mockResolvedValue({ job: { id: 'j9' }, upload: { path: 'p', token: 't' } });
+    stemsApi.uploadInput.mockResolvedValue(undefined);
+    stemsApi.startJob.mockResolvedValue({ ok: true });
+    stemsApi.getJob.mockResolvedValue({
+      job: {
+        id: 'j9',
+        status: 'processing',
+        input_meta: { filename: 'colombia.mp3', title: 'colombia' },
+        sections: {},
+      },
+    });
+    renderStudioPage(container);
+    await vi.waitFor(() => expect(container.querySelector('.studio-dropzone')).not.toBeNull());
+
+    const drop = container.querySelector('.studio-dropzone');
+    const file = new File([''], 'colombia.mp3', { type: 'audio/mpeg' });
+    const ev = new Event('drop');
+    ev.preventDefault = vi.fn();
+    Object.defineProperty(ev, 'dataTransfer', { value: { files: [file] } });
+    drop.dispatchEvent(ev);
+    await vi.waitFor(() => expect(container.querySelector('.studio-review')).not.toBeNull());
+
+    const checks = [...container.querySelectorAll('.studio-review__section-check')];
+    checks.forEach((c) => {
+      c.checked = false;
+      c.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    const submit = container.querySelector('.studio-review__submit');
+    expect(submit.disabled).toBe(true);
+
+    checks[0].checked = true;
+    checks[0].dispatchEvent(new Event('change', { bubbles: true }));
+    checks[1].checked = true;
+    checks[1].dispatchEvent(new Event('change', { bubbles: true }));
+    expect(submit.disabled).toBe(false);
+
+    const titleInput = container.querySelector('.studio-review__title-input');
+    titleInput.value = 'Mi Tema';
+    titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    submit.click();
+    await vi.waitFor(() => expect(stemsApi.createJob).toHaveBeenCalled());
+    expect(stemsApi.createJob).toHaveBeenCalledWith(file, 'Mi Tema');
+    await vi.waitFor(() => expect(stemsApi.startJob).toHaveBeenCalled());
+    const [, sections] = stemsApi.startJob.mock.calls[0];
+    expect(sections).toEqual(['voiceInstrumental', 'structure']);
   });
 
   // SEC-X1: file.name en innerHTML durante la subida
@@ -391,6 +468,11 @@ describe('renderStudioPage', () => {
     dropEvent.preventDefault = vi.fn();
     Object.defineProperty(dropEvent, 'dataTransfer', { value: { files: [fakeFile] } });
     drop.dispatchEvent(dropEvent);
+
+    await vi.waitFor(() =>
+      expect(container.querySelector('.studio-review__submit')).not.toBeNull(),
+    );
+    container.querySelector('.studio-review__submit').click();
 
     // Esperar a que se muestre el mensaje "Subiendo..."
     await vi.waitFor(() => expect(container.querySelector('[aria-busy]')).not.toBeNull());

@@ -14,7 +14,7 @@ describe('studioSections', () => {
     expect(sectionState({ status: 'running' }).label).toBe('Separando…');
     expect(sectionState({ status: 'done' }).label).toBe('Listo');
     expect(sectionState({ status: 'failed' }).label).toBe('Error');
-    expect(sectionState({ status: 'skipped' }).label).toBe('No disponible');
+    expect(sectionState({ status: 'skipped' }).label).toBe('No procesada');
   });
 
   it('SECTION_KEYS tiene exactamente los 4 bloques en el orden canónico', () => {

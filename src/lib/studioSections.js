@@ -18,7 +18,7 @@ const STATUS_LABELS = {
   running: 'Separando…',
   done: 'Listo',
   failed: 'Error',
-  skipped: 'No disponible',
+  skipped: 'No procesada',
 };
 
 /**

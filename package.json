@@ -35,6 +35,7 @@
     "lint-staged": "^16.4.0",
     "pdfjs-dist": "^6.0.227",
     "prettier": "^3.8.1",
+    "rollup-plugin-visualizer": "^7.0.1",
     "sharp": "^0.34.5",
     "start-server-and-test": "^3.0.11",
     "vite": "^7.3.1",

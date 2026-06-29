@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { visualizer } from 'rollup-plugin-visualizer';
 
 export default defineConfig({
   server: {
@@ -98,9 +99,16 @@ export default defineConfig({
         ],
       },
     }),
-  ],
+    process.env.ANALYZE &&
+      visualizer({
+        filename: 'dist/stats.html',
+        gzipSize: true,
+        brotliSize: true,
+        template: 'treemap',
+      }),
+  ].filter(Boolean),
   build: {
-    target: 'es2020',
+    target: 'baseline-widely-available',
     minify: 'terser',
     chunkSizeWarningLimit: 250,
     rollupOptions: {

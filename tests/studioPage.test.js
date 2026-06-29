@@ -126,7 +126,7 @@ describe('renderStudioPage', () => {
     // done chip en voiceInstrumental
     expect(chips[0].textContent).toBe('Listo');
     // skipped chip en gender
-    expect(chips[3].textContent).toContain('Beta');
+    expect(chips[3].textContent).toBe('No procesada');
 
     // Labels de las secciones en el texto
     expect(container.textContent).toContain('Voz e instrumentos');
@@ -144,8 +144,8 @@ describe('renderStudioPage', () => {
     // Expiración
     expect(container.textContent.toLowerCase()).toContain('disponible por');
 
-    // Género bloqueado (candado / locked)
-    expect(container.textContent).toContain('Disponible pronto');
+    // Género skipped: nota de sección no procesada
+    expect(container.textContent).toContain('Esta sección no se procesó');
   });
 
   it('gender done: tarjeta muestra dos modelos lado a lado con players de audio', async () => {

@@ -93,7 +93,7 @@ function chipText(status) {
     case 'failed':
       return 'Error';
     case 'skipped':
-      return 'Beta · próximamente';
+      return 'No procesada';
     default:
       return status;
   }
@@ -129,19 +129,25 @@ function buildBody(body, key, status, section, stems, voices, genderVoices) {
     retryBtn.type = 'button';
     retryBtn.className = 'btn studio-section-card__retry';
     retryBtn.dataset.section = key;
-    retryBtn.textContent = '⚠ Reintentar';
+    retryBtn.innerHTML = `${icon('alert-triangle', { size: 14 })} `;
+    retryBtn.appendChild(document.createTextNode('Reintentar'));
     body.appendChild(msg);
     body.appendChild(retryBtn);
     return;
   }
 
   if (status === 'skipped') {
-    const lock = document.createElement('div');
-    lock.className = 'studio-section-card__locked';
-    lock.innerHTML = `${icon('lock', { size: 20 })} `;
-    const lockText = document.createTextNode('Disponible pronto');
-    lock.appendChild(lockText);
-    body.appendChild(lock);
+    const note = document.createElement('p');
+    note.className = 'empty-state__text studio-section-card__skipped-note';
+    note.textContent = 'Esta sección no se procesó.';
+    const resumeBtn = document.createElement('button');
+    resumeBtn.type = 'button';
+    resumeBtn.className = 'btn studio-section-card__resume';
+    resumeBtn.dataset.section = key;
+    resumeBtn.innerHTML = `${icon('play', { size: 14 })} `;
+    resumeBtn.appendChild(document.createTextNode('Procesar ahora'));
+    body.appendChild(note);
+    body.appendChild(resumeBtn);
     return;
   }
 
@@ -155,6 +161,29 @@ function buildBody(body, key, status, section, stems, voices, genderVoices) {
   } else if (key === 'gender') {
     buildGenderBody(body, genderVoices);
   }
+
+  // Descarga por sección (solo secciones con audio: structure no genera pistas).
+  if (key !== 'structure' && sectionHasAudio(key, stems, voices, genderVoices)) {
+    const dl = document.createElement('button');
+    dl.type = 'button';
+    dl.className = 'btn studio-section-card__dl';
+    dl.dataset.section = key;
+    dl.innerHTML = `${icon('download', { size: 14 })} `;
+    dl.appendChild(document.createTextNode('Descargar sección (ZIP)'));
+    body.appendChild(dl);
+  }
+}
+
+// True si la sección tiene al menos una pista de audio reproducible.
+function sectionHasAudio(key, stems, voices, genderVoices) {
+  if (key === 'voiceInstrumental') return Object.values(stems ?? {}).some(Boolean);
+  if (key === 'leadBacking') return Object.values(voices ?? {}).some(Boolean);
+  if (key === 'gender') {
+    return Object.values(genderVoices ?? {}).some(
+      (m) => m && typeof m === 'object' && Object.values(m).some(Boolean),
+    );
+  }
+  return false;
 }
 
 function buildVoiceInstrumentalBody(body, stems) {

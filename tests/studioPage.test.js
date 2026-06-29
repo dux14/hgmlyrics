@@ -266,8 +266,8 @@ describe('renderStudioPage', () => {
     });
     renderStudioPage(container);
 
-    // partial es terminal: renderJob (no renderProcessing)
-    await vi.waitFor(() => expect(container.querySelector('#studio-zip')).not.toBeNull());
+    // partial es terminal: renderJob (no renderProcessing) — expiry siempre presente en renderJob
+    await vi.waitFor(() => expect(container.querySelector('.studio__expiry')).not.toBeNull());
     expect(container.textContent.toLowerCase()).toContain('disponible por');
 
     // Botón retry para la sección fallida
@@ -476,6 +476,48 @@ describe('renderStudioPage', () => {
     save.click();
 
     await vi.waitFor(() => expect(stemsApi.updateJobTitle).toHaveBeenCalledWith('j1', 'Nuevo Nombre'));
+  });
+
+  it('Procesar ahora en una sección skipped llama al endpoint retry?section= y re-vigila', async () => {
+    stemsApi.listJobs.mockResolvedValueOnce({ jobs: [{ id: 'j1', status: 'partial' }], quota: { used: 1, limit: 3 } });
+    stemsApi.getJob.mockResolvedValue({
+      job: {
+        id: 'j1', status: 'partial',
+        stems: { vocals: 'https://s/v' }, voices: {},
+        input_meta: { filename: 'x.mp3', title: 'x' },
+        expires_at: new Date(Date.now() + 47 * 3600e3).toISOString(),
+        sections: {
+          voiceInstrumental: { status: 'done' },
+          structure: { status: 'done', segments: [] },
+          leadBacking: { status: 'done' },
+          gender: { status: 'skipped' },
+        },
+      },
+    });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+    vi.stubGlobal('fetch', fetchMock);
+    renderStudioPage(container);
+    await vi.waitFor(() => expect(container.querySelector('.studio-section-card__resume')).not.toBeNull());
+    container.querySelector('.studio-section-card__resume').click();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toContain('/api/stems/jobs/j1/retry?section=gender');
+    expect(opts.method).toBe('POST');
+    expect(opts.headers?.Authorization).toBe('Bearer tok');
+    vi.unstubAllGlobals();
+  });
+
+  it('ZIP global oculto mientras alguna sección activa no terminó (processing)', async () => {
+    stemsApi.listJobs.mockResolvedValueOnce({ jobs: [{ id: 'j1', status: 'processing' }], quota: { used: 1, limit: 3 } });
+    stemsApi.getJob.mockResolvedValue({
+      job: { id: 'j1', status: 'processing', input_meta: { filename: 'x.mp3' }, sections: {
+        voiceInstrumental: { status: 'done' }, structure: { status: 'running' },
+        leadBacking: { status: 'pending' }, gender: { status: 'skipped' },
+      } },
+    });
+    renderStudioPage(container);
+    await vi.waitFor(() => expect(container.querySelectorAll('.studio-section-card').length).toBe(4));
+    expect(container.querySelector('#studio-zip')).toBeNull();
   });
 
   // SEC-X1: file.name en innerHTML durante la subida

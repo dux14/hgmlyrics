@@ -16,7 +16,7 @@ import {
   updateJobTitle,
 } from '../lib/stemsApi.js';
 import { getSession } from '../lib/authStore.js';
-import { downloadAllZip, buildTrackList, songBaseName } from '../lib/studioZip.js';
+import { downloadAllZip, buildTrackList, songBaseName, downloadSectionZip } from '../lib/studioZip.js';
 import { getDriveToken } from '../lib/driveAuth.js';
 import { uploadTracksToDrive } from '../lib/driveUpload.js';
 import { createActionButton } from '../lib/studioActionButton.js';
@@ -405,6 +405,64 @@ function mountSectionUI(body, job, quota) {
       }
     });
   });
+
+  // --- Cablear "Procesar ahora" (reanudar sección skipped) ---
+  body.querySelectorAll('.studio-section-card__resume').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const section = btn.dataset.section;
+      btn.disabled = true;
+      const original = btn.textContent;
+      btn.textContent = 'Iniciando…';
+      try {
+        const s = getSession();
+        const headers = s ? { Authorization: `Bearer ${s.access_token}` } : {};
+        const res = await fetch(
+          `/api/stems/jobs/${job.id}/retry?section=${encodeURIComponent(section)}`,
+          { method: 'POST', headers },
+        );
+        if (!res.ok) {
+          const b2 = await res.json().catch(() => ({}));
+          throw new Error(b2.error ?? `Error ${res.status}`);
+        }
+        watchJob(body, job.id, quota, job.input_meta?.title ?? job.input_meta?.filename);
+      } catch (e) {
+        btn.textContent = original;
+        btn.disabled = false;
+        let errEl = btn.parentElement.querySelector('.studio__error');
+        if (!errEl) {
+          errEl = document.createElement('p');
+          errEl.className = 'studio__error';
+          btn.parentElement.appendChild(errEl);
+        }
+        errEl.textContent = e.message || 'No se pudo iniciar.';
+      }
+    });
+  });
+
+  // --- Cablear "Descargar sección (ZIP)" ---
+  body.querySelectorAll('.studio-section-card__dl').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const section = btn.dataset.section;
+      btn.disabled = true;
+      const original = btn.textContent;
+      btn.textContent = 'Empaquetando…';
+      try {
+        await downloadSectionZip(job, ALL_LABELS, section);
+        btn.textContent = original;
+      } catch (e) {
+        let errEl = btn.parentElement.querySelector('.studio__error');
+        if (!errEl) {
+          errEl = document.createElement('p');
+          errEl.className = 'studio__error';
+          btn.parentElement.appendChild(errEl);
+        }
+        errEl.textContent = e.message || 'No pudimos generar el ZIP de la sección.';
+        btn.textContent = original;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
 }
 
 /**
@@ -526,18 +584,22 @@ function renderJob(body, job, quota) {
     });
   });
 
-  // Acciones ZIP + Drive
-  const actions = document.createElement('div');
-  actions.className = 'studio-actions';
-  actions.innerHTML = `
-    <button class="btn btn--primary studio-actions__zip" id="studio-zip">
-      ${icon('download', { size: 16 })} Descargar todo (ZIP)
-    </button>
-    <button class="btn studio-actions__drive" id="studio-drive">
-      ${icon('upload', { size: 16 })} Guardar en Drive
-    </button>
-  `;
-  frag.appendChild(actions);
+  // Acciones ZIP + Drive — solo cuando todas las secciones activas (no skipped) están done.
+  const activeSections = SECTION_KEYS.map((k) => sections[k]).filter((s) => s && s.status !== 'skipped');
+  const allActiveDone = activeSections.length > 0 && activeSections.every((s) => s.status === 'done');
+  if (allActiveDone) {
+    const actions = document.createElement('div');
+    actions.className = 'studio-actions';
+    actions.innerHTML = `
+      <button class="btn btn--primary studio-actions__zip" id="studio-zip">
+        ${icon('download', { size: 16 })} Descargar todo (ZIP)
+      </button>
+      <button class="btn studio-actions__drive" id="studio-drive">
+        ${icon('upload', { size: 16 })} Guardar en Drive
+      </button>
+    `;
+    frag.appendChild(actions);
+  }
 
   // 4 tarjetas de sección
   const cardsEl = document.createElement('div');

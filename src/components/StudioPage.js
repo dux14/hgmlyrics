@@ -13,6 +13,7 @@ import {
   listJobs,
   readAudioDuration,
   watchJobRealtime,
+  updateJobTitle,
 } from '../lib/stemsApi.js';
 import { getSession } from '../lib/authStore.js';
 import { downloadAllZip, buildTrackList, songBaseName } from '../lib/studioZip.js';
@@ -418,13 +419,14 @@ function renderProcessing(body, job, filename, quota) {
 
   const frag = document.createDocumentFragment();
 
-  if (filename) {
+  const displayName = job.input_meta?.title || filename;
+  if (displayName) {
     const filenameEl = document.createElement('p');
     filenameEl.className = 'studio__filename';
-    filenameEl.title = filename;
+    filenameEl.title = displayName;
     filenameEl.innerHTML = `${icon('audio-lines', { size: 16 })} `;
     const span = document.createElement('span');
-    span.textContent = filename;
+    span.textContent = displayName;
     filenameEl.appendChild(span);
     frag.appendChild(filenameEl);
   }
@@ -475,17 +477,54 @@ function renderJob(body, job, quota) {
   expiry.innerHTML = `Disponible por <strong>${hoursLeft(job.expires_at)} h</strong> más.`;
   frag.appendChild(expiry);
 
-  // Nombre del archivo
-  if (job.input_meta?.filename) {
-    const filenameEl = document.createElement('p');
-    filenameEl.className = 'studio__filename';
-    filenameEl.title = job.input_meta.filename;
-    filenameEl.innerHTML = `${icon('audio-lines', { size: 16 })} `;
-    const span = document.createElement('span');
-    span.textContent = job.input_meta.filename;
-    filenameEl.appendChild(span);
-    frag.appendChild(filenameEl);
-  }
+  // Título editable (input_meta.title con fallback al filename sin extensión)
+  const displayTitle =
+    job.input_meta?.title || (job.input_meta?.filename ?? '').replace(/\.[^/.]+$/, '') || 'Audio';
+  const titleWrap = document.createElement('div');
+  titleWrap.className = 'studio__title-row';
+  const titleText = document.createElement('span');
+  titleText.className = 'studio__title-text';
+  titleText.textContent = displayTitle;
+  const editBtn = document.createElement('button');
+  editBtn.type = 'button';
+  editBtn.className = 'studio__title-edit';
+  editBtn.setAttribute('aria-label', 'Editar título');
+  editBtn.innerHTML = icon('pencil', { size: 14 });
+  titleWrap.appendChild(titleText);
+  titleWrap.appendChild(editBtn);
+  frag.appendChild(titleWrap);
+
+  editBtn.addEventListener('click', () => {
+    titleWrap.innerHTML = '';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'studio__title-input';
+    input.maxLength = 120;
+    input.value = titleText.textContent;
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.className = 'btn studio__title-save';
+    save.textContent = 'Guardar';
+    titleWrap.appendChild(input);
+    titleWrap.appendChild(save);
+    input.focus();
+    const commit = async () => {
+      const next = input.value.trim();
+      if (!next) { renderJob(body, job, quota); return; }
+      save.disabled = true;
+      try {
+        const { job: updated } = await updateJobTitle(job.id, next);
+        renderJob(body, updated, quota);
+      } catch {
+        renderJob(body, job, quota);
+      }
+    };
+    save.addEventListener('click', () => void commit());
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') void commit();
+      if (e.key === 'Escape') renderJob(body, job, quota);
+    });
+  });
 
   // Acciones ZIP + Drive
   const actions = document.createElement('div');

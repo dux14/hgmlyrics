@@ -8,6 +8,7 @@ vi.mock('../src/lib/stemsApi.js', () => ({
   listJobs: vi.fn(),
   readAudioDuration: vi.fn().mockResolvedValue(180),
   watchJobRealtime: vi.fn(() => ({ leave: vi.fn() })),
+  updateJobTitle: vi.fn(),
 }));
 vi.mock('../src/lib/authStore.js', () => ({
   getSession: () => ({ access_token: 'tok' }),
@@ -447,6 +448,34 @@ describe('renderStudioPage', () => {
     await vi.waitFor(() => expect(stemsApi.startJob).toHaveBeenCalled());
     const [, sections] = stemsApi.startJob.mock.calls[0];
     expect(sections).toEqual(['voiceInstrumental', 'structure']);
+  });
+
+  it('renderJob muestra title y permite editarlo con el lápiz (PATCH)', async () => {
+    const jobDone = { ...JOB_DONE_FIXTURE, input_meta: { filename: 'colombia.mp3', title: 'Colombia Live' } };
+    stemsApi.listJobs.mockResolvedValueOnce({ jobs: [{ id: 'j1', status: 'done' }], quota: { used: 1, limit: 3 } });
+    stemsApi.getJob.mockResolvedValue({ job: jobDone });
+    stemsApi.updateJobTitle = vi.fn().mockResolvedValue({
+      job: { ...jobDone, input_meta: { filename: 'colombia.mp3', title: 'Nuevo Nombre' } },
+    });
+    renderStudioPage(container);
+
+    await vi.waitFor(() =>
+      expect(container.querySelectorAll('.studio-section-card').length).toBe(4),
+    );
+
+    await vi.waitFor(() => expect(container.textContent).toContain('Colombia Live'));
+
+    const editBtn = container.querySelector('.studio__title-edit');
+    expect(editBtn).not.toBeNull();
+    editBtn.click();
+
+    const input = container.querySelector('.studio__title-input');
+    expect(input).not.toBeNull();
+    input.value = 'Nuevo Nombre';
+    const save = container.querySelector('.studio__title-save');
+    save.click();
+
+    await vi.waitFor(() => expect(stemsApi.updateJobTitle).toHaveBeenCalledWith('j1', 'Nuevo Nombre'));
   });
 
   // SEC-X1: file.name en innerHTML durante la subida

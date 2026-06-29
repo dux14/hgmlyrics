@@ -191,12 +191,28 @@ describe('POST /api/stems/jobs/[id]/retry — DAG retry flow', () => {
     expect(mockInvokeModalPipeline).not.toHaveBeenCalled();
   });
 
-  it('409 si la sección objetivo está skipped (no se puede reintentar)', async () => {
-    sqlResponses.push([jobWithFailedVI()]);
+  it('skipped → running: 200, sección pasa a running y se añade a enabled_sections', async () => {
+    sqlResponses.push([jobWithFailedVI()]); // SELECT (gender está skipped)
+    sqlResponses.push([]); // UPDATE
     const res = makeRes();
     await handler(authedReq({ query: { id: 'job1', section: 'gender' } }), res);
-    expect(res.statusCode).toBe(409);
-    expect(mockInvokeModalPipeline).not.toHaveBeenCalled();
+
+    expect(res.statusCode).toBe(200);
+    const updateCall = sqlCalls.find(
+      (c) => c.text.includes('processing') && c.text.includes('stem_jobs'),
+    );
+    const sectionsArg = updateCall.values.find(
+      (v) => v && typeof v === 'object' && 'gender' in v,
+    );
+    expect(sectionsArg.gender.status).toBe('running');
+
+    // enabled_sections se actualiza con la sección reanudada
+    expect(sqlMock.array).toHaveBeenCalled();
+    const arrArg = sqlMock.array.mock.calls.at(-1)[0];
+    expect(arrArg).toEqual(['voiceInstrumental', 'structure', 'leadBacking', 'gender']);
+
+    const payload = mockInvokeModalPipeline.mock.calls[0][0];
+    expect(payload.enabledSections).toEqual(['gender']);
   });
 
   it('happy path voiceInstrumental failed: 200, UPDATE a processing, sección pasa a running, otras intactas', async () => {

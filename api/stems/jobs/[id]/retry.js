@@ -33,9 +33,10 @@ export default withErrors(async (req, res) => {
   }
   const job = rows[0];
 
-  // Solo se puede reintentar una sección que esté en estado failed.
-  if (job.sections?.[section]?.status !== 'failed') {
-    res.status(409).json({ error: `La sección no está en estado failed` });
+  // Reintentar una sección failed o reanudar una skipped → running.
+  const currentStatus = job.sections?.[section]?.status;
+  if (currentStatus !== 'failed' && currentStatus !== 'skipped') {
+    res.status(409).json({ error: `La sección no se puede reintentar (estado: ${currentStatus})` });
     return;
   }
 
@@ -54,11 +55,17 @@ export default withErrors(async (req, res) => {
     [section]: { ...job.sections[section], status: 'running', error: null },
   };
 
-  // Persistir estado de reinicio (processing). NO tocar enabled_sections.
+  // Persistir estado de reinicio (processing). Si la sección venía skipped,
+  // añadirla a enabled_sections para mantener el registro consistente con las secciones activas.
+  const enabledSet = new Set(job.enabled_sections ?? []);
+  enabledSet.add(section);
+  const nextEnabled = SECTION_KEYS.filter((k) => enabledSet.has(k));
+
   await sql`
     UPDATE stem_jobs
     SET status = 'processing',
         sections = ${sql.json(sections)},
+        enabled_sections = ${sql.array(nextEnabled)},
         updated_at = now()
     WHERE id = ${job.id}
   `;
@@ -95,6 +102,8 @@ export default withErrors(async (req, res) => {
     });
   } catch (err) {
     // Revertir la sección a failed y recomputar el estado del job.
+    // Nota: enabled_sections se conserva tras el fallo — el usuario pidió habilitar esta sección,
+    // así que queda como failed-pero-habilitada (reintentable), no se revierte a skipped.
     const reverted = {
       ...sections,
       [section]: { ...sections[section], status: 'failed', error: String(err?.message ?? err) },

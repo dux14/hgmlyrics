@@ -2,6 +2,7 @@ import sql from '../../_lib/db.js';
 import { requireUser } from '../../_lib/auth.js';
 import { allowMethods, withErrors } from '../../_lib/http.js';
 import { signStemsDownload } from '../../_lib/storage.js';
+import { sanitizeTitle } from '../../_lib/stems.js';
 
 const MODAL_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -58,7 +59,7 @@ async function withSignedUrls(job) {
 }
 
 export default withErrors(async (req, res) => {
-  if (allowMethods(req, res, ['GET'])) return;
+  if (allowMethods(req, res, ['GET', 'PATCH'])) return;
   const user = await requireUser(req);
   const { id } = req.query;
 
@@ -68,6 +69,24 @@ export default withErrors(async (req, res) => {
     return;
   }
   let job = rows[0];
+
+  // PATCH: editar el título mostrado (input_meta.title). No toca el path de Storage.
+  if (req.method === 'PATCH') {
+    const meta = job.input_meta ?? {};
+    const cleanTitle = sanitizeTitle(req.body?.title, meta.filename);
+    const updated = await sql`
+      UPDATE stem_jobs
+      SET input_meta = ${sql.json({ ...meta, title: cleanTitle })}
+      WHERE id = ${job.id} AND user_id = ${user.id}
+      RETURNING *
+    `;
+    if (!updated[0]) {
+      res.status(404).json({ error: 'Job no encontrado' });
+      return;
+    }
+    res.status(200).json({ job: toClientJob(updated[0]) });
+    return;
+  }
 
   // Modal es fire-and-forget: si el job lleva >10 min en processing sin avanzar, marcar failed.
   if (job.status === 'processing') {

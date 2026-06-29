@@ -333,3 +333,44 @@ describe('SEC-15: DTO omite columnas internas del payload al cliente', () => {
     expect(result.status).toBe('processing');
   });
 });
+
+describe('PATCH /api/stems/jobs/[id] — editar título', () => {
+  it('405 si el método no es GET ni PATCH', async () => {
+    const res = makeRes();
+    await handler(authedReq({ method: 'DELETE' }), res);
+    expect(res.statusCode).toBe(405);
+  });
+
+  it('404 si el job no es del usuario', async () => {
+    sqlResponses.push([]); // SELECT vacío
+    const res = makeRes();
+    await handler(authedReq({ method: 'PATCH', body: { title: 'Nuevo' } }), res);
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('actualiza input_meta.title saneado y devuelve el job', async () => {
+    const job = { id: 'j1', user_id: 'u1', status: 'done', input_meta: { filename: 'a.mp3', title: 'Viejo' } };
+    sqlResponses.push([job]); // SELECT
+    sqlResponses.push([{ ...job, input_meta: { filename: 'a.mp3', title: 'Nuevo' } }]); // UPDATE ... RETURNING
+    const res = makeRes();
+    await handler(authedReq({ method: 'PATCH', body: { title: '  Nuevo  ' } }), res);
+    expect(res.statusCode).toBe(200);
+    const updateCall = sqlCalls.find((c) => c.text.includes('UPDATE') && c.text.includes('input_meta'));
+    const metaArg = updateCall.values.find((v) => v && typeof v === 'object' && 'title' in v);
+    expect(metaArg.title).toBe('Nuevo');
+    expect(metaArg.filename).toBe('a.mp3'); // filename intacto
+    expect(res.body.job.input_path).toBeUndefined(); // sigue usando el DTO
+  });
+
+  it('title ausente cae al filename sin extensión', async () => {
+    const job = { id: 'j1', user_id: 'u1', status: 'done', input_meta: { filename: 'a.mp3' } };
+    sqlResponses.push([job]); // SELECT
+    sqlResponses.push([{ ...job, input_meta: { filename: 'a.mp3', title: 'a' } }]); // UPDATE ... RETURNING
+    const res = makeRes();
+    await handler(authedReq({ method: 'PATCH', body: {} }), res);
+    expect(res.statusCode).toBe(200);
+    const updateCall = sqlCalls.find((c) => c.text.includes('UPDATE') && c.text.includes('input_meta'));
+    const metaArg = updateCall.values.find((v) => v && typeof v === 'object' && 'title' in v);
+    expect(metaArg.title).toBe('a');
+  });
+});

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { vi } from 'vitest';
-import { zipFilename, buildTrackList, buildZipBlob, songBaseName } from './studioZip.js';
+import { zipFilename, buildTrackList, buildZipBlob, songBaseName, buildSectionTrackList } from './studioZip.js';
 
 describe('zipFilename', () => {
   it('usa el nombre original sin extensión + label + .mp3', () => {
@@ -122,6 +122,58 @@ describe('buildTrackList', () => {
       { url: 'u/bass', filename: 'colombia - Bajo.mp3' },
       { url: 'u/lead', filename: 'colombia - Voz líder.mp3' },
     ]);
+  });
+});
+
+describe('songBaseName con title', () => {
+  it('usa input_meta.title si existe, saneado', () => {
+    expect(songBaseName({ input_meta: { filename: 'a.mp3', title: 'Mi Tema' } })).toBe('Mi Tema');
+  });
+  it('cae a filename si no hay title', () => {
+    expect(songBaseName({ input_meta: { filename: 'colombia.mp3' } })).toBe('colombia');
+  });
+  it('sanea el title', () => {
+    expect(songBaseName({ input_meta: { filename: 'a.mp3', title: 'a/b:c' } })).toBe('a_b_c');
+  });
+});
+
+describe('buildSectionTrackList', () => {
+  const labels = {
+    vocals: 'Voz', instrumental: 'Instrumental', drums: 'Batería', bass: 'Bajo',
+    guitar: 'Guitarra', piano: 'Piano', other: 'Otros', lead: 'Voz líder', backing: 'Coros',
+  };
+  it('voiceInstrumental: solo pistas de stems', () => {
+    const job = {
+      input_meta: { filename: 'colombia.mp3' },
+      stems: { vocals: 'u/v', drums: 'u/d' },
+      voices: { lead: 'u/l' },
+    };
+    expect(buildSectionTrackList(job, labels, 'voiceInstrumental')).toEqual([
+      { url: 'u/v', filename: 'colombia - Voz.mp3' },
+      { url: 'u/d', filename: 'colombia - Batería.mp3' },
+    ]);
+  });
+  it('leadBacking: solo voces', () => {
+    const job = { input_meta: { filename: 'c.mp3' }, voices: { lead: 'u/l', backing: 'u/b' }, stems: { vocals: 'u/v' } };
+    expect(buildSectionTrackList(job, labels, 'leadBacking')).toEqual([
+      { url: 'u/l', filename: 'c - Voz líder.mp3' },
+      { url: 'u/b', filename: 'c - Coros.mp3' },
+    ]);
+  });
+  it('gender: incluye ambos modelos', () => {
+    const job = {
+      input_meta: { filename: 'c.mp3' },
+      genderVoices: { chorus: { male: 'u/cm', female: 'u/cf' }, aufr33: { male: 'u/am', female: 'u/af' } },
+    };
+    expect(buildSectionTrackList(job, labels, 'gender')).toEqual([
+      { url: 'u/cm', filename: 'c - Voz masculina (Opción A).mp3' },
+      { url: 'u/cf', filename: 'c - Voz femenina (Opción A).mp3' },
+      { url: 'u/am', filename: 'c - Voz masculina (Opción B).mp3' },
+      { url: 'u/af', filename: 'c - Voz femenina (Opción B).mp3' },
+    ]);
+  });
+  it('structure: lista vacía (no genera audio)', () => {
+    expect(buildSectionTrackList({ input_meta: { filename: 'c.mp3' } }, labels, 'structure')).toEqual([]);
   });
 });
 

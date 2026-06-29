@@ -16,7 +16,18 @@ function sanitize(part) {
  * @param {object} job @returns {string}
  */
 export function songBaseName(job) {
-  return sanitize((job?.input_meta?.filename ?? 'audio').replace(/\.[^/.]+$/, '') || 'audio');
+  const meta = job?.input_meta ?? {};
+  const fromTitle = typeof meta.title === 'string' ? meta.title.trim() : '';
+  const raw = fromTitle || (meta.filename ?? 'audio').replace(/\.[^/.]+$/, '');
+  return sanitize(raw || 'audio');
+}
+
+// Nombre base de cada pista del ZIP: title si existe (sin extensión propia),
+// si no el filename tal cual (zipFilename quita la extensión).
+function trackBaseName(job) {
+  const meta = job?.input_meta ?? {};
+  const fromTitle = typeof meta.title === 'string' && meta.title.trim() ? meta.title.trim() : '';
+  return fromTitle || meta.filename || '';
 }
 
 /**
@@ -48,7 +59,7 @@ const GENDER_TRACK_LABELS = { male: 'Voz masculina', female: 'Voz femenina' };
  * @returns {{url:string, filename:string}[]}
  */
 export function buildTrackList(job, labels) {
-  const filename = job?.input_meta?.filename ?? '';
+  const filename = trackBaseName(job);
   const out = [];
   for (const k of STEM_ORDER) {
     const url = job?.stems?.[k];
@@ -70,6 +81,76 @@ export function buildTrackList(job, labels) {
     }
   }
   return out;
+}
+
+/**
+ * Lista de pistas { url, filename } de UNA sola sección, para el ZIP por sección.
+ * @param {object} job
+ * @param {Record<string,string>} labels
+ * @param {'voiceInstrumental'|'leadBacking'|'gender'|'structure'} sectionKey
+ * @returns {{url:string, filename:string}[]}
+ */
+export function buildSectionTrackList(job, labels, sectionKey) {
+  const filename = trackBaseName(job);
+  const out = [];
+  if (sectionKey === 'voiceInstrumental') {
+    for (const k of STEM_ORDER) {
+      const url = job?.stems?.[k];
+      if (url && labels[k]) out.push({ url, filename: zipFilename(filename, labels[k]) });
+    }
+  } else if (sectionKey === 'leadBacking') {
+    for (const k of VOICE_ORDER) {
+      const url = job?.voices?.[k];
+      if (url && labels[k]) out.push({ url, filename: zipFilename(filename, labels[k]) });
+    }
+  } else if (sectionKey === 'gender') {
+    for (const model of GENDER_MODEL_ORDER) {
+      const modelVoices = job?.genderVoices?.[model];
+      if (!modelVoices) continue;
+      for (const track of GENDER_TRACK_ORDER) {
+        const url = modelVoices[track];
+        if (url) {
+          const label = `${GENDER_TRACK_LABELS[track]} (${GENDER_MODEL_LABELS[model]})`;
+          out.push({ url, filename: zipFilename(filename, label) });
+        }
+      }
+    }
+  }
+  // structure no genera audio → []
+  return out;
+}
+
+/**
+ * Descarga el ZIP de una sola sección en el navegador.
+ * @param {object} job
+ * @param {Record<string,string>} labels  Mapa key→etiqueta. La clave reservada `__section` puede contener
+ *   el nombre legible de la sección (p. ej. 'Voces e Instrumental') usado en el nombre del ZIP; si falta, se usa el sectionKey literal.
+ * @param {'voiceInstrumental'|'leadBacking'|'gender'|'structure'} sectionKey
+ * @param {function} [onProgress]
+ * @returns {Promise<number>} pistas empaquetadas
+ */
+export async function downloadSectionZip(job, labels, sectionKey, onProgress) {
+  const tracks = buildSectionTrackList(job, labels, sectionKey);
+  if (tracks.length === 0) throw new Error('No hay pistas para descargar en esta sección.');
+  const files = {};
+  let done = 0;
+  for (const { url, filename } of tracks) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`No pudimos descargar "${filename}".`);
+    files[filename] = new Uint8Array(await res.arrayBuffer());
+    onProgress?.(++done, tracks.length);
+  }
+  const blob = new Blob([zipSync(files, { level: 0 })], { type: 'application/zip' });
+  const base = songBaseName(job);
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = `${base} - ${sanitize(labels.__section ?? sectionKey)}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 1000);
+  return tracks.length;
 }
 
 /**

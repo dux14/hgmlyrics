@@ -458,7 +458,7 @@ function mountSectionUI(body, job, quota) {
       const original = btn.textContent;
       btn.textContent = 'Empaquetando…';
       try {
-        await downloadSectionZip(job, ALL_LABELS, section);
+        await downloadSectionZip(job, { ...ALL_LABELS, __section: sectionLabel(section) }, section);
         btn.textContent = original;
       } catch (e) {
         let errEl = btn.parentElement.querySelector('.studio__error');

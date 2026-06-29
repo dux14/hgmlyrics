@@ -411,13 +411,13 @@
 /* Letra que SÍ canta la voz activa: blanca plena y firme (el color lo lleva la nota). */
 .lyrics__tono-sung {
   color: var(--color-text);
-  font-weight: 500;
+  font-weight: 600; /* remapeado 500->600 */
 }
 /* Grupo de la voz activa SIN nota asignada: el color vive en la palabra
    (estado "pendiente de nota" durante el autorado). Punteado que dialoga
    con el subrayado sólido de las notas. currentColor = .voice-text--*. */
 .lyrics__tono-pending {
-  font-weight: 500;
+  font-weight: 600; /* remapeado 500->600 */
   text-decoration: underline dotted;
   text-decoration-color: color-mix(in srgb, currentColor 50%, transparent);
   text-underline-offset: 0.25em;
@@ -1606,7 +1606,7 @@
   background: var(--color-surface);
   color: var(--color-text);
   font-size: 0.9rem;
-  font-weight: 500;
+  font-weight: 600; /* remapeado 500->600 */
   white-space: nowrap;
   cursor: pointer;
 }

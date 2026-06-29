@@ -145,6 +145,8 @@ function createSongCard(song, index) {
         class="song-card__cover"
         src="${coverUrl}"
         alt="Portada de ${escapeHtml(song.album)}"
+        width="400"
+        height="400"
         loading="${imgLoading}"
         decoding="async"
         fetchpriority="${imgFetchPriority}"

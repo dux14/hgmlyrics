@@ -33,7 +33,7 @@ export function songRowCompact(song, { index, actions, dragHandle } = {}) {
     <div class="song-row-compact" data-song-id="${escapeHtml(song.id)}">
       ${dragHandle ? '<span class="song-row-compact__grip"><i></i><i></i><i></i></span>' : ''}
       ${index !== null && index !== undefined ? `<span class="song-row-compact__index">${index}</span>` : ''}
-      <img class="song-row-compact__cover" src="${cover}" alt="" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'" />
+      <img class="song-row-compact__cover" src="${cover}" alt="" width="56" height="56" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'" />
       <div class="song-row-compact__info">
         <span class="song-row-compact__title">${escapeHtml(song.title)}</span>
         <span class="song-row-compact__album">${escapeHtml(albumLine)}</span>

@@ -26,6 +26,7 @@ import { createStudioPlayer } from './StudioPlayer.js';
 import { renderTimeline, markActive } from './StudioSectionTimeline.js';
 import { renderSectionCard } from './StudioSectionCard.js';
 import { escapeHtml as escHtml, safeUrl } from '../lib/escape.js';
+import { subscribe, isOffline } from '../lib/offlineState.js';
 
 const MAX_DURATION_S = 10.5 * 60;
 let pollTimer = null;
@@ -33,6 +34,7 @@ let jobChannel = null; // { leave } del Realtime del job activo
 const SAFETY_POLL_MS = 30000; // red de seguridad + reconciliación server-side
 const NO_PUSH_POLL_MS = 10000; // si el canal no conecta, refrescar más seguido
 let hashChangeHandler = null;
+let _unsubOffline = null; // suscripción al estado de red (panel de revisión)
 
 // Teardown completo: detiene el timer Y desregistra la guarda de navegación.
 // Se usa al desmontar la página o al navegar fuera de #/estudio.
@@ -47,6 +49,7 @@ function stopPolling() {
     window.removeEventListener('hashchange', hashChangeHandler);
     hashChangeHandler = null;
   }
+  if (_unsubOffline) { _unsubOffline(); _unsubOffline = null; }
 }
 
 // Registra (una sola vez) la guarda que corta el polling cuando el usuario sale
@@ -228,20 +231,28 @@ function renderReviewPanel(body, file, quota) {
 
   const selected = () => checks.filter((c) => c.checked).map((c) => c.dataset.section);
   const syncSubmit = () => {
+    const offline = isOffline();
     const n = selected().length;
-    submit.disabled = n === 0;
+    submit.disabled = offline || n === 0;
+    submit.title = offline ? 'Requiere conexión para procesar' : '';
     submitLabel.textContent =
       n === 0 ? 'Elige una sección' : `Procesar ${n} ${n === 1 ? 'sección' : 'secciones'}`;
   };
   checks.forEach((c) => c.addEventListener('change', syncSubmit));
   syncSubmit();
+  // Suscribir al estado de red para bloquear/desbloquear el botón en tiempo real.
+  // Limpiar suscripción anterior si el panel se re-renderizó sin pasar por stopPolling.
+  if (_unsubOffline) { _unsubOffline(); _unsubOffline = null; }
+  _unsubOffline = subscribe(() => syncSubmit());
 
-  body.querySelector('.studio-review__cancel').addEventListener('click', () =>
-    renderIdle(body, quota),
-  );
+  body.querySelector('.studio-review__cancel').addEventListener('click', () => {
+    if (_unsubOffline) { _unsubOffline(); _unsubOffline = null; }
+    renderIdle(body, quota);
+  });
   submit.addEventListener('click', () => {
     const sections = selected();
     if (sections.length === 0) return;
+    if (_unsubOffline) { _unsubOffline(); _unsubOffline = null; }
     const title = titleInput.value.trim() || deriveTitleFromFilename(file.name);
     void startUpload(body, file, title, sections, quota);
   });

@@ -9,6 +9,7 @@
  * al salir de #/mundo (mismo patrón que StudioPage.js).
  */
 import { getSession, getProfile } from '../lib/authStore.js';
+import { subscribe } from '../lib/offlineState.js';
 import { supabase } from '../lib/supabase.js';
 import { WorldRoster } from './WorldRoster.js';
 import { ZoneChat } from './ZoneChat.js';
@@ -56,6 +57,7 @@ let _adminChannel = null;
 let _wrapperEl = null;
 let _joystick = null;
 let _reconnectEl = null;
+let _unsubNetWorld = null; // suscripción al estado de red (banner offline)
 /** @type {{ el: HTMLElement, addRemotePeer: Function, removeRemotePeer: Function, clearRemotePeers: Function, destroy: Function }|null} */
 let _voiceControls = null;
 /** @type {{ setPeers: Function, onRemoteStream: Function, onPeerSpeaking: Function, closeAllPeers: Function, closeAll: Function }|null} */
@@ -108,6 +110,7 @@ function teardown() {
     _joystick.el.remove();
     _joystick = null;
   }
+  if (_unsubNetWorld) { _unsubNetWorld(); _unsubNetWorld = null; }
   if (_reconnectEl) {
     _reconnectEl.remove();
     _reconnectEl = null;
@@ -287,6 +290,20 @@ export async function renderWorldPage(container) {
   ].join(';');
   _reconnectEl = reconnectEl;
   wrapper.appendChild(reconnectEl);
+
+  // Degradar cuando la red del dispositivo cae: muestra el banner con mensaje
+  // específico. Al volver, restaura el texto y deja que onStatus controle la visibilidad.
+  _unsubNetWorld = subscribe((online) => {
+    if (!_reconnectEl) return;
+    if (!online) {
+      _reconnectEl.textContent =
+        'La sala virtual requiere conexión activa. Volverás automáticamente al reconectarte.';
+      _reconnectEl.hidden = false;
+    } else {
+      _reconnectEl.textContent = 'Reconectando…';
+      // No forzar hidden: onStatus gestiona la visibilidad cuando el canal Supabase reconecta.
+    }
+  });
 
   // Estado de conexión: muestra el overlay al caer; al reconectar, re-suscribe
   // la señalizacion de voz y reconcilia el mesh con la presencia actual.

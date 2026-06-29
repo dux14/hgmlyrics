@@ -11,6 +11,7 @@ import './styles/layout.css';
 import './styles/components.css';
 import './styles/admin.css';
 import './styles/auth.css';
+import './styles/offline-chip.css';
 
 // Modules
 import { initTheme } from './components/ThemeToggle.js';
@@ -333,6 +334,16 @@ async function boot() {
     startBackgroundCache();
   } catch (_) {
     // offlineCache module not critical
+  }
+
+  // PWA: chip global de estado offline
+  try {
+    const { initOfflineState } = await import('./lib/offlineState.js');
+    initOfflineState();
+    const { mountOfflineChip } = await import('./components/OfflineChip.js');
+    mountOfflineChip();
+  } catch (_) {
+    // no critico
   }
 }
 

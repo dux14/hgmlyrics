@@ -1,0 +1,17 @@
+.offline-chip {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: var(--z-toast, 9999);
+  padding: 8px 14px;
+  border-radius: var(--border-radius-full, 9999px);
+  background: var(--color-surface, #222);
+  color: var(--color-text, #fff);
+  font-size: var(--font-size-sm, 0.85rem);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+.offline-chip[hidden] {
+  display: none;
+}

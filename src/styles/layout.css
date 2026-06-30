@@ -195,6 +195,8 @@
 .sidebar-overlay.active {
   opacity: 1;
   visibility: visible;
+  /* Overlay activo sube sobre el bottom-nav cuando el drawer está abierto */
+  z-index: var(--z-bottom-nav);
 }
 
 .sidebar {
@@ -210,12 +212,16 @@
   transition: transform var(--transition-base);
   overflow-y: auto;
   padding-top: calc(var(--header-height) + 56px + 48px);
+  /* Evita que el último ítem quede bajo el bottom-nav en móvil */
+  padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
 }
 
 .sidebar.open {
   transform: translateX(0);
+  /* El drawer abierto sube sobre el bottom-nav (z-bottom-nav=200) */
+  z-index: calc(var(--z-bottom-nav) + 1);
 }
 
 .sidebar__section {

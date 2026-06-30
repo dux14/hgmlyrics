@@ -139,15 +139,15 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
 
   if (editId) {
     container.innerHTML = `
-      <div class="editor fade-in" style="display: flex; justify-content: center; align-items: center; min-height: 50vh;">
-        <p style="color: var(--color-text-secondary); font-size: 1.1rem;">${icon('music', { size: 18, className: 'loading-pulse' })} Cargando canción...</p>
+      <div class="editor editor--loading fade-in">
+        <p class="editor__state-text">${icon('music', { size: 18, className: 'loading-pulse' })} Cargando canción...</p>
       </div>
     `;
     existingSong = await fetchSongDetail(editId);
     if (!existingSong) {
       container.innerHTML = `
-        <div class="editor fade-in" style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 50vh; gap: 1rem;">
-          <p style="color: var(--color-text-secondary); font-size: 1.1rem; display: inline-flex; align-items: center; gap: 0.4em;">${icon('frown', { size: 18 })} No se encontró la canción.</p>
+        <div class="editor editor--notfound fade-in">
+          <p class="editor__state-text">${icon('frown', { size: 18 })} No se encontró la canción.</p>
           <button class="btn btn--secondary" id="editor-back-home">← Volver</button>
         </div>
       `;
@@ -202,11 +202,11 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
           </div>
         </div>
         <div class="editor__row-3">
-          <div class="form-group" style="flex: 2;">
+          <div class="form-group">
             <label class="form-group__label" for="song-genre">Género</label>
             <input class="form-group__input" id="song-genre" type="text" placeholder="Pop/Worship" value="${escapeHtml(existingSong?.genre || '')}" />
           </div>
-          <div class="form-group" style="flex: 1;">
+          <div class="form-group">
             <label class="form-group__label" for="song-cejilla">Cejilla</label>
             <input class="form-group__input" id="song-cejilla" type="number" min="0" max="12" placeholder="0" value="${existingSong?.cejilla || ''}" />
           </div>
@@ -219,9 +219,9 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         <div class="form-group">
           <label class="form-group__label">Porcentaje: <span id="voice-value">♂ ${existingSong?.voicePercent?.male ?? 50}% / ♀ ${100 - (existingSong?.voicePercent?.male ?? 50)}%</span></label>
           <div class="voice-slider">
-            <span style="font-size: 0.8rem;">♂</span>
+            <span class="voice-slider__icon">♂</span>
             <input type="range" id="voice-range" min="0" max="100" value="${existingSong?.voicePercent?.male ?? 50}" />
-            <span style="font-size: 0.8rem;">♀</span>
+            <span class="voice-slider__icon">♀</span>
           </div>
         </div>
       </div>
@@ -231,8 +231,8 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         <h2 class="editor__section-title">Portada del álbum</h2>
         <div class="image-upload" id="image-upload-area">
           <div id="image-preview"></div>
-          <p class="image-upload__text" style="display: inline-flex; align-items: center; gap: 0.4em;">${icon('camera', { size: 18 })} Haz clic o arrastra una imagen aquí</p>
-          <input type="file" id="cover-input" accept="image/*" style="display: none;" />
+          <p class="image-upload__text">${icon('camera', { size: 18 })} Haz clic o arrastra una imagen aquí</p>
+          <input type="file" id="cover-input" accept="image/*" class="editor__cover-input" />
         </div>
       </div>
 
@@ -249,18 +249,18 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
           `,
           ).join('')}
         </div>
-        <h2 class="editor__section-title" style="margin-top: var(--space-lg);">Links de voces (Drive)</h2>
+        <h2 class="editor__section-title editor__section-title--spaced">Links de voces (Drive)</h2>
         <div id="editor-voice-links"></div>
-        <button class="btn btn--secondary" id="add-voice-link-btn" type="button" style="margin-top: var(--space-sm);">+ Agregar link de voz</button>
+        <button class="btn btn--secondary editor__add-link-btn" id="add-voice-link-btn" type="button">+ Agregar link de voz</button>
       </div>
 
       ${
         v2Enabled
           ? `<!-- Roster de voces (v2) -->
       <section class="editor-roster editor__section" id="editor-roster">
-        <h2 class="editor__section-title" style="display: inline-flex; align-items: center; gap: 0.4em;">${icon('users', { size: 18 })} Voces de la canción</h2>
+        <h2 class="editor__section-title editor__section-title--flex">${icon('users', { size: 18 })} Voces de la canción</h2>
         <div id="roster-list"></div>
-        <button class="btn btn--secondary" id="add-roster-voice" type="button" style="margin-top: var(--space-sm); display: inline-flex; align-items: center; gap: 0.4em;">${icon('plus', { size: 16 })} Añadir voz</button>
+        <button class="btn btn--secondary editor__roster-add-btn" id="add-roster-voice" type="button">${icon('plus', { size: 16 })} Añadir voz</button>
       </section>`
           : ''
       }
@@ -271,7 +271,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         <div class="block-editor" id="block-editor"></div>
         <div class="block-editor__controls">
           <button class="btn btn--secondary block-editor__add-section" id="add-section-btn">+ Agregar sección</button>
-          <button class="btn btn--secondary block-editor__import-btn" id="import-btn" style="display: inline-flex; align-items: center; gap: 0.4em;">${icon('download', { size: 16 })} Importar texto</button>
+          <button class="btn btn--secondary block-editor__import-btn" id="import-btn">${icon('download', { size: 16 })} Importar texto</button>
         </div>
       </div>
 
@@ -289,8 +289,8 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       <!-- Actions -->
       <div class="editor__actions">
         <button class="btn btn--secondary" id="editor-cancel">Cancelar</button>
-        ${existingSong ? `<button class="btn btn--secondary" id="editor-delete" style="color: var(--color-error); border-color: var(--color-error); margin-right: auto; display: inline-flex; align-items: center; gap: 0.4em;">${icon('trash', { size: 16 })} Eliminar</button>` : ''}
-        <button class="btn btn--primary" id="editor-save" style="display: inline-flex; align-items: center; gap: 0.4em;">${icon('save', { size: 16 })} Guardar canción</button>
+        ${existingSong ? `<button class="btn btn--secondary btn--danger btn--icon btn--delete-action" id="editor-delete">${icon('trash', { size: 16 })} Eliminar</button>` : ''}
+        <button class="btn btn--primary btn--icon" id="editor-save">${icon('save', { size: 16 })} Guardar canción</button>
       </div>
     </div>
   `;
@@ -334,22 +334,22 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     voiceLinksEl.innerHTML = voiceLinkItems
       .map(
         (item, i) => `
-        <div class="editor__row-3" style="align-items: flex-end; margin-bottom: var(--space-sm);" data-vlink="${i}">
-          <div class="form-group" style="flex: 1;">
+        <div class="editor__row-3 editor__vlink-row" data-vlink="${i}">
+          <div class="form-group">
             <label class="form-group__label">Voz</label>
             <select class="form-group__input" data-action="vlink-voice" data-idx="${i}">
               ${VOICE_LINK_TYPES.map((v) => `<option value="${v.id}" ${item.voiceType === v.id ? 'selected' : ''}>${v.label}</option>`).join('')}
             </select>
           </div>
-          <div class="form-group" style="flex: 2;">
+          <div class="form-group">
             <label class="form-group__label">URL (Drive)</label>
             <input class="form-group__input" type="url" placeholder="https://drive.google.com/..." data-action="vlink-url" data-idx="${i}" value="${escapeHtml(item.url || '')}" />
           </div>
-          <div class="form-group" style="flex: 1;">
+          <div class="form-group">
             <label class="form-group__label">Etiqueta</label>
             <input class="form-group__input" type="text" placeholder="Partitura" data-action="vlink-label" data-idx="${i}" value="${escapeHtml(item.label || '')}" />
           </div>
-          <button class="btn btn--secondary" style="color: var(--color-error); border-color: var(--color-error); padding: 0.5rem;" data-action="vlink-delete" data-idx="${i}" type="button" aria-label="Eliminar enlace">${icon('close', { size: 16 })}</button>
+          <button class="btn btn--secondary btn--danger btn--compact" data-action="vlink-delete" data-idx="${i}" type="button" aria-label="Eliminar enlace">${icon('close', { size: 16 })}</button>
         </div>
       `,
       )
@@ -408,7 +408,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     if (!rosterListEl) return;
     if (voiceRoster.length === 0) {
       rosterListEl.innerHTML =
-        '<p style="color: var(--color-text-secondary); font-size: 0.875rem;">Aún no hay voces. Añade al menos una para asignar voces y tono por rango.</p>';
+        '<p class="editor__empty-hint">Aún no hay voces. Añade al menos una para asignar voces y tono por rango.</p>';
       return;
     }
     rosterListEl.innerHTML = voiceRoster
@@ -420,17 +420,17 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
           !isValidNote(v.referenceKey);
         return `
         <div class="roster-row" data-roster-idx="${i}">
-          <div class="form-group" style="flex: 2;">
+          <div class="form-group form-group--flex-2">
             <label class="form-group__label">Nombre</label>
             <input class="form-group__input" type="text" data-action="roster-name" data-idx="${i}" value="${escapeHtml(v.name || '')}" placeholder="Voz ${i + 1}" />
           </div>
-          <div class="form-group" style="flex: 2;">
+          <div class="form-group form-group--flex-2">
             <label class="form-group__label">Categoría</label>
             <select class="form-group__input" data-action="roster-category" data-idx="${i}">
               ${CANONICAL_VOICE_ORDER.map((c) => `<option value="${c}" ${v.category === c ? 'selected' : ''}>${getVoiceLabel(c)}</option>`).join('')}
             </select>
           </div>
-          <div class="form-group" style="flex: 1;">
+          <div class="form-group form-group--flex-1">
             <label class="form-group__label">Tono ref.</label>
             <input class="form-group__input ${keyInvalid ? 'form-group__input--invalid' : ''}" type="text" data-action="roster-refkey" data-idx="${i}" value="${escapeHtml(v.referenceKey || '')}" placeholder="Ej: B3" aria-invalid="${keyInvalid}" />
           </div>
@@ -760,7 +760,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
                 const on = st.included;
                 return `<div class="voice-note-row">
                   <button class="voice-pick${on ? ' voice-pick--active' : ''}" data-voice="${v.id}" type="button" aria-pressed="${on}">
-                    <span class="voice-pick__dot" style="background: var(--color-voice-${v.category})"></span>
+                    <span class="voice-pick__dot" style="--current-voice: var(--color-voice-${v.category})"></span>
                     ${escapeHtml(v.name || getVoiceLabel(v.category))}
                   </button>
                   <input class="form-group__input voice-note-row__note${st.invalid ? ' form-group__input--invalid' : ''}" data-note-for="${v.id}" type="text" value="${escapeHtml(st.note)}" placeholder="Ej: B3 (vacío = sin nota)" aria-invalid="${st.invalid}" />
@@ -785,7 +785,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
                     : `<span class="group-row__note">${escapeHtml(g.note)}</span>`;
                 return `<div class="group-row">
                   <span class="group-row__seg">${seg}</span>
-                  <span class="group-row__voice"><span class="voice-pick__dot" style="background: var(--color-voice-${cat})"></span>${vname}</span>
+                  <span class="group-row__voice"><span class="voice-pick__dot" style="--current-voice: var(--color-voice-${cat})"></span>${vname}</span>
                   ${noteHtml}
                   <button class="group-row__del" data-del-idx="${i}" type="button" aria-label="Eliminar grupo">${icon('trash', { size: 14 })}</button>
                 </div>`;
@@ -794,7 +794,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
 
       modalEl.innerHTML = `
           <div class="import-modal__header">
-            <h3 class="import-modal__title" style="display:inline-flex;align-items:center;gap:0.4em;">${icon('music', { size: 18 })} Voces y tono</h3>
+            <h3 class="import-modal__title">${icon('music', { size: 18 })} Voces y tono</h3>
             <button class="import-modal__close" data-tono="close" aria-label="Cerrar">${icon('close', { size: 18 })}</button>
           </div>
 
@@ -806,7 +806,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
           <div class="tono-editor__step">
             <div class="tono-editor__step-head"><span>2 · Notas por voz (vacío = esa voz no canta el rango)</span></div>
             <div class="voice-note-grid">${voiceRows}</div>
-            <button class="btn btn--primary" data-tono="apply" type="button" style="margin-top: var(--space-sm);"${range ? '' : ' disabled'}>${icon('plus', { size: 14 })} Agregar grupos del rango</button>
+            <button class="btn btn--primary btn--icon tono-editor__apply-btn" data-tono="apply" type="button"${range ? '' : ' disabled'}>${icon('plus', { size: 14 })} Agregar grupos del rango</button>
             ${formError ? `<p class="tono-editor__error" role="alert">${escapeHtml(formError)}</p>` : ''}
           </div>
 
@@ -970,7 +970,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       const canAdd = pos !== null;
       modalEl.innerHTML = `
           <div class="import-modal__header">
-            <h3 class="import-modal__title" style="display:inline-flex;align-items:center;gap:0.4em;">${icon('audio-lines', { size: 18 })} Acordes</h3>
+            <h3 class="import-modal__title">${icon('audio-lines', { size: 18 })} Acordes</h3>
             <button class="import-modal__close" data-chord="close" aria-label="Cerrar">${icon('close', { size: 18 })}</button>
           </div>
 
@@ -1068,7 +1068,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     overlay.innerHTML = `
       <div class="import-modal">
         <div class="import-modal__header">
-          <h3 class="import-modal__title" style="display: inline-flex; align-items: center; gap: 0.4em;">${icon('download', { size: 18 })} Importar texto</h3>
+          <h3 class="import-modal__title">${icon('download', { size: 18 })} Importar texto</h3>
           <button class="import-modal__close" id="import-close" aria-label="Cerrar">${icon('close', { size: 18 })}</button>
         </div>
         <p class="import-modal__hint">
@@ -1077,7 +1077,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         </p>
         <textarea class="import-modal__textarea" id="import-textarea" placeholder="[Verso 1]\nPrimera línea de la canción\nSegunda línea\n\n[Coro]\nEstribillo aquí..."></textarea>
         <div class="import-modal__preview" id="import-preview">
-          <p style="color: var(--color-text-secondary); font-size: 0.85rem;">La vista previa aparecerá aquí...</p>
+          <p class="import-modal__placeholder">La vista previa aparecerá aquí...</p>
         </div>
         <div class="import-modal__actions">
           <button class="btn btn--secondary" id="import-cancel-btn">Cancelar</button>
@@ -1095,15 +1095,15 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       const parsed = parseImportText(textarea.value);
       if (parsed.length === 0) {
         previewEl.innerHTML =
-          '<p style="color: var(--color-text-secondary); font-size: 0.85rem;">La vista previa aparecerá aquí...</p>';
+          '<p class="import-modal__placeholder">La vista previa aparecerá aquí...</p>';
         return;
       }
       previewEl.innerHTML = parsed
         .map(
           (block) =>
-            `<div style="margin-bottom: 0.75rem;">
-          <div style="font-size: 0.75rem; font-weight: 600; color: var(--color-primary); margin-bottom: 0.25rem; text-transform: uppercase;">${escapeHtml(block.label)}</div>
-          ${block.lines.map((l) => `<div style="font-size: 0.85rem; padding: 1px 0;">${escapeHtml(l.text)}</div>`).join('')}
+            `<div class="import-preview__section">
+          <div class="import-preview__label">${escapeHtml(block.label)}</div>
+          ${block.lines.map((l) => `<div class="import-preview__line">${escapeHtml(l.text)}</div>`).join('')}
         </div>`,
         )
         .join('');
@@ -1134,7 +1134,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     const sections = blocksToSectionsV3(blocks);
     if (sections.length === 0 || sections.every((s) => s.lines.length === 0)) {
       previewEl.innerHTML =
-        '<p style="color: var(--color-text-secondary); font-size: 0.875rem;">Agrega secciones y letras para ver la vista previa.</p>';
+        '<p class="editor__preview-hint">Agrega secciones y letras para ver la vista previa.</p>';
       return;
     }
 
@@ -1222,9 +1222,7 @@ function handleImageFile(file, previewEl) {
         const previewUrl = URL.createObjectURL(blob);
         previewEl.innerHTML = `
           <img class="image-upload__preview" src="${previewUrl}" alt="Preview" />
-          <p style="font-size: 0.75rem; color: var(--color-text-secondary); margin-top: 0.5rem;">
-            WebP · ${width}×${height} · ${(blob.size / 1024).toFixed(1)} KB
-          </p>
+          <p class="image-upload__meta">WebP · ${width}×${height} · ${(blob.size / 1024).toFixed(1)} KB</p>
         `;
       },
       'image/webp',

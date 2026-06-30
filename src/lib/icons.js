@@ -69,6 +69,12 @@ const PATHS = {
   pause: '<line x1="14" y1="4" x2="14" y2="20"></line><line x1="10" y1="4" x2="10" y2="20"></line>',
   'rotate-ccw':
     '<polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>',
+  album: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>',
+  globe:
+    '<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  sliders:
+    '<line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/>',
+  'chevron-left': '<path d="m15 18-6-6 6-6"/>',
 };
 
 /**

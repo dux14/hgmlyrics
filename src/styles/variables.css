@@ -113,11 +113,11 @@
   --color-voice-low: #ff7043;
   --color-voice-chorus: #ab47bc;
 
-  /* Voice part colors — Soprano rosado, Contralto morado, Tenor amarillo, Bajo azul */
-  --color-voice-soprano: #c2185b;
-  --color-voice-contralto: #6a1b9a;
-  --color-voice-tenor: #b58900;
-  --color-voice-bass: #1565c0;
+  /* Voice part colors — derivan de primitivos en tokens.css (mismo hex, sin cambio renderizado) */
+  --color-voice-soprano: var(--color-voice-soprano-l);
+  --color-voice-contralto: var(--color-voice-contralto-l);
+  --color-voice-tenor: var(--color-voice-tenor-l);
+  --color-voice-bass: var(--color-voice-bass-l);
 
   /* Voice background highlights */
   --color-voice-soprano-bg: rgba(194, 24, 91, 0.12);
@@ -127,8 +127,8 @@
   --color-voice-extra-bg: rgba(171, 71, 188, 0.12);
   --color-voice-chorus-bg: rgba(171, 71, 188, 0.12);
 
-  /* Chord color — verde para diferenciar del Bajo (azul) */
-  --color-chord: #2e7d32;
+  /* Chord color — deriva de primitivo en tokens.css (mismo hex, sin cambio renderizado) */
+  --color-chord: var(--color-chord-l);
   --color-chord-bg: rgba(46, 125, 50, 0.1);
   --color-chord-hover: #1b5e20;
   --color-chord-hover-bg: rgba(46, 125, 50, 0.2);
@@ -198,6 +198,23 @@
   --scrollbar-width: 6px;
   --scrollbar-track: transparent;
   --scrollbar-thumb: var(--color-border);
+
+  /* === Alias semánticos NUEVOS (para utilities Ambient Kinetic) === */
+  --color-brand: var(--color-teal-500);        /* teal — alias nuevo */
+  --color-action: var(--color-amber-500);      /* ámbar — SOLO acciones */
+  --color-accent-2: var(--color-violet-500);   /* gradientes ambient */
+  --color-danger: var(--color-error);
+  --color-warn: var(--color-warning);
+  --color-liturgy: var(--color-amber-400);     /* oro devocional ≠ acción */
+  --color-accent-rose: var(--color-rose-300);  /* acento rosa de galería (F2+) — AUDIT-360 §5.1 */
+
+  /* === Motion tokens (spec §3) === */
+  --motion-micro: 120ms;
+  --motion-state: 250ms;
+  --motion-page: 350ms;
+  --motion-hero: 500ms;
+  --ease-emph: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-entrance: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* ============================================

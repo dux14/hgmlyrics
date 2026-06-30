@@ -69,3 +69,14 @@
   /* violet claro de galería (#c4b5fd) ≈ violet-300; se materializa al subir
      primitivos en F1. Hasta entonces --color-accent-2 deriva de violet-400/500. */
 }
+
+/* Utilities que siguen el tema runtime (bg-surface, text-brand, etc.) — se usan en F1+ */
+@theme inline {
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-text: var(--color-text);
+  --color-muted: var(--color-text-secondary);
+  --color-brand: var(--color-brand);
+  --color-action: var(--color-action);
+  --color-accent-2: var(--color-accent-2);
+}

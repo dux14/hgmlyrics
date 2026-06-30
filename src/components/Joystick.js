@@ -41,47 +41,26 @@ export function Joystick({ onChange, radius = 60 }) {
   const size = radius * 2;
   const thumbSize = radius * 0.6;
 
-  // Contenedor exterior
+  // Contenedor exterior — tamaño dinámico (radio como parámetro)
   const el = document.createElement('div');
-  el.style.cssText = [
-    `width:${size}px`,
-    `height:${size}px`,
-    'position:relative',
-    'pointer-events:none',
-    'user-select:none',
-    '-webkit-user-select:none',
-  ].join(';');
+  el.className = 'joy-pad';
+  el.style.width = size + 'px';
+  el.style.height = size + 'px';
 
   // Base circular
   const base = document.createElement('div');
   base.setAttribute('data-joystick-base', '');
-  base.style.cssText = [
-    'position:absolute',
-    'inset:0',
-    'border-radius:50%',
-    'background:rgba(255,255,255,0.12)',
-    'border:2px solid rgba(255,255,255,0.3)',
-    'pointer-events:auto',
-    'touch-action:none',
-    'cursor:grab',
-  ].join(';');
+  base.className = 'joy-base';
   el.appendChild(base);
 
-  // Thumb (el palo del joystick)
+  // Thumb (el palo del joystick) — posición dinámica (calculada de radius)
   const thumb = document.createElement('div');
   thumb.setAttribute('data-joystick-thumb', '');
-  thumb.style.cssText = [
-    `width:${thumbSize}px`,
-    `height:${thumbSize}px`,
-    'border-radius:50%',
-    'background:rgba(255,255,255,0.7)',
-    'position:absolute',
-    `top:${radius - thumbSize / 2}px`,
-    `left:${radius - thumbSize / 2}px`,
-    'pointer-events:none',
-    'transition:none',
-    'will-change:transform',
-  ].join(';');
+  thumb.className = 'joy-thumb';
+  thumb.style.width = thumbSize + 'px';
+  thumb.style.height = thumbSize + 'px';
+  thumb.style.top = (radius - thumbSize / 2) + 'px';
+  thumb.style.left = (radius - thumbSize / 2) + 'px';
   base.appendChild(thumb);
 
   let active = false;

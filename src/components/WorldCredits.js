@@ -23,56 +23,26 @@ export function WorldCredits() {
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-label', 'Creditos de assets');
   el.setAttribute('aria-modal', 'true');
-  el.style.cssText = [
-    'display:none',
-    'position:absolute',
-    'inset:0',
-    'background:rgba(0,0,0,0.8)',
-    'z-index:50',
-    'align-items:center',
-    'justify-content:center',
-    'font-family:sans-serif',
-    'font-size:13px',
-    'color:#e0e0e0',
-  ].join(';');
+  el.className = 'wc-backdrop';
 
   // ── Modal interior ───────────────────────────────────────────────────────
   const modal = document.createElement('div');
-  modal.style.cssText = [
-    'background:#1e1e2e',
-    'border:1px solid rgba(255,255,255,0.15)',
-    'border-radius:10px',
-    'padding:20px 24px',
-    'max-width:560px',
-    'width:90%',
-    'max-height:80vh',
-    'display:flex',
-    'flex-direction:column',
-    'gap:12px',
-  ].join(';');
+  modal.className = 'wc-modal';
   el.appendChild(modal);
 
   // ── Cabecera ─────────────────────────────────────────────────────────────
   const header = document.createElement('div');
-  header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+  header.className = 'wc-header';
 
   const title = document.createElement('h2');
-  title.style.cssText = 'margin:0;font-size:15px;color:#90caf9;';
+  title.className = 'wc-title';
   title.textContent = 'Creditos — Assets LPC';
   header.appendChild(title);
 
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.setAttribute('aria-label', 'Cerrar creditos');
-  closeBtn.style.cssText = [
-    'background:none',
-    'border:none',
-    'color:#aaa',
-    'font-size:20px',
-    'cursor:pointer',
-    'line-height:1',
-    'padding:0',
-  ].join(';');
+  closeBtn.className = 'wc-close-btn';
   closeBtn.textContent = '×';
   closeBtn.addEventListener('click', () => close());
   header.appendChild(closeBtn);
@@ -80,20 +50,7 @@ export function WorldCredits() {
 
   // ── Contenido scrollable ─────────────────────────────────────────────────
   const pre = document.createElement('pre');
-  pre.style.cssText = [
-    'margin:0',
-    'overflow-y:auto',
-    'max-height:55vh',
-    'white-space:pre-wrap',
-    'word-break:break-word',
-    'font-family:monospace',
-    'font-size:12px',
-    'line-height:1.5',
-    'color:#ccc',
-    'background:#13131f',
-    'border-radius:4px',
-    'padding:12px',
-  ].join(';');
+  pre.className = 'wc-pre';
   modal.appendChild(pre);
 
   // ── Cerrar con Esc ───────────────────────────────────────────────────────

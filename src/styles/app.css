@@ -3,7 +3,8 @@
 
 @import 'tailwindcss';
 
-/* Tokens (primitivos @theme + utilities theme-aware) — se crea en Task 2 */
+/* tokens.css va sin layer(): contiene @theme, directiva de Tailwind v4 que se
+   procesa a nivel raíz y no admite envolverse en una capa. */
 @import './tokens.css';
 
 /* CSS legacy — se migra superficie por superficie en F1+ */

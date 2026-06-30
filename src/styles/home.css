@@ -1,7 +1,7 @@
 /* ============================================================
    home.css — Vista de inicio (renderHome)
-   Ambient Kinetic: dark primario, teal/violeta = identidad,
-   ámbar = acción. Sin hex de marca hardcodeado.
+   Ambient Kinetic: dark primario, teal = identidad, ámbar = acción.
+   Sin hex de marca suelto; todo via tokens.
    ============================================================ */
 
 .home {
@@ -11,25 +11,49 @@
   gap: var(--space-lg);
 }
 
-/* ── Módulo (sección) ── */
+/* ── Módulo (sección genérica) ── */
 .home__module {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
 }
 
-/* ── Kicker (título de sección) — Syncopate, teal, uppercase ── */
-.home__kicker {
-  font-family: var(--font-display);
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  color: var(--color-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  margin: 0;
+/* ── Cabecera estilo Spotify: título grande + enlace "Ver todos" ── */
+.home__hd {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: 0 var(--space-md);
 }
 
-/* ── Strip horizontal (canciones recientes) ── */
+.home__hd-title {
+  font-size: 1.25rem; /* ~20px */
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  margin: 0;
+  line-height: var(--line-height-tight, 1.2);
+}
+
+.home__all {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+  transition: color var(--transition-fast);
+}
+
+.home__all:hover,
+.home__all:focus-visible {
+  color: var(--color-primary);
+  outline: none;
+}
+
+/* ── Strip horizontal (recientes / favoritos) — full-bleed ── */
 .home__strip {
   display: flex;
   flex-direction: row;
@@ -52,32 +76,43 @@
   scroll-snap-align: start;
 }
 
-/* ── Grid de álbumes — 2 columnas ── */
-.home__albums {
+/* ── Rejilla de álbumes: 3 col. en móvil (5 reales + card "+") ── */
+.home__albums-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--space-sm);
+  padding: 0 var(--space-md);
 }
 
-/* ── Botón de álbum ── */
-.home__album {
+@media (min-width: 420px) {
+  .home__albums-grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  }
+}
+
+/* ── Card de álbum (home) ── */
+.home__album-card {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--space-xs);
+  align-items: stretch;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
-  padding: var(--space-sm);
+  padding: 0;
   cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
+  text-align: left;
   overflow: hidden;
+  transition:
+    transform var(--transition-base),
+    box-shadow var(--transition-base);
 }
 
-.home__album:hover,
-.home__album:focus-visible {
-  background: var(--color-surface-hover);
-  border-color: var(--color-primary);
+.home__album-card:hover,
+.home__album-card:focus-visible {
+  transform: translateY(-3px);
+  box-shadow:
+    0 6px 18px var(--color-shadow),
+    0 0 0 1px var(--color-primary);
   outline: none;
 }
 
@@ -85,19 +120,207 @@
   width: 100%;
   aspect-ratio: 1 / 1;
   object-fit: cover;
-  border-radius: var(--border-radius-sm);
   background: var(--color-bg);
+  display: block;
+}
+
+.home__album-body {
+  padding: var(--space-xs) var(--space-sm) var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .home__album-name {
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text);
-  text-align: center;
-  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.home__album-artist {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Card "+" — abre /albumes, pulso teal ── */
+.home__album-plus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklch, var(--color-primary) 12%, var(--color-surface));
+  border: 1px dashed var(--color-primary);
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  aspect-ratio: 1 / 1;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.home__album-plus:hover,
+.home__album-plus:focus-visible {
+  background: color-mix(in oklch, var(--color-primary) 24%, var(--color-surface));
+  outline: none;
+}
+
+.home__album-plus-ic {
+  font-size: 1.5rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* ── Filas de listas ── */
+.home__list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+
+.home__list-row:last-of-type {
+  border-bottom: none;
+}
+
+.home__list-row:hover,
+.home__list-row:focus-visible {
+  background: var(--color-surface-hover);
+  outline: none;
+}
+
+.home__list-ic {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
+.home__list-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.home__list-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home__list-meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.home__list-arr {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
+.home__list-empty {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  padding: 0 var(--space-md);
+  margin: 0;
+}
+
+.home__list-create {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-primary);
+  transition: opacity var(--transition-fast);
+}
+
+.home__list-create:hover,
+.home__list-create:focus-visible {
+  opacity: 0.75;
+  outline: none;
+}
+
+/* ── Card de voz en off vigente ── */
+.home__voz-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  padding: var(--space-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.home__voz-card:hover,
+.home__voz-card:focus-visible {
+  background: var(--color-surface-hover);
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.home__voz-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.home__voz-ref {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home__voz-date {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.home__voz-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+  background: color-mix(in oklch, var(--color-primary) 15%, transparent);
+  border-radius: 3px;
+  padding: 1px 5px;
+  margin-top: 2px;
+  align-self: flex-start;
+}
+
+.home__voz-arr {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
 }
 
 /* ── Teaser: oración del artista — superficie glass ── */
@@ -154,47 +377,76 @@
 .home__teaser-arr {
   flex-shrink: 0;
   color: var(--color-text-secondary);
-  transform: rotate(90deg);
 }
 
-/* ── Quick cards (favoritos / listas) ── */
-.home__quick {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-sm);
+/* ══ Animaciones (Ambient Kinetic) ══════════════════════════════════
+   Todas las animaciones y transiciones de motion dentro del guard
+   prefers-reduced-motion: no-preference para respetar la preferencia
+   del sistema sin duplicar reglas en un bloque reduce. */
+
+@keyframes home-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.home__quick-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-xs);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  padding: var(--space-md);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text);
-  transition: background var(--transition-fast), border-color var(--transition-fast),
-    color var(--transition-fast);
+@keyframes home-pulse-teal {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-primary) 50%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 7px transparent;
+  }
 }
 
-.home__quick-card:hover,
-.home__quick-card:focus-visible {
-  background: var(--color-surface-hover);
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  outline: none;
+@keyframes home-slide-x {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
-.home__quick-card .icon {
-  color: var(--color-accent-2);
-}
+@media (prefers-reduced-motion: no-preference) {
+  /* Rise escalonado por sección */
+  .home__module {
+    animation: home-rise 0.35s ease both;
+  }
 
-/* Invitados: atenúa las quick cards sin ocultarlas */
-.home__quick[data-guest='true'] .home__quick-card {
-  opacity: 0.55;
+  .home__module:nth-child(1) { animation-delay: 0.04s; }
+  .home__module:nth-child(2) { animation-delay: 0.08s; }
+  .home__module:nth-child(3) { animation-delay: 0.12s; }
+  .home__module:nth-child(4) { animation-delay: 0.16s; }
+  .home__module:nth-child(5) { animation-delay: 0.20s; }
+  .home__module:nth-child(6) { animation-delay: 0.24s; }
+
+  /* Hover lift en cards de álbum (performance hint) */
+  .home__album-card {
+    will-change: transform;
+  }
+
+  /* Pulso teal en card "+" */
+  .home__album-plus {
+    animation: home-pulse-teal 2.2s ease-in-out infinite;
+  }
+
+  /* Deslizamiento horizontal en filas de listas */
+  .home__list-row {
+    animation: home-slide-x 0.28s ease both;
+  }
+
+  .home__list-row:nth-child(1) { animation-delay: 0.00s; }
+  .home__list-row:nth-child(2) { animation-delay: 0.05s; }
+  .home__list-row:nth-child(3) { animation-delay: 0.10s; }
+  .home__list-row:nth-child(4) { animation-delay: 0.15s; }
+  .home__list-row:nth-child(5) { animation-delay: 0.20s; }
 }

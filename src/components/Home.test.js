@@ -265,6 +265,33 @@ describe('renderHome — Listas', () => {
     c.querySelector('[data-create-list]').click();
     expect(navigate).toHaveBeenCalledWith('/lista/nueva');
   });
+
+  it('muestra el conteo real desde song_count (plural)', async () => {
+    isAuthenticated.mockReturnValue(true);
+    listMyLists.mockResolvedValue([
+      { id: 'l1', name: 'Concierto', song_count: 12, expires_at: null },
+    ]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const meta = c.querySelector('.home__list-meta');
+    expect(meta).not.toBeNull();
+    expect(meta.textContent).toContain('12 canciones');
+  });
+
+  it('muestra singular cuando song_count es 1', async () => {
+    isAuthenticated.mockReturnValue(true);
+    listMyLists.mockResolvedValue([
+      { id: 'l2', name: 'Sola', song_count: 1, expires_at: null },
+    ]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const meta = c.querySelector('.home__list-meta');
+    expect(meta).not.toBeNull();
+    expect(meta.textContent).toContain('1 canción');
+    expect(meta.textContent).not.toContain('1 canciones');
+  });
 });
 
 // ── Álbumes ───────────────────────────────────────────────────────────

@@ -55,8 +55,8 @@ function formatShortDate(isoDate) {
  * @returns {string}
  */
 function listRowHtml(list) {
-  const count = list.songs_count ?? list.item_count ?? list.items_count ?? 0;
-  let meta = `Lista · ${count} canción${count === 1 ? '' : 'es'}`;
+  const count = list.song_count ?? list.songs_count ?? list.item_count ?? list.items_count ?? 0;
+  let meta = `Lista · ${count} ${count === 1 ? 'canción' : 'canciones'}`;
   const expires = formatExpiresShort(list.expires_at);
   if (expires) {
     meta += ` · caduca ${expires}`;

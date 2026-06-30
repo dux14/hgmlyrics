@@ -1,0 +1,94 @@
+/* licenses.css — Licencias y creditos · Ambient Kinetic (F3d)
+ * Tokens: --color-text · --color-text-secondary · --color-border
+ *         --color-danger · --space-* · --border-radius-* · --font-size-*
+ */
+
+/* ── Contenedor de pagina ── */
+.lc-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-xl) var(--space-md);
+  padding-bottom: calc(var(--bottom-nav-height, 60px) + var(--space-xl));
+}
+
+/* ── Cabecera: boton volver + titulo ── */
+.lc-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+}
+
+.lc-back {
+  max-width: 140px;
+  flex-shrink: 0;
+}
+
+.lc-title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+/* ── Parrafo introductorio ── */
+.lc-intro {
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xl);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+/* ── Seccion de contenido ── */
+.lc-section {
+  margin-bottom: var(--space-xl);
+}
+
+.lc-section--border {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-lg);
+}
+
+.lc-section__title {
+  margin-bottom: var(--space-sm);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+/* ── Nota al pie ── */
+.lc-note {
+  color: var(--color-text-secondary);
+  margin-top: var(--space-md);
+  font-size: 0.85em;
+}
+
+/* ── Estado de error (carga fallida del componente) ── */
+.lc-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  min-height: 240px;
+  text-align: center;
+  padding: var(--space-xl);
+}
+
+.lc-error__icon {
+  color: var(--color-danger);
+  opacity: 0.8;
+}
+
+.lc-error__title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-danger);
+  margin: 0;
+}
+
+.lc-error__text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
+}

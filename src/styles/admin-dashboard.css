@@ -75,6 +75,12 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .admin-gate__input--error {
+    animation: none;
+  }
+}
+
 .admin-gate__submit {
   width: 100%;
   height: 48px;

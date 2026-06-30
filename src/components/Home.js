@@ -263,7 +263,11 @@ export async function renderHome(container, { today = new Date().toISOString().s
     const res = await fetch('/api/weekly-words', { headers });
     const jsonBody = res.ok ? await res.json() : {};
     const words = jsonBody.weeklyWords ?? [];
-    const vigente = words.find((w) => isVigente(w.sunday_date, today)) ?? null;
+    // Elegir la más reciente entre las vigentes (sunday_date ≤ hoy).
+    // No se asume orden de la API: se toma el máximo sunday_date explícitamente.
+    const vigente = words
+      .filter((w) => isVigente(w.sunday_date, today))
+      .reduce((best, w) => (best && best.sunday_date >= w.sunday_date ? best : w), null);
     const vozBody = container.querySelector('#home-voz-body');
     if (!vigente) {
       container.querySelector('#section-voz')?.remove();

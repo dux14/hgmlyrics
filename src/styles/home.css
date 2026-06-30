@@ -380,9 +380,9 @@
 }
 
 /* ══ Animaciones (Ambient Kinetic) ══════════════════════════════════
-   Todas las animaciones y transiciones de motion dentro del guard
-   prefers-reduced-motion: no-preference para respetar la preferencia
-   del sistema sin duplicar reglas en un bloque reduce. */
+   Keyframes y animaciones activos por defecto.
+   Guard al final: prefers-reduced-motion: reduce los desactiva.
+   Patrón del proyecto idéntico al de editor.css (commit 3210434). */
 
 @keyframes home-rise {
   from {
@@ -416,37 +416,44 @@
   }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  /* Rise escalonado por sección */
-  .home__module {
-    animation: home-rise 0.35s ease both;
-  }
+/* Rise escalonado por sección */
+.home__module {
+  animation: home-rise 0.35s ease both;
+}
 
-  .home__module:nth-child(1) { animation-delay: 0.04s; }
-  .home__module:nth-child(2) { animation-delay: 0.08s; }
-  .home__module:nth-child(3) { animation-delay: 0.12s; }
-  .home__module:nth-child(4) { animation-delay: 0.16s; }
-  .home__module:nth-child(5) { animation-delay: 0.20s; }
-  .home__module:nth-child(6) { animation-delay: 0.24s; }
+.home__module:nth-child(1) { animation-delay: 0.04s; }
+.home__module:nth-child(2) { animation-delay: 0.08s; }
+.home__module:nth-child(3) { animation-delay: 0.12s; }
+.home__module:nth-child(4) { animation-delay: 0.16s; }
+.home__module:nth-child(5) { animation-delay: 0.20s; }
+.home__module:nth-child(6) { animation-delay: 0.24s; }
 
-  /* Hover lift en cards de álbum (performance hint) */
-  .home__album-card {
-    will-change: transform;
-  }
+/* Hover lift en cards de álbum (performance hint) */
+.home__album-card {
+  will-change: transform;
+}
 
-  /* Pulso teal en card "+" */
-  .home__album-plus {
-    animation: home-pulse-teal 2.2s ease-in-out infinite;
-  }
+/* Pulso teal en card "+" */
+.home__album-plus {
+  animation: home-pulse-teal 2.2s ease-in-out infinite;
+}
 
-  /* Deslizamiento horizontal en filas de listas */
+/* Deslizamiento horizontal en filas de listas */
+.home__list-row {
+  animation: home-slide-x 0.28s ease both;
+}
+
+.home__list-row:nth-child(1) { animation-delay: 0.00s; }
+.home__list-row:nth-child(2) { animation-delay: 0.05s; }
+.home__list-row:nth-child(3) { animation-delay: 0.10s; }
+.home__list-row:nth-child(4) { animation-delay: 0.15s; }
+.home__list-row:nth-child(5) { animation-delay: 0.20s; }
+
+/* ── Accesibilidad: movimiento reducido ── */
+@media (prefers-reduced-motion: reduce) {
+  .home__module,
+  .home__album-plus,
   .home__list-row {
-    animation: home-slide-x 0.28s ease both;
+    animation: none;
   }
-
-  .home__list-row:nth-child(1) { animation-delay: 0.00s; }
-  .home__list-row:nth-child(2) { animation-delay: 0.05s; }
-  .home__list-row:nth-child(3) { animation-delay: 0.10s; }
-  .home__list-row:nth-child(4) { animation-delay: 0.15s; }
-  .home__list-row:nth-child(5) { animation-delay: 0.20s; }
 }

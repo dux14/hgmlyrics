@@ -397,35 +397,40 @@ describe('renderHome — Voz en off', () => {
     expect(navigate).toHaveBeenCalledWith('/voz/w42');
   });
 
-  it('usa el parámetro today para elegir la vigente más reciente ≤ hoy', async () => {
+  it('usa el parámetro today para filtrar vigentes (futura excluida)', async () => {
     // w-future (2026-07-06) está en futuro → no vigente con today=2026-06-30
     // w-past   (2026-06-22) está en pasado → vigente
     const words = [
-      {
-        id: 'w-future',
-        sunday_date: '2026-07-06',
-        gospel_ref: 'A',
-        liturgical_color: 'green',
-      },
-      {
-        id: 'w-past',
-        sunday_date: '2026-06-22',
-        gospel_ref: 'B',
-        liturgical_color: 'purple',
-      },
+      { id: 'w-future', sunday_date: '2026-07-06', gospel_ref: 'A', liturgical_color: 'green' },
+      { id: 'w-past', sunday_date: '2026-06-22', gospel_ref: 'B', liturgical_color: 'purple' },
     ];
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ weeklyWords: words }),
-      }),
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ weeklyWords: words }) }),
     );
     const c = mkContainer();
     await renderHome(c, { today: '2026-06-30' });
 
-    const card = c.querySelector('[data-voz-id]');
-    expect(card?.dataset.vozId).toBe('w-past');
+    expect(c.querySelector('[data-voz-id]')?.dataset.vozId).toBe('w-past');
+  });
+
+  it('elige la más reciente (max sunday_date) entre varias vigentes, sin depender del orden del array', async () => {
+    // Array en orden ASCENDENTE (más antigua primero) para probar que no usamos find().
+    // Con find() devolvería w-old (primera); con reduce(max) devuelve w-recent.
+    const words = [
+      { id: 'w-old', sunday_date: '2026-06-01', gospel_ref: 'A', liturgical_color: 'green' },
+      { id: 'w-mid', sunday_date: '2026-06-15', gospel_ref: 'B', liturgical_color: 'purple' },
+      { id: 'w-recent', sunday_date: '2026-06-29', gospel_ref: 'C', liturgical_color: 'white' },
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ weeklyWords: words }) }),
+    );
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    // Debe mostrar la más reciente, no la primera del array
+    expect(c.querySelector('[data-voz-id]')?.dataset.vozId).toBe('w-recent');
   });
 });
 

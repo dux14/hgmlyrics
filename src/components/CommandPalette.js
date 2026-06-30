@@ -140,7 +140,7 @@ let _overlayKeydown = null;
 
 /**
  * Abre el command palette por trigger (header pill). Funciona en cualquier
- * ancho. Idempotente: no hace nada si ya esta abierto.
+ * ancho. Idempotente: no hace nada si ya está abierto.
  */
 export function openCommandPalette() {
   _open();

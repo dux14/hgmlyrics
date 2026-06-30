@@ -24,6 +24,8 @@ import {
 } from '../lib/lyricsRender.js';
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
+import { isFavorite, toggleFavorite } from '../lib/favorites.js';
+import '../styles/favorites.css';
 import { openVoiceSheet } from './VoiceSheet.js';
 import { presetToSpeed, stepToward, shouldShowFab } from '../lib/autoscroll.js';
 import { escapeHtml } from '../lib/escape.js';
@@ -113,6 +115,46 @@ function getVoiceTypeLabel(voiceType) {
   if (voiceType === 'male') return 'Masculina';
   if (voiceType === 'female') return 'Femenina';
   return 'Mixta';
+}
+
+/**
+ * Muestra un toast indicando si la cancion fue agregada o eliminada de favoritos.
+ * El boton "Deshacer" llama toggleFavorite de nuevo y actualiza el btn.
+ * @param {boolean} added
+ * @param {string} songId
+ * @param {HTMLElement} favBtn
+ */
+function showFavToast(added, songId, favBtn) {
+  let toast = document.querySelector('.toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.className = 'toast';
+    document.body.appendChild(toast);
+  }
+  clearTimeout(toast._hideTimer);
+
+  const label = added ? 'Agregada' : 'Eliminada';
+  toast.innerHTML = `
+    <span>${label}</span>
+    <button class="fav-toast__undo" type="button" aria-label="Deshacer">· Deshacer</button>
+  `;
+  toast.classList.add('visible');
+
+  toast.querySelector('.fav-toast__undo').addEventListener(
+    'click',
+    async () => {
+      toast.classList.remove('visible');
+      await toggleFavorite(songId);
+      const nowOn = !added;
+      if (favBtn) {
+        favBtn.classList.toggle('is-on', nowOn);
+        favBtn.setAttribute('aria-label', nowOn ? 'Quitar de favoritos' : 'Agregar a favoritos');
+      }
+    },
+    { once: true },
+  );
+
+  toast._hideTimer = setTimeout(() => toast.classList.remove('visible'), 3500);
 }
 
 /**
@@ -304,6 +346,7 @@ export async function renderSongView(container, songIdOrData) {
               : ''
           }
           <button class="song-toolbar__voices" id="open-voice-sheet" aria-label="Control de voces">${icon('sliders', { size: 18 })}</button>
+          <button class="fav-btn${!isPreview && songId && isFavorite(songId) ? ' is-on' : ''}" id="fav-btn" aria-label="Agregar a favoritos">${icon('heart', { size: 18 })}</button>
         </div>
 
         ${
@@ -672,6 +715,18 @@ export async function renderSongView(container, songIdOrData) {
 
   // ── Preview mode: skip remaining interactive controls ──
   if (isPreview) return;
+
+  // Favorite button
+  const favBtn = container.querySelector('#fav-btn');
+  if (favBtn && songId) {
+    favBtn.addEventListener('click', async () => {
+      const wasOn = favBtn.classList.contains('is-on');
+      await toggleFavorite(songId);
+      favBtn.classList.toggle('is-on', !wasOn);
+      favBtn.setAttribute('aria-label', wasOn ? 'Agregar a favoritos' : 'Quitar de favoritos');
+      showFavToast(!wasOn, songId, favBtn);
+    });
+  }
 
   // Font controls
   container.querySelector('#font-decrease')?.addEventListener('click', () => {

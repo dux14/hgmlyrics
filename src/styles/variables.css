@@ -101,11 +101,11 @@
   --color-surface-hover: #242424;
   --color-text: #f0f0f0;
   --color-text-secondary: #9ca3af;
-  --color-primary: #4fc3f7;
-  --color-primary-light: #81d4fa;
-  --color-primary-dark: #0097a7;
-  --color-accent: #ffb74d;
-  --color-accent-light: #ffcc80;
+  --color-primary: var(--color-teal-400);        /* #2dd4bf — marca Ambient Kinetic */
+  --color-primary-light: var(--color-teal-300);
+  --color-primary-dark: var(--color-teal-500);
+  --color-accent: var(--color-amber-500);         /* #f59e0b — SOLO acciones */
+  --color-accent-light: var(--color-amber-400);
   --color-border: #2d2d2d;
   --color-shadow: rgba(0, 0, 0, 0.4);
 
@@ -232,11 +232,11 @@
   --color-surface-hover: #f0f1f3;
   --color-text: #1a1a1a;
   --color-text-secondary: #6b7280;
-  --color-primary: #0097a7;
-  --color-primary-light: #4fc3f7;
-  --color-primary-dark: #00796b;
-  --color-accent: #ff8f00;
-  --color-accent-light: #ffb74d;
+  --color-primary: var(--color-teal-500);
+  --color-primary-light: var(--color-teal-400);
+  --color-primary-dark: var(--color-teal-700);
+  --color-accent: var(--color-amber-600);
+  --color-accent-light: var(--color-amber-500);
   --color-border: #e5e7eb;
   --color-shadow: rgba(0, 0, 0, 0.08);
 
@@ -283,11 +283,11 @@
     --color-surface-hover: #f0f1f3;
     --color-text: #1a1a1a;
     --color-text-secondary: #6b7280;
-    --color-primary: #0097a7;
-    --color-primary-light: #4fc3f7;
-    --color-primary-dark: #00796b;
-    --color-accent: #ff8f00;
-    --color-accent-light: #ffb74d;
+    --color-primary: var(--color-teal-500);
+    --color-primary-light: var(--color-teal-400);
+    --color-primary-dark: var(--color-teal-700);
+    --color-accent: var(--color-amber-600);
+    --color-accent-light: var(--color-amber-500);
     --color-border: #e5e7eb;
     --color-shadow: rgba(0, 0, 0, 0.08);
 

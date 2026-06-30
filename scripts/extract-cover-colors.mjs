@@ -39,7 +39,7 @@ export async function dominantColors(rawRGB, width, height) {
   r = r / n; g = g / n; b = b / n;
   let [h, s, l] = rgbToHsl(r, g, b);
   l = Math.min(l, 0.46); s = Math.min(1, s * 1.15 + 0.05);
-  return { base: hslToHex(h, s, l), light: hslToHex(h, Math.min(0.6, l + 0.16), s) };
+  return { base: hslToHex(h, s, l), light: hslToHex(h, s, Math.min(0.6, l + 0.16)) };
 }
 
 async function main() {

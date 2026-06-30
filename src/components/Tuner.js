@@ -173,10 +173,10 @@ function bodyGuitarOrVoice(mode, targetNote) {
     ${renderGauge()}
     <p class="tuner-hint">${
       mode === 'guitar'
-        ? 'Tocá una cuerda. Se resalta la nota objetivo más cercana.'
+        ? 'Toca una cuerda. Se resalta la nota objetivo más cercana.'
         : targetNote
-          ? `Cantá ${targetNote} sostenida. Se pone en verde cuando coincide.`
-          : 'Cantá una nota sostenida.'
+          ? `Canta ${targetNote} sostenida. Se pone en verde cuando coincide.`
+          : 'Canta una nota sostenida.'
     }</p>
   `;
 }
@@ -217,7 +217,7 @@ export function bodySong(song, targetLabel = null) {
       ${renderGauge()}
       <p class="tuner-hint">${
         targetLabel
-          ? `Cantá <strong>${targetLabel}</strong>. Se pone verde al coincidir. Verde claro = nota en escala de ${song.key}.`
+          ? `Canta <strong>${targetLabel}</strong>. Se pone verde al coincidir. Verde claro = nota en escala de ${song.key}.`
           : `Verde = la nota pertenece a <em>${song.key}</em>. Rojo = fuera de escala.`
       }</p>
     `;
@@ -236,7 +236,7 @@ export function bodySong(song, targetLabel = null) {
         <div class="tuner-readout__meta">— Hz · —¢</div>
       </div>
       ${renderGauge()}
-      <p class="tuner-hint">Cantá <strong>${targetLabel}</strong> sostenida. Se pone verde al coincidir.</p>
+      <p class="tuner-hint">Canta <strong>${targetLabel}</strong> sostenida. Se pone verde al coincidir.</p>
     `;
   }
 
@@ -303,7 +303,7 @@ export function bodyFreeNote(pick) {
   const hz = noteToFrequency(label);
   return `
     <div class="tuner-free">
-      <p class="tuner-free__hint">Elegí la nota que querés afinar</p>
+      <p class="tuner-free__hint">Elige la nota que quieres afinar</p>
       <div class="tuner-free__grid" role="group" aria-label="Nota">
         ${FREE_PCS.map(
           (pc) =>
@@ -359,7 +359,7 @@ export function bodyEntrenarPicker() {
   ).join('');
   return `
     <div class="tuner-train">
-      <p class="tuner-train__hint">Elegí un entrenamiento</p>
+      <p class="tuner-train__hint">Elige un entrenamiento</p>
       <button class="btn btn--primary tuner-train__warmup" data-train="warmup">
         ${icon('flame', { size: 15 })} Calentamiento por mi rango
       </button>
@@ -424,7 +424,7 @@ function bodyPermissionGate(state) {
       <div class="tuner-perm">
         <div class="tuner-perm__icon">${icon('mic-off', { size: 32 })}</div>
         <p>Micrófono bloqueado.</p>
-        <p>Habilitá el micrófono en los permisos del sitio para usar el afinador.</p>
+        <p>Habilita el micrófono en los permisos del sitio para usar el afinador.</p>
       </div>
     `;
   }
@@ -998,7 +998,7 @@ export async function renderTuner(container, opts = {}) {
     const runBtn = bodyEl.querySelector('#cal-run');
     runBtn?.addEventListener('click', async () => {
       if (micState !== 'running') {
-        resultEl.textContent = 'Activá el micrófono primero.';
+        resultEl.textContent = 'Activa el micrófono primero.';
         return;
       }
       // Fix 2: deshabilita para evitar dobles clics concurrentes.
@@ -1012,7 +1012,7 @@ export async function renderTuner(container, opts = {}) {
           isCancelled: () => mode !== 'calibrar',
         });
         if (!ok) {
-          resultEl.textContent = 'No detecté los tonos. Subí el volumen y reintentá.';
+          resultEl.textContent = 'No detecté los tonos. Sube el volumen e intenta de nuevo.';
           return;
         }
         const rounded = Math.round(offsetCents);

@@ -484,7 +484,7 @@ export async function renderSongView(container, songIdOrData) {
     const headingEl = container.querySelector('#tono-active-voice');
     if (!headingEl) return;
     if (!activeRosterId) {
-      headingEl.textContent = activeCategory ? 'Elegí una voz' : 'Elegí una categoría';
+      headingEl.textContent = activeCategory ? 'Elige una voz' : 'Elige una categoría';
       updateTuneAction();
       return;
     }

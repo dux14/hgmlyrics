@@ -202,9 +202,21 @@
   color: var(--color-text-secondary);
 }
 
-/* ── Defensa movil: nunca montar en <768px ───────────────────────────────── */
+/* Movil: el panel ocupa toda la pantalla (el backdrop blur ya existe en .cmdk-overlay) */
 @media (max-width: 767px) {
-  .cmdk-overlay {
-    display: none;
+  .cmdk {
+    margin-top: 0;
+    width: 100vw;
+    height: 100dvh;
+    max-width: none;
+    border-radius: 0;
+    box-shadow: none;
+    border: none;
+    display: flex;
+    flex-direction: column;
+  }
+  .cmdk__list {
+    flex: 1;
+    overflow-y: auto;
   }
 }

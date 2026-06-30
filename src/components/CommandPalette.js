@@ -139,6 +139,14 @@ let _initDone = false;
 let _overlayKeydown = null;
 
 /**
+ * Abre el command palette por trigger (header pill). Funciona en cualquier
+ * ancho. Idempotente: no hace nada si ya esta abierto.
+ */
+export function openCommandPalette() {
+  _open();
+}
+
+/**
  * Registra el shortcut global Cmd/Ctrl+K (solo desktop >=768px).
  * Llamar una vez despues de montar el shell.
  */
@@ -160,6 +168,12 @@ function _toggle() {
 }
 
 function _open() {
+  // Si el overlay fue removido del DOM externamente, resetear el estado interno
+  if (_isOpen && (!_overlayEl || !document.body.contains(_overlayEl))) {
+    _isOpen = false;
+    _overlayEl = null;
+    _listEl = null;
+  }
   if (_isOpen) return;
   _isOpen = true;
   _query = '';

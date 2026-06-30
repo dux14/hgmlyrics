@@ -17,7 +17,7 @@ vi.mock('./songRow.js', () => ({ resolveCoverUrl: () => 'cover.jpg' }));
 vi.mock('./ThemeToggle.js', () => ({ getTheme: () => 'dark', applyTheme: vi.fn() }));
 vi.mock('../router.js', () => ({ navigate: vi.fn() }));
 
-import { buildResults, getFlatItems, moveActiveIndex } from './CommandPalette.js';
+import { buildResults, getFlatItems, moveActiveIndex, openCommandPalette } from './CommandPalette.js';
 import { searchSongs } from '../lib/search.js';
 import { getAlbums, getState } from '../lib/store.js';
 
@@ -111,5 +111,23 @@ describe('navegacion de teclado', () => {
 
   it('moveActiveIndex con lista vacia devuelve 0', () => {
     expect(moveActiveIndex(0, 1, 0)).toBe(0);
+  });
+});
+
+describe('openCommandPalette', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    document.documentElement.style.overflow = '';
+  });
+
+  it('monta el overlay full-screen en el body', () => {
+    openCommandPalette();
+    expect(document.querySelectorAll('.cmdk-overlay')).toHaveLength(1);
+  });
+
+  it('es idempotente: dos llamadas no duplican el overlay', () => {
+    openCommandPalette();
+    openCommandPalette();
+    expect(document.querySelectorAll('.cmdk-overlay')).toHaveLength(1);
   });
 });

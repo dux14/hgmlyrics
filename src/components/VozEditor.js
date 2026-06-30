@@ -2,6 +2,7 @@
 // Editor admin para crear/editar voces en off.
 // Split: formulario izquierda, preview en vivo derecha (o stacked en mobile).
 
+import '../styles/weekly-word.css';
 import { navigate } from '../router.js';
 import { splitVoiceover } from '../lib/voiceover.js';
 import { liturgicalPalette, coverGradient } from '../lib/liturgicalColor.js';
@@ -72,24 +73,24 @@ export async function renderVozEditor(container, wordId = null) {
   }
 
   container.innerHTML = `
-    <div class="voz-editor fade-in" style="max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem;">
+    <div class="voz-editor fade-in">
       <nav class="breadcrumb" aria-label="Breadcrumb">
         <a href="#/admin" id="voz-ed-admin">Admin</a>
         <span class="breadcrumb__separator">›</span>
         <span class="breadcrumb__current">${wordId ? 'Editar voz en off' : 'Nueva voz en off'}</span>
       </nav>
-      <h1 class="editor__title" style="margin: 1rem 0 1.5rem;">${wordId ? 'Editar voz en off' : 'Nueva voz en off'}</h1>
+      <h1 class="editor__title voz-editor__title">${wordId ? 'Editar voz en off' : 'Nueva voz en off'}</h1>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+      <div class="voz-editor__body">
         <!-- Formulario -->
-        <form id="voz-form" style="display: flex; flex-direction: column; gap: 1rem;">
+        <form id="voz-form" class="voz-editor__form">
           <div>
             <label class="editor__label" for="voz-sunday-date">Domingo</label>
             <input type="date" id="voz-sunday-date" class="editor__input" value="${escapeHtml(word?.sunday_date ?? '')}">
-            <button type="button" class="btn btn--sm" id="voz-load-ordo" style="margin-top: 0.5rem;">
+            <button type="button" class="btn btn--sm voz-editor__load-ordo-btn" id="voz-load-ordo">
               ${icon('download', { size: 14 })} Cargar desde ordo
             </button>
-            <span id="voz-ordo-status" style="font-size: 0.75rem; margin-left: 0.5rem; color: var(--color-text-secondary);"></span>
+            <span id="voz-ordo-status" class="voz-editor__status"></span>
           </div>
 
           <div>
@@ -122,30 +123,30 @@ export async function renderVozEditor(container, wordId = null) {
 
           <div>
             <label class="editor__label" for="voz-body">Voz en off (pegar bloque completo)</label>
-            <textarea id="voz-body" class="editor__input" rows="12" style="resize: vertical; font-family: monospace;">${escapeHtml(word?.voiceover_body ?? '')}</textarea>
+            <textarea id="voz-body" class="editor__input editor__input--mono" rows="12">${escapeHtml(word?.voiceover_body ?? '')}</textarea>
           </div>
 
-          <details style="margin-top: 0.25rem;">
-            <summary style="cursor: pointer; font-size: 0.85rem; color: var(--color-text-secondary);">Evangelio del ordo (editable / colapsado)</summary>
-            <textarea id="voz-gospel-body" class="editor__input" rows="8" style="resize: vertical; margin-top: 0.5rem; font-family: monospace;">${escapeHtml(word?.gospel_body ?? '')}</textarea>
+          <details class="voz-editor__gospel-details">
+            <summary class="voz-editor__gospel-summary">Evangelio del ordo (editable / colapsado)</summary>
+            <textarea id="voz-gospel-body" class="editor__input editor__input--mono editor__input--gospel" rows="8">${escapeHtml(word?.gospel_body ?? '')}</textarea>
           </details>
 
-          <div id="voz-error" style="color: var(--color-error); font-size: 0.85rem; display: none;"></div>
+          <div id="voz-error" class="voz-editor__error"></div>
 
-          <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-            <button type="button" class="btn btn--secondary" id="voz-save-draft">
+          <div class="voz-editor__actions">
+            <button type="button" class="btn btn--secondary btn--icon" id="voz-save-draft">
               ${icon('save', { size: 16 })} Guardar borrador
             </button>
-            <button type="button" class="btn btn--primary" id="voz-publish">
+            <button type="button" class="btn btn--primary btn--icon" id="voz-publish">
               ${icon('check', { size: 16 })} Publicar
             </button>
-            ${wordId ? `<button type="button" class="btn btn--danger" id="voz-delete" style="margin-left: auto;">Eliminar</button>` : ''}
+            ${wordId ? `<button type="button" class="btn btn--danger voz-editor__delete-btn" id="voz-delete">Eliminar</button>` : ''}
           </div>
         </form>
 
         <!-- Preview en vivo -->
-        <div id="voz-preview" style="background: var(--color-surface); border-radius: var(--border-radius-lg); padding: 1.5rem; overflow: auto; max-height: 90vh; position: sticky; top: 1rem;">
-          <p style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--color-text-secondary); margin: 0 0 1rem;">Preview en vivo</p>
+        <div id="voz-preview" class="voz-preview">
+          <p class="voz-preview__label">Vista previa en vivo</p>
           <div id="voz-preview-content"></div>
         </div>
       </div>
@@ -173,21 +174,23 @@ export async function renderVozEditor(container, wordId = null) {
     const gradient = coverGradient(palette);
     const { scripture, reflection } = splitVoiceover(bodyArea.value, gospelArea.value);
     const gospelRef = refInput.value.trim();
+    // El hero usa el contrato de weekly-word.css: asigna custom props litúrgicas
+    // en el propio elemento; los estilos (.voz-view__hero, etc.) los consume ese CSS.
     previewEl.innerHTML = `
-      <div style="background: ${gradient}; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; color: ${palette.text};">
-        <p style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.8; margin: 0 0 0.25rem; display: inline-flex; align-items: center; gap: 0.4em;">${icon('gospel', { size: 13 })} Palabra de la semana</p>
-        <h2 style="font-size: 1.4rem; margin: 0;">${escapeHtml(gospelRef || 'Referencia del evangelio')}</h2>
-        ${titleInput.value ? `<p style="font-size: 0.8rem; opacity: 0.8; margin: 0.5rem 0 0;">${escapeHtml(titleInput.value)}</p>` : ''}
+      <div class="voz-view__hero" style="--liturgical-gradient: ${gradient}; --liturgical-accent: ${palette.accent}; --liturgical-text: ${palette.text}; --liturgical-bg: ${palette.bg ?? 'transparent'};">
+        <p class="voz-view__eyebrow"><span class="voz-view__eyebrow-inner">${icon('gospel', { size: 13 })} Palabra de la semana</span></p>
+        <h2 class="voz-view__title">${escapeHtml(gospelRef || 'Referencia del evangelio')}</h2>
+        ${titleInput.value ? `<p class="voz-view__meta">${escapeHtml(titleInput.value)}</p>` : ''}
       </div>
-      ${scripture ? `<div style="border-left: 3px solid ${palette.accent}; padding-left: 0.75rem; margin-bottom: 1rem; font-style: italic; color: var(--color-text-secondary); white-space: pre-wrap;">${escapeHtml(scripture)}</div>` : ''}
+      ${scripture ? `<pre class="voz__prose voz__scripture">${escapeHtml(scripture)}</pre>` : ''}
       ${
         reflection
           ? `
-        <div style="text-align: center; margin: 0.75rem 0; color: ${palette.accent}; font-weight: 600; font-size: 0.8rem;">✦ Reflexión</div>
-        <div style="white-space: pre-wrap; color: var(--color-text);">${escapeHtml(reflection)}</div>`
+        <div class="voz__reflection-sep">${icon('diamond', { size: 12 })} Reflexión</div>
+        <pre class="voz__prose voz__reflection">${escapeHtml(reflection)}</pre>`
           : ''
       }
-      ${!scripture && !reflection && bodyArea.value ? `<div style="white-space: pre-wrap; color: var(--color-text);">${escapeHtml(bodyArea.value)}</div>` : ''}
+      ${!scripture && !reflection && bodyArea.value ? `<pre class="voz__prose">${escapeHtml(bodyArea.value)}</pre>` : ''}
     `;
   }
 

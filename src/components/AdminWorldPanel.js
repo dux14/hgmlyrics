@@ -10,7 +10,7 @@
  */
 import { supabase } from '../lib/supabase.js';
 import { icon } from '../lib/icons.js';
-import { validateTiledMap } from '../../api/_lib/validateTiledMap.js';
+import { validateTiledMap } from '../lib/validateTiledMap.js';
 import { listMaps, saveMap, activate } from '../world/worldMapStore.js';
 import { joinWorldAdmin } from '../lib/worldAdminChannel.js';
 import { diffZoneChannels } from '../world/zoneChannelsDiff.js';

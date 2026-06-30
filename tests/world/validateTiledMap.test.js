@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateTiledMap } from '../../api/_lib/validateTiledMap.js';
+import { validateTiledMap } from '../../src/lib/validateTiledMap.js';
 
 // ---------------------------------------------------------------------------
 // Fixture base: mapa Tiled válido mínimo (nombres canónicos del motor: ground/walls)

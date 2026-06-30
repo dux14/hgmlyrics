@@ -30,10 +30,9 @@ import { renderSidebar, toggleSidebar, updateSidebarContent } from './components
 import {
   renderFilterBar,
   updateFilterBar,
-  showFilterBar,
   hideFilterBar,
 } from './components/FilterBar.js';
-import { renderSongList, renderSongListSkeleton } from './components/SongList.js';
+import { renderSongListSkeleton } from './components/SongList.js';
 import { renderSongView } from './components/SongView.js';
 import { renderSongEditor } from './components/SongEditor.js';
 import { renderAdminDashboard, renderAdminEditList } from './components/AdminDashboard.js';
@@ -134,19 +133,22 @@ async function boot() {
 
     const currentHash = globalThis.location.hash.slice(1) || '/';
     if (currentHash === '/buscar') {
-      renderSongList(mainContent, state.filtered);
+      const { renderSearchPage } = await import('./components/SearchPage.js');
+      await renderSearchPage(mainContent, weeklyWords);
     } else if (currentHash === '/' || currentHash === '') {
       renderHome(mainContent);
     }
   });
 
   // ============ Public routes ============
-  // Wrapper: marca rutas privadas/guardadas quitando la clase de shell oculto.
+  // Wrapper: marca rutas privadas/guardadas quitando la clase de shell oculto
+  // y la clase de bleed del browse hub (se vuelve a añadir solo en /buscar).
   const privateRoute = (path, cb, opts) =>
     guardedRoute(
       path,
       (...args) => {
         document.body.classList.remove('auth-route');
+        document.querySelector('.main')?.classList.remove('main--bleed');
         return cb(...args);
       },
       opts,
@@ -154,18 +156,21 @@ async function boot() {
 
   route('/login', () => {
     hideFilterBar();
+    document.querySelector('.main')?.classList.remove('main--bleed');
     document.body.classList.add('auth-route');
     renderLoginPage(mainContent);
   });
 
   route('/register', () => {
     hideFilterBar();
+    document.querySelector('.main')?.classList.remove('main--bleed');
     document.body.classList.add('auth-route');
     renderRegisterPage(mainContent);
   });
 
   route('/auth/callback', () => {
     hideFilterBar();
+    document.querySelector('.main')?.classList.remove('main--bleed');
     document.body.classList.add('auth-route');
     renderAuthCallback(mainContent);
   });
@@ -181,11 +186,12 @@ async function boot() {
     renderHome(mainContent);
   });
 
-  privateRoute('/buscar', () => {
-    showFilterBar();
-    const { filtered } = getState();
-    renderSongList(mainContent, filtered);
-    document.querySelector('#search-input')?.focus();
+  privateRoute('/buscar', async () => {
+    hideFilterBar();
+    document.querySelector('.main')?.classList.add('main--bleed');
+    const { renderSearchPage } = await import('./components/SearchPage.js');
+    const weeklyWords = await loadWeeklyWordsForIndex();
+    await renderSearchPage(mainContent, weeklyWords);
   });
 
   privateRoute('/herramientas', () => {

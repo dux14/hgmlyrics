@@ -230,7 +230,7 @@ export async function renderVozEditor(container, wordId = null) {
       titleInput.value = data.liturgicalTitle || '';
       colorSelect.value = data.liturgicalColor || '';
       gospelArea.value = data.gospelBody || '';
-      statusEl.textContent = 'ordo cargado ✓';
+      statusEl.textContent = 'Ordo cargado';
       updatePreview();
     } catch (e) {
       statusEl.textContent = `Error: ${e.message}`;

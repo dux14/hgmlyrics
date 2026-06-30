@@ -1,0 +1,174 @@
+/* voice-sheet.css — Bottom-sheet "Control de voces" (solo movil) */
+
+/* Overlay con glass blur */
+.vsheet-dim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 300;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+/* Sheet principal */
+.vsheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 301;
+  border-radius: 22px 22px 0 0;
+  background: color-mix(in srgb, var(--color-surface) 90%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid var(--color-border);
+  border-bottom: none;
+  padding: var(--space-md) var(--space-md)
+    calc(var(--space-md) + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+/* Asa de arrastre */
+.vsheet__grab {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border);
+  margin: 0 auto var(--space-sm);
+  flex-shrink: 0;
+}
+
+/* Titulos de seccion (Syncopate) */
+.vsheet__h,
+.vsheet__tl {
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+/* Lista de categorias de voz */
+.vsheet__rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+/* Chip de categoria */
+.vsheet__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: border-color 0.15s, background 0.15s;
+  text-align: left;
+  width: 100%;
+}
+
+.vsheet__row.is-active {
+  border-color: var(--color-teal-500);
+  background: color-mix(in srgb, var(--color-teal-500) 12%, transparent);
+}
+
+/* Punto de color de categoria */
+.vsheet__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.vsheet__nm {
+  flex: 1;
+}
+
+/* Controles de tono y tamano */
+.vsheet__tools {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.vsheet__grp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.vsheet__seg {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.vsheet__seg button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.9rem;
+  min-width: 2.5rem;
+  min-height: 2rem;
+  transition: background 0.12s;
+}
+
+.vsheet__seg button:active {
+  background: color-mix(in srgb, var(--color-teal-500) 18%, transparent);
+}
+
+.vsheet__notation {
+  margin-left: var(--space-sm);
+  color: var(--color-text-secondary);
+}
+
+.vsheet__val {
+  min-width: 2.5rem;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+}
+
+/* ── Boton disparador: oculto en desktop, visible en movil ── */
+.song-toolbar__voices {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .song-toolbar__voices {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--border-radius-sm);
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-text);
+    cursor: pointer;
+    transition: background 0.12s;
+    flex-shrink: 0;
+  }
+
+  .song-toolbar__voices:active {
+    background: color-mix(in srgb, var(--color-teal-500) 15%, transparent);
+  }
+}

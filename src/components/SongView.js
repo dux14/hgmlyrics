@@ -24,6 +24,7 @@ import {
 } from '../lib/lyricsRender.js';
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
+import { openVoiceSheet } from './VoiceSheet.js';
 import { presetToSpeed, stepToward, shouldShowFab } from '../lib/autoscroll.js';
 import { escapeHtml } from '../lib/escape.js';
 
@@ -300,6 +301,7 @@ export async function renderSongView(container, songIdOrData) {
           `
               : ''
           }
+          <button class="song-toolbar__voices" id="open-voice-sheet" aria-label="Control de voces">${icon('sliders', { size: 18 })}</button>
         </div>
 
         ${
@@ -729,6 +731,39 @@ export async function renderSongView(container, songIdOrData) {
         {navigate(`/song/${adjacent.next.item_id ?? adjacent.next.id}${listSuffix}`);}
     });
   }
+
+  // ── VoiceSheet: control de voces (solo movil, <768px) ──
+  container.querySelector('#open-voice-sheet')?.addEventListener('click', () => {
+    openVoiceSheet({
+      song,
+      activeCategory,
+      transposeValue: transposeSemitones,
+      useFlats,
+      fontLabel: fontSize.toFixed(2),
+      onSelectCategory: (cat) => selectCategory(cat),
+      onTranspose: (dir) => {
+        transposeSemitones += dir;
+        const tv = container.querySelector('#transpose-value');
+        if (tv) tv.textContent = transposeSemitones;
+        const vt = document.querySelector('#vsheet-tono');
+        if (vt) vt.textContent = transposeSemitones;
+        reRenderLyrics();
+      },
+      onToggleNotation: () => {
+        useFlats = !useFlats;
+        reRenderLyrics();
+      },
+      onFont: (dir) => {
+        fontSize = Math.min(FONT_MAX, Math.max(FONT_MIN, fontSize + dir * FONT_STEP));
+        applyFontSize(fontSize);
+        saveFontSize(fontSize);
+        const fl = container.querySelector('#font-size-label');
+        if (fl) fl.textContent = fontSize.toFixed(2);
+        const vf = document.querySelector('#vsheet-font');
+        if (vf) vf.textContent = fontSize.toFixed(2);
+      },
+    });
+  });
 
   // ── Feature 1: Autoscroll FAB ──
   setupAutoscroll(container, song.id);

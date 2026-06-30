@@ -17,3 +17,4 @@
 @import './admin.css' layer(components);
 @import './auth.css' layer(components);
 @import './offline-chip.css' layer(components);
+@import './voice-sheet.css' layer(components);

@@ -74,7 +74,7 @@ export function resolveToken(name, fallback = '#000000') {
 export function readWorldColors() {
   // Fallbacks alineados con los valores dark del sistema de tokens.
   const bg     = resolveToken('--color-bg',     '#0a0a14');
-  const brand  = resolveToken('--color-brand',  '#2dd4bf');
+  const brand  = resolveToken('--color-brand',  '#01ccd9');
   const danger = resolveToken('--color-danger', '#fca5a5');
   const text   = resolveToken('--color-text',   '#f5f5f5');
 

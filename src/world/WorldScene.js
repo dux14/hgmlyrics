@@ -61,8 +61,8 @@ export class WorldScene extends Phaser.Scene {
      */
     this._colors = {
       bg: '#000000',
-      brand: '#2dd4bf',
-      brandInt: 0x2dd4bf,
+      brand: '#01ccd9',
+      brandInt: 0x01ccd9,
       dangerInt: 0xfca5a5,
       text: '#f5f5f5',
     };

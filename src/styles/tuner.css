@@ -793,7 +793,7 @@
   cursor: pointer;
 }
 .metro-sig__btn[aria-selected='true'] {
-  background: var(--color-brand, #2dd4bf);
+  background: var(--color-brand, #01ccd9);
   border-color: transparent;
   color: #fff;
 }
@@ -813,11 +813,11 @@
     background 0.06s ease;
 }
 .metro-dot--accent {
-  outline: 2px solid var(--color-brand, #2dd4bf);
+  outline: 2px solid var(--color-brand, #01ccd9);
   outline-offset: 2px;
 }
 .metro-dot--on {
-  background: var(--color-brand, #2dd4bf);
+  background: var(--color-brand, #01ccd9);
   transform: scale(1.35);
 }
 .metro-count {

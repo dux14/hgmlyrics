@@ -1,0 +1,210 @@
+/* cmdk.css — Command Palette desktop-only (>=768px, Cmd/Ctrl+K).
+   Calcado al frame 3 del gallery F1. Tokens: variables.css + tokens.css. */
+
+/* ── Overlay con glass blur ─────────────────────────────────────────────── */
+.cmdk-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: color-mix(in srgb, var(--color-bg) 55%, transparent);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* ── Panel principal ─────────────────────────────────────────────────────── */
+.cmdk {
+  margin-top: 10vh;
+  width: min(640px, 92vw);
+  border-radius: var(--border-radius-lg);
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text) 10%, transparent);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+/* ── Fila del input ──────────────────────────────────────────────────────── */
+.cmdk__input-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
+}
+
+.cmdk__search-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
+.cmdk__input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 1.05rem;
+  font-family: inherit;
+  color: var(--color-text);
+  caret-color: var(--color-amber-500);
+}
+
+.cmdk__input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+/* Cursor ambar parpadeante */
+@keyframes cmdk-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+.cmdk__esc {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text) 12%, transparent);
+  border-radius: var(--border-radius-sm);
+  padding: 2px 6px;
+}
+
+/* ── Lista de resultados ─────────────────────────────────────────────────── */
+.cmdk__list {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: var(--space-xs) 0;
+}
+
+/* Cabecera de grupo (Syncopate) */
+.cmdk__group {
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  padding: var(--space-sm) var(--space-md) var(--space-xs);
+  margin-top: var(--space-xs);
+}
+
+.cmdk__group:first-child {
+  margin-top: 0;
+}
+
+/* Item individual */
+.cmdk__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-md);
+  cursor: pointer;
+  border-radius: 0;
+  transition: background 0.1s;
+  position: relative;
+}
+
+/* Item activo: anillo teal + fondo */
+.cmdk__item--active {
+  background: color-mix(in srgb, var(--color-teal-500) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-teal-500) 40%, transparent);
+}
+
+/* Portada de cancion/album */
+.cmdk__cover {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: var(--border-radius-sm);
+  object-fit: cover;
+  background: color-mix(in srgb, var(--color-surface) 80%, var(--color-bg));
+}
+
+/* Caja de icono para acciones y albums sin portada */
+.cmdk__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--color-teal-500) 12%, transparent);
+  color: var(--color-teal-500);
+}
+
+/* Bloque de texto */
+.cmdk__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.cmdk__title {
+  font-size: 0.9rem;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmdk__subtitle {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Glifico Enter — visible solo en item activo */
+.cmdk__enter {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  color: var(--color-teal-500);
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.cmdk__item--active .cmdk__enter {
+  opacity: 1;
+}
+
+/* ── Footer de atajos ────────────────────────────────────────────────────── */
+.cmdk__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-md);
+  border-top: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent);
+  font-size: 0.72rem;
+  color: var(--color-text-secondary);
+}
+
+.cmdk__footer kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  padding: 1px 4px;
+  font-size: 0.7rem;
+  font-family: inherit;
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text) 14%, transparent);
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+}
+
+/* ── Defensa movil: nunca montar en <768px ───────────────────────────────── */
+@media (max-width: 767px) {
+  .cmdk-overlay {
+    display: none;
+  }
+}

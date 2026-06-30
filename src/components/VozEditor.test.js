@@ -112,12 +112,15 @@ describe('VozEditor', () => {
     expect(previewEl.innerHTML).toContain('Reflexión');
   });
 
-  it('el preview muestra ✦ Reflexión cuando hay reflexión', async () => {
+  it('el preview muestra el separador de reflexión cuando hay reflexión', async () => {
     await renderVozEditor(container, null);
     const bodyArea = container.querySelector('#voz-body');
     bodyArea.value = 'Escritura.\n---\nMi reflexión aquí.';
     bodyArea.dispatchEvent(new Event('input'));
-    expect(container.querySelector('#voz-preview-content').innerHTML).toContain('✦ Reflexión');
+    const previewContent = container.querySelector('#voz-preview-content');
+    // El separador usa clase .voz__reflection-sep con icono lucide (sin glifo ✦)
+    expect(previewContent.querySelector('.voz__reflection-sep')).toBeTruthy();
+    expect(previewContent.querySelector('.voz__reflection-sep').textContent).toContain('Reflexión');
   });
 
   it('el breadcrumb Admin navega a /admin', async () => {

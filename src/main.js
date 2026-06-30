@@ -43,7 +43,6 @@ import { renderToolsHub } from './components/ToolsHub.js';
 import { renderHome } from './components/Home.js';
 import { renderBottomNav, updateBottomNavActive } from './components/BottomNav.js';
 import { openGoToSheet } from './components/GoToSheet.js';
-import { initCommandPalette } from './components/CommandPalette.js';
 
 // Initialize theme immediately to avoid flash
 initTheme();
@@ -101,8 +100,14 @@ async function boot() {
   // Bottom-nav móvil (F1b)
   renderBottomNav(app);
 
-  // Command palette desktop-only (Cmd/Ctrl+K) — global, se monta lazy (F1)
-  initCommandPalette();
+  // Shortcut global Cmd/Ctrl+K — abre SearchFocus (reemplaza al CommandPalette)
+  document.addEventListener('keydown', async (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      const { openSearchFocus } = await import('./components/SearchFocus.js');
+      openSearchFocus();
+    }
+  });
 
   // Show skeleton while loading
   renderSongListSkeleton(mainContent);

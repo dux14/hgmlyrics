@@ -3,15 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('./ThemeToggle.js', () => ({ renderThemeToggle: vi.fn() }));
 vi.mock('./AuthButton.js', () => ({ renderAuthButton: vi.fn() }));
 vi.mock('../router.js', () => ({ navigate: vi.fn() }));
-vi.mock('./CommandPalette.js', () => ({ openCommandPalette: vi.fn() }));
-// Mocks extra para que el Header.js pre-fix no falle por imports sin resolver
-vi.mock('../lib/search.js', () => ({ searchAll: vi.fn().mockReturnValue([]) }));
-vi.mock('../lib/escape.js', () => ({ escapeHtml: vi.fn((s) => s) }));
-vi.mock('../lib/searchRow.js', () => ({ weeklyWordSearchRow: vi.fn().mockReturnValue('') }));
+vi.mock('./SearchFocus.js', () => ({ openSearchFocus: vi.fn() }));
 vi.mock('../lib/icons.js', () => ({ icon: vi.fn().mockReturnValue('') }));
 
 import { renderHeader } from './Header.js';
-import { openCommandPalette } from './CommandPalette.js';
+import { openSearchFocus } from './SearchFocus.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -27,10 +23,12 @@ describe('renderHeader — búsqueda como disparador', () => {
     expect(app.querySelector('.header__search-trigger')).not.toBeNull();
   });
 
-  it('al activar el pill abre el command palette', () => {
+  it('al activar el pill abre el focus de búsqueda', async () => {
     const app = document.querySelector('#app');
     renderHeader(app, { onMenuToggle: vi.fn() });
     app.querySelector('.header__search-trigger').click();
-    expect(openCommandPalette).toHaveBeenCalledTimes(1);
+    // La importación dinámica resuelve después de que el módulo es cargado/cacheado
+    await new Promise((r) => setTimeout(r, 0));
+    expect(openSearchFocus).toHaveBeenCalledTimes(1);
   });
 });

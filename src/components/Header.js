@@ -8,7 +8,6 @@ import { navigate } from '../router.js';
 import { renderThemeToggle } from './ThemeToggle.js';
 import { renderAuthButton } from './AuthButton.js';
 import { icon } from '../lib/icons.js';
-import { openCommandPalette } from './CommandPalette.js';
 
 /**
  * Render the header into the app
@@ -73,7 +72,10 @@ export function renderHeader(container, { onMenuToggle }) {
   menuBtn.addEventListener('click', onMenuToggle);
 
   const searchTrigger = header.querySelector('#search-trigger');
-  searchTrigger.addEventListener('click', () => openCommandPalette());
+  searchTrigger.addEventListener('click', async () => {
+    const { openSearchFocus } = await import('./SearchFocus.js');
+    openSearchFocus();
+  });
 
   // Cache clear button
   const cacheBtn = header.querySelector('#cache-btn');

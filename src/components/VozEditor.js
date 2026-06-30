@@ -186,7 +186,7 @@ export async function renderVozEditor(container, wordId = null) {
       ${
         reflection
           ? `
-        <div class="voz__reflection-sep">${icon('diamond', { size: 12 })} Reflexión</div>
+        <div class="voz__reflection-sep">${icon('sparkles', { size: 12 })} Reflexión</div>
         <pre class="voz__prose voz__reflection">${escapeHtml(reflection)}</pre>`
           : ''
       }

@@ -6,6 +6,7 @@
 
 // Styles (orden de capas centralizado en app.css)
 import './styles/app.css';
+import './styles/cmdk.css';
 
 // Modules
 import { initTheme } from './components/ThemeToggle.js';
@@ -43,6 +44,7 @@ import { renderToolsHub } from './components/ToolsHub.js';
 import { renderHome } from './components/Home.js';
 import { renderBottomNav, updateBottomNavActive } from './components/BottomNav.js';
 import { openGoToSheet } from './components/GoToSheet.js';
+import { initCommandPalette } from './components/CommandPalette.js';
 
 // Initialize theme immediately to avoid flash
 initTheme();
@@ -99,6 +101,9 @@ async function boot() {
 
   // Bottom-nav móvil (F1b)
   renderBottomNav(app);
+
+  // Command palette desktop-only (Cmd/Ctrl+K) — global, se monta lazy (F1)
+  initCommandPalette();
 
   // Show skeleton while loading
   renderSongListSkeleton(mainContent);

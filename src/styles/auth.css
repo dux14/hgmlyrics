@@ -32,11 +32,18 @@
    ─────────────────────────────────────────────────────────────
    ============================================ */
 
-/* Rutas de auth: ocultar shell y quitar padding inferior del contenido. */
+/* Rutas de auth: ocultar shell y centrar el card en TODA la pantalla.
+   El shell oculto deja residuos de layout (margin-left del sidebar en desktop,
+   padding-top reservado para header/bottom-nav): se anulan aquí para que
+   .auth-page ocupe el viewport completo y el card quede centrado en ambos ejes. */
 body.auth-route .header,
 body.auth-route .bottom-nav,
 body.auth-route .sidebar { display: none; }
-body.auth-route .main__content { padding-bottom: 0; }
+body.auth-route .main {
+  margin-left: 0;
+  padding: 0;
+}
+body.auth-route .main__content { padding: 0; }
 
 .auth-page {
   display: flex;
@@ -45,12 +52,9 @@ body.auth-route .main__content { padding-bottom: 0; }
   justify-content: center;
   /* Con el shell oculto (body.auth-route) el card centra en toda la pantalla. */
   min-height: 100dvh;
-  padding: var(--space-md) 0;
+  padding: var(--space-md);
   gap: var(--space-md);
-  background:
-    radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--color-primary) 14%, transparent), transparent 55%),
-    radial-gradient(100% 70% at 50% 100%, color-mix(in srgb, var(--color-secondary, var(--color-primary)) 12%, transparent), transparent 60%),
-    var(--color-bg);
+  background: var(--color-bg);
 }
 
 .auth-card {
@@ -71,9 +75,12 @@ body.auth-route .main__content { padding-bottom: 0; }
 }
 
 .auth-title {
-  font-family: var(--font-display);
+  /* Montserrat (no Syncopate): Syncopate es para micro-etiquetas en mayúsculas
+     (VERSO/CORO, EN VIVO); en una frase como "Inicia sesión" deforma el texto. */
+  font-family: var(--font-family);
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-bold);
+  letter-spacing: -0.01em;
   margin-bottom: var(--space-sm);
   color: var(--color-text);
 }

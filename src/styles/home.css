@@ -63,9 +63,12 @@
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  padding-left: var(--space-md);
-  padding-right: 0;
+  /* Primera card alineada al gutter de .main__content (16px); sangra al borde
+     derecho cancelando el gutter del padre y restaurándolo como padding interno. */
+  padding-left: 0;
+  padding-right: var(--space-md);
   padding-bottom: 0;
+  margin-right: calc(-1 * var(--space-md));
 }
 
 .home__strip::-webkit-scrollbar {
@@ -76,6 +79,10 @@
   flex: 0 0 auto;
   width: 160px;
   scroll-snap-align: start;
+  /* El strip solo monta ≤6 cards: anular content-visibility:auto evita que las
+     cards fuera de viewport reserven contain-intrinsic-size (1px×420px) y
+     estiren el alto del strip, dejando un hueco vacío bajo Reciente. */
+  content-visibility: visible;
 }
 
 /* ── Rail horizontal de álbumes (5 portadas cuadradas + card "+") ── */
@@ -84,9 +91,11 @@
   gap: var(--space-sm);
   overflow-x: auto;
   scrollbar-width: none;
-  padding-left: var(--space-md);
-  padding-right: 0;
+  /* Mismo patrón que .home__strip: primera card al gutter (16px), bleed derecho. */
+  padding-left: 0;
+  padding-right: var(--space-md);
   padding-bottom: var(--space-xs);
+  margin-right: calc(-1 * var(--space-md));
 }
 
 .home__albums-rail::-webkit-scrollbar { display: none; }
@@ -401,11 +410,9 @@
 @keyframes home-rise {
   from {
     opacity: 0;
-    transform: translateY(14px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -422,25 +429,23 @@
 @keyframes home-slide-x {
   from {
     opacity: 0;
-    transform: translateX(-10px);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
   }
 }
 
-/* Rise escalonado por sección */
+/* Fade escalonado por sección (solo opacidad; sin movimiento) */
 .home__module {
-  animation: home-rise 0.35s ease both;
+  animation: home-rise var(--transition-page) ease both;
 }
 
-.home__module:nth-child(1) { animation-delay: 0.04s; }
-.home__module:nth-child(2) { animation-delay: 0.08s; }
-.home__module:nth-child(3) { animation-delay: 0.12s; }
-.home__module:nth-child(4) { animation-delay: 0.16s; }
-.home__module:nth-child(5) { animation-delay: 0.20s; }
-.home__module:nth-child(6) { animation-delay: 0.24s; }
+.home__module:nth-child(1) { animation-delay: 0.03s; }
+.home__module:nth-child(2) { animation-delay: 0.06s; }
+.home__module:nth-child(3) { animation-delay: 0.09s; }
+.home__module:nth-child(4) { animation-delay: 0.12s; }
+.home__module:nth-child(5) { animation-delay: 0.15s; }
+.home__module:nth-child(6) { animation-delay: 0.18s; }
 
 /* Hover lift en cards de álbum (performance hint) */
 .home__album-card {
@@ -452,16 +457,16 @@
   animation: home-pulse-teal 2.2s ease-in-out infinite;
 }
 
-/* Deslizamiento horizontal en filas de listas */
+/* Fade escalonado en filas de listas (solo opacidad; sin movimiento) */
 .home__list-row {
-  animation: home-slide-x 0.28s ease both;
+  animation: home-slide-x var(--transition-page) ease both;
 }
 
 .home__list-row:nth-child(1) { animation-delay: 0.00s; }
-.home__list-row:nth-child(2) { animation-delay: 0.05s; }
-.home__list-row:nth-child(3) { animation-delay: 0.10s; }
-.home__list-row:nth-child(4) { animation-delay: 0.15s; }
-.home__list-row:nth-child(5) { animation-delay: 0.20s; }
+.home__list-row:nth-child(2) { animation-delay: 0.04s; }
+.home__list-row:nth-child(3) { animation-delay: 0.08s; }
+.home__list-row:nth-child(4) { animation-delay: 0.12s; }
+.home__list-row:nth-child(5) { animation-delay: 0.16s; }
 
 /* ── Accesibilidad: movimiento reducido ── */
 @media (prefers-reduced-motion: reduce) {

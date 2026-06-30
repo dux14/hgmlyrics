@@ -193,9 +193,12 @@ async function boot() {
 
   privateRoute('/buscar', async () => {
     hideFilterBar();
-    document.querySelector('.main')?.classList.add('main--bleed');
     const { renderSearchPage } = await import('./components/SearchPage.js');
     const weeklyWords = await loadWeeklyWordsForIndex();
+    // Añadir el bleed justo antes de montar el contenido nuevo: si se añadiera
+    // antes de los await, el contenido de la ruta anterior (aún montado) perdería
+    // su gutter y se vería expandirse edge-to-edge durante todo el fetch.
+    document.querySelector('.main')?.classList.add('main--bleed');
     await renderSearchPage(mainContent, weeklyWords);
   });
 

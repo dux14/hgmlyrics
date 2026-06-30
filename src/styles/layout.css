@@ -17,7 +17,7 @@
   left: 0;
   right: 0;
   height: auto;
-  background: var(--color-surface);
+  background: color-mix(in srgb, var(--color-surface) 82%, transparent);
   border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
@@ -25,9 +25,8 @@
   padding: var(--space-sm) var(--space-md);
   gap: var(--space-md);
   z-index: var(--z-header);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  background: rgba(26, 26, 26, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   transition: background-color var(--transition-base);
 }
 
@@ -101,6 +100,35 @@
   height: 18px;
   color: var(--color-text-secondary);
   pointer-events: none;
+}
+
+.header__search-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  height: 40px;
+  padding: 0 var(--space-md) 0 12px;
+  border-radius: var(--border-radius-full);
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+/* El ícono dentro del pill es inline, no absoluto */
+.header__search-trigger .header__search-icon {
+  position: static;
+  transform: none;
+  flex-shrink: 0;
+}
+
+.header__search-trigger:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border));
+}
+
+.header__search-placeholder {
+  font-size: 0.95rem;
 }
 
 .header__actions {

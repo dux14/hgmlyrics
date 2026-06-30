@@ -1,18 +1,14 @@
 /**
  * Header.js — App header component
  *
- * Logo, search bar with real-time results, theme toggle, menu button, and cache clear.
+ * Logo, botón-pill de búsqueda (abre command palette), theme toggle, menu button, cache clear.
  */
 
-import { searchAll } from '../lib/search.js';
 import { navigate } from '../router.js';
 import { renderThemeToggle } from './ThemeToggle.js';
 import { renderAuthButton } from './AuthButton.js';
 import { icon } from '../lib/icons.js';
-import { escapeHtml } from '../lib/escape.js';
-import { weeklyWordSearchRow } from '../lib/searchRow.js';
-
-let searchTimeout = null;
+import { openCommandPalette } from './CommandPalette.js';
 
 /**
  * Render the header into the app
@@ -40,20 +36,13 @@ export function renderHeader(container, { onMenuToggle }) {
       </svg>
     </a>
 
-    <div class="header__search" id="search-container">
-      <svg class="header__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <button class="header__search header__search-trigger" id="search-trigger" type="button" aria-label="Buscar canciones, álbumes">
+      <svg class="header__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
         <circle cx="11" cy="11" r="8"></circle>
         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
       </svg>
-      <input
-        type="search"
-        class="header__search-input"
-        id="search-input"
-        placeholder="Buscar canciones, álbumes..."
-        autocomplete="off"
-      />
-      <div class="search-results" id="search-results" style="display: none;"></div>
-    </div>
+      <span class="header__search-placeholder">Buscar canciones, álbumes…</span>
+    </button>
 
     <div class="header__actions" id="header-actions">
       <button class="header__btn" id="cache-btn" aria-label="Limpiar caché" title="Limpiar caché y recargar">
@@ -83,28 +72,8 @@ export function renderHeader(container, { onMenuToggle }) {
   const menuBtn = header.querySelector('#menu-btn');
   menuBtn.addEventListener('click', onMenuToggle);
 
-  const searchInput = header.querySelector('#search-input');
-  const searchResults = header.querySelector('#search-results');
-
-  searchInput.addEventListener('input', (e) => {
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => {
-      handleSearch(e.target.value, searchResults);
-    }, 200);
-  });
-
-  searchInput.addEventListener('focus', () => {
-    if (searchInput.value.trim()) {
-      handleSearch(searchInput.value, searchResults);
-    }
-  });
-
-  // Close search results on outside click
-  document.addEventListener('click', (e) => {
-    if (!header.querySelector('#search-container').contains(e.target)) {
-      searchResults.style.display = 'none';
-    }
-  });
+  const searchTrigger = header.querySelector('#search-trigger');
+  searchTrigger.addEventListener('click', () => openCommandPalette());
 
   // Cache clear button
   const cacheBtn = header.querySelector('#cache-btn');
@@ -112,77 +81,6 @@ export function renderHeader(container, { onMenuToggle }) {
 
   const prayerBtn = header.querySelector('#prayer-btn');
   prayerBtn.addEventListener('click', () => navigate('/oracion'));
-}
-
-/**
- * Handle search input
- * @param {string} query
- * @param {HTMLElement} resultsEl
- */
-function handleSearch(query, resultsEl) {
-  if (!query.trim()) {
-    resultsEl.style.display = 'none';
-    return;
-  }
-
-  const results = searchAll(query, 8);
-
-  if (results.length === 0) {
-    resultsEl.innerHTML = `
-      <div class="search-results__empty">
-        No se encontraron resultados para "${escapeHtml(query)}"
-      </div>
-    `;
-    resultsEl.style.display = 'block';
-    return;
-  }
-
-  resultsEl.innerHTML = results
-    .map(({ type, item }) => {
-      if (type === 'song') {
-        const coverUrl =
-          item.coverImage.startsWith('/') || item.coverImage.startsWith('http')
-            ? item.coverImage
-            : `/covers/${item.coverImage}`;
-        return `
-    <div class="search-results__item" data-song-id="${escapeHtml(item.id)}">
-      <img
-        class="sidebar__album-thumb"
-        src="${coverUrl}"
-        alt="${escapeHtml(item.album)}"
-        loading="lazy"
-        onerror="this.style.display='none'"
-      />
-      <div>
-        <div style="font-weight: 600; font-size: 0.875rem;">${escapeHtml(item.title)}</div>
-        <div style="font-size: 0.75rem; color: var(--color-text-secondary);">${escapeHtml(item.album)}</div>
-      </div>
-    </div>
-  `;
-      }
-      // weekly_word
-      return weeklyWordSearchRow(item);
-    })
-    .join('');
-
-  resultsEl.style.display = 'block';
-
-  // Click handlers for search results
-  resultsEl.querySelectorAll('[data-song-id]').forEach((item) => {
-    item.addEventListener('click', () => {
-      navigate(`/song/${item.dataset.songId}`);
-      resultsEl.style.display = 'none';
-      document.querySelector('#search-input').value = '';
-    });
-  });
-
-  resultsEl.querySelectorAll('[data-voz-id]').forEach((item) => {
-    item.addEventListener('click', () => {
-      navigate(`/voz/${item.dataset.vozId}`);
-      resultsEl.style.display = 'none';
-      document.querySelector('#search-input').value = '';
-    });
-  });
 }
 
 /**

@@ -65,7 +65,7 @@
   -webkit-overflow-scrolling: touch;
   padding-left: var(--space-md);
   padding-right: 0;
-  padding-bottom: var(--space-xs);
+  padding-bottom: 0;
 }
 
 .home__strip::-webkit-scrollbar {

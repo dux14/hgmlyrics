@@ -206,7 +206,7 @@ export async function renderHome(container, { today = new Date().toISOString().s
           <h2 class="home__hd-title" id="home-fav-hd">Favoritos</h2>
           <button class="home__all" data-nav="/favoritos">Ver todos</button>
         </div>
-        <div class="home__strip full-bleed" id="home-fav-strip"></div>
+        <div class="home__strip" id="home-fav-strip"></div>
       </section>`
           : ''
       }

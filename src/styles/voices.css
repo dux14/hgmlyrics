@@ -1,0 +1,139 @@
+/* voices.css — Álbum "Voces en off" · Ambient Kinetic (F2c)
+ *
+ * Paleta litúrgica: JS asigna --liturgical-gradient / --liturgical-accent /
+ * --liturgical-text al elemento raíz vía style.setProperty(); este archivo
+ * solo referencia esas vars y proporciona fallbacks razonables.
+ *
+ * Tokens de mapeo (igual que profile.css / friends.css):
+ *   --color-surface    tarjetas / fondo alterno
+ *   --color-border     separadores de ítems
+ *   --color-text / --color-text-secondary   tipografía
+ *   --color-liturgy    badge VIGENTE (oro devocional, ≠ --color-action)
+ *   --color-bg         contraste sobre liturgy en el badge
+ *   --color-brand      fallback teal cuando no hay paleta litúrgica
+ */
+
+/* ── Contenedor de página ── */
+.voz-album {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+}
+
+/* ── Hero portada álbum ── */
+.voz-album__hero {
+  background: var(--liturgical-gradient, var(--color-surface));
+  border-radius: var(--border-radius-lg);
+  padding: 2.5rem 1.5rem;
+  margin: 1rem 0 1.5rem;
+  color: var(--liturgical-text, var(--color-text));
+  text-align: center;
+}
+
+.voz-album__hero-icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+  color: var(--liturgical-accent, var(--color-brand));
+}
+
+.voz-album__hero-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+  color: inherit;
+}
+
+.voz-album__hero-meta {
+  margin: 0;
+  opacity: 0.8;
+  font-size: 0.9rem;
+}
+
+.voz-album__hero .btn--sm {
+  margin-top: 1rem;
+}
+
+/* ── Lista de entradas ── */
+.voz-album__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.voz-album__item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.875rem 0.75rem;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-border);
+  transition: background var(--transition-fast, 0.12s ease);
+}
+
+.voz-album__item:hover {
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+
+/* Portada generativa mini — vars litúrgicas por ítem, asignadas desde JS */
+.voz-album__cover {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--liturgical-gradient, var(--color-surface));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--liturgical-accent, var(--color-brand));
+}
+
+/* Bloque de metadatos (título + fecha) */
+.voz-album__meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.voz-album__gospel-ref {
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.voz-album__date {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.125rem;
+}
+
+/* Badge VIGENTE: fondo devocional (oro), sin hex suelto */
+.voz-album__badge--vigente {
+  background: var(--color-liturgy);
+  color: var(--color-bg);
+  border-radius: 999px;
+  padding: 0.15em 0.6em;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Estado vacío (cuando words.length === 0) */
+.voz-album .empty-state {
+  padding: 3rem 1rem;
+  text-align: center;
+}
+
+.voz-album .empty-state .btn {
+  margin-top: 1rem;
+}
+
+/* Reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .voz-album__item {
+    transition: none;
+  }
+}

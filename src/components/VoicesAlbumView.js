@@ -2,6 +2,7 @@
 // Vista virtual del álbum "Voces en off": tracklist de semanas, badge VIGENTE,
 // estado vacío, acceso al detalle de cada voz.
 
+import '../styles/voices.css';
 import { navigate } from '../router.js';
 import { isAdmin } from '../lib/authStore.js';
 import { liturgicalPalette, coverGradient } from '../lib/liturgicalColor.js';
@@ -67,11 +68,13 @@ export async function renderVoicesAlbumView(container) {
 
   if (words.length === 0) {
     container.innerHTML = `
-      <div class="empty-state fade-in" style="padding: 3rem 1rem; text-align: center;">
-        <div>${icon('gospel', { size: 40 })}</div>
-        <h2 class="empty-state__title">Aún no hay voces en off</h2>
-        <p class="empty-state__text">Cada domingo se publica una reflexión sobre el evangelio.</p>
-        ${isAdmin() ? `<button class="btn btn--primary" id="voz-create-btn" style="margin-top: 1rem;">Crear voz en off</button>` : ''}
+      <div class="voz-album fade-in">
+        <div class="empty-state">
+          <div class="empty-state__icon">${icon('gospel', { size: 40 })}</div>
+          <h2 class="empty-state__title">Aún no hay voces en off</h2>
+          <p class="empty-state__text">Cada domingo se publica una reflexión sobre el evangelio.</p>
+          ${isAdmin() ? `<button class="btn btn--primary" id="voz-create-btn">Crear voz en off</button>` : ''}
+        </div>
       </div>
     `;
     container
@@ -85,7 +88,7 @@ export async function renderVoicesAlbumView(container) {
   const heroGradient = coverGradient(heroPalette);
 
   container.innerHTML = `
-    <div class="voz-album fade-in" style="max-width: 680px; margin: 0 auto; padding: 1.5rem 1rem;">
+    <div class="voz-album fade-in">
 
       <!-- Breadcrumb -->
       <nav class="breadcrumb" aria-label="Breadcrumb">
@@ -95,34 +98,40 @@ export async function renderVoicesAlbumView(container) {
       </nav>
 
       <!-- Hero portada álbum -->
-      <div class="voz-album__hero" style="background: ${heroGradient}; border-radius: var(--border-radius-lg); padding: 2.5rem 1.5rem; margin: 1rem 0 1.5rem; color: ${heroPalette.text}; text-align: center;">
-        <div style="margin-bottom: 0.5rem; color: ${heroPalette.accent};">${icon('gospel', { size: 48 })}</div>
-        <h1 style="font-size: 1.6rem; font-weight: 700; margin: 0 0 0.25rem; color: inherit;">Voces en off</h1>
-        <p style="margin: 0; opacity: 0.8; font-size: 0.9rem;">${words.length} entrada${words.length !== 1 ? 's' : ''}</p>
-        ${isAdmin() ? `<button class="btn btn--sm" id="voz-create-btn" style="margin-top: 1rem;">+ Nueva voz en off</button>` : ''}
+      <div class="voz-album__hero">
+        <div class="voz-album__hero-icon">${icon('gospel', { size: 48 })}</div>
+        <h1 class="voz-album__hero-title">Voces en off</h1>
+        <p class="voz-album__hero-meta">${words.length} entrada${words.length !== 1 ? 's' : ''}</p>
+        ${isAdmin() ? `<button class="btn btn--sm" id="voz-create-btn">+ Nueva voz en off</button>` : ''}
       </div>
 
       <!-- Tracklist -->
-      <ul class="voz-album__list" style="list-style: none; padding: 0; margin: 0;">
+      <ul class="voz-album__list">
         ${words
           .map((w) => {
-            const palette = liturgicalPalette(w.liturgical_color);
             const isVig = w.id === vigenteId;
             return `
-          <li class="voz-album__item" data-voz-id="${escapeHtml(w.id)}" style="display: flex; align-items: center; gap: 1rem; padding: 0.875rem 0.75rem; border-radius: var(--border-radius); cursor: pointer; border-bottom: 1px solid var(--color-border);">
-            <!-- Mini portada generativa -->
-            <div style="width: 48px; height: 48px; flex-shrink: 0; border-radius: 8px; background: ${coverGradient(palette)}; display: flex; align-items: center; justify-content: center; color: ${palette.accent};">${icon('gospel', { size: 26 })}</div>
-            <div style="flex: 1; min-width: 0;">
-              <div style="font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(w.gospel_ref)}</div>
-              <div style="font-size: 0.8rem; color: var(--color-text-secondary);">${escapeHtml(formatShortDate(w.sunday_date))}</div>
+          <li class="voz-album__item" data-voz-id="${escapeHtml(w.id)}">
+            <div class="voz-album__cover">${icon('gospel', { size: 26 })}</div>
+            <div class="voz-album__meta">
+              <div class="voz-album__gospel-ref">${escapeHtml(w.gospel_ref)}</div>
+              <div class="voz-album__date">${escapeHtml(formatShortDate(w.sunday_date))}</div>
             </div>
-            ${isVig ? `<span style="background: #2d7a4f; color: #fff; border-radius: 999px; padding: 0.15em 0.6em; font-size: 0.7rem; font-weight: 700; white-space: nowrap;">VIGENTE</span>` : ''}
+            ${isVig ? `<span class="voz-album__badge--vigente">VIGENTE</span>` : ''}
           </li>`;
           })
           .join('')}
       </ul>
     </div>
   `;
+
+  // Vars litúrgicas del hero (gradiente + acento + texto)
+  const heroEl = container.querySelector('.voz-album__hero');
+  if (heroEl) {
+    heroEl.style.setProperty('--liturgical-gradient', heroGradient);
+    heroEl.style.setProperty('--liturgical-accent', heroPalette.accent);
+    heroEl.style.setProperty('--liturgical-text', heroPalette.text);
+  }
 
   container.querySelector('#voz-album-home')?.addEventListener('click', (e) => {
     e.preventDefault();
@@ -132,7 +141,17 @@ export async function renderVoicesAlbumView(container) {
     .querySelector('#voz-create-btn')
     ?.addEventListener('click', () => navigate('/admin/voz/nueva'));
 
+  // Click handlers + vars litúrgicas de cada portada mini
   container.querySelectorAll('[data-voz-id]').forEach((item) => {
     item.addEventListener('click', () => navigate(`/voz/${item.dataset.vozId}`));
+
+    const word = words.find((w) => String(w.id) === item.dataset.vozId);
+    if (!word) return;
+    const pal = liturgicalPalette(word.liturgical_color);
+    const cover = item.querySelector('.voz-album__cover');
+    if (cover) {
+      cover.style.setProperty('--liturgical-gradient', coverGradient(pal));
+      cover.style.setProperty('--liturgical-accent', pal.accent);
+    }
   });
 }

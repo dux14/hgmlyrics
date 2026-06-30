@@ -182,6 +182,21 @@
   margin-bottom: var(--space-lg);
   align-items: flex-start;
   text-align: left;
+  position: relative;
+  isolation: isolate;
+}
+
+/* Ambient Kinetic — gradiente teal/violeta de identidad; z-index -1 para que
+   el contenido del header quede siempre sobre la capa de color. */
+.song-view__header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(120% 100% at 30% 0, color-mix(in oklch, var(--color-teal-500) 35%, transparent), transparent 55%),
+    radial-gradient(120% 90% at 90% 10%, color-mix(in oklch, var(--color-violet-400) 30%, transparent), transparent 60%);
+  pointer-events: none;
 }
 
 .song-view__cover {
@@ -190,7 +205,9 @@
   border-radius: var(--border-radius-md);
   object-fit: cover;
   flex-shrink: 0;
-  box-shadow: 0 4px 16px var(--color-shadow);
+  box-shadow:
+    0 4px 16px var(--color-shadow),
+    0 0 0 1px color-mix(in oklch, var(--color-teal-500) 20%, transparent);
 }
 
 .song-view__meta {
@@ -322,18 +339,19 @@
   transition: opacity var(--transition-base);
 }
 
-/* Labeled divider: neutral, uniform across all section types — decoupled
-   from voice colors so it never competes with the colored lyrics. The label
-   sits left; a hairline rule extends to the right as quiet wayfinding. */
+/* Labeled divider: identidad Ambient Kinetic — Syncopate + teal para que las
+   etiquetas de sección (VERSO, CORO…) sean puntos de navegación visual claros.
+   La hairline rule de la derecha sigue siendo --color-border (quieta). */
 .lyrics__section-label {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
   font-size: var(--font-size-xs);
+  font-family: var(--font-display);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-text-secondary);
+  color: var(--color-teal-500);
   text-transform: uppercase;
-  letter-spacing: 1.5px;
+  letter-spacing: 0.08em;
   margin-bottom: var(--space-sm);
 }
 
@@ -514,13 +532,16 @@
   margin-bottom: var(--space-md);
 }
 
+/* Surface glass — el panel flota visualmente sobre el contenido de la
+   cancion con un fondo semitransparente + desenfoque ambient. */
 .tool-box {
-  background: var(--color-surface);
+  background: color-mix(in oklch, var(--color-surface) 85%, transparent);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
   padding: 0.6rem 0.75rem;
   width: 100%;
   box-sizing: border-box;
+  backdrop-filter: blur(8px);
 }
 .tool-box__title {
   display: flex;
@@ -1057,9 +1078,12 @@
   border: none;
 }
 
+/* Amber = accion activa; inset para que el anillo no sea recortado por
+   overflow:hidden del contenedor .chord-toggle. */
 .chord-toggle__btn--active {
-  background: var(--color-primary);
-  color: #fff;
+  background: color-mix(in oklch, var(--color-amber-500) 15%, var(--color-surface));
+  color: var(--color-amber-500);
+  box-shadow: inset 0 0 0 2px var(--color-amber-500);
 }
 
 /* === Cejilla Badge === */
@@ -1211,17 +1235,19 @@
 }
 
 /* === Transpose Controls (F6) === */
+/* Surface glass — misma familia que .tool-box para coherencia de materiales. */
 .transpose-controls {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
-  background: var(--color-surface);
+  background: color-mix(in oklch, var(--color-surface) 85%, transparent);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
   margin-bottom: var(--space-md);
   flex-wrap: wrap;
+  backdrop-filter: blur(8px);
 }
 
 .transpose-btn {
@@ -1622,10 +1648,13 @@
   cursor: pointer;
 }
 
+/* Amber = accion activa — anillo exterior + fondo sutil + texto ambar.
+   .tono-chip no tiene overflow:hidden, el box-shadow exterior funciona. */
 .tono-chip--active {
-  border-color: var(--color-primary);
-  background: var(--color-primary-bg, var(--color-surface));
-  color: var(--color-primary);
+  border-color: var(--color-amber-500);
+  background: color-mix(in oklch, var(--color-amber-500) 12%, var(--color-surface));
+  color: var(--color-amber-500);
+  box-shadow: 0 0 0 2px var(--color-amber-500);
 }
 
 .voice-badge-extra--soprano {

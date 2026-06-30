@@ -199,6 +199,7 @@
   /* === Layout === */
   --sidebar-width: 280px;
   --header-height: 64px;
+  --bottom-nav-height: 60px;
   --max-content-width: 900px;
   --border-radius-sm: 6px;
   --border-radius-md: 10px;
@@ -217,6 +218,7 @@
   /* === Z-Index === */
   --z-sidebar: 100;
   --z-header: 200;
+  --z-bottom-nav: 200;   /* sobre el contenido, par del header */
   --z-overlay: 300;
   --z-modal: 400;
   --z-toast: 500;

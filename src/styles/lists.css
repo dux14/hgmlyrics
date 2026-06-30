@@ -103,7 +103,7 @@
 
 /* ── Badge teñido por banda de caducidad ── */
 .sidebar__list-badge--urgent {
-  background: var(--color-error);
+  background: var(--color-danger);
 }
 .sidebar__list-badge--soon {
   background: var(--color-warning);
@@ -124,7 +124,7 @@
   flex-shrink: 0;
 }
 .sidebar__list-dot--urgent {
-  background: var(--color-error);
+  background: var(--color-danger);
 }
 .sidebar__list-dot--soon {
   background: var(--color-warning);
@@ -201,7 +201,7 @@
 }
 
 .list-detail__icon-btn--danger:hover {
-  color: var(--color-error, #e53935);
+  color: var(--color-danger);
 }
 
 /* Buscador de canciones */
@@ -270,7 +270,7 @@
 }
 
 .list-detail__row-btn--danger:hover {
-  color: var(--color-error, #e53935);
+  color: var(--color-danger);
 }
 
 /* Sección de invitados */
@@ -286,7 +286,7 @@
 
 .list-detail__error {
   font-size: 0.8rem;
-  color: var(--color-error, #e53935);
+  color: var(--color-danger);
   min-height: 1.2em;
 }
 

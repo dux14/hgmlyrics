@@ -4,7 +4,9 @@ vi.mock('../lib/authStore.js', () => ({
   getSession: vi.fn(),
   getProfile: vi.fn(),
   refreshProfile: vi.fn(),
+  signOut: vi.fn(),
 }));
+vi.mock('../router.js', () => ({ navigate: vi.fn() }));
 vi.mock('../lib/icons.js', () => ({ icon: vi.fn(() => '') }));
 vi.mock('../lib/imageCompress.js', () => ({ compressImageToLimit: vi.fn() }));
 vi.mock('../styles/profile.css', () => ({}));

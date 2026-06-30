@@ -21,7 +21,6 @@
   border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   padding: var(--space-sm) var(--space-md);
   gap: var(--space-md);
   z-index: var(--z-header);
@@ -52,84 +51,6 @@
   color: var(--color-accent);
 }
 
-.header__search {
-  flex: 0 0 100%;
-  max-width: none;
-  order: 3;
-  position: relative;
-  margin-top: var(--space-sm);
-}
-
-.header__search-input {
-  width: 100%;
-  height: 40px;
-  padding: 0 var(--space-md) 0 40px;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-full);
-  color: var(--color-text);
-  /* 16px mínimo en mobile: evita el auto-zoom de iOS Safari al enfocar */
-  font-size: var(--font-size-base);
-  transition:
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast);
-}
-
-@media (min-width: 768px) {
-  .header__search-input {
-    font-size: var(--font-size-sm);
-  }
-}
-
-.header__search-input::placeholder {
-  color: var(--color-text-secondary);
-}
-
-.header__search-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 15%, transparent);
-}
-
-.header__search-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 18px;
-  height: 18px;
-  color: var(--color-text-secondary);
-  pointer-events: none;
-}
-
-.header__search-trigger {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  height: 40px;
-  padding: 0 var(--space-md) 0 12px;
-  border-radius: var(--border-radius-full);
-  cursor: pointer;
-  text-align: left;
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
-  background: var(--color-bg);
-}
-
-/* El ícono dentro del pill es inline, no absoluto */
-.header__search-trigger .header__search-icon {
-  position: static;
-  transform: none;
-  flex-shrink: 0;
-}
-
-.header__search-trigger:hover {
-  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border));
-}
-
-.header__search-placeholder {
-  font-size: 0.95rem;
-}
 
 .header__actions {
   display: flex;
@@ -239,7 +160,7 @@
   transform: translateX(-100%);
   transition: transform var(--transition-base);
   overflow-y: auto;
-  padding-top: calc(var(--header-height) + 56px + 48px);
+  padding-top: calc(var(--header-height) + 48px);
   /* Evita que el último ítem quede bajo el bottom-nav en móvil */
   padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
   display: flex;
@@ -347,18 +268,16 @@
 /* === Main Content === */
 .main {
   flex: 1;
-  /* Reserve space for the fixed header + mobile search row only. The filter
-     bar's height is added on demand (see .main--filtered) so pages without it
-     (song detail, links, admin, profile…) don't leave dead space up top. */
-  padding-top: calc(var(--header-height) + 56px);
+  /* Reserve space for the fixed header. The filter bar's height is added on
+     demand (see .main--filtered) so pages without it don't leave dead space. */
+  padding-top: var(--header-height);
   /* Reserva espacio inferior en móvil para el bottom-nav fijo. */
   padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
-  transition: margin-left var(--transition-base);
 }
 
 /* List views show the sticky filter bar → reserve its 48px. */
 .main--filtered {
-  padding-top: calc(var(--header-height) + 56px + 48px);
+  padding-top: calc(var(--header-height) + 48px);
 }
 
 .main__content {
@@ -395,7 +314,7 @@
 /* === Filter Bar (F4) === */
 .filter-bar {
   position: fixed;
-  top: calc(var(--header-height) + 56px);
+  top: var(--header-height);
   left: 0;
   right: 0;
   z-index: calc(var(--z-header) - 1);
@@ -472,8 +391,8 @@
   z-index: var(--z-bottom-nav);
 }
 .bottom-nav__item {
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  font-size: var(--font-size-xs);
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font-size: 0.62rem;
   color: var(--color-text-secondary);
   text-decoration: none;
   -webkit-tap-highlight-color: transparent;
@@ -483,10 +402,20 @@
   line-height: 1;
   text-align: center;
 }
-.bottom-nav__item svg { width: 22px; height: 22px; }
+.bottom-nav__item svg { width: 24px; height: 24px; }
 .bottom-nav__item--active { color: var(--color-primary); }
 .bottom-nav__item--active svg {
   filter: drop-shadow(0 0 6px color-mix(in oklch, var(--color-primary) 55%, transparent));
+}
+.bottom-nav__avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.bottom-nav__item--active .bottom-nav__avatar {
+  box-shadow: 0 0 0 2px var(--color-primary);
 }
 @media (min-width: 768px) {
   .bottom-nav { display: none; }   /* desktop conserva sidebar */
@@ -498,23 +427,18 @@
 
 /* === Responsive === */
 
+/* Avatar solo visible en desktop */
+@media (max-width: 767px) {
+  #auth-button-mount {
+    display: none;
+  }
+}
+
 /* Tablet */
 @media (min-width: 768px) {
   .header {
     height: var(--header-height);
-    flex-wrap: nowrap;
     padding: 0 var(--space-md);
-  }
-
-  .header__search {
-    order: 0;
-    flex: 1;
-    max-width: 480px;
-    margin-top: 0;
-  }
-
-  .header__actions {
-    margin-left: auto;
   }
 
   .header__btn--menu {
@@ -556,10 +480,6 @@
 @media (min-width: 1024px) {
   .song-grid {
     grid-template-columns: repeat(3, 1fr);
-  }
-
-  .header__search {
-    max-width: 560px;
   }
 
   .filter-bar {

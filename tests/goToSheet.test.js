@@ -2,19 +2,38 @@ import { describe, it, expect } from 'vitest';
 import { GO_TO_TILES, activeTile } from '../src/components/GoToSheet.js';
 
 describe('GO_TO_TILES', () => {
-  it('tiene 6 tiles con id/label/route/iconKey', () => {
+  it('tiene 6 tiles', () => {
     expect(GO_TO_TILES).toHaveLength(6);
+  });
+  it('cada tile tiene id, label e iconKey', () => {
     for (const t of GO_TO_TILES) {
-      expect(t).toEqual(expect.objectContaining({
-        id: expect.any(String), label: expect.any(String),
-        route: expect.any(String), iconKey: expect.any(String),
-      }));
+      expect(t).toEqual(
+        expect.objectContaining({
+          id: expect.any(String),
+          label: expect.any(String),
+          iconKey: expect.any(String),
+        }),
+      );
     }
   });
-  it('orden y rutas esperadas', () => {
-    expect(GO_TO_TILES.map((t) => t.route)).toEqual([
-      '/buscar', '/lista/nueva', '/oracion', '/favoritos', '/voces', '/mundo',
-    ]);
+  it('los primeros 5 tiles tienen route; el tile cache tiene action', () => {
+    const withRoute = GO_TO_TILES.filter((t) => t.route);
+    const withAction = GO_TO_TILES.filter((t) => t.action);
+    expect(withRoute).toHaveLength(5);
+    expect(withAction).toHaveLength(1);
+    expect(withAction[0].id).toBe('cache');
+    expect(withAction[0].action).toBe('clearCache');
+  });
+  it('orden de rutas de los tiles con route', () => {
+    const routes = GO_TO_TILES.filter((t) => t.route).map((t) => t.route);
+    expect(routes).toEqual(['/buscar', '/lista/nueva', '/oracion', '/favoritos', '/voces']);
+  });
+  it('tile "Limpiar caché" en lugar de "Mundo"', () => {
+    const ids = GO_TO_TILES.map((t) => t.id);
+    expect(ids).not.toContain('mundo');
+    expect(ids).toContain('cache');
+    const cacheTile = GO_TO_TILES.find((t) => t.id === 'cache');
+    expect(cacheTile.label).toBe('Limpiar caché');
   });
 });
 
@@ -23,4 +42,5 @@ describe('activeTile', () => {
   it('ignora querystring', () => expect(activeTile('/favoritos?x=1')).toBe('favoritos'));
   it('match por prefijo de subruta', () => expect(activeTile('/lista/nueva')).toBe('listas'));
   it('ruta sin tile → null', () => expect(activeTile('/song/1')).toBeNull());
+  it('/mundo ya no tiene tile → null', () => expect(activeTile('/mundo')).toBeNull());
 });

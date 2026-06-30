@@ -376,6 +376,21 @@
   color: var(--color-action);
 }
 
+.pf-ai--logout {
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  color: var(--color-danger);
+}
+
+.pf-accrow--logout {
+  width: 100%;
+  text-align: left;
+  color: var(--color-danger);
+}
+
+.pf-accrow--logout:hover {
+  border-color: color-mix(in srgb, var(--color-danger) 30%, transparent);
+}
+
 .pf-ai .icon {
   width: 16px;
   height: 16px;

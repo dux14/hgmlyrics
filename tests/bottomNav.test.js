@@ -1,4 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+// BottomNav ahora importa authStore; mockear para que los tests no carguen supabase
+vi.mock('../src/lib/authStore.js', () => ({
+  getProfile: vi.fn(() => null),
+  subscribe: vi.fn(() => () => {}),
+}));
+
 import { activeTab } from '../src/components/BottomNav.js';
 
 describe('activeTab — rutas de inicio', () => {

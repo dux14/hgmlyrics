@@ -4,10 +4,12 @@
  * 4 tabs: Inicio · Buscar · Herramientas · Perfil.
  * Visible solo en móvil (oculto en ≥768px vía CSS).
  * Iconos via helper icon() — sin emojis.
+ * El tab Perfil muestra la foto del usuario si tiene avatar.
  */
 
 import { icon } from '../lib/icons.js';
 import { navigate } from '../router.js';
+import { getProfile, subscribe } from '../lib/authStore.js';
 
 /** Tabs configurados: { id, label, path, iconKey, matchPaths } */
 const TABS = [
@@ -17,7 +19,7 @@ const TABS = [
     id: 'herramientas',
     label: 'Herramientas',
     path: '/herramientas',
-    iconKey: 'wrench',
+    iconKey: 'sliders',
     matchPaths: ['/herramientas', '/afinador', '/recomendador', '/estudio'],
   },
   { id: 'perfil', label: 'Perfil', path: '/perfil', iconKey: 'user', matchPaths: ['/perfil'] },
@@ -41,6 +43,18 @@ export function activeTab(path) {
 }
 
 /**
+ * Devuelve el HTML del icono para el tab Perfil.
+ * Si el usuario tiene avatarUrl, renderiza una <img>; en caso contrario el icono 'user'.
+ */
+function profileIconHtml() {
+  const avatarUrl = getProfile()?.avatarUrl;
+  if (avatarUrl) {
+    return `<img class="bottom-nav__avatar" src="${avatarUrl}" alt="">`;
+  }
+  return icon('user', { size: 24 });
+}
+
+/**
  * Crea y monta el componente bottom-nav dentro de `container`.
  *
  * @param {HTMLElement} container — normalmente el elemento #app
@@ -55,7 +69,9 @@ export function renderBottomNav(container) {
     a.className = 'bottom-nav__item';
     a.href = tab.path;
     a.dataset.tab = tab.id;
-    a.innerHTML = `${icon(tab.iconKey, { size: 22 })}<span>${tab.label}</span>`;
+
+    const iconHtml = tab.id === 'perfil' ? profileIconHtml() : icon(tab.iconKey, { size: 24 });
+    a.innerHTML = `${iconHtml}<span>${tab.label}</span>`;
 
     a.addEventListener('click', (e) => {
       e.preventDefault();
@@ -66,6 +82,17 @@ export function renderBottomNav(container) {
   }
 
   container.appendChild(nav);
+
+  // Re-renderizar solo el tab Perfil cuando cambie el avatar en authStore
+  const unsub = subscribe(() => {
+    const pfTab = nav.querySelector('[data-tab="perfil"]');
+    if (!pfTab) return;
+    const span = pfTab.querySelector('span');
+    pfTab.innerHTML = `${profileIconHtml()}<span>${span.textContent}</span>`;
+  });
+
+  // Guardar referencia para limpiar si el nav fuera eliminado del DOM
+  nav._unsubAuthStore = unsub;
 }
 
 /**

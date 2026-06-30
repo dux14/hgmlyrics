@@ -7,7 +7,7 @@ export const GO_TO_TILES = [
   { id: 'oracion', label: 'Oración', route: '/oracion', iconKey: 'flame' },
   { id: 'favoritos', label: 'Favoritos', route: '/favoritos', iconKey: 'heart' },
   { id: 'voces', label: 'Voces', route: '/voces', iconKey: 'gospel' },
-  { id: 'mundo', label: 'Mundo', route: '/mundo', iconKey: 'globe' },
+  { id: 'cache', label: 'Limpiar caché', iconKey: 'rotate-ccw', action: 'clearCache' },
 ];
 
 /**
@@ -18,7 +18,9 @@ export const GO_TO_TILES = [
  */
 export function activeTile(path) {
   const clean = (path || '/').split('?')[0];
-  const t = GO_TO_TILES.find((x) => clean === x.route || clean.startsWith(`${x.route}/`));
+  const t = GO_TO_TILES.find(
+    (x) => x.route && (clean === x.route || clean.startsWith(`${x.route}/`)),
+  );
   return t ? t.id : null;
 }
 
@@ -45,12 +47,13 @@ export function openGoToSheet(currentPath = '') {
     <div class="gsheet__grab"></div>
     <div class="gsheet__h syn">Ir a</div>
     <div class="gsheet__grid">
-      ${GO_TO_TILES.map(
-        (t) => `<button class="gsheet__tile${t.id === active ? ' is-active' : ''}" data-route="${t.route}">
+      ${GO_TO_TILES.map((t) => {
+        const dataAttr = t.action ? `data-action="${t.action}"` : `data-route="${t.route}"`;
+        return `<button class="gsheet__tile${t.id === active ? ' is-active' : ''}" ${dataAttr}>
           <span class="gsheet__ic">${icon(t.iconKey, { size: 22 })}</span>
           <span class="gsheet__lb">${t.label}</span>
-        </button>`,
-      ).join('')}
+        </button>`;
+      }).join('')}
     </div>
   `;
 
@@ -61,11 +64,22 @@ export function openGoToSheet(currentPath = '') {
   }
 
   dim.addEventListener('click', close);
+
+  // Tiles con ruta → navegar
   sheet.querySelectorAll('[data-route]').forEach((b) =>
     b.addEventListener('click', () => {
       const r = b.dataset.route;
       close();
       navigate(r);
+    }),
+  );
+
+  // Tiles con acción → ejecutar
+  sheet.querySelectorAll('[data-action]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      close();
+      const { clearAppCache } = await import('../lib/cacheClear.js');
+      clearAppCache();
     }),
   );
 

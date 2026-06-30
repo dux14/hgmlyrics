@@ -1,7 +1,8 @@
 /**
  * Profile.js — Own profile view + edit + avatar upload.
  */
-import { getSession, getProfile, refreshProfile } from '../lib/authStore.js';
+import { getSession, getProfile, refreshProfile, signOut } from '../lib/authStore.js';
+import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { compressImageToLimit } from '../lib/imageCompress.js'; // usados por renderProfileEdit (Task 3)
 import { escapeHtml } from '../lib/escape.js';
@@ -105,6 +106,10 @@ export function buildProfileHeader(profile) {
         <span class="pf-an">Favoritos</span><span class="pf-ac">${favCount}</span>
         ${icon('chevron-right', { size: 15, className: 'pf-arr' })}
       </a>
+      <button class="pf-accrow pf-accrow--logout" id="pf-logout" type="button">
+        <span class="pf-ai pf-ai--logout">${icon('log-out', { size: 16 })}</span>
+        <span class="pf-an">Cerrar sesión</span>
+      </button>
     </div>
   `;
 }
@@ -391,4 +396,14 @@ export async function renderProfile(container) {
       <a class="profile-licenses-link" href="#/licencias">Licencias y créditos</a>
     </div>
   `;
+
+  // Logout desde la vista de perfil en móvil
+  container.querySelector('#pf-logout')?.addEventListener('click', async () => {
+    try {
+      await signOut();
+    } catch (_e) {
+      // Continuar aunque falle el signOut remoto
+    }
+    navigate('/login', { replace: true });
+  });
 }

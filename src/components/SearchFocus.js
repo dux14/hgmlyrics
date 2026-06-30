@@ -46,7 +46,7 @@ function renderResults(box, query) {
   section('Voz en off', voces, (v) => {
     const a = document.createElement('a');
     a.className = 'voz-card';
-    a.innerHTML = `<div class="voz-card__art">${icon('music', { size: 18 })}</div><div><div class="voz-card__title">${escapeHtml(v.title || v.liturgical_title || 'Voz en off')}</div><div class="voz-card__ref">${escapeHtml(v.gospel_ref || '')}</div></div>`;
+    a.innerHTML = `<div class="voz-card__art">${icon('gospel', { size: 18 })}</div><div><div class="voz-card__title">${escapeHtml(v.title || v.liturgical_title || 'Voz en off')}</div><div class="voz-card__ref">${escapeHtml(v.gospel_ref || '')}</div></div>`;
     a.addEventListener('click', () => { close(); navigate(`/voz/${v.id}`); });
     return a;
   });
@@ -66,6 +66,7 @@ export function openSearchFocus(initial = '') {
     <div class="search-focus__bar">
       ${icon('search', { size: 16 })}
       <input type="search" placeholder="Buscar canciones, álbumes, voces…" aria-label="Buscar" />
+      <button type="button" class="search-focus__cancel" aria-label="Cancelar búsqueda">Cancelar</button>
     </div>
     <div class="search-focus__results" role="listbox"></div>
   `;
@@ -77,6 +78,7 @@ export function openSearchFocus(initial = '') {
   renderResults(box, initial);
   input.addEventListener('input', () => renderResults(box, input.value));
   root.querySelector('.search-focus__scrim').addEventListener('click', close);
+  root.querySelector('.search-focus__cancel').addEventListener('click', close);
   document.addEventListener('keydown', onKey);
   input.focus();
 }

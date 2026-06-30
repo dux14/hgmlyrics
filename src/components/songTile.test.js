@@ -28,3 +28,21 @@ describe('songTile', () => {
     expect(navigate).toHaveBeenCalledWith('/song/42');
   });
 });
+
+describe('songTile color/cover por álbum', () => {
+  const colorMap = { 'elartedevivir.webp': { base: '#6a817a', light: '#8fa39d' } };
+  const coverBySlug = { 'el-arte-de-vivir': 'elartedevivir.webp' };
+
+  it('usa el color del cover del álbum vía coverBySlug', () => {
+    const song = { id: 's1', title: 'Ojalá', album: 'El Arte de vivir', albumSlug: 'el-arte-de-vivir', coverImage: null };
+    const el = songTile(song, colorMap, coverBySlug);
+    expect(el.style.getPropertyValue('--tile-c1')).toBe('#6a817a');
+    expect(el.querySelector('.song-tile__art').getAttribute('src')).toContain('elartedevivir.webp');
+  });
+
+  it('cae al fallback gris si el álbum no resuelve', () => {
+    const song = { id: 's2', title: 'X', album: 'Z', albumSlug: 'no-existe', coverImage: null };
+    const el = songTile(song, colorMap, coverBySlug);
+    expect(el.style.getPropertyValue('--tile-c1')).toBe('#3a3a3a');
+  });
+});

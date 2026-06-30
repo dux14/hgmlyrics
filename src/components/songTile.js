@@ -12,11 +12,14 @@ const FALLBACK = { base: '#3a3a3a', light: '#565656' };
 /**
  * @param {object} song - forma de /api/songs
  * @param {Record<string,{base:string,light:string}>} colorMap - de cover-colors.json
+ * @param {Record<string,string>} coverBySlug - albumSlug → filename (p.ej. 'el-arte-de-vivir' → 'elartedevivir.webp')
  * @returns {HTMLAnchorElement}
  */
-export function songTile(song, colorMap = {}) {
-  const color = colorMap[song.coverImage] || FALLBACK;
-  const cover = resolveCoverUrl(song);
+export function songTile(song, colorMap = {}, coverBySlug = {}) {
+  const albumFile = (song.albumSlug && coverBySlug[song.albumSlug]) || null;
+  const coverKey = albumFile || song.coverImage || '';
+  const color = colorMap[coverKey] || FALLBACK;
+  const cover = albumFile ? `/covers/${albumFile}` : resolveCoverUrl(song);
 
   const a = document.createElement('a');
   a.className = 'song-tile';

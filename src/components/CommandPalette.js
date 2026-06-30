@@ -10,6 +10,7 @@ import { getAlbums, getState } from '../lib/store.js';
 import { resolveCoverUrl } from './songRow.js';
 import { applyTheme, getTheme } from './ThemeToggle.js';
 import { navigate } from '../router.js';
+import { icon } from '../lib/icons.js';
 
 /**
  * Lista estatica de acciones del launcher.
@@ -123,4 +124,234 @@ export function buildResults(query) {
   }
 
   return groups;
+}
+
+// ─── Controlador DOM (singleton lazy) ────────────────────────────────────────
+
+/** Estado de modulo del palette */
+let _isOpen = false;
+let _overlayEl = null;
+let _listEl = null;
+let _query = '';
+let _groups = [];
+let _activeIndex = 0;
+let _initDone = false;
+let _overlayKeydown = null;
+
+/**
+ * Registra el shortcut global Cmd/Ctrl+K (solo desktop >=768px).
+ * Llamar una vez despues de montar el shell.
+ */
+export function initCommandPalette() {
+  if (_initDone) return;
+  _initDone = true;
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if (window.innerWidth < 768) return;
+      e.preventDefault();
+      _toggle();
+    }
+  });
+}
+
+function _toggle() {
+  if (_isOpen) _close();
+  else _open();
+}
+
+function _open() {
+  if (_isOpen) return;
+  _isOpen = true;
+  _query = '';
+  _activeIndex = 0;
+  _groups = buildResults('');
+
+  // Overlay (backdrop)
+  _overlayEl = document.createElement('div');
+  _overlayEl.className = 'cmdk-overlay';
+
+  // Panel
+  const panel = document.createElement('div');
+  panel.className = 'cmdk';
+  _overlayEl.appendChild(panel);
+
+  // Fila del input
+  const inputRow = document.createElement('div');
+  inputRow.className = 'cmdk__input-row';
+
+  const searchIconEl = document.createElement('span');
+  searchIconEl.className = 'cmdk__search-icon';
+  searchIconEl.innerHTML = icon('search', { size: 18 });
+
+  const inputEl = document.createElement('input');
+  inputEl.type = 'text';
+  inputEl.className = 'cmdk__input';
+  inputEl.placeholder = 'Buscar canciones, acciones...';
+  inputEl.setAttribute('aria-label', 'Buscar en el palette');
+  inputEl.setAttribute('autocomplete', 'off');
+  inputEl.setAttribute('spellcheck', 'false');
+
+  const escChip = document.createElement('span');
+  escChip.className = 'cmdk__esc';
+  escChip.textContent = 'ESC';
+
+  inputRow.appendChild(searchIconEl);
+  inputRow.appendChild(inputEl);
+  inputRow.appendChild(escChip);
+  panel.appendChild(inputRow);
+
+  // Lista de resultados
+  _listEl = document.createElement('div');
+  _listEl.className = 'cmdk__list';
+  panel.appendChild(_listEl);
+
+  // Footer de atajos (HTML estatico, sin datos de usuario)
+  const footer = document.createElement('div');
+  footer.className = 'cmdk__footer';
+  footer.innerHTML =
+    '<kbd>↑</kbd><kbd>↓</kbd> navegar &nbsp;·&nbsp; <kbd>↵</kbd> abrir &nbsp;·&nbsp; <kbd>ESC</kbd> cerrar';
+  panel.appendChild(footer);
+
+  // Montar en el body
+  document.body.appendChild(_overlayEl);
+  document.documentElement.style.overflow = 'hidden';
+
+  // Primer render
+  _render();
+
+  // Foco al input
+  inputEl.focus();
+
+  // Cambios en el input → recomputa grupos + re-render
+  inputEl.addEventListener('input', () => {
+    _query = inputEl.value;
+    _activeIndex = 0;
+    _groups = buildResults(_query);
+    _render();
+  });
+
+  // Teclado sobre el overlay
+  _overlayKeydown = (e) => {
+    const flat = getFlatItems(_groups);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      _activeIndex = moveActiveIndex(_activeIndex, 1, flat.length);
+      _render();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      _activeIndex = moveActiveIndex(_activeIndex, -1, flat.length);
+      _render();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const item = flat[_activeIndex];
+      if (item) {
+        item.run();
+        _close();
+      }
+    } else if (e.key === 'Escape') {
+      _close();
+    }
+  };
+  document.addEventListener('keydown', _overlayKeydown);
+
+  // Click en el backdrop (target directo = overlay) → cierra
+  _overlayEl.addEventListener('click', (e) => {
+    if (e.target === _overlayEl) _close();
+  });
+}
+
+function _close() {
+  if (!_isOpen) return;
+  if (_overlayKeydown) {
+    document.removeEventListener('keydown', _overlayKeydown);
+    _overlayKeydown = null;
+  }
+  _overlayEl?.remove();
+  _overlayEl = null;
+  _listEl = null;
+  document.documentElement.style.overflow = '';
+  _isOpen = false;
+}
+
+/**
+ * Re-pinta la lista de grupos/items en _listEl.
+ * Marca con --active el item en _activeIndex (indice sobre lista plana).
+ */
+function _render() {
+  if (!_listEl) return;
+  _listEl.innerHTML = '';
+  let flatIdx = 0;
+
+  _groups.forEach((group) => {
+    // Cabecera del grupo (Syncopate via CSS)
+    const header = document.createElement('div');
+    header.className = 'cmdk__group';
+    header.textContent = group.label;
+    _listEl.appendChild(header);
+
+    group.items.forEach((item) => {
+      const idx = flatIdx++;
+      const isActive = idx === _activeIndex;
+
+      const el = document.createElement('div');
+      el.className = 'cmdk__item' + (isActive ? ' cmdk__item--active' : '');
+      el.setAttribute('role', 'option');
+      el.setAttribute('aria-selected', String(isActive));
+
+      // Izquierda: portada o icono
+      if (item.cover) {
+        const img = document.createElement('img');
+        img.className = 'cmdk__cover';
+        img.src = item.cover;
+        img.alt = '';
+        img.width = 34;
+        img.height = 34;
+        el.appendChild(img);
+      } else {
+        const iconEl = document.createElement('span');
+        iconEl.className = 'cmdk__icon';
+        const iconKey = item.iconKey || (item.kind === 'album' ? 'disc-3' : 'zap');
+        iconEl.innerHTML = icon(iconKey, { size: 16 });
+        el.appendChild(iconEl);
+      }
+
+      // Texto: titulo + subtitulo
+      const textEl = document.createElement('span');
+      textEl.className = 'cmdk__text';
+
+      const titleEl = document.createElement('span');
+      titleEl.className = 'cmdk__title';
+      titleEl.textContent = item.title;
+      textEl.appendChild(titleEl);
+
+      if (item.subtitle) {
+        const subtitleEl = document.createElement('span');
+        subtitleEl.className = 'cmdk__subtitle';
+        subtitleEl.textContent = item.subtitle;
+        textEl.appendChild(subtitleEl);
+      }
+
+      el.appendChild(textEl);
+
+      // Glifico Enter (visible solo en item activo via CSS)
+      const enterEl = document.createElement('span');
+      enterEl.className = 'cmdk__enter';
+      enterEl.textContent = '↵'; // ↵
+      el.appendChild(enterEl);
+
+      // mouseenter → activa sin keyboard
+      el.addEventListener('mouseenter', () => {
+        _activeIndex = idx;
+        _render();
+      });
+
+      // click → ejecuta y cierra
+      el.addEventListener('click', () => {
+        item.run();
+        _close();
+      });
+
+      _listEl.appendChild(el);
+    });
+  });
 }

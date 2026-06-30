@@ -1,0 +1,529 @@
+/* ============================================================
+   world.css — Chrome/overlays del Mundo Virtual (Ambient Kinetic)
+   F4b: DOM HTML del mundo (overlays, HUD, modales). Canvas Phaser → F4c.
+   ============================================================ */
+
+/* ──────────────────────────────────────────────────────────
+   WorldPage — contenedor principal y HUD de posicionamiento
+   ────────────────────────────────────────────────────────── */
+
+.world-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.world-host {
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--color-bg);
+  touch-action: none;
+}
+
+/* Barra superior: botones de acceso a overlays (avatar, créditos) */
+.world-topbar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 20;
+  display: flex;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.world-topbar-btn {
+  background: color-mix(in srgb, black 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text) 20%, transparent);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text);
+  font-size: 12px;
+  font-family: var(--font-family);
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.world-topbar-btn:hover {
+  border-color: color-mix(in srgb, var(--color-brand) 50%, transparent);
+  color: var(--color-brand);
+}
+
+/* Dock de controles de voz (esquina inferior derecha) */
+.world-voice-dock {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  z-index: 22;
+  pointer-events: auto;
+  background: color-mix(in srgb, black 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
+  border-radius: var(--border-radius-sm);
+  padding: 8px 10px;
+}
+
+/* Joystick táctil — solo dispositivos de puntero grueso (pointer: coarse) */
+.world-joystick {
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+  z-index: 25;
+}
+
+/* Banner de reconexión (top-center, semitransparente, tinte danger) */
+.world-reconnect {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  background: color-mix(in srgb, var(--color-danger) 30%, black);
+  border: 1px solid color-mix(in srgb, var(--color-text) 25%, transparent);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text);
+  font-size: 13px;
+  font-family: var(--font-family);
+  padding: 6px 14px;
+  pointer-events: none;
+}
+
+/* Overlays de estado completo (frame 2c): reconexión total y sin sesión */
+.world-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  font-family: var(--font-family);
+  color: var(--color-text);
+}
+
+.world-overlay--reconnect {
+  background: color-mix(in srgb, var(--color-danger) 20%, color-mix(in srgb, black 80%, transparent));
+}
+
+.world-overlay--no-session {
+  background: color-mix(in srgb, black 70%, transparent);
+}
+
+.world-overlay__btn {
+  background: var(--color-action);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  padding: 10px 20px;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: var(--font-family);
+  font-weight: 600;
+  transition: opacity var(--transition-fast);
+}
+
+.world-overlay__btn:hover {
+  opacity: 0.85;
+}
+
+/* ──────────────────────────────────────────────────────────
+   WorldRoster — panel de presencia superpuesto
+   ────────────────────────────────────────────────────────── */
+
+.wr-overlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.wr-panel {
+  background: color-mix(in srgb, black 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
+  border-radius: var(--border-radius-sm);
+  padding: 8px 12px;
+  min-width: 140px;
+  pointer-events: auto;
+  font-family: var(--font-family);
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+.wr-header {
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--color-brand);
+}
+
+.wr-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.wr-entry {
+  padding: 2px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+/* ──────────────────────────────────────────────────────────
+   ZoneChat — chat superpuesto por zona
+   ────────────────────────────────────────────────────────── */
+
+/* .zc-overlay display controlado por JS: setZone(null) → 'none'; setZone(zone) → '' */
+.zc-overlay {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  pointer-events: none;
+  z-index: 10;
+  /* display:none es el valor de presentacion inicial en JS */
+}
+
+.zc-panel {
+  background: color-mix(in srgb, black 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
+  border-radius: var(--border-radius-sm);
+  padding: 8px 12px;
+  min-width: 200px;
+  max-width: 300px;
+  pointer-events: auto;
+  font-family: var(--font-family);
+  font-size: 12px;
+  color: var(--color-text);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.zc-header {
+  font-weight: 600;
+  color: var(--color-brand);
+}
+
+.zc-messages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.zc-msg {
+  padding: 2px 0;
+  word-break: break-word;
+  color: var(--color-text);
+}
+
+/* Mensaje propio: tinte brand */
+.zc-msg--self {
+  color: var(--color-brand);
+}
+
+.zc-msg-name {
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.zc-input-row {
+  display: flex;
+  gap: 4px;
+}
+
+.zc-input {
+  flex: 1;
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-text) 20%, transparent);
+  border-radius: 4px;
+  padding: 4px 6px;
+  color: var(--color-text);
+  font-size: 12px;
+  font-family: var(--font-family);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.zc-input:focus {
+  border-color: color-mix(in srgb, var(--color-brand) 60%, transparent);
+}
+
+/* ──────────────────────────────────────────────────────────
+   Joystick — control táctil virtual
+   width/height/top/left del thumb se pasan inline (calculados de radius).
+   ────────────────────────────────────────────────────────── */
+
+.joy-pad {
+  position: relative;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.joy-base {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-text) 12%, transparent);
+  border: 2px solid color-mix(in srgb, var(--color-text) 30%, transparent);
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+}
+
+.joy-thumb {
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-text) 70%, transparent);
+  position: absolute;
+  pointer-events: none;
+  transition: none;
+  will-change: transform;
+}
+
+/* ──────────────────────────────────────────────────────────
+   AvatarCreator — modal de creación de avatar LPC
+   display del backdrop controlado por open()/close() via style.display.
+   ────────────────────────────────────────────────────────── */
+
+/* Fondo oscuro (backdrop): display:none inicial; open() → style.display='flex' */
+.ac-backdrop {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, black 75%, transparent);
+  z-index: 50;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-family);
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.ac-modal {
+  background: var(--color-surface);
+  border: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
+  border-radius: var(--border-radius-md);
+  padding: 20px 24px;
+  max-width: 480px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ac-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ac-title {
+  margin: 0;
+  font-size: 16px;
+  color: var(--color-brand);
+}
+
+.ac-close-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  transition: color var(--transition-fast);
+}
+
+.ac-close-btn:hover {
+  color: var(--color-text);
+}
+
+.ac-selectors {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ac-select-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.ac-select-label {
+  flex: 1;
+  color: var(--color-text-secondary);
+}
+
+.ac-select {
+  flex: 1;
+  background: var(--color-surface);
+  border: 1px solid color-mix(in srgb, var(--color-text) 20%, transparent);
+  border-radius: 4px;
+  color: var(--color-text);
+  padding: 3px 6px;
+  font-size: 12px;
+  font-family: var(--font-family);
+}
+
+.ac-preview-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.ac-preview-label {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.ac-preview-container {
+  width: 128px;
+  height: 128px;
+  background: var(--color-bg);
+  border: 1px solid color-mix(in srgb, var(--color-text) 10%, transparent);
+  border-radius: var(--border-radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* Canvas escalado al doble para mayor visibilidad (64→128 px) */
+.ac-preview-canvas {
+  width: 128px;
+  height: 128px;
+  image-rendering: pixelated;
+}
+
+.ac-status {
+  font-size: 12px;
+  text-align: center;
+  min-height: 18px;
+  color: var(--color-text-secondary);
+}
+
+/* #f48fb1 → var(--color-danger): error de sesión o guardado */
+.ac-status--error {
+  color: var(--color-danger);
+}
+
+/* #90caf9 → var(--color-brand): guardando en progreso */
+.ac-status--saving {
+  color: var(--color-brand);
+}
+
+/* #a5d6a7 → var(--color-success): guardado exitoso */
+.ac-status--ok {
+  color: var(--color-success);
+}
+
+/* #3a7bd5 → var(--color-action): botón guardar (ámbar ambient kinetic) */
+.ac-save-btn {
+  background: var(--color-action);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--font-family);
+  align-self: flex-end;
+  transition: opacity var(--transition-fast);
+}
+
+.ac-save-btn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.ac-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ──────────────────────────────────────────────────────────
+   WorldCredits — modal de créditos LPC
+   display controlado por open()/close() via style.display.
+   ────────────────────────────────────────────────────────── */
+
+.wc-backdrop {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, black 80%, transparent);
+  z-index: 50;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-family);
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.wc-modal {
+  background: var(--color-surface);
+  border: 1px solid color-mix(in srgb, var(--color-text) 15%, transparent);
+  border-radius: var(--border-radius-md);
+  padding: 20px 24px;
+  max-width: 560px;
+  width: 90%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.wc-title {
+  margin: 0;
+  font-size: 15px;
+  color: var(--color-brand);
+}
+
+.wc-close-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  transition: color var(--transition-fast);
+}
+
+.wc-close-btn:hover {
+  color: var(--color-text);
+}
+
+/* #ccc → var(--color-text-secondary); #13131f → var(--color-bg) */
+.wc-pre {
+  margin: 0;
+  overflow-y: auto;
+  max-height: 55vh;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+  border-radius: 4px;
+  padding: 12px;
+}

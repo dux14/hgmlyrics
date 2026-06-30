@@ -84,6 +84,23 @@ async function loadAll() {
 }
 
 /**
+ * Devuelve un array con los IDs de canciones marcadas como favoritas.
+ * @returns {string[]}
+ */
+export function getFavoriteIds() {
+  return [...state.ids];
+}
+
+/**
+ * Solo para tests: reemplaza el conjunto de IDs de favoritos en el estado
+ * interno. No invocar en código de producción.
+ * @param {string[]} ids
+ */
+export function _setFavoriteIds(ids) {
+  state.ids = new Set(ids);
+}
+
+/**
  * Bootstrap favorites cache and re-load on sign-in / clear on sign-out.
  */
 export async function initFavorites() {

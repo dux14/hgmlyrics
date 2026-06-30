@@ -126,21 +126,57 @@ export async function refreshData() {
 }
 
 /**
- * Get unique albums from all songs
- * @returns {Array<{slug: string, name: string, coverImage: string}>}
+ * Get unique albums from all songs.
+ *
+ * El campo `artist` se calcula como el artista más frecuente entre las
+ * canciones del álbum. Desempate: gana el primer artista encontrado (orden
+ * de inserción). Si ninguna canción del álbum tiene artista, `artist` es
+ * `undefined`.
+ *
+ * @returns {Array<{slug: string, name: string, coverImage: string, artist: string|undefined}>}
  */
 export function getAlbums() {
-  const albumMap = new Map();
+  // Primera pasada: registrar metadatos del álbum y contar artistas.
+  const albumMeta = new Map();    // slug → { slug, name, coverImage }
+  const artistCount = new Map();  // slug → Map<artist, count>
+
   state.songs.forEach((song) => {
-    if (!albumMap.has(song.albumSlug)) {
-      albumMap.set(song.albumSlug, {
+    if (!albumMeta.has(song.albumSlug)) {
+      albumMeta.set(song.albumSlug, {
         slug: song.albumSlug,
         name: song.album,
         coverImage: song.coverImage,
       });
+      artistCount.set(song.albumSlug, new Map());
+    }
+    if (song.artist) {
+      const counts = artistCount.get(song.albumSlug);
+      counts.set(song.artist, (counts.get(song.artist) || 0) + 1);
     }
   });
-  return Array.from(albumMap.values());
+
+  // Segunda pasada: elegir el artista más frecuente por álbum.
+  return Array.from(albumMeta.entries()).map(([slug, meta]) => {
+    const counts = artistCount.get(slug);
+    let artist;
+    let maxCount = 0;
+    counts.forEach((count, name) => {
+      if (count > maxCount) {
+        maxCount = count;
+        artist = name;
+      }
+    });
+    return { ...meta, artist };
+  });
+}
+
+/**
+ * Solo para tests: reemplaza el array de canciones en el estado interno.
+ * No invocar en código de producción.
+ * @param {Array} songs
+ */
+export function _setSongs(songs) {
+  state.songs = songs;
 }
 
 export function getVoiceTypes() {

@@ -1,0 +1,220 @@
+/* favorites.css — Favoritos · Ambient Kinetic (F2b)
+ * Extraído de auth.css. Importado por FavoritesPage.js (mismo patrón que profile.css).
+ * Tokens:
+ *   --color-action = ámbar (corazón activo)
+ *   --color-bg     = fondo app (gradiente veil)
+ *   --color-text   = texto sobre carátula
+ */
+
+/* ── Encabezado de la página ── */
+.fav-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+  flex-wrap: wrap;
+}
+
+/* Subtítulo "N canciones" dentro del encabezado */
+.fav-header .profile-username {
+  margin: 0;
+}
+
+/* Toggle Grid/Lista: alinear a la derecha sin inline style */
+.fav-toggle {
+  margin: 0 0 0 auto;
+}
+
+/* ── Grid de carátulas ── */
+.fav-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-md);
+}
+
+@media (min-width: 600px) {
+  .fav-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 900px) {
+  .fav-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (min-width: 1200px) {
+  .fav-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+/* ── Tarjeta carátula ── */
+.fav-cover {
+  position: relative;
+  display: block;
+  aspect-ratio: 1;
+  border-radius: var(--border-radius-md);
+  overflow: hidden;
+  text-decoration: none;
+  transition: transform var(--transition-fast);
+}
+
+.fav-cover:hover {
+  transform: translateY(-3px) scale(1.02);
+}
+
+.fav-cover:active {
+  transform: scale(0.98);
+}
+
+.fav-cover__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform var(--transition-base);
+}
+
+.fav-cover:hover .fav-cover__img {
+  transform: scale(1.05);
+}
+
+/* Veil: gradiente oscuro para legibilidad del título */
+.fav-cover__veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--color-bg) 70%, transparent),
+    transparent 55%
+  );
+}
+
+/* Título de la canción sobre la carátula */
+.fav-cover__title {
+  position: absolute;
+  left: var(--space-sm);
+  right: var(--space-sm);
+  bottom: var(--space-sm);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-shadow: 0 1px 4px color-mix(in srgb, var(--color-bg) 60%, transparent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Botón de corazón (toggle favorito) ── */
+.fav-cover__heart {
+  position: absolute;
+  top: var(--space-sm);
+  right: var(--space-sm);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: color-mix(in srgb, var(--color-bg) 45%, transparent);
+  color: var(--color-text-secondary);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+/* Estado activo (is-on): corazón ámbar */
+.fav-cover__heart.is-on {
+  color: var(--color-action);
+}
+
+.fav-cover:hover .fav-cover__heart {
+  background: color-mix(in srgb, var(--color-bg) 65%, transparent);
+  transform: scale(1.12);
+}
+
+/* ── Botón favorito en SongView (fav-btn) ── */
+.fav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 40px;
+  min-width: 40px;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.fav-btn:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-action);
+  border-color: color-mix(in srgb, var(--color-action) 30%, transparent);
+}
+
+/* Estado activo: corazón ámbar con glow */
+.fav-btn.is-on {
+  color: var(--color-action);
+  border-color: color-mix(in srgb, var(--color-action) 40%, transparent);
+  background: color-mix(in srgb, var(--color-action) 10%, transparent);
+}
+
+.fav-btn:focus-visible {
+  outline: 2px solid var(--color-action);
+  outline-offset: 2px;
+}
+
+/* ── Toast de favorito (Agregada / Eliminada) ── */
+.fav-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.fav-toast__undo {
+  background: transparent;
+  border: none;
+  color: var(--color-action);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+/* Focus/accessibility */
+.fav-cover:focus-visible,
+.fav-cover__heart:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+/* Overrides de reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .fav-cover,
+  .fav-cover__img,
+  .fav-cover__heart {
+    transition: none;
+  }
+
+  .fav-cover:hover {
+    transform: none;
+  }
+
+  .fav-cover:hover .fav-cover__img {
+    transform: none;
+  }
+}

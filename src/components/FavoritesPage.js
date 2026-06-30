@@ -4,6 +4,7 @@
  * Reuses `renderSongList` so the heart overlay on each cover is the
  * "remove from favorites" affordance the user already knows.
  */
+import '../styles/favorites.css';
 import { getState, subscribe as subscribeStore } from '../lib/store.js';
 import { subscribe as subscribeFavorites, isFavorite, toggleFavorite } from '../lib/favorites.js';
 import { renderSongList } from './SongList.js';
@@ -43,7 +44,7 @@ function buildFavGrid(mount, favs) {
       <a class="fav-cover" href="#/song/${s.id}" aria-label="${escapeHtml(s.title || '')}">
         <img class="fav-cover__img" src="${resolveCoverUrl(s)}" alt="" loading="lazy" decoding="async" />
         <span class="fav-cover__veil"></span>
-        <button class="fav-cover__heart is-on" data-fav-id="${s.id}" aria-label="Quitar de favoritos">♥</button>
+        <button class="fav-cover__heart is-on" data-fav-id="${s.id}" aria-label="Quitar de favoritos">${icon('heart', { fill: true, size: 16 })}</button>
         <span class="fav-cover__title">${escapeHtml(s.title || '')}</span>
       </a>`,
     )
@@ -99,12 +100,12 @@ export function renderFavoritesPage(container) {
         <div class="fav-header">
           <button class="auth-btn" id="back-btn" style="max-width:120px;">← Volver</button>
           <h1 style="margin:0;">Mis favoritos</h1>
-          <div class="seg-tabs fav-toggle" role="tablist" style="margin:0 0 0 auto;">
+          <div class="seg-tabs fav-toggle" role="tablist">
             <button class="seg-tab${view === 'grid' ? ' seg-tab--active' : ''}" role="tab" aria-selected="${view === 'grid'}" data-view="grid">Grid</button>
             <button class="seg-tab${view === 'list' ? ' seg-tab--active' : ''}" role="tab" aria-selected="${view === 'list'}" data-view="list">Lista</button>
           </div>
         </div>
-        <p class="profile-username" style="margin-bottom:var(--space-md);">${favs.length} canciones</p>
+        <p class="profile-username">${favs.length} canciones</p>
         <div id="fav-list"></div>
       </div>
     `;

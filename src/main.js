@@ -20,7 +20,7 @@ import { configureAuth, guardedRoute } from './router.js';
 import { renderLoginPage, renderRegisterPage } from './components/LoginPage.js';
 import { renderAuthCallback } from './components/AuthCallback.js';
 import { renderOnboardingPage } from './components/OnboardingPage.js';
-import { renderProfile } from './components/Profile.js';
+import { renderProfile, renderProfileEdit } from './components/Profile.js';
 import { renderPublicProfile } from './components/PublicProfile.js';
 import { renderFriendsPanel } from './components/FriendsPanel.js';
 import { renderFavoritesPage } from './components/FavoritesPage.js';
@@ -250,6 +250,11 @@ async function boot() {
   guardedRoute('/perfil', () => {
     hideFilterBar();
     renderProfile(mainContent);
+  });
+
+  guardedRoute('/perfil/editar', () => {
+    hideFilterBar();
+    renderProfileEdit(mainContent);
   });
 
   guardedRoute('/u/:username', ({ params }) => {

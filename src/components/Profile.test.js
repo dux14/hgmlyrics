@@ -9,7 +9,7 @@ vi.mock('../lib/icons.js', () => ({ icon: vi.fn(() => '') }));
 vi.mock('../lib/imageCompress.js', () => ({ compressImageToLimit: vi.fn() }));
 vi.mock('../styles/profile.css', () => ({}));
 
-import { voiceLabel, buildProfileHeader, buildRangeBars } from './Profile.js';
+import { voiceLabel, buildProfileHeader, buildRangeBars, renderProfileEdit } from './Profile.js';
 
 describe('voiceLabel', () => {
   it('mapea tenor a etiqueta y clase de color', () => {
@@ -97,5 +97,34 @@ describe('buildProfileHeader', () => {
     const img = el.querySelector('#avatar-preview');
     expect(img).not.toBeNull();
     expect(img.hasAttribute('onerror')).toBe(false);
+  });
+});
+
+describe('renderProfileEdit', () => {
+  const base = {
+    displayName: 'Ana',
+    username: 'ana',
+    avatarUrl: '',
+    voiceType: 'tenor',
+    vocalRangeLow: 'C3',
+    vocalRangeHigh: 'A5',
+    instrumentRoles: ['Guitarra', 'Piano'],
+    isPublic: true,
+  };
+
+  it('renderiza el form con los campos clave y la action bar', async () => {
+    const { getProfile } = await import('../lib/authStore.js');
+    getProfile.mockReturnValue(base);
+    const c = document.createElement('div');
+    await renderProfileEdit(c);
+    expect(c.querySelector('#profile-form')).toBeTruthy();
+    expect(c.querySelector('#display-input')).toBeTruthy();
+    expect(c.querySelector('#public-input')).toBeTruthy();
+    expect(c.querySelector('.pf-actbar')).toBeTruthy();
+    expect(c.querySelector('a[href="#/perfil"]')).toBeTruthy();
+    // Prellenado: el valor del input refleja el perfil
+    expect(c.querySelector('#display-input').value).toBe(base.displayName);
+    // Visibilidad: el checkbox refleja isPublic del perfil
+    expect(c.querySelector('#public-input').checked).toBe(base.isPublic);
   });
 });

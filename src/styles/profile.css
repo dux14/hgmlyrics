@@ -354,3 +354,360 @@
   color: var(--color-text-secondary);
   flex: none;
 }
+
+/* ──────────────────────────────────────────────
+   Pantalla de edición de perfil (Task 3)
+   Tokens: misma tabla de mapeo que la vista.
+   ────────────────────────────────────────────── */
+
+/* ── Cabecera de edición ── */
+.pf-etop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 10px;
+}
+
+.pf-bk {
+  width: 30px;
+  height: 30px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  display: grid;
+  place-items: center;
+  color: var(--color-text);
+  flex: none;
+  text-decoration: none;
+}
+
+.pf-bk .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.pf-etop h1 {
+  font-size: 15px;
+  font-weight: 800;
+  margin: 0;
+  flex: 1;
+}
+
+.pf-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--color-success);
+}
+
+.pf-saved .icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* ── Bloque de avatar (edición) ── */
+.pf-av-edit {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 6px 16px 2px;
+}
+
+.pf-av-lg {
+  width: 64px;
+  height: 64px;
+  border-radius: 99px;
+  flex: none;
+  background: linear-gradient(135deg, var(--color-accent-2), var(--color-voice-soprano));
+  border: 2px solid color-mix(in srgb, var(--color-text) 14%, transparent);
+  position: relative;
+}
+
+/* Sobreescribe el tamaño del .pf-av global dentro del bloque de edición */
+.pf-av-lg .pf-av {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  box-shadow: none;
+}
+
+.pf-cam {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 24px;
+  height: 24px;
+  border-radius: 99px;
+  background: var(--color-primary);
+  border: 2px solid var(--color-bg);
+  display: grid;
+  place-items: center;
+  color: var(--color-bg);
+}
+
+.pf-cam .icon {
+  width: 12px;
+  height: 12px;
+}
+
+.pf-ava {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pf-ab {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: 99px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.pf-ab.rm {
+  color: var(--color-error);
+  border-color: color-mix(in srgb, var(--color-error) 22%, transparent);
+  background: transparent;
+}
+
+.pf-av-note {
+  font-size: 8px;
+  color: var(--color-text-secondary);
+  padding: 6px 16px 0;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* ── Formulario de edición ── */
+.pf-form {
+  padding: 6px 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.pf-fld {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pf-fl {
+  font-size: 8px;
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pf-cnt {
+  color: var(--color-text-secondary);
+}
+
+.pf-inp {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 11px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--color-text);
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.pf-inp:focus {
+  border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 8%, transparent);
+  outline: none;
+}
+
+.pf-inp--area {
+  display: block;
+  min-height: 64px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+select.pf-inp {
+  display: block;
+  appearance: auto;
+  cursor: pointer;
+}
+
+.pf-two {
+  display: flex;
+  gap: 10px;
+}
+
+.pf-two .pf-fld {
+  flex: 1;
+  min-width: 0;
+}
+
+.pf-hint {
+  font-size: 8.5px;
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+  margin: 0;
+}
+
+/* ── Fila de enlace (linkrow) ── */
+.pf-linkrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 13px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  text-decoration: none;
+  color: var(--color-text);
+}
+
+.pf-li {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--color-voice-tenor) 12%, transparent);
+  color: var(--color-voice-tenor);
+}
+
+.pf-li--eye {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+}
+
+.pf-li .icon {
+  width: 15px;
+  height: 15px;
+}
+
+.pf-lt {
+  flex: 1;
+  min-width: 0;
+}
+
+.pf-lt-a {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.pf-lt-b {
+  font-size: 8.5px;
+  color: var(--color-text-secondary);
+  margin-top: 1px;
+}
+
+.icon.pf-li-arr {
+  width: 15px;
+  height: 15px;
+  color: var(--color-text-secondary);
+  flex: none;
+}
+
+/* ── Toggle de visibilidad (pf-sw) ── */
+.pf-sw {
+  width: 34px;
+  height: 19px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--color-text) 12%, transparent);
+  position: relative;
+  flex: none;
+  cursor: pointer;
+  display: block;
+}
+
+.pf-sw::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 99px;
+  background: var(--color-text);
+}
+
+/* Estado activo vía CSS :has() — sin JS extra */
+.pf-sw:has(input:checked) {
+  background: color-mix(in srgb, var(--color-primary) 55%, transparent);
+}
+
+.pf-sw:has(input:checked)::after {
+  transform: translateX(15px);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pf-sw {
+    transition: background 0.15s ease-out;
+  }
+
+  .pf-sw::after {
+    transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+/* ── Barra de acción fija ── */
+.pf-actbar {
+  padding: 11px 16px calc(13px + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--color-bg) 82%, transparent);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid color-mix(in srgb, var(--color-text) 7%, transparent);
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+}
+
+.pf-btn-ghost {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-decoration: none;
+  flex: 1;
+  font-family: inherit;
+}
+
+.pf-btn-pri {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 11px;
+  border-radius: 12px;
+  background: var(--color-primary);
+  color: var(--color-bg);
+  font-size: 12px;
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--color-primary) 32%, transparent);
+  flex: 1;
+  font-family: inherit;
+}
+
+.pf-btn-pri .icon {
+  width: 15px;
+  height: 15px;
+}

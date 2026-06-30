@@ -27,6 +27,7 @@ import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { openVoiceSheet } from './VoiceSheet.js';
 import { presetToSpeed, stepToward, shouldShowFab } from '../lib/autoscroll.js';
 import { escapeHtml } from '../lib/escape.js';
+import { enterStage } from './StageMode.js';
 
 const FONT_SIZE_KEY = 'hkn-lyrics-font-size';
 const FONT_STEP = 0.125; // rem
@@ -289,6 +290,7 @@ export async function renderSongView(container, songIdOrData) {
             <button class="font-controls__btn" id="font-decrease" aria-label="Reducir tamaño de letra">A−</button>
             <span class="font-controls__label" id="font-size-label">${fontSize.toFixed(2)}</span>
             <button class="font-controls__btn" id="font-increase" aria-label="Aumentar tamaño de letra">A+</button>
+            <button class="font-controls__btn font-controls__stage" id="enter-stage-btn" aria-label="Modo escenario">${icon('maximize', { size: 18 })}</button>
           </div>
           ${
             showToggle
@@ -686,6 +688,11 @@ export async function renderSongView(container, songIdOrData) {
     container.querySelector('#font-size-label').textContent = fontSize.toFixed(2);
   });
 
+  container.querySelector('#enter-stage-btn')?.addEventListener('click', () => {
+    const sv = container.querySelector('.song-view');
+    if (sv) enterStage(sv);
+  });
+
   // Breadcrumb
   container.querySelector('#breadcrumb-album')?.addEventListener('click', (e) => {
     e.preventDefault();
@@ -1034,6 +1041,7 @@ function setupAutoscroll(_container, songId) {
   let headerVisible = true; // al cargar estás en el tope → header visible
 
   function applyFabVisibility() {
+    if (fab.classList.contains('autoscroll-fab--stage')) return; // en escenario lo controla StageMode
     fab.classList.toggle('autoscroll-fab--hidden', !shouldShowFab(headerVisible, isScrolling));
   }
   applyFabVisibility(); // estado inicial: oculto en el header

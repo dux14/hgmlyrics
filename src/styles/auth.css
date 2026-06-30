@@ -158,20 +158,12 @@
   color: var(--color-text-secondary);
 }
 
-/* Profile + friends shared */
-.profile-page,
+/* Friends shared */
 .friends-page {
   max-width: 720px;
   margin: 0 auto;
   /* Sin padding horizontal: el gutter lo aporta .main__content */
   padding: var(--space-lg) 0;
-}
-
-.profile-header {
-  display: flex;
-  gap: var(--space-md);
-  align-items: center;
-  margin-bottom: var(--space-xl);
 }
 
 .profile-avatar {
@@ -188,16 +180,6 @@
   color: var(--color-text-secondary);
 }
 
-.profile-section {
-  margin-bottom: var(--space-xl);
-}
-
-.profile-section__title {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  margin-bottom: var(--space-sm);
-}
-
 .profile-field {
   margin-bottom: var(--space-md);
 }
@@ -207,19 +189,6 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   margin-bottom: var(--space-xs);
-}
-
-.profile-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
-}
-
-.profile-tag {
-  padding: var(--space-xs) var(--space-sm);
-  background: var(--color-surface);
-  border-radius: var(--border-radius-full);
-  font-size: var(--font-size-sm);
 }
 
 /* Friends panel */
@@ -598,134 +567,6 @@
   }
 }
 
-/* === Rediseño: Perfil Variante C === */
-.profile-banner {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-lg);
-  margin-bottom: var(--space-lg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  background:
-    radial-gradient(120% 140% at 15% 0%, rgba(0, 151, 167, 0.18), transparent 60%),
-    linear-gradient(135deg, rgba(0, 151, 167, 0.4), rgba(255, 183, 77, 0.16));
-  flex-wrap: wrap;
-}
-.profile-banner__avatar {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  object-fit: cover;
-  background: var(--color-surface);
-  border: 2px solid rgba(255, 255, 255, 0.5);
-  flex-shrink: 0;
-}
-.profile-banner__id {
-  min-width: 0;
-}
-.profile-banner__name {
-  margin: 0;
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-extrabold);
-  line-height: var(--line-height-tight);
-}
-.voice-pill {
-  position: absolute;
-  top: var(--space-md);
-  right: var(--space-md);
-  padding: 2px var(--space-sm);
-  border-radius: var(--border-radius-full);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-bold);
-  color: #1a1a1a;
-}
-.voice-pill--soprano {
-  background: var(--color-voice-soprano);
-  color: #fff;
-}
-.voice-pill--contralto {
-  background: var(--color-voice-contralto);
-  color: #fff;
-}
-.voice-pill--tenor {
-  background: var(--color-voice-tenor);
-}
-.voice-pill--bass {
-  background: var(--color-voice-bass);
-  color: #fff;
-}
-.range-viz {
-  flex-basis: 100%;
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--border-radius-md);
-  background: rgba(0, 0, 0, 0.28);
-}
-.range-viz__bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 3px;
-  height: 24px;
-}
-.range-viz__bars span {
-  width: 4px;
-  border-radius: 2px;
-  background: var(--color-primary-light);
-}
-.range-viz__label {
-  font-size: var(--font-size-sm);
-  color: #fff;
-  font-weight: var(--font-weight-medium);
-}
-.profile-quick {
-  display: flex;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-md);
-}
-.profile-quick__btn {
-  flex: 1;
-  text-align: center;
-  text-decoration: none;
-  padding: var(--space-md);
-  border-radius: var(--border-radius-md);
-  border: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--color-text);
-  font-weight: var(--font-weight-semibold);
-  transition:
-    transform var(--transition-fast),
-    background var(--transition-fast);
-}
-.profile-quick__btn:hover {
-  background: var(--color-surface-hover);
-}
-.profile-quick__btn:active {
-  transform: scale(0.97);
-}
-.profile-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
-  margin-bottom: var(--space-lg);
-}
-.profile-chip {
-  padding: var(--space-xs) var(--space-sm);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-full);
-  font-size: var(--font-size-sm);
-}
-.profile-edit-card {
-  padding: var(--space-lg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  background: var(--color-surface);
-  margin-top: var(--space-md);
-}
 .profile-licenses-link {
   display: block;
   text-align: center;
@@ -733,15 +574,9 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
 }
-.profile-quick__btn:focus-visible,
 .profile-licenses-link:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .profile-quick__btn {
-    transition: none;
-  }
 }
 
 /* === Distintivo de corona (fundadores) === */

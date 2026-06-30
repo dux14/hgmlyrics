@@ -11,6 +11,8 @@
 
 /* ── Contenedor de página ── */
 .profile-page {
+  max-width: 720px;
+  margin: 0 auto;
   min-height: 100%;
   padding-bottom: calc(var(--bottom-nav-height, 60px) + 1rem);
 }
@@ -77,26 +79,26 @@
 
 .pf-vbadge--soprano {
   color: var(--color-voice-soprano);
-  background: rgba(244, 143, 177, 0.12);
-  border: 1px solid rgba(244, 143, 177, 0.35);
+  background: color-mix(in srgb, var(--color-voice-soprano) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-voice-soprano) 35%, transparent);
 }
 
 .pf-vbadge--contralto {
   color: var(--color-voice-contralto);
-  background: rgba(206, 147, 216, 0.12);
-  border: 1px solid rgba(206, 147, 216, 0.35);
+  background: color-mix(in srgb, var(--color-voice-contralto) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-voice-contralto) 35%, transparent);
 }
 
 .pf-vbadge--tenor {
   color: var(--color-voice-tenor);
-  background: rgba(255, 224, 130, 0.12);
-  border: 1px solid rgba(255, 224, 130, 0.35);
+  background: color-mix(in srgb, var(--color-voice-tenor) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-voice-tenor) 35%, transparent);
 }
 
 .pf-vbadge--bass {
   color: var(--color-voice-bass);
-  background: rgba(144, 202, 249, 0.12);
-  border: 1px solid rgba(144, 202, 249, 0.35);
+  background: color-mix(in srgb, var(--color-voice-bass) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-voice-bass) 35%, transparent);
 }
 
 /* Punto de color dentro del badge (estático) */
@@ -155,8 +157,8 @@
   color: var(--color-primary);
   padding: 4px 9px;
   border-radius: 99px;
-  background: rgba(45, 212, 191, 0.12);
-  border: 1px solid rgba(45, 212, 191, 0.28);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, transparent);
   text-decoration: none;
 }
 
@@ -183,7 +185,7 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .pf-range i.on {
-    background: linear-gradient(var(--color-voice-tenor), rgba(255, 224, 130, 0.35));
+    background: linear-gradient(var(--color-voice-tenor), color-mix(in srgb, var(--color-voice-tenor) 35%, transparent));
     animation:
       pf-rngrow 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards,
       pf-rnbreathe 3.4s ease-in-out infinite;
@@ -198,14 +200,14 @@
 
 /* Barra de nota grave (lo = bajo/bass) */
 .pf-range i.lo {
-  background: linear-gradient(var(--color-voice-bass), rgba(144, 202, 249, 0.3));
-  box-shadow: 0 0 11px rgba(144, 202, 249, 0.55);
+  background: linear-gradient(var(--color-voice-bass), color-mix(in srgb, var(--color-voice-bass) 30%, transparent));
+  box-shadow: 0 0 11px color-mix(in srgb, var(--color-voice-bass) 55%, transparent);
 }
 
 /* Barra de nota aguda (hi = soprano) */
 .pf-range i.hi {
-  background: linear-gradient(var(--color-voice-soprano), rgba(244, 143, 177, 0.3));
-  box-shadow: 0 0 11px rgba(244, 143, 177, 0.55);
+  background: linear-gradient(var(--color-voice-soprano), color-mix(in srgb, var(--color-voice-soprano) 30%, transparent));
+  box-shadow: 0 0 11px color-mix(in srgb, var(--color-voice-soprano) 55%, transparent);
 }
 
 @keyframes pf-rngrow {
@@ -310,7 +312,7 @@
 }
 
 .pf-accrow:hover {
-  border-color: rgba(45, 212, 191, 0.3);
+  border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 .pf-ai {
@@ -323,12 +325,12 @@
 }
 
 .pf-ai--friends {
-  background: rgba(244, 143, 177, 0.14);
+  background: color-mix(in srgb, var(--color-voice-soprano) 14%, transparent);
   color: var(--color-voice-soprano);
 }
 
 .pf-ai--fav {
-  background: rgba(245, 158, 11, 0.14);
+  background: color-mix(in srgb, var(--color-action) 14%, transparent);
   color: var(--color-action);
 }
 

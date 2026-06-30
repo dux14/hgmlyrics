@@ -124,8 +124,10 @@ async function boot() {
     updateFilterBar();
 
     const currentHash = globalThis.location.hash.slice(1) || '/';
-    if (currentHash === '/' || currentHash === '') {
+    if (currentHash === '/buscar') {
       renderSongList(mainContent, state.filtered);
+    } else if (currentHash === '/' || currentHash === '') {
+      renderHome(mainContent);
     }
   });
 

@@ -83,7 +83,7 @@ export function openVoiceSheet(opts) {
         </div>
       </div>
       <div class="vsheet__grp">
-        <div class="vsheet__tl syn">Tamano</div>
+        <div class="vsheet__tl syn">Tamaño</div>
         <div class="vsheet__seg">
           <button data-act="fdown">A−</button>
           <span class="vsheet__val" id="vsheet-font">${opts.fontLabel}</span>

@@ -1,0 +1,43 @@
+/* voice-controls.css — Indicadores de presencia de voz (VoiceControls)
+ * Tokens: --color-text, --color-text-secondary, --color-success.
+ * Sustituye los hex inline (#e0e0e0, #555, #4caf50) del componente VoiceControls.js.
+ */
+
+/* Fila de un participante: nombre + punto de actividad */
+.vc-peer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 12px;
+  font-family: sans-serif;
+  color: var(--color-text);
+}
+
+/* Punto de actividad — estado silencio / inactivo */
+.vc-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-secondary);
+  transition: background 0.1s;
+  flex-shrink: 0;
+}
+
+/* Estado hablando */
+.vc-dot--speaking {
+  background: var(--color-success);
+}
+
+/* Botones de control de voz (activar / silenciar) — fondo glass sobre el mundo */
+.vc-btn {
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 5px;
+  color: var(--color-text);
+  font-size: 12px;
+  font-family: sans-serif;
+  padding: 5px 10px;
+  cursor: pointer;
+}

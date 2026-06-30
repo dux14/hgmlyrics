@@ -1,10 +1,12 @@
 /**
  * FriendsPanel.js — /amigos page with tabs: friends / incoming / outgoing + search.
  */
+import '../styles/friends.css';
 import { getSession } from '../lib/authStore.js';
 import { emitPendingChanged } from '../lib/friends.js';
 import { escapeHtml } from '../lib/escape.js';
 import { isFounder, founderCrownHtml } from '../lib/founders.js';
+import { icon } from '../lib/icons.js';
 
 let searchTimer = null;
 
@@ -152,7 +154,19 @@ export async function renderFriendsPanel(container) {
           ? listCache.pendingIncoming
           : listCache.pendingOutgoing;
     if (items.length === 0) {
-      listEl.innerHTML = '<li style="color:var(--color-text-secondary);">Nada por aquí.</li>';
+      const emptyLabels = {
+        accepted: ['Sin amigos aún', 'Busca usuarios arriba para agregar a alguien.'],
+        incoming: ['Sin solicitudes recibidas', 'Cuando alguien te agregue, aparecera aqui.'],
+        outgoing: ['Sin solicitudes enviadas', 'Agrega amigos usando el buscador.'],
+      };
+      const [title, text] = emptyLabels[activeTab] || ['Nada por aqui.', ''];
+      listEl.innerHTML = `
+        <li class="empty-state">
+          <div class="empty-state__icon">${icon('user-plus', { size: 40 })}</div>
+          <h2 class="empty-state__title">${title}</h2>
+          ${text ? `<p class="empty-state__text">${text}</p>` : ''}
+        </li>
+      `;
       return;
     }
     listEl.innerHTML = items.map((it) => buildFriendItem(it, viewerId, activeTab)).join('');
@@ -198,8 +212,12 @@ export async function renderFriendsPanel(container) {
     searchTimer = setTimeout(async () => {
       const results = await searchUsers(q);
       if (results.length === 0) {
-        searchResults.innerHTML =
-          '<li style="color:var(--color-text-secondary);">Sin resultados.</li>';
+        searchResults.innerHTML = `
+          <li class="empty-state" style="padding:var(--space-md) 0;">
+            <div class="empty-state__icon">${icon('user-plus', { size: 32 })}</div>
+            <p class="empty-state__text">Sin resultados.</p>
+          </li>
+        `;
         return;
       }
       searchResults.innerHTML = results
@@ -207,14 +225,14 @@ export async function renderFriendsPanel(container) {
           (u) => `
         <li class="friend-item">
           <span class="avatar-wrap">
-            <img class="profile-avatar" style="width:40px;height:40px;" src="${escapeHtml(u.avatarUrl || '')}" alt="" />${isFounder(u.username) ? founderCrownHtml() : ''}
+            <img class="profile-avatar" src="${escapeHtml(u.avatarUrl || '')}" alt="" width="40" height="40" loading="lazy" decoding="async" />${isFounder(u.username) ? founderCrownHtml() : ''}
           </span>
-          <div>
-            <a href="#/u/${encodeURIComponent(u.username)}" style="color:inherit;text-decoration:none;font-weight:600;">${escapeHtml(u.displayName || u.username)}</a>
-            <div style="font-size:0.8em;color:var(--color-text-secondary);">@${escapeHtml(u.username)}</div>
+          <div class="friend-item__name">
+            <a href="#/u/${encodeURIComponent(u.username)}" class="friend-item__link">${escapeHtml(u.displayName || u.username)}</a>
+            <div class="friend-item__user">@${escapeHtml(u.username)}</div>
           </div>
           <div class="friend-item__actions">
-            <button class="auth-btn" data-username="${u.username}" style="padding:4px 12px;">Agregar</button>
+            <button class="friends-send-btn" data-username="${escapeHtml(u.username)}">Agregar</button>
           </div>
         </li>
       `,
@@ -224,12 +242,15 @@ export async function renderFriendsPanel(container) {
         b.addEventListener('click', async () => {
           b.disabled = true;
           b.textContent = '...';
+          b.classList.remove('friends-send-btn--sent', 'friends-send-btn--exists');
           const r = await sendRequest(b.dataset.username);
           if (r.ok) {
             b.textContent = 'Enviada';
+            b.classList.add('friends-send-btn--sent');
             listCache = await reloadList();
           } else if (r.status === 409) {
             b.textContent = 'Ya existe';
+            b.classList.add('friends-send-btn--exists');
           } else {
             b.textContent = 'Error';
             b.disabled = false;

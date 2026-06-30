@@ -53,7 +53,7 @@
   outline: none;
 }
 
-/* ── Strip horizontal (recientes / favoritos) — full-bleed ── */
+/* ── Strip horizontal (recientes / favoritos) ── */
 .home__strip {
   display: flex;
   flex-direction: row;
@@ -63,6 +63,8 @@
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
+  padding-left: var(--space-md);
+  padding-right: 0;
   padding-bottom: var(--space-xs);
 }
 
@@ -76,19 +78,27 @@
   scroll-snap-align: start;
 }
 
-/* ── Rejilla de álbumes: 3 col. en móvil (5 reales + card "+") ── */
-.home__albums-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+/* ── Rail horizontal de álbumes (5 portadas cuadradas + card "+") ── */
+.home__albums-rail {
+  display: flex;
   gap: var(--space-sm);
-  padding: 0 var(--space-md);
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-left: var(--space-md);
+  padding-right: 0;
+  padding-bottom: var(--space-xs);
 }
 
-@media (min-width: 420px) {
-  .home__albums-grid {
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  }
+.home__albums-rail::-webkit-scrollbar { display: none; }
+
+.home__albums-rail .home__album-card,
+.home__albums-rail .home__album-plus {
+  flex: 0 0 auto;
+  width: 132px;
+  scroll-snap-align: start;
 }
+
+.home__albums-rail .home__album-cover { aspect-ratio: 1 / 1; width: 100%; object-fit: cover; }
 
 /* ── Card de álbum (home) ── */
 .home__album-card {

@@ -303,6 +303,14 @@ describe('renderHome — Álbumes', () => {
     expect(names).toContain('Album Uno');
     expect(names).toContain('Album Cinco');
   });
+
+  it('renderiza los álbumes del home como rail horizontal', async () => {
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+    const rail = c.querySelector('.home__albums-rail');
+    expect(rail).toBeTruthy();
+    expect(rail.querySelector('.home__album-plus')).toBeTruthy(); // el "+" vive dentro del rail
+  });
 });
 
 // ── Voz en off ────────────────────────────────────────────────────────

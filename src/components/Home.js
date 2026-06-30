@@ -136,7 +136,7 @@ export async function renderHome(container, { today = new Date().toISOString().s
           <h2 class="home__hd-title" id="home-recent-hd">Reciente</h2>
           <button class="home__all" data-nav="/buscar">Ver todos</button>
         </div>
-        <div class="home__strip full-bleed" id="home-recent-strip"></div>
+        <div class="home__strip" id="home-recent-strip"></div>
       </section>
 
       <!-- Listas (ocultar si invitado o error de red) -->
@@ -153,7 +153,7 @@ export async function renderHome(container, { today = new Date().toISOString().s
           <h2 class="home__hd-title" id="home-albums-hd">Álbumes</h2>
           <button class="home__all" data-nav="/albumes">Ver todos</button>
         </div>
-        <div class="home__albums-grid">
+        <div class="home__albums-rail">
           ${albums
             .map(
               (a) => `

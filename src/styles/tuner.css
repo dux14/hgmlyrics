@@ -55,9 +55,9 @@
 }
 
 .tuner-tabs__btn[aria-selected='true'] {
-  background: var(--color-primary);
+  background: var(--color-brand);
   color: #fff;
-  border-color: var(--color-primary);
+  border-color: var(--color-brand);
 }
 
 /* === Body === */
@@ -72,10 +72,47 @@
   padding: var(--space-xl) var(--space-md);
   background: var(--color-surface);
   border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.tuner-perm__icon {
+  color: var(--color-text-secondary);
+  display: flex;
+  justify-content: center;
 }
 
 .tuner-perm p {
-  margin: 0 0 var(--space-sm);
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  max-width: 30ch;
+}
+
+/* Botón ámbar de activación de micrófono (acción de acceso) */
+.tuner-perm__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-lg);
+  background: var(--color-action);
+  border: 1px solid var(--color-action);
+  border-radius: var(--border-radius-md);
+  color: #000;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.tuner-perm__btn:hover {
+  background: var(--color-accent-light);
+  border-color: var(--color-accent-light);
 }
 
 .tuner-empty {
@@ -106,10 +143,11 @@
 }
 
 .tuner-strings__item[data-active='true'] {
-  background: var(--color-primary);
+  background: var(--color-brand);
   color: #fff;
-  border-color: var(--color-primary);
+  border-color: var(--color-brand);
   transform: scale(1.05);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-brand) 40%, transparent);
 }
 
 /* === Readout === */
@@ -127,11 +165,11 @@
 }
 
 .tuner-readout[data-status='warn'] {
-  border-color: var(--color-warning);
+  border-color: var(--color-warn);
 }
 
 .tuner-readout[data-status='bad'] {
-  border-color: var(--color-error);
+  border-color: var(--color-danger);
 }
 
 .tuner-readout__note {
@@ -164,62 +202,87 @@
 }
 
 .tuner-readout[data-scale='out'] .tuner-readout__sub {
-  color: var(--color-error);
+  color: var(--color-danger);
 }
 
-/* === Gauge === */
+/* === Gauge SVG (semicircle arc + rotating needle) ===
+   viewBox 0 0 200 110 — cx=100 cy=100 r=78
+   Zone arc endpoints (cents → angle from +x-axis → (x, y)):
+     ±50¢ = 180°/0°  → (22,100) / (178,100)
+     ±30¢ = 144°/36° → (37,54)  / (163,54)
+     ±10¢ = 108°/72° → (76,26)  / (124,26)
+   Needle points east (→) at render time; CSS rotates via
+   --gauge-angle (default -90deg = north = 0¢).
+*/
 .tuner-gauge {
   padding: var(--space-sm) var(--space-xs) 0;
 }
 
-.tuner-gauge__track {
-  position: relative;
-  height: 64px;
-  background: var(--color-surface);
-  border-radius: var(--border-radius-md);
-  border: 1px solid var(--color-border);
+.tuner-gauge__svg {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  margin: 0 auto;
+  overflow: visible;
 }
 
-.tuner-gauge__mark {
-  position: absolute;
-  top: 50%;
-  width: 1px;
-  height: 16px;
-  margin-top: -8px;
-  background: var(--color-border);
+.tuner-gauge__arc {
+  fill: none;
+  stroke-width: 8;
+  stroke-linecap: butt;
 }
 
-.tuner-gauge__mark--zero {
-  height: 32px;
-  margin-top: -16px;
-  background: var(--color-text-secondary);
+.tuner-gauge__arc--bg {
+  stroke: var(--color-border);
+  opacity: 0.8;
 }
 
-.tuner-gauge__needle {
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 50%;
-  width: 4px;
-  margin-left: -2px;
-  background: var(--color-error);
-  border-radius: 2px;
-  transition:
-    left 80ms linear,
-    background-color 80ms ease;
-  box-shadow: 0 0 6px rgba(0, 0, 0, 0.15);
+.tuner-gauge__arc--ok {
+  stroke: var(--color-success);
+  opacity: 0.25;
 }
 
-.tuner-gauge__needle[data-status='ok'] {
-  background: var(--color-success);
+.tuner-gauge__arc--warn {
+  stroke: var(--color-warn);
+  opacity: 0.22;
 }
 
-.tuner-gauge__needle[data-status='warn'] {
-  background: var(--color-warning);
+.tuner-gauge__arc--danger {
+  stroke: var(--color-danger);
+  opacity: 0.18;
 }
 
-.tuner-gauge__needle[data-status='bad'] {
-  background: var(--color-error);
+.tuner-gauge__zero {
+  stroke: var(--color-text-secondary);
+  stroke-width: 1.5;
+  opacity: 0.6;
+}
+
+/* Needle: transform-origin at the pivot (100,100 in SVG viewport coords) */
+.tuner-gauge__needle-svg {
+  stroke: var(--color-text-secondary);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transform-box: view-box;
+  transform-origin: 100px 100px;
+  transform: rotate(var(--gauge-angle, -90deg));
+  transition: transform 80ms ease-out;
+}
+
+.tuner-gauge__needle-svg[data-status='ok'] {
+  stroke: var(--color-success);
+}
+
+.tuner-gauge__needle-svg[data-status='warn'] {
+  stroke: var(--color-warn);
+}
+
+.tuner-gauge__needle-svg[data-status='bad'] {
+  stroke: var(--color-danger);
+}
+
+.tuner-gauge__center {
+  fill: var(--color-text);
 }
 
 .tuner-gauge__scale {
@@ -229,6 +292,12 @@
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tuner-gauge__needle-svg {
+    transition: none;
+  }
 }
 
 .tuner-hint {
@@ -307,7 +376,7 @@
 
 /* Nota objetivo resaltada dentro de la escala (modo Canción con objetivo de voz) */
 .tuner-scale li[data-target='true'] {
-  outline: 2px solid var(--color-primary);
+  outline: 2px solid var(--color-brand);
   outline-offset: 1px;
   font-weight: var(--font-weight-bold);
 }
@@ -353,7 +422,7 @@
 .tuner-progress__bar {
   height: 100%;
   width: 0%;
-  background: var(--color-primary);
+  background: var(--color-brand);
   transition: width 100ms linear;
 }
 
@@ -409,7 +478,7 @@
 
 .tuner-cal__manual input[type='range'] {
   width: 100%;
-  accent-color: var(--color-primary);
+  accent-color: var(--color-brand);
 }
 
 /* ─── Wave 4: nota libre (Canción sin canción) ─── */
@@ -444,9 +513,9 @@
   transition: all var(--transition-fast);
 }
 .tuner-free__pc[data-active='true'] {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 8%, transparent);
 }
 .tuner-free__oct {
   display: flex;
@@ -477,7 +546,7 @@
   text-align: center;
   font-size: 2.4rem;
   font-weight: 700;
-  color: var(--color-primary);
+  color: var(--color-brand);
   font-variant-numeric: tabular-nums;
 }
 .tuner-free__sub {
@@ -569,9 +638,9 @@
 }
 
 .tuner-train__preset:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 8%, transparent);
 }
 
 .tuner-train__fit {
@@ -587,13 +656,13 @@
 }
 
 .tuner-train__fit:hover {
-  border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+  border-color: var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 6%, transparent);
 }
 
 .tuner-train__fit:has(input:checked) {
-  border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  border-color: var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 10%, transparent);
 }
 
 .tuner-train__fit input {
@@ -601,7 +670,7 @@
   height: 1.15rem;
   margin-top: 0.1rem;
   flex-shrink: 0;
-  accent-color: var(--color-primary);
+  accent-color: var(--color-brand);
   cursor: pointer;
 }
 
@@ -645,7 +714,7 @@
   font-size: 3rem;
   font-weight: var(--font-weight-bold);
   line-height: 1;
-  color: var(--color-primary);
+  color: var(--color-brand);
   font-variant-numeric: tabular-nums;
 }
 
@@ -724,7 +793,7 @@
   cursor: pointer;
 }
 .metro-sig__btn[aria-selected='true'] {
-  background: var(--color-primary, #6c8cff);
+  background: var(--color-brand, #2dd4bf);
   border-color: transparent;
   color: #fff;
 }
@@ -744,11 +813,11 @@
     background 0.06s ease;
 }
 .metro-dot--accent {
-  outline: 2px solid var(--color-primary, #6c8cff);
+  outline: 2px solid var(--color-brand, #2dd4bf);
   outline-offset: 2px;
 }
 .metro-dot--on {
-  background: var(--color-primary, #6c8cff);
+  background: var(--color-brand, #2dd4bf);
   transform: scale(1.35);
 }
 .metro-count {

@@ -79,16 +79,42 @@ function clampCents(c) {
 }
 
 function renderGauge() {
+  // Semicircle arc: viewBox 0 0 200 110, center (100,100), radius 78.
+  // Zone arc endpoints precomputed from angle = 90 + cents*1.8 degrees:
+  //   ±50¢ = 180°/0°  → (22,100)/(178,100)
+  //   ±30¢ = 144°/36° → (37,54)/(163,54)
+  //   ±10¢ = 108°/72° → (76,26)/(124,26)
+  // Needle <line> points east (→) by default; CSS rotates via --gauge-angle.
+  // Default --gauge-angle = -90deg → needle points north = 0¢.
   return `
     <div class="tuner-gauge" aria-hidden="true">
-      <div class="tuner-gauge__track">
-        <span class="tuner-gauge__mark" style="left:0%"></span>
-        <span class="tuner-gauge__mark" style="left:40%"></span>
-        <span class="tuner-gauge__mark tuner-gauge__mark--zero" style="left:50%"></span>
-        <span class="tuner-gauge__mark" style="left:60%"></span>
-        <span class="tuner-gauge__mark" style="left:100%"></span>
-        <span class="tuner-gauge__needle" id="tuner-needle"></span>
-      </div>
+      <svg class="tuner-gauge__svg" viewBox="0 0 200 110" xmlns="http://www.w3.org/2000/svg">
+        <!-- Background track (full semicircle) -->
+        <path class="tuner-gauge__arc tuner-gauge__arc--bg"
+          d="M 22 100 A 78 78 0 0 1 178 100" />
+        <!-- Danger zones (>±30¢) -->
+        <path class="tuner-gauge__arc tuner-gauge__arc--danger"
+          d="M 22 100 A 78 78 0 0 1 37 54" />
+        <path class="tuner-gauge__arc tuner-gauge__arc--danger"
+          d="M 163 54 A 78 78 0 0 1 178 100" />
+        <!-- Warn zones (±10–30¢) -->
+        <path class="tuner-gauge__arc tuner-gauge__arc--warn"
+          d="M 37 54 A 78 78 0 0 1 76 26" />
+        <path class="tuner-gauge__arc tuner-gauge__arc--warn"
+          d="M 124 26 A 78 78 0 0 1 163 54" />
+        <!-- OK zone (±10¢) -->
+        <path class="tuner-gauge__arc tuner-gauge__arc--ok"
+          d="M 76 26 A 78 78 0 0 1 124 26" />
+        <!-- Zero tick at 0¢ (top of arc) -->
+        <line class="tuner-gauge__zero" x1="100" y1="22" x2="100" y2="12" />
+        <!-- Needle (start = pivot, end = tip; rotated via CSS --gauge-angle) -->
+        <line id="tuner-needle"
+          class="tuner-gauge__needle-svg"
+          x1="100" y1="100" x2="172" y2="100"
+          data-status="" />
+        <!-- Pivot dot -->
+        <circle class="tuner-gauge__center" cx="100" cy="100" r="5" />
+      </svg>
       <div class="tuner-gauge__scale">
         <span>−50</span><span>−10</span><span>0</span><span>+10</span><span>+50</span>
       </div>
@@ -99,8 +125,9 @@ function renderGauge() {
 function setNeedle(container, cents, statusClass) {
   const needle = container.querySelector('#tuner-needle');
   if (!needle) return;
-  const pct = 50 + clampCents(cents);
-  needle.style.left = `${pct}%`;
+  // Map cents [-50..+50] to rotation angle: -50¢→-180deg, 0¢→-90deg, +50¢→0deg
+  const angle = clampCents(cents) * 1.8 - 90;
+  needle.style.setProperty('--gauge-angle', `${angle}deg`);
   needle.dataset.status = statusClass || '';
 }
 
@@ -395,15 +422,19 @@ function bodyPermissionGate(state) {
   if (state === 'denied') {
     return `
       <div class="tuner-perm">
-        <p>${icon('mic', { size: 16 })} Microfono bloqueado.</p>
-        <p>Habilitalo en los permisos del sitio para usar el afinador.</p>
+        <div class="tuner-perm__icon">${icon('mic-off', { size: 32 })}</div>
+        <p>Micrófono bloqueado.</p>
+        <p>Habilitá el micrófono en los permisos del sitio para usar el afinador.</p>
       </div>
     `;
   }
   return `
     <div class="tuner-perm">
-      <p>${icon('mic', { size: 16 })} Necesito acceso al micrófono para detectar el tono.</p>
-      <button class="btn btn--primary" id="tuner-grant">Permitir micrófono</button>
+      <div class="tuner-perm__icon">${icon('mic-off', { size: 32 })}</div>
+      <p>Necesito acceso al micrófono para detectar el tono.</p>
+      <button class="tuner-perm__btn" id="tuner-grant">
+        ${icon('mic', { size: 15 })} Activar micrófono
+      </button>
     </div>
   `;
 }

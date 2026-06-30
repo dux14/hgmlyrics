@@ -111,8 +111,8 @@
 }
 
 .tuner-perm__btn:hover {
-  background: var(--color-accent-light);
-  border-color: var(--color-accent-light);
+  background: color-mix(in srgb, var(--color-action) 80%, white);
+  border-color: color-mix(in srgb, var(--color-action) 80%, white);
 }
 
 .tuner-empty {

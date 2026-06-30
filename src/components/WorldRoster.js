@@ -21,37 +21,21 @@
 export function WorldRoster() {
   // Contenedor exterior: no intercepta clicks en el canvas
   const el = document.createElement('div');
-  el.style.cssText = [
-    'position:absolute',
-    'top:12px',
-    'right:12px',
-    'pointer-events:none',
-    'z-index:10',
-  ].join(';');
+  el.className = 'wr-overlay';
 
   // Panel visible con fondo semitransparente
   const panel = document.createElement('div');
-  panel.style.cssText = [
-    'background:rgba(0,0,0,0.55)',
-    'border:1px solid rgba(255,255,255,0.15)',
-    'border-radius:6px',
-    'padding:8px 12px',
-    'min-width:140px',
-    'pointer-events:auto',
-    'font-family:sans-serif',
-    'font-size:12px',
-    'color:#e0e0e0',
-  ].join(';');
+  panel.className = 'wr-panel';
   el.appendChild(panel);
 
   // Encabezado con conteo
   const header = document.createElement('div');
-  header.style.cssText = 'font-weight:600;margin-bottom:6px;color:#90caf9;';
+  header.className = 'wr-header';
   panel.appendChild(header);
 
   // Lista de nombres
   const list = document.createElement('ul');
-  list.style.cssText = 'list-style:none;margin:0;padding:0;';
+  list.className = 'wr-list';
   panel.appendChild(list);
 
   /**
@@ -64,8 +48,7 @@ export function WorldRoster() {
     list.replaceChildren();
     entries.forEach(({ name }) => {
       const li = document.createElement('li');
-      li.style.cssText =
-        'padding:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;';
+      li.className = 'wr-entry';
       li.textContent = name;
       list.appendChild(li);
     });

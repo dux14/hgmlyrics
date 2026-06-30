@@ -51,73 +51,35 @@ export function ZoneChat() {
 
   // ── Contenedor exterior ──────────────────────────────────────────────────
   // No intercepta clicks en el canvas (pointer-events:none).
+  // display controlado por setZone(): null → 'none', zona → ''
   const el = document.createElement('div');
-  el.style.cssText = [
-    'position:absolute',
-    'bottom:12px',
-    'left:12px',
-    'pointer-events:none',
-    'z-index:10',
-    'display:none',
-  ].join(';');
+  el.className = 'zc-overlay';
+  el.style.display = 'none';
 
   // ── Panel visible ────────────────────────────────────────────────────────
   const panel = document.createElement('div');
-  panel.style.cssText = [
-    'background:rgba(0,0,0,0.55)',
-    'border:1px solid rgba(255,255,255,0.15)',
-    'border-radius:6px',
-    'padding:8px 12px',
-    'min-width:200px',
-    'max-width:300px',
-    'pointer-events:auto',
-    'font-family:sans-serif',
-    'font-size:12px',
-    'color:#e0e0e0',
-    'display:flex',
-    'flex-direction:column',
-    'gap:6px',
-  ].join(';');
+  panel.className = 'zc-panel';
   el.appendChild(panel);
 
   // ── Encabezado con el nombre de la zona ─────────────────────────────────
   const header = document.createElement('div');
-  header.style.cssText = 'font-weight:600;color:#90caf9;';
+  header.className = 'zc-header';
   panel.appendChild(header);
 
   // ── Lista de mensajes ────────────────────────────────────────────────────
   const messageList = document.createElement('ul');
-  messageList.style.cssText = [
-    'list-style:none',
-    'margin:0',
-    'padding:0',
-    'max-height:180px',
-    'overflow-y:auto',
-    'display:flex',
-    'flex-direction:column',
-    'gap:2px',
-  ].join(';');
+  messageList.className = 'zc-messages';
   panel.appendChild(messageList);
 
   // ── Fila de input ────────────────────────────────────────────────────────
   const inputRow = document.createElement('div');
-  inputRow.style.cssText = 'display:flex;gap:4px;';
+  inputRow.className = 'zc-input-row';
   panel.appendChild(inputRow);
 
   const input = document.createElement('input');
   input.type = 'text';
   input.placeholder = 'Escribe un mensaje...';
-  input.style.cssText = [
-    'flex:1',
-    'background:rgba(255,255,255,0.08)',
-    'border:1px solid rgba(255,255,255,0.2)',
-    'border-radius:4px',
-    'padding:4px 6px',
-    'color:#e0e0e0',
-    'font-size:12px',
-    'font-family:sans-serif',
-    'outline:none',
-  ].join(';');
+  input.className = 'zc-input';
   inputRow.appendChild(input);
 
   // ── Lógica de envío ──────────────────────────────────────────────────────
@@ -159,14 +121,10 @@ export function ZoneChat() {
    */
   function addMessage({ name, text, self = false }) {
     const li = document.createElement('li');
-    li.style.cssText = [
-      'padding:2px 0',
-      'word-break:break-word',
-      self ? 'color:#90caf9' : 'color:#e0e0e0',
-    ].join(';');
+    li.className = self ? 'zc-msg zc-msg--self' : 'zc-msg';
 
     const nameSpan = document.createElement('span');
-    nameSpan.style.cssText = 'font-weight:600;margin-right:4px;';
+    nameSpan.className = 'zc-msg-name';
     nameSpan.textContent = name + ':';
 
     const textSpan = document.createElement('span');

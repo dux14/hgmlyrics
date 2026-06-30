@@ -93,47 +93,48 @@
    HKN Lyrics — Design Tokens
    ============================================ */
 
+/* :root = DARK por defecto (Ambient Kinetic) */
 :root {
-  /* === Color Palette — Light Mode (Hakuna identity) === */
-  --color-bg: #ffffff;
-  --color-surface: #f8f9fa;
-  --color-surface-hover: #f0f1f3;
-  --color-text: #1a1a1a;
-  --color-text-secondary: #6b7280;
-  --color-primary: #0097a7;
-  --color-primary-light: #4fc3f7;
-  --color-primary-dark: #00796b;
-  --color-accent: #ff8f00;
-  --color-accent-light: #ffb74d;
-  --color-border: #e5e7eb;
-  --color-shadow: rgba(0, 0, 0, 0.08);
+  /* === Color Palette — Dark Mode por defecto (Hakuna Ambient Kinetic) === */
+  --color-bg: #0f0f0f;
+  --color-surface: #1a1a1a;
+  --color-surface-hover: #242424;
+  --color-text: #f0f0f0;
+  --color-text-secondary: #9ca3af;
+  --color-primary: #4fc3f7;
+  --color-primary-light: #81d4fa;
+  --color-primary-dark: #0097a7;
+  --color-accent: #ffb74d;
+  --color-accent-light: #ffcc80;
+  --color-border: #2d2d2d;
+  --color-shadow: rgba(0, 0, 0, 0.4);
 
   /* Voice highlight colors */
-  --color-voice-high: #4fc3f7;
-  --color-voice-low: #ff7043;
-  --color-voice-chorus: #ab47bc;
+  --color-voice-high: #81d4fa;
+  --color-voice-low: #ff8a65;
+  --color-voice-chorus: #ce93d8;
 
-  /* Voice part colors — derivan de primitivos en tokens.css (mismo hex, sin cambio renderizado) */
-  --color-voice-soprano: var(--color-voice-soprano-l);
-  --color-voice-contralto: var(--color-voice-contralto-l);
-  --color-voice-tenor: var(--color-voice-tenor-l);
-  --color-voice-bass: var(--color-voice-bass-l);
+  /* Voice part colors — dark mode (pastel para legibilidad sobre fondo oscuro) */
+  --color-voice-soprano: var(--color-voice-soprano-d);   /* #f48fb1 */
+  --color-voice-contralto: var(--color-voice-contralto-d); /* #ce93d8 */
+  --color-voice-tenor: var(--color-voice-tenor-d);       /* #ffe082 */
+  --color-voice-bass: var(--color-voice-bass-d);         /* #90caf9 */
 
   /* Voice background highlights */
-  --color-voice-soprano-bg: rgba(194, 24, 91, 0.12);
-  --color-voice-contralto-bg: rgba(106, 27, 154, 0.12);
-  --color-voice-tenor-bg: rgba(181, 137, 0, 0.12);
-  --color-voice-bass-bg: rgba(21, 101, 192, 0.12);
-  --color-voice-extra-bg: rgba(171, 71, 188, 0.12);
-  --color-voice-chorus-bg: rgba(171, 71, 188, 0.12);
+  --color-voice-soprano-bg: rgba(244, 143, 177, 0.15);
+  --color-voice-contralto-bg: rgba(206, 147, 216, 0.15);
+  --color-voice-tenor-bg: rgba(255, 224, 130, 0.15);
+  --color-voice-bass-bg: rgba(144, 202, 249, 0.15);
+  --color-voice-extra-bg: rgba(206, 147, 216, 0.15);
+  --color-voice-chorus-bg: rgba(206, 147, 216, 0.15);
 
-  /* Chord color — deriva de primitivo en tokens.css (mismo hex, sin cambio renderizado) */
-  --color-chord: var(--color-chord-l);
-  --color-chord-bg: rgba(46, 125, 50, 0.1);
-  --color-chord-hover: #1b5e20;
-  --color-chord-hover-bg: rgba(46, 125, 50, 0.2);
+  /* Chord color — verde pastel para dark mode */
+  --color-chord: var(--color-chord-d);                   /* #a5d6a7 */
+  --color-chord-bg: rgba(165, 214, 167, 0.12);
+  --color-chord-hover: #c8e6c9;
+  --color-chord-hover-bg: rgba(165, 214, 167, 0.22);
 
-  /* Semantic */
+  /* Semantic — no varían por tema */
   --color-success: #4caf50;
   --color-warning: #ff9800;
   --color-error: #f44336;
@@ -197,12 +198,12 @@
   /* === Scrollbar === */
   --scrollbar-width: 6px;
   --scrollbar-track: transparent;
-  --scrollbar-thumb: var(--color-border);
+  --scrollbar-thumb: #3a3a3a;
 
-  /* === Alias semánticos NUEVOS (para utilities Ambient Kinetic) === */
-  --color-brand: var(--color-teal-500);        /* teal — alias nuevo */
+  /* === Alias semánticos (Ambient Kinetic) === */
+  --color-brand: var(--color-teal-400);        /* teal dark */
   --color-action: var(--color-amber-500);      /* ámbar — SOLO acciones */
-  --color-accent-2: var(--color-violet-500);   /* gradientes ambient */
+  --color-accent-2: var(--color-violet-400);   /* gradientes ambient */
   --color-danger: var(--color-error);
   --color-warn: var(--color-warning);
   --color-liturgy: var(--color-amber-400);     /* oro devocional ≠ acción */
@@ -218,52 +219,104 @@
 }
 
 /* ============================================
-   Dark Mode
+   Overrides CLAROS: forzado [data-theme=light] o auto (sistema claro sin override)
    ============================================ */
-[data-theme='dark'] {
-  --color-bg: #0f0f0f;
-  --color-surface: #1a1a1a;
-  --color-surface-hover: #242424;
-  --color-text: #f0f0f0;
-  --color-text-secondary: #9ca3af;
-  --color-primary: #4fc3f7;
-  --color-primary-light: #81d4fa;
-  --color-primary-dark: #0097a7;
-  --color-accent: #ffb74d;
-  --color-accent-light: #ffcc80;
-  --color-border: #2d2d2d;
-  --color-shadow: rgba(0, 0, 0, 0.4);
+[data-theme='light'] {
+  --color-bg: #ffffff;
+  --color-surface: #f8f9fa;
+  --color-surface-hover: #f0f1f3;
+  --color-text: #1a1a1a;
+  --color-text-secondary: #6b7280;
+  --color-primary: #0097a7;
+  --color-primary-light: #4fc3f7;
+  --color-primary-dark: #00796b;
+  --color-accent: #ff8f00;
+  --color-accent-light: #ffb74d;
+  --color-border: #e5e7eb;
+  --color-shadow: rgba(0, 0, 0, 0.08);
 
-  /* Voice colors — brighter in dark mode */
-  --color-voice-high: #81d4fa;
-  --color-voice-low: #ff8a65;
-  --color-voice-chorus: #ce93d8;
+  /* Voice colors — light mode */
+  --color-voice-high: #4fc3f7;
+  --color-voice-low: #ff7043;
+  --color-voice-chorus: #ab47bc;
 
-  /* Voice part colors — dark mode (pastel para legibilidad sobre fondo oscuro) */
-  --color-voice-soprano: var(--color-voice-soprano-d);   /* #f48fb1 */
-  --color-voice-contralto: var(--color-voice-contralto-d); /* #ce93d8 */
-  --color-voice-tenor: var(--color-voice-tenor-d);       /* #ffe082 */
-  --color-voice-bass: var(--color-voice-bass-d);         /* #90caf9 */
+  /* Voice part colors — light mode */
+  --color-voice-soprano: var(--color-voice-soprano-l);
+  --color-voice-contralto: var(--color-voice-contralto-l);
+  --color-voice-tenor: var(--color-voice-tenor-l);
+  --color-voice-bass: var(--color-voice-bass-l);
 
-  /* Voice background highlights — dark mode */
-  --color-voice-soprano-bg: rgba(244, 143, 177, 0.15);
-  --color-voice-contralto-bg: rgba(206, 147, 216, 0.15);
-  --color-voice-tenor-bg: rgba(255, 224, 130, 0.15);
-  --color-voice-bass-bg: rgba(144, 202, 249, 0.15);
-  --color-voice-extra-bg: rgba(206, 147, 216, 0.15);
-  --color-voice-chorus-bg: rgba(206, 147, 216, 0.15);
+  /* Voice background highlights — light mode */
+  --color-voice-soprano-bg: rgba(194, 24, 91, 0.12);
+  --color-voice-contralto-bg: rgba(106, 27, 154, 0.12);
+  --color-voice-tenor-bg: rgba(181, 137, 0, 0.12);
+  --color-voice-bass-bg: rgba(21, 101, 192, 0.12);
+  --color-voice-extra-bg: rgba(171, 71, 188, 0.12);
+  --color-voice-chorus-bg: rgba(171, 71, 188, 0.12);
 
-  /* Chord color — verde pastel para dark mode */
-  --color-chord: var(--color-chord-d);                   /* #a5d6a7 */
-  --color-chord-bg: rgba(165, 214, 167, 0.12);
-  --color-chord-hover: #c8e6c9;
-  --color-chord-hover-bg: rgba(165, 214, 167, 0.22);
+  /* Chord color — light mode */
+  --color-chord: var(--color-chord-l);
+  --color-chord-bg: rgba(46, 125, 50, 0.1);
+  --color-chord-hover: #1b5e20;
+  --color-chord-hover-bg: rgba(46, 125, 50, 0.2);
 
-  /* === Alias nuevos — variante dark (Ambient Kinetic) === */
-  --color-brand: var(--color-teal-400);
+  /* Alias — variante light */
+  --color-brand: var(--color-teal-500);
   --color-action: var(--color-amber-500);
-  --color-accent-2: var(--color-violet-400);
+  --color-accent-2: var(--color-violet-500);
   --color-liturgy: var(--color-amber-400);
 
-  --scrollbar-thumb: #3a3a3a;
+  --scrollbar-thumb: var(--color-border);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    /* Misma lista de valores CLAROS (duplicada — inevitable en CSS puro).
+       Cubre la ventana FOUC antes de que JS fije data-theme. */
+    --color-bg: #ffffff;
+    --color-surface: #f8f9fa;
+    --color-surface-hover: #f0f1f3;
+    --color-text: #1a1a1a;
+    --color-text-secondary: #6b7280;
+    --color-primary: #0097a7;
+    --color-primary-light: #4fc3f7;
+    --color-primary-dark: #00796b;
+    --color-accent: #ff8f00;
+    --color-accent-light: #ffb74d;
+    --color-border: #e5e7eb;
+    --color-shadow: rgba(0, 0, 0, 0.08);
+
+    /* Voice colors — light mode */
+    --color-voice-high: #4fc3f7;
+    --color-voice-low: #ff7043;
+    --color-voice-chorus: #ab47bc;
+
+    /* Voice part colors — light mode */
+    --color-voice-soprano: var(--color-voice-soprano-l);
+    --color-voice-contralto: var(--color-voice-contralto-l);
+    --color-voice-tenor: var(--color-voice-tenor-l);
+    --color-voice-bass: var(--color-voice-bass-l);
+
+    /* Voice background highlights — light mode */
+    --color-voice-soprano-bg: rgba(194, 24, 91, 0.12);
+    --color-voice-contralto-bg: rgba(106, 27, 154, 0.12);
+    --color-voice-tenor-bg: rgba(181, 137, 0, 0.12);
+    --color-voice-bass-bg: rgba(21, 101, 192, 0.12);
+    --color-voice-extra-bg: rgba(171, 71, 188, 0.12);
+    --color-voice-chorus-bg: rgba(171, 71, 188, 0.12);
+
+    /* Chord color — light mode */
+    --color-chord: var(--color-chord-l);
+    --color-chord-bg: rgba(46, 125, 50, 0.1);
+    --color-chord-hover: #1b5e20;
+    --color-chord-hover-bg: rgba(46, 125, 50, 0.2);
+
+    /* Alias — variante light */
+    --color-brand: var(--color-teal-500);
+    --color-action: var(--color-amber-500);
+    --color-accent-2: var(--color-violet-500);
+    --color-liturgy: var(--color-amber-400);
+
+    --scrollbar-thumb: var(--color-border);
+  }
 }

@@ -21,11 +21,13 @@ export function getTheme() {
     // localStorage unavailable
   }
 
-  // System preference
-  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    return 'dark';
-  }
-  return 'light';
+  // System preference — default dark (Ambient Kinetic)
+  try {
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+      return 'light';
+    }
+  } catch (_e) { /* matchMedia unavailable */ }
+  return 'dark';
 }
 
 /**

@@ -51,9 +51,7 @@ export function buildProfileHeader(profile) {
   const vbadge = voice
     ? `<div class="pf-vbadge pf-vbadge--${profile.voiceType}"><span class="pf-dot"></span>${voice.text}</div>`
     : '';
-  const bio = profile.bio
-    ? `<p class="pf-bio">${escapeHtml(profile.bio)}</p>`
-    : '';
+  const bio = profile.bio ? `<p class="pf-bio">${escapeHtml(profile.bio)}</p>` : '';
   const hasRange = profile.vocalRangeLow || profile.vocalRangeHigh;
   const bars = buildRangeBars()
     .map(
@@ -295,7 +293,7 @@ export async function renderProfileEdit(container) {
     const file = avatarInput.files?.[0];
     if (!file) return;
     avatarError.textContent = 'Procesando imagen…';
-    avatarError.style.color = 'var(--color-text-muted, #888)';
+    avatarError.style.color = 'var(--color-text-secondary)';
     avatarError.style.display = 'block';
     avatarBtn.disabled = true;
     try {

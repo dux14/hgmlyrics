@@ -333,7 +333,7 @@ export function bodyCalibrar({ calCents }) {
   return `
     <div class="tuner-cal">
       <p class="tuner-cal__hint">
-        ${icon('info', { size: 14 })} Usá un <strong>altavoz</strong> (no audífonos) para el auto-test.
+        ${icon('info', { size: 14 })} Usa un <strong>altavoz</strong> (no audífonos) para el auto-test.
       </p>
       <div class="tuner-cal__current">Ajuste actual: <strong id="cal-current">${fmtCents(calCents)}</strong></div>
       <button class="btn btn--primary" id="cal-run">${icon('activity', { size: 14 })} Probar afinador</button>

@@ -41,7 +41,7 @@
   display: block;
   margin: 6px auto 0;
   position: relative;
-  background: linear-gradient(135deg, var(--color-accent-2), #f472b6);
+  background: linear-gradient(135deg, var(--color-accent-2), var(--color-accent-rose));
   border: 2px solid rgba(255, 255, 255, 0.14);
   box-shadow: 0 8px 26px -8px rgba(0, 0, 0, 0.6);
   object-fit: cover;
@@ -108,10 +108,18 @@
   border-radius: 99px;
 }
 
-.pf-vbadge--soprano .pf-dot { background: var(--color-voice-soprano); }
-.pf-vbadge--contralto .pf-dot { background: var(--color-voice-contralto); }
-.pf-vbadge--tenor .pf-dot { background: var(--color-voice-tenor); }
-.pf-vbadge--bass .pf-dot { background: var(--color-voice-bass); }
+.pf-vbadge--soprano .pf-dot {
+  background: var(--color-voice-soprano);
+}
+.pf-vbadge--contralto .pf-dot {
+  background: var(--color-voice-contralto);
+}
+.pf-vbadge--tenor .pf-dot {
+  background: var(--color-voice-tenor);
+}
+.pf-vbadge--bass .pf-dot {
+  background: var(--color-voice-bass);
+}
 
 /* ── Bio ── */
 .pf-bio {
@@ -185,38 +193,65 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .pf-range i.on {
-    background: linear-gradient(var(--color-voice-tenor), color-mix(in srgb, var(--color-voice-tenor) 35%, transparent));
+    background: linear-gradient(
+      var(--color-voice-tenor),
+      color-mix(in srgb, var(--color-voice-tenor) 35%, transparent)
+    );
     animation:
       pf-rngrow 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards,
       pf-rnbreathe 3.4s ease-in-out infinite;
   }
 
-  .pf-range i.on:nth-child(2) { animation-delay: 0.05s, 0.65s; }
-  .pf-range i.on:nth-child(3) { animation-delay: 0.13s, 0.73s; }
-  .pf-range i.on:nth-child(4) { animation-delay: 0.21s, 0.81s; }
-  .pf-range i.on:nth-child(5) { animation-delay: 0.29s, 0.89s; }
-  .pf-range i.on:nth-child(6) { animation-delay: 0.37s, 0.97s; }
+  .pf-range i.on:nth-child(2) {
+    animation-delay: 0.05s, 0.65s;
+  }
+  .pf-range i.on:nth-child(3) {
+    animation-delay: 0.13s, 0.73s;
+  }
+  .pf-range i.on:nth-child(4) {
+    animation-delay: 0.21s, 0.81s;
+  }
+  .pf-range i.on:nth-child(5) {
+    animation-delay: 0.29s, 0.89s;
+  }
+  .pf-range i.on:nth-child(6) {
+    animation-delay: 0.37s, 0.97s;
+  }
 }
 
 /* Barra de nota grave (lo = bajo/bass) */
 .pf-range i.lo {
-  background: linear-gradient(var(--color-voice-bass), color-mix(in srgb, var(--color-voice-bass) 30%, transparent));
+  background: linear-gradient(
+    var(--color-voice-bass),
+    color-mix(in srgb, var(--color-voice-bass) 30%, transparent)
+  );
   box-shadow: 0 0 11px color-mix(in srgb, var(--color-voice-bass) 55%, transparent);
 }
 
 /* Barra de nota aguda (hi = soprano) */
 .pf-range i.hi {
-  background: linear-gradient(var(--color-voice-soprano), color-mix(in srgb, var(--color-voice-soprano) 30%, transparent));
+  background: linear-gradient(
+    var(--color-voice-soprano),
+    color-mix(in srgb, var(--color-voice-soprano) 30%, transparent)
+  );
   box-shadow: 0 0 11px color-mix(in srgb, var(--color-voice-soprano) 55%, transparent);
 }
 
 @keyframes pf-rngrow {
-  from { height: 0; }
+  from {
+    height: 0;
+  }
 }
 
 @keyframes pf-rnbreathe {
-  0%, 100% { opacity: 0.9; }
-  50% { opacity: 1; filter: brightness(1.14); }
+  0%,
+  100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 1;
+    filter: brightness(1.14);
+  }
 }
 
 /* ── Etiquetas grave/agudo bajo la viz ── */
@@ -258,8 +293,15 @@
 }
 
 @keyframes pf-rnpulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.45; transform: scale(0.8); }
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
 }
 
 /* Defensa extra: las animaciones ya solo viven en no-preference */

@@ -1,0 +1,119 @@
+/* tools-hub.css — Hub de Herramientas (/herramientas).
+   3 tarjetas full-width apiladas: icono con tono + nombre + descripcion + flecha. */
+
+.tools-hub {
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Encabezado de pagina */
+.tools-hub__title {
+  font-size: 1.6rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  margin: 0;
+}
+
+.tools-hub__sub {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  margin: var(--space-xs) 0 var(--space-lg);
+}
+
+/* Pila de tarjetas */
+.tools-hub__grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* Tarjeta-herramienta */
+.tools-hub__tile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  padding: var(--space-md);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease-out,
+    transform 0.15s ease-out,
+    box-shadow 0.15s ease-out;
+}
+
+.tools-hub__tile:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--color-teal-500) 35%, transparent);
+}
+
+.tools-hub__tile:focus-visible {
+  outline: none;
+  border-color: var(--color-teal-500);
+  box-shadow: 0 0 0 1px var(--color-teal-500),
+    0 0 8px color-mix(in srgb, var(--color-teal-500) 30%, transparent);
+}
+
+.tools-hub__tile:active {
+  transform: none;
+  background: color-mix(in srgb, var(--color-surface) 80%, var(--color-bg));
+}
+
+/* Contenedor del icono con tono por herramienta */
+.tools-hub__tile-icon {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+}
+
+.tools-hub__tile-icon--teal {
+  color: var(--color-teal-400);
+  background: color-mix(in srgb, var(--color-teal-400) 16%, transparent);
+}
+
+.tools-hub__tile-icon--violet {
+  color: var(--color-violet-400);
+  background: color-mix(in srgb, var(--color-violet-400) 16%, transparent);
+}
+
+.tools-hub__tile-icon--amber {
+  color: var(--color-amber-500);
+  background: color-mix(in srgb, var(--color-amber-500) 16%, transparent);
+}
+
+/* Texto (nombre + descripcion) */
+.tools-hub__tile-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tools-hub__tile-label {
+  font-size: 0.95rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.tools-hub__tile-desc {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--color-text-secondary);
+}
+
+/* Flecha de afordancia */
+.tools-hub__tile-arrow {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-secondary);
+}

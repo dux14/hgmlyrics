@@ -4,6 +4,7 @@ import { createSongCard } from './SongList.js';
 import { isAuthenticated } from '../lib/authStore.js';
 import { icon } from '../lib/icons.js';
 import { escapeHtml } from '../lib/escape.js';
+import { resolveCoverUrl } from './songRow.js';
 
 export function selectRecent(songs, limit = 6) {
   return [...(songs || [])]
@@ -26,16 +27,12 @@ export function renderHome(container) {
         <h2 class="home__kicker syn" id="home-albums">Álbumes</h2>
         <div class="home__albums">
           ${albums
-            .map((a) => {
-              const cover =
-                a.coverImage?.startsWith('/') || a.coverImage?.startsWith('http')
-                  ? a.coverImage
-                  : `/covers/${a.coverImage}`;
-              return `<button class="home__album" data-album="${escapeHtml(a.slug)}">
-                <img class="home__album-cover" src="${cover}" alt="" loading="lazy" onerror="this.style.visibility='hidden'" />
+            .map(
+              (a) => `<button class="home__album">
+                <img class="home__album-cover" src="${escapeHtml(resolveCoverUrl(a))}" alt="" loading="lazy" onerror="this.style.visibility='hidden'" />
                 <span class="home__album-name">${escapeHtml(a.name)}</span>
-              </button>`;
-            })
+              </button>`,
+            )
             .join('')}
         </div>
       </section>
@@ -63,7 +60,7 @@ export function renderHome(container) {
   const strip = container.querySelector('#home-recent-strip');
   recent.forEach((song, i) => strip.appendChild(createSongCard(song, i)));
 
-  container.querySelectorAll('[data-album]').forEach((el) =>
+  container.querySelectorAll('.home__album').forEach((el) =>
     el.addEventListener('click', () => navigate('/buscar')),
   );
   container.querySelectorAll('[data-nav]').forEach((el) =>

@@ -161,7 +161,6 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-sm);
-  flex-direction: unset;
 }
 
 .home__quick-card {

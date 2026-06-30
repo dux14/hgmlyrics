@@ -57,7 +57,7 @@ function buildChannelWarning(currentZones, nextZones) {
   }
 
   return `
-    <div style="margin-top:var(--space-sm);padding:var(--space-sm);background:var(--color-warning-bg,#fff8e1);border:1px solid var(--color-warning,#f59e0b);border-radius:var(--border-radius-sm);font-size:var(--font-size-sm);color:var(--color-warning-text,#92400e);">
+    <div class="wm-warning">
       <strong>Aviso:</strong> ${lines.join(' ')}
     </div>
   `;
@@ -67,13 +67,11 @@ function buildChannelWarning(currentZones, nextZones) {
 // Renderizar la lista de versiones
 // ---------------------------------------------------------------------------
 async function renderVersions(listEl, statusEl, adminChannel) {
-  listEl.innerHTML =
-    '<p style="color:var(--color-text-secondary);font-size:var(--font-size-sm);">Cargando versiones…</p>';
+  listEl.innerHTML = '<p class="wm-text-secondary">Cargando versiones…</p>';
   try {
     const maps = await listMaps({});
     if (!maps.length) {
-      listEl.innerHTML =
-        '<p style="color:var(--color-text-secondary);font-size:var(--font-size-sm);">No hay mapas guardados.</p>';
+      listEl.innerHTML = '<p class="wm-text-secondary">No hay mapas guardados.</p>';
       return;
     }
 
@@ -91,13 +89,13 @@ async function renderVersions(listEl, statusEl, adminChannel) {
           <strong>${esc(m.name)}</strong>
           <span>${fmtDate(m.updatedAt)}</span>
         </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-sm);">
+        <div class="wm-badge-row">
           <span class="wm-badge ${m.isActive ? 'wm-badge--active' : 'wm-badge--inactive'}">
             ${m.isActive ? `${icon('check', { size: 14 })} Activo` : 'Inactivo'}
           </span>
           ${
             !m.isActive
-              ? `<button class="btn btn--primary btn--sm wm-activate-btn">Activar</button>`
+              ? `<button class="btn btn--action btn--sm wm-activate-btn">Activar</button>`
               : ''
           }
         </div>
@@ -146,7 +144,7 @@ async function renderVersions(listEl, statusEl, adminChannel) {
       });
     });
   } catch (err) {
-    listEl.innerHTML = `<p style="color:var(--color-error);font-size:var(--font-size-sm);">Error al cargar versiones: ${esc(err.message)}</p>`;
+    listEl.innerHTML = `<p class="wm-text-error">Error al cargar versiones: ${esc(err.message)}</p>`;
   }
 }
 
@@ -156,12 +154,12 @@ async function renderVersions(listEl, statusEl, adminChannel) {
 function renderZones(zonesContainer, zones, tiledJsonRef) {
   if (!zones.length) {
     zonesContainer.innerHTML =
-      '<p style="color:var(--color-text-secondary);font-size:var(--font-size-sm);">No se detectaron zonas en el mapa.</p>';
+      '<p class="wm-text-secondary">No se detectaron zonas en el mapa.</p>';
     return;
   }
 
   zonesContainer.innerHTML = `
-    <p style="font-size:var(--font-size-sm);color:var(--color-text-secondary);margin-bottom:var(--space-sm);">
+    <p class="wm-zones-header">
       Zonas detectadas (${zones.length}). Puedes editar el nombre y channelId antes de guardar.
     </p>
     <div class="ff-list wm-zones-list">
@@ -169,11 +167,11 @@ function renderZones(zonesContainer, zones, tiledJsonRef) {
         .map(
           (z, idx) => `
         <div class="ff-item wm-zone-item" data-idx="${idx}">
-          <div class="ff-item__add" style="flex-direction:column;gap:var(--space-xs);">
-            <label style="font-size:var(--font-size-sm);font-weight:var(--font-weight-semibold);">Nombre</label>
+          <div class="ff-item__add wm-zone-fields">
+            <label class="wm-zone-label">Nombre</label>
             <input class="ff-input wm-zone-name" value="${esc(z.name)}" placeholder="Nombre de la zona" />
-            <label style="font-size:var(--font-size-sm);font-weight:var(--font-weight-semibold);">channelId</label>
-            <input class="ff-input wm-zone-channel" value="${esc(z.channelId)}" placeholder="channelId único" />
+            <label class="wm-zone-label">channelId</label>
+            <input class="ff-input wm-zone-channel" value="${esc(z.channelId)}" placeholder="channelId unico" />
           </div>
         </div>
       `,
@@ -236,12 +234,10 @@ export function mountAdminWorldPanel(container) {
       <h2 class="ff-section__title">${icon('upload', { size: 18 })} Mundo Virtual — Mapas</h2>
 
       <!-- Subir nuevo mapa -->
-      <div class="ff-item" id="wm-upload-card">
-        <h3 style="font-size:var(--font-size-base);font-weight:var(--font-weight-semibold);margin-bottom:var(--space-md);">
-          Subir nuevo mapa
-        </h3>
+      <div class="ff-item wm-upload-card" id="wm-upload-card">
+        <h3 class="ff-section__title">Subir nuevo mapa</h3>
 
-        <div style="display:flex;flex-direction:column;gap:var(--space-md);">
+        <div class="wm-upload-form">
           <div>
             <label class="wm-label" for="wm-name">Nombre del mapa</label>
             <input id="wm-name" class="ff-input" type="text" maxlength="80" placeholder="ej. Sala Principal v2" />
@@ -249,34 +245,34 @@ export function mountAdminWorldPanel(container) {
 
           <div>
             <label class="wm-label" for="wm-map-file">Archivo map.json (Tiled)</label>
-            <input id="wm-map-file" class="ff-input" type="file" accept=".json,application/json" style="height:auto;padding:var(--space-sm);" />
+            <input id="wm-map-file" class="ff-input wm-file-input" type="file" accept=".json,application/json" />
           </div>
 
           <div>
             <label class="wm-label" for="wm-tileset-file">Imagen del tileset (PNG/JPEG)</label>
-            <input id="wm-tileset-file" class="ff-input" type="file" accept="image/png,image/jpeg,image/webp" style="height:auto;padding:var(--space-sm);" />
+            <input id="wm-tileset-file" class="ff-input wm-file-input" type="file" accept="image/png,image/jpeg,image/webp" />
           </div>
         </div>
 
         <!-- Errores de validacion del JSON -->
-        <div id="wm-validation-errors" style="display:none;margin-top:var(--space-md);padding:var(--space-sm);background:var(--color-error-bg,#fff0f0);border:1px solid var(--color-error);border-radius:var(--border-radius-sm);font-size:var(--font-size-sm);color:var(--color-error);"></div>
+        <div id="wm-validation-errors" class="wm-validation-errors"></div>
 
         <!-- Zonas detectadas -->
-        <div id="wm-zones-container" style="margin-top:var(--space-md);display:none;"></div>
+        <div id="wm-zones-container" class="wm-zones-container"></div>
 
-        <div style="margin-top:var(--space-lg);display:flex;gap:var(--space-sm);">
+        <div class="wm-save-row">
           <button id="wm-save-btn" class="btn btn--primary" disabled>
             ${icon('upload', { size: 16 })} Guardar mapa
           </button>
-          <span id="wm-save-status" style="font-size:var(--font-size-sm);align-self:center;"></span>
+          <span id="wm-save-status" class="wm-save-status"></span>
         </div>
       </div>
 
       <!-- Estado general (activar, etc.) -->
-      <div id="wm-status" style="font-size:var(--font-size-sm);min-height:1.2em;margin-top:var(--space-sm);"></div>
+      <div id="wm-status" class="wm-status"></div>
 
       <!-- Lista de versiones -->
-      <div id="wm-versions-list" class="ff-list" style="margin-top:var(--space-lg);"></div>
+      <div id="wm-versions-list" class="ff-list wm-versions-list"></div>
     </section>
   `;
 

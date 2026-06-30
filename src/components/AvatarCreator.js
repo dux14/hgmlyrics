@@ -150,57 +150,26 @@ export function AvatarCreator() {
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-label', 'Creador de avatar');
   el.setAttribute('aria-modal', 'true');
-  el.style.cssText = [
-    'display:none',
-    'position:absolute',
-    'inset:0',
-    'background:rgba(0,0,0,0.75)',
-    'z-index:50',
-    'align-items:center',
-    'justify-content:center',
-    'font-family:sans-serif',
-    'font-size:13px',
-    'color:#e0e0e0',
-  ].join(';');
+  el.className = 'ac-backdrop';
 
   // ── Modal interior ───────────────────────────────────────────────────────
   const modal = document.createElement('div');
-  modal.style.cssText = [
-    'background:#1e1e2e',
-    'border:1px solid rgba(255,255,255,0.15)',
-    'border-radius:10px',
-    'padding:20px 24px',
-    'max-width:480px',
-    'width:90%',
-    'max-height:90vh',
-    'overflow-y:auto',
-    'display:flex',
-    'flex-direction:column',
-    'gap:14px',
-  ].join(';');
+  modal.className = 'ac-modal';
   el.appendChild(modal);
 
   // ── Cabecera ─────────────────────────────────────────────────────────────
   const header = document.createElement('div');
-  header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+  header.className = 'ac-header';
 
   const title = document.createElement('h2');
-  title.style.cssText = 'margin:0;font-size:16px;color:#90caf9;';
+  title.className = 'ac-title';
   title.textContent = 'Editar avatar';
   header.appendChild(title);
 
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.setAttribute('aria-label', 'Cerrar creador de avatar');
-  closeBtn.style.cssText = [
-    'background:none',
-    'border:none',
-    'color:#aaa',
-    'font-size:20px',
-    'cursor:pointer',
-    'line-height:1',
-    'padding:0',
-  ].join(';');
+  closeBtn.className = 'ac-close-btn';
   closeBtn.textContent = '×';
   closeBtn.addEventListener('click', () => close());
   header.appendChild(closeBtn);
@@ -208,52 +177,32 @@ export function AvatarCreator() {
 
   // ── Área de selectores ───────────────────────────────────────────────────
   const selectorsArea = document.createElement('div');
-  selectorsArea.style.cssText = 'display:flex;flex-direction:column;gap:10px;';
+  selectorsArea.className = 'ac-selectors';
   modal.appendChild(selectorsArea);
 
   // ── Preview ──────────────────────────────────────────────────────────────
   const previewArea = document.createElement('div');
-  previewArea.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:6px;';
+  previewArea.className = 'ac-preview-area';
 
   const previewLabel = document.createElement('div');
-  previewLabel.style.cssText = 'font-size:11px;color:#aaa;';
+  previewLabel.className = 'ac-preview-label';
   previewLabel.textContent = 'Vista previa';
   previewArea.appendChild(previewLabel);
 
   const previewContainer = document.createElement('div');
-  previewContainer.style.cssText = [
-    'width:128px',
-    'height:128px',
-    'background:#111',
-    'border:1px solid rgba(255,255,255,0.1)',
-    'border-radius:6px',
-    'display:flex',
-    'align-items:center',
-    'justify-content:center',
-    'overflow:hidden',
-  ].join(';');
+  previewContainer.className = 'ac-preview-container';
   previewArea.appendChild(previewContainer);
   modal.appendChild(previewArea);
 
   // ── Estado de guardado ───────────────────────────────────────────────────
   const statusEl = document.createElement('div');
-  statusEl.style.cssText = 'font-size:12px;text-align:center;min-height:18px;';
+  statusEl.className = 'ac-status';
   modal.appendChild(statusEl);
 
   // ── Botón guardar ────────────────────────────────────────────────────────
   const saveBtn = document.createElement('button');
   saveBtn.type = 'button';
-  saveBtn.style.cssText = [
-    'background:#3a7bd5',
-    'color:#fff',
-    'border:none',
-    'border-radius:6px',
-    'padding:8px 16px',
-    'cursor:pointer',
-    'font-size:13px',
-    'font-family:sans-serif',
-    'align-self:flex-end',
-  ].join(';');
+  saveBtn.className = 'ac-save-btn';
   saveBtn.textContent = 'Guardar avatar';
   saveBtn.addEventListener('click', handleSave);
   modal.appendChild(saveBtn);
@@ -319,23 +268,14 @@ export function AvatarCreator() {
    */
   function makeSelectRow({ label, options, value, onChange }) {
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;';
+    row.className = 'ac-select-row';
 
     const lbl = document.createElement('label');
-    lbl.style.cssText = 'flex:1;color:#ccc;';
+    lbl.className = 'ac-select-label';
     lbl.textContent = label;
 
     const sel = document.createElement('select');
-    sel.style.cssText = [
-      'background:#2a2a3e',
-      'border:1px solid rgba(255,255,255,0.2)',
-      'border-radius:4px',
-      'color:#e0e0e0',
-      'padding:3px 6px',
-      'font-size:12px',
-      'font-family:sans-serif',
-      'flex:1',
-    ].join(';');
+    sel.className = 'ac-select';
 
     for (const opt of options) {
       const optEl = document.createElement('option');
@@ -369,7 +309,7 @@ export function AvatarCreator() {
       const images = await Promise.all(sources.map((s) => loadImage(s.url)));
       const previewCanvas = composePreviewFrame(images);
       // Escalar 64→128 con CSS para mayor visibilidad
-      previewCanvas.style.cssText = 'width:128px;height:128px;image-rendering:pixelated;';
+      previewCanvas.className = 'ac-preview-canvas';
       previewContainer.appendChild(previewCanvas);
     } catch {
       // En jsdom / entorno sin imágenes reales, simplemente no muestra nada.
@@ -385,13 +325,13 @@ export function AvatarCreator() {
 
     const user = getSession()?.user;
     if (!user) {
-      statusEl.style.color = '#f48fb1';
+      statusEl.className = 'ac-status ac-status--error';
       statusEl.textContent = 'No hay sesion activa.';
       return;
     }
 
     saveBtn.disabled = true;
-    statusEl.style.color = '#90caf9';
+    statusEl.className = 'ac-status ac-status--saving';
     statusEl.textContent = 'Guardando...';
 
     try {
@@ -410,11 +350,11 @@ export function AvatarCreator() {
 
       await saveAvatar({ supabase, user, config, blob });
 
-      statusEl.style.color = '#a5d6a7';
+      statusEl.className = 'ac-status ac-status--ok';
       statusEl.textContent = 'Avatar guardado. Re-entra a /mundo para ver el cambio.';
     } catch (err) {
       console.error('[AvatarCreator] error al guardar', err);
-      statusEl.style.color = '#f48fb1';
+      statusEl.className = 'ac-status ac-status--error';
       statusEl.textContent = 'Error al guardar. Intenta de nuevo.';
     } finally {
       saveBtn.disabled = false;
@@ -439,7 +379,7 @@ export function AvatarCreator() {
         console.error('[AvatarCreator] error al cargar manifest', err);
         selectorsArea.replaceChildren();
         const errEl = document.createElement('div');
-        errEl.style.color = '#f48fb1';
+        errEl.className = 'ac-status ac-status--error';
         errEl.textContent = 'Error al cargar el manifest.';
         selectorsArea.appendChild(errEl);
         return;

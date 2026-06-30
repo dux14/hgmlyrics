@@ -3,6 +3,7 @@
  * y divide la pista vocal (líder/coros + segmentos por cantante).
  * Estados: idle → uploading → processing → done | failed.
  */
+import '../styles/studio.css';
 import { icon } from '../lib/icons.js';
 import { SECTION_KEYS, sectionLabel } from '../lib/studioSections.js';
 import {

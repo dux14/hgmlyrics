@@ -1,0 +1,74 @@
+{
+  "capricho.webp": {
+    "base": "#7f3e4c",
+    "light": "#85293d"
+  },
+  "elartedevivir.webp": {
+    "base": "#6a817a",
+    "light": "#0a2920"
+  },
+  "entiperfecto.webp": {
+    "base": "#7b6f7b",
+    "light": "#140514"
+  },
+  "hakuna.webp": {
+    "base": "#ad7f3d",
+    "light": "#c38731"
+  },
+  "historiadeamor.webp": {
+    "base": "#9b5350",
+    "light": "#832521"
+  },
+  "llevame.webp": {
+    "base": "#8b7060",
+    "light": "#4b2813"
+  },
+  "mipobreloco.webp": {
+    "base": "#8b695f",
+    "light": "#4c2013"
+  },
+  "misa.webp": {
+    "base": "#915d39",
+    "light": "#ad6532"
+  },
+  "paraquiensoyyo.webp": {
+    "base": "#a26648",
+    "light": "#9d4e27"
+  },
+  "pasion.webp": {
+    "base": "#141212",
+    "light": "#100a0a"
+  },
+  "pescadordehombres.webp": {
+    "base": "#9d744e",
+    "light": "#8a5522"
+  },
+  "qaos.webp": {
+    "base": "#dfe307",
+    "light": "#f8f9e5"
+  },
+  "sencillamente.webp": {
+    "base": "#7b6f6f",
+    "light": "#140505"
+  },
+  "todoseaverdad.webp": {
+    "base": "#53977d",
+    "light": "#1e7654"
+  },
+  "tu.webp": {
+    "base": "#696f82",
+    "light": "#0b132b"
+  },
+  "tuyasson.webp": {
+    "base": "#b58535",
+    "light": "#d19d46"
+  },
+  "tuyo.webp": {
+    "base": "#d7a614",
+    "light": "#eee1bb"
+  },
+  "venespirituven.webp": {
+    "base": "#524842",
+    "light": "#28180f"
+  }
+}

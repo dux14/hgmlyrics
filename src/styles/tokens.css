@@ -74,16 +74,16 @@
   /* violet claro de galería (#c4b5fd) = --color-violet-300 (rampa oficial). */
 }
 
-/* Utilities que siguen el tema runtime (bg-surface, text-brand, etc.) — se usan en F1+.
-   inline: las utilities emiten var(...) —no el valor estatico— para que
-   [data-theme='dark'] las sobreescriba en runtime. Las auto-referencias
-   (--color-bg: var(--color-bg)) son INTENCIONALES; no las reemplaces por hex. */
-@theme inline {
-  --color-bg: var(--color-bg);
-  --color-surface: var(--color-surface);
-  --color-text: var(--color-text);
-  --color-muted: var(--color-text-secondary);
-  --color-brand: var(--color-brand);
-  --color-action: var(--color-action);
-  --color-accent-2: var(--color-accent-2);
-}
+/* NO declarar aqui --color-bg/surface/text/brand/action/accent-2 via @theme.
+   Tailwind emite @theme en `@layer theme`, que en el orden final de capas
+   (app.css: reset, tokens, base, components, utilities) queda POR ENCIMA de
+   `@layer tokens` (donde vive variables.css). Una auto-referencia como
+   `--color-surface: var(--color-surface)` ahi gana al valor real de
+   variables.css, forma un ciclo guaranteed-invalid y deja la variable VACIA
+   en runtime (dark roto global; superficies transparentes). Los valores de
+   tema runtime son responsabilidad EXCLUSIVA de variables.css (:root +
+   [data-theme]). Estos tokens se consumen via var(--color-*) directo (no por
+   utilities bg-surface/text-brand, que no se usan). Si en el futuro hicieran
+   falta esas utilities, el `@theme inline` debe apuntar a variables con OTRO
+   nombre (p. ej. `--color-surface: var(--surface)`), nunca a si mismas.
+   Ver test: tests/tokensSelfReference.test.js. */

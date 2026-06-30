@@ -240,10 +240,10 @@
   --color-voice-chorus: #ce93d8;
 
   /* Voice part colors — dark mode (pastel para legibilidad sobre fondo oscuro) */
-  --color-voice-soprano: #f48fb1;
-  --color-voice-contralto: #ce93d8;
-  --color-voice-tenor: #ffe082;
-  --color-voice-bass: #90caf9;
+  --color-voice-soprano: var(--color-voice-soprano-d);   /* #f48fb1 */
+  --color-voice-contralto: var(--color-voice-contralto-d); /* #ce93d8 */
+  --color-voice-tenor: var(--color-voice-tenor-d);       /* #ffe082 */
+  --color-voice-bass: var(--color-voice-bass-d);         /* #90caf9 */
 
   /* Voice background highlights — dark mode */
   --color-voice-soprano-bg: rgba(244, 143, 177, 0.15);
@@ -254,10 +254,16 @@
   --color-voice-chorus-bg: rgba(206, 147, 216, 0.15);
 
   /* Chord color — verde pastel para dark mode */
-  --color-chord: #a5d6a7;
+  --color-chord: var(--color-chord-d);                   /* #a5d6a7 */
   --color-chord-bg: rgba(165, 214, 167, 0.12);
   --color-chord-hover: #c8e6c9;
   --color-chord-hover-bg: rgba(165, 214, 167, 0.22);
+
+  /* === Alias nuevos — variante dark (Ambient Kinetic) === */
+  --color-brand: var(--color-teal-400);
+  --color-action: var(--color-amber-500);
+  --color-accent-2: var(--color-violet-400);
+  --color-liturgy: var(--color-amber-400);
 
   --scrollbar-thumb: #3a3a3a;
 }

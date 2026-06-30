@@ -8,6 +8,7 @@
  * Teardown: registra una guarda de hashchange que destruye el juego Phaser
  * al salir de #/mundo (mismo patrón que StudioPage.js).
  */
+import '../styles/world.css';
 import { getSession, getProfile } from '../lib/authStore.js';
 import { subscribe } from '../lib/offlineState.js';
 import { supabase } from '../lib/supabase.js';
@@ -193,13 +194,13 @@ export async function renderWorldPage(container) {
   // gate === 'ok'
   // Envolver canvas + roster en un contenedor relativo para posicionar el overlay
   const wrapper = document.createElement('div');
-  wrapper.style.cssText = 'position:relative;width:100%;height:100vh;overflow:hidden;';
+  wrapper.className = 'world-wrapper';
   _wrapperEl = wrapper;
   container.appendChild(wrapper);
 
   const host = document.createElement('div');
   host.id = 'world-canvas';
-  host.style.cssText = 'width:100%;height:100vh;overflow:hidden;background:#000;touch-action:none;';
+  host.className = 'world-host';
   host.setAttribute('role', 'application');
   host.setAttribute('aria-label', 'Mundo virtual — muevete con WASD, flechas o el joystick tactil');
   wrapper.appendChild(host);
@@ -226,33 +227,14 @@ export async function renderWorldPage(container) {
 
   // Botones de acceso a overlays (esquina superior derecha)
   const overlayBtns = document.createElement('div');
-  overlayBtns.style.cssText = [
-    'position:absolute',
-    'top:12px',
-    'right:12px',
-    'z-index:20',
-    'display:flex',
-    'gap:6px',
-    'pointer-events:auto',
-  ].join(';');
+  overlayBtns.className = 'world-topbar';
   _overlayBtnsEl = overlayBtns;
-
-  const btnStyle = [
-    'background:rgba(0,0,0,0.6)',
-    'border:1px solid rgba(255,255,255,0.2)',
-    'border-radius:5px',
-    'color:#e0e0e0',
-    'font-size:12px',
-    'font-family:sans-serif',
-    'padding:5px 10px',
-    'cursor:pointer',
-  ].join(';');
 
   const avatarBtn = document.createElement('button');
   avatarBtn.type = 'button';
   avatarBtn.textContent = 'Editar avatar';
   avatarBtn.setAttribute('aria-label', 'Editar avatar');
-  avatarBtn.style.cssText = btnStyle;
+  avatarBtn.className = 'world-topbar-btn';
   avatarBtn.addEventListener('click', () => avatarCreator.open());
   overlayBtns.appendChild(avatarBtn);
 
@@ -260,7 +242,7 @@ export async function renderWorldPage(container) {
   creditsBtn.type = 'button';
   creditsBtn.textContent = 'Creditos';
   creditsBtn.setAttribute('aria-label', 'Ver creditos de los assets');
-  creditsBtn.style.cssText = btnStyle;
+  creditsBtn.className = 'world-topbar-btn';
   creditsBtn.addEventListener('click', () => worldCredits.open());
   overlayBtns.appendChild(creditsBtn);
 
@@ -273,21 +255,7 @@ export async function renderWorldPage(container) {
   reconnectEl.setAttribute('aria-live', 'polite');
   reconnectEl.hidden = true;
   reconnectEl.textContent = 'Reconectando…';
-  reconnectEl.style.cssText = [
-    'position:absolute',
-    'top:12px',
-    'left:50%',
-    'transform:translateX(-50%)',
-    'z-index:30',
-    'background:rgba(120,40,40,0.92)',
-    'border:1px solid rgba(255,255,255,0.25)',
-    'border-radius:5px',
-    'color:#fff',
-    'font-size:13px',
-    'font-family:sans-serif',
-    'padding:6px 14px',
-    'pointer-events:none',
-  ].join(';');
+  reconnectEl.className = 'world-reconnect';
   _reconnectEl = reconnectEl;
   wrapper.appendChild(reconnectEl);
 
@@ -362,10 +330,7 @@ export async function renderWorldPage(container) {
     typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
   if (isCoarse) {
     _joystick = Joystick({ onChange: (v) => (inputRef.vector = v) });
-    _joystick.el.style.position = 'absolute';
-    _joystick.el.style.left = '20px';
-    _joystick.el.style.bottom = '20px';
-    _joystick.el.style.zIndex = '25';
+    _joystick.el.classList.add('world-joystick');
     _joystick.el.setAttribute('aria-hidden', 'true');
     wrapper.appendChild(_joystick.el);
   }
@@ -408,17 +373,7 @@ export async function renderWorldPage(container) {
   });
   _voiceControls = voiceControls;
 
-  voiceControls.el.style.cssText = [
-    'position:absolute',
-    'bottom:12px',
-    'right:12px',
-    'z-index:22',
-    'pointer-events:auto',
-    'background:rgba(0,0,0,0.55)',
-    'border:1px solid rgba(255,255,255,0.15)',
-    'border-radius:6px',
-    'padding:8px 10px',
-  ].join(';');
+  voiceControls.el.classList.add('world-voice-dock');
   wrapper.appendChild(voiceControls.el);
 
   // Envío local: publica al canal de la zona y hace eco en la propia lista

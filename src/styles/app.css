@@ -18,3 +18,4 @@
 @import './auth.css' layer(components);
 @import './offline-chip.css' layer(components);
 @import './voice-sheet.css' layer(components);
+@import './go-to-sheet.css' layer(components);

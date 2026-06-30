@@ -42,6 +42,7 @@ import { initUpdateNotifier } from './components/UpdateNotifier.js';
 import { renderToolsHub } from './components/ToolsHub.js';
 import { renderHome } from './components/Home.js';
 import { renderBottomNav, updateBottomNavActive } from './components/BottomNav.js';
+import { openGoToSheet } from './components/GoToSheet.js';
 
 // Initialize theme immediately to avoid flash
 initTheme();
@@ -82,9 +83,12 @@ async function boot() {
   app.innerHTML = `<main class="main"><div class="main__content" id="main-content"></div></main>`;
   mainContent = app.querySelector('#main-content');
 
-  // Render header
+  // Render header — movil abre la hoja "Ir a…"; desktop conserva la sidebar
   renderHeader(app, {
-    onMenuToggle: toggleSidebar,
+    onMenuToggle: () =>
+      window.matchMedia('(max-width: 767px)').matches
+        ? openGoToSheet(getCurrentPath())
+        : toggleSidebar(),
   });
 
   // Render sidebar

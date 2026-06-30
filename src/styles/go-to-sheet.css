@@ -1,0 +1,104 @@
+/* go-to-sheet.css — Hoja "Ir a..." (6 tiles de navegacion, solo movil) */
+
+/* Overlay con glass blur */
+.gsheet-dim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 300;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+/* Sheet principal */
+.gsheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 301;
+  border-radius: 22px 22px 0 0;
+  background: color-mix(in srgb, var(--color-surface) 90%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid var(--color-border);
+  border-bottom: none;
+  padding: var(--space-md) var(--space-md)
+    calc(var(--space-md) + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* Asa de arrastre */
+.gsheet__grab {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border);
+  margin: 0 auto var(--space-sm);
+  flex-shrink: 0;
+}
+
+/* Titulo (Syncopate) */
+.gsheet__h {
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+/* Grid 3x2 de tiles */
+.gsheet__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-sm);
+}
+
+/* Tile individual */
+.gsheet__tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: var(--space-md) var(--space-sm);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  text-align: center;
+  width: 100%;
+}
+
+.gsheet__tile:active {
+  background: color-mix(in srgb, var(--color-teal-500) 10%, transparent);
+}
+
+/* Tile activo: anillo teal + glow */
+.gsheet__tile.is-active {
+  border-color: var(--color-teal-500);
+  background: color-mix(in srgb, var(--color-teal-500) 12%, transparent);
+  box-shadow: 0 0 0 1px var(--color-teal-500),
+    0 0 8px color-mix(in srgb, var(--color-teal-500) 30%, transparent);
+}
+
+/* Icono en teal */
+.gsheet__ic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-teal-500);
+}
+
+/* Label del tile */
+.gsheet__lb {
+  font-size: 0.78rem;
+  line-height: 1.2;
+  color: var(--color-text);
+}

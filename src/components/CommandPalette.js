@@ -169,7 +169,13 @@ function _toggle() {
 
 function _open() {
   // Si el overlay fue removido del DOM externamente, resetear el estado interno
+  // (equivalente a _close() sin intentar remover el elemento ya ausente)
   if (_isOpen && (!_overlayEl || !document.body.contains(_overlayEl))) {
+    if (_overlayKeydown) {
+      document.removeEventListener('keydown', _overlayKeydown);
+      _overlayKeydown = null;
+    }
+    document.documentElement.style.overflow = '';
     _isOpen = false;
     _overlayEl = null;
     _listEl = null;

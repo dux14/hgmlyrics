@@ -120,6 +120,14 @@ describe('openCommandPalette', () => {
     document.documentElement.style.overflow = '';
   });
 
+  afterEach(() => {
+    // Cierra el palette via el handler de teclado existente para no depender
+    // del path de recuperacion stale como efecto secundario entre tests.
+    // Nota: exportar closeCommandPalette() seria la alternativa mas explicita
+    // pero no esta contemplada en el spec de esta tarea.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  });
+
   it('monta el overlay full-screen en el body', () => {
     openCommandPalette();
     expect(document.querySelectorAll('.cmdk-overlay')).toHaveLength(1);

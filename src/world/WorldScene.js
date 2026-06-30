@@ -18,7 +18,6 @@ import { createAvatarSprite, publicAvatarUrl } from './avatarSprite.js';
 import { mergeInputVector, deriveDir } from './input.js';
 
 const SPEED = 160; // px/s
-const PEER_COLOR = 0xe57373; // rojo claro para distinguir peers del jugador local
 const INTERP_DELAY_MS = 100;
 const LABEL_OFFSET_Y = 18; // px que el label de nombre se eleva sobre el sprite
 
@@ -55,6 +54,18 @@ export class WorldScene extends Phaser.Scene {
     this._wasDisconnected = false;
     /** @type {Phaser.GameObjects.Text|null} label de nombre del jugador local */
     this.playerLabel = null;
+    /**
+     * Paleta de colores resuelta desde tokens CSS en createGame().
+     * Fallbacks: valores dark del sistema de tokens para entornos sin DOM.
+     * @type {{ bg: string, brand: string, brandInt: number, dangerInt: number, text: string }}
+     */
+    this._colors = {
+      bg: '#000000',
+      brand: '#2dd4bf',
+      brandInt: 0x2dd4bf,
+      dangerInt: 0xfca5a5,
+      text: '#f5f5f5',
+    };
   }
 
   preload() {
@@ -80,6 +91,11 @@ export class WorldScene extends Phaser.Scene {
   }
 
   create() {
+    // ---- Paleta de colores (resuelta desde tokens CSS en createGame) ----
+    // Si el registry no tiene la clave (tests sin createGame), se usan los
+    // fallbacks inicializados en el constructor.
+    this._colors = this.registry.get('worldColors') ?? this._colors;
+
     // ---- Tilemap ----
     const mapDesc = this.registry.get('worldMapDescriptor') ?? getActiveMapDescriptor();
     const map = this.make.tilemap({ key: mapDesc.key });
@@ -99,7 +115,7 @@ export class WorldScene extends Phaser.Scene {
     // ---- Jugador (rectángulo provisional) ----
     const startX = map.widthInPixels / 2;
     const startY = map.heightInPixels / 2;
-    this.player = this.add.rectangle(startX, startY, 16, 24, 0x4fc3f7);
+    this.player = this.add.rectangle(startX, startY, 16, 24, this._colors.brandInt);
     this.physics.add.existing(this.player);
     /** @type {Phaser.Physics.Arcade.Body} */
     const body = this.player.body;
@@ -134,8 +150,8 @@ export class WorldScene extends Phaser.Scene {
       // Label de nombre del jugador local (legible: stroke + origen centrado)
       this.playerLabel = this.add.text(startX, startY - LABEL_OFFSET_Y, ctx.me.name, {
         fontSize: '10px',
-        color: '#9fe6ff',
-        stroke: '#000000',
+        color: this._colors.brand,
+        stroke: this._colors.bg,
         strokeThickness: 2,
       });
       this.playerLabel.setOrigin(0.5, 1);
@@ -334,11 +350,11 @@ export class WorldScene extends Phaser.Scene {
    * @param {string} name
    */
   _createPeerEntry(uid, name) {
-    const sprite = this.add.rectangle(0, 0, 16, 24, PEER_COLOR).setVisible(false);
+    const sprite = this.add.rectangle(0, 0, 16, 24, this._colors.dangerInt).setVisible(false);
     const label = this.add.text(0, -LABEL_OFFSET_Y, name, {
       fontSize: '10px',
-      color: '#ffffff',
-      stroke: '#000000',
+      color: this._colors.text,
+      stroke: this._colors.bg,
       strokeThickness: 2,
     });
     label.setOrigin(0.5, 1);

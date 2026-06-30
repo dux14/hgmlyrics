@@ -8,12 +8,17 @@
  */
 import Phaser from 'phaser';
 import { WorldScene } from './WorldScene.js';
+import { readWorldColors } from './worldTokens.js';
 
 export function createGame(parentId, context) {
+  // Leer tokens CSS una sola vez, antes de montar Phaser. El canvas WebGL
+  // no accede a custom properties; los pasamos via registry a WorldScene.
+  const worldColors = readWorldColors();
+
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: parentId,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: worldColors.bg,
     physics: {
       default: 'arcade',
       arcade: { debug: false },
@@ -28,6 +33,7 @@ export function createGame(parentId, context) {
   // mapDescriptor (si existe) se separa en su propia clave del registry para que
   // WorldScene lo use en preload() sin necesidad de desestructurar el contexto
   // de red.
+  game.registry.set('worldColors', worldColors);
   game.registry.set('worldContext', context ?? null);
   if (context?.mapDescriptor) {
     game.registry.set('worldMapDescriptor', context.mapDescriptor);

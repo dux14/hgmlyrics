@@ -1,0 +1,187 @@
+/* ============================================
+   HKN Lyrics — Admin World Panel
+   ============================================ */
+
+/* === Labels de formulario === */
+.wm-label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--space-xs);
+  color: var(--color-text-secondary);
+}
+
+/* === Badges de estado de mapa === */
+.wm-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 0.15em 0.6em;
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.wm-badge--active {
+  background: color-mix(in oklch, var(--color-success) 20%, transparent);
+  color: var(--color-success);
+}
+
+.wm-badge--inactive {
+  background: color-mix(in oklch, var(--color-text-secondary) 15%, transparent);
+  color: var(--color-text-secondary);
+}
+
+/* Fila de badge + boton activar */
+.wm-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+/* === Aviso de impacto de canales === */
+.wm-warning {
+  margin-top: var(--space-sm);
+  padding: var(--space-sm);
+  background: color-mix(in oklch, var(--color-warn) 12%, var(--color-surface));
+  border: 1px solid var(--color-warn);
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+/* === Textos de estado === */
+.wm-text-secondary {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.wm-text-error {
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}
+
+/* === Errores de validacion JSON (oculto por defecto) === */
+.wm-validation-errors {
+  display: none;
+  margin-top: var(--space-md);
+  padding: var(--space-sm);
+  background: color-mix(in oklch, var(--color-danger) 12%, var(--color-surface));
+  border: 1px solid var(--color-danger);
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-danger);
+}
+
+/* === Tarjeta de subida: borde brand dashed === */
+.wm-upload-card {
+  border: 2px dashed var(--color-brand) !important;
+}
+
+/* === Formulario de campos de subida === */
+.wm-upload-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* Inputs tipo file (altura automatica) */
+.wm-file-input {
+  height: auto;
+  padding: var(--space-sm);
+}
+
+/* === Zonas detectadas (oculto por defecto) === */
+.wm-zones-container {
+  margin-top: var(--space-md);
+  display: none;
+}
+
+.wm-zones-header {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-sm);
+}
+
+/* Campos inline de una zona (sobreescribe gap de ff-item__add) */
+.wm-zone-fields {
+  gap: var(--space-xs);
+}
+
+.wm-zone-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* === Fila de guardado === */
+.wm-save-row {
+  margin-top: var(--space-lg);
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.wm-save-status {
+  font-size: var(--font-size-sm);
+  align-self: center;
+}
+
+/* Estado general (activar, errores) */
+.wm-status {
+  font-size: var(--font-size-sm);
+  min-height: 1.2em;
+  margin-top: var(--space-sm);
+}
+
+/* === Lista de versiones de mapa === */
+.wm-versions-list {
+  margin-top: var(--space-lg);
+}
+
+/* === Boton de accion ambar (Activar / Publicar) === */
+.btn--action {
+  background: var(--color-action);
+  color: var(--color-bg);
+  border: none;
+}
+
+.btn--action:hover {
+  background: color-mix(in oklch, var(--color-action) 85%, black);
+}
+
+/* === Overrides tema claro === */
+@media (prefers-color-scheme: light) {
+  .wm-badge--active {
+    background: color-mix(in oklch, var(--color-success) 15%, white);
+  }
+
+  .wm-badge--inactive {
+    background: color-mix(in oklch, var(--color-text-secondary) 10%, white);
+  }
+
+  .wm-warning {
+    background: color-mix(in oklch, var(--color-warn) 10%, white);
+  }
+
+  .wm-validation-errors {
+    background: color-mix(in oklch, var(--color-danger) 8%, white);
+  }
+}
+
+[data-theme='light'] .wm-badge--active {
+  background: color-mix(in oklch, var(--color-success) 15%, white);
+}
+
+[data-theme='light'] .wm-badge--inactive {
+  background: color-mix(in oklch, var(--color-text-secondary) 10%, white);
+}
+
+[data-theme='light'] .wm-warning {
+  background: color-mix(in oklch, var(--color-warn) 10%, white);
+}
+
+[data-theme='light'] .wm-validation-errors {
+  background: color-mix(in oklch, var(--color-danger) 8%, white);
+}

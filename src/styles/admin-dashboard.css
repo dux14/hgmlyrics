@@ -1,0 +1,249 @@
+/* ============================================
+   HKN Lyrics — Admin Dashboard
+   ============================================ */
+
+/* === Admin Gate (pantalla de verificacion) === */
+.admin-gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - var(--header-height));
+  padding: var(--space-xl) 0;
+}
+
+.admin-gate__card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-2xl);
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+  box-shadow: 0 4px 24px var(--color-shadow);
+}
+
+.admin-gate__icon {
+  font-size: 48px;
+  margin-bottom: var(--space-md);
+}
+
+.admin-gate__title {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--space-sm);
+}
+
+.admin-gate__subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xl);
+}
+
+.admin-gate__input {
+  width: 100%;
+  height: 48px;
+  padding: 0 var(--space-md);
+  background: var(--color-bg);
+  border: 2px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-lg);
+  text-align: center;
+  letter-spacing: 4px;
+  transition: border-color var(--transition-fast);
+}
+
+.admin-gate__input:focus {
+  outline: none;
+  border-color: var(--color-brand);
+}
+
+.admin-gate__input--error {
+  border-color: var(--color-danger);
+  animation: shake 0.4s ease;
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-8px);
+  }
+  75% {
+    transform: translateX(8px);
+  }
+}
+
+.admin-gate__submit {
+  width: 100%;
+  height: 48px;
+  margin-top: var(--space-md);
+  background: var(--color-brand);
+  color: #fff;
+  border-radius: var(--border-radius-md);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  transition:
+    background-color var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.admin-gate__submit:hover {
+  background: color-mix(in oklch, var(--color-brand) 85%, black);
+  transform: translateY(-1px);
+}
+
+.admin-gate__error {
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-sm);
+  min-height: 20px;
+}
+
+/* === Panel principal de administracion === */
+.admin-dashboard {
+  max-width: 600px;
+  margin: 2rem auto;
+  padding: var(--space-2xl);
+  background: var(--color-surface);
+  border-radius: var(--border-radius-lg);
+  box-shadow: 0 4px 12px var(--color-shadow);
+}
+
+.admin-dashboard__title {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+/* Grid de acciones principales */
+.admin-actions {
+  display: grid;
+  gap: var(--space-md);
+}
+
+/* Modificador para botones de accion grandes */
+.admin-action-btn {
+  padding: 1.5rem;
+  font-size: 1.2rem;
+}
+
+/* === Lista de edicion de canciones === */
+.admin-edit-list {
+  max-width: 800px;
+  margin: 2rem auto;
+  padding: var(--space-2xl);
+  background: var(--color-surface);
+  border-radius: var(--border-radius-lg);
+  box-shadow: 0 4px 12px var(--color-shadow);
+}
+
+.admin-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.admin-header-row h1 {
+  margin: 0;
+}
+
+.admin-back-btn {
+  padding: var(--space-sm) var(--space-md);
+}
+
+.admin-song-list {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.admin-empty {
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding: 2rem 0;
+}
+
+.admin-song-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.admin-song-item:hover {
+  border-color: var(--color-brand);
+}
+
+.admin-song-item__title {
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-base);
+}
+
+.admin-song-item__meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin-top: var(--space-xs);
+}
+
+.admin-edit-btn {
+  padding: var(--space-sm) var(--space-md);
+}
+
+/* === Chips de rol (BEM) === */
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15em 0.6em;
+  border-radius: var(--border-radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.admin-badge--admin {
+  background: color-mix(in oklch, var(--color-brand) 20%, transparent);
+  color: var(--color-brand);
+}
+
+.admin-badge--user {
+  background: color-mix(in oklch, var(--color-text-secondary) 15%, transparent);
+  color: var(--color-text-secondary);
+}
+
+/* === Overrides tema claro === */
+@media (prefers-color-scheme: light) {
+  .admin-gate__submit:hover {
+    background: color-mix(in oklch, var(--color-brand) 80%, black);
+  }
+
+  .admin-badge--admin {
+    background: color-mix(in oklch, var(--color-brand) 15%, white);
+  }
+
+  .admin-badge--user {
+    background: color-mix(in oklch, var(--color-text-secondary) 10%, white);
+  }
+}
+
+[data-theme='light'] .admin-gate__submit:hover {
+  background: color-mix(in oklch, var(--color-brand) 80%, black);
+}
+
+[data-theme='light'] .admin-badge--admin {
+  background: color-mix(in oklch, var(--color-brand) 15%, white);
+}
+
+[data-theme='light'] .admin-badge--user {
+  background: color-mix(in oklch, var(--color-text-secondary) 10%, white);
+}

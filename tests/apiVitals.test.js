@@ -25,4 +25,16 @@ describe('validateVital', () => {
   it('rechaza value fuera de rango', () => {
     expect(validateVital({ metric: 'LCP', value: 1e9 })).toBe(false);
   });
+  it('rechaza rating que no es string (evita [object Object] en DB)', () => {
+    expect(validateVital({ metric: 'LCP', value: 100, rating: { x: 1 } })).toBe(false);
+  });
+  it('rechaza path arbitrariamente largo', () => {
+    expect(validateVital({ metric: 'LCP', value: 100, path: 'A'.repeat(5000) })).toBe(false);
+  });
+  it('acepta rating en el borde (needs-improvement)', () => {
+    expect(validateVital({ metric: 'CLS', value: 0.2, rating: 'needs-improvement' })).toBe(true);
+  });
+  it('rechaza attribution.target no serializable', () => {
+    expect(validateVital({ metric: 'INP', value: 50, attribution: { target: { a: 1 } } })).toBe(false);
+  });
 });

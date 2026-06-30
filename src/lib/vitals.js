@@ -9,7 +9,8 @@ function send(metric) {
     value: metric.value,
     rating: metric.rating,
     navigationType: metric.navigationType,
-    path: location.pathname,
+    // SPA con hash-router: la ruta real vive en location.hash, no en pathname (siempre "/")
+    path: location.pathname + location.hash,
     attribution: target ? { target: String(target) } : null,
   });
   navigator.sendBeacon?.('/api/vitals', body);

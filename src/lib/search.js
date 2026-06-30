@@ -143,3 +143,42 @@ export function clearIndex() {
   songList = [];
   weeklyWordList = [];
 }
+
+/**
+ * Busqueda unificada seccionada: canciones, albumes (dedupe por slug) y voces en off.
+ * @param {string} query
+ * @param {{ songs?: number, albums?: number, voces?: number }} [limits]
+ * @returns {{ songs: Array, albums: Array, voces: Array }}
+ */
+export function searchEverything(query, limits = {}) {
+  const empty = { songs: [], albums: [], voces: [] };
+  if (!query?.trim()) return empty;
+  const q = normalize(query.trim());
+  const { songs: sL = 20, albums: aL = 8, voces: vL = 6 } = limits;
+
+  const songs = searchSongs(query, sL);
+
+  const albumMap = new Map();
+  for (const song of songList) {
+    if (!song.albumSlug || albumMap.has(song.albumSlug)) continue;
+    if (normalize(song.album || '').includes(q)) {
+      albumMap.set(song.albumSlug, {
+        slug: song.albumSlug,
+        name: song.album,
+        coverImage: song.coverImage,
+      });
+    }
+  }
+  const albums = Array.from(albumMap.values()).slice(0, aL);
+
+  const voces = [];
+  for (const ww of weeklyWordList) {
+    const t = normalize(ww.title || '');
+    const ref = normalize(ww.gospel_ref || '');
+    const lit = normalize(ww.liturgical_title || '');
+    if (t.includes(q) || ref.includes(q) || lit.includes(q)) voces.push(ww);
+    if (voces.length >= vL) break;
+  }
+
+  return { songs, albums, voces };
+}

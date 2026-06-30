@@ -104,3 +104,108 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* ============================================================
+   Detalle de álbum — Fase 3 Home Spotify + Álbumes
+   Tokens: variables.css. Cero hex de marca sueltos.
+   ============================================================ */
+
+.album-detail {
+  padding: var(--space-md) var(--space-md) var(--space-2xl);
+  max-width: var(--max-content-width);
+  margin: 0 auto;
+}
+
+/* === Hero === */
+
+.album-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-md) 0 var(--space-xl);
+  text-align: center;
+}
+
+@media (min-width: 600px) {
+  .album-hero {
+    flex-direction: row;
+    align-items: flex-end;
+    text-align: left;
+  }
+}
+
+.album-hero__cover {
+  width: 200px;
+  height: 200px;
+  object-fit: cover;
+  border-radius: var(--border-radius-md);
+  box-shadow: 0 8px 32px var(--color-shadow);
+  flex-shrink: 0;
+  display: block;
+}
+
+@media (min-width: 600px) {
+  .album-hero__cover {
+    width: 240px;
+    height: 240px;
+  }
+}
+
+.album-hero__info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.album-hero__name {
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  line-height: var(--line-height-tight);
+  margin: 0;
+}
+
+.album-hero__artist {
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.album-hero__count {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+/* === Tracklist === */
+
+.album-tracklist {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-xs);
+}
+
+.album-tracklist .song-row-compact {
+  cursor: pointer;
+  border-radius: var(--border-radius-sm);
+  transition: background-color var(--transition-base);
+}
+
+.album-tracklist .song-row-compact:hover,
+.album-tracklist .song-row-compact:focus-visible {
+  background-color: var(--color-surface);
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .album-hero__cover {
+    box-shadow: 0 2px 8px var(--color-shadow);
+  }
+
+  .album-tracklist .song-row-compact {
+    transition: none;
+  }
+}

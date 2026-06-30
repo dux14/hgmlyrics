@@ -315,6 +315,12 @@ async function boot() {
     renderAlbumsView(mainContent);
   });
 
+  privateRoute('/album/:id', async ({ params }) => {
+    hideFilterBar();
+    const { renderAlbumDetail } = await import('./components/AlbumDetail.js');
+    renderAlbumDetail(mainContent, params.id);
+  });
+
   privateRoute('/voz/:id', async ({ params }) => {
     hideFilterBar();
     const { renderWeeklyWordById } = await import('./components/WeeklyWordView.js');

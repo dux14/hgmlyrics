@@ -39,6 +39,7 @@ import { renderAdminDashboard, renderAdminEditList } from './components/AdminDas
 import { renderPrayerPage } from './components/PrayerPage.js';
 import { renderListDetail } from './components/ListDetail.js';
 import { initUpdateNotifier } from './components/UpdateNotifier.js';
+import { renderToolsHub } from './components/ToolsHub.js';
 
 // Initialize theme immediately to avoid flash
 initTheme();
@@ -149,6 +150,18 @@ async function boot() {
     showFilterBar();
     const { filtered } = getState();
     renderSongList(mainContent, filtered);
+  });
+
+  guardedRoute('/buscar', () => {
+    showFilterBar();
+    const { filtered } = getState();
+    renderSongList(mainContent, filtered);
+    document.querySelector('#search-input')?.focus();
+  });
+
+  guardedRoute('/herramientas', () => {
+    hideFilterBar();
+    renderToolsHub(mainContent);
   });
 
   guardedRoute('/song/:id', ({ params }) => {

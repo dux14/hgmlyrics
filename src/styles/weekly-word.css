@@ -1,0 +1,209 @@
+/* weekly-word.css — Detalle de Palabra Semanal · Ambient Kinetic (F2c)
+ *
+ * ╔══════════════════════════════════════════════════════════════════╗
+ * ║  CONTRATO PÚBLICO — reutilizado por el preview de VozEditor (F3c) ║
+ * ╠══════════════════════════════════════════════════════════════════╣
+ * ║  .voz-view           contenedor raíz; necesita:                  ║
+ * ║                        --voz-fs (rem) → tamaño de letra          ║
+ * ║  .voz-view__hero     hero litúrgico; necesita (en su propio      ║
+ * ║                        style) --liturgical-gradient,             ║
+ * ║                        --liturgical-accent, --liturgical-text,   ║
+ * ║                        --liturgical-bg                           ║
+ * ║  .voz__prose         estilo base <pre> de prosa                  ║
+ * ║  .voz__scripture     cita bíblica (borde ámbar izquierdo)        ║
+ * ║  .voz__reflection-sep separador "Reflexión" (::before/::after)   ║
+ * ║  .voz__reflection    texto de reflexión (<pre class="voz__prose">)║
+ * ║  .voz-view__gospel   bloque de evangelio                         ║
+ * ╚══════════════════════════════════════════════════════════════════╝
+ *
+ * Tokens de mapeo:
+ *   --color-action        ámbar — acento devocional en body
+ *                         (cita bíblica, separador, etiqueta evangelio)
+ *   --color-border        separador superior bloque evangelio
+ *   --color-brand         teal — fallback / hover de controles
+ *   --color-surface / --color-border   controles de tamaño de letra
+ *   --color-text / --color-text-secondary   tipografía
+ */
+
+/* ── Contenedor de página ── */
+.voz-view {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+}
+
+/* ── Hero litúrgico ── */
+.voz-view__hero {
+  background: var(--liturgical-gradient, var(--color-surface));
+  border-radius: var(--border-radius-lg);
+  padding: 2rem 1.5rem;
+  margin: 1rem 0 1.5rem;
+  color: var(--liturgical-text, var(--color-text));
+}
+
+.voz-view__eyebrow {
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  margin: 0 0 0.5rem;
+}
+
+.voz-view__eyebrow-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  color: inherit;
+}
+
+.voz-view__title {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+  color: inherit;
+}
+
+.voz-view__meta {
+  margin: 0;
+  opacity: 0.92;
+  font-size: 0.9rem;
+}
+
+/* Chip de color litúrgico — background/color via vars del hero */
+.voz-view__color-chip {
+  display: inline-block;
+  margin-top: 0.75rem;
+  background: var(--liturgical-accent, var(--color-brand));
+  color: var(--liturgical-bg, var(--color-bg));
+  border-radius: 999px;
+  padding: 0.2em 0.75em;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* ── Barra de acciones (tamaño letra + editar) ── */
+.voz-view__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.font-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.font-controls__btn {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-full, 999px);
+  color: var(--color-text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1;
+  transition: border-color var(--transition-fast, 0.12s ease);
+}
+
+.font-controls__btn:hover {
+  border-color: color-mix(in srgb, var(--color-brand) 40%, transparent);
+}
+
+.font-controls__label {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  min-width: 3.5ch;
+  text-align: center;
+}
+
+/* ── Prosa base: bloques <pre> de texto litúrgico ── */
+.voz__prose {
+  white-space: pre-wrap;
+  font-family: inherit;
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--voz-fs, 1.1rem);
+  line-height: 1.75;
+}
+
+/* ── Cita bíblica (scripture) ── */
+.voz__scripture {
+  border-left: 3px solid var(--color-action);
+  padding-left: 1rem;
+  margin-bottom: 1.25rem;
+  font-style: italic;
+}
+
+/* ── Separador "Reflexión": líneas via ::before/::after, icono centrado ── */
+.voz__reflection-sep {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+  color: var(--color-action);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.voz__reflection-sep::before,
+.voz__reflection-sep::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--color-action);
+  opacity: 0.35;
+}
+
+/* ── Texto de reflexión ── */
+/* clase compuesta: <pre class="voz__reflection voz__prose"> */
+.voz__reflection {
+  /* intencional: sin reglas propias; hereda todo de .voz__prose */
+}
+
+/* ── Bloque de evangelio ── */
+.voz-view__gospel {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.voz-view__gospel-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-action);
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+}
+
+.voz-view__gospel-body {
+  white-space: pre-wrap;
+  font-family: inherit;
+  margin: 0 0 0.5rem;
+  color: var(--color-text);
+  font-size: calc(var(--voz-fs, 1.1rem) * 0.94);
+  line-height: 1.7;
+}
+
+.voz-view__gospel-footnote {
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+/* ── Estado de error de carga ── */
+.voz-view__error .empty-state .btn {
+  margin-top: 1rem;
+}
+
+/* Reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .font-controls__btn {
+    transition: none;
+  }
+}

@@ -2,6 +2,7 @@
 // Vista de detalle de una "Palabra de la semana" (weekly_word).
 // Una columna centrada, max-width legible. No reutiliza SongView.
 
+import '../styles/weekly-word.css';
 import { navigate } from '../router.js';
 import { isAdmin } from '../lib/authStore.js';
 import { splitVoiceover } from '../lib/voiceover.js';
@@ -73,12 +74,8 @@ export async function renderWeeklyWordView(container, word) {
   const cleanTitle = cleanLiturgicalTitle(word.liturgical_title);
   const fontSize = getVozFontSize();
 
-  // Estilos compartidos por los bloques de texto: color pleno + buen interlineado.
-  const proseStyle =
-    'white-space: pre-wrap; font-family: inherit; margin: 0; color: var(--color-text); font-size: var(--voz-fs); line-height: 1.75;';
-
   container.innerHTML = `
-    <div class="voz-view fade-in" style="max-width: 680px; margin: 0 auto; padding: 1.5rem 1rem; --voz-fs: ${fontSize}rem;">
+    <div class="voz-view fade-in">
 
       <!-- Breadcrumb -->
       <nav class="breadcrumb" aria-label="Breadcrumb">
@@ -89,23 +86,23 @@ export async function renderWeeklyWordView(container, word) {
         <span class="breadcrumb__current">${escapeHtml(word.gospel_ref)}</span>
       </nav>
 
-      <!-- Hero -->
-      <div class="voz-view__hero" style="background: ${gradient}; border-radius: var(--border-radius-lg); padding: 2rem 1.5rem; margin: 1rem 0 1.5rem; color: ${palette.text};">
-        <p class="voz-view__eyebrow" style="font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.85; margin: 0 0 0.5rem;">
-          <span style="display:inline-flex; align-items:center; gap:0.4em; color: inherit;">${icon('gospel', { size: 15 })} Palabra de la semana</span>
+      <!-- Hero litúrgico — vars asignadas post-render via style.setProperty() -->
+      <div class="voz-view__hero">
+        <p class="voz-view__eyebrow">
+          <span class="voz-view__eyebrow-inner">${icon('gospel', { size: 15 })} Palabra de la semana</span>
         </p>
-        <h1 class="voz-view__title" style="font-size: 1.8rem; font-weight: 700; margin: 0 0 0.75rem; color: inherit;">
+        <h1 class="voz-view__title">
           ${escapeHtml(word.gospel_ref)}
         </h1>
-        <p style="margin: 0; opacity: 0.92; font-size: 0.9rem;">
+        <p class="voz-view__meta">
           ${escapeHtml(dateLabel)}${cleanTitle ? ` · ${escapeHtml(cleanTitle)}` : ''}
         </p>
-        ${word.liturgical_color ? `<span class="voz-view__color-chip" style="display: inline-block; margin-top: 0.75rem; background: ${palette.accent}; color: ${palette.bg}; border-radius: 999px; padding: 0.2em 0.75em; font-size: 0.75rem; font-weight: 600;">${escapeHtml(palette.label)}</span>` : ''}
+        ${word.liturgical_color ? `<span class="voz-view__color-chip">${escapeHtml(palette.label)}</span>` : ''}
       </div>
 
       <!-- Barra de acciones: tamaño de letra (+ editar si admin) -->
-      <div class="voz-view__toolbar" style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1.25rem;">
-        <div class="font-controls" style="display: flex; align-items: center; gap: 0.4rem;" role="group" aria-label="Tamaño de letra">
+      <div class="voz-view__toolbar">
+        <div class="font-controls" role="group" aria-label="Tamaño de letra">
           <button class="font-controls__btn" id="voz-font-dec" aria-label="Reducir tamaño de letra">A−</button>
           <span class="font-controls__label" id="voz-font-label" aria-live="polite">${Math.round(fontSize * 100)}%</span>
           <button class="font-controls__btn" id="voz-font-inc" aria-label="Aumentar tamaño de letra">A+</button>
@@ -122,8 +119,8 @@ export async function renderWeeklyWordView(container, word) {
         ${
           scripture
             ? `
-        <div class="voz__scripture" style="border-left: 3px solid ${palette.accent}; padding-left: 1rem; margin-bottom: 1.25rem; font-style: italic;">
-          <pre style="${proseStyle}">${escapeHtml(scripture)}</pre>
+        <div class="voz__scripture">
+          <pre class="voz__prose">${escapeHtml(scripture)}</pre>
         </div>`
             : ''
         }
@@ -131,15 +128,13 @@ export async function renderWeeklyWordView(container, word) {
         ${
           reflection
             ? `
-        <div class="voz__reflection-sep" style="display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0; color: ${palette.accent}; font-size: 0.85rem; font-weight: 600; letter-spacing: 0.08em;">
-          <span style="flex: 1; height: 1px; background: ${palette.accent}; opacity: 0.35;"></span>
-          ✦ Reflexión
-          <span style="flex: 1; height: 1px; background: ${palette.accent}; opacity: 0.35;"></span>
+        <div class="voz__reflection-sep">
+          ${icon('sparkles', { size: 14 })} Reflexión
         </div>
-        <pre class="voz__reflection" style="${proseStyle}">${escapeHtml(reflection)}</pre>`
+        <pre class="voz__reflection voz__prose">${escapeHtml(reflection)}</pre>`
             : !scripture
               ? `
-        <pre class="voz__reflection" style="${proseStyle}">${escapeHtml(word.voiceover_body || '')}</pre>`
+        <pre class="voz__reflection voz__prose">${escapeHtml(word.voiceover_body || '')}</pre>`
               : ''
         }
       </section>
@@ -148,12 +143,12 @@ export async function renderWeeklyWordView(container, word) {
       ${
         word.gospel_body
           ? `
-      <section class="voz-view__block voz-view__gospel" style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--color-border);" aria-label="Evangelio">
-        <p class="voz-view__gospel-label" style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.1em; color: ${palette.accent}; font-weight: 600; margin: 0 0 0.75rem;">
+      <section class="voz-view__block voz-view__gospel" aria-label="Evangelio">
+        <p class="voz-view__gospel-label">
           Evangelio · ${escapeHtml(word.gospel_ref)}
         </p>
-        <pre style="white-space: pre-wrap; font-family: inherit; margin: 0 0 0.5rem; color: var(--color-text); font-size: calc(var(--voz-fs) * 0.94); line-height: 1.7;">${escapeHtml(word.gospel_body)}</pre>
-        <p style="font-size: 0.7rem; color: var(--color-text-secondary); margin: 0;">
+        <pre class="voz-view__gospel-body">${escapeHtml(word.gospel_body)}</pre>
+        <p class="voz-view__gospel-footnote">
           Fuente: Ordo · snapshot · editable
         </p>
       </section>`
@@ -164,8 +159,16 @@ export async function renderWeeklyWordView(container, word) {
   `;
 
   const viewEl = container.querySelector('.voz-view');
+  const heroEl = container.querySelector('.voz-view__hero');
   const labelEl = container.querySelector('#voz-font-label');
   let currentSize = fontSize;
+
+  // Tamaño de letra inicial y vars litúrgicas del hero
+  viewEl.style.setProperty('--voz-fs', `${currentSize}rem`);
+  heroEl.style.setProperty('--liturgical-gradient', gradient);
+  heroEl.style.setProperty('--liturgical-accent', palette.accent);
+  heroEl.style.setProperty('--liturgical-text', palette.text);
+  heroEl.style.setProperty('--liturgical-bg', palette.bg);
 
   function applyFont(size) {
     currentSize = Math.min(VOZ_FONT_MAX, Math.max(VOZ_FONT_MIN, size));
@@ -218,10 +221,12 @@ export async function renderWeeklyWordById(container, id) {
     await renderWeeklyWordView(container, word);
   } catch (_e) {
     container.innerHTML = `
-      <div class="empty-state fade-in">
-        <div class="empty-state__icon">${icon('frown', { size: 48 })}</div>
-        <h2 class="empty-state__title">Voz en off no encontrada</h2>
-        <button class="btn btn--primary" id="voz-go-home" style="margin-top: 1rem;">Volver al inicio</button>
+      <div class="voz-view__error">
+        <div class="empty-state fade-in">
+          <div class="empty-state__icon">${icon('frown', { size: 48 })}</div>
+          <h2 class="empty-state__title">Voz en off no encontrada</h2>
+          <button class="btn btn--primary" id="voz-go-home">Volver al inicio</button>
+        </div>
       </div>
     `;
     container.querySelector('#voz-go-home')?.addEventListener('click', () => navigate('/'));

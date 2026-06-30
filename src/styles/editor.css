@@ -1,0 +1,1080 @@
+/* editor.css — SongEditor · Ambient Kinetic (F3c)
+ *
+ * Extraído de admin.css. Tokens: --color-brand (teal), --color-danger (rojo),
+ * --color-action (ámbar). Sin hex hardcodeado excepto box-shadow legados con
+ * alpha (se conservan como rgba semitransparentes).
+ *
+ * Clases NO redefinidas aquí (ya en components.css):
+ *   .roster-row, .roster-row__delete, .form-group__input--invalid,
+ *   .section-block__speed*, .tono-editor*, .char-strip*, .voice-pick*,
+ *   .voice-note-*, .group-row*, .group-list
+ */
+
+/* ── Contenedor principal ── */
+.editor {
+  max-width: 100%;
+  margin: 0 auto;
+  padding: var(--space-sm);
+}
+
+/* Estado cargando: flex centrado */
+.editor--loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 50vh;
+}
+
+/* Estado no-encontrado: flex columna centrada */
+.editor--notfound {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 50vh;
+  gap: 1rem;
+}
+
+.editor__title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--space-md);
+}
+
+/* Texto de estado vacío/error en pantalla de carga */
+.editor__state-text {
+  color: var(--color-text-secondary);
+  font-size: 1.1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+/* ── Campos del editor de voces en off (VozEditor) ── */
+.editor__label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+.editor__input {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text);
+  font-size: var(--font-size-base);
+  font-family: inherit;
+  transition: border-color var(--transition-fast);
+  /* Controles nativos (date picker, select) en tema oscuro. */
+  color-scheme: dark;
+}
+
+.editor__input:focus {
+  outline: none;
+  border-color: var(--color-brand);
+}
+
+.editor__input::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+}
+
+/* Variante monoespaciada para textareas de prosa */
+.editor__input--mono {
+  resize: vertical;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+/* Sección con borde/fondo */
+.editor__section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+/* Título de sección */
+.editor__section-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--space-md);
+  color: var(--color-brand);
+}
+
+/* Modificador: título con icono (inline-flex) */
+.editor__section-title--flex {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+/* Modificador: título con margen superior (separador visual de sub-sección) */
+.editor__section-title--spaced {
+  margin-top: var(--space-lg);
+}
+
+/* ── Grilla de 3 columnas responsiva ── */
+.editor__row-3 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .editor__row-3 {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+/* Fila de voice-links: alineación inferior */
+.editor__vlink-row {
+  align-items: end;
+  margin-bottom: var(--space-sm);
+}
+
+/* ── Grupos de campos ── */
+.form-group {
+  margin-bottom: var(--space-md);
+}
+
+.form-group__label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+.form-group__input,
+.form-group__select {
+  width: 100%;
+  height: 44px;
+  padding: 0 var(--space-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  transition: border-color var(--transition-fast);
+  color: var(--color-text);
+  font-size: var(--font-size-base);
+}
+
+.form-group__input:focus,
+.form-group__select:focus {
+  outline: none;
+  border-color: var(--color-brand);
+}
+
+.form-group__textarea {
+  width: 100%;
+  min-height: 300px;
+  padding: var(--space-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-lyrics);
+  resize: vertical;
+  transition: border-color var(--transition-fast);
+}
+
+.form-group__textarea:focus {
+  outline: none;
+  border-color: var(--color-brand);
+}
+
+/* Modificadores flex para hijos de .roster-row (display: flex) */
+.form-group--flex-2 {
+  flex: 2;
+  min-width: 0;
+}
+
+.form-group--flex-1 {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Slider de tipo de voz ── */
+.voice-slider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.voice-slider input[type='range'] {
+  width: 100%;
+  cursor: pointer;
+}
+
+/* Glífos ♂ / ♀ en el slider */
+.voice-slider__icon {
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+/* ── Subida de imagen (portada) ── */
+.image-upload {
+  border: 2px dashed var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-xl);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.image-upload:hover {
+  border-color: var(--color-brand);
+  background: color-mix(in srgb, var(--color-brand) 5%, transparent);
+}
+
+.image-upload__preview {
+  max-width: 200px;
+  max-height: 200px;
+  margin: 0 auto var(--space-md);
+  border-radius: var(--border-radius-md);
+}
+
+.image-upload__text {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+/* Input file oculto (reemplaza style="display:none") */
+.editor__cover-input {
+  display: none;
+}
+
+/* Meta-info bajo la previsualización de portada (tamaño, dimensiones) */
+.image-upload__meta {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.5rem;
+}
+
+/* ── Área de acciones del editor ── */
+.editor__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-top: var(--space-xl);
+  padding-bottom: var(--space-xl);
+}
+
+.editor__actions .btn {
+  width: 100%;
+  text-align: center;
+}
+
+@media (min-width: 768px) {
+  .editor__actions {
+    flex-direction: row;
+  }
+
+  .editor__actions .btn {
+    width: auto;
+    text-align: initial;
+  }
+}
+
+/* ── Modificadores de botón (específicos del editor) ── */
+
+/* Botón destructivo */
+.btn--danger {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+.btn--danger:hover {
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+}
+
+/* Botón con icono inline */
+.btn--icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+/* Botón compacto (solo icono, padding reducido) */
+.btn--compact {
+  padding: 0.5rem;
+}
+
+/* Botón de acción de eliminar: empuja elementos siguientes a la derecha */
+.btn--delete-action {
+  margin-right: auto;
+}
+
+/* ── Error inline de guardado ── */
+.editor__save-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--border-radius-sm);
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--space-md);
+}
+
+/* ── Botones de sección de links y roster ── */
+.editor__add-link-btn {
+  margin-top: var(--space-sm);
+}
+
+.editor__roster-add-btn {
+  margin-top: var(--space-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+/* Texto de lista vacía (roster, preview sin contenido, etc.) */
+.editor__empty-hint {
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+/* ── Vista previa de letras ── */
+.editor__preview {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-lg);
+  margin-top: var(--space-md);
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.editor__preview-title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--space-md);
+}
+
+/* Texto de marcador de posición en previsualizaciones */
+.editor__preview-hint,
+.import-modal__placeholder {
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+/* ============================================
+   Editor de bloques — Secciones y líneas
+   ============================================ */
+
+.block-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.block-editor__controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.block-editor__add-section,
+.block-editor__import-btn {
+  width: 100%;
+  flex: 1;
+  min-width: 140px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+/* ── Bloque de sección ── */
+.section-block {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  overflow: hidden;
+  transition:
+    box-shadow var(--transition-fast),
+    border-color var(--transition-fast);
+  border-left: 4px solid var(--color-brand);
+}
+
+.section-block:hover {
+  box-shadow: 0 2px 12px var(--color-shadow);
+}
+
+.section-block__header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.section-block__header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+/* Chip de tipo de sección: ámbar uppercase (Ambient Kinetic) */
+.section-block__type-select {
+  padding: 4px 8px;
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-action);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  min-width: 80px;
+}
+
+.section-block__label-input {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--border-radius-sm);
+  background: transparent;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  min-width: 100px;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.section-block__label-input:hover {
+  background: var(--color-surface-hover);
+}
+
+.section-block__label-input:focus {
+  outline: none;
+  border-color: var(--color-brand);
+  background: var(--color-bg);
+}
+
+.section-block__header-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.section-block__btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  transition: all var(--transition-fast);
+}
+
+.section-block__btn:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+  border-color: var(--color-text-secondary);
+}
+
+.section-block__btn--danger:hover {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+}
+
+.section-block__lines {
+  padding: var(--space-sm) var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.section-block__add-line {
+  width: 100%;
+  padding: var(--space-sm);
+  background: transparent;
+  border: none;
+  border-top: 1px dashed var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.section-block__add-line:hover {
+  color: var(--color-brand);
+  background: var(--color-surface);
+}
+
+/* ── Fila de línea ── */
+.line-row {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--border-radius-sm);
+  transition: background-color var(--transition-fast);
+}
+
+.line-row:hover {
+  background: var(--color-surface);
+}
+
+.line-row__main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 2px 0;
+  flex-wrap: wrap;
+}
+
+.line-row__input {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--border-radius-sm);
+  background: transparent;
+  font-size: 16px; /* Prevents zoom on iOS */
+  color: var(--color-text);
+  transition: all var(--transition-fast);
+  width: 100%;
+  min-width: 100%;
+}
+
+.line-row__input:hover {
+  border-color: var(--color-border);
+}
+
+.line-row__input:focus {
+  outline: none;
+  border-color: var(--color-brand);
+  background: var(--color-bg);
+}
+
+.line-row__input::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.5;
+}
+
+.line-row__chord-input {
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-surface);
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand);
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+  transition: border-color var(--transition-fast);
+}
+
+.line-row__chord-input:focus {
+  outline: none;
+  border-color: var(--color-brand);
+}
+
+.line-row__chord-input::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.4;
+  font-weight: var(--font-weight-regular);
+}
+
+.line-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.line-row__voice-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: var(--border-radius-full);
+  font-size: 0.65rem;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.line-row__btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  transition: all var(--transition-fast);
+  opacity: 1;
+}
+
+.line-row:hover .line-row__btn {
+  opacity: 1;
+}
+
+.line-row__btn:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.line-row__btn--active {
+  color: var(--color-brand);
+  opacity: 1;
+}
+
+.line-row__btn--voice:hover {
+  color: var(--color-voice-soprano);
+}
+
+.line-row__btn--tono:hover {
+  color: var(--color-brand);
+}
+
+.line-row__btn--delete:hover {
+  color: var(--color-danger);
+}
+
+.line-row__btn--annotation.line-row__btn--active {
+  color: var(--color-action);
+  background: color-mix(in srgb, var(--color-action) 12%, transparent);
+  border-radius: var(--border-radius-sm);
+  opacity: 1;
+}
+
+.line-row__btn--annotation:hover {
+  color: var(--color-action);
+}
+
+/* Punto de color de voz: background viene de --current-voice (custom prop dinámica) */
+.voice-pick__dot {
+  background: var(--current-voice, var(--color-text-secondary));
+}
+
+/* ── Popover de voces ── */
+.voice-popover {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-md);
+  min-width: 220px;
+  max-width: calc(100vw - 2 * var(--space-md));
+  box-shadow: 0 8px 32px var(--color-shadow);
+  animation: popoverIn 200ms ease;
+}
+
+@keyframes popoverIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.voice-popover__title {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--space-sm);
+}
+
+.voice-popover__group {
+  margin-bottom: var(--space-sm);
+}
+
+.voice-popover__group-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+  margin-bottom: 4px;
+}
+
+.voice-popover__chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-bottom: 4px;
+}
+
+.voice-popover__chip:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-text-secondary);
+}
+
+.voice-popover__chip--active {
+  font-weight: var(--font-weight-semibold);
+}
+
+.voice-popover__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.voice-popover__sublabel {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-regular);
+}
+
+.voice-popover__clear {
+  width: 100%;
+  padding: 6px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+  margin-top: var(--space-xs);
+}
+
+.voice-popover__clear:hover {
+  color: var(--color-danger);
+}
+
+/* ── Modal de importación y de tono ── */
+.import-modal__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  animation: fadeIn 200ms ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.import-modal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-lg);
+  width: 100%;
+  max-width: 640px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
+  animation: modalIn 220ms ease;
+}
+
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.import-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
+}
+
+/* Título del modal: siempre inline-flex para alojar iconos */
+.import-modal__title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.import-modal__close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-lg);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.import-modal__close:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.import-modal__hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-md);
+  line-height: 1.5;
+}
+
+.import-modal__hint code {
+  background: var(--color-bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  color: var(--color-brand);
+}
+
+.import-modal__textarea {
+  width: 100%;
+  min-height: 200px;
+  padding: var(--space-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  resize: vertical;
+  color: var(--color-text);
+  transition: border-color var(--transition-fast);
+}
+
+.import-modal__textarea:focus {
+  outline: none;
+  border-color: var(--color-brand);
+}
+
+.import-modal__preview {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  padding: var(--space-md);
+  margin-top: var(--space-md);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.import-modal__actions {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: flex-end;
+  margin-top: var(--space-lg);
+}
+
+/* Estructura de la vista previa de importación */
+.import-preview__section {
+  margin-bottom: 0.75rem;
+}
+
+.import-preview__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-brand);
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+}
+
+.import-preview__line {
+  font-size: 0.85rem;
+  padding: 1px 0;
+}
+
+/* Botón "Agregar grupos del rango" dentro del tono-editor */
+.tono-editor__apply-btn {
+  margin-top: var(--space-sm);
+}
+
+/* Full-width para el editor en contenido principal (móvil base). */
+.main__content:has(.editor) {
+  padding: var(--space-sm);
+  max-width: 100%;
+}
+
+/* ── Tablet / Desktop ── */
+@media (min-width: 768px) {
+  .editor {
+    padding: var(--space-lg);
+    max-width: var(--max-content-width);
+  }
+
+  .editor__section {
+    border-radius: var(--border-radius-md);
+    padding: var(--space-lg);
+    margin-bottom: var(--space-lg);
+  }
+
+  .editor__title {
+    font-size: var(--font-size-2xl);
+    margin-bottom: var(--space-xl);
+  }
+
+  .section-block__header {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .section-block__header-left {
+    flex-wrap: nowrap;
+  }
+
+  .section-block__header-actions {
+    justify-content: flex-start;
+  }
+
+  .section-block__btn {
+    width: 32px;
+    height: 32px;
+    font-size: var(--font-size-sm);
+  }
+
+  .line-row__btn {
+    width: 28px;
+    height: 28px;
+    opacity: 0.5;
+    font-size: var(--font-size-sm);
+  }
+
+  .line-row__actions {
+    gap: 2px;
+  }
+
+  .line-row__main {
+    flex-wrap: nowrap;
+  }
+
+  .line-row__input {
+    width: auto;
+    min-width: 0;
+    font-size: var(--font-size-base);
+  }
+
+  .block-editor__controls {
+    flex-direction: row;
+  }
+
+  .block-editor__add-section,
+  .block-editor__import-btn {
+    width: auto;
+  }
+
+  .voice-popover {
+    max-width: 280px;
+  }
+
+  .import-modal {
+    padding: var(--space-xl);
+  }
+
+  .main__content:has(.editor) {
+    padding: var(--space-lg);
+    max-width: 1200px;
+  }
+}
+
+/* ── Acordes: chip y asignación ── */
+.chord-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: flex-end;
+}
+
+.chord-chip-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.chord-chip__chord {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-brand);
+  line-height: 1.1;
+}
+
+.chord-chip {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 0.25rem 0.5rem;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.chord-chip--active {
+  border-color: var(--color-brand);
+  outline: 2px solid var(--color-brand);
+}
+
+.chord-editor__assign {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ── Overrides tema claro ── */
+@media (prefers-color-scheme: light) {
+  .editor__input {
+    color-scheme: light;
+  }
+}

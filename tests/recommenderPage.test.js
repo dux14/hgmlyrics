@@ -10,7 +10,7 @@ describe('renderRecommenderPage', () => {
   it('renderiza el título Recomendador con badge BETA', () => {
     renderRecommenderPage(container);
     expect(container.textContent).toContain('Recomendador');
-    expect(container.querySelector('.badge--beta')).not.toBeNull();
+    expect(container.querySelector('.recommender-page__beta')).not.toBeNull();
   });
 
   it('muestra copy de construcción', () => {

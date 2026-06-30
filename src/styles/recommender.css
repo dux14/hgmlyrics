@@ -1,0 +1,107 @@
+/* recommender.css — Recomendador · Ambient Kinetic (F3d)
+ * Referencia: docs/refactor-uiux-ambient-kinetic/galleries/f3-gallery.html sección 2.
+ * Tokens: --color-accent-2 (violet) · --color-primary (teal) · --color-warn (amber chip BETA)
+ *         --color-text-secondary · --color-text · --color-bg
+ */
+
+/* ── Contenedor de página ── */
+.recommender-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: calc(100dvh - var(--header-height, 64px) - var(--bottom-nav-height, 60px));
+  padding: var(--space-xl) var(--space-lg);
+  gap: var(--space-sm);
+}
+
+/* ── Orbe ambiente (cápsula glass teal/violeta) ── */
+.recommender-page__orb {
+  width: 72px;
+  height: 72px;
+  border-radius: 99px;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(
+    circle at 35% 30%,
+    color-mix(in srgb, var(--color-accent-2) 30%, transparent),
+    color-mix(in srgb, var(--color-primary) 12%, transparent)
+  );
+  border: 1px solid color-mix(in srgb, var(--color-accent-2) 30%, transparent);
+  color: var(--color-accent-2);
+  margin-bottom: var(--space-sm);
+  animation: recommender-breathe 4s ease-in-out infinite;
+}
+
+.recommender-page__orb svg {
+  width: 34px;
+  height: 34px;
+}
+
+@keyframes recommender-breathe {
+  0%,
+  100% {
+    transform: scale(0.95);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+/* ── Título con badge BETA inline ── */
+.recommender-page__title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-text);
+}
+
+/* ── Chip BETA — Syncopate + ámbar ── */
+.recommender-page__beta {
+  font-family: 'Syncopate', sans-serif;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--color-bg);
+  background: var(--color-warn);
+  padding: 4px 7px;
+  border-radius: var(--border-radius-sm);
+}
+
+/* ── Párrafo de promesa ── */
+.recommender-page__text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+  margin: var(--space-xs) 0 var(--space-md);
+  max-width: 30ch;
+}
+
+/* ── Botón CTA — separador de margen ── */
+.recommender-page__cta {
+  margin-top: var(--space-md);
+}
+
+/* ── Tema claro ── */
+@media (prefers-color-scheme: light) {
+  .recommender-page__beta {
+    color: var(--color-bg);
+  }
+}
+
+[data-theme='light'] .recommender-page__beta {
+  color: var(--color-bg);
+}
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .recommender-page__orb {
+    animation: none;
+  }
+}

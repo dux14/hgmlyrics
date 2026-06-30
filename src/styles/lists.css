@@ -81,8 +81,8 @@
 }
 
 .lists__expiry-chip--urgent {
-  background: color-mix(in srgb, var(--color-error, #e53935) 15%, transparent);
-  color: var(--color-error, #e53935);
+  background: color-mix(in srgb, var(--color-warn) 18%, transparent);
+  color: var(--color-warn);
 }
 
 /* ── Badge de sub-listas ── */
@@ -92,7 +92,7 @@
   height: 18px;
   padding: 0 5px;
   border-radius: var(--border-radius-full);
-  background: var(--color-primary);
+  background: var(--color-brand);
   color: #fff;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-bold);
@@ -174,7 +174,7 @@
 
 .list-detail__title-input:focus {
   outline: none;
-  border-bottom-color: var(--color-accent);
+  border-bottom-color: var(--color-action);
 }
 
 .list-detail__header-actions {
@@ -222,7 +222,7 @@
 
 .list-detail__search-input:focus {
   outline: none;
-  border-color: var(--color-accent);
+  border-color: var(--color-action);
 }
 
 .list-detail__search-results {
@@ -361,7 +361,7 @@
 }
 
 .song-row-compact--clickable:hover {
-  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-hover));
+  background: color-mix(in srgb, var(--color-action) 10%, var(--color-surface-hover));
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -515,14 +515,14 @@
   display: none;
 }
 .list-wizard__num--act {
-  color: var(--color-primary);
+  color: var(--color-brand);
   font-size: 1.35rem;
 }
 .list-wizard__num--done {
-  color: var(--color-primary);
+  color: var(--color-success);
 }
 .list-wizard__num--done::after {
-  background: var(--color-primary);
+  background: var(--color-success);
 }
 
 .list-wizard__panel {
@@ -575,7 +575,7 @@
 }
 .list-wizard__datetime:focus {
   outline: none;
-  border-color: var(--color-primary);
+  border-color: var(--color-brand);
 }
 .list-wizard__life-row {
   display: flex;
@@ -594,8 +594,12 @@
 .list-wizard__life i {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
+  background: linear-gradient(90deg, var(--color-brand), var(--color-action));
   transition: width 0.25s ease;
+}
+/* Lifebar urgente — rojo peligro cuando caduca pronto */
+.list-wizard__body:has(.lists__expiry-chip--urgent) .list-wizard__life i {
+  background: var(--color-danger);
 }
 .list-wizard__delete {
   width: fit-content;
@@ -622,7 +626,7 @@
   margin: calc(-1 * var(--space-xs)) 0 0;
   font-size: 0.72rem;
   font-weight: 600;
-  color: var(--color-primary);
+  color: var(--color-brand);
 }
 .list-detail__admin-hint svg {
   flex-shrink: 0;
@@ -650,7 +654,7 @@
   position: relative;
   z-index: 5;
   background: var(--color-bg);
-  border: 1.5px solid var(--color-accent);
+  border: 1.5px solid var(--color-action);
   box-shadow: 0 12px 28px var(--color-shadow);
   cursor: grabbing;
 }
@@ -711,7 +715,7 @@
   gap: var(--space-xs);
   background: none;
   border: none;
-  color: var(--color-primary);
+  color: var(--color-brand);
   font-weight: var(--font-weight-semibold);
   font-size: var(--font-size-sm);
   cursor: pointer;
@@ -737,7 +741,7 @@
     color var(--transition-fast);
 }
 .list-detail__seg-tab.is-active {
-  background: var(--color-primary);
+  background: var(--color-brand);
   color: #fff;
 }
 .list-detail__child {
@@ -764,4 +768,23 @@
 }
 .list-detail__add-child {
   margin-top: var(--space-md);
+}
+
+/* ── Fila polimórfica: voz en off ── */
+.list-detail__voz-row {
+  border-left: 3px solid var(--color-liturgy);
+}
+
+/* ── Estado vacío inline (lista sin ítems) ── */
+.list-detail__empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-2xl) 0;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+.list-detail__empty-state svg {
+  opacity: 0.4;
 }

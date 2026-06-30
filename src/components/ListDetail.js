@@ -407,7 +407,7 @@ function renderEditor(container, listData, opts = {}) {
 
     function renderSongs(enteringId = null) {
       if (draft.order.length === 0) {
-        songsEl.innerHTML = `<p class="list-detail__empty">Busca arriba para agregar canciones.</p>`;
+        songsEl.innerHTML = `<div class="list-detail__empty-state">${icon('list', { size: 32 })}<p>Busca arriba para agregar canciones.</p></div>`;
         return;
       }
       songsEl.innerHTML = draft.order.map((it, idx) => draftItemRow(it, idx)).join('');
@@ -808,7 +808,7 @@ function renderReadonly(container, listData, { isOwner } = {}) {
 
   const songsPaneHtml =
     orderedItems.length === 0
-      ? `<p class="list-detail__empty">Esta lista no tiene canciones aún.</p>`
+      ? `<div class="list-detail__empty-state">${icon('list', { size: 32 })}<p>Esta lista no tiene canciones aún.</p></div>`
       : orderedItems
           .map((it, idx) => {
             if (it.item_type === 'weekly_word') {

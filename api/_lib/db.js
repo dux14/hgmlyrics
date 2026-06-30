@@ -9,7 +9,7 @@ if (!process.env.DATABASE_URL) {
 // `prepare: false` is mandatory for the Supabase transaction pooler (port 6543).
 const sql = postgres(process.env.DATABASE_URL, {
   ssl: 'require',
-  max: 5,            // pequeno pero > 1; Fluid comparte el pool entre requests concurrentes
+  max: 5,            // pequeño pero > 1; Fluid comparte el pool entre requests concurrentes
   prepare: false,
   idle_timeout: 20,
   max_lifetime: 60 * 30,

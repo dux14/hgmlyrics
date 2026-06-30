@@ -1,6 +1,35 @@
 /* ============================================
    Auth pages — Login, Register, Callback, Onboarding, Profile, Friends
    Mobile-first (min-width media queries only).
+   ============================================
+
+   DISEÑO Ambient Kinetic — Login / Register / Onboarding (F3d)
+   ─────────────────────────────────────────────────────────────
+   Tarjeta principal (.auth-card):
+   · Fondo: var(--color-surface) — neutral-900 dark / neutral-100 light.
+   · Borde: 1px solid var(--color-border) con border-radius-lg.
+   · Sombra: 0 4px 20px var(--color-shadow) — sin blur extra.
+   · Máx. ancho: 420px; padding xl (desktop 2xl).
+
+   Cabecera de la tarjeta (no implementada aún — espacio para logo HKN):
+   · Logo HKN centrado sobre el título con margin-bottom var(--space-md).
+   · El logo usa fill var(--color-brand) (teal).
+
+   Inputs (.auth-input):
+   · Fondo var(--color-bg), borde var(--color-border).
+   · Focus: borde var(--color-primary) — sin glow extra.
+   · Estado error: var(--color-error) / éxito: var(--color-success).
+
+   Botón primario de acción (.auth-btn como submit):
+   · Usa el token de acción ámbar solo en el botón de SUBMIT (CTA principal).
+   · Botones secundarios (Google, volver) mantienen fondo var(--color-bg).
+   · Implementación pendiente: .auth-btn--primary { background: var(--color-action); color: var(--color-bg); }
+
+   Tipografía:
+   · Título: Montserrat 800, var(--font-size-2xl), var(--color-text).
+   · Subtítulo: var(--font-size-sm), var(--color-text-secondary).
+   · Links: var(--color-primary), sin subrayado por defecto.
+   ─────────────────────────────────────────────────────────────
    ============================================ */
 
 .auth-page {
@@ -158,6 +187,10 @@
   color: var(--color-text-secondary);
 }
 
+.auth-offline__icon {
+  color: var(--color-text-secondary);
+}
+
 /* profile-avatar / profile-username / profile-field se comparten con
    OnboardingPage y LicensesPage — permanecen aquí hasta su migración (F3). */
 .profile-avatar {
@@ -268,7 +301,7 @@
 }
 
 .auth-menu__item--danger:hover {
-  background: rgba(244, 67, 54, 0.08);
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
   color: var(--color-error);
 }
 

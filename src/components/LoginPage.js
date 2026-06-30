@@ -17,7 +17,7 @@ function offlinePane(container) {
   container.innerHTML = `
     <div class="auth-page fade-in">
       <div class="auth-card auth-offline">
-        <div style="color: var(--color-text-secondary);">${icon('wifi-off', { size: 48 })}</div>
+        <div class="auth-offline__icon">${icon('wifi-off', { size: 48 })}</div>
         <h2 class="auth-title">Sin conexión</h2>
         <p class="auth-subtitle">Necesitas conexión para iniciar sesión.</p>
         <button class="auth-btn" id="retry-btn">Reintentar</button>

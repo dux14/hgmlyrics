@@ -362,18 +362,27 @@
 }
 
 .main__content {
-  /* Gutter base: ajustado en mobile (--space-md lateral) para no desperdiciar
-     espacio en pantallas pequeñas. El padding vertical se mantiene en --space-lg.
-     Las páginas individuales NO deben añadir su propio padding horizontal. */
+  /* Gutter unico: 16px lateral (--space-md) en todos los breakpoints.
+     Las vistas individuales NO añaden padding horizontal propio.
+     Sin max-width ni centrado: el contenido ocupa todo el ancho disponible. */
   padding: var(--space-lg) var(--space-md);
-  max-width: 1200px;
-  margin: 0 auto;
 }
 
 @media (min-width: 768px) {
   .main__content {
-    padding: var(--space-lg);
+    /* Solo ajusta vertical en desktop; el lateral se mantiene en --space-md. */
+    padding-top: var(--space-xl);
+    padding-bottom: var(--space-xl);
   }
+}
+
+/* Utilidad full-bleed: permite que strips y carruseles sangren hasta el borde
+   del gutter sin romper el padding lateral del contenedor padre. */
+.full-bleed {
+  margin-left: calc(-1 * var(--space-md));
+  margin-right: calc(-1 * var(--space-md));
+  padding-left: var(--space-md);
+  padding-right: var(--space-md);
 }
 
 /* === Song Grid === */

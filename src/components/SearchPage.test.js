@@ -44,9 +44,11 @@ vi.mock('./songTile.js', () => ({
 import { getState, getAlbums } from '../lib/store.js';
 import { isAuthenticated } from '../lib/authStore.js';
 import { isFavorite } from '../lib/favorites.js';
+import { icon } from '../lib/icons.js';
 import { renderSearchPage } from './SearchPage.js';
 
 beforeEach(() => {
+  vi.clearAllMocks();
   global.fetch = vi.fn().mockResolvedValue({
     ok: true,
     json: async () => ({}),
@@ -105,5 +107,37 @@ describe('renderSearchPage', () => {
     expect(rail).not.toBeNull();
     const cards = rail.querySelectorAll('.search-rail__album');
     expect(cards).toHaveLength(2);
+  });
+
+  it('renderiza Álbumes antes de Todas las canciones', async () => {
+    const albums = [{ slug: 'album-uno', name: 'Album Uno', coverImage: '' }];
+    getState.mockReturnValue({
+      songs: [{ id: '1', title: 'Una', album: 'Album Uno', coverImage: '' }],
+      filtered: [],
+    });
+    getAlbums.mockReturnValue(albums);
+
+    const container = document.createElement('div');
+    await renderSearchPage(container);
+
+    const heads = [...container.querySelectorAll('.search-section__head h2')].map(
+      (h) => h.textContent,
+    );
+    const iAlb = heads.findIndex((t) => /Álbumes/i.test(t));
+    const iAll = heads.findIndex((t) => /Todas las canciones/i.test(t));
+    expect(iAlb).toBeGreaterThanOrEqual(0);
+    expect(iAlb).toBeLessThan(iAll);
+  });
+
+  it('la voz en off usa icono gospel, no mic', async () => {
+    getState.mockReturnValue({ songs: [], filtered: [] });
+    const weeklyWords = [{ id: 'ww1', title: 'Palabra del dia', gospel_ref: 'Juan 1:1' }];
+
+    const container = document.createElement('div');
+    await renderSearchPage(container, weeklyWords);
+
+    const iconCalls = icon.mock.calls.map((c) => c[0]);
+    expect(iconCalls).toContain('gospel');
+    expect(iconCalls).not.toContain('mic');
   });
 });

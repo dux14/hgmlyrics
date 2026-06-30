@@ -64,7 +64,7 @@ function vozCard(ww) {
   a.className = 'voz-card';
   a.href = `/voz/${ww.id}`;
   a.innerHTML = `
-    <div class="voz-card__art">${icon('mic', { size: 18 })}</div>
+    <div class="voz-card__art">${icon('gospel', { size: 18 })}</div>
     <div>
       <div class="voz-card__title">${escapeHtml(ww.title || ww.liturgical_title || 'Voz en off')}</div>
       <div class="voz-card__ref">${escapeHtml(ww.gospel_ref || '')}</div>
@@ -86,15 +86,12 @@ export async function renderSearchPage(container, weeklyWords = []) {
   const page = document.createElement('div');
   page.className = 'search-page';
 
-  // 1 · Todas las canciones (catálogo completo)
-  page.appendChild(sectionHead('Todas las canciones'));
-  const grid = document.createElement('div');
-  grid.className = 'song-tile-grid';
-  songs.forEach((song) => grid.appendChild(songTile(song, colorMap)));
-  page.appendChild(grid);
-
-  // 2 · Álbumes
+  // 1 · Álbumes
   const albums = getAlbums();
+  const coverBySlug = {};
+  albums.forEach((al) => {
+    if (al.slug && al.coverImage) coverBySlug[al.slug] = al.coverImage.replace(/^.*\//, '');
+  });
   if (albums.length) {
     page.appendChild(sectionHead('Álbumes'));
     const rail = document.createElement('div');
@@ -102,6 +99,13 @@ export async function renderSearchPage(container, weeklyWords = []) {
     albums.forEach((al) => rail.appendChild(albumCard(al, container)));
     page.appendChild(rail);
   }
+
+  // 2 · Todas las canciones (catálogo completo)
+  page.appendChild(sectionHead('Todas las canciones'));
+  const grid = document.createElement('div');
+  grid.className = 'song-tile-grid';
+  songs.forEach((song) => grid.appendChild(songTile(song, colorMap, coverBySlug)));
+  page.appendChild(grid);
 
   // 3 · Voces en off
   if (weeklyWords.length) {
@@ -119,7 +123,7 @@ export async function renderSearchPage(container, weeklyWords = []) {
       page.appendChild(sectionHead('Tus favoritos', () => navigate('/favoritos')));
       const fgrid = document.createElement('div');
       fgrid.className = 'song-tile-grid';
-      favs.forEach((song) => fgrid.appendChild(songTile(song, colorMap)));
+      favs.forEach((song) => fgrid.appendChild(songTile(song, colorMap, coverBySlug)));
       page.appendChild(fgrid);
     }
   }

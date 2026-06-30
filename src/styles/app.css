@@ -10,6 +10,7 @@
 /* CSS legacy — se migra superficie por superficie en F1+ */
 @import './variables.css' layer(tokens);
 @import './base.css' layer(base);
+@import './base-utilities.css' layer(components);
 @import './layout.css' layer(components);
 @import './components.css' layer(components);
 @import './admin.css' layer(components);

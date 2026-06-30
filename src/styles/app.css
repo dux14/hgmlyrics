@@ -13,6 +13,7 @@
 @import './base-utilities.css' layer(components);
 @import './layout.css' layer(components);
 @import './components.css' layer(components);
+@import './home.css' layer(components);
 @import './admin.css' layer(components);
 @import './auth.css' layer(components);
 @import './offline-chip.css' layer(components);

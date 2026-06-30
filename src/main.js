@@ -40,6 +40,7 @@ import { renderPrayerPage } from './components/PrayerPage.js';
 import { renderListDetail } from './components/ListDetail.js';
 import { initUpdateNotifier } from './components/UpdateNotifier.js';
 import { renderToolsHub } from './components/ToolsHub.js';
+import { renderHome } from './components/Home.js';
 import { renderBottomNav, updateBottomNavActive } from './components/BottomNav.js';
 
 // Initialize theme immediately to avoid flash
@@ -151,9 +152,8 @@ async function boot() {
   });
 
   guardedRoute('/', () => {
-    showFilterBar();
-    const { filtered } = getState();
-    renderSongList(mainContent, filtered);
+    hideFilterBar();
+    renderHome(mainContent);
   });
 
   guardedRoute('/buscar', () => {

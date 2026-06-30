@@ -1,0 +1,200 @@
+/* ============================================================
+   home.css — Vista de inicio (renderHome)
+   Ambient Kinetic: dark primario, teal/violeta = identidad,
+   ámbar = acción. Sin hex de marca hardcodeado.
+   ============================================================ */
+
+.home {
+  padding: var(--space-md) var(--space-md) var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+/* ── Módulo (sección) ── */
+.home__module {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* ── Kicker (título de sección) — Syncopate, teal, uppercase ── */
+.home__kicker {
+  font-family: var(--font-display);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--color-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
+
+/* ── Strip horizontal (canciones recientes) ── */
+.home__strip {
+  display: flex;
+  flex-direction: row;
+  gap: var(--space-sm);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: var(--space-xs);
+}
+
+.home__strip::-webkit-scrollbar {
+  display: none;
+}
+
+.home__strip .song-card {
+  flex: 0 0 auto;
+  width: 160px;
+  scroll-snap-align: start;
+}
+
+/* ── Grid de álbumes — 2 columnas ── */
+.home__albums {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
+}
+
+/* ── Botón de álbum ── */
+.home__album {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+  overflow: hidden;
+}
+
+.home__album:hover,
+.home__album:focus-visible {
+  background: var(--color-surface-hover);
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.home__album-cover {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--border-radius-sm);
+  background: var(--color-bg);
+}
+
+.home__album-name {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  text-align: center;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Teaser: oración del artista — superficie glass ── */
+.home__teaser {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  background: color-mix(in oklch, var(--color-surface) 75%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-md) var(--space-lg);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.home__teaser:hover,
+.home__teaser:focus-visible {
+  background: color-mix(in oklch, var(--color-surface) 90%, transparent);
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.home__teaser-ic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-accent);
+}
+
+.home__teaser-tx {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.home__teaser-t {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.home__teaser-s {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.home__teaser-arr {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+  transform: rotate(90deg);
+}
+
+/* ── Quick cards (favoritos / listas) ── */
+.home__quick {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
+  flex-direction: unset;
+}
+
+.home__quick-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-md);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.home__quick-card:hover,
+.home__quick-card:focus-visible {
+  background: var(--color-surface-hover);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  outline: none;
+}
+
+.home__quick-card .icon {
+  color: var(--color-accent-2);
+}
+
+/* Invitados: atenúa las quick cards sin ocultarlas */
+.home__quick[data-guest='true'] .home__quick-card {
+  opacity: 0.55;
+}

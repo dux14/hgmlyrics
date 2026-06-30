@@ -120,7 +120,7 @@ export function renderSongListSkeleton(container, count = 6) {
  * @param {number} index - For staggered animation
  * @returns {HTMLElement}
  */
-function createSongCard(song, index) {
+export function createSongCard(song, index) {
   const card = document.createElement('article');
   card.className = 'song-card fade-in';
   card.style.animationDelay = `${index * 50}ms`;

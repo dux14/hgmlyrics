@@ -1,0 +1,356 @@
+/* profile.css — Perfil propio · Ambient Kinetic (F2a)
+ * Valores extraídos de docs/refactor-uiux-ambient-kinetic/galleries/f2-gallery.html (frame A).
+ * Tokens locales del mockup mapeados a tokens de app:
+ *   --teal → --color-primary  |  --violet → --color-accent-2
+ *   --amber → --color-action  |  --gold → --color-liturgy
+ *   --muted → --color-text-secondary  |  --hair → --color-border
+ *   --surface-2 → --color-surface  |  --bg → --color-bg
+ *   --text → --color-text
+ *   --ten/--bass/--sop → --color-voice-tenor/bass/soprano
+ */
+
+/* ── Contenedor de página ── */
+.profile-page {
+  min-height: 100%;
+  padding-bottom: calc(var(--bottom-nav-height, 60px) + 1rem);
+}
+
+/* ── Zona superior: ambient blob + avatar + identidad ── */
+.pf-top {
+  position: relative;
+  padding: 18px 16px 0;
+  text-align: center;
+}
+
+.pf-amb {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 120px;
+  background:
+    radial-gradient(120% 100% at 50% 0, rgba(29, 111, 126, 0.27), transparent 70%),
+    radial-gradient(90% 80% at 80% 0, rgba(124, 58, 237, 0.2), transparent);
+  pointer-events: none;
+}
+
+.pf-av {
+  width: 78px;
+  height: 78px;
+  border-radius: 99px;
+  display: block;
+  margin: 6px auto 0;
+  position: relative;
+  background: linear-gradient(135deg, var(--color-accent-2), #f472b6);
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 26px -8px rgba(0, 0, 0, 0.6);
+  object-fit: cover;
+}
+
+.pf-name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 11px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+/* La corona (.avatar-crown) la reutiliza el sistema existente. */
+
+.pf-user {
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+/* ── Distintivo de voz ── */
+.pf-vbadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 9px;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 4px 11px;
+  border-radius: 99px;
+}
+
+.pf-vbadge--soprano {
+  color: var(--color-voice-soprano);
+  background: rgba(244, 143, 177, 0.12);
+  border: 1px solid rgba(244, 143, 177, 0.35);
+}
+
+.pf-vbadge--contralto {
+  color: var(--color-voice-contralto);
+  background: rgba(206, 147, 216, 0.12);
+  border: 1px solid rgba(206, 147, 216, 0.35);
+}
+
+.pf-vbadge--tenor {
+  color: var(--color-voice-tenor);
+  background: rgba(255, 224, 130, 0.12);
+  border: 1px solid rgba(255, 224, 130, 0.35);
+}
+
+.pf-vbadge--bass {
+  color: var(--color-voice-bass);
+  background: rgba(144, 202, 249, 0.12);
+  border: 1px solid rgba(144, 202, 249, 0.35);
+}
+
+/* Punto de color dentro del badge (estático) */
+.pf-vbadge .pf-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+}
+
+.pf-vbadge--soprano .pf-dot { background: var(--color-voice-soprano); }
+.pf-vbadge--contralto .pf-dot { background: var(--color-voice-contralto); }
+.pf-vbadge--tenor .pf-dot { background: var(--color-voice-tenor); }
+.pf-vbadge--bass .pf-dot { background: var(--color-voice-bass); }
+
+/* ── Bio ── */
+.pf-bio {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  margin: 10px 20px 0;
+  text-align: center;
+}
+
+/* ── Tarjetas de datos (rango / instrumentos) ── */
+.pf-card {
+  margin: 13px 16px 0;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+  padding: 12px 13px;
+}
+
+.pf-cl {
+  font-size: 8px;
+  color: var(--color-primary);
+  margin-bottom: 9px;
+}
+
+.pf-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 9px;
+}
+
+.pf-row .pf-cl {
+  margin: 0;
+}
+
+.pf-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--color-primary);
+  padding: 4px 9px;
+  border-radius: 99px;
+  background: rgba(45, 212, 191, 0.12);
+  border: 1px solid rgba(45, 212, 191, 0.28);
+  text-decoration: none;
+}
+
+.pf-edit-btn .icon {
+  width: 11px;
+  height: 11px;
+}
+
+/* ── Viz de rango vocal (barras animadas) ── */
+.pf-range {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 40px;
+}
+
+.pf-range i {
+  flex: 1;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.07);
+  height: var(--h, 40%);
+  transform-origin: bottom;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pf-range i.on {
+    background: linear-gradient(var(--color-voice-tenor), rgba(255, 224, 130, 0.35));
+    animation:
+      pf-rngrow 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards,
+      pf-rnbreathe 3.4s ease-in-out infinite;
+  }
+
+  .pf-range i.on:nth-child(2) { animation-delay: 0.05s, 0.65s; }
+  .pf-range i.on:nth-child(3) { animation-delay: 0.13s, 0.73s; }
+  .pf-range i.on:nth-child(4) { animation-delay: 0.21s, 0.81s; }
+  .pf-range i.on:nth-child(5) { animation-delay: 0.29s, 0.89s; }
+  .pf-range i.on:nth-child(6) { animation-delay: 0.37s, 0.97s; }
+}
+
+/* Barra de nota grave (lo = bajo/bass) */
+.pf-range i.lo {
+  background: linear-gradient(var(--color-voice-bass), rgba(144, 202, 249, 0.3));
+  box-shadow: 0 0 11px rgba(144, 202, 249, 0.55);
+}
+
+/* Barra de nota aguda (hi = soprano) */
+.pf-range i.hi {
+  background: linear-gradient(var(--color-voice-soprano), rgba(244, 143, 177, 0.3));
+  box-shadow: 0 0 11px rgba(244, 143, 177, 0.55);
+}
+
+@keyframes pf-rngrow {
+  from { height: 0; }
+}
+
+@keyframes pf-rnbreathe {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 1; filter: brightness(1.14); }
+}
+
+/* ── Etiquetas grave/agudo bajo la viz ── */
+.pf-range-lbl {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  color: var(--color-text-secondary);
+  margin-top: 7px;
+}
+
+.pf-range-lbl span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Punto pulsante en etiquetas de rango */
+.pf-range-lbl .pf-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+}
+
+.pf-range-lbl .lo .pf-dot {
+  background: var(--color-voice-bass);
+  box-shadow: 0 0 7px var(--color-voice-bass);
+}
+
+.pf-range-lbl .hi .pf-dot {
+  background: var(--color-voice-soprano);
+  box-shadow: 0 0 7px var(--color-voice-soprano);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pf-range-lbl .pf-dot {
+    animation: pf-rnpulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes pf-rnpulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.8); }
+}
+
+/* Defensa extra: las animaciones ya solo viven en no-preference */
+@media (prefers-reduced-motion: reduce) {
+  .pf-range i.on,
+  .pf-range-lbl .pf-dot {
+    animation: none;
+  }
+}
+
+/* ── Chips de instrumentos ── */
+.pf-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pf-chip {
+  font-size: 9.5px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ── Accesos rapidos (Amigos / Favoritos) ── */
+.pf-acc {
+  padding: 13px 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pf-accrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: 13px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  text-decoration: none;
+  color: var(--color-text);
+  transition: border-color 0.12s ease-out;
+}
+
+.pf-accrow:hover {
+  border-color: rgba(45, 212, 191, 0.3);
+}
+
+.pf-ai {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+
+.pf-ai--friends {
+  background: rgba(244, 143, 177, 0.14);
+  color: var(--color-voice-soprano);
+}
+
+.pf-ai--fav {
+  background: rgba(245, 158, 11, 0.14);
+  color: var(--color-action);
+}
+
+.pf-ai .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.pf-an {
+  flex: 1;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.pf-ac {
+  font-size: 9px;
+  color: var(--color-text-secondary);
+}
+
+.icon.pf-arr {
+  width: 15px;
+  height: 15px;
+  color: var(--color-text-secondary);
+  flex: none;
+}

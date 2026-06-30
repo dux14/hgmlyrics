@@ -11,7 +11,7 @@ import './styles/app.css';
 import { initTheme } from './components/ThemeToggle.js';
 import { initStore, subscribe, getState } from './lib/store.js';
 import { buildIndex } from './lib/search.js';
-import { route, initRouter, onNotFound, navigate } from './router.js';
+import { route, initRouter, onNotFound, navigate, getCurrentPath } from './router.js';
 import { initAuthStore, isAuthenticated, needsOnboarding, isAdmin } from './lib/authStore.js';
 import { initFavorites } from './lib/favorites.js';
 import { icon } from './lib/icons.js';
@@ -40,6 +40,7 @@ import { renderPrayerPage } from './components/PrayerPage.js';
 import { renderListDetail } from './components/ListDetail.js';
 import { initUpdateNotifier } from './components/UpdateNotifier.js';
 import { renderToolsHub } from './components/ToolsHub.js';
+import { renderBottomNav, updateBottomNavActive } from './components/BottomNav.js';
 
 // Initialize theme immediately to avoid flash
 initTheme();
@@ -90,6 +91,9 @@ async function boot() {
 
   // Render filter bar (F4)
   renderFilterBar(app);
+
+  // Bottom-nav móvil (F1b)
+  renderBottomNav(app);
 
   // Show skeleton while loading
   renderSongListSkeleton(mainContent);
@@ -323,6 +327,10 @@ async function boot() {
 
   // Start router
   initRouter();
+
+  // Sincronizar tab activo del bottom-nav en cada cambio de ruta (F1b)
+  updateBottomNavActive(getCurrentPath());
+  window.addEventListener('hashchange', () => updateBottomNavActive(getCurrentPath()));
 
   // F1: Initialize update notifier
   initUpdateNotifier();

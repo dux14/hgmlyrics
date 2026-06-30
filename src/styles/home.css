@@ -33,6 +33,7 @@
 .home__strip {
   display: flex;
   flex-direction: row;
+  align-items: flex-start;
   gap: var(--space-sm);
   overflow-x: auto;
   scroll-snap-type: x mandatory;

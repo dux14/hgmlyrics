@@ -1,0 +1,16 @@
+/* Orden de capas explícito: utilities ganan a components durante la migración */
+@layer reset, tokens, base, components, utilities;
+
+@import 'tailwindcss';
+
+/* Tokens (primitivos @theme + utilities theme-aware) — se crea en Task 2 */
+@import './tokens.css';
+
+/* CSS legacy — se migra superficie por superficie en F1+ */
+@import './variables.css' layer(tokens);
+@import './base.css' layer(base);
+@import './layout.css' layer(components);
+@import './components.css' layer(components);
+@import './admin.css' layer(components);
+@import './auth.css' layer(components);
+@import './offline-chip.css' layer(components);

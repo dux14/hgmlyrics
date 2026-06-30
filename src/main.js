@@ -4,14 +4,8 @@
  * Initializes theme, store, search index, router, and renders the app shell.
  */
 
-// Styles
-import './styles/variables.css';
-import './styles/base.css';
-import './styles/layout.css';
-import './styles/components.css';
-import './styles/admin.css';
-import './styles/auth.css';
-import './styles/offline-chip.css';
+// Styles (orden de capas centralizado en app.css)
+import './styles/app.css';
 
 // Modules
 import { initTheme } from './components/ThemeToggle.js';

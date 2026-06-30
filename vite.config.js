@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite';
+import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { visualizer } from 'rollup-plugin-visualizer';
 
@@ -16,6 +17,7 @@ export default defineConfig({
     },
   },
   plugins: [
+    tailwindcss(),
     VitePWA({
       // autoUpdate: el nuevo SW toma control apenas se instala, sin esperar
       // que el usuario acepte un prompt. Necesario porque iOS Safari es

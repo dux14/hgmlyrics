@@ -141,56 +141,71 @@ async function boot() {
   });
 
   // ============ Public routes ============
+  // Wrapper: marca rutas privadas/guardadas quitando la clase de shell oculto.
+  const privateRoute = (path, cb, opts) =>
+    guardedRoute(
+      path,
+      (...args) => {
+        document.body.classList.remove('auth-route');
+        return cb(...args);
+      },
+      opts,
+    );
+
   route('/login', () => {
     hideFilterBar();
+    document.body.classList.add('auth-route');
     renderLoginPage(mainContent);
   });
 
   route('/register', () => {
     hideFilterBar();
+    document.body.classList.add('auth-route');
     renderRegisterPage(mainContent);
   });
 
   route('/auth/callback', () => {
     hideFilterBar();
+    document.body.classList.add('auth-route');
     renderAuthCallback(mainContent);
   });
 
   // ============ Guarded routes ============
-  guardedRoute('/onboarding', () => {
+  privateRoute('/onboarding', () => {
     hideFilterBar();
     renderOnboardingPage(mainContent);
   });
 
-  guardedRoute('/', () => {
+  privateRoute('/', () => {
     hideFilterBar();
     renderHome(mainContent);
   });
 
-  guardedRoute('/buscar', () => {
+  privateRoute('/buscar', () => {
     showFilterBar();
     const { filtered } = getState();
     renderSongList(mainContent, filtered);
     document.querySelector('#search-input')?.focus();
   });
 
-  guardedRoute('/herramientas', () => {
+  privateRoute('/herramientas', () => {
     hideFilterBar();
     renderToolsHub(mainContent);
   });
 
-  guardedRoute('/song/:id', ({ params }) => {
+  privateRoute('/song/:id', ({ params }) => {
     hideFilterBar();
     renderSongView(mainContent, params.id);
   });
 
   route('/song/:id/links', async ({ params }) => {
     hideFilterBar();
+    document.body.classList.remove('auth-route');
     const { renderSongLinks } = await import('./components/SongLinks.js');
     renderSongLinks(mainContent, params.id);
   });
 
-  guardedRoute(
+  privateRoute(
     '/admin',
     () => {
       hideFilterBar();
@@ -199,7 +214,7 @@ async function boot() {
     { adminOnly: true },
   );
 
-  guardedRoute(
+  privateRoute(
     '/admin/create',
     () => {
       hideFilterBar();
@@ -208,7 +223,7 @@ async function boot() {
     { adminOnly: true },
   );
 
-  guardedRoute(
+  privateRoute(
     '/admin/edit',
     () => {
       hideFilterBar();
@@ -217,7 +232,7 @@ async function boot() {
     { adminOnly: true },
   );
 
-  guardedRoute(
+  privateRoute(
     '/admin/edit/:id',
     ({ params, query }) => {
       hideFilterBar();
@@ -227,7 +242,7 @@ async function boot() {
     { adminOnly: true },
   );
 
-  guardedRoute(
+  privateRoute(
     '/admin/voz/nueva',
     async () => {
       hideFilterBar();
@@ -237,7 +252,7 @@ async function boot() {
     { adminOnly: true },
   );
 
-  guardedRoute(
+  privateRoute(
     '/admin/voz/:id',
     async ({ params }) => {
       hideFilterBar();
@@ -247,82 +262,82 @@ async function boot() {
     { adminOnly: true },
   );
 
-  guardedRoute('/perfil', () => {
+  privateRoute('/perfil', () => {
     hideFilterBar();
     renderProfile(mainContent);
   });
 
-  guardedRoute('/perfil/editar', () => {
+  privateRoute('/perfil/editar', () => {
     hideFilterBar();
     renderProfileEdit(mainContent);
   });
 
-  guardedRoute('/u/:username', ({ params }) => {
+  privateRoute('/u/:username', ({ params }) => {
     hideFilterBar();
     renderPublicProfile(mainContent, params.username);
   });
 
-  guardedRoute('/amigos', () => {
+  privateRoute('/amigos', () => {
     hideFilterBar();
     renderFriendsPanel(mainContent);
   });
 
-  guardedRoute('/favoritos', () => {
+  privateRoute('/favoritos', () => {
     hideFilterBar();
     renderFavoritesPage(mainContent);
   });
 
-  guardedRoute('/afinador', async ({ query }) => {
+  privateRoute('/afinador', async ({ query }) => {
     hideFilterBar();
     const { renderTuner } = await import('./components/Tuner.js');
     renderTuner(mainContent, { query });
   });
 
-  guardedRoute('/recomendador', () => {
+  privateRoute('/recomendador', () => {
     hideFilterBar();
     renderRecommenderPage(mainContent);
   });
 
-  guardedRoute('/oracion', () => {
+  privateRoute('/oracion', () => {
     hideFilterBar();
     renderPrayerPage(mainContent);
   });
 
-  guardedRoute('/voces', async () => {
+  privateRoute('/voces', async () => {
     hideFilterBar();
     const { renderVoicesAlbumView } = await import('./components/VoicesAlbumView.js');
     renderVoicesAlbumView(mainContent);
   });
 
-  guardedRoute('/voz/:id', async ({ params }) => {
+  privateRoute('/voz/:id', async ({ params }) => {
     hideFilterBar();
     const { renderWeeklyWordById } = await import('./components/WeeklyWordView.js');
     renderWeeklyWordById(mainContent, params.id);
   });
 
-  guardedRoute('/lista/nueva', () => {
+  privateRoute('/lista/nueva', () => {
     hideFilterBar();
     renderListDetail(mainContent, null, { mode: 'edit' });
   });
 
-  guardedRoute('/lista/:id', ({ params }) => {
+  privateRoute('/lista/:id', ({ params }) => {
     hideFilterBar();
     renderListDetail(mainContent, params.id, { mode: 'view' });
   });
 
-  guardedRoute('/estudio', async () => {
+  privateRoute('/estudio', async () => {
     hideFilterBar();
     const { renderStudioPage } = await import('./components/StudioPage.js');
     renderStudioPage(mainContent);
   });
 
-  guardedRoute('/licencias', async () => {
+  privateRoute('/licencias', async () => {
     hideFilterBar();
     const { renderLicenses } = await import('./components/LicensesPage.js');
     renderLicenses(mainContent);
   });
 
-  guardedRoute('/mundo', async () => {
+  privateRoute('/mundo', async () => {
     hideFilterBar();
     const { renderWorldPage } = await import('./components/WorldPage.js');
     renderWorldPage(mainContent);
@@ -330,6 +345,7 @@ async function boot() {
 
   onNotFound(() => {
     hideFilterBar();
+    document.body.classList.remove('auth-route');
     mainContent.innerHTML = `
       <div class="empty-state fade-in">
         <div class="empty-state__icon">${icon('frown', { size: 48 })}</div>

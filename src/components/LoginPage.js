@@ -52,6 +52,11 @@ function render(container, opts = {}) {
   container.innerHTML = `
     <div class="auth-page fade-in">
       <div class="auth-card">
+        <div class="auth-logo" aria-hidden="true">
+          <svg width="34" height="43" viewBox="0 0 23 29" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M5.8 0H0V29H5.8V23.2002H16.5195V29H22.3195V0H16.5195V5.79997L5.8 5.79998V0ZM16.5195 11.6L5.8 11.6V17.4002L16.5195 17.4002V11.6Z" fill="currentColor"/>
+          </svg>
+        </div>
         <h1 class="auth-title">${title}</h1>
         <p class="auth-subtitle">${subtitle}</p>
 

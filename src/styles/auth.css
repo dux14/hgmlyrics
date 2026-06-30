@@ -32,26 +32,25 @@
    ─────────────────────────────────────────────────────────────
    ============================================ */
 
+/* Rutas de auth: ocultar shell y quitar padding inferior del contenido. */
+body.auth-route .header,
+body.auth-route .bottom-nav,
+body.auth-route .sidebar { display: none; }
+body.auth-route .main__content { padding-bottom: 0; }
+
 .auth-page {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  /* `.main` reserves space for header + search row + filter bar even when the
-     filter bar is hidden. Pull the auth-page up so the card visually centers
-     against the actual viewport below the fixed search row, not below the
-     reserved 48px filter slot + main__content padding. */
-  min-height: calc(100dvh - var(--header-height, 64px) - 56px);
-  margin-top: calc(-48px - var(--space-lg));
+  /* Con el shell oculto (body.auth-route) el card centra en toda la pantalla. */
+  min-height: 100dvh;
   padding: var(--space-md) 0;
   gap: var(--space-md);
-}
-
-@media (min-width: 768px) {
-  .auth-page {
-    /* Desktop: search row lives inside the header; only the filter slot pads. */
-    min-height: calc(100dvh - var(--header-height, 64px));
-  }
+  background:
+    radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--color-primary) 14%, transparent), transparent 55%),
+    radial-gradient(100% 70% at 50% 100%, color-mix(in srgb, var(--color-secondary, var(--color-primary)) 12%, transparent), transparent 60%),
+    var(--color-bg);
 }
 
 .auth-card {
@@ -64,7 +63,15 @@
   box-shadow: 0 4px 20px var(--color-shadow);
 }
 
+.auth-logo {
+  display: flex;
+  justify-content: center;
+  color: var(--color-primary);
+  margin-bottom: var(--space-md);
+}
+
 .auth-title {
+  font-family: var(--font-display);
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-bold);
   margin-bottom: var(--space-sm);

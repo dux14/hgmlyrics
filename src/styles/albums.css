@@ -1,0 +1,106 @@
+/* albums-view — rejilla de álbumes, Fase 2 Home Spotify + Álbumes
+   Tokens: variables.css. Cero hex de marca sueltos. */
+
+.albums-view {
+  padding: var(--space-md) var(--space-md) var(--space-2xl);
+  max-width: var(--max-content-width);
+  margin: 0 auto;
+}
+
+.albums-view__title {
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  margin: var(--space-sm) 0 var(--space-lg);
+  line-height: var(--line-height-tight);
+}
+
+/* === Grid responsivo === */
+
+.albums-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-md);
+}
+
+@media (min-width: 480px) {
+  .albums-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .albums-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: var(--space-lg);
+  }
+}
+
+/* === Card === */
+
+.album-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  transition:
+    transform var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+.album-card:hover,
+.album-card:focus-visible {
+  transform: translateY(-4px);
+  box-shadow:
+    0 8px 24px var(--color-shadow),
+    0 0 0 1px var(--color-primary);
+  outline: none;
+}
+
+/* Respeta la preferencia de movimiento reducido */
+@media (prefers-reduced-motion: reduce) {
+  .album-card {
+    transition: none;
+  }
+
+  .album-card:hover,
+  .album-card:focus-visible {
+    transform: none;
+  }
+}
+
+.album-card__cover {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  display: block;
+}
+
+.album-card__info {
+  padding: var(--space-sm) var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.album-card__name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  line-height: var(--line-height-tight);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.album-card__artist {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

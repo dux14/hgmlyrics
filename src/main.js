@@ -309,6 +309,12 @@ async function boot() {
     renderVoicesAlbumView(mainContent);
   });
 
+  privateRoute('/albumes', async () => {
+    hideFilterBar();
+    const { renderAlbumsView } = await import('./components/AlbumsView.js');
+    renderAlbumsView(mainContent);
+  });
+
   privateRoute('/voz/:id', async ({ params }) => {
     hideFilterBar();
     const { renderWeeklyWordById } = await import('./components/WeeklyWordView.js');

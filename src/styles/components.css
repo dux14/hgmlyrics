@@ -1503,21 +1503,32 @@
    tema claro — no el token global, para no alterar el resaltado de voces v1.
    En tema oscuro el token (#ffe082) ya cumple, así que se restaura. */
 .lyrics__line--tono.voice-text--tenor .syll__note {
+  color: var(--color-voice-tenor);
+}
+[data-theme='light'] .lyrics__line--tono.voice-text--tenor .syll__note {
   color: #8a6800;
 }
-[data-theme='dark'] .lyrics__line--tono.voice-text--tenor .syll__note {
-  color: var(--color-voice-tenor);
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .lyrics__line--tono.voice-text--tenor .syll__note {
+    color: #8a6800;
+  }
 }
 
 /* Mismo fix de contraste para las notas Wave 4 (subrayadas, sin pill):
    tenor en tema claro baja a #8a6800; en oscuro el token ya cumple. */
 .float-label.tono-note.voice-text--tenor,
 .mix-rail--note.voice-text--tenor {
+  color: var(--color-voice-tenor);
+}
+[data-theme='light'] .float-label.tono-note.voice-text--tenor,
+[data-theme='light'] .mix-rail--note.voice-text--tenor {
   color: #8a6800;
 }
-[data-theme='dark'] .float-label.tono-note.voice-text--tenor,
-[data-theme='dark'] .mix-rail--note.voice-text--tenor {
-  color: var(--color-voice-tenor);
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .float-label.tono-note.voice-text--tenor,
+  :root:not([data-theme]) .mix-rail--note.voice-text--tenor {
+    color: #8a6800;
+  }
 }
 
 /* El texto de la sílaba se mantiene en el color de lectura normal; solo la

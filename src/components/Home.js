@@ -102,7 +102,7 @@ function renderListsBody(lists) {
 function vozCardHtml(word) {
   return `
     <button class="home__voz-card" data-voz-id="${escapeHtml(word.id)}">
-      ${voiceoverCoverHtml(word.liturgical_color, { size: 64, radius: 10 })}
+      ${voiceoverCoverHtml(word.liturgical_color, { size: 44, radius: 10 })}
       <span class="home__voz-info">
         <span class="home__voz-ref">${escapeHtml(word.gospel_ref ?? '')}</span>
         <span class="home__voz-date">${escapeHtml(formatShortDate(word.sunday_date))}</span>

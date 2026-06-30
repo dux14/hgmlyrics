@@ -344,7 +344,7 @@
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-lg);
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-md);
   cursor: pointer;
   text-align: left;
   transition: background var(--transition-fast), border-color var(--transition-fast);
@@ -358,11 +358,15 @@
 }
 
 .home__teaser-ic {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  background: color-mix(in oklch, var(--color-accent) 14%, transparent);
   color: var(--color-accent);
+  flex-shrink: 0;
 }
 
 .home__teaser-tx {

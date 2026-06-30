@@ -36,6 +36,27 @@ export const ACTIONS = [
 ];
 
 /**
+ * Aplana todos los items de los grupos en un array plano navegable.
+ * @param {Array<{ label: string, items: Array }>} groups
+ * @returns {Array}
+ */
+export function getFlatItems(groups) {
+  return groups.flatMap((g) => g.items);
+}
+
+/**
+ * Nuevo indice activo con wrap circular.
+ * @param {number} current  Indice actual
+ * @param {number} delta    +1 (abajo) o -1 (arriba)
+ * @param {number} length   Longitud total de la lista plana
+ * @returns {number}
+ */
+export function moveActiveIndex(current, delta, length) {
+  if (!length) return 0;
+  return ((current + delta) % length + length) % length;
+}
+
+/**
  * Construye los grupos de resultados para el query dado.
  *
  * @param {string} query

@@ -17,7 +17,7 @@ vi.mock('./songRow.js', () => ({ resolveCoverUrl: () => 'cover.jpg' }));
 vi.mock('./ThemeToggle.js', () => ({ getTheme: () => 'dark', applyTheme: vi.fn() }));
 vi.mock('../router.js', () => ({ navigate: vi.fn() }));
 
-import { buildResults } from './CommandPalette.js';
+import { buildResults, getFlatItems, moveActiveIndex } from './CommandPalette.js';
 import { searchSongs } from '../lib/search.js';
 import { getAlbums, getState } from '../lib/store.js';
 
@@ -89,5 +89,27 @@ describe('buildResults', () => {
   it('omite grupos vacios: con query sin matches no retorna grupos vacios', () => {
     const groups = buildResults('zzzzznomatch');
     expect(groups.every((g) => g.items.length > 0)).toBe(true);
+  });
+});
+
+describe('navegacion de teclado', () => {
+  it('getFlatItems aplana items saltando headers', () => {
+    const groups = [
+      { label: 'A', items: [{ id: '1' }, { id: '2' }] },
+      { label: 'B', items: [{ id: '3' }] },
+    ];
+    expect(getFlatItems(groups).map((i) => i.id)).toEqual(['1', '2', '3']);
+  });
+
+  it('moveActiveIndex hace wrap hacia abajo', () => {
+    expect(moveActiveIndex(2, 1, 3)).toBe(0);
+  });
+
+  it('moveActiveIndex hace wrap hacia arriba', () => {
+    expect(moveActiveIndex(0, -1, 3)).toBe(2);
+  });
+
+  it('moveActiveIndex con lista vacia devuelve 0', () => {
+    expect(moveActiveIndex(0, 1, 0)).toBe(0);
   });
 });

@@ -18,8 +18,8 @@ function buildChrome() {
       <span class="stage-chrome__wakelock" id="stage-wakelock" hidden>${icon('sun', { size: 18 })}<span>Pantalla activa</span></span>
     </div>
     <div class="stage-chrome__bottom">
-      <button class="stage-chrome__btn stage-chrome__font" id="stage-font-down" type="button" aria-label="Reducir tamano de letra">A−</button>
-      <button class="stage-chrome__btn stage-chrome__font" id="stage-font-up" type="button" aria-label="Aumentar tamano de letra">A+</button>
+      <button class="stage-chrome__btn stage-chrome__font" id="stage-font-down" type="button" aria-label="Reducir tamaño de letra">A−</button>
+      <button class="stage-chrome__btn stage-chrome__font" id="stage-font-up" type="button" aria-label="Aumentar tamaño de letra">A+</button>
       <div class="stage-chrome__autoscroll" id="stage-autoscroll-slot"></div>
     </div>`;
   return chrome;

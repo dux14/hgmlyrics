@@ -12,7 +12,7 @@ import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { resolveCoverUrl, voiceBadge } from './songRow.js';
 import { escapeHtml } from '../lib/escape.js';
 
-let currentViewMode = localStorage.getItem('hkn-view-mode') || 'grid';
+let currentViewMode = localStorage.getItem('hkn-view-mode') || 'list';
 let favUnsubscribe = null;
 
 function paintFavBtn(btn, on) {
@@ -66,14 +66,14 @@ export function renderSongList(container, songs) {
   });
 
   const listContainer = document.createElement('div');
-  listContainer.className = currentViewMode === 'grid' ? 'song-grid' : 'song-table-container';
+  listContainer.className = currentViewMode === 'grid' ? 'song-grid' : 'song-list';
 
   if (currentViewMode === 'grid') {
     songs.forEach((song, index) => {
       listContainer.appendChild(createSongCard(song, index));
     });
   } else {
-    listContainer.appendChild(createSongTable(songs));
+    songs.forEach((song, i) => listContainer.appendChild(createSongListRow(song, i)));
   }
 
   container.appendChild(listContainer);
@@ -216,56 +216,38 @@ export function createSongCard(song, index) {
 }
 
 /**
- * Create a song table element
- * @param {Array} songs
+ * Crea una fila limpia de lista: carátula + título + álbum + badge de voz.
+ * @param {object} song
+ * @param {number} [index] - para animación escalonada
  * @returns {HTMLElement}
  */
-function createSongTable(songs) {
-  const table = document.createElement('table');
-  table.className = 'song-table';
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th style="width: 50px;"></th>
-        <th>Título</th>
-        <th>Artista</th>
-        <th>Álbum</th>
-        <th>Año / Género</th>
-        <th>Tipo Voz</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${songs
-        .map((song, i) => {
-          const coverUrl = resolveCoverUrl(song);
-          const { class: voiceBadgeClass, label: voiceLabel } = voiceBadge(song);
+export function createSongListRow(song, index = 0) {
+  const row = document.createElement('div');
+  row.className = 'song-list-row fade-in';
+  row.style.animationDelay = `${index * 30}ms`;
+  row.setAttribute('role', 'button');
+  row.setAttribute('tabindex', '0');
+  row.setAttribute('aria-label', `${song.title} — ${song.album}`);
 
-          return `
-          <tr class="song-table__row fade-in" style="animation-delay: ${i * 30}ms" data-id="${song.id}" tabindex="0">
-            <td>
-              <img src="${coverUrl}" class="song-table__thumb" width="40" height="40" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'" />
-            </td>
-            <td class="song-table__title">${escapeHtml(song.title)}</td>
-            <td>${escapeHtml(song.artist)}</td>
-            <td class="song-table__meta">${escapeHtml(song.album)}</td>
-            <td class="song-table__meta">${song.year || ''} <span style="font-size:0.75rem;opacity:0.7">${escapeHtml(song.genre || '')}</span></td>
-            <td><span class="voice-badge ${voiceBadgeClass}">${voiceLabel}</span></td>
-          </tr>
-        `;
-        })
-        .join('')}
-    </tbody>
+  const coverUrl = resolveCoverUrl(song);
+  const { class: voiceBadgeClass, label: voiceLabel } = voiceBadge(song);
+
+  row.innerHTML = `
+    <img class="song-list-row__thumb" src="${coverUrl}" alt="" width="40" height="40" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'" />
+    <div class="song-list-row__text">
+      <span class="song-list-row__title">${escapeHtml(song.title)}</span>
+      <span class="song-list-row__album">${escapeHtml(song.album)}</span>
+    </div>
+    <span class="voice-badge ${voiceBadgeClass}">${voiceLabel}</span>
   `;
 
-  table.querySelectorAll('.song-table__row').forEach((row) => {
-    row.addEventListener('click', () => navigate(`/song/${row.dataset.id}`));
-    row.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        navigate(`/song/${row.dataset.id}`);
-      }
-    });
+  row.addEventListener('click', () => navigate(`/song/${song.id}`));
+  row.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      navigate(`/song/${song.id}`);
+    }
   });
 
-  return table;
+  return row;
 }

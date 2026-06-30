@@ -767,6 +767,22 @@
   color: var(--color-bg);
 }
 
+/* === Song List (fila limpia: carátula + título + álbum + voz) === */
+.song-list { display: flex; flex-direction: column; }
+.song-list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-xs);
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+}
+.song-list-row:hover { background: color-mix(in srgb, var(--color-primary) 6%, transparent); }
+.song-list-row__thumb { width: 40px; height: 40px; border-radius: var(--border-radius-sm); object-fit: cover; flex: 0 0 40px; }
+.song-list-row__text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.song-list-row__title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.song-list-row__album { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+
 /* === Song Table === */
 .song-table-container {
   width: 100%;

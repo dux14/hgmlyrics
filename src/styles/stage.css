@@ -1,0 +1,88 @@
+/* stage.css — Modo escenario (F1d). Overlay song-first + chrome glass. */
+
+/* El Lector ocupa toda la pantalla; oculta el shell. */
+body.stage-active .header,
+body.stage-active .bottom-nav,
+body.stage-active .sidebar,
+body.stage-active .sidebar-overlay { display: none !important; }
+body.stage-active { overflow: hidden; }
+
+.song-view--stage {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  margin: 0;
+  max-width: none;
+  height: 100svh;
+  height: 100dvh;
+  overflow-y: auto;
+  background: var(--color-bg);
+  padding: clamp(1.5rem, 6vw, 4rem) clamp(1rem, 5vw, 3rem) 40svh;
+}
+
+/* En escenario, ocultar el cromo del Lector que no es la letra. */
+.song-view--stage .song-view__header,
+.song-view--stage .song-toolbar,
+.song-view--stage .tool-box,
+.song-view--stage .font-controls { display: none; }
+
+/* Chrome auto-ocultable */
+.stage-chrome {
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  pointer-events: none; /* solo las barras reciben eventos */
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.stage-chrome--visible { opacity: 1; }
+
+.stage-chrome__top,
+.stage-chrome__bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  pointer-events: auto;
+  background: color-mix(in oklab, var(--color-surface) 75%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.stage-chrome__top { top: 0; justify-content: space-between; padding-top: max(0.75rem, env(safe-area-inset-top)); }
+.stage-chrome__bottom { bottom: 0; justify-content: center; padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+
+.stage-chrome__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  border-radius: var(--border-radius-md, 8px);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font-weight: 600;
+}
+.stage-chrome__btn:hover { background: color-mix(in oklab, var(--color-text) 12%, transparent); }
+
+.stage-chrome__wakelock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--color-brand);
+}
+
+/* FAB de autoscroll re-parentado a la barra inferior del escenario. */
+.autoscroll-fab--stage {
+  position: static;
+  inset: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-chrome { transition: none; }
+}

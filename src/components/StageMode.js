@@ -1,6 +1,7 @@
 import { icon } from '../lib/icons.js';
 import { createWakeLock } from '../lib/wakeLock.js';
 import { requestStageFullscreen, exitStageFullscreen } from '../lib/fullscreen.js';
+import '../styles/stage.css';
 
 /** Transicion pura del chrome: el toque tiene un solo significado. */
 export function nextChromeVisible(prev) {

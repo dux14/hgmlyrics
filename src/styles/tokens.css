@@ -1,5 +1,7 @@
 @theme static {
-  /* ── Teal (marca) — H 195 — ancla 500 ≡ #0097a7 ── */
+  /* ── Teal (marca) — H 195 — ancla 500 ~ #0097a7 (aproximacion, NO match exacto:
+     #0097a7 ~ oklch(61.9% 0.106 208); ΔH≈13° ΔC≈+13%. F1 = rebranding intencional
+     a los tonos Ambient Kinetic, no un swap neutro de --color-primary) ── */
   --color-teal-50:  oklch(97% 0.02 195);
   --color-teal-100: oklch(93% 0.04 195);
   --color-teal-200: oklch(87% 0.06 195);
@@ -25,7 +27,8 @@
   --color-violet-900: oklch(31% 0.08 285);
   --color-violet-950: oklch(23% 0.06 285);
 
-  /* ── Amber (acción) — H 70 — ancla 500 ≡ #ff8f00 ── */
+  /* ── Amber (acción) — H 70 — ancla 500 ~ #ff8f00 (aproximacion OKLCH, no match
+     exacto; ver nota de teal. F1 ajusta el tono si se requiere) ── */
   --color-amber-50:  oklch(97% 0.03 80);
   --color-amber-100: oklch(94% 0.06 78);
   --color-amber-200: oklch(89% 0.10 76);
@@ -70,7 +73,10 @@
      primitivos en F1. Hasta entonces --color-accent-2 deriva de violet-400/500. */
 }
 
-/* Utilities que siguen el tema runtime (bg-surface, text-brand, etc.) — se usan en F1+ */
+/* Utilities que siguen el tema runtime (bg-surface, text-brand, etc.) — se usan en F1+.
+   inline: las utilities emiten var(...) —no el valor estatico— para que
+   [data-theme='dark'] las sobreescriba en runtime. Las auto-referencias
+   (--color-bg: var(--color-bg)) son INTENCIONALES; no las reemplaces por hex. */
 @theme inline {
   --color-bg: var(--color-bg);
   --color-surface: var(--color-surface);

@@ -711,3 +711,113 @@ select.pf-inp {
   width: 15px;
   height: 15px;
 }
+
+/* ──────────────────────────────────────────────
+   Perfil público — Ambient Kinetic (Task 4 F2a)
+   ────────────────────────────────────────────── */
+
+/* ── Botón de acción ámbar (agregar amigo) ── */
+.pf-btn-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 12px 16px 0;
+  padding: 11px;
+  border-radius: 12px;
+  background: var(--color-action);
+  color: var(--color-bg);
+  font-size: 12px;
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--color-action) 35%, transparent);
+  font-family: inherit;
+}
+
+.pf-btn-action .icon {
+  width: 15px;
+  height: 15px;
+}
+
+/* Estado enviado: fondo atenuado, sin glow */
+.pf-btn-action--sent {
+  background: color-mix(in srgb, var(--color-action) 38%, transparent);
+  box-shadow: none;
+  opacity: 0.7;
+  cursor: default;
+}
+
+/* Chips en perfil público: padding lateral (no afecta .pf-card que tiene el suyo) */
+.pf-chips--pub {
+  padding: 0 16px;
+}
+
+/* ── Encabezados de sección del perfil público ── */
+.sec-h {
+  font-size: 8px;
+  color: var(--color-primary);
+  padding: 14px 18px 7px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+/* ── Lista de canciones favoritas ── */
+.pf-list {
+  padding: 0 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pf-srow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px;
+  border-radius: 13px;
+}
+
+.pf-srow:hover {
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pf-srow {
+    transition: background 0.12s ease-out;
+  }
+}
+
+/* Carátula dentro de la fila */
+.pf-cv {
+  width: 42px;
+  height: 42px;
+  border-radius: 9px;
+  flex: none;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+
+/* Bloque de info (título + álbum) */
+.pf-si {
+  min-width: 0;
+  flex: 1;
+}
+
+.pf-st {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text);
+}
+
+.pf-sa {
+  font-size: 9.5px;
+  color: var(--color-text-secondary);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

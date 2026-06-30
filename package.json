@@ -50,6 +50,7 @@
     "formidable": "^3.5.4",
     "idb-keyval": "^6.2.2",
     "phaser": "^4.1.0",
-    "postgres": "^3.4.9"
+    "postgres": "^3.4.9",
+    "web-vitals": "^5.3.0"
   }
 }

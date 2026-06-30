@@ -345,6 +345,14 @@ async function boot() {
   } catch (_) {
     // no critico
   }
+
+  // RUM: web-vitals (no bloquea el primer render, import lazy al final del boot)
+  try {
+    const { initVitals } = await import('./lib/vitals.js');
+    initVitals();
+  } catch (_) {
+    // no critico
+  }
 }
 
 // Boot on DOMContentLoaded

@@ -2,16 +2,14 @@
    Tokens: variables.css. Cero hex de marca sueltos. */
 
 .albums-view {
-  padding: var(--space-md) var(--space-md) var(--space-2xl);
-  max-width: var(--max-content-width);
-  margin: 0 auto;
+  padding: 0 0 var(--space-2xl);
 }
 
 .albums-view__title {
-  font-size: var(--font-size-3xl);
+  font-size: var(--font-size-lg);
   font-weight: var(--font-weight-bold);
   color: var(--color-text);
-  margin: var(--space-sm) 0 var(--space-lg);
+  margin: 0 0 var(--space-md);
   line-height: var(--line-height-tight);
 }
 

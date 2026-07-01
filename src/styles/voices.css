@@ -15,9 +15,7 @@
 
 /* ── Contenedor de página ── */
 .voz-album {
-  max-width: 680px;
-  margin: 0 auto;
-  padding: 1.5rem 1rem;
+  padding: 0 0 var(--space-lg);
 }
 
 /* ── Hero portada álbum ── */
@@ -130,6 +128,21 @@
 .voz-album .empty-state .btn {
   margin-top: 1rem;
 }
+
+/* Botón editar por fila (solo admin) */
+.voz-album__edit {
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.voz-album__edit:hover { color: var(--color-text); }
 
 /* Reduced-motion */
 @media (prefers-reduced-motion: reduce) {

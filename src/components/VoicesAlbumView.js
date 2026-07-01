@@ -118,6 +118,7 @@ export async function renderVoicesAlbumView(container) {
               <div class="voz-album__date">${escapeHtml(formatShortDate(w.sunday_date))}</div>
             </div>
             ${isVig ? `<span class="voz-album__badge--vigente">VIGENTE</span>` : ''}
+            ${isAdmin() ? `<button class="voz-album__edit" data-edit-voz="${escapeHtml(w.id)}" aria-label="Editar voz en off">${icon('pencil', { size: 18 })}</button>` : ''}
           </li>`;
           })
           .join('')}
@@ -153,5 +154,12 @@ export async function renderVoicesAlbumView(container) {
       cover.style.setProperty('--liturgical-gradient', coverGradient(pal));
       cover.style.setProperty('--liturgical-accent', pal.accent);
     }
+  });
+
+  container.querySelectorAll('[data-edit-voz]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      navigate(`/admin/voz/${btn.dataset.editVoz}`);
+    });
   });
 }

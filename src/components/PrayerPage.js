@@ -5,6 +5,7 @@
  * sin estado, sin red. Estética theme-aware en prayer.css.
  */
 
+import { icon } from '../lib/icons.js';
 import '../styles/prayer.css';
 
 /** Estrofas de la oración, en orden. Texto fijo — no editar a la ligera. */
@@ -26,13 +27,17 @@ export function renderPrayerPage(container) {
   container.innerHTML = `
     <section class="prayer" aria-label="Oración del artista">
       <div class="prayer__glow" aria-hidden="true"></div>
-      <div class="prayer__inner">
-        <p class="prayer__label">Oración del artista</p>
-        <div class="prayer__body">
-          ${stanzasHtml}
-        </div>
-        <p class="prayer__amen">Amén.</p>
+      <header class="prayer__header">
+        <span class="prayer__badge" aria-hidden="true">${icon('sun', { size: 26 })}</span>
+        <h1 class="prayer__title">Oración del artista</h1>
+      </header>
+      <div class="prayer__body">
+        ${stanzasHtml}
       </div>
+      <footer class="prayer__footer">
+        <span class="prayer__divider" aria-hidden="true"></span>
+        <p class="prayer__amen">Amén.</p>
+      </footer>
     </section>
   `;
 }

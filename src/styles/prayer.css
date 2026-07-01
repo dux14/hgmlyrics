@@ -7,9 +7,9 @@
   position: relative;
   min-height: calc(100vh - var(--header-height, 64px));
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: clamp(2rem, 6vw, 5rem) clamp(1.25rem, 5vw, 3rem);
+  padding: clamp(2.5rem, 7vw, 4.5rem) clamp(1.25rem, 5vw, 3rem);
   overflow: hidden;
   isolation: isolate;
   /* Fondo theme-aware. Light = alba cálida; Dark = penumbra ámbar. */
@@ -56,26 +56,52 @@
   }
 }
 
-.prayer__inner {
+/* ---- Cabecera: insignia circular con el sol + título ---- */
+.prayer__header {
   position: relative;
-  max-width: 36ch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
 }
 
-.prayer__label {
-  font-family: var(--font-family);
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
-  font-size: clamp(0.62rem, 1.4vw, 0.78rem);
-  font-weight: 600; /* remapeado 500->600 (Montserrat self-host omite peso 500) */
-  color: var(--prayer-label);
-  margin: 0 0 clamp(1.5rem, 4vw, 2.5rem);
+.prayer__badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  border: 1px solid color-mix(in oklch, var(--prayer-accent) 40%, transparent);
+  color: var(--prayer-accent);
 }
 
+.prayer__badge .icon {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.prayer__title {
+  font-family: 'Cormorant Garamond', 'Cormorant-fallback', Georgia, serif;
+  font-weight: 500;
+  font-size: clamp(2rem, 1.4rem + 2.6vw, 2.9rem);
+  line-height: 1.15;
+  color: var(--prayer-text);
+  margin: clamp(1.1rem, 3vw, 1.6rem) 0 0;
+  text-wrap: balance;
+}
+
+/* ---- Cuerpo: estrofas centradas, ocupa el espacio disponible ---- */
 .prayer__body {
+  position: relative;
+  flex: 1;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: clamp(1.1rem, 3vw, 1.8rem);
+  max-width: 38ch;
+  margin: clamp(2rem, 5vw, 3rem) 0;
+  text-align: center;
 }
 
 .prayer__stanza {
@@ -88,68 +114,71 @@
   text-wrap: balance;
 }
 
+/* ---- Pie: línea vertical degradada + Amén ---- */
+.prayer__footer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.prayer__divider {
+  width: 1px;
+  height: 3rem;
+  margin-bottom: clamp(1rem, 3vw, 1.4rem);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklch, var(--prayer-accent) 60%, transparent),
+    transparent
+  );
+}
+
 .prayer__amen {
   font-family: 'Cormorant Garamond', 'Cormorant-fallback', Georgia, serif;
-  font-style: italic;
-  font-weight: 700;
-  font-size: clamp(1.15rem, 1rem + 1vw, 1.5rem);
+  font-weight: 500;
+  font-size: clamp(2rem, 1.4rem + 2.4vw, 2.75rem);
+  letter-spacing: 0.04em;
   color: var(--prayer-accent);
-  margin: clamp(1.6rem, 4vw, 2.4rem) 0 0;
+  margin: 0;
 }
 
 /* ---- Tokens de tema (dark por defecto; light vía override) ---- */
 :root {
-  /* Dark: ambient teal/violeta (spec §3 — teal-950 + violet-950) */
-  --prayer-bg: radial-gradient(
-    120% 95% at 50% 12%,
-    var(--color-teal-950) 0%,
-    var(--color-violet-950) 48%,
-    var(--color-neutral-950) 100%
-  );
+  /* Dark: luz de vela. El fondo base es EXACTAMENTE --color-bg (igual que el
+     header y el bottom-nav) para no dejar costura en los bordes; la calidez
+     vive solo en el halo centrado (.prayer__glow), que se desvanece antes de
+     tocar los bordes. */
+  --prayer-bg: var(--color-bg);
   --prayer-glow: radial-gradient(
     circle,
-    color-mix(in oklch, var(--color-accent-2) 40%, transparent),
-    transparent 66%
+    color-mix(in oklch, var(--color-liturgy) 30%, transparent),
+    transparent 68%
   );
-  --prayer-label: var(--color-action);
   --prayer-text: var(--color-neutral-100);
   --prayer-accent: var(--color-liturgy);
 }
 
 [data-theme='light'] {
-  /* Light: luz del alba ámbar */
-  --prayer-bg: linear-gradient(
-    165deg,
-    var(--color-amber-50) 0%,
-    var(--color-amber-100) 42%,
-    var(--color-amber-200) 78%,
-    var(--color-amber-300) 100%
-  );
+  /* Light: papel cálido sobrio. Base = --color-bg (igual que header/bottom-nav)
+     para fundirse sin costura; la calidez vive en el halo centrado. */
+  --prayer-bg: var(--color-bg);
   --prayer-glow: radial-gradient(
     circle,
-    color-mix(in oklch, var(--color-neutral-50) 90%, transparent),
-    transparent 62%
+    color-mix(in oklch, var(--color-amber-200) 42%, transparent),
+    transparent 66%
   );
-  --prayer-label: var(--color-amber-800);
   --prayer-text: var(--color-amber-950);
   --prayer-accent: var(--color-amber-700);
 }
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme]) {
-    --prayer-bg: linear-gradient(
-      165deg,
-      var(--color-amber-50) 0%,
-      var(--color-amber-100) 42%,
-      var(--color-amber-200) 78%,
-      var(--color-amber-300) 100%
-    );
+    --prayer-bg: var(--color-bg);
     --prayer-glow: radial-gradient(
       circle,
-      color-mix(in oklch, var(--color-neutral-50) 90%, transparent),
-      transparent 62%
+      color-mix(in oklch, var(--color-amber-200) 42%, transparent),
+      transparent 66%
     );
-    --prayer-label: var(--color-amber-800);
     --prayer-text: var(--color-amber-950);
     --prayer-accent: var(--color-amber-700);
   }

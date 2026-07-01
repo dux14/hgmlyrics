@@ -6,7 +6,12 @@ vi.mock('../styles/home.css', () => ({}));
 vi.mock('../router.js', () => ({ navigate: vi.fn() }));
 vi.mock('../lib/store.js', () => ({ getState: vi.fn(), getAlbums: vi.fn() }));
 vi.mock('../lib/authStore.js', () => ({ isAuthenticated: vi.fn(), getSession: vi.fn() }));
-vi.mock('../lib/lists.js', () => ({ listMyLists: vi.fn() }));
+vi.mock('../lib/lists.js', () => ({ listMyLists: vi.fn(), warmList: vi.fn() }));
+vi.mock('../lib/prefetch.js', () => ({
+  cached: vi.fn((key, fetcher) => fetcher().then((data) => ({ data, fromCache: false }))),
+  readCached: vi.fn(() => undefined),
+  warm: vi.fn(),
+}));
 vi.mock('../lib/favorites.js', () => ({ getFavoriteIds: vi.fn() }));
 vi.mock('../lib/icons.js', () => ({ icon: vi.fn((name) => `[${name}]`) }));
 vi.mock('../lib/escape.js', () => ({ escapeHtml: (s) => String(s ?? '') }));
@@ -311,6 +316,21 @@ describe('renderHome — Listas', () => {
     expect(first.querySelector('.home__list-dot.-red')).not.toBeNull();
     expect(first.querySelector('.home__list-pill').textContent.trim()).toBe('mañana');
   });
+
+  it('precalienta el detalle de las primeras listas visibles', async () => {
+    isAuthenticated.mockReturnValue(true);
+    const { warmList } = await import('../lib/lists.js');
+    listMyLists.mockResolvedValue([
+      { id: 'roja', name: 'A', song_count: 1, expires_at: '2026-07-02' },
+      { id: 'amarilla', name: 'B', song_count: 1, expires_at: '2026-07-06' },
+    ]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-07-01' });
+
+    const warmedIds = warmList.mock.calls.map((call) => call[0]);
+    expect(warmedIds).toContain('roja');
+    expect(warmedIds).toContain('amarilla');
+  });
 });
 
 // ── Álbumes ───────────────────────────────────────────────────────────
@@ -485,6 +505,28 @@ describe('renderHome — Voz en off', () => {
 
     // Debe mostrar la más reciente, no la primera del array
     expect(c.querySelector('[data-voz-id]')?.dataset.vozId).toBe('w-recent');
+  });
+});
+
+// ── Skeletons ─────────────────────────────────────────────────────────
+describe('renderHome — skeletons', () => {
+  it('muestra skeleton de Listas antes de que resuelva el fetch', async () => {
+    isAuthenticated.mockReturnValue(true);
+    let resolve;
+    const { cached } = await import('../lib/prefetch.js');
+    cached.mockReturnValueOnce(new Promise((r) => (resolve = r)));
+
+    const c = mkContainer();
+    const done = renderHome(c, { today: '2026-07-01' });
+
+    // Antes de resolver: skeleton presente
+    expect(c.querySelector('.home__list-skeleton')).not.toBeNull();
+
+    resolve({ data: [], fromCache: false });
+    await done;
+    // Tras resolver: skeleton reemplazado por el estado vacío
+    expect(c.querySelector('.home__list-skeleton')).toBeNull();
+    expect(c.querySelector('[data-create-list]')).not.toBeNull();
   });
 });
 

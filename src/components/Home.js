@@ -9,7 +9,8 @@ import { icon } from '../lib/icons.js';
 import { escapeHtml } from '../lib/escape.js';
 import { urgencyOf, sortByUrgency, countdownLabel } from '../lib/listUrgency.js';
 import { resolveCoverUrl } from './songRow.js';
-import { listMyLists } from '../lib/lists.js';
+import { listMyLists, warmList } from '../lib/lists.js';
+import { cached } from '../lib/prefetch.js';
 import { getFavoriteIds } from '../lib/favorites.js';
 import { isVigente } from './VoicesAlbumView.js';
 import { voiceoverCoverHtml } from '../lib/voiceoverCover.js';
@@ -118,6 +119,26 @@ function vozCardHtml(word) {
     </button>`;
 }
 
+function listsSkeletonHtml() {
+  return `<div class="home__list-skeleton" aria-hidden="true">
+    <div class="home__skel-row"></div>
+    <div class="home__skel-row"></div>
+    <div class="home__skel-row"></div>
+  </div>`;
+}
+
+function vozSkeletonHtml() {
+  return `<div class="home__voz-skeleton" aria-hidden="true"></div>`;
+}
+
+async function fetchWeeklyWords() {
+  const session = getSession();
+  const headers = session ? { Authorization: `Bearer ${session.access_token}` } : {};
+  const res = await fetch('/api/weekly-words', { headers });
+  const jsonBody = res.ok ? await res.json() : {};
+  return jsonBody.weeklyWords ?? [];
+}
+
 /**
  * Renderiza la vista principal.
  * @param {HTMLElement} container
@@ -150,7 +171,7 @@ export async function renderHome(container, { today = new Date().toISOString().s
         <div class="home__hd">
           <h2 class="home__hd-title" id="home-listas-hd">Listas</h2>
         </div>
-        <div id="home-listas-body"></div>
+        <div id="home-listas-body">${listsSkeletonHtml()}</div>
       </section>
 
       <!-- Álbumes -->
@@ -188,7 +209,7 @@ export async function renderHome(container, { today = new Date().toISOString().s
           <h2 class="home__hd-title" id="home-voz-hd">Voz en off</h2>
           <button class="home__all" data-nav="/voces">Ver todas</button>
         </div>
-        <div id="home-voz-body"></div>
+        <div id="home-voz-body">${vozSkeletonHtml()}</div>
       </section>
 
       <!-- Oración -->
@@ -246,7 +267,7 @@ export async function renderHome(container, { today = new Date().toISOString().s
     container.querySelector('#section-listas')?.remove();
   } else {
     try {
-      const lists = await listMyLists();
+      const { data: lists } = await cached('lists', listMyLists);
       const listsBody = container.querySelector('#home-listas-body');
       if (listsBody) {
         listsBody.innerHTML = renderListsBody(lists, today);
@@ -257,6 +278,13 @@ export async function renderHome(container, { today = new Date().toISOString().s
           .querySelector('[data-create-list]')
           ?.addEventListener('click', () => navigate('/lista/nueva'));
       }
+      // Warm-up progresivo: detalle de las primeras listas (salta si save-data).
+      const saveData = globalThis.navigator?.connection?.saveData;
+      if (!saveData) {
+        sortByUrgency(lists)
+          .slice(0, 4)
+          .forEach((l) => warmList(l.id));
+      }
     } catch {
       container.querySelector('#section-listas')?.remove();
     }
@@ -264,11 +292,7 @@ export async function renderHome(container, { today = new Date().toISOString().s
 
   // ── Async: Voz en off ────────────────────────────────────────
   try {
-    const session = getSession();
-    const headers = session ? { Authorization: `Bearer ${session.access_token}` } : {};
-    const res = await fetch('/api/weekly-words', { headers });
-    const jsonBody = res.ok ? await res.json() : {};
-    const words = jsonBody.weeklyWords ?? [];
+    const { data: words } = await cached('weekly-words', fetchWeeklyWords);
     // Elegir la más reciente entre las vigentes (sunday_date ≤ hoy).
     // No se asume orden de la API: se toma el máximo sunday_date explícitamente.
     const vigente = words

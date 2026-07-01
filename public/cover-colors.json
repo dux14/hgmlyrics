@@ -1,74 +1,74 @@
 {
   "capricho.webp": {
-    "base": "#7f3e4c",
-    "light": "#b05f70"
+    "base": "#b2969c",
+    "light": "#c7b3b8"
   },
   "elartedevivir.webp": {
-    "base": "#6a817a",
-    "light": "#8fa39d"
+    "base": "#abb0ae",
+    "light": "#c5c8c8"
   },
   "entiperfecto.webp": {
-    "base": "#7b6f7b",
-    "light": "#9e949e"
+    "base": "#adadad",
+    "light": "#c7c7c7"
   },
   "hakuna.webp": {
-    "base": "#ad7f3d",
-    "light": "#caa268"
+    "base": "#c0b19b",
+    "light": "#d3c9ba"
   },
   "historiadeamor.webp": {
-    "base": "#9b5350",
-    "light": "#ba7b78"
+    "base": "#b9a3a2",
+    "light": "#cfc0bf"
   },
   "llevame.webp": {
-    "base": "#8b7060",
-    "light": "#ac9486"
+    "base": "#b3aca8",
+    "light": "#cbc6c3"
   },
   "mipobreloco.webp": {
-    "base": "#8b695f",
-    "light": "#ac8e86"
+    "base": "#b3aaa8",
+    "light": "#cbc5c3"
   },
   "misa.webp": {
-    "base": "#915d39",
-    "light": "#bf855c"
+    "base": "#b9a596",
+    "light": "#cebfb5"
   },
   "paraquiensoyyo.webp": {
-    "base": "#a26648",
-    "light": "#c08b72"
+    "base": "#bca89f",
+    "light": "#d1c3bd"
   },
   "pasion.webp": {
-    "base": "#141212",
-    "light": "#3f3939"
+    "base": "#858585",
+    "light": "#9e9e9e"
   },
   "pescadordehombres.webp": {
-    "base": "#9d744e",
-    "light": "#bb9877"
+    "base": "#baada1",
+    "light": "#cfc7be"
   },
   "qaos.webp": {
-    "base": "#dfe307",
-    "light": "#f5f939"
+    "base": "#cdce8d",
+    "light": "#dcddb0"
   },
   "sencillamente.webp": {
-    "base": "#7b6f6f",
-    "light": "#9e9494"
+    "base": "#adadad",
+    "light": "#c7c7c7"
   },
   "todoseaverdad.webp": {
-    "base": "#53977d",
-    "light": "#7bb7a0"
+    "base": "#a3b8b0",
+    "light": "#c0cec8"
   },
   "tu.webp": {
-    "base": "#696f82",
-    "light": "#8e94a4"
+    "base": "#abacb0",
+    "light": "#c5c6c9"
   },
   "tuyasson.webp": {
-    "base": "#b58535",
-    "light": "#d1a761"
+    "base": "#c3b398",
+    "light": "#d5cbb8"
   },
   "tuyo.webp": {
-    "base": "#d7a614",
-    "light": "#eec444"
+    "base": "#cebe8d",
+    "light": "#ddd2b0"
   },
   "venespirituven.webp": {
-    "base": "#524842",
-    "light": "#7f6f66"
+    "base": "#9b9794",
+    "light": "#b3b0af"
   }
 }

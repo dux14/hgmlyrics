@@ -38,8 +38,11 @@ export async function dominantColors(rawRGB, width, height) {
   }
   r = r / n; g = g / n; b = b / n;
   let [h, s, l] = rgbToHsl(r, g, b);
-  l = Math.min(l, 0.46); s = Math.min(1, s * 1.15 + 0.05);
-  return { base: hslToHex(h, s, l), light: hslToHex(h, s, Math.min(0.6, l + 0.16)) };
+  // Pastel: desaturar (cap ~0.40) y llevar la luminancia a banda media-clara.
+  s = Math.min(0.40, s * 0.6);
+  l = Math.max(0.52, Math.min(0.68, l * 0.6 + 0.42));
+  const lightL = Math.min(0.78, l + 0.10);
+  return { base: hslToHex(h, s, l), light: hslToHex(h, s, lightL) };
 }
 
 async function main() {

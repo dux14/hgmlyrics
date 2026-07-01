@@ -10,18 +10,18 @@ function lum(hex) {
 }
 
 describe('dominantColors', () => {
-  it('devuelve base y light en hex a partir de un buffer RGB', async () => {
-    // 2x2 px solido naranja (#cc6600) en raw RGB
+  it('devuelve base y light pastel (saturación baja, luminancia media-clara)', async () => {
+    // 2x2 px sólido naranja saturado (#cc6600) en raw RGB
     const px = [0xcc, 0x66, 0x00];
     const raw = Buffer.from([...px, ...px, ...px, ...px]);
     const { base, light } = await dominantColors(raw, 2, 2);
     expect(base).toMatch(/^#[0-9a-f]{6}$/);
     expect(light).toMatch(/^#[0-9a-f]{6}$/);
     expect(base).not.toBe(light);
-    // light debe ser mas claro que base pero sin blanquearse: si los args
-    // h/s/l estuvieran swapeados, l saltaria a 1.0 y el resultado seria
-    // #ffffff (lum=1.0); el valor correcto ronda 0.6 para esta entrada.
+    // Pastel: luminancia de base en banda media-clara, light algo más claro
+    // pero sin blanquearse.
+    expect(lum(base)).toBeGreaterThan(0.5);
     expect(lum(light)).toBeGreaterThan(lum(base));
-    expect(lum(light)).toBeLessThan(0.95);
+    expect(lum(light)).toBeLessThan(0.9);
   });
 });

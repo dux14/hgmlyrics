@@ -311,6 +311,12 @@ async function boot() {
     renderAlbumsView(mainContent);
   });
 
+  privateRoute('/listas', async () => {
+    hideFilterBar();
+    const { renderListsPage } = await import('./components/ListsPage.js');
+    await renderListsPage(mainContent);
+  });
+
   privateRoute('/album/:id', async ({ params }) => {
     hideFilterBar();
     const { renderAlbumDetail } = await import('./components/AlbumDetail.js');

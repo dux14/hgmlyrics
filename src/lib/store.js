@@ -133,11 +133,11 @@ export async function refreshData() {
  * de inserción). Si ninguna canción del álbum tiene artista, `artist` es
  * `undefined`.
  *
- * @returns {Array<{slug: string, name: string, coverImage: string, artist: string|undefined}>}
+ * @returns {Array<{slug: string, name: string, coverImage: string, artist: string|undefined, year: number|undefined}>}
  */
 export function getAlbums() {
   // Primera pasada: registrar metadatos del álbum y contar artistas.
-  const albumMeta = new Map();    // slug → { slug, name, coverImage }
+  const albumMeta = new Map();    // slug → { slug, name, coverImage, year }
   const artistCount = new Map();  // slug → Map<artist, count>
 
   state.songs.forEach((song) => {
@@ -146,8 +146,13 @@ export function getAlbums() {
         slug: song.albumSlug,
         name: song.album,
         coverImage: song.coverImage,
+        year: undefined,
       });
       artistCount.set(song.albumSlug, new Map());
+    }
+    if (typeof song.year === 'number') {
+      const meta = albumMeta.get(song.albumSlug);
+      meta.year = meta.year === undefined ? song.year : Math.max(meta.year, song.year);
     }
     if (song.artist) {
       const counts = artistCount.get(song.albumSlug);

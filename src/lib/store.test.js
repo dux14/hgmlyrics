@@ -81,4 +81,15 @@ describe('getAlbums', () => {
     ]);
     expect(getAlbums()).toHaveLength(2);
   });
+
+  it('incluye year = máximo año de las canciones del álbum', () => {
+    _setSongs([
+      { id: '1', album: 'A', albumSlug: 'a', coverImage: 'a.webp', year: 2020 },
+      { id: '2', album: 'A', albumSlug: 'a', coverImage: 'a.webp', year: 2024 },
+      { id: '3', album: 'B', albumSlug: 'b', coverImage: 'b.webp' },
+    ]);
+    const byslug = Object.fromEntries(getAlbums().map((al) => [al.slug, al]));
+    expect(byslug.a.year).toBe(2024);
+    expect(byslug.b.year).toBeUndefined();
+  });
 });

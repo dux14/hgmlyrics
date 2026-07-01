@@ -1,5 +1,6 @@
 /** lists.js — cliente de listas efímeras: API + contexto de reproducción. */
 import { supabase } from './supabase.js';
+import { cached, warm, invalidate } from './prefetch.js';
 
 async function authHeaders() {
   const { data } = await supabase.auth.getSession();
@@ -20,18 +21,34 @@ async function req(path, opts = {}) {
   return body;
 }
 
+const listKey = (id) => `list:${id}`;
+const fetchListRaw = (id) => req(`/api/lists/${id}`);
+
 export const listMyLists = () => req('/api/lists');
 export const createList = (name, expiresAt, parentId = null) =>
   req('/api/lists', {
     method: 'POST',
     body: JSON.stringify({ name, expires_at: expiresAt, parent_id: parentId }),
   });
-export const getList = (id) => req(`/api/lists/${id}`);
+/** Detalle de una lista, cacheado (SWR). Devuelve el objeto de la lista. */
+export const getList = (id) => cached(listKey(id), () => fetchListRaw(id)).then((r) => r.data);
+/** Precalienta el detalle de una lista en idle (apertura instantanea). */
+export const warmList = (id) => warm(listKey(id), () => fetchListRaw(id));
 export const updateList = (id, fields) =>
-  req(`/api/lists/${id}`, { method: 'PATCH', body: JSON.stringify(fields) });
-export const deleteList = (id) => req(`/api/lists/${id}`, { method: 'DELETE' });
+  req(`/api/lists/${id}`, { method: 'PATCH', body: JSON.stringify(fields) }).then((r) => {
+    invalidate(listKey(id));
+    return r;
+  });
+export const deleteList = (id) =>
+  req(`/api/lists/${id}`, { method: 'DELETE' }).then((r) => {
+    invalidate(listKey(id));
+    return r;
+  });
 export const setListSongs = (id, songIds) =>
-  req(`/api/lists/${id}/songs`, { method: 'PUT', body: JSON.stringify({ songIds }) });
+  req(`/api/lists/${id}/songs`, { method: 'PUT', body: JSON.stringify({ songIds }) }).then((r) => {
+    invalidate(listKey(id));
+    return r;
+  });
 
 /**
  * Reemplaza los items tipados de una lista.
@@ -39,11 +56,22 @@ export const setListSongs = (id, songIds) =>
  * @param {Array<{ item_type: 'song'|'weekly_word', item_id: string }>} items
  */
 export const setListItems = (id, items) =>
-  req(`/api/lists/${id}/songs`, { method: 'PUT', body: JSON.stringify({ items }) });
+  req(`/api/lists/${id}/songs`, { method: 'PUT', body: JSON.stringify({ items }) }).then((r) => {
+    invalidate(listKey(id));
+    return r;
+  });
 export const inviteMember = (id, username) =>
-  req(`/api/lists/${id}/members`, { method: 'POST', body: JSON.stringify({ username }) });
+  req(`/api/lists/${id}/members`, { method: 'POST', body: JSON.stringify({ username }) }).then(
+    (r) => {
+      invalidate(listKey(id));
+      return r;
+    }
+  );
 export const removeMember = (id, userId) =>
-  req(`/api/lists/${id}/members/${userId}`, { method: 'DELETE' });
+  req(`/api/lists/${id}/members/${userId}`, { method: 'DELETE' }).then((r) => {
+    invalidate(listKey(id));
+    return r;
+  });
 
 /**
  * Busca usuarios para invitar. scope='all' (solo admin en backend) devuelve a

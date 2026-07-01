@@ -287,13 +287,13 @@
   /* Gutter unico: 16px lateral (--space-md) en todos los breakpoints.
      Las vistas individuales NO añaden padding horizontal propio.
      Sin max-width ni centrado: el contenido ocupa todo el ancho disponible. */
-  padding: var(--space-lg) var(--space-md);
+  padding: var(--space-md) var(--space-md) var(--space-lg);
 }
 
 @media (min-width: 768px) {
   .main__content {
     /* Solo ajusta vertical en desktop; el lateral se mantiene en --space-md. */
-    padding-top: var(--space-xl);
+    padding-top: var(--space-md);
     padding-bottom: var(--space-xl);
   }
 }

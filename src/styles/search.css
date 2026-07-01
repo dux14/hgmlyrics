@@ -20,7 +20,7 @@
 .search-section__more { font-size: 0.7rem; font-weight: 700; color: var(--color-accent); background: none; border: 0; cursor: pointer; }
 
 /* Grid de tiles */
-.song-tile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm); padding-inline: var(--space-md); }
+.song-tile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-md); padding-inline: var(--space-md); }
 @media (min-width: 768px) { .song-tile-grid { grid-template-columns: repeat(4, 1fr); } }
 
 /* Tile */
@@ -42,7 +42,7 @@
   border-radius: 6px; transform: rotate(24deg); box-shadow: 0 8px 16px -4px rgba(0,0,0,.55); }
 
 /* Rails horizontales */
-.search-rail { display: flex; gap: var(--space-sm); overflow-x: auto; padding: 2px var(--space-md) 4px; scrollbar-width: none; }
+.search-rail { display: flex; gap: var(--space-md); overflow-x: auto; padding: 2px var(--space-md) 4px; scrollbar-width: none; }
 .search-rail::-webkit-scrollbar { display: none; }
 .search-rail__album { flex: none; width: 98px; text-decoration: none; }
 .search-rail__album img { width: 98px; height: 98px; border-radius: 10px; object-fit: cover; box-shadow: 0 6px 16px -6px rgba(0,0,0,.5); }

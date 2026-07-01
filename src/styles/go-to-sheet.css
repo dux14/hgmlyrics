@@ -77,23 +77,23 @@
 }
 
 .gsheet__tile:active {
-  background: color-mix(in srgb, var(--color-teal-500) 10%, transparent);
+  background: color-mix(in srgb, var(--tile-color, var(--color-teal-500)) 10%, transparent);
 }
 
-/* Tile activo: anillo teal + glow */
+/* Tile activo: anillo + glow en el color del tile */
 .gsheet__tile.is-active {
-  border-color: var(--color-teal-500);
-  background: color-mix(in srgb, var(--color-teal-500) 12%, transparent);
-  box-shadow: 0 0 0 1px var(--color-teal-500),
-    0 0 8px color-mix(in srgb, var(--color-teal-500) 30%, transparent);
+  border-color: var(--tile-color, var(--color-teal-500));
+  background: color-mix(in srgb, var(--tile-color, var(--color-teal-500)) 12%, transparent);
+  box-shadow: 0 0 0 1px var(--tile-color, var(--color-teal-500)),
+    0 0 8px color-mix(in srgb, var(--tile-color, var(--color-teal-500)) 30%, transparent);
 }
 
-/* Icono en teal */
+/* Icono en el color de identidad del tile */
 .gsheet__ic {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-teal-500);
+  color: var(--tile-color, var(--color-teal-500));
 }
 
 /* Label del tile */
@@ -101,4 +101,20 @@
   font-size: 0.78rem;
   line-height: 1.2;
   color: var(--color-text);
+}
+
+@keyframes gsheet-in {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes gsheet-dim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.gsheet { animation: gsheet-in 180ms ease-out; }
+.gsheet-dim { animation: gsheet-dim-in 180ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .gsheet, .gsheet-dim { animation: none; }
 }

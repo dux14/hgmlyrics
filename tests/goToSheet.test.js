@@ -26,7 +26,7 @@ describe('GO_TO_TILES', () => {
   });
   it('orden de rutas de los tiles con route', () => {
     const routes = GO_TO_TILES.filter((t) => t.route).map((t) => t.route);
-    expect(routes).toEqual(['/buscar', '/lista/nueva', '/oracion', '/favoritos', '/voces']);
+    expect(routes).toEqual(['/albumes', '/listas', '/oracion', '/favoritos', '/voces']);
   });
   it('tile "Limpiar caché" en lugar de "Mundo"', () => {
     const ids = GO_TO_TILES.map((t) => t.id);
@@ -40,7 +40,29 @@ describe('GO_TO_TILES', () => {
 describe('activeTile', () => {
   it('match exacto', () => expect(activeTile('/oracion')).toBe('oracion'));
   it('ignora querystring', () => expect(activeTile('/favoritos?x=1')).toBe('favoritos'));
-  it('match por prefijo de subruta', () => expect(activeTile('/lista/nueva')).toBe('listas'));
+  it('match por prefijo de subruta', () => expect(activeTile('/listas/nueva')).toBe('listas'));
   it('ruta sin tile → null', () => expect(activeTile('/song/1')).toBeNull());
   it('/mundo ya no tiene tile → null', () => expect(activeTile('/mundo')).toBeNull());
+});
+
+describe('GO_TO_TILES rutas y colores', () => {
+  it('álbumes apunta a /albumes y listas a /listas', () => {
+    const albumes = GO_TO_TILES.find((t) => t.id === 'albumes');
+    const listas = GO_TO_TILES.find((t) => t.id === 'listas');
+    expect(albumes.route).toBe('/albumes');
+    expect(listas.route).toBe('/listas');
+  });
+
+  it('cada tile define un color de identidad', () => {
+    for (const t of GO_TO_TILES) {
+      expect(typeof t.color).toBe('string');
+      expect(t.color.startsWith('--color') || t.color.startsWith('var(')).toBe(true);
+    }
+  });
+
+  it('activeTile resuelve las nuevas rutas', () => {
+    expect(activeTile('/albumes')).toBe('albumes');
+    expect(activeTile('/listas')).toBe('listas');
+    expect(activeTile('/voces')).toBe('voces');
+  });
 });

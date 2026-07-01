@@ -2,12 +2,12 @@ import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
 
 export const GO_TO_TILES = [
-  { id: 'albumes', label: 'Álbumes', route: '/buscar', iconKey: 'album' },
-  { id: 'listas', label: 'Listas', route: '/lista/nueva', iconKey: 'list' },
-  { id: 'oracion', label: 'Oración', route: '/oracion', iconKey: 'flame' },
-  { id: 'favoritos', label: 'Favoritos', route: '/favoritos', iconKey: 'heart' },
-  { id: 'voces', label: 'Voces', route: '/voces', iconKey: 'gospel' },
-  { id: 'cache', label: 'Limpiar caché', iconKey: 'rotate-ccw', action: 'clearCache' },
+  { id: 'albumes', label: 'Álbumes', route: '/albumes', iconKey: 'album', color: '--color-primary' },
+  { id: 'listas', label: 'Listas', route: '/listas', iconKey: 'list', color: '--color-violet-500' },
+  { id: 'oracion', label: 'Oración', route: '/oracion', iconKey: 'flame', color: '--color-liturgy' },
+  { id: 'favoritos', label: 'Favoritos', route: '/favoritos', iconKey: 'heart', color: '--color-rose-300' },
+  { id: 'voces', label: 'Voces', route: '/voces', iconKey: 'gospel', color: '--color-success' },
+  { id: 'cache', label: 'Limpiar caché', iconKey: 'rotate-ccw', action: 'clearCache', color: '--color-text-secondary' },
 ];
 
 /**
@@ -49,7 +49,7 @@ export function openGoToSheet(currentPath = '') {
     <div class="gsheet__grid">
       ${GO_TO_TILES.map((t) => {
         const dataAttr = t.action ? `data-action="${t.action}"` : `data-route="${t.route}"`;
-        return `<button class="gsheet__tile${t.id === active ? ' is-active' : ''}" ${dataAttr}>
+        return `<button class="gsheet__tile${t.id === active ? ' is-active' : ''}" style="--tile-color: var(${t.color});" ${dataAttr}>
           <span class="gsheet__ic">${icon(t.iconKey, { size: 22 })}</span>
           <span class="gsheet__lb">${t.label}</span>
         </button>`;

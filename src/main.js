@@ -91,15 +91,6 @@ async function boot() {
   // Bottom-nav móvil (F1b)
   renderBottomNav(app);
 
-  // Shortcut global Cmd/Ctrl+K — abre SearchFocus (reemplaza al CommandPalette)
-  document.addEventListener('keydown', async (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-      e.preventDefault();
-      const { openSearchFocus } = await import('./components/SearchFocus.js');
-      openSearchFocus();
-    }
-  });
-
   // Show skeleton while loading
   renderSongListSkeleton(mainContent);
 

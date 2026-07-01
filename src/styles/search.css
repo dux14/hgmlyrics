@@ -11,6 +11,17 @@
 .search-page { padding-bottom: var(--space-xl); }
 .search-page__gutter { padding-inline: var(--space-md); }
 
+.search-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px;
+  margin: 0 var(--space-md) var(--space-sm); padding: 11px 13px; border-radius: 14px;
+  background: var(--color-surface-2, rgba(255,255,255,.05)); border: 1px solid var(--color-border);
+  color: var(--color-text-secondary); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.search-bar input { flex: 1; background: none; border: 0; outline: none; color: var(--color-text); font-size: 1rem; }
+.search-bar__clear { flex: none; display: grid; place-items: center; min-width: 32px; min-height: 32px;
+  background: none; border: 0; color: var(--color-accent); cursor: pointer; }
+.search-inline-results { padding: 4px var(--space-md) var(--space-lg); }
+.search-inline-results .voz-card { width: 100%; margin-bottom: var(--space-xs); }
+[hidden] { display: none !important; }
+
 /* Encabezado de sección */
 .search-section__head {
   display: flex; align-items: baseline; justify-content: space-between;
@@ -59,43 +70,9 @@
   padding: var(--space-sm); border-radius: 10px; border: 1px solid var(--color-border); background: none;
   color: var(--color-text-secondary); font-size: 0.7rem; font-weight: 700; cursor: pointer; }
 
-/* Modo focus */
-.search-focus__scrim { position: fixed; inset: 0; z-index: var(--z-modal, 1000); background: rgba(4,5,10,.55);
-  backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); opacity: 0; animation: focusScrimIn .18s ease-out forwards; }
-.search-focus__bar { position: fixed; left: var(--space-md); right: var(--space-md); top: var(--space-md);
-  z-index: calc(var(--z-modal, 1000) + 1); display: flex; align-items: center; gap: 10px; padding: 13px 14px;
-  border-radius: 14px; background: #11141b; border: 1.5px solid var(--color-accent);
-  box-shadow: 0 0 0 4px rgba(45,212,191,.16), 0 18px 40px -12px rgba(0,0,0,.7); }
-.search-focus__bar input { flex: 1; background: none; border: 0; outline: none; color: var(--color-text); font-size: 1rem; }
-.search-focus__results { position: fixed; left: 0; right: 0; top: calc(var(--space-md) + 58px); bottom: 0;
-  z-index: var(--z-modal, 1000); overflow-y: auto; }
 .search-focus__group { font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: .5px;
   color: var(--color-text-secondary); padding: var(--space-md) var(--space-md) var(--space-sm); }
-/* Boton Cancelar — area tacto iOS ≥44px */
-.search-focus__cancel {
-  flex: none;
-  min-height: 44px;
-  padding: 0 6px;
-  background: none;
-  border: 0;
-  color: var(--color-accent);
-  font-size: .95rem;
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-}
-
-/* Resultados full-width (anula width:178px de .voz-card para rail) */
-.search-focus__results {
-  padding: 4px var(--space-md) var(--space-lg);
-}
-.search-focus__results .voz-card {
-  width: 100%;
-  margin-bottom: var(--space-xs);
-}
-
-@keyframes focusScrimIn { to { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
   .song-tile { transition: none; }
-  .search-focus__scrim { animation: none; opacity: 1; }
 }

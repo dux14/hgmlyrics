@@ -162,6 +162,38 @@ describe('renderSearchPage', () => {
     expect(names).toEqual(['Nuevo', 'Viejo']);
   });
 
+  it('renderiza una barra de búsqueda sticky con input[type=search]', async () => {
+    getState.mockReturnValue({ songs: [], filtered: [] });
+    const container = document.createElement('div');
+    await renderSearchPage(container);
+    const input = container.querySelector('.search-bar input[type="search"]');
+    expect(input).not.toBeNull();
+  });
+
+  it('al escribir, oculta el hub y muestra resultados inline; ✕ restaura el hub', async () => {
+    const { searchEverything } = await import('../lib/search.js');
+    searchEverything.mockReturnValue({
+      songs: [{ id: '1', title: 'Refugio', album: 'A' }], albums: [], voces: [],
+    });
+    getState.mockReturnValue({
+      songs: [{ id: '1', title: 'Refugio', album: 'A', coverImage: '' }], filtered: [],
+    });
+    const container = document.createElement('div');
+    await renderSearchPage(container);
+
+    const input = container.querySelector('.search-bar input[type="search"]');
+    input.value = 'refug';
+    input.dispatchEvent(new Event('input'));
+
+    expect(container.querySelector('.search-inline-results')).not.toBeNull();
+    expect(container.querySelector('.search-hub').hidden).toBe(true);
+
+    const clear = container.querySelector('.search-bar__clear');
+    clear.click();
+    expect(container.querySelector('.search-hub').hidden).toBe(false);
+    expect(container.querySelector('.search-inline-results')).toBeNull();
+  });
+
   it('baraja las canciones de forma estable dado un seed fijo en sessionStorage', async () => {
     sessionStorage.setItem('hkn-search-shuffle-seed', 'seed-fijo');
     const songs = Array.from({ length: 8 }, (_, i) => ({

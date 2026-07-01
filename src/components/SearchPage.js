@@ -37,10 +37,19 @@ export function seededShuffle(arr, seedStr) {
   }
   return a;
 }
-/** Baraja estable por sesión (semilla en sessionStorage). */
+/**
+ * Baraja estable por sesión (semilla en sessionStorage). Si el almacenamiento
+ * está bloqueado (Safari privado, WebViews, anti-tracking) usa una semilla
+ * volátil para no romper el render — no persiste entre renders pero no lanza.
+ */
 function stableShuffle(arr) {
-  let seed = sessionStorage.getItem('hkn-search-shuffle-seed');
-  if (!seed) { seed = String(Math.random()); sessionStorage.setItem('hkn-search-shuffle-seed', seed); }
+  let seed;
+  try {
+    seed = sessionStorage.getItem('hkn-search-shuffle-seed');
+    if (!seed) { seed = String(Math.random()); sessionStorage.setItem('hkn-search-shuffle-seed', seed); }
+  } catch (_e) {
+    seed = seed || 'hkn-fallback-seed';
+  }
   return seededShuffle(arr, seed);
 }
 
@@ -160,7 +169,7 @@ export async function renderSearchPage(container, weeklyWords = []) {
   bar.innerHTML = `
     ${icon('search', { size: 18 })}
     <input type="search" placeholder="Buscar canciones, álbumes, voces…" aria-label="Buscar" />
-    <button type="button" class="search-bar__clear" aria-label="Limpiar búsqueda" hidden>${icon('x', { size: 18 })}</button>
+    <button type="button" class="search-bar__clear" aria-label="Limpiar búsqueda" hidden>${icon('close', { size: 18 })}</button>
   `;
   page.appendChild(bar);
 
@@ -234,10 +243,15 @@ export async function renderSearchPage(container, weeklyWords = []) {
     if (results) { results.remove(); results = null; }
     hub.hidden = false;
     clearBtn.hidden = true;
+    // Restaurar cualquier filtro de álbum aplicado por albumCard antes del focus.
+    hub.querySelectorAll('.song-tile').forEach((t) => { t.style.display = ''; });
   }
   input.addEventListener('input', () => {
     if (input.value.trim()) enterFocus();
     else exitFocus();
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && input.value) { exitFocus(); input.blur(); }
   });
   clearBtn.addEventListener('click', () => { exitFocus(); input.focus(); });
 

@@ -28,6 +28,7 @@ export function songTile(song, colorMap = {}, coverBySlug = {}) {
   a.style.setProperty('--tile-c2', color.light);
   a.setAttribute('aria-label', `${song.title} — ${song.album}`);
   a.innerHTML = `
+    <div class="song-tile__plate" aria-hidden="true"></div>
     <div class="song-tile__txt">
       <span class="song-tile__title">${escapeHtml(song.title)}</span>
       <span class="song-tile__group">Hakuna Group Music</span>

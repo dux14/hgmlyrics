@@ -27,6 +27,13 @@ describe('songTile', () => {
     el.click();
     expect(navigate).toHaveBeenCalledWith('/song/42');
   });
+
+  it('incluye la placa (degradado) para legibilidad del texto', () => {
+    const el = songTile(SONG, COLORS);
+    const plate = el.querySelector('.song-tile__plate');
+    expect(plate).not.toBeNull();
+    expect(plate.getAttribute('aria-hidden')).toBe('true');
+  });
 });
 
 describe('songTile color/cover por álbum', () => {

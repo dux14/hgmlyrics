@@ -10,9 +10,9 @@
   font-weight: 400;
   font-display: swap;
   src: url('/fonts/montserrat-latin-400.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
-    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
@@ -21,9 +21,9 @@
   font-weight: 600;
   font-display: swap;
   src: url('/fonts/montserrat-latin-600.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
-    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
@@ -32,9 +32,9 @@
   font-weight: 700;
   font-display: swap;
   src: url('/fonts/montserrat-latin-700.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
-    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
@@ -43,9 +43,9 @@
   font-weight: 500;
   font-display: swap;
   src: url('/fonts/cormorant-garamond-latin-500.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
-    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
@@ -54,9 +54,9 @@
   font-weight: 600;
   font-display: swap;
   src: url('/fonts/cormorant-garamond-latin-600.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
-    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
@@ -65,9 +65,9 @@
   font-weight: 500;
   font-display: swap;
   src: url('/fonts/cormorant-garamond-latin-500italic.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
-    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
@@ -76,9 +76,9 @@
   font-weight: 400;
   font-display: swap;
   src: url('/fonts/syncopate-latin-400.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
-    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: 'Syncopate';
@@ -86,9 +86,9 @@
   font-weight: 700;
   font-display: swap;
   src: url('/fonts/syncopate-latin-700.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191,
-    U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 /* Fallbacks con override de metricas para CLS bajo */
@@ -122,10 +122,10 @@
   --color-surface-hover: #242424;
   --color-text: #f0f0f0;
   --color-text-secondary: #9ca3af;
-  --color-primary: #01ccd9;                       /* cyan — marca Ambient Kinetic */
+  --color-primary: #01ccd9; /* cyan — marca Ambient Kinetic */
   --color-primary-light: #3dd9e3;
   --color-primary-dark: #00a3ad;
-  --color-accent: var(--color-amber-500);         /* #f59e0b — SOLO acciones */
+  --color-accent: var(--color-amber-500); /* #f59e0b — SOLO acciones */
   --color-accent-light: var(--color-amber-400);
   --color-border: #2d2d2d;
   --color-shadow: rgba(0, 0, 0, 0.4);
@@ -136,10 +136,10 @@
   --color-voice-chorus: #ce93d8;
 
   /* Voice part colors — dark mode (pastel para legibilidad sobre fondo oscuro) */
-  --color-voice-soprano: var(--color-voice-soprano-d);   /* #f48fb1 */
+  --color-voice-soprano: var(--color-voice-soprano-d); /* #f48fb1 */
   --color-voice-contralto: var(--color-voice-contralto-d); /* #ce93d8 */
-  --color-voice-tenor: var(--color-voice-tenor-d);       /* #ffe082 */
-  --color-voice-bass: var(--color-voice-bass-d);         /* #90caf9 */
+  --color-voice-tenor: var(--color-voice-tenor-d); /* #ffe082 */
+  --color-voice-bass: var(--color-voice-bass-d); /* #90caf9 */
 
   /* Voice background highlights */
   --color-voice-soprano-bg: rgba(244, 143, 177, 0.15);
@@ -150,7 +150,7 @@
   --color-voice-chorus-bg: rgba(206, 147, 216, 0.15);
 
   /* Chord color — verde pastel para dark mode */
-  --color-chord: var(--color-chord-d);                   /* #a5d6a7 */
+  --color-chord: var(--color-chord-d); /* #a5d6a7 */
   --color-chord-bg: rgba(165, 214, 167, 0.12);
   --color-chord-hover: #c8e6c9;
   --color-chord-hover-bg: rgba(165, 214, 167, 0.22);
@@ -161,7 +161,8 @@
   --color-error: #f44336;
 
   /* === Typography === */
-  --font-family: 'Montserrat', 'Montserrat-fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family:
+    'Montserrat', 'Montserrat-fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   /* Display (micro-etiquetas: VERSO/CORO, EN VIVO, header de escenario) — fundacion F0.
      Syncopate aun NO se carga: cae a Montserrat (invisible en F0). F1 debe self-hostear
      Syncopate 400/700 en public/fonts/ con @font-face (mismo patron que arriba), NO via CDN
@@ -198,8 +199,8 @@
 
   /* === Layout === */
   --sidebar-width: 280px;
-  --header-height: 64px;
-  --bottom-nav-height: 60px;
+  --header-height: 52px;
+  --bottom-nav-height: 56px;
   --max-content-width: 900px;
   --border-radius-sm: 6px;
   --border-radius-md: 10px;
@@ -221,7 +222,7 @@
   /* === Z-Index === */
   --z-sidebar: 100;
   --z-header: 200;
-  --z-bottom-nav: 200;   /* sobre el contenido, par del header */
+  --z-bottom-nav: 200; /* sobre el contenido, par del header */
   --z-overlay: 300;
   --z-modal: 400;
   --z-toast: 500;
@@ -232,13 +233,13 @@
   --scrollbar-thumb: #3a3a3a;
 
   /* === Alias semánticos (Ambient Kinetic) === */
-  --color-brand: #01ccd9;                      /* cyan — marca */
-  --color-action: var(--color-amber-500);      /* ámbar — SOLO acciones */
-  --color-accent-2: var(--color-violet-400);   /* gradientes ambient */
+  --color-brand: #01ccd9; /* cyan — marca */
+  --color-action: var(--color-amber-500); /* ámbar — SOLO acciones */
+  --color-accent-2: var(--color-violet-400); /* gradientes ambient */
   --color-danger: var(--color-error);
   --color-warn: var(--color-warning);
-  --color-liturgy: var(--color-amber-400);     /* oro devocional ≠ acción */
-  --color-accent-rose: var(--color-rose-300);  /* acento rosa de galería (F2+) — AUDIT-360 §5.1 */
+  --color-liturgy: var(--color-amber-400); /* oro devocional ≠ acción */
+  --color-accent-rose: var(--color-rose-300); /* acento rosa de galería (F2+) — AUDIT-360 §5.1 */
 
   /* === Motion tokens (spec §3) === */
   --motion-micro: 120ms;

@@ -26,12 +26,8 @@ import { renderFriendsPanel } from './components/FriendsPanel.js';
 import { renderFavoritesPage } from './components/FavoritesPage.js';
 import { renderRecommenderPage } from './components/RecommenderPage.js';
 import { renderHeader } from './components/Header.js';
-import { renderSidebar, toggleSidebar, updateSidebarContent } from './components/Sidebar.js';
-import {
-  renderFilterBar,
-  updateFilterBar,
-  hideFilterBar,
-} from './components/FilterBar.js';
+import { renderSidebar, updateSidebarContent } from './components/Sidebar.js';
+import { renderFilterBar, updateFilterBar, hideFilterBar } from './components/FilterBar.js';
 import { renderSongListSkeleton } from './components/SongList.js';
 import { renderSongView } from './components/SongView.js';
 import { renderSongEditor } from './components/SongEditor.js';
@@ -42,7 +38,6 @@ import { initUpdateNotifier } from './components/UpdateNotifier.js';
 import { renderToolsHub } from './components/ToolsHub.js';
 import { renderHome } from './components/Home.js';
 import { renderBottomNav, updateBottomNavActive } from './components/BottomNav.js';
-import { openGoToSheet } from './components/GoToSheet.js';
 
 // Initialize theme immediately to avoid flash
 initTheme();
@@ -83,13 +78,9 @@ async function boot() {
   app.innerHTML = `<main class="main"><div class="main__content" id="main-content"></div></main>`;
   mainContent = app.querySelector('#main-content');
 
-  // Render header — movil abre la hoja "Ir a…"; desktop conserva la sidebar
-  renderHeader(app, {
-    onMenuToggle: () =>
-      window.matchMedia('(max-width: 767px)').matches
-        ? openGoToSheet(getCurrentPath())
-        : toggleSidebar(),
-  });
+  // Render header — logo + oración + tema + avatar. La navegación por menú
+  // vive en el footer (móvil, hoja "Ir a…") y en la sidebar (desktop).
+  renderHeader(app);
 
   // Render sidebar
   renderSidebar(app);
@@ -399,7 +390,9 @@ async function boot() {
       const persisted = await navigator.storage.persisted();
       if (!persisted) await navigator.storage.persist();
     }
-  } catch (_) { /* no critico */ }
+  } catch (_) {
+    /* no critico */
+  }
 
   // F8: Start background caching for all visitors (not only installed PWA)
   try {

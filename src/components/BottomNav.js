@@ -1,17 +1,17 @@
 /**
  * BottomNav.js — Navegación principal para móvil (<768 px).
  *
- * 4 tabs: Inicio · Buscar · Herramientas · Perfil.
- * Visible solo en móvil (oculto en ≥768px vía CSS).
+ * 4 tabs: Inicio · Buscar · Herramientas · Menú.
+ * El tab Menú (icono grid) despliega la hoja "Ir a…" (openGoToSheet).
+ * El perfil vive ahora en el header (avatar). Visible solo en móvil.
  * Iconos via helper icon() — sin emojis.
- * El tab Perfil muestra la foto del usuario si tiene avatar.
  */
 
 import { icon } from '../lib/icons.js';
-import { navigate } from '../router.js';
-import { getProfile, subscribe } from '../lib/authStore.js';
+import { navigate, getCurrentPath } from '../router.js';
+import { openGoToSheet } from './GoToSheet.js';
 
-/** Tabs configurados: { id, label, path, iconKey, matchPaths } */
+/** Tabs configurados: { id, label, path|action, iconKey, matchPaths } */
 const TABS = [
   { id: 'inicio', label: 'Inicio', path: '/', iconKey: 'home', matchPaths: ['/', ''] },
   { id: 'buscar', label: 'Buscar', path: '/buscar', iconKey: 'search', matchPaths: ['/buscar'] },
@@ -22,15 +22,16 @@ const TABS = [
     iconKey: 'sliders',
     matchPaths: ['/herramientas', '/afinador', '/recomendador', '/estudio'],
   },
-  { id: 'perfil', label: 'Perfil', path: '/perfil', iconKey: 'user', matchPaths: ['/perfil'] },
+  { id: 'menu', label: 'Menú', action: 'menu', iconKey: 'grid', matchPaths: [] },
 ];
 
 /**
  * Devuelve el id del tab activo dado el path actual, o null si ningún tab coincide.
- * Normaliza: quita querystring antes de comparar.
+ * Normaliza: quita querystring antes de comparar. El tab Menú (acción) nunca
+ * queda marcado como activo.
  *
  * @param {string} path — p.ej. '/', '/buscar?q=x', '/song/123'
- * @returns {'inicio'|'buscar'|'herramientas'|'perfil'|null}
+ * @returns {'inicio'|'buscar'|'herramientas'|null}
  */
 export function activeTab(path) {
   // Quitar querystring
@@ -40,18 +41,6 @@ export function activeTab(path) {
     if (tab.matchPaths.includes(clean)) return tab.id;
   }
   return null;
-}
-
-/**
- * Devuelve el HTML del icono para el tab Perfil.
- * Si el usuario tiene avatarUrl, renderiza una <img>; en caso contrario el icono 'user'.
- */
-function profileIconHtml() {
-  const avatarUrl = getProfile()?.avatarUrl;
-  if (avatarUrl) {
-    return `<img class="bottom-nav__avatar" src="${avatarUrl}" alt="">`;
-  }
-  return icon('user', { size: 24 });
 }
 
 /**
@@ -67,32 +56,23 @@ export function renderBottomNav(container) {
   for (const tab of TABS) {
     const a = document.createElement('a');
     a.className = 'bottom-nav__item';
-    a.href = tab.path;
+    a.href = tab.action ? '#' : tab.path;
     a.dataset.tab = tab.id;
-
-    const iconHtml = tab.id === 'perfil' ? profileIconHtml() : icon(tab.iconKey, { size: 24 });
-    a.innerHTML = `${iconHtml}<span>${tab.label}</span>`;
+    a.innerHTML = `${icon(tab.iconKey, { size: 24 })}<span>${tab.label}</span>`;
 
     a.addEventListener('click', (e) => {
       e.preventDefault();
-      navigate(tab.path);
+      if (tab.action === 'menu') {
+        openGoToSheet(getCurrentPath());
+      } else {
+        navigate(tab.path);
+      }
     });
 
     nav.appendChild(a);
   }
 
   container.appendChild(nav);
-
-  // Re-renderizar solo el tab Perfil cuando cambie el avatar en authStore
-  const unsub = subscribe(() => {
-    const pfTab = nav.querySelector('[data-tab="perfil"]');
-    if (!pfTab) return;
-    const span = pfTab.querySelector('span');
-    pfTab.innerHTML = `${profileIconHtml()}<span>${span.textContent}</span>`;
-  });
-
-  // Guardar referencia para limpiar si el nav fuera eliminado del DOM
-  nav._unsubAuthStore = unsub;
 }
 
 /**

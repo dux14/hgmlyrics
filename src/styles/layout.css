@@ -10,32 +10,22 @@
   min-height: 100dvh;
 }
 
-/* === Header === */
+/* === Header ===
+   Seamless: mismo fondo que el contenido (--color-bg), sin borde ni blur.
+   Solo el footer conserva el estilo translúcido. */
 .header {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  height: auto;
-  background: color-mix(in srgb, var(--color-surface) 82%, transparent);
-  border-bottom: 1px solid var(--color-border);
+  height: var(--header-height);
+  background: var(--color-bg);
   display: flex;
   align-items: center;
-  padding: var(--space-sm) var(--space-md);
-  gap: var(--space-md);
+  padding: 0 var(--space-md);
+  gap: var(--space-sm);
   z-index: var(--z-header);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   transition: background-color var(--transition-base);
-}
-
-[data-theme='light'] .header {
-  background: rgba(248, 249, 250, 0.85);
-}
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme]) .header {
-    background: rgba(248, 249, 250, 0.85);
-  }
 }
 
 .header__logo {
@@ -51,21 +41,38 @@
   color: var(--color-accent);
 }
 
-
 .header__actions {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
-  /* min-width:0 permite que el bloque se encoja en mobile para que los
-     botones + nombre del usuario no salten a un segundo renglón. */
-  min-width: 0;
+  gap: var(--space-xs);
   margin-left: auto;
 }
 
-/* Contenedor del AuthButton dentro de .header__actions. Necesita min-width:0
-   para que el flex shrink se propague hasta el span del nombre. */
-#auth-button-mount {
-  min-width: 0;
+/* Avatar del header → perfil. Círculo, mismo alto que el touch target. */
+.header__avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--border-radius-full);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.header__avatar-img {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  transition: box-shadow var(--transition-fast);
+}
+
+.header__avatar:hover .header__avatar-img,
+.header__avatar:focus-visible .header__avatar-img {
+  box-shadow: 0 0 0 2px var(--color-primary);
+  outline: none;
 }
 
 .header__btn {
@@ -87,10 +94,6 @@
 .header__btn:hover {
   background: var(--color-surface-hover);
   color: var(--color-text);
-}
-
-.header__btn--menu {
-  display: flex;
 }
 
 /* === Search Results Dropdown === */
@@ -377,74 +380,57 @@
   flex-shrink: 0;
 }
 
-/* === Bottom nav (solo móvil) === */
+/* === Bottom nav (solo móvil) ===
+   Translúcido con blur (único elemento del chrome que lo conserva), tintado
+   con --color-bg para fundirse con el contenido. Sin borde superior. */
 .bottom-nav {
   position: fixed;
-  left: 0; right: 0; bottom: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   justify-content: stretch;
-  padding: 9px 6px calc(13px + env(safe-area-inset-bottom));
-  background: rgba(26, 26, 26, 0.82);
+  padding: 6px 6px calc(8px + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--color-bg) 80%, transparent);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  border-top: 1px solid var(--color-border);
   z-index: var(--z-bottom-nav);
 }
 .bottom-nav__item {
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
   font-size: 0.62rem;
   color: var(--color-text-secondary);
   text-decoration: none;
   -webkit-tap-highlight-color: transparent;
-  min-height: 44px;            /* touch target a11y */
+  min-height: 44px; /* touch target a11y */
   justify-content: center;
   flex: 1;
   line-height: 1;
   text-align: center;
 }
-.bottom-nav__item svg { width: 24px; height: 24px; }
-.bottom-nav__item--active { color: var(--color-primary); }
+.bottom-nav__item svg {
+  width: 24px;
+  height: 24px;
+}
+.bottom-nav__item--active {
+  color: var(--color-primary);
+}
 .bottom-nav__item--active svg {
   filter: drop-shadow(0 0 6px color-mix(in oklch, var(--color-primary) 55%, transparent));
 }
-.bottom-nav__avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  object-fit: cover;
-  flex-shrink: 0;
-}
-.bottom-nav__item--active .bottom-nav__avatar {
-  box-shadow: 0 0 0 2px var(--color-primary);
-}
 @media (min-width: 768px) {
-  .bottom-nav { display: none; }   /* desktop conserva sidebar */
-}
-[data-theme='light'] .bottom-nav { background: rgba(248, 249, 250, 0.85); }
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme]) .bottom-nav { background: rgba(248, 249, 250, 0.85); }
+  .bottom-nav {
+    display: none;
+  } /* desktop conserva sidebar */
 }
 
 /* === Responsive === */
 
-/* Avatar solo visible en desktop */
-@media (max-width: 767px) {
-  #auth-button-mount {
-    display: none;
-  }
-}
-
 /* Tablet */
 @media (min-width: 768px) {
-  .header {
-    height: var(--header-height);
-    padding: 0 var(--space-md);
-  }
-
-  .header__btn--menu {
-    display: none;
-  }
-
   .sidebar {
     transform: translateX(0);
     top: var(--header-height);

@@ -6,24 +6,9 @@
  *   --color-text   = texto sobre carátula
  */
 
-/* ── Encabezado de la página ── */
-.fav-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-lg);
-  flex-wrap: wrap;
-}
-
-/* Subtítulo "N canciones" dentro del encabezado */
-.fav-header .profile-username {
-  margin: 0;
-}
-
-/* Toggle Grid/Lista: alinear a la derecha sin inline style */
-.fav-toggle {
-  margin: 0 0 0 auto;
-}
+/* ── Wrapper de la página ── */
+.fav-page { padding: 0 0 var(--space-lg); }
+.fav-page__count { margin: 0 0 var(--space-md); color: var(--color-text-secondary); font-size: var(--font-size-sm); }
 
 /* ── Grid de carátulas ── */
 .fav-grid {

@@ -15,7 +15,7 @@ export function daysUntil(expiresAt, today) {
 }
 
 /**
- * Nivel de urgencia + días restantes. Umbrales: rojo ≤2 · amarillo ≤7 · verde >7.
+ * Nivel de urgencia + días restantes. Umbrales: rojo ≤2 · amarillo ≤7 · verde ≤21 · lejano (neutral) >21.
  * @param {{expires_at?: string|null}} list
  * @param {string} today YYYY-MM-DD
  * @returns {{level:'red'|'amber'|'green'|'neutral', daysLeft:number|null}}
@@ -25,7 +25,8 @@ export function urgencyOf(list, today) {
   if (daysLeft === null) return { level: 'neutral', daysLeft: null };
   if (daysLeft <= 2) return { level: 'red', daysLeft };
   if (daysLeft <= 7) return { level: 'amber', daysLeft };
-  return { level: 'green', daysLeft };
+  if (daysLeft <= 21) return { level: 'green', daysLeft };
+  return { level: 'neutral', daysLeft };
 }
 
 /**

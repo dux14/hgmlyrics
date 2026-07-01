@@ -18,13 +18,15 @@ describe('daysUntil', () => {
   });
 });
 
-describe('urgencyOf — umbrales rojo≤2 · amarillo≤7 · verde>7', () => {
+describe('urgencyOf — umbrales rojo≤2 · amarillo≤7 · verde 8–21 · lejano>21', () => {
   const cases = [
     ['2026-07-01', 'red', 0],
     ['2026-07-03', 'red', 2],
     ['2026-07-04', 'amber', 3],
     ['2026-07-08', 'amber', 7],
     ['2026-07-09', 'green', 8],
+    ['2026-07-22', 'green', 21],
+    ['2026-07-23', 'neutral', 22],
     [null, 'neutral', null],
   ];
   it.each(cases)('%s → %s', (expires_at, level, daysLeft) => {

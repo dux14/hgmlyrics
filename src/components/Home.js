@@ -7,6 +7,7 @@ import { createSongCard } from './SongList.js';
 import { isAuthenticated, getSession } from '../lib/authStore.js';
 import { icon } from '../lib/icons.js';
 import { escapeHtml } from '../lib/escape.js';
+import { urgencyOf, sortByUrgency, countdownLabel } from '../lib/listUrgency.js';
 import { resolveCoverUrl } from './songRow.js';
 import { listMyLists } from '../lib/lists.js';
 import { getFavoriteIds } from '../lib/favorites.js';
@@ -32,8 +33,8 @@ export function selectRecent(songs, limit = 6) {
  */
 function formatExpiresShort(isoDate) {
   if (!isoDate) return null;
-  const [, m, d] = String(isoDate).slice(0, 10).split('-');
-  return `${parseInt(d, 10)}/${parseInt(m, 10)}`;
+  const [y, m, d] = String(isoDate).slice(0, 10).split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('es', { day: 'numeric', month: 'short' });
 }
 
 /**
@@ -52,34 +53,37 @@ function formatShortDate(isoDate) {
 /**
  * HTML de una fila de lista.
  * @param {object} list
+ * @param {string} today YYYY-MM-DD
  * @returns {string}
  */
-function listRowHtml(list) {
+function listRowHtml(list, today) {
   const count = list.song_count ?? list.songs_count ?? list.item_count ?? list.items_count ?? 0;
-  let meta = `Lista · ${count} ${count === 1 ? 'canción' : 'canciones'}`;
+  const { level, daysLeft } = urgencyOf(list, today);
+  let meta = `${count} ${count === 1 ? 'canción' : 'canciones'}`;
   const expires = formatExpiresShort(list.expires_at);
-  if (expires) {
-    meta += ` · caduca ${expires}`;
-  } else if (list.is_shared) {
-    meta += ' · compartida';
-  }
+  if (expires) meta += ` · caduca ${expires}`;
+  else if (list.is_shared) meta += ' · compartida';
   return `
-    <button class="home__list-row" data-list-id="${escapeHtml(list.id)}">
+    <button class="home__list-row -${level}" data-list-id="${escapeHtml(list.id)}">
       <span class="home__list-ic">${icon('list', { size: 18 })}</span>
       <span class="home__list-info">
-        <span class="home__list-name">${escapeHtml(list.name)}</span>
+        <span class="home__list-name">
+          <span class="home__list-dot -${level}" aria-hidden="true"></span>
+          ${escapeHtml(list.name)}
+        </span>
         <span class="home__list-meta">${escapeHtml(meta)}</span>
       </span>
-      ${icon('chevron-right', { size: 16, className: 'home__list-arr' })}
+      <span class="home__list-pill -${level}">${escapeHtml(countdownLabel(daysLeft))}</span>
     </button>`;
 }
 
 /**
  * HTML del cuerpo de la sección Listas.
  * @param {Array} lists
+ * @param {string} today YYYY-MM-DD
  * @returns {string}
  */
-function renderListsBody(lists) {
+function renderListsBody(lists, today) {
   if (!Array.isArray(lists) || lists.length === 0) {
     return `
       <p class="home__list-empty">Aún no tienes listas guardadas.</p>
@@ -88,7 +92,9 @@ function renderListsBody(lists) {
       </button>`;
   }
   return `
-    ${lists.map(listRowHtml).join('')}
+    ${sortByUrgency(lists)
+      .map((l) => listRowHtml(l, today))
+      .join('')}
     <button class="home__list-create" data-create-list>
       ${icon('plus', { size: 16 })}Crear nueva lista
     </button>`;
@@ -243,7 +249,7 @@ export async function renderHome(container, { today = new Date().toISOString().s
       const lists = await listMyLists();
       const listsBody = container.querySelector('#home-listas-body');
       if (listsBody) {
-        listsBody.innerHTML = renderListsBody(lists);
+        listsBody.innerHTML = renderListsBody(lists, today);
         listsBody.querySelectorAll('[data-list-id]').forEach((el) =>
           el.addEventListener('click', () => navigate(`/lista/${el.dataset.listId}`)),
         );

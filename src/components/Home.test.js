@@ -292,6 +292,25 @@ describe('renderHome — Listas', () => {
     expect(meta.textContent).toContain('1 canción');
     expect(meta.textContent).not.toContain('1 canciones');
   });
+
+  it('ordena las listas por proximidad a vencer y aplica clase de urgencia', async () => {
+    isAuthenticated.mockReturnValue(true);
+    listMyLists.mockResolvedValue([
+      { id: 'lejana', name: 'Lejana', song_count: 2, expires_at: '2026-09-06' }, // verde
+      { id: 'roja', name: 'Inminente', song_count: 2, expires_at: '2026-07-02' }, // rojo (1 día)
+      { id: 'amarilla', name: 'Media', song_count: 2, expires_at: '2026-07-06' }, // amarillo (5 días)
+    ]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-07-01' });
+
+    const ids = [...c.querySelectorAll('[data-list-id]')].map((b) => b.dataset.listId);
+    expect(ids).toEqual(['roja', 'amarilla', 'lejana']);
+
+    const first = c.querySelector('[data-list-id="roja"]');
+    expect(first.classList.contains('-red')).toBe(true);
+    expect(first.querySelector('.home__list-dot.-red')).not.toBeNull();
+    expect(first.querySelector('.home__list-pill').textContent.trim()).toBe('mañana');
+  });
 });
 
 // ── Álbumes ───────────────────────────────────────────────────────────

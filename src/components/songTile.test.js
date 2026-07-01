@@ -52,4 +52,15 @@ describe('songTile color/cover por álbum', () => {
     const el = songTile(song, colorMap, coverBySlug);
     expect(el.style.getPropertyValue('--tile-c1')).toBe('#3a3a3a');
   });
+
+  it('preserva la URL http del cover del álbum (Storage) sin prefijar /covers/', () => {
+    const remote =
+      'https://x.supabase.co/storage/v1/object/public/covers-uploads/abc-reina.webp';
+    const song = {
+      id: 's3', title: 'Reina de Colombia', album: 'Reina de Colombia',
+      albumSlug: 'reina-de-colombia', coverImage: remote,
+    };
+    const el = songTile(song, {}, { 'reina-de-colombia': remote });
+    expect(el.querySelector('.song-tile__art').getAttribute('src')).toBe(remote);
+  });
 });

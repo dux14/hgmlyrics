@@ -33,10 +33,11 @@ vi.mock('../lib/escape.js', () => ({
 }));
 
 vi.mock('./songTile.js', () => ({
-  songTile: vi.fn((song) => {
+  songTile: vi.fn((song, _colors, coverBySlug) => {
     const div = document.createElement('div');
     div.className = 'song-tile';
     div.setAttribute('aria-label', `${song.title} — ${song.album}`);
+    div.dataset.cover = (coverBySlug && coverBySlug[song.albumSlug]) || '';
     return div;
   }),
 }));
@@ -192,6 +193,29 @@ describe('renderSearchPage', () => {
     clear.click();
     expect(container.querySelector('.search-hub').hidden).toBe(false);
     expect(container.querySelector('.search-inline-results')).toBeNull();
+  });
+
+  it('coverBySlug preserva la URL http del cover del álbum (no la corta a nombre de archivo)', async () => {
+    const remote =
+      'https://x.supabase.co/storage/v1/object/public/covers-uploads/abc-reina.webp';
+    getAlbums.mockReturnValue([
+      { slug: 'reina-de-colombia', name: 'Reina de Colombia', coverImage: remote, year: 2026 },
+    ]);
+    getState.mockReturnValue({
+      songs: [
+        {
+          id: '1', title: 'Reina de Colombia', album: 'Reina de Colombia',
+          albumSlug: 'reina-de-colombia', coverImage: remote,
+        },
+      ],
+      filtered: [],
+    });
+
+    const container = document.createElement('div');
+    await renderSearchPage(container);
+
+    const tile = container.querySelector('.song-tile-grid .song-tile');
+    expect(tile.dataset.cover).toBe(remote);
   });
 
   it('baraja las canciones de forma estable dado un seed fijo en sessionStorage', async () => {

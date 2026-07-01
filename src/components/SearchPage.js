@@ -183,7 +183,11 @@ export async function renderSearchPage(container, weeklyWords = []) {
   );
   const coverBySlug = {};
   albums.forEach((al) => {
-    if (al.slug && al.coverImage) coverBySlug[al.slug] = al.coverImage.replace(/^.*\//, '');
+    if (!al.slug || !al.coverImage) return;
+    const c = al.coverImage;
+    // Portada remota (Storage) o ruta absoluta → preservar tal cual.
+    // Portada local → quedarnos con el nombre de archivo (clave de cover-colors.json).
+    coverBySlug[al.slug] = /^(https?:|\/)/.test(c) ? c : c.replace(/^.*\//, '');
   });
   if (albums.length) {
     hub.appendChild(sectionHead('Álbumes'));

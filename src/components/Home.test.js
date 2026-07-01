@@ -33,7 +33,7 @@ vi.mock('./VoicesAlbumView.js', () => ({
   isVigente: vi.fn((date, today) => String(date).slice(0, 10) <= today),
 }));
 
-import { selectRecent, renderHome } from './Home.js';
+import { selectRecent, renderHome, renderListsBody } from './Home.js';
 import { getState, getAlbums } from '../lib/store.js';
 import { isAuthenticated } from '../lib/authStore.js';
 import { listMyLists } from '../lib/lists.js';
@@ -558,5 +558,24 @@ describe('renderHome — Favoritos', () => {
 
     const strip = c.querySelector('#home-fav-strip');
     expect(strip?.querySelectorAll('.song-card').length).toBe(1);
+  });
+});
+
+// ── renderListsBody (helper exportado) ───────────────────────────────
+describe('renderListsBody (helper exportado)', () => {
+  const today = '2026-07-01';
+  it('estado vacío muestra CTA de crear', () => {
+    const html = renderListsBody([], today);
+    expect(html).toContain('data-create-list');
+    expect(html).toContain('Aún no tienes listas');
+  });
+  it('renderiza una fila por lista + botón crear', () => {
+    const html = renderListsBody(
+      [{ id: 'l1', name: 'Domingo', song_count: 3 }],
+      today,
+    );
+    expect(html).toContain('data-list-id="l1"');
+    expect(html).toContain('Domingo');
+    expect(html).toContain('data-create-list');
   });
 });

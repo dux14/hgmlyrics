@@ -57,7 +57,7 @@ function formatShortDate(isoDate) {
  * @param {string} today YYYY-MM-DD
  * @returns {string}
  */
-function listRowHtml(list, today) {
+export function listRowHtml(list, today) {
   const count = list.song_count ?? list.songs_count ?? list.item_count ?? list.items_count ?? 0;
   const { level, daysLeft } = urgencyOf(list, today);
   let meta = `${count} ${count === 1 ? 'canción' : 'canciones'}`;
@@ -84,7 +84,7 @@ function listRowHtml(list, today) {
  * @param {string} today YYYY-MM-DD
  * @returns {string}
  */
-function renderListsBody(lists, today) {
+export function renderListsBody(lists, today) {
   if (!Array.isArray(lists) || lists.length === 0) {
     return `
       <p class="home__list-empty">Aún no tienes listas guardadas.</p>

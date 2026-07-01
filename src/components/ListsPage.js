@@ -21,7 +21,7 @@ export async function renderListsPage(container, { today = new Date().toISOStrin
     </div>
   `;
   const body = container.querySelector('#lists-page-body');
-  let lists = [];
+  let lists;
   try {
     const res = await cached('lists', listMyLists);
     lists = res.data ?? [];

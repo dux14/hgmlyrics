@@ -5,7 +5,7 @@
 import { navigate, openBackable, closeBackable, clearBackable } from '../router.js';
 import { getState, getAlbums } from '../lib/store.js';
 import { resolveCoverUrl } from './songRow.js';
-import { isAuthenticated } from '../lib/authStore.js';
+import { isAuthenticated, getSession } from '../lib/authStore.js';
 import { isFavorite } from '../lib/favorites.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { escapeHtml } from '../lib/escape.js';
@@ -107,12 +107,15 @@ function vozCard(ww) {
 }
 
 /**
- * Trae las voces en off publicadas para el rail del hub. Sin token: el rail muestra
- * solo las publicadas (las mismas que ve cualquier visitante), lo que evita depender
- * de supabase aqui y mantiene este fetch trivialmente testeable con un global.fetch mock.
+ * Trae las voces en off para el rail del hub. El endpoint exige token
+ * (requireUser), y /buscar es una ruta guardada, asi que la sesion siempre existe:
+ * tomamos el access_token del authStore (sin depender de supabase directamente).
  */
 async function fetchVocesEnOff() {
-  const res = await fetch('/api/weekly-words');
+  const token = getSession()?.access_token;
+  const res = await fetch('/api/weekly-words', {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
   if (!res.ok) throw new Error('weekly-words fetch failed');
   const body = await res.json();
   return body.weeklyWords ?? [];

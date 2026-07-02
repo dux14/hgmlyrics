@@ -23,6 +23,7 @@ vi.mock('./songRow.js', () => ({
 
 vi.mock('../lib/authStore.js', () => ({
   isAuthenticated: vi.fn(),
+  getSession: vi.fn(() => null),
 }));
 
 vi.mock('../lib/favorites.js', () => ({
@@ -425,5 +426,19 @@ describe('renderSearchPage', () => {
     const rail = container.querySelector('.search-voces-region .search-rail');
     expect(rail).not.toBeNull();
     expect(rail.querySelectorAll('.voz-card')).toHaveLength(2);
+  });
+
+  it('voces en off: envia el token de sesion en el fetch a /api/weekly-words (regresion 401)', async () => {
+    const { getSession } = await import('../lib/authStore.js');
+    getSession.mockReturnValue({ access_token: 'tok-123' });
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ weeklyWords: [] }) });
+    getState.mockReturnValue({ songs: [], filtered: [] });
+
+    const container = document.createElement('div');
+    await renderSearchPage(container);
+
+    const call = global.fetch.mock.calls.find((c) => String(c[0]).includes('weekly-words'));
+    expect(call).toBeTruthy();
+    expect(call[1]?.headers?.Authorization).toBe('Bearer tok-123');
   });
 });

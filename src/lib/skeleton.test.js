@@ -42,10 +42,10 @@ describe('skeleton arquetipos', () => {
   it('skelRowList({rows:3}) tiene 3 filas', () => {
     expect((skelRowList({ rows: 3 }).match(/sk-row/g) || []).length).toBe(3);
   });
-  it('skelProfile trae avatar redondo + grid', () => {
+  it('skelProfile trae avatar redondo + filas de cuenta', () => {
     const html = skelProfile();
     expect(html).toContain('border-radius:50%');
-    expect(html).toContain('sk-grid');
+    expect((html.match(/sk-row/g) || []).length).toBeGreaterThanOrEqual(3);
   });
   it('skelLongText trae hero + párrafos', () => {
     expect(skelLongText()).toContain('sk-para');

@@ -49,7 +49,17 @@ export function skelRowList({ rows: n = 4 } = {}) {
 }
 
 export function skelProfile() {
-  return `<div class="sk-arch" aria-hidden="true"><div class="sk-prof-top">${skelCircle({ size: 76 })}<div class="sk-rtx">${skelLine({ w: '60%', h: 18 })}${skelLine({ w: '45%' })}</div></div><div class="sk-stats">${skelBlock({ w: '54px', h: 34, radius: 8 })}${skelBlock({ w: '54px', h: 34, radius: 8 })}${skelBlock({ w: '54px', h: 34, radius: 8 })}</div>${skelGrid(6)}</div>`;
+  // Sección superior centrada: avatar grande (~104px), nombre, usuario, badge de voz
+  const top = `<div style="display:flex;flex-direction:column;align-items:center;margin-bottom:20px">${skelCircle({ size: 104 })}${skelLine({ w: '52%', h: 23 })}${skelLine({ w: '36%', h: 14 })}${skelBlock({ w: '90px', h: 22, radius: 11 })}</div>`;
+  // Botón primario "Editar perfil" (pastilla centrada)
+  const editBtn = `<div style="display:flex;justify-content:center;margin-bottom:16px">${skelBlock({ w: '148px', h: 40, radius: 20 })}</div>`;
+  // Tarjeta de rango vocal: título, onda canvas (~110px), etiqueta
+  const rangeCard = `<div style="margin-bottom:12px">${skelLine({ w: '42%', h: 13 })}${skelBlock({ h: 110, radius: 10 })}${skelLine({ w: '75%', h: 12 })}</div>`;
+  // Tarjeta de instrumentos: título + chips en fila horizontal
+  const instrCard = `<div style="margin-bottom:16px">${skelLine({ w: '40%', h: 13 })}<div style="display:flex;gap:8px">${skelBlock({ w: '72px', h: 28, radius: 14 })}${skelBlock({ w: '72px', h: 28, radius: 14 })}${skelBlock({ w: '64px', h: 28, radius: 14 })}</div></div>`;
+  // Etiqueta "Cuenta" (línea estrecha) + 3 filas de acceso con icono 38px
+  const accRow = `<div class="sk-row">${skelCircle({ size: 38 })}<div class="sk-rtx">${skelLine({ w: '50%' })}</div></div>`;
+  return `<div class="sk-arch" aria-hidden="true">${top}${editBtn}${rangeCard}${instrCard}${skelLine({ w: '28%', h: 11 })}${accRow}${accRow}${accRow}</div>`;
 }
 
 export function skelLongText() {

@@ -21,7 +21,7 @@ export function skelThumb({ size = 46, radius = 9 } = {}) {
 }
 
 export function skelRow() {
-  return `<div class="sk-row" aria-hidden="true">${skelThumb()}<div class="sk-row-tx">${skelLine({ w: '70%' })}${skelLine({ w: '45%', h: 11 })}</div></div>`;
+  return `<div class="sk-row" aria-hidden="true">${skelThumb()}<div class="sk-rtx">${skelLine({ w: '70%' })}${skelLine({ w: '45%', h: 11 })}</div></div>`;
 }
 
 export function skelCard() {
@@ -31,4 +31,27 @@ export function skelCard() {
 export function skelGrid(n = 6) {
   const tiles = Array.from({ length: n }, () => box('sk-tile', 'aspect-ratio:1;border-radius:12px')).join('');
   return `<div class="sk-grid" aria-hidden="true">${tiles}</div>`;
+}
+
+const rows = (n) => Array.from({ length: n }, () => skelRow()).join('');
+const para = (widths) => `<div class="sk-para" aria-hidden="true">${widths.map((w) => skelLine({ w, h: 12 })).join('')}</div>`;
+
+export function skelTracklist({ rows: n = 4 } = {}) {
+  return `<div class="sk-arch" aria-hidden="true">${skelBlock({ h: 150, radius: 16 })}${skelLine({ w: '62%', h: 22 })}${skelLine({ w: '40%', h: 12 })}<div class="sk-gap"></div>${rows(n)}</div>`;
+}
+
+export function skelSongDetail() {
+  return `<div class="sk-arch" aria-hidden="true">${skelLine({ w: '60%', h: 22 })}${skelLine({ w: '38%', h: 12 })}<div class="sk-actions">${skelBlock({ w: '120px', h: 44, radius: 22 })}${skelCircle({ size: 44 })}${skelCircle({ size: 44 })}</div>${para(['95%', '88%', '70%', '30%', '95%', '88%', '60%'])}</div>`;
+}
+
+export function skelRowList({ rows: n = 4 } = {}) {
+  return `<div class="sk-arch" aria-hidden="true">${skelLine({ w: '45%', h: 22 })}${skelLine({ w: '28%', h: 12 })}<div class="sk-gap"></div>${rows(n)}</div>`;
+}
+
+export function skelProfile() {
+  return `<div class="sk-arch" aria-hidden="true"><div class="sk-prof-top">${skelCircle({ size: 76 })}<div class="sk-rtx">${skelLine({ w: '60%', h: 18 })}${skelLine({ w: '45%' })}</div></div><div class="sk-stats">${skelBlock({ w: '54px', h: 34, radius: 8 })}${skelBlock({ w: '54px', h: 34, radius: 8 })}${skelBlock({ w: '54px', h: 34, radius: 8 })}</div>${skelGrid(6)}</div>`;
+}
+
+export function skelLongText() {
+  return `<div class="sk-arch" aria-hidden="true">${skelBlock({ h: 110, radius: 14 })}${skelLine({ w: '72%', h: 22 })}${skelLine({ w: '34%', h: 12 })}${para(['95%', '95%', '88%', '70%'])}</div>`;
 }

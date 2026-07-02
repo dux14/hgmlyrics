@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { skelLine, skelBlock, skelCircle, skelRow, skelCard, skelGrid } from './skeleton.js';
+import { skelTracklist, skelSongDetail, skelRowList, skelProfile, skelLongText } from './skeleton.js';
 
 describe('skeleton primitivas', () => {
   it('skelLine devuelve un div .skeleton con ancho/alto y aria-hidden', () => {
@@ -26,5 +27,27 @@ describe('skeleton primitivas', () => {
   });
   it('skelCard trae cover + título', () => {
     expect(skelCard()).toContain('sk-card');
+  });
+});
+
+describe('skeleton arquetipos', () => {
+  it('skelTracklist({rows:4}) tiene hero + 4 filas', () => {
+    const html = skelTracklist({ rows: 4 });
+    expect(html).toContain('sk-block');
+    expect((html.match(/sk-row/g) || []).length).toBe(4);
+  });
+  it('skelSongDetail trae acciones + párrafos', () => {
+    expect(skelSongDetail()).toContain('sk-actions');
+  });
+  it('skelRowList({rows:3}) tiene 3 filas', () => {
+    expect((skelRowList({ rows: 3 }).match(/sk-row/g) || []).length).toBe(3);
+  });
+  it('skelProfile trae avatar redondo + grid', () => {
+    const html = skelProfile();
+    expect(html).toContain('border-radius:50%');
+    expect(html).toContain('sk-grid');
+  });
+  it('skelLongText trae hero + párrafos', () => {
+    expect(skelLongText()).toContain('sk-para');
   });
 });

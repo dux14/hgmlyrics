@@ -39,6 +39,8 @@ import { icon } from '../lib/icons.js';
 import { updateSidebarContent } from './Sidebar.js';
 import { escapeHtml } from '../lib/escape.js';
 import { voiceoverCoverHtml } from '../lib/voiceoverCover.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelRowList } from '../lib/skeleton.js';
 
 /* global CSS */
 
@@ -72,39 +74,32 @@ export async function renderListDetail(container, id, { mode = 'view' } = {}) {
     return;
   }
 
+  // Shell instantáneo: región async para el contenido de la lista.
   container.innerHTML = `
     <div class="list-detail__container">
-      <div class="empty-state fade-in">
-        <div class="empty-state__icon">${icon('list', { size: 40 })}</div>
-        <h2 class="empty-state__title">Cargando lista…</h2>
-      </div>
+      <div class="list-detail__region" aria-busy="true"></div>
     </div>
   `;
+  const region = container.querySelector('.list-detail__region');
 
-  let listData;
-  try {
-    listData = await getList(id);
-  } catch (err) {
-    container.innerHTML = `
-      <div class="list-detail__container">
-        <div class="empty-state fade-in">
-          <div class="empty-state__icon">${icon('frown', { size: 40 })}</div>
-          <h2 class="empty-state__title">Lista no encontrada</h2>
-          <p class="empty-state__text">${escapeHtml(err.message)}</p>
-          <button class="btn btn--secondary" id="list-detail-back">Volver</button>
-        </div>
-      </div>
-    `;
-    container.querySelector('#list-detail-back')?.addEventListener('click', () => goBack());
-    return;
-  }
-
-  const isOwner = listData.role === 'owner';
-  if (mode === 'edit' && isOwner) {
-    renderEditor(container, listData);
-  } else {
-    renderReadonly(container, listData, { isOwner });
-  }
+  renderAsyncRegion(region, {
+    skeleton: () => skelRowList({ rows: 5 }),
+    fetcher: () => getList(id),
+    render: (listData) => {
+      const isOwner = listData.role === 'owner';
+      if (mode === 'edit' && isOwner) {
+        renderEditor(container, listData);
+      } else {
+        renderReadonly(container, listData, { isOwner });
+      }
+    },
+    onError: () => `
+      <div class="empty-state">
+        <div class="empty-state__icon">${icon('frown', { size: 40 })}</div>
+        <h2 class="empty-state__title">No se pudo cargar la lista</h2>
+        <button class="btn btn--primary" data-retry>Reintentar</button>
+      </div>`,
+  });
 }
 
 /* ── Editor (owner) ────────────────────────────────────────────── */

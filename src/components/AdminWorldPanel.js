@@ -15,6 +15,8 @@ import { listMaps, saveMap, activate } from '../world/worldMapStore.js';
 import { joinWorldAdmin } from '../lib/worldAdminChannel.js';
 import { diffZoneChannels } from '../world/zoneChannelsDiff.js';
 import { escapeHtml as esc } from '../lib/escape.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelRowList } from '../lib/skeleton.js';
 
 // ---------------------------------------------------------------------------
 // Formatear fecha ISO a local legible
@@ -66,86 +68,87 @@ function buildChannelWarning(currentZones, nextZones) {
 // ---------------------------------------------------------------------------
 // Renderizar la lista de versiones
 // ---------------------------------------------------------------------------
-async function renderVersions(listEl, statusEl, adminChannel) {
-  listEl.innerHTML = '<p class="wm-text-secondary">Cargando versiones…</p>';
-  try {
-    const maps = await listMaps({});
-    if (!maps.length) {
-      listEl.innerHTML = '<p class="wm-text-secondary">No hay mapas guardados.</p>';
-      return;
-    }
+function renderVersions(listEl, statusEl, adminChannel) {
+  renderAsyncRegion(listEl, {
+    skeleton: () => skelRowList({ rows: 3 }),
+    fetcher: () => listMaps({}),
+    render: (maps) => {
+      // Zonas del mapa actualmente activo (para la comparación E4.3)
+      const activeMap = maps.find((m) => m.isActive);
+      const activeZones = activeMap?.zones ?? [];
 
-    // Zonas del mapa actualmente activo (para la comparación E4.3)
-    const activeMap = maps.find((m) => m.isActive);
-    const activeZones = activeMap?.zones ?? [];
-
-    listEl.innerHTML = maps
-      .map((m) => {
-        // Aviso de impacto en channelIds para mapas inactivos
-        const warning = !m.isActive ? buildChannelWarning(activeZones, m.zones ?? []) : '';
-        return `
-      <div class="ff-item wm-version-item" data-id="${esc(m.id)}">
-        <div class="ff-item__head">
-          <strong>${esc(m.name)}</strong>
-          <span>${fmtDate(m.updatedAt)}</span>
+      listEl.innerHTML = maps
+        .map((m) => {
+          // Aviso de impacto en channelIds para mapas inactivos
+          const warning = !m.isActive ? buildChannelWarning(activeZones, m.zones ?? []) : '';
+          return `
+        <div class="ff-item wm-version-item" data-id="${esc(m.id)}">
+          <div class="ff-item__head">
+            <strong>${esc(m.name)}</strong>
+            <span>${fmtDate(m.updatedAt)}</span>
+          </div>
+          <div class="wm-badge-row">
+            <span class="wm-badge ${m.isActive ? 'wm-badge--active' : 'wm-badge--inactive'}">
+              ${m.isActive ? `${icon('check', { size: 14 })} Activo` : 'Inactivo'}
+            </span>
+            ${
+              !m.isActive
+                ? `<button class="btn btn--action btn--sm wm-activate-btn">Activar</button>`
+                : ''
+            }
+          </div>
+          ${warning}
         </div>
-        <div class="wm-badge-row">
-          <span class="wm-badge ${m.isActive ? 'wm-badge--active' : 'wm-badge--inactive'}">
-            ${m.isActive ? `${icon('check', { size: 14 })} Activo` : 'Inactivo'}
-          </span>
-          ${
-            !m.isActive
-              ? `<button class="btn btn--action btn--sm wm-activate-btn">Activar</button>`
-              : ''
-          }
-        </div>
-        ${warning}
-      </div>
-    `;
-      })
-      .join('');
+      `;
+        })
+        .join('');
 
-    // Eventos de activar
-    listEl.querySelectorAll('.wm-activate-btn').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const item = btn.closest('.wm-version-item');
-        const mapId = item?.dataset.id;
-        if (!mapId) return;
-        // Obtener el nombre del mapa activado (para el payload del broadcast)
-        const targetMap = maps.find((m) => m.id === mapId);
-        btn.disabled = true;
-        btn.textContent = 'Activando…';
-        try {
-          const result = await activate({ id: mapId });
-          // Notificar a todos los clientes conectados que el mapa cambió (E4.1).
-          // Fire-and-forget; no bloqueamos el UX de éxito. Un fallo silencioso
-          // se volvería invisible, así que lo registramos como advertencia.
-          adminChannel
-            ?.broadcastMapUpdated({
-              mapId: result.map?.id ?? mapId,
-              mapName: result.map?.name ?? targetMap?.name ?? '',
-            })
-            ?.catch((err) => {
-              console.warn('[mundo] No se pudo difundir map-updated a los clientes:', err);
-            });
-          if (statusEl) {
-            statusEl.textContent = 'Mapa activado correctamente.';
-            statusEl.style.color = 'var(--color-success, green)';
+      // Eventos de activar
+      listEl.querySelectorAll('.wm-activate-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const item = btn.closest('.wm-version-item');
+          const mapId = item?.dataset.id;
+          if (!mapId) return;
+          // Obtener el nombre del mapa activado (para el payload del broadcast)
+          const targetMap = maps.find((m) => m.id === mapId);
+          btn.disabled = true;
+          btn.textContent = 'Activando…';
+          try {
+            const result = await activate({ id: mapId });
+            // Notificar a todos los clientes conectados que el mapa cambió (E4.1).
+            // Fire-and-forget; no bloqueamos el UX de éxito. Un fallo silencioso
+            // se volvería invisible, así que lo registramos como advertencia.
+            adminChannel
+              ?.broadcastMapUpdated({
+                mapId: result.map?.id ?? mapId,
+                mapName: result.map?.name ?? targetMap?.name ?? '',
+              })
+              ?.catch((err) => {
+                console.warn('[mundo] No se pudo difundir map-updated a los clientes:', err);
+              });
+            if (statusEl) {
+              statusEl.textContent = 'Mapa activado correctamente.';
+              statusEl.style.color = 'var(--color-success, green)';
+            }
+            renderVersions(listEl, statusEl, adminChannel);
+          } catch (err) {
+            if (statusEl) {
+              statusEl.textContent = `Error al activar: ${err.message}`;
+              statusEl.style.color = 'var(--color-error)';
+            }
+            btn.disabled = false;
+            btn.textContent = 'Activar';
           }
-          await renderVersions(listEl, statusEl, adminChannel);
-        } catch (err) {
-          if (statusEl) {
-            statusEl.textContent = `Error al activar: ${err.message}`;
-            statusEl.style.color = 'var(--color-error)';
-          }
-          btn.disabled = false;
-          btn.textContent = 'Activar';
-        }
+        });
       });
-    });
-  } catch (err) {
-    listEl.innerHTML = `<p class="wm-text-error">Error al cargar versiones: ${esc(err.message)}</p>`;
-  }
+    },
+    empty: () => `<p class="wm-text-secondary">No hay mapas guardados.</p>`,
+    onError: () => `
+      <div class="empty-state">
+        <h2 class="empty-state__title">No se pudieron cargar las versiones</h2>
+        <button class="btn btn--primary" data-retry>Reintentar</button>
+      </div>`,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -386,7 +389,7 @@ export function mountAdminWorldPanel(container) {
       updateSaveEnabled();
 
       // Refrescar lista de versiones
-      await renderVersions(versionsList, statusEl, adminChannel);
+      renderVersions(versionsList, statusEl, adminChannel);
     } catch (err) {
       const msgs = err.errors ? err.errors.map((m) => `• ${m}`).join('\n') : err.message;
       saveStatus.textContent = `Error: ${msgs}`;

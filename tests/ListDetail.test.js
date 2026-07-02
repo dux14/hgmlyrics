@@ -24,6 +24,15 @@ vi.mock('../src/components/Sidebar.js', () => ({ updateSidebarContent: vi.fn() }
 
 import { renderListDetail, __renderEditorForTest } from '../src/components/ListDetail.js';
 
+// Helper: cede el event-loop hasta que fn() devuelve verdadero o se agotan los intentos.
+// Necesario porque renderAsyncRegion pinta la región async (fetcher().then(...)).
+const waitFor = async (fn, tries = 50) => {
+  for (let i = 0; i < tries; i++) {
+    await Promise.resolve();
+    if (fn()) return;
+  }
+};
+
 describe('wizard de listas', () => {
   let container;
   beforeEach(() => {
@@ -186,7 +195,8 @@ describe('wizard de listas', () => {
       ],
     });
     const el = document.createElement('div');
-    await renderListDetail(el, 'evt1', { mode: 'view' });
+    renderListDetail(el, 'evt1', { mode: 'view' });
+    await waitFor(() => el.querySelector('.list-detail__seg'));
     expect(el.querySelector('.list-detail__seg')).toBeTruthy();
     expect(el.textContent).toContain('Ensayos');
     expect(el.textContent).toContain('Ensayo general');
@@ -217,7 +227,8 @@ describe('wizard de listas', () => {
       songs: ['s1'],
     });
     const el = document.createElement('div');
-    await renderListDetail(el, 'l1', { mode: 'view' });
+    renderListDetail(el, 'l1', { mode: 'view' });
+    await waitFor(() => el.querySelector('.list-detail__voz-row'));
     const vozRow = el.querySelector('.list-detail__voz-row');
     expect(vozRow).toBeTruthy();
     // muestra el título, no el UUID
@@ -243,7 +254,8 @@ describe('wizard de listas', () => {
       children: [],
     });
     const el = document.createElement('div');
-    await renderListDetail(el, 'sub1', { mode: 'view' });
+    renderListDetail(el, 'sub1', { mode: 'view' });
+    await waitFor(() => el.querySelector('.list-detail__crumb'));
     expect(el.querySelector('.list-detail__crumb')).toBeTruthy();
     expect(el.textContent).toContain('Concierto');
   });

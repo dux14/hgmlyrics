@@ -94,6 +94,8 @@ export function renderFavoritesPage(container) {
     buildFavGrid(listMount, favs);
   }
 
+  // Render síncrono: todos los datos vienen de getState() + isFavorite() en memoria.
+  // No hay fuente async, por lo que NO se aplica renderAsyncRegion — cero overhead.
   paint();
 
   // Re-paint when the user removes a favorite from this view (or any other).

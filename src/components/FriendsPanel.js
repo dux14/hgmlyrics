@@ -7,6 +7,8 @@ import { emitPendingChanged } from '../lib/friends.js';
 import { escapeHtml } from '../lib/escape.js';
 import { isFounder, founderCrownHtml } from '../lib/founders.js';
 import { icon } from '../lib/icons.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelRowList } from '../lib/skeleton.js';
 
 let searchTimer = null;
 
@@ -118,9 +120,11 @@ export function buildFriendItem(item, viewerId, kind) {
  * Render the friends panel.
  * @param {HTMLElement} container
  */
-export async function renderFriendsPanel(container) {
+export function renderFriendsPanel(container) {
   const viewerId = getSession()?.user?.id;
   let activeTab = 'accepted';
+  // Cache inicial vacío; se rellena en el primer ciclo async vía renderAsyncRegion.
+  let listCache = { accepted: [], pendingIncoming: [], pendingOutgoing: [] };
 
   async function reloadList() {
     const data = await fetchList();
@@ -128,8 +132,7 @@ export async function renderFriendsPanel(container) {
     return data;
   }
 
-  let listCache = await reloadList();
-
+  // Shell instantáneo: tabs (badge=0 hasta que carguen) + región async de la lista.
   container.innerHTML = `
     <div class="friends-page fade-in">
       <h1>Amigos</h1>
@@ -139,11 +142,17 @@ export async function renderFriendsPanel(container) {
         <ul id="search-results" class="friends-list"></ul>
       </div>
 
-      ${buildTabs(activeTab, listCache.pendingIncoming.length)}
+      ${buildTabs(activeTab, 0)}
 
-      <ul class="friends-list" id="friends-list"><li>Cargando...</li></ul>
+      <div class="friends-list__region" aria-busy="true">
+        <ul class="friends-list" id="friends-list"></ul>
+      </div>
     </div>
   `;
+
+  // La región async es el <div> envolvente, no el <ul>: el skeleton es un <div>
+  // y un <div> hijo directo de <ul> es HTML inválido (Chrome/Firefox lo promueven).
+  const region = container.querySelector('.friends-list__region');
 
   function renderList() {
     const listEl = container.querySelector('#friends-list');
@@ -186,6 +195,37 @@ export async function renderFriendsPanel(container) {
       });
     });
   }
+
+  renderAsyncRegion(region, {
+    skeleton: () => skelRowList({ rows: 5 }),
+    fetcher: reloadList,
+    render: (data) => {
+      listCache = data;
+      // El skeleton pudo haber reemplazado el <ul>; restablecerlo antes de pintar.
+      if (!container.querySelector('#friends-list')) {
+        region.innerHTML = '<ul class="friends-list" id="friends-list"></ul>';
+      }
+      // Actualiza el badge de solicitudes recibidas si hay pendientes.
+      const count = Array.isArray(data.pendingIncoming) ? data.pendingIncoming.length : 0;
+      if (count > 0) {
+        const incTab = container.querySelector('[data-tab="incoming"]');
+        if (incTab) {
+          const badge = incTab.querySelector('.seg-tab__count');
+          if (badge) {
+            badge.textContent = String(count);
+          } else {
+            incTab.insertAdjacentHTML('beforeend', `<span class="seg-tab__count">${count}</span>`);
+          }
+        }
+      }
+      renderList();
+    },
+    onError: () => `
+      <div class="empty-state">
+        <h2 class="empty-state__title">No se pudieron cargar los amigos</h2>
+        <button class="btn btn--primary" data-retry>Reintentar</button>
+      </div>`,
+  });
 
   container.querySelectorAll('.seg-tab').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -259,6 +299,4 @@ export async function renderFriendsPanel(container) {
       });
     }, 300);
   });
-
-  renderList();
 }

@@ -71,7 +71,7 @@ describe('renderPublicProfile — SEC-X1: avatarUrl escapado en img src', () => 
 
     const container = document.createElement('div');
     await renderPublicProfile(container, 'ana');
-
+    await flush(); // la región se pinta async tras el fetch
     // No debe existir <img> con atributo onerror ejecutable
     expect(container.querySelector('img[onerror]')).toBeNull();
 
@@ -107,7 +107,7 @@ describe('renderPublicProfile — SEC-X1: avatarUrl escapado en img src', () => 
 
     const container = document.createElement('div');
     await renderPublicProfile(container, 'ana');
-
+    await flush(); // la región se pinta async tras el fetch
     const img = container.querySelector('img.pf-av');
     expect(img).not.toBeNull();
     // escapeHtml no altera una URL legítima que no contiene &<>"'
@@ -128,7 +128,7 @@ describe('renderPublicProfile — UI Ambient Kinetic (Task 4 F2a)', () => {
   it('muestra el botón #add-friend-btn cuando !isOwn', async () => {
     const container = document.createElement('div');
     await renderPublicProfile(container, 'mateor');
-
+    await flush(); // la región se pinta async tras el fetch
     const btn = container.querySelector('#add-friend-btn');
     expect(btn).not.toBeNull();
     expect(btn.textContent).toContain('Agregar amigo');
@@ -144,7 +144,7 @@ describe('renderPublicProfile — UI Ambient Kinetic (Task 4 F2a)', () => {
 
     const container = document.createElement('div');
     await renderPublicProfile(container, 'mateor');
-
+    await flush(); // la región se pinta async tras el fetch
     expect(container.querySelector('#add-friend-btn')).toBeNull();
 
     const editLink = container.querySelector('a[href="#/perfil/editar"]');
@@ -163,7 +163,7 @@ describe('renderPublicProfile — UI Ambient Kinetic (Task 4 F2a)', () => {
 
     const container = document.createElement('div');
     await renderPublicProfile(container, 'mateor');
-
+    await flush(); // la región se pinta async tras el fetch
     const btn = container.querySelector('#add-friend-btn');
     expect(btn).not.toBeNull();
 
@@ -189,7 +189,7 @@ describe('renderPublicProfile — UI Ambient Kinetic (Task 4 F2a)', () => {
 
     const container = document.createElement('div');
     await renderPublicProfile(container, 'mateor');
-
+    await flush(); // la región se pinta async tras el fetch
     const btn = container.querySelector('#add-friend-btn');
     btn.click();
     await flush();
@@ -210,7 +210,7 @@ describe('renderPublicProfile — UI Ambient Kinetic (Task 4 F2a)', () => {
 
     const container = document.createElement('div');
     await renderPublicProfile(container, 'mateor');
-
+    await flush(); // la región se pinta async tras el fetch
     const btn = container.querySelector('#add-friend-btn');
     btn.click();
     await flush();
@@ -252,6 +252,7 @@ describe('renderPublicProfile — UI Ambient Kinetic (Task 4 F2a)', () => {
 
     const container = document.createElement('div');
     await renderPublicProfile(container, 'mateor');
+    await flush(); // la región se pinta async tras el fetch
 
     const rows = container.querySelectorAll('.pf-srow');
     expect(rows).toHaveLength(2);
@@ -266,7 +267,7 @@ describe('renderPublicProfile — UI Ambient Kinetic (Task 4 F2a)', () => {
   it('cuando no hay favoritas muestra "—" en lugar de filas', async () => {
     const container = document.createElement('div');
     await renderPublicProfile(container, 'mateor');
-
+    await flush(); // la región se pinta async tras el fetch
     expect(container.querySelectorAll('.pf-srow')).toHaveLength(0);
     expect(container.querySelector('.pf-list').textContent).toContain('—');
   });
@@ -274,7 +275,7 @@ describe('renderPublicProfile — UI Ambient Kinetic (Task 4 F2a)', () => {
   it('muestra identidad: nombre, @usuario y conteo de amigos', async () => {
     const container = document.createElement('div');
     await renderPublicProfile(container, 'mateor');
-
+    await flush(); // la región se pinta async tras el fetch
     const name = container.querySelector('.pf-name');
     expect(name.textContent).toContain('Mateo Ríos');
 
@@ -293,7 +294,7 @@ describe('renderPublicProfile — UI Ambient Kinetic (Task 4 F2a)', () => {
 
     const container = document.createElement('div');
     await renderPublicProfile(container, 'mateor');
-
+    await flush(); // la región se pinta async tras el fetch
     expect(container.querySelector('.pf-user').textContent).toContain('1 amigo');
     expect(container.querySelector('.pf-user').textContent).not.toContain('1 amigos');
   });

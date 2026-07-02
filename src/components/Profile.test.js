@@ -102,6 +102,8 @@ describe('buildProfileHeader', () => {
   });
 });
 
+const flush = () => new Promise((r) => setTimeout(r, 0));
+
 describe('renderProfileEdit', () => {
   const base = {
     displayName: 'Ana',
@@ -119,6 +121,7 @@ describe('renderProfileEdit', () => {
     getProfile.mockReturnValue(base);
     const c = document.createElement('div');
     await renderProfileEdit(c);
+    await flush();
     expect(c.querySelector('#profile-form')).toBeTruthy();
     expect(c.querySelector('#display-input')).toBeTruthy();
     expect(c.querySelector('#public-input')).toBeTruthy();

@@ -1,3 +1,6 @@
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelLongText } from '../lib/skeleton.js';
+
 /**
  * WorldCredits.js — Overlay de créditos de assets LPC.
  *
@@ -21,7 +24,7 @@ export function WorldCredits() {
   // ── Fondo oscuro (backdrop) ──────────────────────────────────────────────
   const el = document.createElement('div');
   el.setAttribute('role', 'dialog');
-  el.setAttribute('aria-label', 'Creditos de assets');
+  el.setAttribute('aria-label', 'Créditos de assets');
   el.setAttribute('aria-modal', 'true');
   el.className = 'wc-backdrop';
 
@@ -36,12 +39,12 @@ export function WorldCredits() {
 
   const title = document.createElement('h2');
   title.className = 'wc-title';
-  title.textContent = 'Creditos — Assets LPC';
+  title.textContent = 'Créditos — Assets LPC';
   header.appendChild(title);
 
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
-  closeBtn.setAttribute('aria-label', 'Cerrar creditos');
+  closeBtn.setAttribute('aria-label', 'Cerrar créditos');
   closeBtn.className = 'wc-close-btn';
   closeBtn.textContent = '×';
   closeBtn.addEventListener('click', () => close());
@@ -49,9 +52,16 @@ export function WorldCredits() {
   modal.appendChild(header);
 
   // ── Contenido scrollable ─────────────────────────────────────────────────
+  // wc-region actúa como regionEl de renderAsyncRegion; pre es solo el texto.
+  // Se usa un wrapper <div> porque onError inyecta <div class="empty-state">
+  // y colocar un <div> dentro de <pre> sería HTML inválido.
+  const region = document.createElement('div');
+  region.className = 'wc-region';
+  modal.appendChild(region);
+
   const pre = document.createElement('pre');
   pre.className = 'wc-pre';
-  modal.appendChild(pre);
+  region.appendChild(pre);
 
   // ── Cerrar con Esc ───────────────────────────────────────────────────────
   function onKeydown(e) {
@@ -71,18 +81,24 @@ export function WorldCredits() {
     document.addEventListener('keydown', onKeydown);
 
     if (!loaded) {
-      pre.textContent = 'Cargando creditos...';
-      try {
-        const res = await fetch('/world/CREDITS.txt');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const text = await res.text();
-        // XSS-safe: textContent, nunca innerHTML
-        pre.textContent = text;
-        loaded = true;
-      } catch (err) {
-        console.error('[WorldCredits] error al cargar CREDITS.txt', err);
-        pre.textContent = 'No se pudieron cargar los creditos.';
-      }
+      renderAsyncRegion(region, {
+        skeleton: () => skelLongText(),
+        fetcher: async () => {
+          const res = await fetch('/world/CREDITS.txt');
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.text();
+        },
+        render: (text) => {
+          // XSS-safe: textContent, nunca innerHTML
+          pre.textContent = text;
+          loaded = true;
+        },
+        onError: () => `
+          <div class="empty-state">
+            <p>No se pudieron cargar los créditos.</p>
+            <button class="btn btn--primary" data-retry>Reintentar</button>
+          </div>`,
+      });
     }
   }
 

@@ -24,6 +24,8 @@ import { composeLayers } from '../world/avatarCompositor.js';
 import { saveAvatar } from '../lib/worldAvatarStore.js';
 import { getSession } from '../lib/authStore.js';
 import { supabase } from '../lib/supabase.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelProfile } from '../lib/skeleton.js';
 
 // ---------------------------------------------------------------------------
 // Funciones puras — exportadas para tests
@@ -219,12 +221,7 @@ export function AvatarCreator() {
   function renderSelectors() {
     selectorsArea.replaceChildren();
 
-    if (!manifest || !config) {
-      const loading = document.createElement('div');
-      loading.textContent = 'Cargando...';
-      selectorsArea.appendChild(loading);
-      return;
-    }
+    if (!manifest || !config) return; // skeleton gestionado por renderAsyncRegion en open()
 
     // Selector de bodyType
     const btRow = makeSelectRow({
@@ -371,23 +368,32 @@ export function AvatarCreator() {
     document.addEventListener('keydown', onKeydown);
 
     if (!manifest) {
-      try {
-        const res = await fetch('/world/lpc/manifest.json');
-        manifest = await res.json();
-        config = defaultConfig(manifest);
-      } catch (err) {
-        console.error('[AvatarCreator] error al cargar manifest', err);
-        selectorsArea.replaceChildren();
-        const errEl = document.createElement('div');
-        errEl.className = 'ac-status ac-status--error';
-        errEl.textContent = 'Error al cargar el manifest.';
-        selectorsArea.appendChild(errEl);
-        return;
-      }
+      // Skeleton mientras carga el manifest; renderSelectors se llama desde render().
+      renderAsyncRegion(selectorsArea, {
+        skeleton: () => skelProfile(),
+        fetcher: async () => {
+          const res = await fetch('/world/lpc/manifest.json');
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const m = await res.json();
+          manifest = m;
+          config = defaultConfig(m);
+          return m;
+        },
+        render: () => {
+          selectorsArea.replaceChildren();
+          renderSelectors();
+          updatePreview();
+        },
+        onError: () => `
+          <div class="ac-status ac-status--error">
+            No se pudo cargar el manifest.
+            <button class="btn btn--primary" data-retry>Reintentar</button>
+          </div>`,
+      });
+    } else {
+      renderSelectors();
+      updatePreview();
     }
-
-    renderSelectors();
-    updatePreview();
   }
 
   function close() {

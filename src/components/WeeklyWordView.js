@@ -9,6 +9,8 @@ import { splitVoiceover } from '../lib/voiceover.js';
 import { liturgicalPalette, coverGradient } from '../lib/liturgicalColor.js';
 import { escapeHtml } from '../lib/escape.js';
 import { icon } from '../lib/icons.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelLongText } from '../lib/skeleton.js';
 
 // Tamaño de letra del lector de voces en off (persistido, propio del módulo).
 const VOZ_FONT_KEY = 'hkn-voz-font-size';
@@ -186,32 +188,38 @@ export async function renderWeeklyWordView(container, word) {
  * @param {string} id - weekly_words.id
  */
 export async function renderWeeklyWordById(container, id) {
+  // Shell + región async (sin caché previa).
   container.innerHTML = `
-    <div class="empty-state fade-in">
-      <div class="empty-state__icon">${icon('gospel', { size: 40 })}</div>
-      <h2 class="empty-state__title">Cargando...</h2>
+    <div class="voz-view__shell">
+      <div class="voz-view__region" aria-busy="true"></div>
     </div>
   `;
-  try {
-    const { supabase } = await import('../lib/supabase.js');
-    const { data: session } = await supabase.auth.getSession();
-    const token = session?.session?.access_token;
-    const res = await fetch(`/api/weekly-words/${id}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) throw new Error(`${res.status}`);
-    const word = await res.json();
-    await renderWeeklyWordView(container, word);
-  } catch (_e) {
-    container.innerHTML = `
-      <div class="voz-view__error">
-        <div class="empty-state fade-in">
-          <div class="empty-state__icon">${icon('frown', { size: 48 })}</div>
-          <h2 class="empty-state__title">Voz en off no encontrada</h2>
-          <button class="btn btn--primary" id="voz-go-home">Volver al inicio</button>
-        </div>
-      </div>
-    `;
-    container.querySelector('#voz-go-home')?.addEventListener('click', () => navigate('/'));
-  }
+  const region = container.querySelector('.voz-view__region');
+
+  renderAsyncRegion(region, {
+    skeleton: () => skelLongText(),
+    fetcher: async () => {
+      const { supabase } = await import('../lib/supabase.js');
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      const res = await fetch(`/api/weekly-words/${id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
+    render: (word) => renderWeeklyWordView(container, word),
+    empty: () => `
+      <div class="empty-state">
+        <div class="empty-state__icon">${icon('frown', { size: 48 })}</div>
+        <h2 class="empty-state__title">Voz en off no encontrada</h2>
+        <a class="btn btn--primary" href="#/">Volver al inicio</a>
+      </div>`,
+    onError: () => `
+      <div class="empty-state">
+        <div class="empty-state__icon">${icon('frown', { size: 48 })}</div>
+        <h2 class="empty-state__title">No se pudo cargar la voz en off</h2>
+        <button class="btn btn--primary" data-retry>Reintentar</button>
+      </div>`,
+  });
 }

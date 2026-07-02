@@ -8,6 +8,8 @@
  */
 
 import { getSongById, fetchSongDetail, getAdjacentSongs } from '../lib/store.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelSongDetail } from '../lib/skeleton.js';
 import { navigate } from '../router.js';
 import {
   upgradeLegacySong,
@@ -164,28 +166,61 @@ function showFavToast(added, songId, favBtn) {
  */
 export async function renderSongView(container, songIdOrData) {
   const isPreview = typeof songIdOrData === 'object' && songIdOrData !== null;
-  let song = null;
   let songId = null;
 
   if (isPreview) {
-    song = songIdOrData;
-  } else {
-    songId = songIdOrData;
-    song = getSongById(songId);
-
-    // If no sections cached, fetch full detail from API
-    if (!song?.sections?.length) {
-      container.innerHTML = `
-        <div class="empty-state fade-in">
-          <div class="empty-state__icon">${icon('music', { size: 48, className: 'loading-pulse' })}</div>
-          <h2 class="empty-state__title">Cargando...</h2>
-        </div>
-      `;
-      const detail = await fetchSongDetail(songId);
-      if (detail) song = detail;
-    }
+    // Preview: datos ya disponibles, render directo sin skeleton.
+    await _renderSongBody(container, null, true, songIdOrData);
+    return;
   }
 
+  songId = songIdOrData;
+  const cachedSong = getSongById(songId);
+
+  if (cachedSong?.sections?.length) {
+    // Canción ya en caché con secciones: render directo sin skeleton.
+    await _renderSongBody(container, songId, false, cachedSong);
+    return;
+  }
+
+  // Sin secciones en caché: shell instantáneo + skeleton + fetch.
+  container.innerHTML = `
+    <div class="song-view__shell">
+      <div class="song-view__region" aria-busy="true"></div>
+    </div>
+  `;
+  const region = container.querySelector('.song-view__region');
+
+  renderAsyncRegion(region, {
+    skeleton: () => skelSongDetail(),
+    fetcher: () => fetchSongDetail(songId),
+    render: (detail) => {
+      _renderSongBody(container, songId, false, detail).catch(() => {
+        container.innerHTML = `
+          <div class="empty-state">
+            <h2 class="empty-state__title">No se pudo cargar la canción</h2>
+            <a class="btn btn--primary" href="#/">Volver al inicio</a>
+          </div>`;
+      });
+    },
+    empty: () => `
+      <div class="empty-state fade-in">
+        <div class="empty-state__icon">${icon('frown', { size: 48 })}</div>
+        <h2 class="empty-state__title">Canción no encontrada</h2>
+        <p class="empty-state__text">La canción que buscas no existe o fue eliminada.</p>
+        <a class="btn btn--primary" style="margin-top: 1rem;" href="#/">Volver al inicio</a>
+      </div>`,
+    onError: () => `
+      <div class="empty-state">
+        <h2 class="empty-state__title">No se pudo cargar la canción</h2>
+        <button class="btn btn--primary" data-retry>Reintentar</button>
+      </div>`,
+  });
+}
+
+// _renderSongBody: pinta la canción completa en container. Invocado desde
+// renderSongView (rutas: preview directo, caché directa, fetch async).
+async function _renderSongBody(container, songId, isPreview, song) {
   // Lectura dual: normaliza v1 → v2 en memoria (inerte para v2 y para el
   // render de Letra/Acordes, que sigue leyendo text/chords/voiceRanges).
   if (song) song = upgradeLegacySong(song);

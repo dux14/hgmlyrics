@@ -2,6 +2,8 @@
  * Profile.js — Own profile view + edit + avatar upload.
  */
 import { getSession, getProfile, refreshProfile, signOut } from '../lib/authStore.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelProfile } from '../lib/skeleton.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { compressImageToLimit } from '../lib/imageCompress.js'; // usados por renderProfileEdit (Task 3)
@@ -166,13 +168,25 @@ function isCustomAvatar(url) {
  * @param {HTMLElement} container
  */
 export async function renderProfileEdit(container) {
-  const profile = getProfile();
-  if (!profile) {
-    container.innerHTML = '<div class="profile-page"><p>Cargando...</p></div>';
-    return;
-  }
+  // Shell + región async; siempre va por el fetcher (sin SWR) para evitar que
+  // una re-renderización por caché borre ediciones en progreso del formulario.
+  container.innerHTML = `<div class="pf-edit-region" aria-busy="true"></div>`;
+  const editRegion = container.querySelector('.pf-edit-region');
 
-  const avatarUrl = profile.avatarUrl || '';
+  renderAsyncRegion(editRegion, {
+    skeleton: () => skelProfile(),
+    fetcher: async () => { await refreshProfile(); return getProfile(); },
+    render: paintEditForm,
+    empty: () => `<p class="pf-hint">Sin sesión. <a href="#/login">Iniciar sesión</a></p>`,
+    onError: () => `
+      <div class="empty-state">
+        <h2 class="empty-state__title">No se pudo cargar el perfil</h2>
+        <button class="btn btn--primary" data-retry>Reintentar</button>
+      </div>`,
+  });
+
+  function paintEditForm(profile) {
+    const avatarUrl = profile.avatarUrl || '';
 
   container.innerHTML = `
     <div class="profile-page fade-in">
@@ -376,6 +390,7 @@ export async function renderProfileEdit(container) {
       submitBtn.disabled = false;
     }
   });
+  } // fin paintEditForm
 }
 
 /**
@@ -384,26 +399,36 @@ export async function renderProfileEdit(container) {
  * @param {HTMLElement} container
  */
 export async function renderProfile(container) {
-  const profile = getProfile();
-  if (!profile) {
-    container.innerHTML = '<div class="profile-page"><p>Cargando...</p></div>';
-    return;
-  }
+  // Shell + región async; si el store ya tiene el perfil, se pinta al instante (SWR).
+  container.innerHTML = `<div class="pf-profile-region" aria-busy="true"></div>`;
+  const profileRegion = container.querySelector('.pf-profile-region');
 
-  container.innerHTML = `
-    <div class="profile-page fade-in">
-      ${buildProfileHeader(profile)}
-      <a class="profile-licenses-link" href="#/licencias">Licencias y créditos</a>
-    </div>
-  `;
-
-  // Logout desde la vista de perfil en móvil
-  container.querySelector('#pf-logout')?.addEventListener('click', async () => {
-    try {
-      await signOut();
-    } catch (_e) {
-      // Continuar aunque falle el signOut remoto
-    }
-    navigate('/login', { replace: true });
+  renderAsyncRegion(profileRegion, {
+    cached: getProfile() || undefined,
+    skeleton: () => skelProfile(),
+    fetcher: async () => { await refreshProfile(); return getProfile(); },
+    render: (profile) => {
+      container.innerHTML = `
+        <div class="profile-page fade-in">
+          ${buildProfileHeader(profile)}
+          <a class="profile-licenses-link" href="#/licencias">Licencias y créditos</a>
+        </div>
+      `;
+      // Logout desde la vista de perfil en móvil
+      container.querySelector('#pf-logout')?.addEventListener('click', async () => {
+        try {
+          await signOut();
+        } catch (_e) {
+          // Continuar aunque falle el signOut remoto
+        }
+        navigate('/login', { replace: true });
+      });
+    },
+    empty: () => `<div class="profile-page"><p>Sin sesión. <a href="#/login">Iniciar sesión</a></p></div>`,
+    onError: () => `
+      <div class="empty-state">
+        <h2 class="empty-state__title">No se pudo cargar el perfil</h2>
+        <button class="btn btn--primary" data-retry>Reintentar</button>
+      </div>`,
   });
 }

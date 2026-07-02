@@ -17,6 +17,15 @@
   padding-bottom: calc(var(--bottom-nav-height, 60px) + 1rem);
 }
 
+/* Perfil propio: el header global esta oculto en /perfil (ver hideHeader),
+   por lo que la reserva de .main (--header-height) + el gutter superior de
+   .main__content (--space-md) quedaban como banda muerta sobre el degradado.
+   Sangramos la pagina hacia arriba para que el difuminado llegue al borde.
+   Scopeado a --own: el perfil publico (/u/:username) conserva su header. */
+.profile-page--own {
+  margin-top: calc(-1 * (var(--header-height) + var(--space-md)));
+}
+
 /* ── Zona superior: ambient blob + avatar + identidad ── */
 .pf-top {
   position: relative;
@@ -24,10 +33,20 @@
   text-align: center;
 }
 
+.profile-page--own .pf-top {
+  /* Respeta el notch en PWA standalone; en navegador el inset es 0. */
+  padding-top: max(20px, env(safe-area-inset-top, 0px));
+}
+
 .pf-amb {
   position: absolute;
-  inset: 0 0 auto 0;
-  height: 150px;
+  /* Difuminado a sangre completa: cubre los gutters laterales (--space-md a
+     cada lado, hasta el borde de la pantalla en movil) y sube hasta pegar con
+     el header. Aplica a perfil propio y publico (ambos usan .pf-amb). */
+  top: calc(-1 * var(--space-md));
+  left: calc(-1 * var(--space-md));
+  right: calc(-1 * var(--space-md));
+  height: 190px;
   background:
     radial-gradient(120% 100% at 50% 0, rgba(29, 111, 126, 0.3), transparent 70%),
     radial-gradient(90% 80% at 78% 0, rgba(124, 58, 237, 0.22), transparent);

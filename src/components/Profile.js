@@ -177,7 +177,10 @@ export async function renderProfileEdit(container) {
 
   renderAsyncRegion(editRegion, {
     skeleton: () => skelProfile(),
-    fetcher: async () => { await refreshProfile(); return getProfile(); },
+    fetcher: async () => {
+      await refreshProfile();
+      return getProfile();
+    },
     render: paintEditForm,
     empty: () => `<p class="pf-hint">Sin sesión. <a href="#/login">Iniciar sesión</a></p>`,
     onError: () => `
@@ -190,7 +193,7 @@ export async function renderProfileEdit(container) {
   function paintEditForm(profile) {
     const avatarUrl = profile.avatarUrl || '';
 
-  container.innerHTML = `
+    container.innerHTML = `
     <div class="profile-page fade-in">
       <div class="pf-etop">
         <a class="pf-bk" href="#/perfil" aria-label="Volver">${icon('chevron-left', { size: 16 })}</a>
@@ -306,114 +309,118 @@ export async function renderProfileEdit(container) {
     </div>
   `;
 
-  // Listeners (lógica idéntica al original; solo cambia markup/clases)
-  const avatarBtn = container.querySelector('#avatar-btn');
-  const avatarRemoveBtn = container.querySelector('#avatar-remove-btn');
-  const avatarInput = container.querySelector('#avatar-input');
-  const avatarPreview = container.querySelector('#avatar-preview');
-  const avatarError = container.querySelector('#avatar-error');
+    // Listeners (lógica idéntica al original; solo cambia markup/clases)
+    const avatarBtn = container.querySelector('#avatar-btn');
+    const avatarRemoveBtn = container.querySelector('#avatar-remove-btn');
+    const avatarInput = container.querySelector('#avatar-input');
+    const avatarPreview = container.querySelector('#avatar-preview');
+    const avatarError = container.querySelector('#avatar-error');
 
-  avatarBtn.addEventListener('click', () => avatarInput.click());
-  avatarInput.addEventListener('change', async () => {
-    const file = avatarInput.files?.[0];
-    if (!file) return;
-    avatarError.textContent = 'Procesando imagen…';
-    avatarError.style.color = 'var(--color-text-secondary)';
-    avatarError.style.display = 'block';
-    avatarBtn.disabled = true;
-    try {
-      const prepared = await compressImageToLimit(file);
-      if (prepared.size > 2 * 1024 * 1024) {
-        avatarError.textContent =
-          'No pudimos reducir la imagen por debajo de 2 MB. Intenta con otra foto.';
+    avatarBtn.addEventListener('click', () => avatarInput.click());
+    avatarInput.addEventListener('change', async () => {
+      const file = avatarInput.files?.[0];
+      if (!file) return;
+      avatarError.textContent = 'Procesando imagen…';
+      avatarError.style.color = 'var(--color-text-secondary)';
+      avatarError.style.display = 'block';
+      avatarBtn.disabled = true;
+      try {
+        const prepared = await compressImageToLimit(file);
+        if (prepared.size > 2 * 1024 * 1024) {
+          avatarError.textContent =
+            'No pudimos reducir la imagen por debajo de 2 MB. Intenta con otra foto.';
+          avatarError.style.color = '';
+          return;
+        }
+        const url = await uploadAvatar(prepared);
+        await refreshProfile();
+        avatarPreview.src = url;
+        avatarRemoveBtn.style.display = 'flex';
+        avatarError.style.display = 'none';
         avatarError.style.color = '';
-        return;
+      } catch (e) {
+        avatarError.textContent = `Error: ${e.message}`;
+        avatarError.style.color = '';
+        avatarError.style.display = 'block';
+      } finally {
+        avatarBtn.disabled = false;
       }
-      const url = await uploadAvatar(prepared);
-      await refreshProfile();
-      avatarPreview.src = url;
-      avatarRemoveBtn.style.display = 'flex';
+    });
+
+    avatarRemoveBtn.addEventListener('click', async () => {
       avatarError.style.display = 'none';
-      avatarError.style.color = '';
-    } catch (e) {
-      avatarError.textContent = `Error: ${e.message}`;
-      avatarError.style.color = '';
-      avatarError.style.display = 'block';
-    } finally {
-      avatarBtn.disabled = false;
-    }
-  });
-
-  avatarRemoveBtn.addEventListener('click', async () => {
-    avatarError.style.display = 'none';
-    avatarRemoveBtn.disabled = true;
-    try {
-      const url = await deleteAvatar();
-      await refreshProfile();
-      avatarPreview.src = url || '';
-      avatarRemoveBtn.style.display = 'none';
-    } catch (e) {
-      avatarError.textContent = `Error: ${e.message}`;
-      avatarError.style.display = 'block';
-    } finally {
-      avatarRemoveBtn.disabled = false;
-    }
-  });
-
-  container.querySelector('#profile-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const errEl = container.querySelector('#form-error');
-    const okEl = container.querySelector('#form-success');
-    errEl.style.display = 'none';
-    okEl.style.display = 'none';
-    const payload = {
-      displayName: container.querySelector('#display-input').value.trim(),
-      bio: container.querySelector('#bio-input').value.trim() || null,
-      voiceType: container.querySelector('#voice-type-input').value || null,
-      voiceSubtype: container.querySelector('#voice-subtype-input').value || null,
-      vocalRangeLow: container.querySelector('#range-low-input').value.trim() || null,
-      vocalRangeHigh: container.querySelector('#range-high-input').value.trim() || null,
-      vocalRangeNotes: container.querySelector('#range-notes-input').value.trim() || null,
-      instrumentRoles: container
-        .querySelector('#instruments-input')
-        .value.split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
-      isPublic: container.querySelector('#public-input').checked,
-    };
-    const submitBtn = container.querySelector('#submit-btn');
-    submitBtn.disabled = true;
-    try {
-      const { ok, data } = await patchProfile(payload);
-      if (!ok) {
-        errEl.textContent = data?.details?.join(', ') || data?.error || 'Error al guardar';
-        errEl.style.display = 'block';
-        return;
+      avatarRemoveBtn.disabled = true;
+      try {
+        const url = await deleteAvatar();
+        await refreshProfile();
+        avatarPreview.src = url || '';
+        avatarRemoveBtn.style.display = 'none';
+      } catch (e) {
+        avatarError.textContent = `Error: ${e.message}`;
+        avatarError.style.display = 'block';
+      } finally {
+        avatarRemoveBtn.disabled = false;
       }
-      await refreshProfile();
-      okEl.style.display = 'block';
-    } finally {
-      submitBtn.disabled = false;
-    }
-  });
+    });
 
-  // Monta y actualiza la onda de rango en vivo al editar Grave/Agudo
-  const waveHost = container.querySelector('#edit-wave-host');
-  const lowEl = container.querySelector('#range-low-input');
-  const highEl = container.querySelector('#range-high-input');
-  let waveTimer;
-  function remountWave() {
-    if (!waveHost || !lowEl || !highEl) return;
-    clearTimeout(waveTimer);
-    waveTimer = setTimeout(() => {
-      waveHost.innerHTML = '';
-      const w = createWaveRange({ low: lowEl.value.trim(), high: highEl.value.trim(), height: 96 });
-      if (w) waveHost.appendChild(w.el);
-    }, 200);
-  }
-  lowEl?.addEventListener('input', remountWave);
-  highEl?.addEventListener('input', remountWave);
-  remountWave();
+    container.querySelector('#profile-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errEl = container.querySelector('#form-error');
+      const okEl = container.querySelector('#form-success');
+      errEl.style.display = 'none';
+      okEl.style.display = 'none';
+      const payload = {
+        displayName: container.querySelector('#display-input').value.trim(),
+        bio: container.querySelector('#bio-input').value.trim() || null,
+        voiceType: container.querySelector('#voice-type-input').value || null,
+        voiceSubtype: container.querySelector('#voice-subtype-input').value || null,
+        vocalRangeLow: container.querySelector('#range-low-input').value.trim() || null,
+        vocalRangeHigh: container.querySelector('#range-high-input').value.trim() || null,
+        vocalRangeNotes: container.querySelector('#range-notes-input').value.trim() || null,
+        instrumentRoles: container
+          .querySelector('#instruments-input')
+          .value.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        isPublic: container.querySelector('#public-input').checked,
+      };
+      const submitBtn = container.querySelector('#submit-btn');
+      submitBtn.disabled = true;
+      try {
+        const { ok, data } = await patchProfile(payload);
+        if (!ok) {
+          errEl.textContent = data?.details?.join(', ') || data?.error || 'Error al guardar';
+          errEl.style.display = 'block';
+          return;
+        }
+        await refreshProfile();
+        okEl.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    // Monta y actualiza la onda de rango en vivo al editar Grave/Agudo
+    const waveHost = container.querySelector('#edit-wave-host');
+    const lowEl = container.querySelector('#range-low-input');
+    const highEl = container.querySelector('#range-high-input');
+    let waveTimer;
+    function remountWave() {
+      if (!waveHost || !lowEl || !highEl) return;
+      clearTimeout(waveTimer);
+      waveTimer = setTimeout(() => {
+        waveHost.innerHTML = '';
+        const w = createWaveRange({
+          low: lowEl.value.trim(),
+          high: highEl.value.trim(),
+          height: 96,
+        });
+        if (w) waveHost.appendChild(w.el);
+      }, 200);
+    }
+    lowEl?.addEventListener('input', remountWave);
+    highEl?.addEventListener('input', remountWave);
+    remountWave();
   } // fin paintEditForm
 }
 
@@ -430,10 +437,13 @@ export async function renderProfile(container) {
   renderAsyncRegion(profileRegion, {
     cached: getProfile() || undefined,
     skeleton: () => skelProfile(),
-    fetcher: async () => { await refreshProfile(); return getProfile(); },
+    fetcher: async () => {
+      await refreshProfile();
+      return getProfile();
+    },
     render: (profile) => {
       container.innerHTML = `
-        <div class="profile-page fade-in">
+        <div class="profile-page profile-page--own fade-in">
           ${buildProfileHeader(profile)}
         </div>
       `;
@@ -453,7 +463,8 @@ export async function renderProfile(container) {
         navigate('/login', { replace: true });
       });
     },
-    empty: () => `<div class="profile-page"><p>Sin sesión. <a href="#/login">Iniciar sesión</a></p></div>`,
+    empty: () =>
+      `<div class="profile-page"><p>Sin sesión. <a href="#/login">Iniciar sesión</a></p></div>`,
     onError: () => `
       <div class="empty-state">
         <h2 class="empty-state__title">No se pudo cargar el perfil</h2>

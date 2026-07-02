@@ -60,10 +60,27 @@ export default withErrors(async (req, res) => {
       AND (requester_id = ${profile.id} OR addressee_id = ${profile.id})
   `;
 
+  // Estado de amistad entre el visitante y el perfil consultado
+  const friendRows = await sql`
+    SELECT status, requester_id, addressee_id
+    FROM friendships
+    WHERE (requester_id = ${viewer.id} AND addressee_id = ${profile.id})
+       OR (requester_id = ${profile.id} AND addressee_id = ${viewer.id})
+    LIMIT 1
+  `;
+  let friendStatus = 'none';
+  if (friendRows.length) {
+    const r = friendRows[0];
+    if (r.status === 'accepted') friendStatus = 'accepted';
+    else if (r.status === 'pending')
+      friendStatus = r.requester_id === viewer.id ? 'pending_out' : 'pending_in';
+  }
+
   res.status(200).json({
     profile,
     favorites: favoritesRows,
     friendCount: friendCountRow[0]?.count ?? 0,
     isOwn: profile.id === viewer.id,
+    friendStatus,
   });
 });

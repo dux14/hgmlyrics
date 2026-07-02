@@ -76,7 +76,6 @@ export function renderFavoritesPage(container) {
         <div class="home__hd">
           <h2 class="home__hd-title fav-page__title">Favoritos</h2>
         </div>
-        <p class="fav-page__count">${favs.length} ${favs.length === 1 ? 'canción' : 'canciones'}</p>
         <div id="fav-list"></div>
       </div>
     `;

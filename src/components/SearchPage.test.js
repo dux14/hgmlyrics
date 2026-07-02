@@ -4,7 +4,12 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../router.js', () => ({ navigate: vi.fn() }));
+vi.mock('../router.js', () => ({
+  navigate: vi.fn(),
+  openBackable: vi.fn(),
+  closeBackable: vi.fn(),
+  clearBackable: vi.fn(),
+}));
 
 vi.mock('../lib/store.js', () => ({
   getState: vi.fn(),
@@ -218,26 +223,16 @@ describe('renderSearchPage', () => {
     expect(tile.dataset.cover).toBe(remote);
   });
 
-  it('baraja las canciones de forma estable dado un seed fijo en sessionStorage', async () => {
-    sessionStorage.setItem('hkn-search-shuffle-seed', 'seed-fijo');
+  it('baraja las canciones incluyendo todas (sin pérdidas) en cada render', async () => {
     const songs = Array.from({ length: 8 }, (_, i) => ({
       id: String(i), title: `T${i}`, album: 'A', coverImage: '',
     }));
     getState.mockReturnValue({ songs, filtered: songs });
 
-    const c1 = document.createElement('div');
-    await renderSearchPage(c1);
-    const order1 = [...c1.querySelectorAll('.song-tile-grid .song-tile')].map(
-      (t) => t.getAttribute('aria-label'),
-    );
+    const container = document.createElement('div');
+    await renderSearchPage(container);
+    const tiles = container.querySelectorAll('.song-tile-grid .song-tile');
 
-    const c2 = document.createElement('div');
-    await renderSearchPage(c2);
-    const order2 = [...c2.querySelectorAll('.song-tile-grid .song-tile')].map(
-      (t) => t.getAttribute('aria-label'),
-    );
-
-    expect(order1).toEqual(order2); // estable con el mismo seed
-    expect(order1).toHaveLength(8); // sin perder canciones
+    expect(tiles).toHaveLength(8); // shuffle no pierde canciones
   });
 });

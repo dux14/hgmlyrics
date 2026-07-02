@@ -2,7 +2,7 @@
  * SearchPage.js — landing de /buscar (browse hub):
  * catálogo completo en tiles + rails de Álbumes, Voces en off y Favoritos.
  */
-import { navigate } from '../router.js';
+import { navigate, openBackable, closeBackable, clearBackable } from '../router.js';
 import { getState, getAlbums } from '../lib/store.js';
 import { resolveCoverUrl } from './songRow.js';
 import { isAuthenticated } from '../lib/authStore.js';
@@ -37,20 +37,9 @@ export function seededShuffle(arr, seedStr) {
   }
   return a;
 }
-/**
- * Baraja estable por sesión (semilla en sessionStorage). Si el almacenamiento
- * está bloqueado (Safari privado, WebViews, anti-tracking) usa una semilla
- * volátil para no romper el render — no persiste entre renders pero no lanza.
- */
+/** Baraja con semilla fresca en cada render — variedad en cada entrada a /buscar. */
 function stableShuffle(arr) {
-  let seed;
-  try {
-    seed = sessionStorage.getItem('hkn-search-shuffle-seed');
-    if (!seed) { seed = String(Math.random()); sessionStorage.setItem('hkn-search-shuffle-seed', seed); }
-  } catch (_e) {
-    seed = seed || 'hkn-fallback-seed';
-  }
-  return seededShuffle(arr, seed);
+  return seededShuffle(arr, String(Math.random()));
 }
 
 let colorMap = {};
@@ -227,11 +216,18 @@ export async function renderSearchPage(container, weeklyWords = []) {
 
   page.appendChild(hub);
 
-  // Focus inline: barra controla hub vs resultados
+  // Focus inline: barra controla hub vs resultados.
+  // El focus es una capa "backable": abrir resultados empuja una entrada de
+  // history para que el atrás nativo cierre el focus y vuelva al hub, en vez de
+  // abandonar /buscar. Al (re)montar la página se descarta cualquier capa
+  // huérfana de una instancia anterior.
+  clearBackable();
   const input = bar.querySelector('input');
   const clearBtn = bar.querySelector('.search-bar__clear');
   let results = null;
+  let overlayOpen = false;
 
+  /** Muestra los resultados y actualiza su contenido (se llama en cada tecla). */
   function enterFocus() {
     if (!results) {
       results = document.createElement('div');
@@ -241,8 +237,13 @@ export async function renderSearchPage(container, weeklyWords = []) {
     hub.hidden = true;
     clearBtn.hidden = false;
     renderInlineResults(results, input.value);
+    if (!overlayOpen) {
+      overlayOpen = true;
+      openBackable(exitFocusFromBack);
+    }
   }
-  function exitFocus() {
+  /** Restaura el hub. No toca el history (uso interno). */
+  function exitFocusVisual() {
     input.value = '';
     if (results) { results.remove(); results = null; }
     hub.hidden = false;
@@ -250,14 +251,27 @@ export async function renderSearchPage(container, weeklyWords = []) {
     // Restaurar cualquier filtro de álbum aplicado por albumCard antes del focus.
     hub.querySelectorAll('.song-tile').forEach((t) => { t.style.display = ''; });
   }
+  /** Cierre disparado por el atrás nativo (vía la capa backable del router). */
+  function exitFocusFromBack() {
+    overlayOpen = false;
+    exitFocusVisual();
+  }
+  /** Cierre iniciado por el usuario (Escape, limpiar, borrar el texto). */
+  function requestExitFocus() {
+    exitFocusVisual();
+    if (overlayOpen) {
+      overlayOpen = false;
+      closeBackable(); // consume la entrada de history sin re-disparar el cierre
+    }
+  }
   input.addEventListener('input', () => {
     if (input.value.trim()) enterFocus();
-    else exitFocus();
+    else requestExitFocus();
   });
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && input.value) { exitFocus(); input.blur(); }
+    if (e.key === 'Escape' && input.value) { requestExitFocus(); input.blur(); }
   });
-  clearBtn.addEventListener('click', () => { exitFocus(); input.focus(); });
+  clearBtn.addEventListener('click', () => { requestExitFocus(); input.focus(); });
 
   container.appendChild(page);
 }

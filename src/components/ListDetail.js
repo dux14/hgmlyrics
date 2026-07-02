@@ -34,7 +34,7 @@ import {
 } from '../lib/listDraft.js';
 import { songRowCompact } from './songRow.js';
 import { weeklyWordSearchRow } from '../lib/searchRow.js';
-import { navigate } from '../router.js';
+import { navigate, goBack } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { updateSidebarContent } from './Sidebar.js';
 import { escapeHtml } from '../lib/escape.js';
@@ -95,7 +95,7 @@ export async function renderListDetail(container, id, { mode = 'view' } = {}) {
         </div>
       </div>
     `;
-    container.querySelector('#list-detail-back')?.addEventListener('click', () => navigate('/'));
+    container.querySelector('#list-detail-back')?.addEventListener('click', () => goBack());
     return;
   }
 
@@ -246,7 +246,9 @@ function renderEditor(container, listData, opts = {}) {
 
   backBtn.addEventListener('click', () => {
     if (state.step === 0) {
-      navigate('/');
+      // Paso 0 del asistente: salir a la pantalla desde la que se abrió (no al
+      // home fijo). Fallback a home si no hay pantalla anterior en la sesión.
+      goBack();
       return;
     }
     state.step -= 1;

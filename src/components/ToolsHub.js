@@ -17,7 +17,8 @@ const TOOLS = [
     path: '/afinador',
     iconKey: 'audio-lines',
     tone: 'teal',
-    beta: false,
+    beta: true,
+    anim: 'eq',
   },
   {
     id: 'recomendador',
@@ -27,6 +28,7 @@ const TOOLS = [
     iconKey: 'sparkles',
     tone: 'violet',
     beta: true,
+    anim: 'sparkle',
   },
   {
     id: 'estudio',
@@ -36,8 +38,23 @@ const TOOLS = [
     iconKey: 'layers',
     tone: 'amber',
     beta: true,
+    anim: 'layers',
   },
 ];
+
+/** Genera el markup de animación idle según el tipo de motivo. */
+function animMarkup(anim) {
+  if (anim === 'eq') {
+    return '<span class="tools-hub__anim-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>';
+  }
+  if (anim === 'sparkle') {
+    return '<span class="tools-hub__anim-sparkle" aria-hidden="true"><span></span><span></span><span></span><span></span></span>';
+  }
+  if (anim === 'layers') {
+    return '<span class="tools-hub__anim-layers" aria-hidden="true"><i></i><i></i><i></i></span>';
+  }
+  return '';
+}
 
 /**
  * Renderiza el hub de Herramientas en `container`.
@@ -72,7 +89,9 @@ export function renderToolsHub(container) {
     const betaBadge = tool.beta ? ' <span class="badge--beta">BETA</span>' : '';
 
     tile.innerHTML = `
-      <span class="tools-hub__tile-icon tools-hub__tile-icon--${tool.tone}">${icon(tool.iconKey, { size: 22 })}</span>
+      <span class="tools-hub__tile-icon tools-hub__tile-icon--${tool.tone}">
+        ${animMarkup(tool.anim)}${icon(tool.iconKey, { size: 22 })}
+      </span>
       <span class="tools-hub__tile-body">
         <span class="tools-hub__tile-label">${tool.label}${betaBadge}</span>
         <span class="tools-hub__tile-desc">${tool.desc}</span>

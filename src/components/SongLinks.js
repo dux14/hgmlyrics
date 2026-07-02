@@ -7,7 +7,7 @@
 
 import '../styles/song-links.css';
 import { fetchSongDetail } from '../lib/store.js';
-import { navigate } from '../router.js';
+import { goBack } from '../router.js';
 import { VOICE_LINK_TYPES, getVoiceColor } from '../lib/voiceSystem.js';
 import { isAdmin } from '../lib/authStore.js';
 import { icon } from '../lib/icons.js';
@@ -66,7 +66,7 @@ export async function renderSongLinks(container, songId) {
         <button class="btn btn--primary" style="margin-top:1rem" id="links-go-home">Volver</button>
       </div>
     `;
-    container.querySelector('#links-go-home')?.addEventListener('click', () => navigate('/'));
+    container.querySelector('#links-go-home')?.addEventListener('click', () => goBack());
     return;
   }
 

@@ -13,6 +13,39 @@ let notFoundHandler = null;
 let currentRoute = null;
 
 /**
+ * Índice de la entrada actual dentro de la sesión de la app. La entrada de
+ * arranque es 0; cada navigate() que empuja una entrada nueva lo incrementa y
+ * lo sella en history.state. goBack() lo usa para decidir entre volver una
+ * entrada (history.back) o caer al home si ya estamos en la raíz de la sesión.
+ * Rastrearlo aquí (y no en history.length) evita salir de la app al hacer
+ * "atrás" desde la primera pantalla o desde un deep link.
+ */
+let historyIndex = 0;
+
+/**
+ * Marca que la próxima 'hashchange' proviene de un navigate() con push (no de
+ * un atrás/adelante), para contarla en el índice de sesión. Se sella en el
+ * handler de hashchange porque el cambio de hash es asíncrono en algunos
+ * entornos (jsdom): sellar de forma síncrona apuntaría a la entrada anterior.
+ */
+let pendingPush = false;
+
+/**
+ * Capa "backable" activa: un estado dentro de una pantalla (p. ej. el focus de
+ * búsqueda en /buscar) que empuja una entrada de history de la MISMA ruta para
+ * que el atrás del navegador la cierre en vez de abandonar la pantalla. Guarda
+ * el índice de sesión de su entrada y el callback a ejecutar al cerrarla.
+ * @type {{ idx: number, onBack: () => void } | null}
+ */
+let backable = null;
+
+/** Sella la entrada actual del history con el índice de sesión dado. */
+function stampHistory(idx) {
+  const prev = window.history.state;
+  window.history.replaceState({ ...prev, hknIdx: idx }, '');
+}
+
+/**
  * Register a route
  * @param {string} pattern - Route pattern (e.g., '/song/:id')
  * @param {Function} handler - Handler function receiving { params, query }
@@ -44,7 +77,8 @@ export function navigate(path, { replace = false } = {}) {
     // fuerza el re-resolve: replaceState no dispara 'hashchange'.
     // NOTA: re-resolve síncrono — no llamar navigate({ replace }) hacia el mismo
     // destino desde un handler de ruta, o se producirá recursión ilimitada.
-    window.history.replaceState(null, '', targetHash);
+    // replace no añade entrada: el índice de sesión no cambia, solo se re-sella.
+    window.history.replaceState({ hknIdx: historyIndex }, '', targetHash);
     currentRoute = null;
     resolve();
     return;
@@ -55,8 +89,58 @@ export function navigate(path, { replace = false } = {}) {
     currentRoute = null;
     resolve();
   } else {
+    // Empuja una entrada nueva; el handler de hashchange la sella con el índice
+    // siguiente, para que goBack() sepa que hay una pantalla anterior.
+    pendingPush = true;
     window.location.hash = path;
   }
+}
+
+/**
+ * Vuelve a la pantalla inmediatamente anterior dentro de la sesión de la app.
+ * Si no hay una (primera pantalla o deep link directo), cae al home en vez de
+ * abandonar la app. Es el "atrás" que deben usar los botones "Volver".
+ */
+export function goBack() {
+  if (historyIndex > 0) {
+    // El popstate resultante actualiza historyIndex y el hashchange re-renderiza.
+    window.history.back();
+  } else {
+    navigate('/');
+  }
+}
+
+/**
+ * Abre una capa "backable" dentro de la pantalla actual: empuja una entrada de
+ * history de la misma ruta (no dispara hashchange ni re-render) para que el
+ * atrás del navegador ejecute onBack (cerrar la capa) en vez de salir de la
+ * pantalla. Reemplaza cualquier capa previa sin dispararla (p. ej. una que
+ * quedó huérfana tras remontar la pantalla).
+ * @param {() => void} onBack
+ */
+export function openBackable(onBack) {
+  historyIndex += 1;
+  backable = { idx: historyIndex, onBack };
+  window.history.pushState({ hknIdx: historyIndex, hknBackable: true }, '', window.location.hash);
+}
+
+/**
+ * Cierra la capa "backable" activa de forma programática (Escape, botón limpiar)
+ * consumiendo su entrada de history, SIN volver a disparar onBack (el cierre
+ * visual ya lo hizo el llamador). No-op si no hay capa activa.
+ */
+export function closeBackable() {
+  if (!backable) return;
+  backable = null;
+  window.history.back();
+}
+
+/**
+ * Olvida la capa "backable" activa sin tocar el history. Lo llama una pantalla
+ * al (re)montarse para descartar una capa huérfana de una instancia anterior.
+ */
+export function clearBackable() {
+  backable = null;
 }
 
 /**
@@ -128,9 +212,35 @@ function matchRoute(pattern, path) {
  */
 export function initRouter() {
   window.addEventListener('hashchange', () => {
+    if (pendingPush) {
+      // hashchange disparado por un navigate() con push: cuenta como pantalla
+      // nueva en la sesión y sella la entrada recién creada con su índice.
+      pendingPush = false;
+      historyIndex += 1;
+      stampHistory(historyIndex);
+    }
     currentRoute = null; // Reset to allow re-resolve
     resolve();
   });
+
+  // popstate (atrás/adelante del navegador o gesto nativo): reposiciona el
+  // índice de sesión leyéndolo de la entrada a la que aterrizamos. El render lo
+  // sigue haciendo el hashchange de arriba; aquí solo se mantiene el índice.
+  window.addEventListener('popstate', (e) => {
+    if (typeof e.state?.hknIdx === 'number') historyIndex = e.state.hknIdx;
+    // Si retrocedimos por debajo de una capa backable activa (atrás nativo desde
+    // el focus de búsqueda, etc.), ejecuta su cierre y descártala.
+    if (backable && historyIndex < backable.idx) {
+      const { onBack } = backable;
+      backable = null;
+      onBack();
+    }
+  });
+
+  // Sella la entrada de arranque como raíz de la sesión (índice 0). Un deep link
+  // directo también arranca en 0 → goBack cae al home, no fuera de la app.
+  historyIndex = 0;
+  stampHistory(0);
 
   // Un refresh() temprano (p. ej. SIGNED_OUT durante el boot, antes de registrar
   // rutas) puede dejar currentRoute apuntando al hash sin que la ruta se haya

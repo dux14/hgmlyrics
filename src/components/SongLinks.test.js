@@ -9,7 +9,7 @@ vi.mock('../styles/song-links.css', () => ({}));
 vi.mock('../lib/store.js', () => ({
   fetchSongDetail: vi.fn(),
 }));
-vi.mock('../router.js', () => ({ navigate: vi.fn() }));
+vi.mock('../router.js', () => ({ navigate: vi.fn(), goBack: vi.fn() }));
 vi.mock('../lib/voiceSystem.js', () => ({
   VOICE_TYPES: [],
   VOICE_LINK_TYPES: [],

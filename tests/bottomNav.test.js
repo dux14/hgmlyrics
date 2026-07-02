@@ -74,7 +74,9 @@ describe('renderBottomNav — tab menú (estilo Spotify)', () => {
     });
     expect(a.classList.contains('bottom-nav__item--close')).toBe(true);
     expect(a.getAttribute('aria-expanded')).toBe('true');
-    expect(a.querySelector('span')).toBeNull();
+    // El contenido se transforma en un circulo con X; sin el label "Menú".
+    expect(a.querySelector('.bottom-nav__close-circle')).not.toBeNull();
+    expect(a.textContent).not.toContain('Menú');
   });
 
   it('ejecutar la onClose capturada restaura el tab menú', () => {

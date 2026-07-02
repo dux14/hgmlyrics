@@ -50,7 +50,7 @@ export function activeTab(path) {
  */
 function setMenuOpenVisual(a) {
   a.classList.add('bottom-nav__item--close');
-  a.innerHTML = icon('close', { size: 24 });
+  a.innerHTML = `<span class="bottom-nav__close-circle">${icon('close', { size: 24 })}</span>`;
   a.setAttribute('aria-label', 'Cerrar menú');
   a.setAttribute('aria-expanded', 'true');
 }

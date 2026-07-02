@@ -27,6 +27,33 @@
    No usar un `[hidden]` global !important — pisaría toda la app. */
 .search-hub[hidden], .search-bar__clear[hidden], .search-bar__cancel[hidden] { display: none; }
 
+/* --- Feature 2: Landing con header colapsable + pill blanco ---
+   Scope: solo /buscar (.main--bleed). El wrapper sticky se convierte en banda negra
+   (z-index > --z-header = 200) que cubre el header fijo al scrollear. Sin JS extra.
+   En reposo (scroll=0) el wrapper está en su posición natural (y=52px), header visible.
+   Al scrollear: wrapper sticks en top:0 y tapa el header — resultado visual requerido. */
+.main--bleed .search-bar-wrap {
+  position: sticky;
+  top: 0;
+  z-index: calc(var(--z-header) + 1); /* 201 > 200 = cubre el header fijo */
+  background: var(--color-bg); /* fondo negro sólido — mismo que .header */
+  padding: var(--space-sm) var(--space-md);
+}
+/* Pill blanco: la barra pierde su propio sticky y adopta fondo blanco (contraste AA). */
+.main--bleed .search-bar {
+  position: static;
+  top: auto;
+  z-index: auto;
+  margin: 0; /* el wrapper provee el gutter lateral */
+  background: #fff;
+  border-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: rgba(0, 0, 0, 0.6); /* icono lupa oscuro */
+}
+.main--bleed .search-bar input { color: #121212; }
+.main--bleed .search-bar input::placeholder { color: rgba(0, 0, 0, 0.5); }
+
 /* --- Modo focus: takeover estilo Spotify --- */
 body.search-focus .header { display: none; }
 body.search-focus .search-bar {
@@ -35,6 +62,18 @@ body.search-focus .search-bar {
 }
 /* Compensa la barra fija para que el contenido no quede oculto detrás. */
 body.search-focus .search-page { padding-top: var(--header-height); }
+/* Revertir pill blanco: en modo focus la barra vuelve al look oscuro (feature 1 intacto).
+   Estas reglas vienen DESPUÉS del bloque landing (.main--bleed) y ganan por orden. */
+body.search-focus .search-bar-wrap { position: static; padding: 0; background: transparent; }
+body.search-focus .search-bar {
+  background: var(--color-bg);
+  color: var(--color-text-secondary);
+  border-color: var(--color-border);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+body.search-focus .search-bar input { color: var(--color-text); }
+body.search-focus .search-bar input::placeholder { color: var(--color-text-secondary); }
 
 /* --- Filas de resultado planas --- */
 .search-row {

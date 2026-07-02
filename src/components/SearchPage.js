@@ -126,7 +126,12 @@ export async function renderSearchPage(container, weeklyWords = []) {
     <button type="button" class="search-bar__clear" aria-label="Limpiar búsqueda" hidden>${icon('close', { size: 18 })}</button>
     <button type="button" class="search-bar__cancel" hidden>Cancelar</button>
   `;
-  page.appendChild(bar);
+  // Wrapper sticky: banda negra sólida que cubre el header al scrollear (Feature 2).
+  // La banda sticks en top:0 con z-index > --z-header, tapando el header fijo.
+  const barWrap = document.createElement('div');
+  barWrap.className = 'search-bar-wrap';
+  barWrap.appendChild(bar);
+  page.appendChild(barWrap);
 
   // Contenedor del hub (secciones)
   const hub = document.createElement('div');

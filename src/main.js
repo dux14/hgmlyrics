@@ -177,12 +177,12 @@ async function boot() {
   privateRoute('/buscar', async () => {
     hideFilterBar();
     const { renderSearchPage } = await import('./components/SearchPage.js');
-    const weeklyWords = await loadWeeklyWordsForIndex();
-    // Añadir el bleed justo antes de montar el contenido nuevo: si se añadiera
-    // antes de los await, el contenido de la ruta anterior (aún montado) perdería
-    // su gutter y se vería expandirse edge-to-edge durante todo el fetch.
+    // El bleed se añade justo antes de montar el contenido nuevo para que la ruta
+    // anterior no pierda su gutter durante el import dinamico.
     document.querySelector('.main')?.classList.add('main--bleed');
-    await renderSearchPage(mainContent, weeklyWords);
+    // Ya no se hace await de /api/weekly-words aqui: renderSearchPage pinta el shell
+    // al instante y la seccion "Voces en off" carga en su propia region async.
+    await renderSearchPage(mainContent);
   });
 
   privateRoute('/herramientas', () => {

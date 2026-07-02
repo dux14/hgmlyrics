@@ -11,6 +11,8 @@ import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { escapeHtml } from '../lib/escape.js';
 import { songTile } from './songTile.js';
 import { searchEverything } from '../lib/search.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelRowList } from '../lib/skeleton.js';
 
 /** PRNG determinista (mulberry32) — para barajar estable por sesión. */
 function mulberry32(seed) {
@@ -105,11 +107,23 @@ function vozCard(ww) {
 }
 
 /**
+ * Trae las voces en off publicadas para el rail del hub. Sin token: el rail muestra
+ * solo las publicadas (las mismas que ve cualquier visitante), lo que evita depender
+ * de supabase aqui y mantiene este fetch trivialmente testeable con un global.fetch mock.
+ */
+async function fetchVocesEnOff() {
+  const res = await fetch('/api/weekly-words');
+  if (!res.ok) throw new Error('weekly-words fetch failed');
+  const body = await res.json();
+  return body.weeklyWords ?? [];
+}
+
+/**
  * Renderiza el browse hub dentro de `container`.
  * @param {HTMLElement} container
- * @param {Array} weeklyWords - voces en off (puede ser vacío)
+ * @param {Array|null} weeklyWords - semilla SWR opcional; si es null la seccion de voces hace su propio fetch con skeleton
  */
-export async function renderSearchPage(container, weeklyWords = []) {
+export async function renderSearchPage(container, weeklyWords = null) {
   container.innerHTML = '';
   await ensureColors();
 
@@ -170,14 +184,30 @@ export async function renderSearchPage(container, weeklyWords = []) {
   stableShuffle(songs).forEach((song) => grid.appendChild(songTile(song, colorMap, coverBySlug)));
   hub.appendChild(grid);
 
-  // 3 · Voces en off
-  if (weeklyWords.length) {
-    hub.appendChild(sectionHead('Voces en off', () => navigate('/voces')));
-    const rail = document.createElement('div');
-    rail.className = 'search-rail';
-    weeklyWords.forEach((ww) => rail.appendChild(vozCard(ww)));
-    hub.appendChild(rail);
-  }
+  // 3 · Voces en off — region async: el shell del hub pinta al instante y esta
+  // seccion carga aparte (skeleton + SWR). Evita que /api/weekly-words bloquee /buscar.
+  const vocesRegion = document.createElement('div');
+  vocesRegion.className = 'search-voces-region';
+  hub.appendChild(vocesRegion);
+
+  renderAsyncRegion(vocesRegion, {
+    cached: weeklyWords,
+    skeleton: () =>
+      `<div class="search-section__head"><h2>Voces en off</h2></div>${skelRowList({ rows: 3 })}`,
+    fetcher: fetchVocesEnOff,
+    render: (words) => {
+      vocesRegion.innerHTML = '';
+      vocesRegion.appendChild(sectionHead('Voces en off', () => navigate('/voces')));
+      const rail = document.createElement('div');
+      rail.className = 'search-rail';
+      words.forEach((ww) => rail.appendChild(vozCard(ww)));
+      vocesRegion.appendChild(rail);
+    },
+    empty: () => '',
+    onError: () =>
+      `<div class="search-section__head"><h2>Voces en off</h2></div>` +
+      `<p class="search-voces-error">No se pudieron cargar las voces. <button type="button" data-retry>Reintentar</button></p>`,
+  });
 
   // 4 · Tus favoritos (solo autenticado + con favoritos)
   if (isAuthenticated()) {

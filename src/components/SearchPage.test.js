@@ -393,4 +393,37 @@ describe('renderSearchPage', () => {
     expect(empty).not.toBeNull();
     expect(empty.textContent).toContain('xyzzy');
   });
+
+  it('shell instantaneo: pinta search-bar y catalogo sin esperar /api/weekly-words', async () => {
+    // weekly-words nunca resuelve; el resto del fetch (cover-colors) si.
+    global.fetch = vi.fn((url) => {
+      if (String(url).includes('weekly-words')) return new Promise(() => {});
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    getState.mockReturnValue({
+      songs: [{ id: '1', title: 'Una', album: 'A', coverImage: '' }],
+      filtered: [],
+    });
+
+    const container = document.createElement('div');
+    await renderSearchPage(container); // sin weeklyWords -> region async
+
+    expect(container.querySelector('.search-bar input[type="search"]')).not.toBeNull();
+    expect(container.querySelector('.song-tile-grid')).not.toBeNull();
+    expect(container.querySelector('.search-voces-region')).not.toBeNull();
+  });
+
+  it('voces en off: con datos cacheados pinta el rail de voz-cards sin esperar fetch', async () => {
+    const weeklyWords = [
+      { id: 'ww1', title: 'Palabra', gospel_ref: 'Juan 1:1' },
+      { id: 'ww2', title: 'Otra', gospel_ref: 'Lucas 2:1' },
+    ];
+    getState.mockReturnValue({ songs: [], filtered: [] });
+    const container = document.createElement('div');
+    await renderSearchPage(container, weeklyWords);
+
+    const rail = container.querySelector('.search-voces-region .search-rail');
+    expect(rail).not.toBeNull();
+    expect(rail.querySelectorAll('.voz-card')).toHaveLength(2);
+  });
 });

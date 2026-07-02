@@ -121,16 +121,22 @@ export async function renderSearchPage(container, weeklyWords = []) {
   const bar = document.createElement('div');
   bar.className = 'search-bar';
   bar.innerHTML = `
-    ${icon('search', { size: 18 })}
+    <span class="search-bar__icon">${icon('search', { size: 18 })}</span>
     <input type="search" placeholder="Buscar canciones, álbumes, voces…" aria-label="Buscar" />
     <button type="button" class="search-bar__clear" aria-label="Limpiar búsqueda" hidden>${icon('close', { size: 18 })}</button>
-    <button type="button" class="search-bar__cancel" hidden>Cancelar</button>
   `;
+  // Cancelar queda FUERA del pill (.search-bar) — a la derecha del wrap (Spotify-style).
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'search-bar__cancel';
+  cancelBtn.hidden = true;
+  cancelBtn.textContent = 'Cancelar';
   // Wrapper sticky: banda negra sólida que cubre el header al scrollear (Feature 2).
   // La banda sticks en top:0 con z-index > --z-header, tapando el header fijo.
   const barWrap = document.createElement('div');
   barWrap.className = 'search-bar-wrap';
   barWrap.appendChild(bar);
+  barWrap.appendChild(cancelBtn);
   page.appendChild(barWrap);
 
   // Contenedor del hub (secciones)
@@ -194,7 +200,6 @@ export async function renderSearchPage(container, weeklyWords = []) {
   clearBackable();
   const input = bar.querySelector('input');
   const clearBtn = bar.querySelector('.search-bar__clear');
-  const cancelBtn = bar.querySelector('.search-bar__cancel');
   let overlayOpen = false;
 
   const resultsBox = document.createElement('div');
@@ -227,7 +232,7 @@ export async function renderSearchPage(container, weeklyWords = []) {
       const a = document.createElement('a');
       a.className = 'search-row';
       a.href = `/song/${s.id}`;
-      a.innerHTML = `<img class="search-row__cover" src="${resolveCoverUrl(s)}" alt="" width="48" height="48" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'"><div class="search-row__info"><div class="search-row__title">${escapeHtml(s.title)}</div><div class="search-row__sub">Canción · ${escapeHtml(s.album || '')}</div></div>`;
+      a.innerHTML = `<img class="search-row__cover" src="${resolveCoverUrl(s)}" alt="" width="56" height="56" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'"><div class="search-row__info"><div class="search-row__title">${escapeHtml(s.title)}</div><div class="search-row__sub">Canción · ${escapeHtml(s.album || '')}</div></div>`;
       a.addEventListener('click', (e) => { e.preventDefault(); requestExitFocus(); navigate(`/song/${s.id}`); });
       return a;
     });
@@ -235,7 +240,7 @@ export async function renderSearchPage(container, weeklyWords = []) {
       const a = document.createElement('a');
       a.className = 'search-row';
       a.href = `/buscar?album=${encodeURIComponent(al.slug)}`;
-      a.innerHTML = `<img class="search-row__cover" src="${resolveCoverUrl(al)}" alt="" width="48" height="48" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'"><div class="search-row__info"><div class="search-row__title">${escapeHtml(al.name)}</div><div class="search-row__sub">Álbum · ${escapeHtml(al.artist || 'Hakuna Group Music')}</div></div>`;
+      a.innerHTML = `<img class="search-row__cover" src="${resolveCoverUrl(al)}" alt="" width="56" height="56" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'"><div class="search-row__info"><div class="search-row__title">${escapeHtml(al.name)}</div><div class="search-row__sub">Álbum · ${escapeHtml(al.artist || 'Hakuna Group Music')}</div></div>`;
       a.addEventListener('click', (e) => { e.preventDefault(); requestExitFocus(); navigate(`/buscar?album=${encodeURIComponent(al.slug)}`); });
       return a;
     });

@@ -38,6 +38,7 @@ import { initUpdateNotifier } from './components/UpdateNotifier.js';
 import { renderToolsHub } from './components/ToolsHub.js';
 import { renderHome } from './components/Home.js';
 import { renderBottomNav, updateBottomNavActive } from './components/BottomNav.js';
+import { closeGoToSheet } from './components/GoToSheet.js';
 
 // Initialize theme immediately to avoid flash
 initTheme();
@@ -376,7 +377,10 @@ async function boot() {
 
   // Sincronizar tab activo del bottom-nav en cada cambio de ruta (F1b)
   updateBottomNavActive(getCurrentPath());
-  window.addEventListener('hashchange', () => updateBottomNavActive(getCurrentPath()));
+  window.addEventListener('hashchange', () => {
+    closeGoToSheet(); // cierra la hoja "Ir a" al navegar (incl. botón atrás)
+    updateBottomNavActive(getCurrentPath());
+  });
 
   // F1: Initialize update notifier
   initUpdateNotifier();

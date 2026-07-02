@@ -1,120 +1,179 @@
-/* go-to-sheet.css — Hoja "Ir a..." (6 tiles de navegacion, solo movil) */
+/* go-to-sheet.css — Hoja "Ir a..." estilo Spotify (lista vertical, solo movil) */
 
-/* Overlay con glass blur */
+/* Overlay: cubre header + contenido, deja el footer libre encima */
 .gsheet-dim {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  z-index: 300;
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.5);
+  z-index: var(--z-overlay);
 }
 
-/* Sheet principal */
+/* El footer queda por encima del dim mientras la hoja esta abierta */
+body.menu-open .bottom-nav {
+  z-index: calc(var(--z-overlay) + 20);
+}
+
+/* Sheet principal: no se solapa con el bottom-nav */
 .gsheet {
   position: fixed;
-  bottom: 0;
   left: 0;
   right: 0;
-  z-index: 301;
+  bottom: calc(var(--bottom-nav-height, 56px) + env(safe-area-inset-bottom));
+  z-index: calc(var(--z-overlay) + 10);
   border-radius: 22px 22px 0 0;
-  background: color-mix(in srgb, var(--color-surface) 90%, transparent);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  backdrop-filter: blur(20px) saturate(1.4);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-bottom: none;
-  padding: var(--space-md) var(--space-md)
-    calc(var(--space-md) + env(safe-area-inset-bottom));
+  padding: var(--space-md);
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+/* Lista vertical de filas */
+.gsheet__list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
 }
 
-/* Asa de arrastre */
-.gsheet__grab {
-  width: 40px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--color-border);
-  margin: 0 auto var(--space-sm);
-  flex-shrink: 0;
-}
-
-/* Titulo (Syncopate) */
-.gsheet__h {
-  font-family: var(--font-display);
-  font-size: 0.6rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-text-secondary);
-  margin-bottom: var(--space-xs);
-}
-
-/* Grid 3x2 de tiles */
-.gsheet__grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-sm);
-}
-
-/* Tile individual */
-.gsheet__tile {
+/* Fila individual: icono circular + texto */
+.gsheet__row {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-xs);
-  padding: var(--space-md) var(--space-sm);
-  border-radius: var(--border-radius-md);
-  border: 1px solid var(--color-border);
-  background: transparent;
-  color: var(--color-text);
-  cursor: pointer;
-  font-size: 0.85rem;
-  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
-  text-align: center;
+  gap: var(--space-md);
+  min-height: 56px;
   width: 100%;
+  background: transparent;
+  border: none;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  text-align: left;
+  padding: var(--space-sm) var(--space-xs);
+  color: var(--color-text);
+  transition: background 0.15s;
 }
 
-.gsheet__tile:active {
-  background: color-mix(in srgb, var(--tile-color, var(--color-teal-500)) 10%, transparent);
+.gsheet__row:hover,
+.gsheet__row:active {
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
 }
 
-/* Tile activo: anillo + glow en el color del tile */
-.gsheet__tile.is-active {
-  border-color: var(--tile-color, var(--color-teal-500));
-  background: color-mix(in srgb, var(--tile-color, var(--color-teal-500)) 12%, transparent);
-  box-shadow: 0 0 0 1px var(--tile-color, var(--color-teal-500)),
-    0 0 8px color-mix(in srgb, var(--tile-color, var(--color-teal-500)) 30%, transparent);
+/* Fila activa: resalta con el color de identidad del tile */
+.gsheet__row.is-active .gsheet__label {
+  color: var(--tile-color, var(--color-teal-500));
 }
 
-/* Icono en el color de identidad del tile */
+/* Icono en circulo, color de identidad del tile */
 .gsheet__ic {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--tile-color, var(--color-teal-500)) 14%, transparent);
   color: var(--tile-color, var(--color-teal-500));
 }
 
-/* Label del tile */
-.gsheet__lb {
-  font-size: 0.78rem;
-  line-height: 1.2;
+/* Texto: label + descripcion de una linea */
+.gsheet__txt {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.gsheet__label {
+  font-weight: 700;
   color: var(--color-text);
 }
 
+.gsheet__desc {
+  font-size: 0.8rem;
+  line-height: 1.2;
+  color: var(--color-text-secondary);
+}
+
+/* Boton X del footer (BottomNav lo activa reemplazando el tab Menu) */
+.bottom-nav__item--close span {
+  display: none;
+}
+
+.bottom-nav__item--close svg {
+  width: 24px;
+  height: 24px;
+}
+
+.bottom-nav__item--close {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-text) 14%, transparent);
+  color: var(--color-text);
+}
+
+/* === Animacion de entrada/salida === */
+
 @keyframes gsheet-in {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes gsheet-out {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(12px);
+    opacity: 0;
+  }
 }
 @keyframes gsheet-dim-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes gsheet-dim-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
-.gsheet { animation: gsheet-in 180ms ease-out; }
-.gsheet-dim { animation: gsheet-dim-in 180ms ease-out; }
+.gsheet {
+  animation: gsheet-in 180ms ease-out;
+}
+.gsheet-dim {
+  animation: gsheet-dim-in 180ms ease-out;
+}
+.gsheet--closing,
+.gsheet-dim--closing {
+  pointer-events: none; /* ignora clicks mientras la hoja sale */
+}
+.gsheet--closing {
+  animation: gsheet-out 150ms ease-in forwards;
+}
+.gsheet-dim--closing {
+  animation: gsheet-dim-out 150ms ease-in forwards;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .gsheet, .gsheet-dim { animation: none; }
+  .gsheet,
+  .gsheet-dim,
+  .gsheet--closing,
+  .gsheet-dim--closing {
+    animation: none;
+  }
 }

@@ -9,7 +9,7 @@
 
 import { icon } from '../lib/icons.js';
 import { navigate, getCurrentPath } from '../router.js';
-import { openGoToSheet } from './GoToSheet.js';
+import { openGoToSheet, closeGoToSheet, isGoToSheetOpen } from './GoToSheet.js';
 
 /** Tabs configurados: { id, label, path|action, iconKey, matchPaths } */
 const TABS = [
@@ -44,6 +44,31 @@ export function activeTab(path) {
 }
 
 /**
+ * Marca visualmente el tab Menú como abierto: icono X, sin label, aria-expanded true.
+ *
+ * @param {HTMLElement} a — el <a> del tab menú
+ */
+function setMenuOpenVisual(a) {
+  a.classList.add('bottom-nav__item--close');
+  a.innerHTML = icon('close', { size: 24 });
+  a.setAttribute('aria-label', 'Cerrar menú');
+  a.setAttribute('aria-expanded', 'true');
+}
+
+/**
+ * Restaura el tab Menú a su estado cerrado: icono grid + label, aria-expanded false.
+ * Idempotente. Se usa como callback onClose de la hoja "Ir a".
+ *
+ * @param {HTMLElement} a — el <a> del tab menú
+ */
+function resetMenu(a) {
+  a.innerHTML = `${icon('grid', { size: 24 })}<span>Menú</span>`;
+  a.classList.remove('bottom-nav__item--close');
+  a.removeAttribute('aria-label');
+  a.setAttribute('aria-expanded', 'false');
+}
+
+/**
  * Crea y monta el componente bottom-nav dentro de `container`.
  *
  * @param {HTMLElement} container — normalmente el elemento #app
@@ -59,12 +84,19 @@ export function renderBottomNav(container) {
     a.href = tab.action ? '#' : tab.path;
     a.dataset.tab = tab.id;
     a.innerHTML = `${icon(tab.iconKey, { size: 24 })}<span>${tab.label}</span>`;
+    if (tab.action === 'menu') a.setAttribute('aria-expanded', 'false');
 
     a.addEventListener('click', (e) => {
       e.preventDefault();
       if (tab.action === 'menu') {
-        openGoToSheet(getCurrentPath());
+        if (isGoToSheetOpen()) {
+          closeGoToSheet();
+        } else {
+          openGoToSheet(getCurrentPath(), { onClose: () => resetMenu(a) });
+          setMenuOpenVisual(a);
+        }
       } else {
+        closeGoToSheet();
         navigate(tab.path);
       }
     });

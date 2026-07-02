@@ -60,6 +60,23 @@ describe('GO_TO_TILES rutas y colores', () => {
     }
   });
 
+  it('cada tile define una descripción de una línea', () => {
+    for (const t of GO_TO_TILES) {
+      expect(typeof t.desc).toBe('string');
+      expect(t.desc.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('descripciones exactas por tile', () => {
+    const byId = Object.fromEntries(GO_TO_TILES.map((t) => [t.id, t.desc]));
+    expect(byId.albumes).toBe('Explora la discografía completa');
+    expect(byId.listas).toBe('Crea colecciones efímeras de letras');
+    expect(byId.oracion).toBe('Un momento contemplativo con el artista');
+    expect(byId.favoritos).toBe('Tus letras guardadas');
+    expect(byId.voces).toBe('Perfiles y voces del grupo');
+    expect(byId.cache).toBe('Libera espacio y datos offline');
+  });
+
   it('activeTile resuelve las nuevas rutas', () => {
     expect(activeTile('/albumes')).toBe('albumes');
     expect(activeTile('/listas')).toBe('listas');

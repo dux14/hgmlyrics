@@ -91,13 +91,29 @@ export async function renderVoicesAlbumView(container) {
   const paintList = (words) => {
     const today = new Date().toISOString().slice(0, 10);
     const vigenteId = words.find((w) => isVigente(w.sunday_date, today))?.id ?? null;
+
+    // Colorea el hero con la paleta litúrgica de la voz más reciente (como en
+    // master) y devuelve el meta + botón de crear a su lugar dentro del banner.
+    const hero = container.querySelector('.voz-album__hero');
+    if (hero) {
+      const pal = liturgicalPalette(words[0]?.liturgical_color);
+      hero.style.setProperty('--liturgical-gradient', coverGradient(pal));
+      hero.style.setProperty('--liturgical-accent', pal.accent);
+      hero.style.setProperty('--liturgical-text', pal.text);
+      hero.innerHTML = `
+        <div class="voz-album__hero-icon">${icon('gospel', { size: 48 })}</div>
+        <h1 class="voz-album__hero-title">Voces en off</h1>
+        <p class="voz-album__hero-meta">${words.length} entrada${words.length !== 1 ? 's' : ''}</p>
+        ${isAdmin() ? `<button class="btn btn--sm" id="voz-create-btn">+ Nueva voz en off</button>` : ''}
+      `;
+    }
+
     region.innerHTML = `
-      <p class="voz-album__hero-meta">${words.length} entrada${words.length !== 1 ? 's' : ''}</p>
-      ${isAdmin() ? `<button class="btn btn--sm" id="voz-create-btn">+ Nueva voz en off</button>` : ''}
       <ul class="voz-album__list">
-        ${words.map((w) => {
-          const isVig = w.id === vigenteId;
-          return `
+        ${words
+          .map((w) => {
+            const isVig = w.id === vigenteId;
+            return `
           <li class="voz-album__item" data-voz-id="${escapeHtml(w.id)}">
             <div class="voz-album__cover">${icon('gospel', { size: 26 })}</div>
             <div class="voz-album__meta">
@@ -107,7 +123,8 @@ export async function renderVoicesAlbumView(container) {
             ${isVig ? `<span class="voz-album__badge--vigente">VIGENTE</span>` : ''}
             ${isAdmin() ? `<button class="voz-album__edit" data-edit-voz="${escapeHtml(w.id)}" aria-label="Editar voz en off">${icon('pencil', { size: 18 })}</button>` : ''}
           </li>`;
-        }).join('')}
+          })
+          .join('')}
       </ul>
     `;
     bindVozEvents(region, words);
@@ -131,7 +148,7 @@ export async function renderVoicesAlbumView(container) {
       </div>`,
   });
 
-  region.addEventListener('click', (e) => {
+  container.addEventListener('click', (e) => {
     if (e.target.closest('#voz-create-btn')) navigate('/admin/voz/nueva');
   });
 }

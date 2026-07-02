@@ -25,7 +25,7 @@ import { renderPublicProfile } from './components/PublicProfile.js';
 import { renderFriendsPanel } from './components/FriendsPanel.js';
 import { renderFavoritesPage } from './components/FavoritesPage.js';
 import { renderRecommenderPage } from './components/RecommenderPage.js';
-import { renderHeader } from './components/Header.js';
+import { renderHeader, hideHeader, showHeader } from './components/Header.js';
 import { renderSidebar, updateSidebarContent } from './components/Sidebar.js';
 import { renderFilterBar, updateFilterBar, hideFilterBar } from './components/FilterBar.js';
 import { renderSongListSkeleton } from './components/SongList.js';
@@ -261,6 +261,7 @@ async function boot() {
 
   privateRoute('/perfil', () => {
     hideFilterBar();
+    hideHeader();
     renderProfile(mainContent);
   });
 
@@ -379,7 +380,10 @@ async function boot() {
   updateBottomNavActive(getCurrentPath());
   window.addEventListener('hashchange', () => {
     closeGoToSheet(); // cierra la hoja "Ir a" al navegar (incl. botón atrás)
-    updateBottomNavActive(getCurrentPath());
+    const path = getCurrentPath();
+    updateBottomNavActive(path);
+    // Oculta el header solo en la pantalla de perfil propia (no en /perfil/editar ni /u/:username).
+    path === '/perfil' ? hideHeader() : showHeader();
   });
 
   // F1: Initialize update notifier

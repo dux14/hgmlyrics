@@ -72,3 +72,13 @@ export function renderHeader(container) {
     navigate('/perfil');
   });
 }
+
+/** Oculta el header global (usado en pantallas donde el encabezado es redundante). */
+export function hideHeader() {
+  document.querySelector('.header')?.setAttribute('hidden', '');
+}
+
+/** Restaura el header global. */
+export function showHeader() {
+  document.querySelector('.header')?.removeAttribute('hidden');
+}

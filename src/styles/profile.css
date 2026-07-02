@@ -759,6 +759,30 @@ select.pf-inp {
   cursor: default;
 }
 
+/* Estado eliminar amigo: borde rojo, fondo transparente */
+.pf-btn-action--rm {
+  background: transparent;
+  color: var(--color-danger);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 40%, transparent);
+  box-shadow: none;
+}
+
+.pf-btn-action--rm:hover {
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+}
+
+/* Estado aceptar solicitud: variante cyan/primario */
+.pf-btn-action--in {
+  background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+  color: var(--color-primary);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+  box-shadow: none;
+}
+
+.pf-btn-action--in:hover {
+  background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+}
+
 /* Chips en perfil público: padding lateral (no afecta .pf-card que tiene el suyo) */
 .pf-chips--pub {
   padding: 0 16px;

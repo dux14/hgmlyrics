@@ -2,6 +2,7 @@
  * PublicProfile.test.js
  * SEC-X1: escape XSS en avatarUrl
  * Task 4 F2a: UI Ambient Kinetic — botón amigo, secciones, favoritas
+ * Task 7: estado de amistad por friendStatus + onda de rango vocal
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -11,12 +12,20 @@ vi.mock('../lib/authStore.js', () => ({
 
 vi.mock('../styles/profile.css', () => ({}));
 
+vi.mock('./vocal-range/waveRange.js', () => ({
+  createWaveRange: vi.fn(({ low, high }) => {
+    if (!low && !high) return null;
+    return { el: document.createElement('canvas') };
+  }),
+}));
+
 import { renderPublicProfile } from './PublicProfile.js';
 
 // Perfil base reutilizable en los tests
 function makeProfileData(overrides = {}) {
   return {
     profile: {
+      id: 'user-uuid-123',
       avatarUrl: null,
       displayName: 'Mateo Ríos',
       username: 'mateor',
@@ -32,6 +41,7 @@ function makeProfileData(overrides = {}) {
     favorites: [],
     friendCount: 24,
     isOwn: false,
+    friendStatus: 'none',
     ...overrides,
   };
 }
@@ -297,5 +307,167 @@ describe('renderPublicProfile — UI Ambient Kinetic (Task 4 F2a)', () => {
     await flush(); // la región se pinta async tras el fetch
     expect(container.querySelector('.pf-user').textContent).toContain('1 amigo');
     expect(container.querySelector('.pf-user').textContent).not.toContain('1 amigos');
+  });
+});
+
+describe('renderPublicProfile — Task 7: estado de amistad + rango vocal', () => {
+  beforeEach(() => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(makeProfileData()),
+      }),
+    );
+    globalThis.confirm = vi.fn(() => true);
+  });
+
+  it('friendStatus "accepted" → botón #rm-friend-btn con clase .pf-btn-action--rm y texto "Eliminar amigo"', async () => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(makeProfileData({ friendStatus: 'accepted' })),
+      }),
+    );
+    const container = document.createElement('div');
+    await renderPublicProfile(container, 'mateor');
+    await flush();
+    const btn = container.querySelector('#rm-friend-btn');
+    expect(btn).not.toBeNull();
+    expect(btn.classList.contains('pf-btn-action--rm')).toBe(true);
+    expect(btn.textContent).toContain('Eliminar amigo');
+    // No debe mostrar el botón de agregar amigo
+    expect(container.querySelector('#add-friend-btn')).toBeNull();
+  });
+
+  it('friendStatus "accepted" → click confirma, llama DELETE con otherUserId y actualiza estado', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(makeProfileData({ friendStatus: 'accepted' })),
+      })
+      .mockResolvedValueOnce({ ok: true });
+
+    const container = document.createElement('div');
+    await renderPublicProfile(container, 'mateor');
+    await flush();
+
+    const btn = container.querySelector('#rm-friend-btn');
+    expect(btn).not.toBeNull();
+    btn.click();
+    await flush();
+
+    expect(globalThis.confirm).toHaveBeenCalled();
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/social/friends',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+    const body = JSON.parse(globalThis.fetch.mock.calls[1][1].body);
+    expect(body).toHaveProperty('otherUserId', 'user-uuid-123');
+  });
+
+  it('friendStatus "accepted" → click con confirm=false NO llama DELETE', async () => {
+    globalThis.confirm = vi.fn(() => false);
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(makeProfileData({ friendStatus: 'accepted' })),
+      }),
+    );
+
+    const container = document.createElement('div');
+    await renderPublicProfile(container, 'mateor');
+    await flush();
+
+    const btn = container.querySelector('#rm-friend-btn');
+    btn.click();
+    await flush();
+
+    // Solo la llamada inicial del perfil; no debe haber llamada DELETE
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('friendStatus "pending_out" → botón "Solicitud enviada" deshabilitado', async () => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(makeProfileData({ friendStatus: 'pending_out' })),
+      }),
+    );
+    const container = document.createElement('div');
+    await renderPublicProfile(container, 'mateor');
+    await flush();
+    const btn = container.querySelector('#add-friend-btn');
+    expect(btn).not.toBeNull();
+    expect(btn.disabled).toBe(true);
+    expect(btn.textContent).toContain('Solicitud enviada');
+  });
+
+  it('friendStatus "pending_in" → muestra botón #accept-friend-btn con texto "Aceptar"', async () => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(makeProfileData({ friendStatus: 'pending_in' })),
+      }),
+    );
+    const container = document.createElement('div');
+    await renderPublicProfile(container, 'mateor');
+    await flush();
+    const btn = container.querySelector('#accept-friend-btn');
+    expect(btn).not.toBeNull();
+    expect(btn.textContent).toContain('Aceptar');
+    // No debe mostrar el botón de agregar
+    expect(container.querySelector('#add-friend-btn')).toBeNull();
+  });
+
+  it('friendStatus "pending_in" → click llama PATCH con requesterId y action accept', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(makeProfileData({ friendStatus: 'pending_in' })),
+      })
+      .mockResolvedValueOnce({ ok: true });
+
+    const container = document.createElement('div');
+    await renderPublicProfile(container, 'mateor');
+    await flush();
+
+    const btn = container.querySelector('#accept-friend-btn');
+    btn.click();
+    await flush();
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/social/friends',
+      expect.objectContaining({ method: 'PATCH' }),
+    );
+    const body = JSON.parse(globalThis.fetch.mock.calls[1][1].body);
+    expect(body).toHaveProperty('requesterId', 'user-uuid-123');
+    expect(body).toHaveProperty('action', 'accept');
+  });
+
+  it('muestra .pf-wave-host cuando el perfil trae vocalRangeLow', async () => {
+    globalThis.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve(
+            makeProfileData({
+              profile: { ...makeProfileData().profile, vocalRangeLow: 'C3', vocalRangeHigh: 'A5' },
+            }),
+          ),
+      }),
+    );
+    const container = document.createElement('div');
+    await renderPublicProfile(container, 'mateor');
+    await flush();
+    expect(container.querySelector('.pf-wave-host')).not.toBeNull();
+  });
+
+  it('no muestra .pf-wave-host cuando el perfil no trae rango vocal', async () => {
+    const container = document.createElement('div');
+    await renderPublicProfile(container, 'mateor');
+    await flush();
+    expect(container.querySelector('.pf-wave-host')).toBeNull();
   });
 });

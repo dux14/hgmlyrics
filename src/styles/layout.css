@@ -28,6 +28,11 @@
   transition: background-color var(--transition-base);
 }
 
+/* El atributo [hidden] pierde contra `display: flex` de autor; forzar ocultado. */
+.header[hidden] {
+  display: none;
+}
+
 .header__logo {
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-extrabold);

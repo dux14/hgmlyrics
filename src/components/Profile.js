@@ -250,16 +250,20 @@ export async function renderProfileEdit(container) {
                  value="${escapeHtml((profile.instrumentRoles || []).join(', '))}" />
           <p class="pf-hint">Separa con comas. Aparecen como chips en tu perfil.</p>
         </div>
-        <div class="pf-two">
-          <div class="pf-fld">
-            <div class="pf-fl">Rango vocal bajo</div>
-            <input class="pf-inp" id="range-low-input" type="text"
-                   value="${escapeHtml(profile.vocalRangeLow || '')}" placeholder="Ej. C3" />
-          </div>
-          <div class="pf-fld">
-            <div class="pf-fl">Rango vocal alto</div>
-            <input class="pf-inp" id="range-high-input" type="text"
-                   value="${escapeHtml(profile.vocalRangeHigh || '')}" placeholder="Ej. A5" />
+        <div class="pf-card" style="margin: 2px 0 0">
+          <div class="pf-ctop"><span class="pf-cl">Vista previa del rango</span></div>
+          <div class="pf-wave-host" id="edit-wave-host" style="height: 96px"></div>
+          <div class="pf-two" style="margin-top: 10px">
+            <div class="pf-fld">
+              <div class="pf-fl">Grave</div>
+              <input class="pf-inp" id="range-low-input" type="text"
+                     value="${escapeHtml(profile.vocalRangeLow || '')}" placeholder="Ej. C3" />
+            </div>
+            <div class="pf-fld">
+              <div class="pf-fl">Agudo</div>
+              <input class="pf-inp" id="range-high-input" type="text"
+                     value="${escapeHtml(profile.vocalRangeHigh || '')}" placeholder="Ej. A5" />
+            </div>
           </div>
         </div>
         <div class="pf-fld">
@@ -392,6 +396,24 @@ export async function renderProfileEdit(container) {
       submitBtn.disabled = false;
     }
   });
+
+  // Monta y actualiza la onda de rango en vivo al editar Grave/Agudo
+  const waveHost = container.querySelector('#edit-wave-host');
+  const lowEl = container.querySelector('#range-low-input');
+  const highEl = container.querySelector('#range-high-input');
+  let waveTimer;
+  function remountWave() {
+    if (!waveHost || !lowEl || !highEl) return;
+    clearTimeout(waveTimer);
+    waveTimer = setTimeout(() => {
+      waveHost.innerHTML = '';
+      const w = createWaveRange({ low: lowEl.value.trim(), high: highEl.value.trim(), height: 96 });
+      if (w) waveHost.appendChild(w.el);
+    }, 200);
+  }
+  lowEl?.addEventListener('input', remountWave);
+  highEl?.addEventListener('input', remountWave);
+  remountWave();
   } // fin paintEditForm
 }
 

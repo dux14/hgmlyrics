@@ -25,10 +25,10 @@ describe('renderLicenses', () => {
     expect(container.textContent).toContain('NC');
   });
 
-  it('incluye el boton de volver', () => {
+  it('no incluye el boton de volver (rediseno: navegacion via bottom-nav)', () => {
     renderLicenses(container);
     const btn = container.querySelector('#back-btn');
-    expect(btn).not.toBeNull();
+    expect(btn).toBeNull();
   });
 
   it('reemplaza el contenido previo del container', () => {

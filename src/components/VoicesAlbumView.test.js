@@ -10,6 +10,16 @@ vi.mock('../lib/supabase.js', () => ({
 
 import { renderVoicesAlbumView } from './VoicesAlbumView.js';
 
+// Espera hasta que fn() devuelva un valor truthy (máx `tries` ciclos de event-loop).
+const waitFor = async (fn, tries = 50) => {
+  for (let i = 0; i < tries; i++) {
+    const v = fn();
+    if (v) return v;
+    await new Promise((r) => setTimeout(r, 0));
+  }
+  return fn();
+};
+
 describe('VoicesAlbumView editar por fila', () => {
   beforeEach(() => {
     navigate.mockClear();
@@ -27,7 +37,7 @@ describe('VoicesAlbumView editar por fila', () => {
   it('admin: cada fila tiene botón editar → /admin/voz/:id', async () => {
     const container = document.createElement('div');
     await renderVoicesAlbumView(container);
-    const editBtn = container.querySelector('[data-edit-voz="w1"]');
+    const editBtn = await waitFor(() => container.querySelector('[data-edit-voz="w1"]'));
     expect(editBtn).not.toBeNull();
     editBtn.click();
     expect(navigate).toHaveBeenCalledWith('/admin/voz/w1');
@@ -37,6 +47,7 @@ describe('VoicesAlbumView editar por fila', () => {
     admin = false;
     const container = document.createElement('div');
     await renderVoicesAlbumView(container);
+    await waitFor(() => container.querySelector('.voz-album__item'));
     expect(container.querySelector('[data-edit-voz]')).toBeNull();
   });
 });

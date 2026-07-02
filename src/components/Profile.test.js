@@ -10,8 +10,9 @@ vi.mock('../router.js', () => ({ navigate: vi.fn() }));
 vi.mock('../lib/icons.js', () => ({ icon: vi.fn(() => '') }));
 vi.mock('../lib/imageCompress.js', () => ({ compressImageToLimit: vi.fn() }));
 vi.mock('../styles/profile.css', () => ({}));
+vi.mock('./vocal-range/waveRange.js', () => ({ createWaveRange: vi.fn(() => null) }));
 
-import { voiceLabel, buildProfileHeader, buildRangeBars, renderProfileEdit } from './Profile.js';
+import { voiceLabel, buildProfileHeader, renderProfileEdit } from './Profile.js';
 
 describe('voiceLabel', () => {
   it('mapea tenor a etiqueta y clase de color', () => {
@@ -19,26 +20,6 @@ describe('voiceLabel', () => {
   });
   it('sin voz devuelve null', () => {
     expect(voiceLabel('', '')).toBeNull();
-  });
-});
-
-describe('buildRangeBars', () => {
-  it('devuelve 7 barras', () => {
-    expect(buildRangeBars().length).toBe(7);
-  });
-  it('marca las 5 centrales como activas y los extremos inactivos', () => {
-    const bars = buildRangeBars();
-    expect(bars[0].on).toBe(false);
-    expect(bars[6].on).toBe(false);
-    expect(bars.slice(1, 6).every((b) => b.on)).toBe(true);
-  });
-  it('marca la barra 2 como grave (lo) y la 6 como aguda (hi)', () => {
-    const bars = buildRangeBars();
-    expect(bars[1].lo).toBe(true);
-    expect(bars[5].hi).toBe(true);
-  });
-  it('cada barra trae una altura porcentual', () => {
-    expect(buildRangeBars().every((b) => /^\d+%$/.test(b.h))).toBe(true);
   });
 });
 
@@ -63,10 +44,10 @@ describe('buildProfileHeader', () => {
     el.innerHTML = buildProfileHeader(base);
     expect(el.querySelectorAll('.pf-chip').length).toBe(2);
   });
-  it('muestra la viz de rango con 7 barras cuando hay rango', () => {
+  it('muestra el host de onda cuando hay rango', () => {
     const el = document.createElement('div');
     el.innerHTML = buildProfileHeader(base);
-    expect(el.querySelectorAll('.pf-range i').length).toBe(7);
+    expect(el.querySelector('.pf-wave-host')).toBeTruthy();
     expect(el.textContent).toContain('C3');
     expect(el.textContent).toContain('A5');
   });
@@ -75,12 +56,45 @@ describe('buildProfileHeader', () => {
     el.innerHTML = buildProfileHeader(base);
     expect(el.querySelector('a[href="#/favoritos"]')).toBeTruthy();
   });
+  it('atajo a Amigos apunta a #/amigos', () => {
+    const el = document.createElement('div');
+    el.innerHTML = buildProfileHeader(base);
+    expect(el.querySelector('a[href="#/amigos"]')).toBeTruthy();
+  });
+  it('botón primario Editar perfil tiene clase pf-edit-primary y href #/perfil/editar', () => {
+    const el = document.createElement('div');
+    el.innerHTML = buildProfileHeader(base);
+    const btn = el.querySelector('a.pf-edit-primary');
+    expect(btn).toBeTruthy();
+    expect(btn.getAttribute('href')).toBe('#/perfil/editar');
+  });
+  it('fila Panel de admin aparece solo si profile.isAdmin es true', () => {
+    const adminEl = document.createElement('div');
+    adminEl.innerHTML = buildProfileHeader({ ...base, isAdmin: true });
+    expect(adminEl.querySelector('a[href="#/admin"]')).toBeTruthy();
+    expect(adminEl.textContent).toContain('Panel de admin');
 
+    const normalEl = document.createElement('div');
+    normalEl.innerHTML = buildProfileHeader(base);
+    expect(normalEl.querySelector('a[href="#/admin"]')).toBeNull();
+  });
+  it('Cerrar sesión tiene id pf-logout con tilde correcta', () => {
+    const el = document.createElement('div');
+    el.innerHTML = buildProfileHeader(base);
+    const btn = el.querySelector('#pf-logout');
+    expect(btn).toBeTruthy();
+    expect(btn.textContent).toContain('Cerrar sesión');
+  });
+  it('fila Licencias apunta a #/licencias', () => {
+    const el = document.createElement('div');
+    el.innerHTML = buildProfileHeader(base);
+    expect(el.querySelector('a[href="#/licencias"]')).toBeTruthy();
+  });
   it('perfil minimo sin rango ni instrumentos no renderiza esas tarjetas', () => {
     const minimal = { username: 'x', displayName: 'X' };
     const el = document.createElement('div');
     el.innerHTML = buildProfileHeader(minimal);
-    expect(el.querySelector('.pf-range')).toBeNull();
+    expect(el.querySelector('.pf-wave-host')).toBeNull();
     expect(el.querySelectorAll('.pf-chip').length).toBe(0);
   });
 

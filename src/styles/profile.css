@@ -1,5 +1,5 @@
 /* profile.css — Perfil propio · Ambient Kinetic (F2a)
- * Valores extraídos de docs/refactor-uiux-ambient-kinetic/galleries/f2-gallery.html (frame A).
+ * Valores extraídos de profile-assembled.html (diseño aprobado, Task 5).
  * Tokens locales del mockup mapeados a tokens de app:
  *   --teal → --color-primary  |  --violet → --color-accent-2
  *   --amber → --color-action  |  --gold → --color-liturgy
@@ -20,30 +20,30 @@
 /* ── Zona superior: ambient blob + avatar + identidad ── */
 .pf-top {
   position: relative;
-  padding: 18px 16px 0;
+  padding: 22px 16px 4px;
   text-align: center;
 }
 
 .pf-amb {
   position: absolute;
   inset: 0 0 auto 0;
-  height: 120px;
+  height: 150px;
   background:
-    radial-gradient(120% 100% at 50% 0, rgba(29, 111, 126, 0.27), transparent 70%),
-    radial-gradient(90% 80% at 80% 0, rgba(124, 58, 237, 0.2), transparent);
+    radial-gradient(120% 100% at 50% 0, rgba(29, 111, 126, 0.3), transparent 70%),
+    radial-gradient(90% 80% at 78% 0, rgba(124, 58, 237, 0.22), transparent);
   pointer-events: none;
 }
 
 .pf-av {
-  width: 78px;
-  height: 78px;
+  width: 104px;
+  height: 104px;
   border-radius: 99px;
   display: block;
-  margin: 6px auto 0;
+  margin: 4px auto 0;
   position: relative;
   background: linear-gradient(135deg, var(--color-accent-2), var(--color-accent-rose));
-  border: 2px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 8px 26px -8px rgba(0, 0, 0, 0.6);
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 12px 34px -10px rgba(0, 0, 0, 0.7);
   object-fit: cover;
 }
 
@@ -52,28 +52,28 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  margin-top: 11px;
-  font-size: 17px;
-  font-weight: 700;
+  margin-top: 14px;
+  font-size: 23px;
+  font-weight: 800;
 }
 
 /* La corona (.avatar-crown) la reutiliza el sistema existente. */
 
 .pf-user {
-  font-size: 10px;
+  font-size: 13px;
   color: var(--color-text-secondary);
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 /* ── Distintivo de voz ── */
 .pf-vbadge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  margin-top: 9px;
-  font-size: 9px;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 12px;
   font-weight: 700;
-  padding: 4px 11px;
+  padding: 6px 14px;
   border-radius: 99px;
 }
 
@@ -103,8 +103,8 @@
 
 /* Punto de color dentro del badge (estático) */
 .pf-vbadge .pf-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 99px;
 }
 
@@ -123,144 +123,78 @@
 
 /* ── Bio ── */
 .pf-bio {
-  font-size: 10px;
-  line-height: 1.5;
-  color: var(--color-text-secondary);
-  margin: 10px 20px 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #c9c9cf;
+  margin: 14px 6px 0;
   text-align: center;
+}
+
+/* ── Botón primario Editar perfil ── */
+.pf-edit-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 16px 16px 0;
+  padding: 13px;
+  border-radius: 14px;
+  background: var(--color-primary);
+  color: var(--color-bg);
+  font-size: 14.5px;
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow: 0 0 20px color-mix(in srgb, var(--color-primary) 30%, transparent);
+}
+
+.pf-edit-primary .icon {
+  width: 17px;
+  height: 17px;
 }
 
 /* ── Tarjetas de datos (rango / instrumentos) ── */
 .pf-card {
-  margin: 13px 16px 0;
+  margin: 14px 16px 0;
   border: 1px solid var(--color-border);
-  border-radius: 14px;
+  border-radius: 16px;
   background: var(--color-surface);
-  padding: 12px 13px;
+  padding: 15px 15px 16px;
+}
+
+.pf-ctop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
 }
 
 .pf-cl {
-  font-size: 8px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
   color: var(--color-primary);
-  margin-bottom: 9px;
+  font-weight: 700;
 }
 
-.pf-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 9px;
+/* ── Host de onda de rango vocal ── */
+.pf-wave-host {
+  width: 100%;
+  height: 110px;
 }
 
-.pf-row .pf-cl {
-  margin: 0;
+.pf-wave-host canvas {
+  width: 100%;
+  height: 110px;
+  display: block;
 }
 
-.pf-edit-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--color-primary);
-  padding: 4px 9px;
-  border-radius: 99px;
-  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, transparent);
-  text-decoration: none;
-}
-
-.pf-edit-btn .icon {
-  width: 11px;
-  height: 11px;
-}
-
-/* ── Viz de rango vocal (barras animadas) ── */
-.pf-range {
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  height: 40px;
-}
-
-.pf-range i {
-  flex: 1;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.07);
-  height: var(--h, 40%);
-  transform-origin: bottom;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .pf-range i.on {
-    background: linear-gradient(
-      var(--color-voice-tenor),
-      color-mix(in srgb, var(--color-voice-tenor) 35%, transparent)
-    );
-    animation:
-      pf-rngrow 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards,
-      pf-rnbreathe 3.4s ease-in-out infinite;
-  }
-
-  .pf-range i.on:nth-child(2) {
-    animation-delay: 0.05s, 0.65s;
-  }
-  .pf-range i.on:nth-child(3) {
-    animation-delay: 0.13s, 0.73s;
-  }
-  .pf-range i.on:nth-child(4) {
-    animation-delay: 0.21s, 0.81s;
-  }
-  .pf-range i.on:nth-child(5) {
-    animation-delay: 0.29s, 0.89s;
-  }
-  .pf-range i.on:nth-child(6) {
-    animation-delay: 0.37s, 0.97s;
-  }
-}
-
-/* Barra de nota grave (lo = bajo/bass) */
-.pf-range i.lo {
-  background: linear-gradient(
-    var(--color-voice-bass),
-    color-mix(in srgb, var(--color-voice-bass) 30%, transparent)
-  );
-  box-shadow: 0 0 11px color-mix(in srgb, var(--color-voice-bass) 55%, transparent);
-}
-
-/* Barra de nota aguda (hi = soprano) */
-.pf-range i.hi {
-  background: linear-gradient(
-    var(--color-voice-soprano),
-    color-mix(in srgb, var(--color-voice-soprano) 30%, transparent)
-  );
-  box-shadow: 0 0 11px color-mix(in srgb, var(--color-voice-soprano) 55%, transparent);
-}
-
-@keyframes pf-rngrow {
-  from {
-    height: 0;
-  }
-}
-
-@keyframes pf-rnbreathe {
-  0%,
-  100% {
-    opacity: 0.9;
-  }
-  50% {
-    opacity: 1;
-    filter: brightness(1.14);
-  }
-}
-
-/* ── Etiquetas grave/agudo bajo la viz ── */
+/* ── Etiquetas grave/agudo bajo la onda ── */
 .pf-range-lbl {
   display: flex;
   justify-content: space-between;
-  font-size: 8px;
+  font-size: 12px;
   color: var(--color-text-secondary);
-  margin-top: 7px;
+  margin-top: 10px;
 }
 
 .pf-range-lbl span {
@@ -269,83 +203,80 @@
   gap: 4px;
 }
 
-/* Punto pulsante en etiquetas de rango */
+.pf-range-lbl b {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+/* Punto de color en etiquetas de rango */
 .pf-range-lbl .pf-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 99px;
 }
 
 .pf-range-lbl .lo .pf-dot {
   background: var(--color-voice-bass);
-  box-shadow: 0 0 7px var(--color-voice-bass);
 }
 
 .pf-range-lbl .hi .pf-dot {
   background: var(--color-voice-soprano);
-  box-shadow: 0 0 7px var(--color-voice-soprano);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .pf-range-lbl .pf-dot {
-    animation: pf-rnpulse 2s ease-in-out infinite;
-  }
-}
-
-@keyframes pf-rnpulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.45;
-    transform: scale(0.8);
-  }
-}
-
-/* Defensa extra: las animaciones ya solo viven en no-preference */
-@media (prefers-reduced-motion: reduce) {
-  .pf-range i.on,
-  .pf-range-lbl .pf-dot {
-    animation: none;
-  }
+/* ── Comentario del rango ── */
+.pf-rnote {
+  font-size: 12px;
+  color: #b7b7bd;
+  line-height: 1.5;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  font-style: italic;
 }
 
 /* ── Chips de instrumentos ── */
 .pf-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
 .pf-chip {
-  font-size: 9.5px;
+  font-size: 12.5px;
   font-weight: 600;
-  padding: 5px 10px;
+  padding: 7px 13px;
   border-radius: 99px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
+  color: #c9c9cf;
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
 
-/* ── Accesos rapidos (Amigos / Favoritos) ── */
+/* ── Etiqueta de sección ── */
+.pf-divlabel {
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  margin: 22px 16px 2px;
+}
+
+/* ── Filas de acceso (Amigos / Favoritos / Admin / Cerrar sesión) ── */
 .pf-acc {
-  padding: 13px 16px 0;
+  padding: 8px 16px 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .pf-accrow {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 11px 12px;
-  border-radius: 13px;
+  gap: 13px;
+  padding: 14px;
+  border-radius: 14px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   text-decoration: none;
@@ -358,22 +289,27 @@
 }
 
 .pf-ai {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
   flex: none;
   display: grid;
   place-items: center;
 }
 
 .pf-ai--friends {
-  background: color-mix(in srgb, var(--color-voice-soprano) 14%, transparent);
+  background: color-mix(in srgb, var(--color-voice-soprano) 15%, transparent);
   color: var(--color-voice-soprano);
 }
 
 .pf-ai--fav {
-  background: color-mix(in srgb, var(--color-action) 14%, transparent);
+  background: color-mix(in srgb, var(--color-action) 15%, transparent);
   color: var(--color-action);
+}
+
+.pf-ai--admin {
+  background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+  color: var(--color-primary);
 }
 
 .pf-ai--logout {
@@ -392,18 +328,18 @@
 }
 
 .pf-ai .icon {
-  width: 16px;
-  height: 16px;
+  width: 19px;
+  height: 19px;
 }
 
 .pf-an {
   flex: 1;
-  font-size: 12.5px;
+  font-size: 14.5px;
   font-weight: 600;
 }
 
 .pf-ac {
-  font-size: 9px;
+  font-size: 12px;
   color: var(--color-text-secondary);
 }
 
@@ -412,6 +348,22 @@
   height: 15px;
   color: var(--color-text-secondary);
   flex: none;
+}
+
+/* ── Fila de licencias y créditos ── */
+.pf-lic {
+  margin: 16px 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px;
+  border-radius: 14px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
 }
 
 /* ──────────────────────────────────────────────

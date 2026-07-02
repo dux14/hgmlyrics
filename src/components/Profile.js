@@ -8,6 +8,7 @@ import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { compressImageToLimit } from '../lib/imageCompress.js'; // usados por renderProfileEdit (Task 3)
 import { escapeHtml } from '../lib/escape.js';
+import { createWaveRange } from './vocal-range/waveRange.js';
 import { isFounder, founderCrownHtml } from '../lib/founders.js';
 import '../styles/profile.css';
 
@@ -26,17 +27,6 @@ const VOICE_SUBTYPES = [
 
 const VOICE_LABELS = { soprano: 'Soprano', contralto: 'Contralto', tenor: 'Tenor', bass: 'Bajo' };
 
-/** Barras decorativas del rango vocal (7; centrales activas, extremos grave/agudo). */
-export function buildRangeBars() {
-  const heights = ['38%', '54%', '72%', '90%', '75%', '58%', '36%'];
-  return heights.map((h, i) => ({
-    h,
-    on: i >= 1 && i <= 5,
-    lo: i === 1,
-    hi: i === 5,
-  }));
-}
-
 /** Etiqueta + clase de color de cuerda para la píldora de voz. null si no hay voz. */
 export function voiceLabel(voiceType, voiceSubtype) {
   if (!voiceType || !VOICE_LABELS[voiceType]) return null;
@@ -46,7 +36,7 @@ export function voiceLabel(voiceType, voiceSubtype) {
   return { text: `${VOICE_LABELS[voiceType]}${sub}`, cls: `voice-pill--${voiceType}` };
 }
 
-/** Cabecera Ambient Kinetic: ambient blob + avatar + nombre + voz + rango + instrumentos + accesos. */
+/** Cabecera Ambient Kinetic: ambient blob + avatar + nombre + voz + rango (onda) + instrumentos + accesos. */
 export function buildProfileHeader(profile) {
   const avatarUrl = profile.avatarUrl || '';
   const voice = voiceLabel(profile.voiceType, profile.voiceSubtype);
@@ -56,34 +46,39 @@ export function buildProfileHeader(profile) {
     : '';
   const bio = profile.bio ? `<p class="pf-bio">${escapeHtml(profile.bio)}</p>` : '';
   const hasRange = profile.vocalRangeLow || profile.vocalRangeHigh;
-  const bars = buildRangeBars()
-    .map(
-      (b) =>
-        `<i class="${b.on ? 'on' : ''}${b.lo ? ' lo' : ''}${b.hi ? ' hi' : ''}" style="--h:${b.h}"></i>`,
-    )
-    .join('');
+  const rangeLbl = hasRange
+    ? `<div class="pf-range-lbl">
+         <span class="lo"><span class="pf-dot"></span><b>${escapeHtml(profile.vocalRangeLow || '?')}</b> grave</span>
+         <span class="hi">agudo <b>${escapeHtml(profile.vocalRangeHigh || '?')}</b><span class="pf-dot"></span></span>
+       </div>`
+    : '';
+  const rnote = profile.vocalRangeNotes
+    ? `<div class="pf-rnote">${escapeHtml(profile.vocalRangeNotes)}</div>`
+    : '';
   const rangeCard = hasRange
     ? `<div class="pf-card">
-         <div class="pf-row">
-           <div class="pf-cl">Rango vocal</div>
-           <a class="pf-edit-btn" href="#/perfil/editar">${icon('edit', { size: 11 })}Editar</a>
-         </div>
-         <div class="pf-range" aria-hidden="true">${bars}</div>
-         <div class="pf-range-lbl">
-           <span class="lo"><span class="pf-dot"></span>${escapeHtml(profile.vocalRangeLow || '?')} · grave</span>
-           <span class="hi">${escapeHtml(profile.vocalRangeHigh || '?')} · agudo<span class="pf-dot"></span></span>
-         </div>
+         <div class="pf-ctop"><span class="pf-cl">Rango vocal</span></div>
+         <div class="pf-wave-host"></div>
+         ${rangeLbl}
+         ${rnote}
        </div>`
     : '';
   const chips = (profile.instrumentRoles || []).filter(Boolean);
   const instrCard = chips.length
     ? `<div class="pf-card">
-         <div class="pf-cl">Instrumentos</div>
+         <div class="pf-ctop"><span class="pf-cl">Instrumentos</span></div>
          <div class="pf-chips">${chips.map((r) => `<span class="pf-chip">${escapeHtml(r)}</span>`).join('')}</div>
        </div>`
     : '';
   const favCount = Number.isFinite(profile.favoriteCount) ? profile.favoriteCount : '';
   const friendCount = Number.isFinite(profile.friendCount) ? profile.friendCount : '';
+  const adminRow = profile.isAdmin
+    ? `<a class="pf-accrow" href="#/admin">
+         <span class="pf-ai pf-ai--admin">${icon('shield', { size: 16 })}</span>
+         <span class="pf-an">Panel de admin</span>
+         ${icon('chevron-right', { size: 15, className: 'pf-arr' })}
+       </a>`
+    : '';
   return `
     <div class="pf-top">
       <div class="pf-amb" aria-hidden="true"></div>
@@ -95,8 +90,10 @@ export function buildProfileHeader(profile) {
       ${vbadge}
       ${bio}
     </div>
+    <a class="pf-edit-primary" href="#/perfil/editar">${icon('edit', { size: 17 })}Editar perfil</a>
     ${rangeCard}
     ${instrCard}
+    <div class="pf-divlabel">Cuenta</div>
     <div class="pf-acc">
       <a class="pf-accrow" href="#/amigos">
         <span class="pf-ai pf-ai--friends">${icon('user', { size: 16 })}</span>
@@ -108,11 +105,16 @@ export function buildProfileHeader(profile) {
         <span class="pf-an">Favoritos</span><span class="pf-ac">${favCount}</span>
         ${icon('chevron-right', { size: 15, className: 'pf-arr' })}
       </a>
+      ${adminRow}
       <button class="pf-accrow pf-accrow--logout" id="pf-logout" type="button">
         <span class="pf-ai pf-ai--logout">${icon('log-out', { size: 16 })}</span>
         <span class="pf-an">Cerrar sesión</span>
       </button>
     </div>
+    <a class="pf-lic" href="#/licencias">
+      <span>Licencias y créditos</span>
+      ${icon('chevron-right', { size: 15, className: 'pf-arr' })}
+    </a>
   `;
 }
 
@@ -411,9 +413,14 @@ export async function renderProfile(container) {
       container.innerHTML = `
         <div class="profile-page fade-in">
           ${buildProfileHeader(profile)}
-          <a class="profile-licenses-link" href="#/licencias">Licencias y créditos</a>
         </div>
       `;
+      // Monta la onda de rango vocal
+      const host = container.querySelector('.pf-wave-host');
+      if (host && (profile.vocalRangeLow || profile.vocalRangeHigh)) {
+        const wave = createWaveRange({ low: profile.vocalRangeLow, high: profile.vocalRangeHigh });
+        if (wave) host.appendChild(wave.el);
+      }
       // Logout desde la vista de perfil en móvil
       container.querySelector('#pf-logout')?.addEventListener('click', async () => {
         try {

@@ -16,7 +16,7 @@ const FLASH_DELAY_MS = 150;
 export function renderAsyncRegion(regionEl, opts) {
   const { cached, skeleton, fetcher, render, empty, onError } = opts;
 
-  const isEmpty = (d) => d == null || (Array.isArray(d) && d.length === 0);
+  const isEmpty = (d) => d === null || d === undefined || (Array.isArray(d) && d.length === 0);
   const paint = (data) => {
     regionEl.setAttribute('aria-busy', 'false');
     if (isEmpty(data) && empty) regionEl.innerHTML = empty();
@@ -24,7 +24,7 @@ export function renderAsyncRegion(regionEl, opts) {
   };
 
   // SWR: si hay cache, pinta ya y revalida en silencio.
-  if (cached != null) {
+  if (cached !== null && cached !== undefined) {
     paint(cached);
     fetcher().then((fresh) => { if (!isEmpty(fresh)) paint(fresh); }).catch(() => {});
     return;

@@ -84,7 +84,7 @@ export function listRowHtml(list, today) {
  * @param {string} today YYYY-MM-DD
  * @returns {string}
  */
-export function renderListsBody(lists, today) {
+export function renderListsBody(lists, today, { limit } = {}) {
   if (!Array.isArray(lists) || lists.length === 0) {
     return `
       <p class="home__list-empty">Aún no tienes listas guardadas.</p>
@@ -92,10 +92,10 @@ export function renderListsBody(lists, today) {
         ${icon('plus', { size: 16 })}Crear tu primera lista
       </button>`;
   }
+  const ordered = sortByUrgency(lists);
+  const shown = limit ? ordered.slice(0, limit) : ordered;
   return `
-    ${sortByUrgency(lists)
-      .map((l) => listRowHtml(l, today))
-      .join('')}
+    ${shown.map((l) => listRowHtml(l, today)).join('')}
     <button class="home__list-create" data-create-list>
       ${icon('plus', { size: 16 })}Crear nueva lista
     </button>`;
@@ -170,6 +170,7 @@ export async function renderHome(container, { today = new Date().toISOString().s
       <section class="home__module" id="section-listas" aria-labelledby="home-listas-hd">
         <div class="home__hd">
           <h2 class="home__hd-title" id="home-listas-hd">Listas</h2>
+          <button class="home__all" data-nav="/listas">Ver todos</button>
         </div>
         <div id="home-listas-body">${listsSkeletonHtml()}</div>
       </section>
@@ -197,9 +198,6 @@ export async function renderHome(container, { today = new Date().toISOString().s
             </button>`,
             )
             .join('')}
-          <button class="home__album-plus" data-album-plus aria-label="Ver todos los álbumes">
-            <span class="home__album-plus-ic" aria-hidden="true">+</span>
-          </button>
         </div>
       </section>
 
@@ -207,7 +205,7 @@ export async function renderHome(container, { today = new Date().toISOString().s
       <section class="home__module" id="section-voz" aria-labelledby="home-voz-hd">
         <div class="home__hd">
           <h2 class="home__hd-title" id="home-voz-hd">Voz en off</h2>
-          <button class="home__all" data-nav="/voces">Ver todas</button>
+          <button class="home__all" data-nav="/voces">Ver todos</button>
         </div>
         <div id="home-voz-body">${vozSkeletonHtml()}</div>
       </section>
@@ -254,9 +252,6 @@ export async function renderHome(container, { today = new Date().toISOString().s
   container.querySelectorAll('[data-album-slug]').forEach((el) =>
     el.addEventListener('click', () => navigate(`/album/${el.dataset.albumSlug}`)),
   );
-  container
-    .querySelector('[data-album-plus]')
-    ?.addEventListener('click', () => navigate('/albumes'));
 
   // Strip de favoritos
   const favStrip = container.querySelector('#home-fav-strip');
@@ -270,7 +265,7 @@ export async function renderHome(container, { today = new Date().toISOString().s
       const { data: lists } = await cached('lists', listMyLists);
       const listsBody = container.querySelector('#home-listas-body');
       if (listsBody) {
-        listsBody.innerHTML = renderListsBody(lists, today);
+        listsBody.innerHTML = renderListsBody(lists, today, { limit: 3 });
         listsBody.querySelectorAll('[data-list-id]').forEach((el) =>
           el.addEventListener('click', () => navigate(`/lista/${el.dataset.listId}`)),
         );

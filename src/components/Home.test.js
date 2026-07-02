@@ -133,7 +133,7 @@ describe('renderHome — estructura y orden', () => {
     expect(navigate).toHaveBeenCalledWith('/albumes');
   });
 
-  it('cabecera Voz en off tiene enlace Ver todas → /voces cuando hay vigente', async () => {
+  it('cabecera Voz en off tiene enlace Ver todos → /voces cuando hay vigente', async () => {
     isAuthenticated.mockReturnValue(false);
     vi.stubGlobal(
       'fetch',
@@ -317,6 +317,36 @@ describe('renderHome — Listas', () => {
     expect(first.querySelector('.home__list-pill').textContent.trim()).toBe('mañana');
   });
 
+  it('cabecera Listas tiene enlace Ver todos → /listas', async () => {
+    isAuthenticated.mockReturnValue(true);
+    listMyLists.mockResolvedValue([
+      { id: 'l1', name: 'Lista Alpha', expires_at: null, songs_count: 2 },
+    ]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const btn = [...c.querySelectorAll('.home__all')].find((b) =>
+      b.closest('#section-listas'),
+    );
+    expect(btn).not.toBeNull();
+    btn.click();
+    expect(navigate).toHaveBeenCalledWith('/listas');
+  });
+
+  it('muestra sólo 3 filas cuando hay más de 3 listas', async () => {
+    isAuthenticated.mockReturnValue(true);
+    listMyLists.mockResolvedValue([
+      { id: 'l1', name: 'Lista Uno', song_count: 1, expires_at: '2026-07-02' },
+      { id: 'l2', name: 'Lista Dos', song_count: 1, expires_at: '2026-07-06' },
+      { id: 'l3', name: 'Lista Tres', song_count: 1, expires_at: '2026-07-10' },
+      { id: 'l4', name: 'Lista Cuatro', song_count: 1, expires_at: '2026-07-20' },
+    ]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    expect(c.querySelectorAll('[data-list-id]').length).toBe(3);
+  });
+
   it('precalienta el detalle de las primeras listas visibles', async () => {
     isAuthenticated.mockReturnValue(true);
     const { warmList } = await import('../lib/lists.js');
@@ -335,20 +365,11 @@ describe('renderHome — Listas', () => {
 
 // ── Álbumes ───────────────────────────────────────────────────────────
 describe('renderHome — Álbumes', () => {
-  it('muestra exactamente 5 cards de álbum + 1 card "+"', async () => {
+  it('muestra exactamente 5 cards de álbum', async () => {
     const c = mkContainer();
     await renderHome(c, { today: '2026-06-30' });
 
     expect(c.querySelectorAll('[data-album-slug]').length).toBe(5);
-    expect(c.querySelector('[data-album-plus]')).not.toBeNull();
-  });
-
-  it('la card "+" navega a /albumes', async () => {
-    const c = mkContainer();
-    await renderHome(c, { today: '2026-06-30' });
-
-    c.querySelector('[data-album-plus]').click();
-    expect(navigate).toHaveBeenCalledWith('/albumes');
   });
 
   it('las cards de álbum navegan a /album/:slug', async () => {
@@ -375,7 +396,7 @@ describe('renderHome — Álbumes', () => {
     await renderHome(c, { today: '2026-06-30' });
     const rail = c.querySelector('.home__albums-rail');
     expect(rail).toBeTruthy();
-    expect(rail.querySelector('.home__album-plus')).toBeTruthy(); // el "+" vive dentro del rail
+    expect(rail.querySelector('.home__album-plus')).toBeNull(); // la card "+" fue eliminada
   });
 });
 
@@ -577,5 +598,20 @@ describe('renderListsBody (helper exportado)', () => {
     expect(html).toContain('data-list-id="l1"');
     expect(html).toContain('Domingo');
     expect(html).toContain('data-create-list');
+  });
+
+  it('con limit acota a N filas; sin limit devuelve todas', () => {
+    const lists = [
+      { id: 'l1', name: 'Uno', song_count: 1, expires_at: '2026-07-02' },
+      { id: 'l2', name: 'Dos', song_count: 1, expires_at: '2026-07-06' },
+      { id: 'l3', name: 'Tres', song_count: 1, expires_at: '2026-07-10' },
+      { id: 'l4', name: 'Cuatro', song_count: 1, expires_at: '2026-07-20' },
+      { id: 'l5', name: 'Cinco', song_count: 1, expires_at: '2026-07-25' },
+    ];
+    const limited = renderListsBody(lists, today, { limit: 3 });
+    expect((limited.match(/data-list-id/g) || []).length).toBe(3);
+
+    const all = renderListsBody(lists, today);
+    expect((all.match(/data-list-id/g) || []).length).toBe(5);
   });
 });

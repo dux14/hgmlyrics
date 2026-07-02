@@ -123,15 +123,6 @@ describe('VozEditor', () => {
     expect(previewContent.querySelector('.voz__reflection-sep').textContent).toContain('Reflexión');
   });
 
-  it('el breadcrumb Admin navega a /admin', async () => {
-    const { navigate } = await import('../router.js');
-    await renderVozEditor(container, null);
-    const adminLink = container.querySelector('#voz-ed-admin');
-    expect(adminLink).toBeTruthy();
-    adminLink.click();
-    expect(navigate).toHaveBeenCalledWith('/admin');
-  });
-
   it('carga voz existente cuando se pasa wordId', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

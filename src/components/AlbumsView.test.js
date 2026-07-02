@@ -93,19 +93,4 @@ describe('renderAlbumsView', () => {
     expect(container.textContent).toContain('Álbumes');
   });
 
-  it('incluye breadcrumb con enlace a Inicio', () => {
-    getAlbums.mockReturnValue([]);
-    renderAlbumsView(container);
-    const homeLink = container.querySelector('.breadcrumb a');
-    expect(homeLink).toBeTruthy();
-    expect(homeLink.textContent.trim()).toBe('Inicio');
-  });
-
-  it('el enlace de breadcrumb navega a / al hacer click', () => {
-    getAlbums.mockReturnValue([]);
-    renderAlbumsView(container);
-    const homeLink = container.querySelector('.breadcrumb a');
-    homeLink.click();
-    expect(navigate).toHaveBeenCalledWith('/');
-  });
 });

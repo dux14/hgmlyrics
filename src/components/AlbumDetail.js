@@ -25,19 +25,11 @@ export function renderAlbumDetail(container, slug) {
   if (tracks.length === 0) {
     container.innerHTML = `
       <div class="album-detail fade-in">
-        <nav class="breadcrumb" aria-label="Ruta de navegación">
-          <a href="#/" class="album-detail__home-link">Inicio</a>
-          <span class="breadcrumb__separator">›</span>
-          <a href="#/albumes" class="album-detail__albums-link">Álbumes</a>
-          <span class="breadcrumb__separator">›</span>
-          <span class="breadcrumb__current">Álbum no encontrado</span>
-        </nav>
         <div class="empty-state">
           <p class="empty-state__text">No se encontró el álbum solicitado.</p>
         </div>
       </div>
     `;
-    _bindBreadcrumb(container);
     return;
   }
 
@@ -51,14 +43,6 @@ export function renderAlbumDetail(container, slug) {
 
   container.innerHTML = `
     <div class="album-detail fade-in">
-
-      <nav class="breadcrumb" aria-label="Ruta de navegación">
-        <a href="#/" class="album-detail__home-link">Inicio</a>
-        <span class="breadcrumb__separator">›</span>
-        <a href="#/albumes" class="album-detail__albums-link">Álbumes</a>
-        <span class="breadcrumb__separator">›</span>
-        <span class="breadcrumb__current">${escapeHtml(albumName)}</span>
-      </nav>
 
       <header class="album-hero">
         <img
@@ -85,8 +69,6 @@ export function renderAlbumDetail(container, slug) {
     </div>
   `;
 
-  _bindBreadcrumb(container);
-
   // Navegación por fila de canción.
   container.querySelectorAll('.song-row-compact').forEach((row) => {
     row.setAttribute('role', 'button');
@@ -98,17 +80,5 @@ export function renderAlbumDetail(container, slug) {
         navigate(`/song/${row.dataset.songId}`);
       }
     });
-  });
-}
-
-/** Enlaza los links del breadcrumb con el router. */
-function _bindBreadcrumb(container) {
-  container.querySelector('.album-detail__home-link')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    navigate('/');
-  });
-  container.querySelector('.album-detail__albums-link')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    navigate('/albumes');
   });
 }

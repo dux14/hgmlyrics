@@ -18,12 +18,6 @@ export function renderAlbumsView(container) {
   container.innerHTML = `
     <div class="albums-view fade-in">
 
-      <nav class="breadcrumb" aria-label="Ruta de navegación">
-        <a href="#/" class="albums-view__home-link">Inicio</a>
-        <span class="breadcrumb__separator">›</span>
-        <span class="breadcrumb__current">Álbumes</span>
-      </nav>
-
       <h1 class="albums-view__title">Álbumes</h1>
 
       <div class="albums-grid" role="list">
@@ -58,11 +52,6 @@ export function renderAlbumsView(container) {
       </div>
     </div>
   `;
-
-  container.querySelector('.albums-view__home-link')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    navigate('/');
-  });
 
   container.querySelectorAll('.album-card').forEach((card) => {
     card.addEventListener('click', () => navigate(`/album/${card.dataset.albumSlug}`));

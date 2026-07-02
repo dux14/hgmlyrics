@@ -77,15 +77,6 @@ export async function renderWeeklyWordView(container, word) {
   container.innerHTML = `
     <div class="voz-view fade-in">
 
-      <!-- Breadcrumb -->
-      <nav class="breadcrumb" aria-label="Breadcrumb">
-        <a href="#/" id="voz-breadcrumb-home">Inicio</a>
-        <span class="breadcrumb__separator">›</span>
-        <a href="#/voces" id="voz-breadcrumb-album">Voces en off</a>
-        <span class="breadcrumb__separator">›</span>
-        <span class="breadcrumb__current">${escapeHtml(word.gospel_ref)}</span>
-      </nav>
-
       <!-- Hero litúrgico — vars asignadas post-render via style.setProperty() -->
       <div class="voz-view__hero">
         <p class="voz-view__eyebrow">
@@ -184,14 +175,6 @@ export async function renderWeeklyWordView(container, word) {
     applyFont(currentSize + VOZ_FONT_STEP);
   });
 
-  container.querySelector('#voz-breadcrumb-home')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    navigate('/');
-  });
-  container.querySelector('#voz-breadcrumb-album')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    navigate('/voces');
-  });
   container.querySelector('[data-action="edit-voz"]')?.addEventListener('click', () => {
     navigate(`/admin/voz/${word.id}`);
   });

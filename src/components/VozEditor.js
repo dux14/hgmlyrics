@@ -74,11 +74,6 @@ export async function renderVozEditor(container, wordId = null) {
 
   container.innerHTML = `
     <div class="voz-editor fade-in">
-      <nav class="breadcrumb" aria-label="Breadcrumb">
-        <a href="#/admin" id="voz-ed-admin">Admin</a>
-        <span class="breadcrumb__separator">›</span>
-        <span class="breadcrumb__current">${wordId ? 'Editar voz en off' : 'Nueva voz en off'}</span>
-      </nav>
       <h1 class="editor__title voz-editor__title">${wordId ? 'Editar voz en off' : 'Nueva voz en off'}</h1>
 
       <div class="voz-editor__body">
@@ -206,11 +201,6 @@ export async function renderVozEditor(container, wordId = null) {
       dateInput.value = snapped;
       statusEl.textContent = 'Ajustado al domingo de esa semana';
     }
-  });
-
-  container.querySelector('#voz-ed-admin')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    navigate('/admin');
   });
 
   container.querySelector('#voz-load-ordo')?.addEventListener('click', async () => {

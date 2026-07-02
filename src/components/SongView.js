@@ -2,12 +2,12 @@
  * SongView.js — Lyrics reader component (Upgraded)
  *
  * Displays song lyrics with section labels, voice-colored highlights,
- * word-level voice spans, font size controls, breadcrumb navigation,
- * album navigation bar, voice part filter with premium chips,
- * chord display with transposition, and album navigation.
+ * word-level voice spans, font size controls, album navigation bar,
+ * voice part filter with premium chips, chord display with transposition,
+ * and album navigation.
  */
 
-import { getSongById, filterByAlbum, fetchSongDetail, getAdjacentSongs } from '../lib/store.js';
+import { getSongById, fetchSongDetail, getAdjacentSongs } from '../lib/store.js';
 import { navigate } from '../router.js';
 import {
   upgradeLegacySong,
@@ -275,21 +275,6 @@ export async function renderSongView(container, songIdOrData) {
 
   container.innerHTML = `
     <div class="song-view fade-in">
-      ${
-        !isPreview
-          ? `
-      <!-- Breadcrumb -->
-      <nav class="breadcrumb" aria-label="Breadcrumb">
-        <a href="#/" id="breadcrumb-home">Inicio</a>
-        <span class="breadcrumb__separator">›</span>
-        <a href="#/" data-album="${song.albumSlug}" id="breadcrumb-album">${escapeHtml(song.album || '')}</a>
-        <span class="breadcrumb__separator">›</span>
-        <span class="breadcrumb__current">${escapeHtml(song.title)}</span>
-      </nav>
-      `
-          : ''
-      }
-
       <!-- Song Header -->
       <div class="song-view__header">
         ${
@@ -746,13 +731,6 @@ export async function renderSongView(container, songIdOrData) {
   container.querySelector('#enter-stage-btn')?.addEventListener('click', () => {
     const sv = container.querySelector('.song-view');
     if (sv) enterStage(sv);
-  });
-
-  // Breadcrumb
-  container.querySelector('#breadcrumb-album')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    filterByAlbum(song.albumSlug);
-    navigate('/');
   });
 
   // Title → links page

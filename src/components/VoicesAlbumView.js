@@ -90,13 +90,6 @@ export async function renderVoicesAlbumView(container) {
   container.innerHTML = `
     <div class="voz-album fade-in">
 
-      <!-- Breadcrumb -->
-      <nav class="breadcrumb" aria-label="Breadcrumb">
-        <a href="#/" id="voz-album-home">Inicio</a>
-        <span class="breadcrumb__separator">›</span>
-        <span class="breadcrumb__current">Voces en off</span>
-      </nav>
-
       <!-- Hero portada álbum -->
       <div class="voz-album__hero">
         <div class="voz-album__hero-icon">${icon('gospel', { size: 48 })}</div>
@@ -134,10 +127,6 @@ export async function renderVoicesAlbumView(container) {
     heroEl.style.setProperty('--liturgical-text', heroPalette.text);
   }
 
-  container.querySelector('#voz-album-home')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    navigate('/');
-  });
   container
     .querySelector('#voz-create-btn')
     ?.addEventListener('click', () => navigate('/admin/voz/nueva'));

@@ -260,36 +260,6 @@
   margin-bottom: var(--space-md);
 }
 
-/* === Breadcrumb === */
-.breadcrumb {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: var(--space-xs);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  margin-bottom: var(--space-lg);
-  flex-wrap: wrap;
-}
-
-.breadcrumb a {
-  color: var(--color-text-secondary);
-  transition: color var(--transition-fast);
-}
-
-.breadcrumb a:hover {
-  color: var(--color-primary);
-}
-
-.breadcrumb__separator {
-  color: var(--color-border);
-}
-
-.breadcrumb__current {
-  color: var(--color-text);
-  font-weight: var(--font-weight-medium);
-}
-
 /* === Font Size Controls === */
 .font-controls {
   display: flex;

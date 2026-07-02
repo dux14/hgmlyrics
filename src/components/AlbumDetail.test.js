@@ -163,35 +163,4 @@ describe('renderAlbumDetail', () => {
     expect(songRowCompact).not.toHaveBeenCalled();
   });
 
-  // — Breadcrumb —
-
-  it('incluye breadcrumb con Inicio, Álbumes y nombre del álbum', () => {
-    getState.mockReturnValue({ songs: SONGS_FIXTURE });
-    renderAlbumDetail(container, 'album-test');
-    const breadcrumb = container.querySelector('.breadcrumb');
-    expect(breadcrumb.textContent).toContain('Inicio');
-    expect(breadcrumb.textContent).toContain('Álbumes');
-    expect(breadcrumb.textContent).toContain('Álbum Test');
-  });
-
-  it('el link de Inicio en el breadcrumb navega a /', () => {
-    getState.mockReturnValue({ songs: SONGS_FIXTURE });
-    renderAlbumDetail(container, 'album-test');
-    container.querySelector('.album-detail__home-link').click();
-    expect(navigate).toHaveBeenCalledWith('/');
-  });
-
-  it('el link de Álbumes en el breadcrumb navega a /albumes', () => {
-    getState.mockReturnValue({ songs: SONGS_FIXTURE });
-    renderAlbumDetail(container, 'album-test');
-    container.querySelector('.album-detail__albums-link').click();
-    expect(navigate).toHaveBeenCalledWith('/albumes');
-  });
-
-  it('en estado vacío el breadcrumb también tiene links de Inicio y Álbumes', () => {
-    getState.mockReturnValue({ songs: SONGS_FIXTURE });
-    renderAlbumDetail(container, 'no-existe');
-    expect(container.querySelector('.album-detail__home-link')).toBeTruthy();
-    expect(container.querySelector('.album-detail__albums-link')).toBeTruthy();
-  });
 });

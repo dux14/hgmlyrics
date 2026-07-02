@@ -134,14 +134,6 @@ export async function renderSongLinks(container, songId) {
 
   container.innerHTML = `
     <div class="slinks fade-in">
-      <nav class="breadcrumb" aria-label="Breadcrumb">
-        <a href="#/" id="slinks-home">Inicio</a>
-        <span class="breadcrumb__separator">›</span>
-        <a href="#/song/${escapeAttr(songId)}" id="slinks-song">${escapeHtml(song.title)}</a>
-        <span class="breadcrumb__separator">›</span>
-        <span class="breadcrumb__current">Links</span>
-      </nav>
-
       <div class="slinks__header">
         ${coverUrl ? `<img class="slinks__cover" src="${coverUrl}" alt="" onerror="this.style.display='none'" />` : ''}
         <div class="slinks__meta">

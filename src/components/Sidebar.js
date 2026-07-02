@@ -11,6 +11,7 @@ import { icon } from '../lib/icons.js';
 import { escapeHtml } from '../lib/escape.js';
 import { listMyLists } from '../lib/lists.js';
 import { expiryBand } from '../lib/listDraft.js';
+import { skelRow } from '../lib/skeleton.js';
 
 let sidebarEl = null;
 let overlayEl = null;
@@ -70,7 +71,7 @@ export function updateSidebarContent() {
         </span>
       </div>
       <div class="sidebar__section-content" id="lists-content">
-        <div class="sidebar__empty">Cargando…</div>
+        ${skelRow()}${skelRow()}${skelRow()}
       </div>
     </div>
     <div class="sidebar__divider" role="separator"></div>

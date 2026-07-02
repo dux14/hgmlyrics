@@ -26,6 +26,7 @@ import {
 } from '../lib/editorSelection.js';
 import { icon } from '../lib/icons.js';
 import { escapeHtml } from '../lib/escape.js';
+import { skelLongText } from '../lib/skeleton.js';
 
 const API_URL = '/api';
 
@@ -138,11 +139,11 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   let existingSong = null;
 
   if (editId) {
-    container.innerHTML = `
-      <div class="editor editor--loading fade-in">
-        <p class="editor__state-text">${icon('music', { size: 18, className: 'loading-pulse' })} Cargando canción...</p>
-      </div>
-    `;
+    // Skeleton por región mientras carga el detalle de la canción.
+    // renderAsyncRegion no aplica aquí: el resto del editor (1400+ líneas de
+    // event listeners) vive en el mismo scope async y no puede extraerse a un
+    // callback sin una refactorización mayor. El async/await ya maneja el ciclo.
+    container.innerHTML = `<div class="editor editor--loading fade-in" aria-busy="true">${skelLongText()}</div>`;
     existingSong = await fetchSongDetail(editId);
     if (!existingSong) {
       container.innerHTML = `

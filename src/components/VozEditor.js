@@ -9,6 +9,8 @@ import { liturgicalPalette, coverGradient } from '../lib/liturgicalColor.js';
 import { escapeHtml } from '../lib/escape.js';
 import { icon } from '../lib/icons.js';
 import { getSession } from '../lib/authStore.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelLongText } from '../lib/skeleton.js';
 
 function authHeader() {
   const s = getSession();
@@ -56,22 +58,42 @@ async function saveWord(id, fields) {
 }
 
 /**
+ * Retorna una Promise que se resuelve cuando la región está pintada. Eso permite
+ * que los llamadores (y los tests) hagan `await renderVozEditor(container, id)`.
+ * El retry interno de renderAsyncRegion vuelve a invocar renderAsyncRegion(opts)
+ * directamente — la Promise original ya estará resuelta, lo que es aceptable.
  * @param {HTMLElement} container
  * @param {string|null} wordId - null para crear nuevo
  */
-export async function renderVozEditor(container, wordId = null) {
-  let word = null;
-
-  if (wordId) {
-    container.innerHTML = `<div class="empty-state fade-in"><div class="empty-state__icon">${icon('gospel', { size: 40 })}</div><h2>Cargando…</h2></div>`;
-    try {
-      const res = await fetch(`/api/weekly-words/${wordId}`, { headers: authHeader() });
-      if (res.ok) word = await res.json();
-    } catch (_e) {
-      /* ignore */
-    }
+export function renderVozEditor(container, wordId = null) {
+  if (!wordId) {
+    _mountVozForm(container, null, null);
+    return Promise.resolve();
   }
 
+  return new Promise((resolve) => {
+    renderAsyncRegion(container, {
+      skeleton: () => skelLongText(),
+      fetcher: () =>
+        fetch(`/api/weekly-words/${wordId}`, { headers: authHeader() }).then((res) =>
+          res.ok ? res.json() : null
+        ),
+      // render recibe null si el servidor devuelve !ok (abre el form en blanco,
+      // comportamiento original). renderAsyncRegion llama empty() solo si está
+      // definido; al omitirlo, render(null) se invoca directamente.
+      render: (word) => {
+        _mountVozForm(container, word, wordId);
+        resolve();
+      },
+      onError: () => {
+        resolve();
+        return `<div class="empty-state fade-in"><p class="empty-state__text">No se pudo cargar la voz en off.</p><button class="btn btn--primary" data-retry>Reintentar</button></div>`;
+      },
+    });
+  });
+}
+
+function _mountVozForm(container, word, wordId) {
   container.innerHTML = `
     <div class="voz-editor fade-in">
       <h1 class="editor__title voz-editor__title">${wordId ? 'Editar voz en off' : 'Nueva voz en off'}</h1>
@@ -209,6 +231,7 @@ export async function renderVozEditor(container, wordId = null) {
       showError('Selecciona una fecha primero');
       return;
     }
+    // Status inline de acción de campo — no es un loader full-screen, se deja como está.
     statusEl.textContent = 'Cargando ordo…';
     try {
       const data = await fetchOrdo(date);

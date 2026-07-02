@@ -28,6 +28,8 @@ import { renderTimeline, markActive } from './StudioSectionTimeline.js';
 import { renderSectionCard } from './StudioSectionCard.js';
 import { escapeHtml as escHtml, safeUrl } from '../lib/escape.js';
 import { subscribe, isOffline } from '../lib/offlineState.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelRowList } from '../lib/skeleton.js';
 
 const MAX_DURATION_S = 10.5 * 60;
 let pollTimer = null;
@@ -96,24 +98,27 @@ export function renderStudioPage(container) {
     </div>
   `;
   const body = container.querySelector('#studio-body');
-  void loadInitial(body);
+  // El ciclo de carga async lo maneja renderAsyncRegion dentro de loadInitial.
+  loadInitial(body);
 }
 
-async function loadInitial(body) {
-  body.innerHTML = `<p class="empty-state__text">Cargando…</p>`;
-  try {
-    const { jobs, quota } = await listJobs();
-    // Solo vigilamos jobs realmente en proceso. Un created/uploaded al cargar la página
-    // es una subida abandonada (el upload en memoria se perdió): no lo seguimos para no
-    // dejar un spinner eterno; el backend lo reclama en la próxima subida.
-    const active = jobs.find((j) => j.status === 'processing');
-    const recent = jobs.find((j) => ['done', 'partial', 'failed'].includes(j.status));
-    if (active) return watchJob(body, active.id, quota, active.input_meta?.filename);
-    if (recent) return showJob(body, recent.id, quota);
-    renderIdle(body, quota);
-  } catch {
-    body.innerHTML = `<p class="empty-state__text">No pudimos cargar el Estudio. Intenta de nuevo.</p>`;
-  }
+function loadInitial(body) {
+  renderAsyncRegion(body, {
+    skeleton: () => skelRowList({ rows: 5 }),
+    fetcher: () => listJobs(),
+    render: ({ jobs, quota }) => {
+      // Solo vigilamos jobs realmente en proceso. Un created/uploaded al cargar la página
+      // es una subida abandonada (el upload en memoria se perdió): no lo seguimos para no
+      // dejar un spinner eterno; el backend lo reclama en la próxima subida.
+      const active = jobs.find((j) => j.status === 'processing');
+      const recent = jobs.find((j) => ['done', 'partial', 'failed'].includes(j.status));
+      if (active) return watchJob(body, active.id, quota, active.input_meta?.filename);
+      if (recent) return showJob(body, recent.id, quota);
+      renderIdle(body, quota);
+    },
+    onError: () =>
+      `<p class="empty-state__text">No pudimos cargar el Estudio. <button class="btn btn--primary" data-retry>Reintentar</button></p>`,
+  });
 }
 
 function renderIdle(body, quota) {

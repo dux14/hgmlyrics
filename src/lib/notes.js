@@ -117,6 +117,13 @@ export function matchesTarget(detected, target) {
   );
 }
 
+/** Convierte un numero MIDI (C-1 = 0) a nombre con octava, ej. 48 -> "C3". */
+export function midiToName(midi) {
+  const i = ((midi % 12) + 12) % 12;
+  const octave = Math.floor(midi / 12) - 1;
+  return `${NOTE_NAMES[i]}${octave}`;
+}
+
 /** Standard guitar tuning (E standard), low → high. */
 export const GUITAR_STANDARD = ['E2', 'A2', 'D3', 'G3', 'B3', 'E4'];
 

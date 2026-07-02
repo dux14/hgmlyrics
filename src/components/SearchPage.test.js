@@ -1,8 +1,9 @@
 /**
- * SearchPage.test.js — smoke tests para el browse hub.
- * Cubre: catálogo tile-grid, sección favoritos (oculta sin auth), rail de álbumes.
+ * SearchPage.test.js — smoke tests para el browse hub y modo focus.
+ * Cubre: catálogo tile-grid, sección favoritos (oculta sin auth), rail de álbumes,
+ * y el modo focus estilo Spotify (body.search-focus, Cancelar, ✕, Escape, backable).
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../router.js', () => ({
   navigate: vi.fn(),
@@ -55,6 +56,7 @@ import { getState, getAlbums } from '../lib/store.js';
 import { isAuthenticated } from '../lib/authStore.js';
 import { isFavorite } from '../lib/favorites.js';
 import { icon } from '../lib/icons.js';
+import { openBackable } from '../router.js';
 import { renderSearchPage } from './SearchPage.js';
 
 beforeEach(() => {
@@ -68,6 +70,10 @@ beforeEach(() => {
   isAuthenticated.mockReturnValue(false);
   isFavorite.mockReturnValue(false);
   sessionStorage.clear();
+});
+
+afterEach(() => {
+  document.body.classList.remove('search-focus');
 });
 
 describe('renderSearchPage', () => {
@@ -176,30 +182,6 @@ describe('renderSearchPage', () => {
     expect(input).not.toBeNull();
   });
 
-  it('al escribir, oculta el hub y muestra resultados inline; ✕ restaura el hub', async () => {
-    const { searchEverything } = await import('../lib/search.js');
-    searchEverything.mockReturnValue({
-      songs: [{ id: '1', title: 'Refugio', album: 'A' }], albums: [], voces: [],
-    });
-    getState.mockReturnValue({
-      songs: [{ id: '1', title: 'Refugio', album: 'A', coverImage: '' }], filtered: [],
-    });
-    const container = document.createElement('div');
-    await renderSearchPage(container);
-
-    const input = container.querySelector('.search-bar input[type="search"]');
-    input.value = 'refug';
-    input.dispatchEvent(new Event('input'));
-
-    expect(container.querySelector('.search-inline-results')).not.toBeNull();
-    expect(container.querySelector('.search-hub').hidden).toBe(true);
-
-    const clear = container.querySelector('.search-bar__clear');
-    clear.click();
-    expect(container.querySelector('.search-hub').hidden).toBe(false);
-    expect(container.querySelector('.search-inline-results')).toBeNull();
-  });
-
   it('coverBySlug preserva la URL http del cover del álbum (no la corta a nombre de archivo)', async () => {
     const remote =
       'https://x.supabase.co/storage/v1/object/public/covers-uploads/abc-reina.webp';
@@ -234,5 +216,181 @@ describe('renderSearchPage', () => {
     const tiles = container.querySelectorAll('.song-tile-grid .song-tile');
 
     expect(tiles).toHaveLength(8); // shuffle no pierde canciones
+  });
+
+  // --- Modo focus ---
+
+  it('enfocar el input añade body.search-focus y muestra el botón Cancelar', async () => {
+    getState.mockReturnValue({ songs: [], filtered: [] });
+    const container = document.createElement('div');
+    await renderSearchPage(container);
+
+    const input = container.querySelector('.search-bar input[type="search"]');
+    const cancelBtn = container.querySelector('.search-bar__cancel');
+
+    expect(document.body.classList.contains('search-focus')).toBe(false);
+    expect(cancelBtn.hidden).toBe(true);
+
+    input.dispatchEvent(new Event('focus'));
+
+    expect(document.body.classList.contains('search-focus')).toBe(true);
+    expect(cancelBtn.hidden).toBe(false);
+  });
+
+  it('click en Cancelar quita search-focus, vacía el input y restaura el hub', async () => {
+    getState.mockReturnValue({ songs: [], filtered: [] });
+    const container = document.createElement('div');
+    await renderSearchPage(container);
+
+    const input = container.querySelector('.search-bar input[type="search"]');
+    const cancelBtn = container.querySelector('.search-bar__cancel');
+
+    input.dispatchEvent(new Event('focus'));
+    expect(document.body.classList.contains('search-focus')).toBe(true);
+
+    cancelBtn.click();
+
+    expect(document.body.classList.contains('search-focus')).toBe(false);
+    expect(input.value).toBe('');
+    expect(container.querySelector('.search-hub').hidden).toBe(false);
+    expect(cancelBtn.hidden).toBe(true);
+  });
+
+  it('Escape sale del focus y restaura el hub', async () => {
+    getState.mockReturnValue({ songs: [], filtered: [] });
+    const container = document.createElement('div');
+    await renderSearchPage(container);
+
+    const input = container.querySelector('.search-bar input[type="search"]');
+    input.dispatchEvent(new Event('focus'));
+    expect(document.body.classList.contains('search-focus')).toBe(true);
+
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(document.body.classList.contains('search-focus')).toBe(false);
+    expect(container.querySelector('.search-hub').hidden).toBe(false);
+  });
+
+  it('atrás nativo (callback openBackable) sale del focus; re-enfocar vuelve a abrir el backable', async () => {
+    getState.mockReturnValue({ songs: [], filtered: [] });
+    const container = document.createElement('div');
+    await renderSearchPage(container);
+
+    const input = container.querySelector('.search-bar input[type="search"]');
+    input.dispatchEvent(new Event('focus'));
+    expect(document.body.classList.contains('search-focus')).toBe(true);
+
+    // El router mock captura el callback pasado a openBackable
+    expect(openBackable).toHaveBeenCalledOnce();
+    const backCallback = openBackable.mock.calls[0][0];
+    backCallback();
+
+    expect(document.body.classList.contains('search-focus')).toBe(false);
+    expect(container.querySelector('.search-hub').hidden).toBe(false);
+
+    // Re-enfocar debe volver a abrir el backable (overlayOpen se reseteó a false)
+    input.dispatchEvent(new Event('focus'));
+    expect(document.body.classList.contains('search-focus')).toBe(true);
+    expect(openBackable).toHaveBeenCalledTimes(2);
+  });
+
+  it('✕ con texto limpia el input pero mantiene search-focus y muestra el hub', async () => {
+    const { searchEverything } = await import('../lib/search.js');
+    searchEverything.mockReturnValue({
+      songs: [{ id: '1', title: 'Refugio', album: 'A' }], albums: [], voces: [],
+    });
+    getState.mockReturnValue({
+      songs: [{ id: '1', title: 'Refugio', album: 'A', coverImage: '' }], filtered: [],
+    });
+    const container = document.createElement('div');
+    await renderSearchPage(container);
+
+    const input = container.querySelector('.search-bar input[type="search"]');
+    const clearBtn = container.querySelector('.search-bar__clear');
+
+    // Entrar en focus y escribir texto
+    input.dispatchEvent(new Event('focus'));
+    input.value = 'refug';
+    input.dispatchEvent(new Event('input'));
+
+    // Con texto: hub oculto
+    expect(container.querySelector('.search-hub').hidden).toBe(true);
+    expect(clearBtn.hidden).toBe(false);
+
+    // Click en ✕
+    clearBtn.click();
+
+    // focus se mantiene, hub vuelve (texto vacío en focus = hub visible)
+    expect(document.body.classList.contains('search-focus')).toBe(true);
+    expect(input.value).toBe('');
+    expect(container.querySelector('.search-hub').hidden).toBe(false);
+  });
+
+  it('click en fila .search-row limpia body.search-focus antes de navegar (regresión C1)', async () => {
+    const { searchEverything } = await import('../lib/search.js');
+    const { navigate } = await import('../router.js');
+    searchEverything.mockReturnValue({
+      songs: [{ id: '42', title: 'Gracia', album: 'Álbum X', coverImage: '' }],
+      albums: [], voces: [],
+    });
+    getState.mockReturnValue({ songs: [], filtered: [] });
+    const container = document.createElement('div');
+    await renderSearchPage(container);
+
+    const input = container.querySelector('.search-bar input[type="search"]');
+    input.dispatchEvent(new Event('focus'));
+    input.value = 'gracia';
+    input.dispatchEvent(new Event('input'));
+
+    const row = container.querySelector('.search-row');
+    expect(row).not.toBeNull();
+
+    row.click();
+
+    // search-focus debe haberse limpiado ANTES de navegar
+    expect(document.body.classList.contains('search-focus')).toBe(false);
+    expect(navigate).toHaveBeenCalledWith('/song/42');
+  });
+
+  it('con matches → .search-row con subtítulos correctos por tipo', async () => {
+    const { searchEverything } = await import('../lib/search.js');
+    searchEverything.mockReturnValue({
+      songs: [{ id: '1', title: 'Refugio', album: 'Nuevo Amanecer', coverImage: '' }],
+      albums: [{ slug: 'na', name: 'Nuevo Amanecer', coverImage: '', artist: 'HGM' }],
+      voces: [{ id: 'v1', title: 'Juan 3:16', gospel_ref: 'Juan 3:16' }],
+    });
+    getState.mockReturnValue({ songs: [], filtered: [] });
+    const container = document.createElement('div');
+    await renderSearchPage(container);
+
+    const input = container.querySelector('.search-bar input[type="search"]');
+    input.dispatchEvent(new Event('focus'));
+    input.value = 'nuevo';
+    input.dispatchEvent(new Event('input'));
+
+    const rows = container.querySelectorAll('.search-row');
+    expect(rows).toHaveLength(3);
+
+    const subs = [...rows].map((r) => r.querySelector('.search-row__sub').textContent);
+    expect(subs[0]).toBe('Canción · Nuevo Amanecer');
+    expect(subs[1]).toBe('Álbum · HGM');
+    expect(subs[2]).toBe('Voz en off · Juan 3:16');
+  });
+
+  it('query con texto y 0 matches → .search-empty visible con el texto del query', async () => {
+    const { searchEverything } = await import('../lib/search.js');
+    searchEverything.mockReturnValue({ songs: [], albums: [], voces: [] });
+    getState.mockReturnValue({ songs: [], filtered: [] });
+    const container = document.createElement('div');
+    await renderSearchPage(container);
+
+    const input = container.querySelector('.search-bar input[type="search"]');
+    input.dispatchEvent(new Event('focus'));
+    input.value = 'xyzzy';
+    input.dispatchEvent(new Event('input'));
+
+    const empty = container.querySelector('.search-empty');
+    expect(empty).not.toBeNull();
+    expect(empty.textContent).toContain('xyzzy');
   });
 });

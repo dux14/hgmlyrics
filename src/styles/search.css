@@ -19,11 +19,53 @@
 .search-bar input { flex: 1; background: none; border: 0; outline: none; color: var(--color-text); font-size: 1rem; }
 .search-bar__clear { flex: none; display: grid; place-items: center; min-width: 44px; min-height: 44px;
   background: none; border: 0; color: var(--color-accent); cursor: pointer; }
-.search-inline-results { padding: 4px var(--space-md) var(--space-lg); }
-.search-inline-results .voz-card { width: 100%; margin-bottom: var(--space-xs); }
-/* Scoped: el atributo hidden se respeta aunque .search-bar__clear defina display.
+.search-bar__cancel { flex: none; min-width: 44px; min-height: 44px; display: flex; align-items: center;
+  justify-content: center; background: none; border: 0; color: var(--color-accent);
+  font-size: 0.875rem; font-weight: 600; cursor: pointer; white-space: nowrap; padding: 0 4px; }
+.search-inline-results { padding: 0 0 var(--space-lg); }
+/* Scoped: el atributo hidden se respeta aunque los elementos definan display.
    No usar un `[hidden]` global !important — pisaría toda la app. */
-.search-hub[hidden], .search-bar__clear[hidden] { display: none; }
+.search-hub[hidden], .search-bar__clear[hidden], .search-bar__cancel[hidden] { display: none; }
+
+/* --- Modo focus: takeover estilo Spotify --- */
+body.search-focus .header { display: none; }
+body.search-focus .search-bar {
+  /* header está en display:none en este modo; var(--z-overlay) basta para quedar encima del contenido */
+  position: fixed; top: 0; left: 0; right: 0; margin: 0; border-radius: 0; z-index: var(--z-overlay);
+}
+/* Compensa la barra fija para que el contenido no quede oculto detrás. */
+body.search-focus .search-page { padding-top: var(--header-height); }
+
+/* --- Filas de resultado planas --- */
+.search-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px var(--space-md); min-height: 60px;
+  text-decoration: none; color: var(--color-text);
+}
+.search-row:active { background: var(--color-surface-2, rgba(255,255,255,.05)); }
+.search-row__cover {
+  width: 48px; height: 48px; border-radius: 6px; object-fit: cover; flex: none;
+}
+.search-row__cover--gospel {
+  display: grid; place-items: center; border-radius: 6px;
+  background: linear-gradient(135deg, rgba(167,139,250,.3), rgba(45,212,191,.2));
+  color: var(--color-accent);
+}
+.search-row__info { flex: 1; min-width: 0; }
+.search-row__title {
+  font-size: 0.875rem; font-weight: 600; color: var(--color-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.search-row__sub {
+  font-size: 0.75rem; color: var(--color-text-secondary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Empty state */
+.search-empty {
+  padding: var(--space-xl) var(--space-md); text-align: center;
+  color: var(--color-text-secondary); font-size: 0.875rem;
+}
 
 /* Encabezado de sección */
 .search-section__head {

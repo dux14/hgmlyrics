@@ -104,41 +104,6 @@ function vozCard(ww) {
   return a;
 }
 
-/** Renderiza resultados seccionados (Canciones → Álbumes → Voz en off) en `box`. */
-function renderInlineResults(box, query) {
-  box.innerHTML = '';
-  const { songs, albums, voces } = searchEverything(query);
-  const section = (label, items, render) => {
-    if (!items.length) return;
-    const h = document.createElement('div');
-    h.className = 'search-focus__group';
-    h.textContent = `${label} · ${items.length}`;
-    box.appendChild(h);
-    items.forEach((it) => box.appendChild(render(it)));
-  };
-  section('Canciones', songs, (s) => {
-    const a = document.createElement('a');
-    a.className = 'voz-card';
-    a.innerHTML = `<img class="voz-card__art" src="${resolveCoverUrl(s)}" alt="" width="40" height="40" onerror="this.src='${COVER_PLACEHOLDER}'"><div><div class="voz-card__title">${escapeHtml(s.title)}</div><div class="voz-card__ref">${escapeHtml(s.album || '')}</div></div>`;
-    a.addEventListener('click', (e) => { e.preventDefault(); navigate(`/song/${s.id}`); });
-    return a;
-  });
-  section('Álbumes', albums, (al) => {
-    const a = document.createElement('a');
-    a.className = 'voz-card';
-    a.innerHTML = `<img class="voz-card__art" src="${resolveCoverUrl(al)}" alt="" width="40" height="40" onerror="this.src='${COVER_PLACEHOLDER}'"><div><div class="voz-card__title">${escapeHtml(al.name)}</div><div class="voz-card__ref">Álbum</div></div>`;
-    a.addEventListener('click', (e) => { e.preventDefault(); navigate(`/buscar?album=${encodeURIComponent(al.slug)}`); });
-    return a;
-  });
-  section('Voz en off', voces, (v) => {
-    const a = document.createElement('a');
-    a.className = 'voz-card';
-    a.innerHTML = `<div class="voz-card__art">${icon('gospel', { size: 18 })}</div><div><div class="voz-card__title">${escapeHtml(v.title || v.liturgical_title || 'Voz en off')}</div><div class="voz-card__ref">${escapeHtml(v.gospel_ref || '')}</div></div>`;
-    a.addEventListener('click', (e) => { e.preventDefault(); navigate(`/voz/${v.id}`); });
-    return a;
-  });
-}
-
 /**
  * Renderiza el browse hub dentro de `container`.
  * @param {HTMLElement} container
@@ -159,6 +124,7 @@ export async function renderSearchPage(container, weeklyWords = []) {
     ${icon('search', { size: 18 })}
     <input type="search" placeholder="Buscar canciones, álbumes, voces…" aria-label="Buscar" />
     <button type="button" class="search-bar__clear" aria-label="Limpiar búsqueda" hidden>${icon('close', { size: 18 })}</button>
+    <button type="button" class="search-bar__cancel" hidden>Cancelar</button>
   `;
   page.appendChild(bar);
 
@@ -216,47 +182,88 @@ export async function renderSearchPage(container, weeklyWords = []) {
 
   page.appendChild(hub);
 
-  // Focus inline: barra controla hub vs resultados.
-  // El focus es una capa "backable": abrir resultados empuja una entrada de
-  // history para que el atrás nativo cierre el focus y vuelva al hub, en vez de
-  // abandonar /buscar. Al (re)montar la página se descarta cualquier capa
-  // huérfana de una instancia anterior.
+  // Modo focus estilo Spotify: la barra se ancla arriba (via CSS body.search-focus),
+  // el header global desaparece y se muestra el botón Cancelar.
+  // Es una capa "backable": el atrás nativo cierra el focus en vez de abandonar /buscar.
+  // Al (re)montar la página se descarta cualquier capa huérfana de una instancia anterior.
   clearBackable();
   const input = bar.querySelector('input');
   const clearBtn = bar.querySelector('.search-bar__clear');
-  let results = null;
+  const cancelBtn = bar.querySelector('.search-bar__cancel');
   let overlayOpen = false;
 
-  /** Muestra los resultados y actualiza su contenido (se llama en cada tecla). */
-  function enterFocus() {
-    if (!results) {
-      results = document.createElement('div');
-      results.className = 'search-inline-results';
-      page.appendChild(results);
-    }
+  const resultsBox = document.createElement('div');
+  resultsBox.className = 'search-inline-results';
+  page.appendChild(resultsBox);
+
+  /** Renderiza filas .search-row seccionadas. Muestra empty state si 0 resultados. */
+  function showResults(query) {
     hub.hidden = true;
     clearBtn.hidden = false;
-    renderInlineResults(results, input.value);
-    if (!overlayOpen) {
-      overlayOpen = true;
-      openBackable(exitFocusFromBack);
+    resultsBox.innerHTML = '';
+    const { songs: foundSongs, albums: foundAlbums, voces: foundVoces } = searchEverything(query);
+    const total = foundSongs.length + foundAlbums.length + foundVoces.length;
+    if (!total) {
+      const p = document.createElement('p');
+      p.className = 'search-empty';
+      p.textContent = `Sin resultados para «${query}»`;
+      resultsBox.appendChild(p);
+      return;
     }
+    const section = (label, items, render) => {
+      if (!items.length) return;
+      const h = document.createElement('div');
+      h.className = 'search-focus__group';
+      h.textContent = label;
+      resultsBox.appendChild(h);
+      items.forEach((it) => resultsBox.appendChild(render(it)));
+    };
+    section('Canciones', foundSongs, (s) => {
+      const a = document.createElement('a');
+      a.className = 'search-row';
+      a.href = `/song/${s.id}`;
+      a.innerHTML = `<img class="search-row__cover" src="${resolveCoverUrl(s)}" alt="" width="48" height="48" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'"><div class="search-row__info"><div class="search-row__title">${escapeHtml(s.title)}</div><div class="search-row__sub">Canción · ${escapeHtml(s.album || '')}</div></div>`;
+      a.addEventListener('click', (e) => { e.preventDefault(); requestExitFocus(); navigate(`/song/${s.id}`); });
+      return a;
+    });
+    section('Álbumes', foundAlbums, (al) => {
+      const a = document.createElement('a');
+      a.className = 'search-row';
+      a.href = `/buscar?album=${encodeURIComponent(al.slug)}`;
+      a.innerHTML = `<img class="search-row__cover" src="${resolveCoverUrl(al)}" alt="" width="48" height="48" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'"><div class="search-row__info"><div class="search-row__title">${escapeHtml(al.name)}</div><div class="search-row__sub">Álbum · ${escapeHtml(al.artist || 'Hakuna Group Music')}</div></div>`;
+      a.addEventListener('click', (e) => { e.preventDefault(); requestExitFocus(); navigate(`/buscar?album=${encodeURIComponent(al.slug)}`); });
+      return a;
+    });
+    section('Voz en off', foundVoces, (v) => {
+      const a = document.createElement('a');
+      a.className = 'search-row';
+      a.href = `/voz/${v.id}`;
+      a.innerHTML = `<div class="search-row__cover search-row__cover--gospel">${icon('gospel', { size: 18 })}</div><div class="search-row__info"><div class="search-row__title">${escapeHtml(v.title || v.liturgical_title || 'Voz en off')}</div><div class="search-row__sub">Voz en off · ${escapeHtml(v.gospel_ref || '')}</div></div>`;
+      a.addEventListener('click', (e) => { e.preventDefault(); requestExitFocus(); navigate(`/voz/${v.id}`); });
+      return a;
+    });
   }
-  /** Restaura el hub. No toca el history (uso interno). */
+
+  /** Restaura el estado visual fuera del focus. No toca el history (uso interno). */
   function exitFocusVisual() {
+    document.body.classList.remove('search-focus');
     input.value = '';
-    if (results) { results.remove(); results = null; }
+    input.blur();
     hub.hidden = false;
     clearBtn.hidden = true;
+    cancelBtn.hidden = true;
+    resultsBox.innerHTML = '';
     // Restaurar cualquier filtro de álbum aplicado por albumCard antes del focus.
     hub.querySelectorAll('.song-tile').forEach((t) => { t.style.display = ''; });
   }
+
   /** Cierre disparado por el atrás nativo (vía la capa backable del router). */
   function exitFocusFromBack() {
     overlayOpen = false;
     exitFocusVisual();
   }
-  /** Cierre iniciado por el usuario (Escape, limpiar, borrar el texto). */
+
+  /** Cierre iniciado por el usuario (Escape, Cancelar). */
   function requestExitFocus() {
     exitFocusVisual();
     if (overlayOpen) {
@@ -264,14 +271,45 @@ export async function renderSearchPage(container, weeklyWords = []) {
       closeBackable(); // consume la entrada de history sin re-disparar el cierre
     }
   }
+
+  // Entrar en focus al enfocar el input (tap o click)
+  input.addEventListener('focus', () => {
+    if (!overlayOpen) {
+      document.body.classList.add('search-focus');
+      cancelBtn.hidden = false;
+      openBackable(exitFocusFromBack);
+      overlayOpen = true;
+    }
+    if (input.value.trim()) showResults(input.value);
+  });
+
+  // Actualizar resultados al escribir
   input.addEventListener('input', () => {
-    if (input.value.trim()) enterFocus();
-    else requestExitFocus();
+    if (input.value.trim()) {
+      showResults(input.value);
+    } else {
+      hub.hidden = false;
+      clearBtn.hidden = true;
+      resultsBox.innerHTML = '';
+    }
   });
+
+  // Escape sale del focus
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && input.value) { requestExitFocus(); input.blur(); }
+    if (e.key === 'Escape') requestExitFocus();
   });
-  clearBtn.addEventListener('click', () => { requestExitFocus(); input.focus(); });
+
+  // ✕ borra el texto pero mantiene el focus activo (hub vuelve a ser visible)
+  clearBtn.addEventListener('click', () => {
+    input.value = '';
+    clearBtn.hidden = true;
+    hub.hidden = false;
+    resultsBox.innerHTML = '';
+    input.focus();
+  });
+
+  // Cancelar sale del focus
+  cancelBtn.addEventListener('click', () => requestExitFocus());
 
   container.appendChild(page);
 }

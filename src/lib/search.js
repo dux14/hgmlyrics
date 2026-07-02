@@ -154,7 +154,7 @@ export function searchEverything(query, limits = {}) {
   const empty = { songs: [], albums: [], voces: [] };
   if (!query?.trim()) return empty;
   const q = normalize(query.trim());
-  const { songs: sL = 20, albums: aL = 8, voces: vL = 6 } = limits;
+  const { songs: sL = 40, albums: aL = 10, voces: vL = 8 } = limits;
 
   const songs = searchSongs(query, sL);
 
@@ -166,6 +166,7 @@ export function searchEverything(query, limits = {}) {
         slug: song.albumSlug,
         name: song.album,
         coverImage: song.coverImage,
+        artist: song.artist,
       });
     }
   }

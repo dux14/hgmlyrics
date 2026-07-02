@@ -13,7 +13,7 @@
 .search-page__gutter { padding-inline: var(--space-md); }
 
 .search-bar { position: sticky; top: var(--header-height); z-index: 5; display: flex; align-items: center; gap: 10px;
-  margin: 0 var(--space-md) var(--space-sm); padding: 11px 13px; border-radius: 14px;
+  margin: 0 var(--space-md) var(--space-sm); padding: 0 13px; min-height: 44px; border-radius: 14px;
   background: var(--color-surface-2, rgba(255,255,255,.05)); border: 1px solid var(--color-border);
   color: var(--color-text-secondary); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 .search-bar input { flex: 1; background: none; border: 0; outline: none; color: var(--color-text); font-size: 1rem; }
@@ -59,6 +59,8 @@
 
 /* --- Modo focus: takeover estilo Spotify --- */
 body.search-focus .header { display: none; }
+/* Con el header oculto, .main ya no debe reservar var(--header-height): eliminaba ese espacio muerto arriba. */
+body.search-focus .main { padding-top: 0; }
 /* El wrap se fija en la cima; pill y Cancelar quedan como flex row (Spotify-style).
    Estas reglas vienen DESPUÉS del bloque landing (.main--bleed) y ganan por orden de cascade. */
 body.search-focus .search-bar-wrap {
@@ -79,8 +81,8 @@ body.search-focus .search-bar {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
-/* Compensar la altura real del wrap (8px×2 padding + barra ~46px ≈ 62px). */
-body.search-focus .search-page { padding-top: 62px; }
+/* Compensar la altura real del wrap fijo: 8px×2 padding + pill 44px = 60px. */
+body.search-focus .search-page { padding-top: 60px; }
 /* Lupa oculta en focus — el pill muestra solo [placeholder/texto] [✕]. */
 body.search-focus .search-bar__icon { display: none; }
 body.search-focus .search-bar input { color: var(--color-text); }

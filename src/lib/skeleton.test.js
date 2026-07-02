@@ -1,0 +1,30 @@
+import { describe, it, expect } from 'vitest';
+import { skelLine, skelBlock, skelCircle, skelRow, skelCard, skelGrid } from './skeleton.js';
+
+describe('skeleton primitivas', () => {
+  it('skelLine devuelve un div .skeleton con ancho/alto y aria-hidden', () => {
+    const html = skelLine({ w: '70%', h: 14 });
+    expect(html).toContain('class="skeleton sk-line"');
+    expect(html).toContain('width:70%');
+    expect(html).toContain('height:14px');
+    expect(html).toContain('aria-hidden="true"');
+  });
+  it('skelCircle es redondo', () => {
+    expect(skelCircle({ size: 48 })).toContain('border-radius:50%');
+  });
+  it('skelBlock respeta radius', () => {
+    expect(skelBlock({ h: 120, radius: 16 })).toContain('border-radius:16px');
+  });
+  it('skelRow trae thumb + 2 líneas', () => {
+    const html = skelRow();
+    expect(html).toContain('sk-row');
+    expect((html.match(/sk-line/g) || []).length).toBe(2);
+  });
+  it('skelGrid(6) devuelve 6 tiles', () => {
+    const html = skelGrid(6);
+    expect((html.match(/sk-tile/g) || []).length).toBe(6);
+  });
+  it('skelCard trae cover + título', () => {
+    expect(skelCard()).toContain('sk-card');
+  });
+});

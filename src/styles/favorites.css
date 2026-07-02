@@ -7,8 +7,9 @@
  */
 
 /* ── Wrapper de la página ── */
-.fav-page { padding: 0 0 var(--space-lg); }
-.fav-page__count { margin: 0 0 var(--space-md); color: var(--color-text-secondary); font-size: var(--font-size-sm); }
+.fav-page {
+  padding: 0 0 var(--space-lg);
+}
 
 /* ── Grid de carátulas ── */
 .fav-grid {

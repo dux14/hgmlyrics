@@ -73,7 +73,7 @@ describe('GO_TO_TILES rutas y colores', () => {
     expect(byId.listas).toBe('Crea colecciones efímeras de letras');
     expect(byId.oracion).toBe('Un momento contemplativo con el artista');
     expect(byId.favoritos).toBe('Tus letras guardadas');
-    expect(byId.voces).toBe('Reflexión semanal sobre el evangelio dominical');
+    expect(byId.voces).toBe('Reflexión semanal a partir del evangelio del domingo');
     expect(byId.cache).toBe('Libera espacio y datos offline');
   });
 

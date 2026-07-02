@@ -37,7 +37,7 @@ export const GO_TO_TILES = [
   {
     id: 'voces',
     label: 'Voz en off',
-    desc: 'Reflexión semanal sobre el evangelio dominical',
+    desc: 'Reflexión semanal a partir del evangelio del domingo',
     route: '/voces',
     iconKey: 'gospel',
     color: '--color-success',

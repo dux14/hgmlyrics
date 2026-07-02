@@ -109,7 +109,7 @@
    ============================================================ */
 
 .album-detail {
-  padding: var(--space-md) var(--space-md) var(--space-2xl);
+  padding: var(--space-md) 0 var(--space-2xl);
   max-width: var(--max-content-width);
   margin: 0 auto;
 }

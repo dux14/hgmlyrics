@@ -12,7 +12,7 @@
   justify-content: center;
   text-align: center;
   min-height: calc(100dvh - var(--header-height, 64px) - var(--bottom-nav-height, 60px));
-  padding: var(--space-xl) var(--space-lg);
+  padding: var(--space-xl) 0;
   gap: var(--space-sm);
 }
 

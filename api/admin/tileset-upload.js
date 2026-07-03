@@ -16,6 +16,7 @@ import sql from '../_lib/db.js';
 import { requireAdmin } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { uploadTileset } from '../_lib/storage.js';
+import { detectImageType } from '../_lib/uploads.js';
 
 export const config = {
   api: { bodyParser: false },
@@ -49,6 +50,9 @@ export default withErrors(async (req, res) => {
     return;
   }
 
+  // El mimetype declarado por el cliente no es fiable; validar la firma real del archivo.
+  const detectedType = await detectImageType(file.filepath, ALLOWED);
+
   // Derivar la ruta en Storage a partir del nombre de mapa opcional.
   // El campo "mapName" es opcional; se usa solo para construir la ruta legible.
   const rawName = (fields.mapName?.[0] ?? 'tileset').trim() || 'tileset';
@@ -57,7 +61,7 @@ export default withErrors(async (req, res) => {
     .replace(/[^a-z0-9]+/g, '-')
     .slice(0, 40);
   const ext =
-    contentType
+    detectedType
       .split('/')
       .pop()
       .replace(/[^a-z0-9]/g, '') || 'png';
@@ -65,7 +69,7 @@ export default withErrors(async (req, res) => {
 
   const url = await uploadTileset({
     path,
-    contentType,
+    contentType: detectedType,
     body: createReadStream(file.filepath),
   });
 

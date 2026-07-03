@@ -48,6 +48,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.106.0",
     "fflate": "^0.8.3",
+    "file-type": "^22.0.1",
     "flexsearch": "^0.8.212",
     "formidable": "^3.5.4",
     "idb-keyval": "^6.2.2",

@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import sql from '../_lib/db.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { deleteStemsPrefix } from '../_lib/storage.js';
@@ -7,7 +8,11 @@ export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['GET'])) return;
   const auth = req.headers?.authorization ?? '';
   const secret = process.env.CRON_SECRET;
-  if (!secret || auth !== `Bearer ${secret}`) {
+  const expected = secret ? `Bearer ${secret}` : null;
+  const a = Buffer.from(auth);
+  const b = Buffer.from(expected ?? '');
+  const matches = !!expected && a.length === b.length && timingSafeEqual(a, b);
+  if (!matches) {
     res.status(401).json({ error: 'No autorizado' });
     return;
   }

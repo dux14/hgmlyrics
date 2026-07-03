@@ -4,6 +4,7 @@ import sql from './_lib/db.js';
 import { requireAdmin } from './_lib/auth.js';
 import { allowMethods, withErrors } from './_lib/http.js';
 import { uploadCover } from './_lib/storage.js';
+import { detectImageType } from './_lib/uploads.js';
 
 // Vercel auto-parses JSON; we must disable that for multipart.
 export const config = {
@@ -34,10 +35,13 @@ export default withErrors(async (req, res) => {
     return;
   }
 
+  // El mimetype declarado por el cliente no es fiable; validar la firma real del archivo.
+  const detectedType = await detectImageType(file.filepath, ALLOWED);
+
   // formidable buffers to /tmp on Vercel (the only writable path). Stream it to Storage.
   const url = await uploadCover({
     filename: file.originalFilename ?? 'upload.bin',
-    contentType,
+    contentType: detectedType,
     body: createReadStream(file.filepath),
   });
 

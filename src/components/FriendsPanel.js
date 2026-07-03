@@ -1,5 +1,5 @@
 /**
- * FriendsPanel.js — /amigos page with tabs: friends / incoming / outgoing + search.
+ * FriendsPanel.js — /amigos page: sections (solicitudes/amigos) + búsqueda inline.
  */
 import '../styles/friends.css';
 import { getSession } from '../lib/authStore.js';
@@ -58,24 +58,6 @@ async function removeFriendship(otherUserId) {
   });
 }
 
-export function buildTabs(activeTab, incomingCount) {
-  const tab = (key, label) => {
-    const sel = activeTab === key;
-    const count =
-      key === 'incoming' && incomingCount > 0
-        ? `<span class="seg-tab__count">${incomingCount}</span>`
-        : '';
-    return `<button class="seg-tab${sel ? ' seg-tab--active' : ''}" role="tab" aria-selected="${sel}" data-tab="${key}">${label}${count}</button>`;
-  };
-  return `
-    <div class="seg-tabs" role="tablist">
-      ${tab('accepted', 'Amigos')}
-      ${tab('incoming', 'Recibidas')}
-      ${tab('outgoing', 'Enviadas')}
-    </div>
-  `;
-}
-
 /** Normaliza un item de friendship al "otro" usuario respecto al viewer. */
 export function normalizeOther(item, viewerId) {
   const otherIsRequester = item.requesterId !== viewerId;
@@ -92,33 +74,6 @@ export function normalizeOther(item, viewerId) {
         displayName: item.addresseeDisplayName,
         avatarUrl: item.addresseeAvatarUrl,
       };
-}
-
-export function buildFriendItem(item, viewerId, kind) {
-  const other = normalizeOther(item, viewerId);
-  const initial = (other.displayName || other.username || '?').trim().charAt(0).toUpperCase();
-  const crown = isFounder(other.username) ? founderCrownHtml() : '';
-  const avatarInner = other.avatarUrl
-    ? `<img class="friend-card__avatar" src="${escapeHtml(other.avatarUrl || '')}" alt="" width="44" height="44" loading="lazy" decoding="async" />`
-    : `<span class="friend-card__avatar friend-card__avatar--initial">${initial}</span>`;
-  const avatar = `<span class="avatar-wrap">${avatarInner}${crown}</span>`;
-  const actions =
-    kind === 'incoming'
-      ? `<button class="pill pill--primary" data-act="accept" data-id="${other.id}">Aceptar</button>
-         <button class="pill pill--ghost" data-act="reject" data-id="${other.id}">Rechazar</button>`
-      : kind === 'outgoing'
-        ? `<button class="pill pill--ghost" data-act="cancel" data-id="${other.id}">Cancelar</button>`
-        : `<button class="pill pill--ghost" data-act="unfriend" data-id="${other.id}">Quitar</button>`;
-  return `
-    <li class="friend-card">
-      ${avatar}
-      <div class="friend-card__id">
-        <a href="#/u/${encodeURIComponent(other.username)}" class="friend-card__name">${escapeHtml(other.displayName || other.username)}</a>
-        <div class="profile-username">@${escapeHtml(other.username)}</div>
-      </div>
-      <div class="friend-card__actions">${actions}</div>
-    </li>
-  `;
 }
 
 function avatarHtml(person) {
@@ -216,9 +171,9 @@ export function buildSearchRow(person) {
  */
 export function renderFriendsPanel(container) {
   const viewerId = getSession()?.user?.id;
-  let activeTab = 'accepted';
   // Cache inicial vacío; se rellena en el primer ciclo async vía renderAsyncRegion.
   let listCache = { accepted: [], pendingIncoming: [], pendingOutgoing: [] };
+  let searching = false;
 
   async function reloadList() {
     const data = await fetchList();
@@ -226,68 +181,97 @@ export function renderFriendsPanel(container) {
     return data;
   }
 
-  // Shell instantáneo: tabs (badge=0 hasta que carguen) + región async de la lista.
   container.innerHTML = `
     <div class="friends-page fade-in">
-      <h1>Amigos</h1>
-
-      <div class="profile-field">
-        <input type="search" class="auth-input" id="friends-search" placeholder="Buscar usuarios..." />
-        <ul id="search-results" class="friends-list"></ul>
+      <div class="friends-head">
+        <h1 class="friends-title">Amigos</h1>
+        <div class="friends-search">
+          ${icon('search', { size: 18 })}
+          <input type="search" id="friends-search" placeholder="Buscar usuarios" autocomplete="off" />
+        </div>
       </div>
-
-      ${buildTabs(activeTab, 0)}
-
       <div class="friends-list__region" aria-busy="true">
         <ul class="friends-list" id="friends-list"></ul>
       </div>
-    </div>
-  `;
+    </div>`;
 
   // La región async es el <div> envolvente, no el <ul>: el skeleton es un <div>
   // y un <div> hijo directo de <ul> es HTML inválido (Chrome/Firefox lo promueven).
   const region = container.querySelector('.friends-list__region');
 
-  function renderList() {
-    const listEl = container.querySelector('#friends-list');
-    const items =
-      activeTab === 'accepted'
-        ? listCache.accepted
-        : activeTab === 'incoming'
-          ? listCache.pendingIncoming
-          : listCache.pendingOutgoing;
-    if (items.length === 0) {
-      const emptyLabels = {
-        accepted: ['Sin amigos aún', 'Busca usuarios arriba para agregar a alguien.'],
-        incoming: ['Sin solicitudes recibidas', 'Cuando alguien te agregue, aparecera aqui.'],
-        outgoing: ['Sin solicitudes enviadas', 'Agrega amigos usando el buscador.'],
-      };
-      const [title, text] = emptyLabels[activeTab] || ['Nada por aqui.', ''];
-      listEl.innerHTML = `
-        <li class="empty-state">
-          <div class="empty-state__icon">${icon('user-plus', { size: 40 })}</div>
-          <h2 class="empty-state__title">${title}</h2>
-          ${text ? `<p class="empty-state__text">${text}</p>` : ''}
-        </li>
-      `;
-      return;
+  // El skeleton (o un resultado de búsqueda previo) puede haber reemplazado el <ul>;
+  // restablecerlo antes de pintar y devolver la referencia vigente.
+  function ensureListEl() {
+    let listEl = container.querySelector('#friends-list');
+    if (!listEl) {
+      region.innerHTML = '<ul class="friends-list" id="friends-list"></ul>';
+      listEl = container.querySelector('#friends-list');
     }
-    listEl.innerHTML = items.map((it) => buildFriendItem(it, viewerId, activeTab)).join('');
-    listEl.querySelectorAll('.friend-card').forEach((li, i) => {
+    return listEl;
+  }
+
+  function renderSections() {
+    const listEl = ensureListEl();
+    listEl.innerHTML = buildSections(listCache, viewerId);
+    listEl.querySelectorAll('.friend-row').forEach((li, i) => {
       li.style.animationDelay = `${Math.min(i * 40, 240)}ms`;
     });
-    listEl.querySelectorAll('button[data-act]').forEach((b) => {
-      b.addEventListener('click', async () => {
-        const id = b.dataset.id;
-        const act = b.dataset.act;
-        if (act === 'accept') await respondRequest(id, 'accept');
-        if (act === 'reject') await removeFriendship(id);
-        if (act === 'cancel') await removeFriendship(id);
-        if (act === 'unfriend') await removeFriendship(id);
-        listCache = await reloadList();
-        renderList();
+    wireActions(listEl);
+  }
+
+  async function doAction(act, id) {
+    if (act === 'accept') await respondRequest(id, 'accept');
+    else await removeFriendship(id); // reject | cancel | unfriend
+    listCache = await reloadList();
+    if (!searching) renderSections();
+  }
+
+  function wireActions(scope) {
+    scope.querySelectorAll('button[data-act]').forEach((b) => {
+      const act = b.dataset.act;
+      b.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (act === 'unfriend' && b.dataset.confirm !== '1') {
+          b.dataset.confirm = '1';
+          b.classList.add('friend-ib--confirm');
+          b.textContent = '¿Quitar?';
+          setTimeout(() => {
+            if (b.dataset.confirm === '1') {
+              b.dataset.confirm = '';
+              b.classList.remove('friend-ib--confirm');
+              b.innerHTML = icon('check', { size: 20 });
+            }
+          }, 2600);
+          return;
+        }
+        if (act === 'add') {
+          await sendAdd(b);
+          return;
+        }
+        await doAction(act, b.dataset.id);
       });
     });
+  }
+
+  async function sendAdd(b) {
+    b.disabled = true;
+    const prev = b.textContent;
+    b.textContent = '...';
+    const r = await sendRequest(b.dataset.username);
+    if (r.ok) {
+      b.textContent = 'Enviada';
+      b.classList.remove('friend-pill--add');
+      b.classList.add('friend-pill--pending');
+      b.dataset.act = 'cancel';
+      b.disabled = false;
+      listCache = await reloadList();
+    } else if (r.status === 409) {
+      b.textContent = 'Ya existe';
+    } else {
+      b.textContent = prev;
+      b.disabled = false;
+    }
   }
 
   renderAsyncRegion(region, {
@@ -295,24 +279,7 @@ export function renderFriendsPanel(container) {
     fetcher: reloadList,
     render: (data) => {
       listCache = data;
-      // El skeleton pudo haber reemplazado el <ul>; restablecerlo antes de pintar.
-      if (!container.querySelector('#friends-list')) {
-        region.innerHTML = '<ul class="friends-list" id="friends-list"></ul>';
-      }
-      // Actualiza el badge de solicitudes recibidas si hay pendientes.
-      const count = Array.isArray(data.pendingIncoming) ? data.pendingIncoming.length : 0;
-      if (count > 0) {
-        const incTab = container.querySelector('[data-tab="incoming"]');
-        if (incTab) {
-          const badge = incTab.querySelector('.seg-tab__count');
-          if (badge) {
-            badge.textContent = String(count);
-          } else {
-            incTab.insertAdjacentHTML('beforeend', `<span class="seg-tab__count">${count}</span>`);
-          }
-        }
-      }
-      renderList();
+      if (!searching) renderSections();
     },
     onError: () => `
       <div class="empty-state">
@@ -321,76 +288,29 @@ export function renderFriendsPanel(container) {
       </div>`,
   });
 
-  container.querySelectorAll('.seg-tab').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      container.querySelectorAll('.seg-tab').forEach((b) => {
-        b.classList.remove('seg-tab--active');
-        b.setAttribute('aria-selected', 'false');
-      });
-      btn.classList.add('seg-tab--active');
-      btn.setAttribute('aria-selected', 'true');
-      activeTab = btn.dataset.tab;
-      renderList();
-    });
-  });
-
   const searchInput = container.querySelector('#friends-search');
-  const searchResults = container.querySelector('#search-results');
   searchInput.addEventListener('input', () => {
     clearTimeout(searchTimer);
     const q = searchInput.value.trim();
     if (q.length < 2) {
-      searchResults.innerHTML = '';
+      searching = false;
+      renderSections();
       return;
     }
+    searching = true;
     searchTimer = setTimeout(async () => {
       const results = await searchUsers(q);
+      const listEl = ensureListEl();
       if (results.length === 0) {
-        searchResults.innerHTML = `
+        listEl.innerHTML = `
           <li class="empty-state" style="padding:var(--space-md) 0;">
-            <div class="empty-state__icon">${icon('user-plus', { size: 32 })}</div>
+            <div class="empty-state__icon">${icon('search', { size: 32 })}</div>
             <p class="empty-state__text">Sin resultados.</p>
-          </li>
-        `;
+          </li>`;
         return;
       }
-      searchResults.innerHTML = results
-        .map(
-          (u) => `
-        <li class="friend-item">
-          <span class="avatar-wrap">
-            <img class="profile-avatar" src="${escapeHtml(u.avatarUrl || '')}" alt="" width="40" height="40" loading="lazy" decoding="async" />${isFounder(u.username) ? founderCrownHtml() : ''}
-          </span>
-          <div class="friend-item__name">
-            <a href="#/u/${encodeURIComponent(u.username)}" class="friend-item__link">${escapeHtml(u.displayName || u.username)}</a>
-            <div class="friend-item__user">@${escapeHtml(u.username)}</div>
-          </div>
-          <div class="friend-item__actions">
-            <button class="friends-send-btn" data-username="${escapeHtml(u.username)}">Agregar</button>
-          </div>
-        </li>
-      `,
-        )
-        .join('');
-      searchResults.querySelectorAll('button[data-username]').forEach((b) => {
-        b.addEventListener('click', async () => {
-          b.disabled = true;
-          b.textContent = '...';
-          b.classList.remove('friends-send-btn--sent', 'friends-send-btn--exists');
-          const r = await sendRequest(b.dataset.username);
-          if (r.ok) {
-            b.textContent = 'Enviada';
-            b.classList.add('friends-send-btn--sent');
-            listCache = await reloadList();
-          } else if (r.status === 409) {
-            b.textContent = 'Ya existe';
-            b.classList.add('friends-send-btn--exists');
-          } else {
-            b.textContent = 'Error';
-            b.disabled = false;
-          }
-        });
-      });
+      listEl.innerHTML = results.map((u) => buildSearchRow(u)).join('');
+      wireActions(listEl);
     }, 300);
   });
 }

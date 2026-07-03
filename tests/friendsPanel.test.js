@@ -45,6 +45,23 @@ describe('buildFriendRow', () => {
   });
 });
 
+describe('buildFriendRow seguridad (SEC-01)', () => {
+  it('avatarUrl con payload XSS no produce atributo onerror en el DOM', () => {
+    const malicious = {
+      id: 'attacker',
+      username: 'attacker',
+      displayName: 'Attacker',
+      avatarUrl: '" onerror="alert(1)" x="',
+    };
+    const el = document.createElement('div');
+    // buildFriendRow devuelve un <li>; envolver en <ul> para un parse correcto
+    el.innerHTML = `<ul>${buildFriendRow(malicious, { kind: 'incoming' })}</ul>`;
+    const img = el.querySelector('img.friend-row__avatar');
+    expect(img).toBeTruthy();
+    expect(img.getAttribute('onerror')).toBeNull();
+  });
+});
+
 describe('buildSearchRow', () => {
   it('none: pill Agregar', () => {
     expect(buildSearchRow({ ...person, relation: 'none' })).toContain('data-act="add"');

@@ -131,7 +131,7 @@ function renderIdle(body, quota) {
     bajo, guitarra, piano y otros) más la voz dividida en <strong>líder/coros</strong> y segmentos
     por cantante.</p>
     <div class="studio-dropzone" role="button" tabindex="0" aria-label="Subir archivo de audio">
-      ${icon('upload', { size: 32 })}
+      <span class="studio-dropzone__icon" aria-hidden="true">${icon('upload', { size: 26 })}</span>
       <p class="studio-dropzone__hint"><strong>Arrastra tu audio aquí</strong> o toca para elegir</p>
       <p class="empty-state__text studio-dropzone__sub">MP3 · máx 25 MB / 10 min</p>
     </div>
@@ -205,7 +205,10 @@ function renderReviewPanel(body, file, quota) {
   const sectionRows = SECTION_KEYS.map(
     (key) => `
       <label class="studio-review__section">
-        <input type="checkbox" class="studio-review__section-check" data-section="${key}" checked />
+        <span class="studio-review__section-box">
+          <input type="checkbox" class="studio-review__section-check" data-section="${key}" checked />
+          <span class="studio-review__section-check-icon" aria-hidden="true">${icon('check', { size: 14 })}</span>
+        </span>
         <span class="studio-review__section-label">${escHtml(sectionLabel(key))}</span>
       </label>`,
   ).join('');
@@ -222,10 +225,10 @@ function renderReviewPanel(body, file, quota) {
         ${sectionRows}
       </fieldset>
       <div class="studio-review__actions">
-        <button type="button" class="btn studio-review__cancel">Cancelar</button>
-        <button type="button" class="btn btn--primary studio-review__submit">
+        <button type="button" class="btn studio-review__submit">
           ${icon('play', { size: 16 })} <span class="studio-review__submit-label"></span>
         </button>
+        <button type="button" class="btn studio-review__cancel">Cancelar</button>
       </div>
     </div>
   `;
@@ -493,6 +496,33 @@ function mountSectionUI(body, job, quota) {
   });
 }
 
+// Alturas (px) de las barras de la onda: silueta de forma de onda, no uniforme.
+const WAVE_BAR_HEIGHTS = [10, 18, 28, 16, 32, 22, 14, 26, 18, 12];
+
+/**
+ * Cabecera decorativa del estado 'processing': una onda que se desdobla en tres
+ * capas horizontales (metáfora de separar la pista en stems). CSS puro, tinte
+ * ámbar; `prefers-reduced-motion` la deja estática (ver studio.css).
+ */
+function renderProcessingWave() {
+  const wave = document.createElement('div');
+  wave.className = 'studio-processing__wave';
+  wave.setAttribute('aria-hidden', 'true');
+  for (const layer of ['top', 'mid', 'bottom']) {
+    const layerEl = document.createElement('div');
+    layerEl.className = `studio-processing__wave-layer studio-processing__wave-layer--${layer}`;
+    WAVE_BAR_HEIGHTS.forEach((h, i) => {
+      const bar = document.createElement('span');
+      bar.className = 'studio-processing__wave-bar';
+      bar.style.setProperty('--h', `${h}px`);
+      bar.style.setProperty('--i', String(i));
+      layerEl.appendChild(bar);
+    });
+    wave.appendChild(layerEl);
+  }
+  return wave;
+}
+
 /**
  * Renderiza las 4 tarjetas de sección con su estado actual.
  * Sirve tanto para 'processing' (estados parciales) como para 'done' (unificado con renderJob).
@@ -516,6 +546,8 @@ function renderProcessing(body, job, filename, quota) {
     filenameEl.appendChild(span);
     frag.appendChild(filenameEl);
   }
+
+  frag.appendChild(renderProcessingWave());
 
   const cardsEl = document.createElement('div');
   cardsEl.className = 'studio-sections';

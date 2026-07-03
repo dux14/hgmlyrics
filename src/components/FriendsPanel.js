@@ -228,19 +228,23 @@ export function renderFriendsPanel(container) {
 
   function wireActions(scope) {
     scope.querySelectorAll('button[data-act]').forEach((b) => {
-      const act = b.dataset.act;
       b.addEventListener('click', async (e) => {
         e.preventDefault();
         e.stopPropagation();
+        const act = b.dataset.act;
         if (act === 'unfriend' && b.dataset.confirm !== '1') {
           b.dataset.confirm = '1';
           b.classList.add('friend-ib--confirm');
           b.textContent = '¿Quitar?';
+          b.setAttribute('aria-label', '¿Quitar amistad?');
+          b.setAttribute('title', '¿Quitar amistad?');
           setTimeout(() => {
             if (b.dataset.confirm === '1') {
               b.dataset.confirm = '';
               b.classList.remove('friend-ib--confirm');
               b.innerHTML = icon('check', { size: 20 });
+              b.setAttribute('aria-label', 'Amigos — quitar');
+              b.setAttribute('title', 'Amigos — quitar');
             }
           }, 2600);
           return;

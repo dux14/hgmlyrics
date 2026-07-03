@@ -76,14 +76,26 @@ export default withErrors(async (req, res) => {
   enabledSet.add(section);
   const nextEnabled = SECTION_KEYS.filter((k) => enabledSet.has(k));
 
-  await sql`
+  // Fix TOCTOU (mismo patrón que start.js): compare-and-swap sobre el estado de la
+  // sección leído arriba. Si dos /retry corren en paralelo para la misma sección,
+  // solo uno matchea el WHERE (status+retries aún iguales) y reclama la fila; el
+  // perdedor recibe 0 filas y NO invoca Modal (evita disparar 2 jobs GPU por el
+  // mismo reintento — el bypass de cuota que el tope MAX_RETRIES no cierra por sí solo).
+  const claimed = await sql`
     UPDATE stem_jobs
     SET status = 'processing',
         sections = ${sql.json(sections)},
         enabled_sections = ${sql.array(nextEnabled)},
         updated_at = now()
     WHERE id = ${job.id}
+      AND sections -> ${section} ->> 'status' = ${currentStatus}
+      AND COALESCE((sections -> ${section} ->> 'retries')::int, 0) = ${currentRetries}
+    RETURNING id
   `;
+  if (claimed.length === 0) {
+    res.status(409).json({ error: 'La sección ya se está reintentando.' });
+    return;
+  }
 
   // Pre-firmar uploads y lanzar Modal para la sección retried.
   try {

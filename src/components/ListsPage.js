@@ -5,6 +5,7 @@ import { navigate } from '../router.js';
 import { renderListsBody } from './Home.js';
 import { listMyLists } from '../lib/lists.js';
 import { cached } from '../lib/prefetch.js';
+import { skelRowList } from '../lib/skeleton.js';
 
 /**
  * Renderiza la pantalla de listas del usuario.
@@ -17,7 +18,7 @@ export async function renderListsPage(container, { today = new Date().toISOStrin
       <div class="home__hd">
         <h2 class="home__hd-title">Listas</h2>
       </div>
-      <div id="lists-page-body"></div>
+      <div id="lists-page-body" aria-busy="true">${skelRowList({ rows: 5 })}</div>
     </div>
   `;
   const body = container.querySelector('#lists-page-body');
@@ -28,6 +29,7 @@ export async function renderListsPage(container, { today = new Date().toISOStrin
   } catch {
     lists = [];
   }
+  body.removeAttribute('aria-busy');
   body.innerHTML = renderListsBody(lists, today);
   body.querySelectorAll('[data-list-id]').forEach((el) =>
     el.addEventListener('click', () => navigate(`/lista/${el.dataset.listId}`)),

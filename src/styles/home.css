@@ -181,9 +181,9 @@
   width: 100%;
   padding: 12px var(--space-md) 12px calc(var(--space-md) + 3px);
   margin-bottom: 7px;
-  background: var(--color-surface);
+  background: transparent;
   border: none;
-  border-radius: 12px;
+  border-radius: 0;
   overflow: hidden;
   cursor: pointer;
   text-align: left;

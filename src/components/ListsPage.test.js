@@ -16,6 +16,13 @@ describe('renderListsPage', () => {
     container = document.createElement('div');
   });
 
+  it('renderListsPage pinta skeleton antes de resolver los datos', async () => {
+    const el = document.createElement('div');
+    const p = renderListsPage(el); // no await todavía
+    expect(el.querySelector('[aria-busy="true"]')).toBeTruthy();
+    await p;
+  });
+
   it('pinta título "Listas" y una fila por lista', async () => {
     await renderListsPage(container, { today: '2026-07-01' });
     expect(container.textContent).toContain('Listas');

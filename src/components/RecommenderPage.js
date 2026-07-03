@@ -20,10 +20,10 @@ export function renderRecommenderPage(container) {
         <span class="recommender-page__beta">BETA</span>
       </h2>
       <p class="recommender-page__text">
-        Estamos construyendo esto. Pronto te sugeriremos canciones segun lo que
+        Estamos construyendo esto. Pronto te sugeriremos canciones según lo que
         cantas y tus favoritos.
       </p>
-      <button class="btn btn--primary recommender-page__cta" id="recommender-home">
+      <button class="btn btn--secondary recommender-page__cta" id="recommender-home">
         ${icon('arrow-left', { size: 16 })}
         Volver al inicio
       </button>

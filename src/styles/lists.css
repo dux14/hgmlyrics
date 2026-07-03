@@ -141,10 +141,10 @@
   max-width: 680px;
   margin: 0 auto;
   /* Sin padding horizontal: el gutter lo aporta .main__content */
-  padding: var(--space-md) 0;
+  padding: 0 0 var(--space-xl);
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: 0;
 }
 
 .list-detail__header {
@@ -152,11 +152,13 @@
   align-items: flex-start;
   gap: var(--space-sm);
   flex-wrap: wrap;
+  margin: 0 0 var(--space-xs);
 }
 
 .list-detail__title {
-  font-size: 1.3rem;
+  font-size: 1.7rem;
   font-weight: 700;
+  letter-spacing: -0.02em;
   margin: 0;
   flex: 1;
 }
@@ -489,6 +491,7 @@
 
 .list-detail__edit-btn {
   flex-shrink: 0;
+  border-radius: var(--border-radius-full);
 }
 
 /* ── Wizard de creación/edición (mobile-first) ── */
@@ -708,26 +711,34 @@
 }
 .list-detail__seg {
   display: flex;
-  gap: var(--space-sm);
+  gap: var(--space-lg);
   margin: var(--space-md) 0;
+  border-bottom: 1px solid var(--color-border);
 }
 .list-detail__seg-tab {
-  flex: 1;
-  padding: var(--space-sm) 0;
-  border: none;
-  border-radius: var(--border-radius-md);
-  background: var(--color-surface);
+  flex: 0 0 auto;
+  padding: 0 0 11px;
+  border: 0;
+  background: none;
   color: var(--color-text-secondary);
-  font-weight: var(--font-weight-bold);
+  font-weight: 700;
   font-size: var(--font-size-sm);
+  position: relative;
   cursor: pointer;
-  transition:
-    background var(--transition-fast),
-    color var(--transition-fast);
+  transition: color var(--transition-fast);
 }
 .list-detail__seg-tab.is-active {
+  color: var(--color-text);
+}
+.list-detail__seg-tab.is-active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
   background: var(--color-brand);
-  color: #fff;
+  border-radius: 2px;
 }
 .list-detail__children {
   display: flex;

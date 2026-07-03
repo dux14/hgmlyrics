@@ -215,11 +215,24 @@
 }
 
 .tuner-strings__item[data-active='true'] {
-  background: var(--color-brand);
-  color: #fff;
-  border-color: var(--color-brand);
-  transform: scale(1.05);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--color-brand) 40%, transparent);
+  background: color-mix(in srgb, var(--color-teal-400) 16%, transparent);
+  color: var(--color-teal-400);
+  border-color: var(--color-teal-400);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-teal-400) 40%, transparent);
+  animation: tuner-string-vibrate 220ms ease-in-out infinite;
+}
+
+@keyframes tuner-string-vibrate {
+  0%,
+  100% {
+    transform: scale(1.05) rotate(0deg);
+  }
+  25% {
+    transform: scale(1.05) rotate(-1.5deg);
+  }
+  75% {
+    transform: scale(1.05) rotate(1.5deg);
+  }
 }
 
 /* === Readout === */
@@ -387,6 +400,19 @@
   .tuner-gauge__indicator {
     transition: none;
   }
+
+  .tuner-strings__item[data-active='true'] {
+    animation: none;
+  }
+
+  .tuner-objective__check,
+  .tuner-objective[data-match='ok'] .tuner-objective__check {
+    animation: none;
+  }
+
+  .tuner-scale li[data-active='true'] {
+    animation: none;
+  }
 }
 
 .tuner-hint {
@@ -422,6 +448,36 @@
   color: inherit;
 }
 
+.tuner-objective__check {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: var(--space-2xs);
+  color: var(--color-success, #2e7d32);
+  opacity: 0;
+  transform: scale(0);
+}
+
+.tuner-objective[data-match='ok'] .tuner-objective__check {
+  opacity: 1;
+  transform: scale(1);
+  animation: tuner-check-pop 260ms ease-out;
+}
+
+@keyframes tuner-check-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* === Song mode === */
 .tuner-song {
   text-align: center;
@@ -450,18 +506,31 @@
 .tuner-scale li {
   min-width: 2.5rem;
   padding: var(--space-2xs) var(--space-sm);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-success) 14%, transparent);
+  color: var(--color-success);
+  border: 1px solid color-mix(in srgb, var(--color-success) 40%, transparent);
   border-radius: var(--border-radius-full);
   font-weight: var(--font-weight-semibold);
   transition: all 120ms ease;
 }
 
 .tuner-scale li[data-active='true'] {
-  background: var(--color-success);
-  color: #fff;
-  border-color: var(--color-success);
-  transform: scale(1.1);
+  background: color-mix(in srgb, var(--color-teal-400) 20%, transparent);
+  color: var(--color-teal-400);
+  border-color: var(--color-teal-400);
+  animation: tuner-chip-pop 220ms ease-out;
+}
+
+@keyframes tuner-chip-pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 /* Nota objetivo resaltada dentro de la escala (modo Canción con objetivo de voz) */

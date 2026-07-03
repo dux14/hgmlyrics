@@ -156,7 +156,7 @@ function bodyGuitarOrVoice(mode, targetNote) {
       : '';
   const objective =
     mode === 'voice' && targetNote
-      ? `<p class="tuner-objective" id="tuner-objective">Objetivo: <strong>${targetNote}</strong></p>`
+      ? `<p class="tuner-objective" id="tuner-objective">Objetivo: <strong>${targetNote}</strong><span class="tuner-objective__check" aria-hidden="true">${icon('check-circle', { size: 18 })}</span></p>`
       : '';
   return `
     ${objective}
@@ -239,7 +239,7 @@ export function bodySong(song, targetLabel = null) {
   return `
     <div class="tuner-empty">
       <p>Esta canción no tiene notas asignadas todavía.</p>
-      <p>Pedile al admin que configure las voces y el tono en el editor.</p>
+      <p>Pide al admin que configure las voces y el tono en el editor.</p>
     </div>
   `;
 }

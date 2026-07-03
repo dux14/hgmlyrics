@@ -349,7 +349,10 @@ function renderEditor(container, listData, opts = {}) {
           : ''
       }
       <div class="list-detail__search-wrap">
-        <input class="list-detail__search-input" type="search" id="list-detail-search" placeholder="Buscar y agregar canciones…" autocomplete="off" />
+        <div class="list-detail__search">
+          ${icon('search', { size: 18 })}
+          <input class="list-detail__search-input" type="search" id="list-detail-search" placeholder="Buscar y agregar canciones…" autocomplete="off" />
+        </div>
         <div class="list-detail__search-results" id="list-detail-results" style="display:none"></div>
       </div>
       <div class="list-detail__songs" id="list-detail-songs"></div>
@@ -642,8 +645,11 @@ function renderEditor(container, listData, opts = {}) {
   function renderStep2(el) {
     const admin = isAdmin();
     el.innerHTML = `
-      <input class="list-detail__search-input" type="search" id="list-detail-friend-search"
-        placeholder="${admin ? 'Buscar entre todos los usuarios…' : 'Buscar entre tus amigos…'}" autocomplete="off" />
+      <div class="list-detail__search">
+        ${icon('search', { size: 18 })}
+        <input class="list-detail__search-input" type="search" id="list-detail-friend-search"
+          placeholder="${admin ? 'Buscar entre todos los usuarios…' : 'Buscar entre tus amigos…'}" autocomplete="off" />
+      </div>
       ${admin ? `<p class="list-detail__admin-hint">${icon('users', { size: 13 })} Modo admin · puedes invitar a cualquier usuario</p>` : ''}
       <div class="list-detail__friend-results" id="list-detail-friend-results"></div>
       <div class="list-detail__invitees" id="list-detail-invitees"></div>

@@ -51,7 +51,9 @@
   justify-content: space-between;
   padding: var(--space-xs) var(--space-md);
   cursor: pointer;
-  border-radius: var(--border-radius-sm);
+  background: transparent;
+  border: 0;
+  border-radius: var(--border-radius-md);
   gap: var(--space-sm);
   transition: background 0.15s;
 }

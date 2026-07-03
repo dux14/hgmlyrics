@@ -27,12 +27,22 @@ describe('WeeklyWordView', () => {
     container.remove();
   });
 
-  it('renderiza el hero con gospel_ref y eyebrow (logo gospel, sin paloma)', async () => {
+  it('renderiza el hero con el título litúrgico y eyebrow (logo gospel, sin paloma)', async () => {
     await renderWeeklyWordView(container, SAMPLE_WORD);
     expect(container.innerHTML).not.toContain('🕊');
     expect(container.innerHTML).toContain('Palabra de la semana');
     expect(container.innerHTML).toContain('<svg');
-    expect(container.innerHTML).toContain('Jn 14,6');
+    const titleEl = container.querySelector('.voz-view__title');
+    expect(titleEl).toBeTruthy();
+    expect(titleEl.textContent).toContain('XI Domingo del Tiempo Ordinario');
+  });
+
+  it('renderiza la píldora de tiempo litúrgico con el label del color', async () => {
+    await renderWeeklyWordView(container, SAMPLE_WORD);
+    const pillEl = container.querySelector('.voz-view__pill');
+    expect(pillEl).toBeTruthy();
+    expect(pillEl.textContent).toContain('Tiempo Ordinario');
+    expect(pillEl.querySelector('.voz-view__pill-dot')).toBeTruthy();
   });
 
   it('renderiza el separador Reflexión con icono SVG (F2c: icono lucide, no ✦)', async () => {
@@ -61,16 +71,29 @@ describe('WeeklyWordView', () => {
     expect(sepEl.style.color).toBe('');
   });
 
-  it('renderiza el bloque evangelio con gospel_body', async () => {
+  it('renderiza el bloque evangelio como details colapsado con gospel_body', async () => {
     await renderWeeklyWordView(container, SAMPLE_WORD);
+    const detailsEl = container.querySelector('details.voz-view__gospel');
+    expect(detailsEl).toBeTruthy();
+    expect(detailsEl.open).toBe(false);
     expect(container.innerHTML).toContain('Fuente: Ordo');
     expect(container.innerHTML).toContain('Nadie llega al Padre sino por mí');
   });
 
-  it('muestra botón Editar solo para admins', async () => {
+  it('muestra botón Editar ancho-completo solo para admins, fuera de la toolbar', async () => {
     const { isAdmin } = await import('../src/lib/authStore.js');
     isAdmin.mockReturnValue(true);
     await renderWeeklyWordView(container, SAMPLE_WORD);
-    expect(container.querySelector('[data-action="edit-voz"]')).toBeTruthy();
+    const editBtn = container.querySelector('[data-action="edit-voz"]');
+    expect(editBtn).toBeTruthy();
+    expect(editBtn.classList.contains('voz-view__edit-cta')).toBe(true);
+    expect(container.querySelector('.voz-view__toolbar [data-action="edit-voz"]')).toBeNull();
+  });
+
+  it('no muestra botón Editar para no-admins', async () => {
+    const { isAdmin } = await import('../src/lib/authStore.js');
+    isAdmin.mockReturnValue(false);
+    await renderWeeklyWordView(container, SAMPLE_WORD);
+    expect(container.querySelector('[data-action="edit-voz"]')).toBeNull();
   });
 });

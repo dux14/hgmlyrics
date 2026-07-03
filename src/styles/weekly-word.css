@@ -41,6 +41,28 @@
   color: var(--liturgical-text, var(--color-text));
 }
 
+/* Píldora de tiempo litúrgico — punto de color + label, sobre el hero */
+.voz-view__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  background: color-mix(in srgb, var(--liturgical-bg, var(--color-bg)) 55%, transparent);
+  color: var(--liturgical-text, var(--color-text));
+  border-radius: 999px;
+  padding: 0.25em 0.75em;
+  margin-bottom: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.voz-view__pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--liturgical-accent, var(--color-brand));
+  flex: none;
+}
+
 .voz-view__eyebrow {
   font-size: 0.8rem;
   letter-spacing: 0.1em;
@@ -69,24 +91,11 @@
   font-size: 0.9rem;
 }
 
-/* Chip de color litúrgico — background/color via vars del hero */
-.voz-view__color-chip {
-  display: inline-block;
-  margin-top: 0.75rem;
-  background: var(--liturgical-accent, var(--color-brand));
-  color: var(--liturgical-bg, var(--color-bg));
-  border-radius: 999px;
-  padding: 0.2em 0.75em;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-/* ── Barra de acciones (tamaño letra + editar) ── */
+/* ── Barra de acciones (solo tamaño de letra, ghost, alineada a la derecha) ── */
 .voz-view__toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+  justify-content: flex-end;
   margin-bottom: 1.25rem;
 }
 
@@ -165,7 +174,7 @@
   /* intencional: sin reglas propias; hereda todo de .voz__prose */
 }
 
-/* ── Bloque de evangelio ── */
+/* ── Bloque de evangelio — <details>/<summary>, colapsado por defecto ── */
 .voz-view__gospel {
   margin-top: 2rem;
   padding-top: 1.5rem;
@@ -173,6 +182,8 @@
 }
 
 .voz-view__gospel-label {
+  display: list-item;
+  cursor: pointer;
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -194,6 +205,33 @@
   font-size: 0.7rem;
   color: var(--color-text-secondary);
   margin: 0;
+}
+
+/* ── Botón Editar (admin-only, ancho completo, ghost) ── */
+.voz-view__edit-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 2rem;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-full, 999px);
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast, 0.12s ease),
+    color var(--transition-fast, 0.12s ease);
+}
+
+.voz-view__edit-cta:hover {
+  border-color: color-mix(in srgb, var(--color-brand) 40%, transparent);
+  color: var(--color-text);
 }
 
 /* ── Estado de error de carga ── */

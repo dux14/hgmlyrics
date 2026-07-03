@@ -7,6 +7,7 @@ import { navigate } from '../router.js';
 import { isAdmin } from '../lib/authStore.js';
 import { splitVoiceover } from '../lib/voiceover.js';
 import { liturgicalPalette, coverGradient } from '../lib/liturgicalColor.js';
+import { voiceoverHero } from '../lib/voiceoverHero.js';
 import { escapeHtml } from '../lib/escape.js';
 import { icon } from '../lib/icons.js';
 import { renderAsyncRegion } from '../lib/renderAsync.js';
@@ -26,44 +27,6 @@ function getVozFontSize() {
 }
 
 /**
- * El título litúrgico del ordo suele traer la fecha y el color
- * ("14 Junio, Domingo. 11ª Sem. del Tiempo Ordinario, Verde"), redundantes con
- * la fecha formateada y el chip de color. Deja solo la descripción litúrgica.
- * @param {string|null|undefined} title
- * @returns {string}
- */
-function cleanLiturgicalTitle(title) {
-  if (!title) return '';
-  let t = String(title).trim();
-  // Quita el prefijo de fecha/día si lo hay: todo lo previo al primer ". "
-  // cuando ese prefijo contiene un número (la fecha).
-  const dotIdx = t.indexOf('. ');
-  if (dotIdx !== -1 && /\d/.test(t.slice(0, dotIdx))) {
-    t = t.slice(dotIdx + 2);
-  }
-  // Quita el color litúrgico al final (ya está en el chip).
-  return t.replace(/,\s*(verde|morado|blanco|rojo|rosa|rosáceo|púrpura|violeta)\s*$/i, '').trim();
-}
-
-/**
- * Formatea una fecha ISO (YYYY-MM-DD) como "15 de junio de 2026".
- * @param {string} isoDate
- * @returns {string}
- */
-function formatSundayDate(isoDate) {
-  if (!isoDate) return '';
-  // La columna es DATE pero la API puede devolver un timestamp ISO completo
-  // ("2026-06-14T00:00:00.000Z"); nos quedamos con la parte YYYY-MM-DD.
-  const [y, m, d] = String(isoDate).slice(0, 10).split('-').map(Number);
-  if (!y || !m || !d) return '';
-  return new Date(y, m - 1, d).toLocaleDateString('es', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-}
-
-/**
  * Renderiza la vista de detalle de una voz en off.
  * @param {HTMLElement} container
  * @param {object} word - Objeto weekly_word completo
@@ -72,8 +35,7 @@ export async function renderWeeklyWordView(container, word) {
   const palette = liturgicalPalette(word.liturgical_color);
   const gradient = coverGradient(palette);
   const { scripture, reflection } = splitVoiceover(word.voiceover_body, word.gospel_body);
-  const dateLabel = formatSundayDate(word.sunday_date);
-  const cleanTitle = cleanLiturgicalTitle(word.liturgical_title);
+  const { pillLabel, bigTitle, metaLine } = voiceoverHero(word);
   const fontSize = getVozFontSize();
 
   container.innerHTML = `
@@ -81,30 +43,29 @@ export async function renderWeeklyWordView(container, word) {
 
       <!-- Hero litúrgico — vars asignadas post-render via style.setProperty() -->
       <div class="voz-view__hero">
+        ${
+          pillLabel
+            ? `<span class="voz-view__pill"><span class="voz-view__pill-dot"></span>${escapeHtml(pillLabel)}</span>`
+            : ''
+        }
         <p class="voz-view__eyebrow">
           <span class="voz-view__eyebrow-inner">${icon('gospel', { size: 15 })} Palabra de la semana</span>
         </p>
         <h1 class="voz-view__title">
-          ${escapeHtml(word.gospel_ref)}
+          ${escapeHtml(bigTitle)}
         </h1>
         <p class="voz-view__meta">
-          ${escapeHtml(dateLabel)}${cleanTitle ? ` · ${escapeHtml(cleanTitle)}` : ''}
+          ${escapeHtml(metaLine)}
         </p>
-        ${word.liturgical_color ? `<span class="voz-view__color-chip">${escapeHtml(palette.label)}</span>` : ''}
       </div>
 
-      <!-- Barra de acciones: tamaño de letra (+ editar si admin) -->
+      <!-- Barra de acciones: tamaño de letra -->
       <div class="voz-view__toolbar">
         <div class="font-controls" role="group" aria-label="Tamaño de letra">
           <button class="font-controls__btn" id="voz-font-dec" aria-label="Reducir tamaño de letra">A−</button>
           <span class="font-controls__label" id="voz-font-label" aria-live="polite">${Math.round(fontSize * 100)}%</span>
           <button class="font-controls__btn" id="voz-font-inc" aria-label="Aumentar tamaño de letra">A+</button>
         </div>
-        ${
-          isAdmin()
-            ? `<button class="btn btn--secondary" data-action="edit-voz">${icon('pencil', { size: 16 })} Editar</button>`
-            : ''
-        }
       </div>
 
       <!-- Bloque Voz en off -->
@@ -136,15 +97,21 @@ export async function renderWeeklyWordView(container, word) {
       ${
         word.gospel_body
           ? `
-      <section class="voz-view__block voz-view__gospel" aria-label="Evangelio">
-        <p class="voz-view__gospel-label">
-          Evangelio · ${escapeHtml(word.gospel_ref)}
-        </p>
+      <details class="voz-view__block voz-view__gospel">
+        <summary class="voz-view__gospel-label">
+          Evangelio del día · ${escapeHtml(word.gospel_ref)}
+        </summary>
         <pre class="voz-view__gospel-body">${escapeHtml(word.gospel_body)}</pre>
         <p class="voz-view__gospel-footnote">
           Fuente: Ordo · snapshot · editable
         </p>
-      </section>`
+      </details>`
+          : ''
+      }
+
+      ${
+        isAdmin()
+          ? `<button class="btn voz-view__edit-cta" data-action="edit-voz">${icon('pencil', { size: 16 })} Editar voz en off</button>`
           : ''
       }
 

@@ -216,6 +216,7 @@ function renderEditor(container, listData, opts = {}) {
       state.step === STEPS.length - 1
         ? `${icon('check-circle', { size: 16 })} ${isNew ? 'Crear lista' : 'Guardar cambios'}`
         : 'Siguiente →';
+    nextBtn.classList.toggle('list-wizard__commit', state.step === STEPS.length - 1);
     if (state.step === 0) renderStep0(bodyEl);
     else if (state.step === 1) renderStep1(bodyEl);
     else renderStep2(bodyEl);

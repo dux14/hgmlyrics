@@ -808,3 +808,18 @@
   border-radius: var(--border-radius-full);
   padding: 2px 8px;
 }
+
+/* ── CTA decisivo (ultimo paso del asistente): ambar con glow ──
+   Especificidad (0,2,0) gana a .btn--primary (0,1,0) sin importar el orden de
+   carga de las hojas de estilo (lists.css se inyecta desde JS, no desde app.css). */
+.btn.list-wizard__commit {
+  background: var(--color-action);
+  color: var(--color-bg);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--color-action) 32%, transparent);
+}
+
+/* ── Boton Invitar: pill ghost neutro (paso de invitados, no compite con el ambar) ── */
+.list-detail__friend-result .btn--secondary {
+  border-radius: var(--border-radius-full);
+  padding: 7px 13px;
+}

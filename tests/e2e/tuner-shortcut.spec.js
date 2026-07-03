@@ -52,11 +52,10 @@ test.describe('Afinador — shortcut desde la voz activa (con flags)', () => {
     await tuneBtn.click();
     await expect(page).toHaveURL(new RegExp(`#/afinador\\?ref=.+&from=${SONG_V2_ID}`));
 
-    // El afinador arranca en modo Voz (tab seleccionado) y muestra el objetivo.
-    await expect(page.locator('.tuner-tabs__btn[data-mode="voice"]')).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    // El afinador arranca directo en modo Voz enfocado (salta el hub) y muestra
+    // el objetivo. Post-refactor hub+modo-enfocado: ya no hay tabs; el deep-link
+    // entra al modo, así que el hub no debe estar presente.
+    await expect(page.locator('.tuner-hub')).toHaveCount(0);
     await expect(page.locator('#tuner-objective')).toContainText('Objetivo:');
 
     // El botón "Volver a la canción" existe y regresa a la canción de origen.

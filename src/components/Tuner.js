@@ -40,18 +40,41 @@ import { buildWarmup } from '../lib/warmup.js';
 import { createExercise } from '../lib/exerciseEngine.js';
 import { get, set } from 'idb-keyval';
 import { createMetronome, TIME_SIGNATURES, DEFAULT_BPM } from '../lib/metronome.js';
+import { centsToBarPercent } from '../lib/tunerGauge.js';
 
 /** Formatea un valor de cents con signo explícito: "+5¢", "-3¢", "0¢". */
 const fmtCents = (c) => `${c > 0 ? '+' : ''}${c}¢`;
 
-const MODES = [
-  { id: 'guitar', label: `${icon('audio-lines', { size: 15 })} Guitarra` },
-  { id: 'voice', label: `${icon('mic', { size: 15 })} Voz` },
-  { id: 'song', label: `${icon('music', { size: 15 })} Canción` },
-  { id: 'range', label: `${icon('ruler', { size: 15 })} Rango` },
-  { id: 'calibrar', label: `${icon('settings', { size: 15 })} Calibrar` },
-  { id: 'entrenar', label: `${icon('activity', { size: 15 })} Entrenar` },
-  { id: 'metronomo', label: 'Metrónomo' },
+/** IDs de modo válidos (usados para validar `?mode=` y las tiles del hub). */
+const MODES = ['guitar', 'voice', 'song', 'range', 'calibrar', 'entrenar', 'metronomo'];
+
+/** Modos que necesitan micrófono activo apenas se entra a ellos (auto-start). */
+const MIC_MODES = new Set(['guitar', 'voice', 'song', 'range', 'entrenar']);
+
+/** Hub (Opción C): tiles agrupadas por bloque, tinte teal, one-liner corto. */
+const HUB_GROUPS = [
+  {
+    label: 'Afinar',
+    items: [
+      { id: 'guitar', iconKey: 'audio-lines', name: 'Guitarra', desc: 'Afina las 6 cuerdas en estándar E.' },
+      { id: 'voice', iconKey: 'mic', name: 'Voz', desc: 'Afina tu voz nota por nota.' },
+      { id: 'song', iconKey: 'music', name: 'Canción', desc: 'Afina contra el tono de una canción.' },
+    ],
+  },
+  {
+    label: 'Practicar',
+    items: [
+      { id: 'range', iconKey: 'ruler', name: 'Rango', desc: 'Mide tu nota más grave y más aguda.' },
+      { id: 'entrenar', iconKey: 'activity', name: 'Entrenar', desc: 'Ejercicios de escalas y calentamiento.' },
+      { id: 'metronomo', iconKey: 'timer', name: 'Metrónomo', desc: 'Practica manteniendo el tempo.' },
+    ],
+  },
+  {
+    label: 'Ajustes',
+    items: [
+      { id: 'calibrar', iconKey: 'settings', name: 'Calibrar', desc: 'Ajusta la referencia A4 de tu dispositivo.' },
+    ],
+  },
 ];
 
 const RANGE_STEP_MS = 10000;
@@ -73,48 +96,22 @@ function colorFromCents(cents) {
   return 'bad';
 }
 
-function clampCents(c) {
-  if (c === null || c === undefined) return 0;
-  return Math.max(-50, Math.min(50, c));
-}
-
 function renderGauge() {
-  // Semicircle arc: viewBox 0 0 200 110, center (100,100), radius 78.
-  // Zone arc endpoints precomputed from angle = 90 + cents*1.8 degrees:
-  //   ±50¢ = 180°/0°  → (22,100)/(178,100)
-  //   ±30¢ = 144°/36° → (37,54)/(163,54)
-  //   ±10¢ = 108°/72° → (76,26)/(124,26)
-  // Needle <line> points east (→) by default; CSS rotates via --gauge-angle.
-  // Default --gauge-angle = -90deg → needle points north = 0¢.
+  // Barra lineal horizontal (ancho completo). Zonas fijas sobre una escala
+  // 0..100% donde 0¢ = 50% (centro): ok=±10¢ (40–60%), warn=±10–30¢
+  // (20–40% / 60–80%), danger=>±30¢ (0–20% / 80–100%). El indicador se
+  // posiciona en runtime con centsToBarPercent() vía setNeedle().
   return `
     <div class="tuner-gauge" aria-hidden="true">
-      <svg class="tuner-gauge__svg" viewBox="0 0 200 110" xmlns="http://www.w3.org/2000/svg">
-        <!-- Background track (full semicircle) -->
-        <path class="tuner-gauge__arc tuner-gauge__arc--bg"
-          d="M 22 100 A 78 78 0 0 1 178 100" />
-        <!-- Danger zones (>±30¢) -->
-        <path class="tuner-gauge__arc tuner-gauge__arc--danger"
-          d="M 22 100 A 78 78 0 0 1 37 54" />
-        <path class="tuner-gauge__arc tuner-gauge__arc--danger"
-          d="M 163 54 A 78 78 0 0 1 178 100" />
-        <!-- Warn zones (±10–30¢) -->
-        <path class="tuner-gauge__arc tuner-gauge__arc--warn"
-          d="M 37 54 A 78 78 0 0 1 76 26" />
-        <path class="tuner-gauge__arc tuner-gauge__arc--warn"
-          d="M 124 26 A 78 78 0 0 1 163 54" />
-        <!-- OK zone (±10¢) -->
-        <path class="tuner-gauge__arc tuner-gauge__arc--ok"
-          d="M 76 26 A 78 78 0 0 1 124 26" />
-        <!-- Zero tick at 0¢ (top of arc) -->
-        <line class="tuner-gauge__zero" x1="100" y1="22" x2="100" y2="12" />
-        <!-- Needle (start = pivot, end = tip; rotated via CSS --gauge-angle) -->
-        <line id="tuner-needle"
-          class="tuner-gauge__needle-svg"
-          x1="100" y1="100" x2="172" y2="100"
-          data-status="" />
-        <!-- Pivot dot -->
-        <circle class="tuner-gauge__center" cx="100" cy="100" r="5" />
-      </svg>
+      <div class="tuner-gauge__track">
+        <div class="tuner-gauge__zone tuner-gauge__zone--danger tuner-gauge__zone--danger-left"></div>
+        <div class="tuner-gauge__zone tuner-gauge__zone--warn tuner-gauge__zone--warn-left"></div>
+        <div class="tuner-gauge__zone tuner-gauge__zone--ok"></div>
+        <div class="tuner-gauge__zone tuner-gauge__zone--warn tuner-gauge__zone--warn-right"></div>
+        <div class="tuner-gauge__zone tuner-gauge__zone--danger tuner-gauge__zone--danger-right"></div>
+        <div class="tuner-gauge__center-mark"></div>
+        <div id="tuner-needle" class="tuner-gauge__indicator" data-status="" style="left: 50%"></div>
+      </div>
       <div class="tuner-gauge__scale">
         <span>−50</span><span>−10</span><span>0</span><span>+10</span><span>+50</span>
       </div>
@@ -123,12 +120,10 @@ function renderGauge() {
 }
 
 function setNeedle(container, cents, statusClass) {
-  const needle = container.querySelector('#tuner-needle');
-  if (!needle) return;
-  // Map cents [-50..+50] to rotation angle: -50¢→-180deg, 0¢→-90deg, +50¢→0deg
-  const angle = clampCents(cents) * 1.8 - 90;
-  needle.style.setProperty('--gauge-angle', `${angle}deg`);
-  needle.dataset.status = statusClass || '';
+  const indicator = container.querySelector('#tuner-needle');
+  if (!indicator) return;
+  indicator.style.left = `${centsToBarPercent(cents)}%`;
+  indicator.dataset.status = statusClass || '';
 }
 
 function renderReadout(container, { label, hz, cents, sub }) {
@@ -439,6 +434,38 @@ function bodyPermissionGate(state) {
   `;
 }
 
+/* ─── Hub (landing agrupada) ─── */
+
+function renderHub() {
+  return `
+    <div class="tuner-hub">
+      ${HUB_GROUPS.map(
+        (group) => `
+          <section class="tuner-hub__group">
+            <h2 class="tuner-hub__label">${group.label}</h2>
+            <div class="tuner-hub__grid">
+              ${group.items
+                .map(
+                  (it) => `
+                    <button class="tuner-hub__tile" data-mode="${it.id}">
+                      <span class="tuner-hub__plate">${icon(it.iconKey, { size: 20 })}</span>
+                      <span class="tuner-hub__text">
+                        <span class="tuner-hub__name">${it.name}</span>
+                        <span class="tuner-hub__desc">${it.desc}</span>
+                      </span>
+                      ${icon('chevron-right', { size: 18, className: 'tuner-hub__arrow' })}
+                    </button>
+                  `,
+                )
+                .join('')}
+            </div>
+          </section>
+        `,
+      ).join('')}
+    </div>
+  `;
+}
+
 /* ─── Main ─── */
 
 /**
@@ -448,8 +475,11 @@ function bodyPermissionGate(state) {
 export async function renderTuner(container, opts = {}) {
   const params = parseQuery(opts.query);
   const target = parseTunerTarget(params);
-  const defaultMode = target.note ? 'voice' : 'guitar';
-  let mode = params.mode && MODES.some((m) => m.id === params.mode) ? params.mode : defaultMode;
+  // Sin ?mode= ni objetivo de canción: aterriza en el hub (mode = null).
+  // Con ?mode= válido o un objetivo de voz (shortcut desde canción): entra
+  // directo al modo enfocado, saltando el hub.
+  const defaultMode = target.note ? 'voice' : null;
+  let mode = params.mode && MODES.includes(params.mode) ? params.mode : defaultMode;
   const songId = params.songId || null;
 
   // Canonical (sharp-spelled) target so it matches frequencyToNote output,
@@ -550,41 +580,43 @@ export async function renderTuner(container, opts = {}) {
   container.innerHTML = `
     <div class="tuner-page fade-in">
       <header class="tuner-header">
-        ${
-          target.fromSongId
-            ? `<button class="btn btn--sm tuner-back" id="tuner-back">${icon('arrow-left', { size: 14 })} Volver a la canción</button>`
-            : ''
-        }
+        <div class="tuner-nav" id="tuner-nav"></div>
         <h1>Afinador <span class="badge--beta">BETA</span></h1>
         <p class="tuner-header__sub">El audio se procesa en tu dispositivo. No lo guardamos.</p>
       </header>
-
-      <nav class="tuner-tabs" role="tablist" id="tuner-tabs">
-        ${MODES.map(
-          (m) =>
-            `<button class="tuner-tabs__btn" role="tab" data-mode="${m.id}" aria-selected="${m.id === mode}">${m.label}</button>`,
-        ).join('')}
-      </nav>
 
       <div class="tuner-body" id="tuner-body"></div>
     </div>
   `;
 
-  const tabsEl = container.querySelector('#tuner-tabs');
+  const navEl = container.querySelector('#tuner-nav');
   const bodyEl = container.querySelector('#tuner-body');
 
-  const backBtn = container.querySelector('#tuner-back');
-  if (backBtn && target.fromSongId) {
-    backBtn.addEventListener('click', () => navigate('/song/' + target.fromSongId));
-  }
-
-  function paintTabs() {
-    for (const btn of tabsEl.querySelectorAll('button')) {
-      btn.setAttribute('aria-selected', btn.dataset.mode === mode ? 'true' : 'false');
-    }
+  // "Volver a la canción" es estático (no depende del modo enfocado ni del
+  // hub): se conserva visible mientras exista un origen `target.fromSongId`.
+  // "Volver" al hub solo aparece dentro de un modo enfocado (paintNav).
+  function paintNav() {
+    const backHub =
+      mode !== null
+        ? `<button class="btn btn--sm tuner-back" id="tuner-hub-back">${icon('arrow-left', { size: 14 })} Volver</button>`
+        : '';
+    const backSong = target.fromSongId
+      ? `<button class="btn btn--sm tuner-back" id="tuner-back">${icon('arrow-left', { size: 14 })} Volver a la canción</button>`
+      : '';
+    navEl.innerHTML = backHub + backSong;
+    navEl.querySelector('#tuner-hub-back')?.addEventListener('click', goToHub);
+    navEl
+      .querySelector('#tuner-back')
+      ?.addEventListener('click', () => navigate('/song/' + target.fromSongId));
   }
 
   function paintBody() {
+    if (mode === null) {
+      bodyEl.innerHTML = renderHub();
+      bindHub();
+      return;
+    }
+
     if (mode === 'metronomo') {
       bodyEl.innerHTML = bodyMetronomo({
         bpm: metronome ? metronome.getBpm() : DEFAULT_BPM,
@@ -1193,14 +1225,11 @@ export async function renderTuner(container, opts = {}) {
     detector.start();
   }
 
-  /* ─── tab clicks ─── */
+  /* ─── navegación hub ↔ modo enfocado ─── */
 
-  tabsEl.addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-mode]');
-    if (!btn) return;
-    const nextMode = btn.dataset.mode;
-    if (nextMode === mode) return;
-    mode = nextMode;
+  // Detiene/resetea todo lo que quedó en curso del modo que se abandona
+  // (mismo cleanup que antes vivía inline en el click de tabs).
+  function cleanupModeState() {
     stabilizer.reset();
     // Cancel any in-progress range timer when switching away.
     if (rangeTimerId !== null) {
@@ -1211,15 +1240,36 @@ export async function renderTuner(container, opts = {}) {
     // corta el tono que pudiera estar sonando.
     capturePitch = null;
     calPlayer.stop();
-    // Resetea el estado de entrenar al cambiar de pestaña.
+    // Resetea el estado de entrenar al cambiar de modo.
     exercise = null;
     exerciseDone = false;
     tonePlayer.stop();
     if (metronome) metronome.stop();
     stopMetroVisual();
-    paintTabs();
+  }
+
+  function switchMode(nextMode) {
+    if (nextMode === mode) return;
+    cleanupModeState();
+    mode = nextMode;
+    paintNav();
     paintBody();
-  });
+    if (MIC_MODES.has(mode)) attemptAutoStartMic();
+  }
+
+  function goToHub() {
+    if (mode === null) return;
+    cleanupModeState();
+    mode = null;
+    paintNav();
+    paintBody();
+  }
+
+  function bindHub() {
+    bodyEl.querySelectorAll('.tuner-hub__tile').forEach((btn) => {
+      btn.addEventListener('click', () => switchMode(btn.dataset.mode));
+    });
+  }
 
   /* ─── cleanup on route change ─── */
 
@@ -1245,18 +1295,26 @@ export async function renderTuner(container, opts = {}) {
   };
   window.addEventListener('hashchange', cleanupOnHashChange);
 
-  paintTabs();
+  paintNav();
   paintBody();
 
   // Micrófono persistente: si el permiso ya está concedido, arrancar sin pedir
   // un tap. Salvedad iOS: si el AudioContext no resuelve sin gesto, el gate
   // sigue disponible como fallback. Sin Permissions API → gate normal.
-  try {
-    if (navigator.permissions?.query) {
-      const status = await navigator.permissions.query({ name: 'microphone' });
-      if (shouldAutoStartMic(status.state)) requestMic();
+  // Solo se intenta al montar si ya entramos directo a un modo enfocado que
+  // necesita mic (deep-link o shortcut desde canción); el hub nunca lo pide.
+  if (mode !== null && MIC_MODES.has(mode)) {
+    await attemptAutoStartMic();
+  }
+
+  async function attemptAutoStartMic() {
+    try {
+      if (navigator.permissions?.query) {
+        const status = await navigator.permissions.query({ name: 'microphone' });
+        if (shouldAutoStartMic(status.state)) requestMic();
+      }
+    } catch (_e) {
+      /* Permissions API no soporta 'microphone' (Safari antiguo): gate normal */
     }
-  } catch (_e) {
-    /* Permissions API no soporta 'microphone' (Safari antiguo): gate normal */
   }
 }

@@ -562,16 +562,14 @@
   outline: none;
   border-color: var(--color-brand);
 }
-.list-wizard__life-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.72rem;
-  color: var(--color-text-secondary);
-  margin-top: var(--space-xs);
-}
+.list-wizard__expiry { margin-top: var(--space-md); }
+.list-wizard__expiry-row { display: flex; align-items: baseline; justify-content: space-between; }
+.list-wizard__countdown { font-size: 1.05rem; font-weight: 700; color: var(--color-action); }
+.list-wizard__countdown.is-urgent { color: var(--color-danger); }
+.list-wizard__expiry-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-text-secondary); }
+.list-wizard__expiry-date { display: block; font-size: 0.82rem; color: var(--color-text-secondary); margin: 2px 0 10px; }
 .list-wizard__life {
-  height: 8px;
+  height: 6px;
   border-radius: var(--border-radius-full);
   background: var(--color-surface-hover);
   overflow: hidden;
@@ -582,8 +580,7 @@
   background: linear-gradient(90deg, var(--color-brand), var(--color-action));
   transition: width 0.25s ease;
 }
-/* Lifebar urgente — rojo peligro cuando caduca pronto */
-.list-wizard__body:has(.lists__expiry-chip--urgent) .list-wizard__life i {
+.list-wizard__life.is-urgent i {
   background: var(--color-danger);
 }
 .list-wizard__delete {

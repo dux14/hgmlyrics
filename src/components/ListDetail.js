@@ -263,26 +263,28 @@ function renderEditor(container, listData, opts = {}) {
 
   function renderStep0(el) {
     const lifeChip = expiresPreview();
+    const maxAttr = maxExpiresAt
+      ? (() => {
+          const d = new Date(maxExpiresAt);
+          const p = (x) => String(x).padStart(2, '0');
+          return `max="${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}"`;
+        })()
+      : '';
     el.innerHTML = `
+      <label class="list-wizard__label" for="list-detail-name">Nombre</label>
       <input class="list-detail__title-input" type="text" id="list-detail-name"
         value="${escapeHtml(draft.name)}" maxlength="80" placeholder="Nombre de la lista" aria-label="Nombre de la lista" />
       <label class="list-wizard__label" for="list-detail-datetime">Caduca el</label>
       <input class="list-wizard__datetime" type="datetime-local" id="list-detail-datetime"
-        value="${escapeHtml(draft.dateValue)}"
-        ${
-          maxExpiresAt
-            ? `max="${(() => {
-                const d = new Date(maxExpiresAt);
-                const p = (x) => String(x).padStart(2, '0');
-                return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-              })()}"`
-            : ''
-        } />
-      <div class="list-wizard__life-row">
-        <span>vida de la lista</span>
-        <span class="lists__expiry-chip ${lifeChip.urgent ? 'lists__expiry-chip--urgent' : ''}" id="list-detail-lifechip">${escapeHtml(lifeChip.text)}</span>
+        value="${escapeHtml(draft.dateValue)}" ${maxAttr} />
+      <div class="list-wizard__expiry">
+        <div class="list-wizard__expiry-row">
+          <span class="list-wizard__countdown ${lifeChip.urgent ? 'is-urgent' : ''}" id="list-detail-lifechip">${escapeHtml(lifeChip.text)}</span>
+          <span class="list-wizard__expiry-label">Vida de la lista</span>
+        </div>
+        <span class="list-wizard__expiry-date" id="list-detail-expdate">${escapeHtml(lifeChip.absolute)}</span>
+        <div class="list-wizard__life ${lifeChip.urgent ? 'is-urgent' : ''}"><i id="list-detail-lifebar" style="width:${lifeChip.pct}%"></i></div>
       </div>
-      <div class="list-wizard__life"><i id="list-detail-lifebar" style="width:${lifeChip.pct}%"></i></div>
       ${isNew ? '' : `<button class="btn btn--secondary list-wizard__delete" id="list-detail-delete" type="button">${icon('trash', { size: 14 })} Borrar lista</button>`}
     `;
     el.querySelector('#list-detail-name').addEventListener('input', (e) => {
@@ -306,22 +308,27 @@ function renderEditor(container, listData, opts = {}) {
         current: draft.expiresAt,
       });
     } catch {
-      return { text: 'fecha inválida', urgent: true, pct: 0 };
+      return { text: 'Fecha inválida', absolute: '', urgent: true, pct: 0 };
     }
     const days = Math.max(0, Math.round((new Date(iso) - Date.now()) / 86400000));
     const pct = Math.min(100, Math.round((days / 30) * 100));
-    return { text: formatExpiry(iso) || 'caduca hoy', urgent: isUrgent(iso), pct };
+    const absolute = new Date(iso).toLocaleString('es', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return { text: formatExpiry(iso) || 'Caduca hoy', absolute, urgent: isUrgent(iso), pct };
   }
 
   function updateLife(el) {
     const p = expiresPreview();
     const chip = el.querySelector('#list-detail-lifechip');
     const bar = el.querySelector('#list-detail-lifebar');
+    const expdate = el.querySelector('#list-detail-expdate');
+    const lifeEl = el.querySelector('.list-wizard__life');
     if (chip) {
       chip.textContent = p.text;
-      chip.classList.toggle('lists__expiry-chip--urgent', p.urgent);
+      chip.classList.toggle('is-urgent', p.urgent);
     }
+    if (expdate) expdate.textContent = p.absolute;
     if (bar) bar.style.width = `${p.pct}%`;
+    if (lifeEl) lifeEl.classList.toggle('is-urgent', p.urgent);
   }
 
   async function onDelete() {

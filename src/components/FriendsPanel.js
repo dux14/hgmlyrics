@@ -76,9 +76,10 @@ export function buildTabs(activeTab, incomingCount) {
   `;
 }
 
-export function buildFriendItem(item, viewerId, kind) {
+/** Normaliza un item de friendship al "otro" usuario respecto al viewer. */
+export function normalizeOther(item, viewerId) {
   const otherIsRequester = item.requesterId !== viewerId;
-  const other = otherIsRequester
+  return otherIsRequester
     ? {
         id: item.requesterId,
         username: item.requesterUsername,
@@ -91,6 +92,10 @@ export function buildFriendItem(item, viewerId, kind) {
         displayName: item.addresseeDisplayName,
         avatarUrl: item.addresseeAvatarUrl,
       };
+}
+
+export function buildFriendItem(item, viewerId, kind) {
+  const other = normalizeOther(item, viewerId);
   const initial = (other.displayName || other.username || '?').trim().charAt(0).toUpperCase();
   const crown = isFounder(other.username) ? founderCrownHtml() : '';
   const avatarInner = other.avatarUrl

@@ -29,7 +29,9 @@
 /* ── Zona superior: ambient blob + avatar + identidad ── */
 .pf-top {
   position: relative;
-  padding: 22px 16px 4px;
+  /* Sin padding lateral propio: el gutter unico lo da .main__content (--space-md).
+     El difuminado (.pf-amb) sangra -space-md para llegar al borde. */
+  padding: 22px 0 4px;
   text-align: center;
 }
 
@@ -155,7 +157,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  margin: 16px 16px 0;
+  margin: 16px 0 0;
   padding: 13px;
   border-radius: 14px;
   background: var(--color-primary);
@@ -173,7 +175,7 @@
 
 /* ── Tarjetas de datos (rango / instrumentos) ── */
 .pf-card {
-  margin: 14px 16px 0;
+  margin: 14px 0 0;
   border: 1px solid var(--color-border);
   border-radius: 16px;
   background: var(--color-surface);
@@ -279,12 +281,12 @@
   letter-spacing: 1.5px;
   text-transform: uppercase;
   color: var(--color-text-secondary);
-  margin: 22px 16px 2px;
+  margin: 22px 0 2px;
 }
 
 /* ── Filas de acceso (Amigos / Favoritos / Admin / Cerrar sesión) ── */
 .pf-acc {
-  padding: 8px 16px 0;
+  padding: 8px 0 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -371,7 +373,7 @@
 
 /* ── Fila de licencias y créditos ── */
 .pf-lic {
-  margin: 16px 16px 20px;
+  margin: 16px 0 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -395,7 +397,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 14px 16px 10px;
+  /* Sin padding lateral propio: gutter unico de .main__content (--space-md). */
+  padding: 14px 0 10px;
 }
 
 .pf-bk {
@@ -441,7 +444,7 @@
   display: flex;
   align-items: center;
   gap: 13px;
-  padding: 6px 16px 2px;
+  padding: 6px 0 2px;
 }
 
 .pf-av-lg {
@@ -508,14 +511,14 @@
 .pf-av-note {
   font-size: 11px;
   color: var(--color-text-secondary);
-  padding: 6px 16px 0;
+  padding: 6px 0 0;
   margin: 0;
   line-height: 1.4;
 }
 
 /* ── Formulario de edición ── */
 .pf-form {
-  padding: 6px 16px 0;
+  padding: 6px 0 0;
   display: flex;
   flex-direction: column;
   gap: 13px;
@@ -690,6 +693,10 @@ select.pf-inp {
 
 /* ── Barra de acción fija ── */
 .pf-actbar {
+  /* Barra sticky a sangre completa: cancela el gutter con margin negativo para
+     que el panel difuminado llegue al borde, y conserva 16px internos para que
+     los botones queden alineados al gutter unico (sin doblar el margen). */
+  margin: 0 calc(-1 * var(--space-md));
   padding: 11px 16px calc(13px + env(safe-area-inset-bottom));
   background: color-mix(in srgb, var(--color-bg) 82%, transparent);
   backdrop-filter: blur(14px);

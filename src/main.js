@@ -29,6 +29,7 @@ import { renderHeader, hideHeader, showHeader } from './components/Header.js';
 import { renderSidebar, updateSidebarContent } from './components/Sidebar.js';
 import { renderFilterBar, updateFilterBar, hideFilterBar } from './components/FilterBar.js';
 import { renderSongListSkeleton } from './components/SongList.js';
+import { skelLongText } from './lib/skeleton.js';
 import { renderSongView } from './components/SongView.js';
 import { renderSongEditor } from './components/SongEditor.js';
 import { renderAdminDashboard, renderAdminEditList } from './components/AdminDashboard.js';
@@ -45,6 +46,16 @@ initTheme();
 
 /** @type {HTMLElement} */
 let mainContent;
+
+/**
+ * Skeleton neutro instantáneo para rutas con import() diferido. Se pinta de
+ * forma síncrona ANTES de esperar el chunk para que la navegación no deje la
+ * pantalla anterior visible bajo la URL ya cambiada (el módulo repinta su
+ * propio shell al resolver el import).
+ */
+function showPageSkeleton() {
+  if (mainContent) mainContent.innerHTML = skelLongText();
+}
 
 /**
  * Carga weekly_words publicadas para incluirlas en el índice de búsqueda.
@@ -137,6 +148,11 @@ async function boot() {
       (...args) => {
         document.body.classList.remove('auth-route');
         document.querySelector('.main')?.classList.remove('main--bleed');
+        // Rutas con carga diferida (handler async → await import): pinta un
+        // skeleton al instante para que la pantalla anterior no quede visible
+        // bajo la URL nueva mientras se resuelve el chunk. Las síncronas ya
+        // pintan su propio shell de inmediato, así que no lo necesitan.
+        if (cb.constructor.name === 'AsyncFunction') showPageSkeleton();
         return cb(...args);
       },
       opts,
@@ -198,6 +214,7 @@ async function boot() {
   route('/song/:id/links', async ({ params }) => {
     hideFilterBar();
     document.body.classList.remove('auth-route');
+    showPageSkeleton();
     const { renderSongLinks } = await import('./components/SongLinks.js');
     renderSongLinks(mainContent, params.id);
   });

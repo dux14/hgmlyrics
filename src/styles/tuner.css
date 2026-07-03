@@ -427,15 +427,6 @@
     animation: none;
     transform: rotate(0deg);
   }
-
-  .tuner-back__icon {
-    transition: none;
-  }
-
-  .tuner-back:hover .tuner-back__icon,
-  .tuner-back:active {
-    transform: none;
-  }
 }
 
 .tuner-hint {
@@ -445,46 +436,8 @@
   margin: 0;
 }
 
-/* === Botón Volver (píldora clickeable con icono que se desliza) ===
-   Espaciado al h1 lo aporta el contenedor .tuner-nav (evita doble margen
-   cuando hay dos botones — Volver al hub + Volver a la canción). */
-.tuner-back {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2xs);
-  min-height: 44px;
-  padding: 0 var(--space-md) 0 var(--space-sm);
-  border-radius: var(--border-radius-full);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-  font: inherit;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-  transition:
-    background-color 150ms ease,
-    border-color 150ms ease,
-    transform 120ms ease;
-}
-
-.tuner-back:hover {
-  background: var(--color-surface-hover);
-  border-color: color-mix(in srgb, var(--color-teal-400) 50%, transparent);
-}
-
-.tuner-back:active {
-  transform: scale(0.96);
-}
-
-.tuner-back__icon {
-  display: inline-flex;
-  transition: transform 180ms ease;
-}
-
-.tuner-back:hover .tuner-back__icon {
-  transform: translateX(-3px);
-}
+/* El botón "Volver" del afinador usa la píldora compartida `.btn--back`
+   (definida en admin.css). El espaciado al h1 lo aporta `.tuner-nav`. */
 
 .tuner-objective {
   text-align: center;

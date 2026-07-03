@@ -631,10 +631,7 @@ export async function renderTuner(container, opts = {}) {
   // hub): se conserva visible mientras exista un origen `target.fromSongId`.
   // "Volver" al hub solo aparece dentro de un modo enfocado (paintNav).
   const backButton = (id, label) =>
-    `<button type="button" class="tuner-back" id="${id}">
-       <span class="tuner-back__icon">${icon('chevron-left', { size: 18 })}</span>
-       <span class="tuner-back__label">${label}</span>
-     </button>`;
+    `<button type="button" class="btn btn--back" id="${id}">${icon('arrow-left', { size: 16 })} ${label}</button>`;
 
   function paintNav() {
     const backHub = mode !== null ? backButton('tuner-hub-back', 'Volver') : '';

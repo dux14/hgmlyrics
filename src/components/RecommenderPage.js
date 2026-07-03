@@ -23,11 +23,13 @@ export function renderRecommenderPage(container) {
         Estamos construyendo esto. Pronto te sugeriremos canciones según lo que
         cantas y tus favoritos.
       </p>
-      <button class="btn btn--secondary recommender-page__cta" id="recommender-home">
+      <button class="btn btn--back recommender-page__cta" id="recommender-home">
         ${icon('arrow-left', { size: 16 })}
-        Volver al inicio
+        Volver a herramientas
       </button>
     </div>
   `;
-  container.querySelector('#recommender-home')?.addEventListener('click', () => navigate('/'));
+  container
+    .querySelector('#recommender-home')
+    ?.addEventListener('click', () => navigate('/herramientas'));
 }

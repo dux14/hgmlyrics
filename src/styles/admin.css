@@ -5,6 +5,10 @@
 
 /* === Botones base (usados en todas las superficies admin) === */
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
   padding: var(--space-sm) var(--space-xl);
   border-radius: var(--border-radius-md);
   font-size: var(--font-size-base);
@@ -18,6 +22,48 @@
 
 .btn:hover {
   transform: translateY(-1px);
+}
+
+/* === Botón "Volver" compartido (píldora con icono que se desliza) ===
+   Reutilizable en cualquier pantalla que necesite volver a la página previa
+   (afinador → hub, recomendador → herramientas, etc.). */
+.btn--back {
+  gap: var(--space-2xs);
+  min-height: 44px;
+  padding: 0 var(--space-md) 0 var(--space-sm);
+  border-radius: var(--border-radius-full);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+}
+
+.btn--back:hover {
+  background: var(--color-surface-hover);
+  border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+}
+
+.btn--back:active {
+  transform: scale(0.96);
+}
+
+/* El icono se desliza hacia atrás al pasar el mouse (refuerza el "volver"). */
+.btn--back svg {
+  transition: transform 180ms ease;
+}
+
+.btn--back:hover svg {
+  transform: translateX(-3px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn--back svg {
+    transition: none;
+  }
+  .btn--back:hover svg,
+  .btn--back:active {
+    transform: none;
+  }
 }
 
 .btn--primary {

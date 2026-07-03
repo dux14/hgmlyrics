@@ -28,6 +28,15 @@
   text-align: center;
 }
 
+.voz-album__hero-kicker {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
 .voz-album__hero-icon {
   display: flex;
   justify-content: center;
@@ -93,7 +102,7 @@
   min-width: 0;
 }
 
-.voz-album__gospel-ref {
+.voz-album__m-title {
   font-weight: 600;
   font-size: 0.95rem;
   white-space: nowrap;
@@ -101,10 +110,13 @@
   text-overflow: ellipsis;
 }
 
-.voz-album__date {
+.voz-album__m-sub {
   font-size: 0.8rem;
   color: var(--color-text-secondary);
   margin-top: 0.125rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Badge VIGENTE: fondo devocional (oro), sin hex suelto */
@@ -142,7 +154,9 @@
   color: var(--color-text-secondary);
   cursor: pointer;
 }
-.voz-album__edit:hover { color: var(--color-text); }
+.voz-album__edit:hover {
+  color: var(--color-text);
+}
 
 /* Reduced-motion */
 @media (prefers-reduced-motion: reduce) {

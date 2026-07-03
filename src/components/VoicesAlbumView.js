@@ -11,6 +11,7 @@ import { supabase } from '../lib/supabase.js';
 import { icon } from '../lib/icons.js';
 import { renderAsyncRegion } from '../lib/renderAsync.js';
 import { skelTracklist } from '../lib/skeleton.js';
+import { voiceoverHero } from '../lib/voiceoverHero.js';
 
 /**
  * Dado un sunday_date (YYYY-MM-DD), ¿es la del domingo más reciente (≤ hoy)?
@@ -92,19 +93,22 @@ export async function renderVoicesAlbumView(container) {
     const today = new Date().toISOString().slice(0, 10);
     const vigenteId = words.find((w) => isVigente(w.sunday_date, today))?.id ?? null;
 
-    // Colorea el hero con la paleta litúrgica de la voz más reciente (como en
-    // master) y devuelve el meta + botón de crear a su lugar dentro del banner.
+    // Colorea el hero con la paleta litúrgica de la voz vigente (si no hay
+    // vigente, cae a la primera) y devuelve el meta + botón de crear a su
+    // lugar dentro del banner.
     const hero = container.querySelector('.voz-album__hero');
     if (hero) {
-      const pal = liturgicalPalette(words[0]?.liturgical_color);
+      const vigenteWord = words.find((w) => w.id === vigenteId) ?? words[0];
+      const pal = liturgicalPalette(vigenteWord?.liturgical_color);
       hero.style.setProperty('--liturgical-gradient', coverGradient(pal));
       hero.style.setProperty('--liturgical-accent', pal.accent);
       hero.style.setProperty('--liturgical-text', pal.text);
       hero.innerHTML = `
+        <p class="voz-album__hero-kicker">Palabra de la semana</p>
         <div class="voz-album__hero-icon">${icon('gospel', { size: 48 })}</div>
         <h1 class="voz-album__hero-title">Voces en off</h1>
         <p class="voz-album__hero-meta">${words.length} entrada${words.length !== 1 ? 's' : ''}</p>
-        ${isAdmin() ? `<button class="btn btn--sm" id="voz-create-btn">+ Nueva voz en off</button>` : ''}
+        ${isAdmin() ? `<button class="btn btn--primary btn--sm" id="voz-create-btn">+ Nueva voz en off</button>` : ''}
       `;
     }
 
@@ -113,12 +117,14 @@ export async function renderVoicesAlbumView(container) {
         ${words
           .map((w) => {
             const isVig = w.id === vigenteId;
+            const title = voiceoverHero(w).bigTitle || w.gospel_ref;
+            const sub = [formatShortDate(w.sunday_date), w.gospel_ref].filter(Boolean).join(' · ');
             return `
           <li class="voz-album__item" data-voz-id="${escapeHtml(w.id)}">
             <div class="voz-album__cover">${icon('gospel', { size: 26 })}</div>
             <div class="voz-album__meta">
-              <div class="voz-album__gospel-ref">${escapeHtml(w.gospel_ref)}</div>
-              <div class="voz-album__date">${escapeHtml(formatShortDate(w.sunday_date))}</div>
+              <div class="voz-album__m-title">${escapeHtml(title)}</div>
+              <div class="voz-album__m-sub">${escapeHtml(sub)}</div>
             </div>
             ${isVig ? `<span class="voz-album__badge--vigente">VIGENTE</span>` : ''}
             ${isAdmin() ? `<button class="voz-album__edit" data-edit-voz="${escapeHtml(w.id)}" aria-label="Editar voz en off">${icon('pencil', { size: 18 })}</button>` : ''}

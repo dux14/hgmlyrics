@@ -255,7 +255,7 @@
 .list-detail__songs {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 /* El atributo [hidden] del user-agent (display:none) pierde contra display:flex
@@ -316,7 +316,7 @@
   gap: var(--space-sm);
   padding: var(--space-sm);
   border-radius: var(--border-radius-md);
-  background: var(--color-surface-hover);
+  background: transparent;
 }
 
 .song-row-compact__index {
@@ -374,7 +374,7 @@
 }
 
 .song-row-compact--clickable:hover {
-  background: color-mix(in srgb, var(--color-action) 10%, var(--color-surface-hover));
+  background: var(--color-surface-hover);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -419,6 +419,10 @@
   border-radius: var(--border-radius-md);
 }
 
+.list-detail__friend-result:hover {
+  background: var(--color-surface-hover);
+}
+
 .list-detail__friend-result-avatar {
   width: 36px;
   height: 36px;
@@ -458,6 +462,10 @@
   gap: var(--space-sm);
   padding: var(--space-xs) var(--space-sm);
   border-radius: var(--border-radius-md);
+  background: transparent;
+}
+
+.list-detail__invitee-row:hover {
   background: var(--color-surface-hover);
 }
 
@@ -648,8 +656,8 @@
 .song-row-compact.is-dragging {
   position: relative;
   z-index: 5;
-  background: var(--color-bg);
-  border: 1.5px solid var(--color-action);
+  background: var(--color-surface);
+  border: 0;
   box-shadow: 0 12px 28px var(--color-shadow);
   cursor: grabbing;
 }
@@ -720,15 +728,25 @@
   background: var(--color-brand);
   color: #fff;
 }
+.list-detail__children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .list-detail__child {
   display: flex;
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-md);
-  margin: var(--space-sm) 0;
+  margin: 0;
   border-radius: var(--border-radius-md);
-  background: var(--color-surface);
+  background: transparent;
   cursor: pointer;
+}
+
+.list-detail__child:hover {
+  background: var(--color-surface-hover);
 }
 .list-detail__child-name {
   font-weight: var(--font-weight-bold);
@@ -763,4 +781,16 @@
 }
 .list-detail__empty-state svg {
   opacity: 0.4;
+}
+
+/* ── Badge "Voz en off" como pill de contorno (scoped: no afecta otras pantallas) ── */
+.list-detail__songs .voice-badge--voz {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-brand);
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--color-brand) 40%, transparent);
+  border-radius: var(--border-radius-full);
+  padding: 2px 8px;
 }

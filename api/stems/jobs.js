@@ -84,11 +84,24 @@ export default withErrors(async (req, res) => {
 
   const safe = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80);
   const cleanTitle = sanitizeTitle(title, filename);
-  const rows = await sql`
-    INSERT INTO stem_jobs (user_id, status, input_meta)
-    VALUES (${user.id}, 'created', ${sql.json({ filename: safe, title: cleanTitle, size, mime })})
-    RETURNING id, status, created_at
-  `;
+  let rows;
+  try {
+    rows = await sql`
+      INSERT INTO stem_jobs (user_id, status, input_meta)
+      VALUES (${user.id}, 'created', ${sql.json({ filename: safe, title: cleanTitle, size, mime })})
+      RETURNING id, status, created_at
+    `;
+  } catch (err) {
+    // Fix 1 (TOCTOU de cuota): el índice único parcial stem_jobs_one_active_per_user
+    // rechaza el INSERT si ya hay un job activo para este usuario (dos POST /jobs casi
+    // simultáneos pasaron el check de arriba antes de que ninguno insertara). El
+    // perdedor de la carrera recibe el mismo error que el path de cuota, no un 500.
+    if (err?.code === '23505') {
+      res.status(429).json({ error: 'quota', reason: 'quota' });
+      return;
+    }
+    throw err;
+  }
   const job = rows[0];
   const inputPath = `${user.id}/${job.id}/input/${safe}`;
   await sql`UPDATE stem_jobs SET input_path = ${inputPath}, updated_at = now() WHERE id = ${job.id}`;

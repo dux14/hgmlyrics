@@ -138,9 +138,21 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
     expect(mockInvokeModalPipeline).not.toHaveBeenCalled();
   });
 
+  it('Fix 1: 409 y no invoca Modal si el UPDATE atómico pierde la carrera (0 filas afectadas)', async () => {
+    // SELECT ve el job todavía como 'created' (pasó el check temprano), pero otro
+    // /start concurrente ya lo reclamó antes del UPDATE: WHERE status='created' no
+    // afecta ninguna fila. No debe re-consultar cuota ni invocar Modal.
+    sqlResponses.push([jobCreated()]); // SELECT
+    sqlResponses.push([]); // UPDATE ... WHERE status='created' RETURNING id → 0 filas
+    const res = makeRes();
+    await handler(authedReq(), res);
+    expect(res.statusCode).toBe(409);
+    expect(mockInvokeModalPipeline).not.toHaveBeenCalled();
+  });
+
   it('actualiza el job a status=processing con sections inicializadas (gender ON por defecto)', async () => {
     sqlResponses.push([jobCreated()]); // SELECT job
-    sqlResponses.push([]); // UPDATE job
+    sqlResponses.push([{ id: 'job1' }]); // UPDATE job (RETURNING id, Fix 1)
 
     const res = makeRes();
     await handler(authedReq(), res);
@@ -173,7 +185,7 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
   it('con STUDIO_GENDER_FLAG=off excluye gender de enabledSections', async () => {
     process.env.STUDIO_GENDER_FLAG = 'off';
     sqlResponses.push([jobCreated()]);
-    sqlResponses.push([]);
+    sqlResponses.push([{ id: 'job1' }]); // UPDATE processing con RETURNING id (Fix 1)
 
     const res = makeRes();
     await handler(authedReq(), res);
@@ -194,7 +206,7 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
 
   it('usa sql.array() para serializar enabled_sections en el UPDATE de processing', async () => {
     sqlResponses.push([jobCreated()]);
-    sqlResponses.push([]);
+    sqlResponses.push([{ id: 'job1' }]); // UPDATE processing con RETURNING id (Fix 1)
 
     await handler(authedReq(), makeRes());
 
@@ -220,7 +232,7 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
 
   it('invoca invokeModalPipeline una sola vez con run_pipeline y payload correcto', async () => {
     sqlResponses.push([jobCreated()]);
-    sqlResponses.push([]);
+    sqlResponses.push([{ id: 'job1' }]); // UPDATE processing con RETURNING id (Fix 1)
 
     await handler(authedReq(), makeRes());
 
@@ -240,7 +252,7 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
 
   it('payload.uploads.voiceInstrumental tiene las 7 pistas firmadas', async () => {
     sqlResponses.push([jobCreated()]);
-    sqlResponses.push([]);
+    sqlResponses.push([{ id: 'job1' }]); // UPDATE processing con RETURNING id (Fix 1)
 
     await handler(authedReq(), makeRes());
 
@@ -258,7 +270,7 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
 
   it('payload.uploads.leadBacking tiene lead y backing', async () => {
     sqlResponses.push([jobCreated()]);
-    sqlResponses.push([]);
+    sqlResponses.push([{ id: 'job1' }]); // UPDATE processing con RETURNING id (Fix 1)
 
     await handler(authedReq(), makeRes());
 
@@ -269,7 +281,7 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
 
   it('structure no tiene uploads (no genera audio)', async () => {
     sqlResponses.push([jobCreated()]);
-    sqlResponses.push([]);
+    sqlResponses.push([{ id: 'job1' }]); // UPDATE processing con RETURNING id (Fix 1)
 
     await handler(authedReq(), makeRes());
 
@@ -281,7 +293,7 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
   it('payload.uploads.gender tiene estructura anidada { chorus:{male,female}, aufr33:{male,female} }', async () => {
     // gender habilitado por defecto (sin STUDIO_GENDER_FLAG=off)
     sqlResponses.push([jobCreated()]);
-    sqlResponses.push([]);
+    sqlResponses.push([{ id: 'job1' }]); // UPDATE processing con RETURNING id (Fix 1)
 
     await handler(authedReq(), makeRes());
 
@@ -324,7 +336,7 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
 
   it('marca el job como failed y relanza si invokeModalPipeline rechaza', async () => {
     sqlResponses.push([jobCreated()]); // SELECT
-    sqlResponses.push([]); // UPDATE a processing
+    sqlResponses.push([{ id: 'job1' }]); // UPDATE a processing (RETURNING id, Fix 1)
     sqlResponses.push([]); // UPDATE a failed
 
     const modalError = new Error('Modal 502: timeout');
@@ -362,7 +374,7 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
 
   it('toma enabledSections del body y marca el resto como skipped', async () => {
     sqlResponses.push([jobCreated()]); // SELECT
-    sqlResponses.push([]); // UPDATE
+    sqlResponses.push([{ id: 'job1' }]); // UPDATE (RETURNING id, Fix 1)
     const res = makeRes();
     await handler(authedReq({ body: { enabledSections: ['voiceInstrumental', 'structure'] } }), res);
 
@@ -393,7 +405,7 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
   it('gender pedido con STUDIO_GENDER_FLAG=off se elimina del set', async () => {
     process.env.STUDIO_GENDER_FLAG = 'off';
     sqlResponses.push([jobCreated()]);
-    sqlResponses.push([]);
+    sqlResponses.push([{ id: 'job1' }]); // UPDATE processing con RETURNING id (Fix 1)
     const res = makeRes();
     await handler(authedReq({ body: { enabledSections: ['voiceInstrumental', 'gender'] } }), res);
     expect(res.statusCode).toBe(200);

@@ -149,6 +149,16 @@ describe('POST /api/stems/webhook — validación payload', () => {
     );
     expect(res.statusCode).toBe(400);
   });
+
+  it('Fix 4: 400 si result.status no está en SECTION_STATUS (no toca la fila)', async () => {
+    setupSqlBegin({ sections: null }); // no debe ni llegar a leer el job
+    const res = makeRes();
+    await handler(
+      modalSectionReq({ jobId: 'j1', section: 'structure', result: { status: 'ESTADO_INVENTADO' } }),
+      res,
+    );
+    expect(res.statusCode).toBe(400);
+  });
 });
 
 describe('POST /api/stems/webhook — contrato per-sección DAG', () => {

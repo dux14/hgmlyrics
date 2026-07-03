@@ -25,7 +25,10 @@ function sqlMock(strings, ...values) {
     return strings;
   }
   sqlCalls.push({ text: strings.join('?'), values });
-  return Promise.resolve(sqlResponses.shift() ?? []);
+  const next = sqlResponses.shift() ?? [];
+  // Fix 1 TDD: permite encolar un rechazo (p.ej. violación 23505 del índice único).
+  if (next && next.__reject) return Promise.reject(next.__reject);
+  return Promise.resolve(next);
 }
 sqlMock.json = (v) => v;
 vi.mock('postgres', () => ({ default: () => sqlMock }));
@@ -174,6 +177,21 @@ describe('POST /api/stems/jobs', () => {
     const insertCall = sqlCalls.find((c) => c.text.includes('INSERT INTO stem_jobs'));
     const meta = insertCall.values.find((v) => v && typeof v === 'object' && 'filename' in v);
     expect(meta.title).toBe('colombia');
+  });
+
+  it('Fix 1: 429 (mismo shape que cuota) si el INSERT choca con el índice único (23505)', async () => {
+    sqlResponses.push([{ is_admin: false, studio_beta: true }]); // perfil beta
+    sqlResponses.push([]); // reclamo
+    sqlResponses.push([]); // sin job en proceso (el check TOCTOU no lo detecta)
+    sqlResponses.push([{ n: 0 }]); // cuota libre
+    const dupError = Object.assign(new Error('duplicate key value violates unique constraint'), {
+      code: '23505',
+    });
+    sqlResponses.push({ __reject: dupError }); // INSERT ... RETURNING → violación de unicidad
+    const res = makeRes();
+    await handler(authedReq(), res);
+    expect(res.statusCode).toBe(429);
+    expect(res.body).toEqual({ error: 'quota', reason: 'quota' });
   });
 
   it('crea el job y devuelve upload firmado', async () => {

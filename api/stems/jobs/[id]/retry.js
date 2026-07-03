@@ -40,6 +40,15 @@ export default withErrors(async (req, res) => {
     return;
   }
 
+  // Fix 2: tope de reintentos por sección — sin esto, retry es GPU gratis ilimitada.
+  const MAX_RETRIES = 3;
+  const currentRetries = job.sections?.[section]?.retries ?? 0;
+  if (currentRetries >= MAX_RETRIES) {
+    const e = new Error('Alcanzaste el máximo de reintentos para esta sección.');
+    e.status = 429;
+    throw e;
+  }
+
   // Re-firmar la URL de descarga del input para que Modal pueda leerlo.
   let inputGetUrl;
   try {
@@ -50,9 +59,15 @@ export default withErrors(async (req, res) => {
   }
 
   // Construir nuevas sections: copia superficial, solo la sección objetivo pasa a running.
+  // Fix 2: se incrementa `retries` en la misma escritura que dispara el reintento.
   const sections = {
     ...job.sections,
-    [section]: { ...job.sections[section], status: 'running', error: null },
+    [section]: {
+      ...job.sections[section],
+      status: 'running',
+      error: null,
+      retries: currentRetries + 1,
+    },
   };
 
   // Persistir estado de reinicio (processing). Si la sección venía skipped,

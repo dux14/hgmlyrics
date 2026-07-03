@@ -55,15 +55,25 @@ export default withErrors(async (req, res) => {
   const sections = initSections(enabledSections);
 
   // ── 2. Persistir estado inicial (processing) ────────────────────────────────
+  // Fix 1 (TOCTOU de cuota): transición atómica created -> processing. El WHERE
+  // status='created' + RETURNING hace que, si dos /start corren en paralelo para
+  // el mismo job, solo uno gane la fila; el perdedor recibe 0 filas y NO debe
+  // invocar Modal (evita disparar 2 jobs GPU). No se re-consulta con un SELECT
+  // aparte: eso reintroduciría el TOCTOU que este UPDATE atómico cierra.
   // Fix 1: usar sql.array() para serializar text[] correctamente en Postgres.
-  await sql`
+  const claimed = await sql`
     UPDATE stem_jobs
     SET status = 'processing',
         sections = ${sql.json(sections)},
         enabled_sections = ${sql.array(enabledSections)},
         updated_at = now()
     WHERE id = ${job.id} AND status = 'created'
+    RETURNING id
   `;
+  if (claimed.length === 0) {
+    res.status(409).json({ error: 'El job ya no se puede iniciar (ya está en proceso).' });
+    return;
+  }
 
   // ── 3. Pre-firmar URLs de upload (PUT) por sección y track ─────────────────
   // Fix 2: si algo falla aquí o en Modal, marcar el job como failed.

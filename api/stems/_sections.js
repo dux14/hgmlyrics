@@ -26,7 +26,8 @@ export const SECTION_OUTPUTS = {
 export function initSections(enabled) {
   const set = new Set(enabled);
   const mk = (key) => {
-    const base = { status: set.has(key) ? 'pending' : 'skipped', model: null, error: null };
+    // Fix 2: `retries` cuenta los reintentos manuales disparados vía /retry (tope MAX_RETRIES=3).
+    const base = { status: set.has(key) ? 'pending' : 'skipped', model: null, error: null, retries: 0 };
     // `structure` no lleva `enabled` ni `outputs`: solo postea segmentos (forma canónica del spec).
     if (key === 'structure') return { ...base, segments: [] };
     const outputs = Object.fromEntries(SECTION_OUTPUTS[key].map((k) => [k, null]));

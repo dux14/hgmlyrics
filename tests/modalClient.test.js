@@ -36,4 +36,15 @@ describe('verifyModalSignature', () => {
       verifyModalSignature({ timestamp: old, signature: sign(secret, old, body), body, secret }),
     ).toBe(false);
   });
+  it('Fix 3: rechaza timestamp no numérico en vez de fail-open (NaN > umbral es false)', () => {
+    const bogus = 'no-soy-un-numero';
+    expect(
+      verifyModalSignature({
+        timestamp: bogus,
+        signature: sign(secret, bogus, body),
+        body,
+        secret,
+      }),
+    ).toBe(false);
+  });
 });

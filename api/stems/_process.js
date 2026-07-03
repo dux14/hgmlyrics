@@ -2,7 +2,7 @@
  * _process.js — Avance del pipeline cuando una sección del DAG termina.
  * El pipeline v1 (separación de voces por modelo externo) fue eliminado en Task 0.7.
  */
-import { SECTION_KEYS, applySectionResult, deriveJobStatus } from './_sections.js';
+import { SECTION_KEYS, SECTION_STATUS, applySectionResult, deriveJobStatus } from './_sections.js';
 
 /**
  * Aplica el resultado de una sección al job en una transacción con row-lock (FOR UPDATE).
@@ -17,6 +17,14 @@ import { SECTION_KEYS, applySectionResult, deriveJobStatus } from './_sections.j
 export async function applySectionWebhook(sql, jobId, section, result) {
   if (!SECTION_KEYS.includes(section)) {
     const e = new Error(`Sección desconocida: ${section}`);
+    e.status = 400;
+    throw e;
+  }
+
+  // Fix 4: sin esto, applySectionResult asigna result.status tal cual, sin validar
+  // contra el enum — un status arbitrario del webhook quedaría persistido en DB.
+  if (!SECTION_STATUS.includes(result.status)) {
+    const e = new Error('status de sección no válido');
     e.status = 400;
     throw e;
   }

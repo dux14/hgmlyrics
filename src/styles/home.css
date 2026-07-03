@@ -183,7 +183,7 @@
   margin-bottom: 7px;
   background: transparent;
   border: none;
-  border-radius: 0;
+  border-radius: var(--border-radius-md);
   overflow: hidden;
   cursor: pointer;
   text-align: left;

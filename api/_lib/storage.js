@@ -134,11 +134,16 @@ export async function signStemsDownload(key, expiresIn = 21600) {
 export async function deleteStemsPrefix(prefix) {
   const toDelete = [];
   // El bucket anida input/ stems/ voices/: listar cada nivel conocido.
-  for (const sub of ['input', 'stems', 'voices']) {
-    const { data, error } = await supabase.storage.from(STEMS_BUCKET).list(`${prefix}/${sub}`);
-    if (error || !data) continue;
+  // Los 3 list() son independientes entre sí: se resuelven en paralelo.
+  const subs = ['input', 'stems', 'voices'];
+  const results = await Promise.all(
+    subs.map((sub) => supabase.storage.from(STEMS_BUCKET).list(`${prefix}/${sub}`)),
+  );
+  results.forEach(({ data, error }, i) => {
+    if (error || !data) return;
+    const sub = subs[i];
     for (const f of data) toDelete.push(`${prefix}/${sub}/${f.name}`);
-  }
+  });
   if (toDelete.length > 0) {
     await supabase.storage.from(STEMS_BUCKET).remove(toDelete);
   }

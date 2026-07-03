@@ -21,15 +21,19 @@ export default withErrors(async (req, res) => {
   const user = await requireUser(req);
 
   if (req.method === 'GET') {
-    const jobs = await sql`
-      SELECT id, status, input_meta, stems, voices, error, created_at, expires_at
-      FROM stem_jobs
-      WHERE user_id = ${user.id} AND status <> 'expired'
-        AND created_at > now() - interval '3 days'
-      ORDER BY created_at DESC
-    `;
-    const used = await quotaUsedToday(user.id);
-    const getProfileRows = await sql`SELECT is_admin FROM profiles WHERE id = ${user.id}`;
+    // jobs, quota usada y perfil son lecturas independientes (todas dependen
+    // solo de user.id, ya resuelto) → Promise.all.
+    const [jobs, used, getProfileRows] = await Promise.all([
+      sql`
+        SELECT id, status, input_meta, stems, voices, error, created_at, expires_at
+        FROM stem_jobs
+        WHERE user_id = ${user.id} AND status <> 'expired'
+          AND created_at > now() - interval '3 days'
+        ORDER BY created_at DESC
+      `,
+      quotaUsedToday(user.id),
+      sql`SELECT is_admin FROM profiles WHERE id = ${user.id}`,
+    ]);
     const isAdmin = getProfileRows[0]?.is_admin ?? false;
     const quota = isAdmin ? { used, limit: null, unlimited: true } : { used, limit: DAILY_QUOTA };
     res.status(200).json({ jobs, quota });

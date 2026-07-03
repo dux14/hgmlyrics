@@ -70,7 +70,17 @@ export default withErrors(async (req, res) => {
     throw e;
   }
 
-  const apiRes = await fetch(ORDO_API);
+  let apiRes;
+  try {
+    apiRes = await fetch(ORDO_API, { signal: AbortSignal.timeout(5000) });
+  } catch (err) {
+    if (err.name === 'AbortError' || err.name === 'TimeoutError') {
+      const e = new Error('El servicio externo no respondió a tiempo.');
+      e.status = 502;
+      throw e;
+    }
+    throw err;
+  }
   if (!apiRes.ok) {
     const e = new Error('Ordo no disponible');
     e.status = 502;

@@ -37,11 +37,25 @@ export async function invokeModalPipeline(payload) {
     e.status = 500;
     throw e;
   }
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-inbound-secret': secret },
-    body: JSON.stringify({ fn: 'run_pipeline', ...payload }),
-  });
+  // Fix 3: timeout < maxDuration de plataforma — si Modal no responde en 8s, fallar rápido
+  // con un 502 claro en vez de colgar la función hasta su límite (el caller marca el job
+  // failed y conserva su reintento existente).
+  let res;
+  try {
+    res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-inbound-secret': secret },
+      body: JSON.stringify({ fn: 'run_pipeline', ...payload }),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (err) {
+    const isTimeout = err?.name === 'AbortError' || err?.name === 'TimeoutError';
+    const e = new Error(
+      isTimeout ? 'Modal no respondió a tiempo.' : `No se pudo contactar a Modal: ${err.message}`,
+    );
+    e.status = 502;
+    throw e;
+  }
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
     const e = new Error(`Modal ${res.status}: ${detail.slice(0, 200)}`);

@@ -77,37 +77,45 @@ export default withErrors(async (req, res) => {
 
   // ── 3. Pre-firmar URLs de upload (PUT) por sección y track ─────────────────
   // Fix 2: si algo falla aquí o en Modal, marcar el job como failed.
+  // Perf: hasta 13 firmados independientes (PUT signing es HTTP suelto, sin pool) —
+  // se resuelven todos en paralelo con Promise.all, preservando la forma sección→track→url.
   try {
-    const uploads = {};
-    for (const section of enabledSections) {
-      // gender usa estructura anidada por modelo: { chorus: {male,female}, aufr33: {male,female} }
-      if (section === 'gender') {
-        const genderModels = ['chorus', 'aufr33'];
-        const genderTracks = ['male', 'female'];
-        const genderUrls = {};
-        for (const model of genderModels) {
-          genderUrls[model] = {};
-          for (const track of genderTracks) {
-            const key = `${user.id}/${job.id}/gender/${model}/${track}.mp3`;
-            genderUrls[model][track] = await createStemsSignedPutUrl(key);
+    const sectionEntries = await Promise.all(
+      enabledSections.map(async (section) => {
+        // gender usa estructura anidada por modelo: { chorus: {male,female}, aufr33: {male,female} }
+        if (section === 'gender') {
+          const genderModels = ['chorus', 'aufr33'];
+          const genderTracks = ['male', 'female'];
+          const signed = await Promise.all(
+            genderModels.flatMap((model) =>
+              genderTracks.map(async (track) => {
+                const key = `${user.id}/${job.id}/gender/${model}/${track}.mp3`;
+                return { model, track, url: await createStemsSignedPutUrl(key) };
+              }),
+            ),
+          );
+          const genderUrls = {};
+          for (const { model, track, url } of signed) {
+            genderUrls[model] = genderUrls[model] ?? {};
+            genderUrls[model][track] = url;
           }
+          return [section, genderUrls];
         }
-        uploads[section] = genderUrls;
-        continue;
-      }
-      const tracks = SECTION_OUTPUTS[section];
-      if (!tracks || tracks.length === 0) {
-        // structure: sin outputs de audio
-        uploads[section] = {};
-        continue;
-      }
-      const trackUrls = {};
-      for (const track of tracks) {
-        const key = `${user.id}/${job.id}/${section}/${track}.mp3`;
-        trackUrls[track] = await createStemsSignedPutUrl(key);
-      }
-      uploads[section] = trackUrls;
-    }
+        const tracks = SECTION_OUTPUTS[section];
+        if (!tracks || tracks.length === 0) {
+          // structure: sin outputs de audio
+          return [section, {}];
+        }
+        const trackEntries = await Promise.all(
+          tracks.map(async (track) => {
+            const key = `${user.id}/${job.id}/${section}/${track}.mp3`;
+            return [track, await createStemsSignedPutUrl(key)];
+          }),
+        );
+        return [section, Object.fromEntries(trackEntries)];
+      }),
+    );
+    const uploads = Object.fromEntries(sectionEntries);
 
     // ── 4. URL del webhook ──────────────────────────────────────────────────────
     const base =

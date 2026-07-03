@@ -125,4 +125,35 @@ describe('GET /api/stems/cleanup — auth fail-closed', () => {
       expiredLists: 0,
     });
   });
+
+  it('Promise.allSettled: un borrado que falla no aborta el resto del barrido ni el cron', async () => {
+    process.env.CRON_SECRET = 'supersecret';
+
+    // 2 jobs "expired": el primer deleteStemsPrefix rechaza, el segundo debe seguir corriendo.
+    sqlResponses.push([
+      { id: 'job1', user_id: 'u1' },
+      { id: 'job2', user_id: 'u2' },
+    ]); // expired
+    sqlResponses.push([]); // UPDATE expired job1
+    sqlResponses.push([]); // UPDATE expired job2
+    sqlResponses.push([]); // zombies
+    sqlResponses.push([]); // abandoned
+    sqlResponses.push([]); // orphanStorage
+    sqlResponses.push([]); // expiredLists
+
+    mockDeleteStemsPrefix
+      .mockReset()
+      .mockRejectedValueOnce(new Error('storage caído'))
+      .mockResolvedValue(undefined);
+
+    const res = makeRes();
+    await handler(makeReq({ headers: { authorization: 'Bearer supersecret' } }), res);
+
+    // El cron no debe abortar ni devolver 5xx por el fallo de un solo borrado.
+    expect(res.statusCode).toBe(200);
+    expect(mockDeleteStemsPrefix).toHaveBeenCalledTimes(2);
+    expect(mockDeleteStemsPrefix).toHaveBeenCalledWith('u1/job1');
+    expect(mockDeleteStemsPrefix).toHaveBeenCalledWith('u2/job2');
+    expect(res.body.expired).toBe(2);
+  });
 });

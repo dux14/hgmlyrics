@@ -22,8 +22,10 @@ export default withErrors(async (req, res) => {
     SELECT id, user_id FROM stem_jobs
     WHERE status = 'done' AND expires_at < now()
   `;
+  // Perf: el borrado de Storage de cada job es independiente — Promise.allSettled evita
+  // que un borrado fallido aborte el resto (y por ende el cron, maxDuration=60s).
+  await Promise.allSettled(expired.map((job) => deleteStemsPrefix(`${job.user_id}/${job.id}`)));
   for (const job of expired) {
-    await deleteStemsPrefix(`${job.user_id}/${job.id}`);
     await sql`
       UPDATE stem_jobs SET status = 'expired', stems = NULL, voices = NULL,
         input_path = NULL, updated_at = now()
@@ -40,9 +42,7 @@ export default withErrors(async (req, res) => {
       AND updated_at < now() - interval '30 minutes'
     RETURNING id, user_id
   `;
-  for (const job of zombies) {
-    await deleteStemsPrefix(`${job.user_id}/${job.id}`);
-  }
+  await Promise.allSettled(zombies.map((job) => deleteStemsPrefix(`${job.user_id}/${job.id}`)));
 
   // 3) Uploads abandonados: created/uploaded > 24h → failed + limpiar
   const abandoned = await sql`
@@ -50,9 +50,7 @@ export default withErrors(async (req, res) => {
     WHERE status IN ('created', 'uploaded') AND created_at < now() - interval '24 hours'
     RETURNING id, user_id
   `;
-  for (const job of abandoned) {
-    await deleteStemsPrefix(`${job.user_id}/${job.id}`);
-  }
+  await Promise.allSettled(abandoned.map((job) => deleteStemsPrefix(`${job.user_id}/${job.id}`)));
 
   // 4) Failed con storage huérfano: borrar archivos y limpiar paths (una sola vez).
   // Cubre los reclamados por POST /jobs, zombis y fallos del webhook: ninguno de esos
@@ -62,9 +60,9 @@ export default withErrors(async (req, res) => {
     WHERE status = 'failed' AND input_path IS NOT NULL
     RETURNING id, user_id
   `;
-  for (const job of orphanStorage) {
-    await deleteStemsPrefix(`${job.user_id}/${job.id}`);
-  }
+  await Promise.allSettled(
+    orphanStorage.map((job) => deleteStemsPrefix(`${job.user_id}/${job.id}`)),
+  );
 
   // Listas efímeras caducadas: borrar (cascadea a songs y members)
   const expiredLists = await sql`

@@ -14,6 +14,8 @@ export default [
         sessionStorage: 'readonly',
         location: 'readonly',
         fetch: 'readonly',
+        AbortSignal: 'readonly',
+        AbortController: 'readonly',
         caches: 'readonly',
         crypto: 'readonly',
         indexedDB: 'readonly',

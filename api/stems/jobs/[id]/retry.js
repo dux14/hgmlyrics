@@ -93,12 +93,14 @@ export default withErrors(async (req, res) => {
       // structure: no genera archivos de audio
       uploads = { [section]: {} };
     } else {
-      const trackUrls = {};
-      for (const track of tracks) {
-        const key = `${user.id}/${job.id}/${section}/${track}.mp3`;
-        trackUrls[track] = await createStemsSignedPutUrl(key);
-      }
-      uploads = { [section]: trackUrls };
+      // Perf: firmar las pistas de la sección en paralelo (Promise.all) en vez de secuencial.
+      const trackEntries = await Promise.all(
+        tracks.map(async (track) => {
+          const key = `${user.id}/${job.id}/${section}/${track}.mp3`;
+          return [track, await createStemsSignedPutUrl(key)];
+        }),
+      );
+      uploads = { [section]: Object.fromEntries(trackEntries) };
     }
 
     const base =

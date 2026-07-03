@@ -123,4 +123,37 @@ describe('PUT /api/songs/[id]/links — URL scheme validation', () => {
     await handler(req, res);
     expect(res._status).toBe(200);
   });
+
+  it('agrupa varios platforms/voices en un solo INSERT multi-fila por tabla (no uno por item)', async () => {
+    const req = makeReq({
+      platforms: [
+        { platform: 'youtube', url: 'https://youtube.com/a' },
+        { platform: 'spotify', url: 'https://spotify.com/a' },
+      ],
+      voices: [
+        { voiceType: 'soprano', url: 'https://example.com/s.mp3', label: 'Soprano' },
+        { voiceType: 'tenor', url: 'https://example.com/t.mp3', label: null },
+      ],
+    });
+    const res = makeRes();
+    await handler(req, res);
+    expect(res._status).toBe(200);
+
+    const taggedInsertCalls = mockTx.mock.calls.filter(
+      (args) =>
+        Array.isArray(args[0]) &&
+        args[0].raw &&
+        args[0].some((s) => typeof s === 'string' && s.includes('INSERT INTO')),
+    );
+    const platformInserts = taggedInsertCalls.filter((args) =>
+      args[0].some((s) => s.includes('song_platform_links')),
+    );
+    const voiceInserts = taggedInsertCalls.filter((args) =>
+      args[0].some((s) => s.includes('song_voice_links')),
+    );
+    // Antes había un INSERT por item (2 platforms → 2 llamadas); ahora una sola
+    // sentencia multi-fila por tabla, sin importar cuántos items traiga.
+    expect(platformInserts).toHaveLength(1);
+    expect(voiceInserts).toHaveLength(1);
+  });
 });

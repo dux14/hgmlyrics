@@ -21,23 +21,26 @@ async function withSignedUrls(job) {
   // Keys con prefijo ajeno (inyectadas vía webhook comprometido) no deben generar signed URL.
   const prefix = `${job.user_id}/${job.id}/`;
 
+  // Perf: este endpoint se hace polling durante el job — firmar en paralelo (Promise.all)
+  // en vez de secuencial. El filtro de prefijo corre ANTES del Promise.all, así que las
+  // keys ajenas siguen sin generar signed URL (mismo guard, ahora también más rápido).
   const sign = async (obj) => {
-    const out = {};
-    for (const [k, v] of Object.entries(obj)) {
-      if (typeof v === 'string' && v.startsWith(prefix)) out[k] = await signStemsDownload(v);
-    }
-    return out;
+    const entries = await Promise.all(
+      Object.entries(obj)
+        .filter(([, v]) => typeof v === 'string' && v.startsWith(prefix))
+        .map(async ([k, v]) => [k, await signStemsDownload(v)]),
+    );
+    return Object.fromEntries(entries);
   };
 
   // gender: outputs anidados { chorus: {male,female}, aufr33: {male,female} }
   const signNested = async (obj) => {
-    const out = {};
-    for (const [modelKey, tracks] of Object.entries(obj)) {
-      if (tracks && typeof tracks === 'object') {
-        out[modelKey] = await sign(tracks);
-      }
-    }
-    return out;
+    const entries = await Promise.all(
+      Object.entries(obj)
+        .filter(([, tracks]) => tracks && typeof tracks === 'object')
+        .map(async ([modelKey, tracks]) => [modelKey, await sign(tracks)]),
+    );
+    return Object.fromEntries(entries);
   };
 
   const sections = job.sections ?? {};
@@ -51,11 +54,14 @@ async function withSignedUrls(job) {
     genderOutputs &&
     Object.values(genderOutputs).some((v) => v && typeof v === 'object' && !Array.isArray(v));
 
-  const genderVoices = hasNestedGender
-    ? await signNested(genderOutputs)
-    : await sign(genderOutputs);
+  // Las 3 ramas (stems, voices, gender) no dependen entre sí: se resuelven en paralelo.
+  const [signedStems, signedVoices, genderVoices] = await Promise.all([
+    sign(stems),
+    sign(voices),
+    hasNestedGender ? signNested(genderOutputs) : sign(genderOutputs),
+  ]);
 
-  return { ...job, stems: await sign(stems), voices: await sign(voices), genderVoices };
+  return { ...job, stems: signedStems, voices: signedVoices, genderVoices };
 }
 
 export default withErrors(async (req, res) => {

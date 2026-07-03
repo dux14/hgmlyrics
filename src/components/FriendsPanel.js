@@ -219,11 +219,35 @@ export function renderFriendsPanel(container) {
     wireActions(listEl);
   }
 
+  async function runSearch(q) {
+    const results = await searchUsers(q);
+    const listEl = ensureListEl();
+    if (results.length === 0) {
+      listEl.innerHTML = `
+        <li class="empty-state" style="padding:var(--space-md) 0;">
+          <div class="empty-state__icon">${icon('search', { size: 32 })}</div>
+          <p class="empty-state__text">Sin resultados.</p>
+        </li>`;
+      return;
+    }
+    listEl.innerHTML = results.map((u) => buildSearchRow(u)).join('');
+    wireActions(listEl);
+  }
+
   async function doAction(act, id) {
     if (act === 'accept') await respondRequest(id, 'accept');
     else await removeFriendship(id); // reject | cancel | unfriend
     listCache = await reloadList();
-    if (!searching) renderSections();
+    if (searching) {
+      const q = searchInput.value.trim();
+      if (q.length >= 2) await runSearch(q);
+      else {
+        searching = false;
+        renderSections();
+      }
+    } else {
+      renderSections();
+    }
   }
 
   function wireActions(scope) {
@@ -302,19 +326,6 @@ export function renderFriendsPanel(container) {
       return;
     }
     searching = true;
-    searchTimer = setTimeout(async () => {
-      const results = await searchUsers(q);
-      const listEl = ensureListEl();
-      if (results.length === 0) {
-        listEl.innerHTML = `
-          <li class="empty-state" style="padding:var(--space-md) 0;">
-            <div class="empty-state__icon">${icon('search', { size: 32 })}</div>
-            <p class="empty-state__text">Sin resultados.</p>
-          </li>`;
-        return;
-      }
-      listEl.innerHTML = results.map((u) => buildSearchRow(u)).join('');
-      wireActions(listEl);
-    }, 300);
+    searchTimer = setTimeout(() => runSearch(q), 300);
   });
 }

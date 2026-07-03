@@ -226,6 +226,22 @@ describe('VozEditor', () => {
     expect(previewContent.querySelector('.voz__reflection-sep').textContent).toContain('Reflexión');
   });
 
+  it('el preview refresca la fecha tras anclar al domingo (evento change)', async () => {
+    await renderVozEditor(container, null);
+    const dateInput = container.querySelector('#voz-sunday-date');
+    const previewEl = container.querySelector('#voz-preview-content');
+    // Miercoles 2026-06-17 → el input pinta "17 de junio", el change lo ancla al
+    // domingo 2026-06-14 y debe refrescar el preview (regresion del refactor).
+    dateInput.value = '2026-06-17';
+    dateInput.dispatchEvent(new Event('input'));
+    dateInput.dispatchEvent(new Event('change'));
+    expect(dateInput.value).toBe('2026-06-14');
+    const meta = previewEl.querySelector('.voz-view__meta');
+    expect(meta).toBeTruthy();
+    expect(meta.textContent).toContain('14 de junio de 2026');
+    expect(meta.textContent).not.toContain('17 de junio de 2026');
+  });
+
   it('carga voz existente cuando se pasa wordId', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

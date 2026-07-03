@@ -289,6 +289,9 @@ function _mountVozForm(container, word, wordId) {
       dateInput.value = snapped;
       statusEl.textContent = 'Ajustado al domingo de esa semana';
     }
+    // Refresca la vista previa con la fecha ya anclada al domingo (el evento
+    // `input` previo pudo pintarla con la fecha sin ajustar).
+    updatePreview();
   });
 
   container.querySelector('#voz-load-ordo')?.addEventListener('click', async () => {

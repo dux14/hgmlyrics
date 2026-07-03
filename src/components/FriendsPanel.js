@@ -121,6 +121,63 @@ export function buildFriendItem(item, viewerId, kind) {
   `;
 }
 
+function avatarHtml(person) {
+  const initial = (person.displayName || person.username || '?').trim().charAt(0).toUpperCase();
+  const crown = isFounder(person.username) ? founderCrownHtml() : '';
+  const inner = person.avatarUrl
+    ? `<img class="friend-row__avatar" src="${escapeHtml(person.avatarUrl || '')}" alt="" width="46" height="46" loading="lazy" decoding="async" />`
+    : `<span class="friend-row__avatar friend-row__avatar--initial">${initial}</span>`;
+  return `<span class="avatar-wrap">${inner}${crown}</span>`;
+}
+
+function rowShell(person, actionsHtml) {
+  return `
+    <li class="friend-row" data-username="${escapeHtml(person.username)}">
+      ${avatarHtml(person)}
+      <a class="friend-row__id" href="#/u/${encodeURIComponent(person.username)}">
+        <span class="friend-row__name">${escapeHtml(person.displayName || person.username)}</span>
+        <span class="friend-row__user">@${escapeHtml(person.username)}</span>
+      </a>
+      <div class="friend-row__act">${actionsHtml}</div>
+    </li>`;
+}
+
+const iconBtn = (act, id, cls, name, label) =>
+  `<button class="friend-ib friend-ib--${cls}" data-act="${act}" data-id="${id}" title="${label}" aria-label="${label}">${icon(name, { size: 20 })}</button>`;
+
+/** Fila de la lista por secciones. kind: 'friend' | 'incoming' | 'outgoing'. */
+export function buildFriendRow(person, { kind }) {
+  let actions;
+  if (kind === 'incoming') {
+    actions =
+      iconBtn('accept', person.id, 'accept', 'check', 'Aceptar') +
+      iconBtn('reject', person.id, 'reject', 'close', 'Rechazar');
+  } else if (kind === 'outgoing') {
+    actions = iconBtn('cancel', person.id, 'pending', 'clock', 'Cancelar solicitud');
+  } else {
+    actions = iconBtn('unfriend', person.id, 'friend', 'check', 'Amigos — quitar');
+  }
+  const html = rowShell(person, actions);
+  return kind === 'outgoing'
+    ? html.replace(`@${escapeHtml(person.username)}`, `@${escapeHtml(person.username)} · enviada`)
+    : html;
+}
+
+/** Fila de resultado de búsqueda; usa person.relation. */
+export function buildSearchRow(person) {
+  let actions;
+  if (person.relation === 'none') {
+    actions = `<button class="friend-pill friend-pill--add" data-act="add" data-username="${escapeHtml(person.username)}">Agregar</button>`;
+  } else if (person.relation === 'pending_out') {
+    actions = `<button class="friend-pill friend-pill--pending" data-act="cancel" data-id="${person.id}">Enviada</button>`;
+  } else if (person.relation === 'pending_in') {
+    actions = iconBtn('accept', person.id, 'accept', 'check', 'Aceptar solicitud');
+  } else {
+    actions = `<span class="friend-ib friend-ib--friend" title="Ya son amigos" aria-label="Ya son amigos">${icon('check', { size: 20 })}</span>`;
+  }
+  return rowShell(person, actions);
+}
+
 /**
  * Render the friends panel.
  * @param {HTMLElement} container

@@ -78,6 +78,17 @@ const HUB_GROUPS = [
   },
 ];
 
+/** Título que muestra la cabecera al entrar a cada modo enfocado. */
+const MODE_TITLES = {
+  guitar: 'Guitarra',
+  voice: 'Voz',
+  song: 'Canción',
+  range: 'Rango',
+  entrenar: 'Entrenamiento',
+  metronomo: 'Metrónomo',
+  calibrar: 'Calibrar',
+};
+
 const RANGE_STEP_MS = 10000;
 const RANGE_RING_R = 36;
 const RANGE_RING_CIRCUMFERENCE = 2 * Math.PI * RANGE_RING_R;
@@ -605,8 +616,8 @@ export async function renderTuner(container, opts = {}) {
     <div class="tuner-page fade-in">
       <header class="tuner-header">
         <div class="tuner-nav" id="tuner-nav"></div>
-        <h1>Afinador <span class="badge--beta">BETA</span></h1>
-        <p class="tuner-header__sub">El audio se procesa en tu dispositivo. No lo guardamos.</p>
+        <h1 id="tuner-title">Afinador <span class="badge--beta">BETA</span></h1>
+        <p class="tuner-header__sub" id="tuner-sub">El audio se procesa en tu dispositivo. No lo guardamos.</p>
       </header>
 
       <div class="tuner-body" id="tuner-body"></div>
@@ -619,19 +630,36 @@ export async function renderTuner(container, opts = {}) {
   // "Volver a la canción" es estático (no depende del modo enfocado ni del
   // hub): se conserva visible mientras exista un origen `target.fromSongId`.
   // "Volver" al hub solo aparece dentro de un modo enfocado (paintNav).
+  const backButton = (id, label) =>
+    `<button type="button" class="tuner-back" id="${id}">
+       <span class="tuner-back__icon">${icon('chevron-left', { size: 18 })}</span>
+       <span class="tuner-back__label">${label}</span>
+     </button>`;
+
   function paintNav() {
-    const backHub =
-      mode !== null
-        ? `<button class="btn btn--sm tuner-back" id="tuner-hub-back">${icon('arrow-left', { size: 14 })} Volver</button>`
-        : '';
-    const backSong = target.fromSongId
-      ? `<button class="btn btn--sm tuner-back" id="tuner-back">${icon('arrow-left', { size: 14 })} Volver a la canción</button>`
-      : '';
+    const backHub = mode !== null ? backButton('tuner-hub-back', 'Volver') : '';
+    const backSong = target.fromSongId ? backButton('tuner-back', 'Volver a la canción') : '';
     navEl.innerHTML = backHub + backSong;
     navEl.querySelector('#tuner-hub-back')?.addEventListener('click', goToHub);
     navEl
       .querySelector('#tuner-back')
       ?.addEventListener('click', () => navigate('/song/' + target.fromSongId));
+    paintHeader();
+  }
+
+  // Cabecera dinámica: en el hub muestra "Afinador BETA" + nota de privacidad;
+  // dentro de un modo enfocado muestra el nombre del modo y oculta esa nota.
+  function paintHeader() {
+    const titleEl = container.querySelector('#tuner-title');
+    const subEl = container.querySelector('#tuner-sub');
+    if (!titleEl || !subEl) return;
+    if (mode === null) {
+      titleEl.innerHTML = 'Afinador <span class="badge--beta">BETA</span>';
+      subEl.hidden = false;
+    } else {
+      titleEl.textContent = MODE_TITLES[mode] || 'Afinador';
+      subEl.hidden = true;
+    }
   }
 
   function paintBody() {

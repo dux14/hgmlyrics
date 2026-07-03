@@ -55,6 +55,21 @@ export function noteToFrequency(noteStr) {
 }
 
 /**
+ * Signed cents deviation from a reference frequency to a measured one.
+ * Positivo = `hz` por encima de la referencia (sostenido); negativo = por debajo.
+ * A diferencia de `frequencyToNote().cents` (que mide contra la nota MÁS
+ * CERCANA), esto mide contra una nota objetivo fija: cantar una nota distinta
+ * bien afinada da una desviación grande, no cero.
+ * @param {number} hz Frecuencia medida.
+ * @param {number} refHz Frecuencia de referencia (objetivo).
+ * @returns {number} Cents con signo (redondeado), o NaN si algún valor no es válido.
+ */
+export function centsBetween(hz, refHz) {
+  if (!Number.isFinite(hz) || !Number.isFinite(refHz) || hz <= 0 || refHz <= 0) return NaN;
+  return Math.round(1200 * Math.log2(hz / refHz));
+}
+
+/**
  * Convert a frequency in Hz to the closest note, octave, and cents offset.
  * @param {number} hz
  * @returns {{ note: string, octave: number, cents: number, midi: number, target: number } | null}

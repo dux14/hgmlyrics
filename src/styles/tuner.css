@@ -554,6 +554,62 @@
   font-weight: var(--font-weight-bold);
 }
 
+/* === Canción — vista a mayor tamaño (escopado por el contenedor) ===
+   Es la vista principal de "cantar con la canción": todo un punto más grande
+   para leerla de lejos mientras se canta. Solo aplica a data-mode='song'. */
+#tuner-body[data-mode='song'] .tuner-song__title {
+  font-size: var(--font-size-xl);
+}
+
+#tuner-body[data-mode='song'] .tuner-song__key {
+  font-size: var(--font-size-md);
+}
+
+#tuner-body[data-mode='song'] .tuner-objective {
+  font-size: var(--font-size-lg);
+}
+
+#tuner-body[data-mode='song'] .tuner-scale {
+  gap: var(--space-sm);
+}
+
+#tuner-body[data-mode='song'] .tuner-scale li {
+  min-width: 3.25rem;
+  padding: var(--space-xs) var(--space-md);
+  font-size: var(--font-size-md);
+}
+
+#tuner-body[data-mode='song'] .tuner-readout {
+  padding: var(--space-lg);
+}
+
+#tuner-body[data-mode='song'] .tuner-readout__note {
+  font-size: 4.5rem;
+}
+
+#tuner-body[data-mode='song'] .tuner-readout__meta,
+#tuner-body[data-mode='song'] .tuner-readout__sub {
+  font-size: var(--font-size-md);
+}
+
+#tuner-body[data-mode='song'] .tuner-gauge__track {
+  height: 14px;
+}
+
+#tuner-body[data-mode='song'] .tuner-gauge__indicator {
+  width: 6px;
+  top: -7px;
+  bottom: -7px;
+}
+
+#tuner-body[data-mode='song'] .tuner-gauge__scale {
+  font-size: var(--font-size-sm);
+}
+
+#tuner-body[data-mode='song'] .tuner-hint {
+  font-size: var(--font-size-md);
+}
+
 /* === Range mode === */
 .tuner-range {
   text-align: center;

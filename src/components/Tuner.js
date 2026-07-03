@@ -21,6 +21,7 @@ import {
   GUITAR_STANDARD,
   parseTunerTarget,
   matchesTarget,
+  centsBetween,
 } from '../lib/notes.js';
 import { fetchSongDetail } from '../lib/store.js';
 import { getSession, refreshProfile, getProfile } from '../lib/authStore.js';
@@ -634,6 +635,10 @@ export async function renderTuner(container, opts = {}) {
   }
 
   function paintBody() {
+    // Marca el modo activo en el contenedor para estilos escopados (p.ej. la
+    // vista Canción se muestra a mayor tamaño via #tuner-body[data-mode='song']).
+    bodyEl.dataset.mode = mode === null ? 'hub' : mode;
+
     if (mode === null) {
       bodyEl.innerHTML = renderHub();
       bindHub();
@@ -748,10 +753,19 @@ export async function renderTuner(container, opts = {}) {
       return;
     }
     const inScale = song?.key ? getScaleNotes(song.key).includes(stab.note) : null;
+    // Con objetivo, afinamos contra ESA nota: la desviacion (y el verde) se
+    // miden respecto al objetivo, no a la nota mas cercana. Asi cantar otra
+    // nota bien afinada NO se pone verde. Sin objetivo (modo escala pura) se
+    // conserva la lectura contra la nota mas cercana.
+    let cents = stab.cents;
+    if (targetCanonical) {
+      const targetFreq = noteToFrequency(`${targetCanonical.note}${targetCanonical.octave}`);
+      cents = centsBetween(stab.hz, targetFreq);
+    }
     renderReadout(bodyEl, {
       label: `${stab.note}${stab.octave}`,
       hz: stab.hz,
-      cents: stab.cents,
+      cents,
       sub:
         inScale === null
           ? undefined
@@ -759,7 +773,7 @@ export async function renderTuner(container, opts = {}) {
             ? `${icon('check', { size: 14 })} en escala`
             : `${icon('close', { size: 14 })} fuera de escala`,
     });
-    setNeedle(bodyEl, stab.cents, colorFromCents(stab.cents));
+    setNeedle(bodyEl, cents, colorFromCents(cents));
     const ul = bodyEl.querySelector('#tuner-scale');
     if (ul) {
       for (const li of ul.children) {
@@ -1012,8 +1026,12 @@ export async function renderTuner(container, opts = {}) {
       exercise.push(null);
       return;
     }
-    renderReadout(bodyEl, { label: `${stab.note}${stab.octave}`, hz: stab.hz, cents: stab.cents });
-    setNeedle(bodyEl, stab.cents, colorFromCents(stab.cents));
+    // Igual que en Canción: hay una nota objetivo (la del ejercicio), asi que la
+    // desviacion y el verde se miden contra ESA nota, no contra la mas cercana.
+    const cur = exercise.current();
+    const cents = cur ? centsBetween(stab.hz, noteToFrequency(cur.label)) : stab.cents;
+    renderReadout(bodyEl, { label: `${stab.note}${stab.octave}`, hz: stab.hz, cents });
+    setNeedle(bodyEl, cents, colorFromCents(cents));
     const r = exercise.push(stab);
     if (r.justAdvanced) {
       if (r.done) finishExercise();

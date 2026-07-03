@@ -144,7 +144,7 @@
   padding: 0 0 var(--space-xl);
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: var(--space-md);
 }
 
 .list-detail__header {
@@ -152,7 +152,7 @@
   align-items: flex-start;
   gap: var(--space-sm);
   flex-wrap: wrap;
-  margin: 0 0 var(--space-xs);
+  margin: 0;
 }
 
 .list-detail__title {
@@ -712,7 +712,7 @@
 .list-detail__seg {
   display: flex;
   gap: var(--space-lg);
-  margin: var(--space-md) 0;
+  margin: 0;
   border-bottom: 1px solid var(--color-border);
 }
 .list-detail__seg-tab {
@@ -721,7 +721,7 @@
   border: 0;
   background: none;
   color: var(--color-text-secondary);
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   font-size: var(--font-size-sm);
   position: relative;
   cursor: pointer;

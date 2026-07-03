@@ -480,49 +480,34 @@
   padding-bottom: max(var(--space-md), calc(env(safe-area-inset-bottom) + var(--space-xs)));
 }
 
-/* Stepper horizontal con conectores (móvil) */
+/* Stepper segmentado */
 .list-wizard__rail {
   display: flex;
-  flex-direction: row;
-  align-items: center;
+  flex-direction: column;
   gap: var(--space-sm);
   width: 100%;
 }
-.list-wizard__num {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  font-size: 1.05rem;
-  font-weight: 700; /* remapeado 800->700 */
-  line-height: 1;
-  color: var(--color-border);
-  letter-spacing: 0.02em;
-  transition: color 0.2s ease;
-}
-.list-wizard__num::after {
-  content: '';
-  flex: 1;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--color-border);
-  transition: background 0.2s ease;
-}
-.list-wizard__num:last-child {
-  flex: 0 0 auto;
-}
-.list-wizard__num:last-child::after {
-  display: none;
-}
-.list-wizard__num--act {
+.list-wizard__step-word {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   color: var(--color-brand);
-  font-size: 1.35rem;
 }
-.list-wizard__num--done {
-  color: var(--color-success);
+.list-wizard__segs {
+  display: flex;
+  gap: 6px;
 }
-.list-wizard__num--done::after {
-  background: var(--color-success);
+.list-wizard__seg {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--border-radius-full);
+  background: var(--color-border);
+  transition: background 0.25s ease;
+}
+.list-wizard__seg.is-on {
+  background: var(--color-brand);
 }
 
 .list-wizard__panel {
@@ -678,22 +663,7 @@
     min-height: 0;
   }
   .list-wizard__rail {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-lg);
-    width: auto;
-    flex-shrink: 0;
-    padding-top: 4px;
-  }
-  .list-wizard__num {
-    flex: 0 0 auto;
-    font-size: 1.5rem;
-  }
-  .list-wizard__num::after {
-    display: none;
-  }
-  .list-wizard__num--act {
-    font-size: 1.6rem;
+    width: 100%;
   }
   .list-wizard__datetime {
     width: fit-content;

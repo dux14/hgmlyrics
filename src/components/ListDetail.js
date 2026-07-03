@@ -162,12 +162,12 @@ function renderEditor(container, listData, opts = {}) {
   const state = { step: 0 };
   const STEPS = [
     {
-      n: '01',
+      word: 'Cuándo',
       title: '¿Cuándo desaparece?',
       sub: 'Las listas son efímeras. Ponle nombre y elige cuándo caduca.',
     },
-    { n: '02', title: '¿Qué suena?', sub: 'Busca y arrastra para ordenar las canciones.' },
-    { n: '03', title: '¿Con quién?', sub: 'Invita amigos a tu lista efímera (opcional).' },
+    { word: 'Qué suena', title: '¿Qué suena?', sub: 'Busca y arrastra para ordenar las canciones.' },
+    { word: 'Con quién', title: '¿Con quién?', sub: 'Invita amigos a tu lista efímera (opcional).' },
   ];
 
   container.innerHTML = `
@@ -197,11 +197,12 @@ function renderEditor(container, listData, opts = {}) {
   const nextBtn = container.querySelector('#list-wizard-next');
 
   function renderRail() {
-    railEl.innerHTML = STEPS.map((s, i) => {
-      const cls =
-        i === state.step ? 'list-wizard__num--act' : i < state.step ? 'list-wizard__num--done' : '';
-      return `<div class="list-wizard__num ${cls}">${s.n}</div>`;
-    }).join('');
+    const label = isNew ? 'Paso' : 'Editar';
+    railEl.innerHTML = `
+      <p class="list-wizard__step-word">${label} ${state.step + 1} · ${STEPS[state.step].word}</p>
+      <div class="list-wizard__segs">
+        ${STEPS.map((_, i) => `<span class="list-wizard__seg ${i <= state.step ? 'is-on' : ''}"></span>`).join('')}
+      </div>`;
   }
 
   function renderStep() {

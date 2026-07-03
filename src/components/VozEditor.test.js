@@ -63,21 +63,36 @@ describe('VozEditor', () => {
     expect(container.innerHTML).toContain('Nueva voz en off');
   });
 
-  it('muestra el área de preview en vivo', async () => {
-    await renderVozEditor(container, null);
-    expect(container.querySelector('#voz-preview')).toBeTruthy();
-    expect(container.querySelector('#voz-preview-content')).toBeTruthy();
-  });
-
-  it('tiene botón Guardar borrador y Publicar', async () => {
+  it('tiene botón Guardar borrador y Publicar, sin botón Eliminar en el footer', async () => {
     await renderVozEditor(container, null);
     expect(container.querySelector('#voz-save-draft')).toBeTruthy();
     expect(container.querySelector('#voz-publish')).toBeTruthy();
+    expect(container.querySelector('.voz-editor__footer #voz-delete')).toBeNull();
+    expect(container.querySelector('.voz-editor__footer-actions .btn--danger')).toBeNull();
   });
 
-  it('no muestra botón Eliminar en modo creación', async () => {
+  it('no muestra la papelera en modo creación (sin wordId)', async () => {
     await renderVozEditor(container, null);
     expect(container.querySelector('#voz-delete')).toBeNull();
+  });
+
+  it('muestra la papelera en la barra superior cuando se edita una voz existente', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id: 'ww1',
+        sunday_date: '2026-06-15',
+        gospel_ref: 'Jn 14,6',
+        liturgical_title: '',
+        liturgical_color: 'green',
+        voiceover_body: 'Texto',
+        gospel_body: '',
+        published: false,
+      }),
+    });
+    await renderVozEditor(container, 'ww1');
+    const deleteBtn = container.querySelector('.voz-editor__topbar #voz-delete');
+    expect(deleteBtn).toBeTruthy();
   });
 
   it('tiene botón Cargar desde ordo y input fecha', async () => {
@@ -92,15 +107,103 @@ describe('VozEditor', () => {
     expect(container.querySelector('details')).toBeTruthy();
   });
 
-  it('el selector de color tiene las opciones litúrgicas', async () => {
+  it('existe el segmented Editar / Vista previa', async () => {
     await renderVozEditor(container, null);
-    const sel = container.querySelector('#voz-liturgical-color');
-    expect(sel).toBeTruthy();
-    const values = [...sel.options].map((o) => o.value);
-    expect(values).toContain('green');
-    expect(values).toContain('purple');
-    expect(values).toContain('white');
-    expect(values).toContain('red');
+    const tabs = container.querySelectorAll('.voz-editor__seg-tab');
+    expect(tabs.length).toBe(2);
+    expect(container.querySelector('#voz-tab-edit').textContent).toContain('Editar');
+    expect(container.querySelector('#voz-tab-preview').textContent).toContain('Vista previa');
+  });
+
+  it('al activar Vista previa se muestra el panel de preview y se oculta el de edición', async () => {
+    await renderVozEditor(container, null);
+    const editPanel = container.querySelector('#voz-panel-edit');
+    const previewPanel = container.querySelector('#voz-panel-preview');
+    expect(editPanel.hidden).toBe(false);
+    expect(previewPanel.hidden).toBe(true);
+
+    container.querySelector('#voz-tab-preview').click();
+
+    expect(editPanel.hidden).toBe(true);
+    expect(previewPanel.hidden).toBe(false);
+    expect(container.querySelector('#voz-tab-preview').getAttribute('aria-selected')).toBe('true');
+    expect(container.querySelector('#voz-tab-edit').getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('el preview usa la jerarquía nueva: título litúrgico en .voz-view__title, sin la cita', async () => {
+    await renderVozEditor(container, null);
+    container.querySelector('#voz-liturgical-title').value = 'XI Domingo del Tiempo Ordinario';
+    container.querySelector('#voz-liturgical-title').dispatchEvent(new Event('input'));
+    container.querySelector('#voz-gospel-ref').value = 'Jn 14,6';
+    container.querySelector('#voz-gospel-ref').dispatchEvent(new Event('input'));
+    const previewContent = container.querySelector('#voz-preview-content');
+    const titleEl = previewContent.querySelector('.voz-view__title');
+    expect(titleEl).toBeTruthy();
+    expect(titleEl.textContent).toContain('XI Domingo del Tiempo Ordinario');
+  });
+
+  it('el preview muestra .voz-view__pill cuando hay color litúrgico seleccionado', async () => {
+    await renderVozEditor(container, null);
+    const greenChip = container.querySelector('.voz-editor__color-chip[data-color="green"]');
+    greenChip.click();
+    const previewContent = container.querySelector('#voz-preview-content');
+    expect(previewContent.querySelector('.voz-view__pill')).toBeTruthy();
+  });
+
+  it('renderiza chips de color litúrgico en vez de <select>', async () => {
+    await renderVozEditor(container, null);
+    expect(container.querySelector('#voz-liturgical-color')).toBeNull();
+    const chips = container.querySelectorAll('.voz-editor__color-chip');
+    expect(chips.length).toBe(4);
+    const colors = [...chips].map((c) => c.dataset.color);
+    expect(colors).toEqual(['green', 'purple', 'white', 'red']);
+  });
+
+  it('seleccionar un chip de color actualiza liturgical_color y aria-checked', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 'ww-new', published: false }),
+    });
+    await renderVozEditor(container, null);
+    const purpleChip = container.querySelector('.voz-editor__color-chip[data-color="purple"]');
+    purpleChip.click();
+    expect(purpleChip.getAttribute('aria-checked')).toBe('true');
+    container
+      .querySelector('.voz-editor__color-chip[data-color="green"]')
+      .getAttribute('aria-checked');
+    expect(
+      container
+        .querySelector('.voz-editor__color-chip[data-color="green"]')
+        .getAttribute('aria-checked'),
+    ).toBe('false');
+
+    container.querySelector('#voz-sunday-date').value = '2026-06-15';
+    container.querySelector('#voz-gospel-ref').value = 'Jn 14,6';
+    container.querySelector('#voz-body').value = 'Voz de prueba';
+    container.querySelector('#voz-save-draft').click();
+    await new Promise((r) => setTimeout(r, 0));
+    const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(callBody.liturgical_color).toBe('purple');
+  });
+
+  it('vuelve a hacer click en el mismo chip lo deselecciona (liturgical_color null)', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 'ww-new', published: false }),
+    });
+    await renderVozEditor(container, null);
+    const greenChip = container.querySelector('.voz-editor__color-chip[data-color="green"]');
+    greenChip.click();
+    greenChip.click();
+    expect(greenChip.getAttribute('aria-checked')).toBe('false');
+
+    container.querySelector('#voz-sunday-date').value = '2026-06-15';
+    container.querySelector('#voz-gospel-ref').value = 'Jn 14,6';
+    container.querySelector('#voz-body').value = 'Voz de prueba';
+    container.querySelector('#voz-save-draft').click();
+    await new Promise((r) => setTimeout(r, 0));
+    const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(callBody.liturgical_color).toBeNull();
   });
 
   it('el preview se actualiza al escribir en el textarea', async () => {
@@ -141,24 +244,11 @@ describe('VozEditor', () => {
     expect(container.querySelector('#voz-gospel-ref').value).toBe('Jn 14,6');
     expect(container.querySelector('#voz-body').value).toBe('Texto voz en off');
     expect(container.innerHTML).toContain('Editar voz en off');
-  });
-
-  it('muestra botón Eliminar cuando se edita una voz existente', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        id: 'ww1',
-        sunday_date: '2026-06-15',
-        gospel_ref: 'Jn 14,6',
-        liturgical_title: '',
-        liturgical_color: 'green',
-        voiceover_body: 'Texto',
-        gospel_body: '',
-        published: false,
-      }),
-    });
-    await renderVozEditor(container, 'ww1');
-    expect(container.querySelector('#voz-delete')).toBeTruthy();
+    expect(
+      container
+        .querySelector('.voz-editor__color-chip[data-color="green"]')
+        .getAttribute('aria-checked'),
+    ).toBe('true');
   });
 
   it('muestra error si se intenta guardar sin fecha', async () => {
@@ -273,7 +363,11 @@ describe('VozEditor', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(container.querySelector('#voz-gospel-ref').value).toBe('Mt 5,1-12');
     expect(container.querySelector('#voz-liturgical-title').value).toBe('IV Domingo');
-    expect(container.querySelector('#voz-liturgical-color').value).toBe('purple');
+    expect(
+      container
+        .querySelector('.voz-editor__color-chip[data-color="purple"]')
+        .getAttribute('aria-checked'),
+    ).toBe('true');
     expect(container.querySelector('#voz-gospel-body').value).toContain('Bienaventurados');
   });
 

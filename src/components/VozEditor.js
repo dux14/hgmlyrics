@@ -1,16 +1,24 @@
 // src/components/VozEditor.js
 // Editor admin para crear/editar voces en off.
-// Split: formulario izquierda, preview en vivo derecha (o stacked en mobile).
+// Segmented Editar / Vista previa: un panel a la vez (mobile-first).
+// El preview reutiliza el helper compartido con WeeklyWordView (contrato
+// público de weekly-word.css), para que ambas vistas nunca diverjan.
 
 import '../styles/weekly-word.css';
 import { navigate } from '../router.js';
-import { splitVoiceover } from '../lib/voiceover.js';
 import { liturgicalPalette, coverGradient } from '../lib/liturgicalColor.js';
+import { vozHeroBodyHtml } from '../lib/vozHeroBody.js';
 import { escapeHtml } from '../lib/escape.js';
 import { icon } from '../lib/icons.js';
 import { getSession } from '../lib/authStore.js';
 import { renderAsyncRegion } from '../lib/renderAsync.js';
 import { skelLongText } from '../lib/skeleton.js';
+
+// Colores litúrgicos disponibles como chips (mismos values que liturgical_color).
+const COLOR_OPTIONS = ['green', 'purple', 'white', 'red'];
+const COLOR_LABELS = { green: 'Verde', purple: 'Morado', white: 'Blanco', red: 'Rojo' };
+// El acento de "Blanco" es claro (crema): su chip seleccionado lleva texto oscuro.
+const CHIP_DARK_TEXT = new Set(['white']);
 
 function authHeader() {
   const s = getSession();
@@ -58,6 +66,22 @@ async function saveWord(id, fields) {
 }
 
 /**
+ * Markup de los chips de color litúrgico.
+ * @param {string} selected - value seleccionado ('' = ninguno)
+ * @returns {string}
+ */
+function colorChipsHtml(selected) {
+  return COLOR_OPTIONS.map((c) => {
+    const { accent } = liturgicalPalette(c);
+    const textColor = CHIP_DARK_TEXT.has(c) ? '#241d0c' : '#ffffff';
+    const checked = selected === c;
+    return `<button type="button" class="voz-editor__color-chip" data-color="${c}" role="radio" aria-checked="${checked}" style="--chip-accent: ${accent}; --chip-text: ${textColor};">
+      <span class="voz-editor__color-chip-dot"></span>${COLOR_LABELS[c]}
+    </button>`;
+  }).join('');
+}
+
+/**
  * Retorna una Promise que se resuelve cuando la región está pintada. Eso permite
  * que los llamadores (y los tests) hagan `await renderVozEditor(container, id)`.
  * El retry interno de renderAsyncRegion vuelve a invocar renderAsyncRegion(opts)
@@ -76,7 +100,7 @@ export function renderVozEditor(container, wordId = null) {
       skeleton: () => skelLongText(),
       fetcher: () =>
         fetch(`/api/weekly-words/${wordId}`, { headers: authHeader() }).then((res) =>
-          res.ok ? res.json() : null
+          res.ok ? res.json() : null,
         ),
       // render recibe null si el servidor devuelve !ok (abre el form en blanco,
       // comportamiento original). renderAsyncRegion llama empty() solo si está
@@ -96,28 +120,40 @@ export function renderVozEditor(container, wordId = null) {
 function _mountVozForm(container, word, wordId) {
   container.innerHTML = `
     <div class="voz-editor fade-in">
-      <h1 class="editor__title voz-editor__title">${wordId ? 'Editar voz en off' : 'Nueva voz en off'}</h1>
+      <header class="voz-editor__topbar">
+        <h1 class="editor__title voz-editor__title">${wordId ? 'Editar voz en off' : 'Nueva voz en off'}</h1>
+        ${
+          wordId
+            ? `<button type="button" class="voz-editor__delete-btn" id="voz-delete" aria-label="Eliminar voz en off">${icon('trash', { size: 18 })}</button>`
+            : ''
+        }
+      </header>
 
-      <div class="voz-editor__body">
-        <!-- Formulario -->
+      <div class="voz-editor__seg" role="tablist">
+        <button type="button" class="voz-editor__seg-tab is-active" id="voz-tab-edit" data-panel="edit" role="tab" aria-selected="true" aria-controls="voz-panel-edit">Editar</button>
+        <button type="button" class="voz-editor__seg-tab" id="voz-tab-preview" data-panel="preview" role="tab" aria-selected="false" aria-controls="voz-panel-preview">Vista previa</button>
+      </div>
+
+      <div id="voz-panel-edit" class="voz-editor__panel" role="tabpanel" aria-labelledby="voz-tab-edit">
         <form id="voz-form" class="voz-editor__form">
-          <div>
-            <label class="editor__label" for="voz-sunday-date">Domingo</label>
-            <input type="date" id="voz-sunday-date" class="editor__input" value="${escapeHtml(word?.sunday_date ?? '')}">
-            <button type="button" class="btn btn--sm voz-editor__load-ordo-btn" id="voz-load-ordo">
-              ${icon('download', { size: 14 })} Cargar desde ordo
+          <div class="voz-editor__load-ordo-block">
+            <button type="button" class="voz-editor__load-ordo-btn" id="voz-load-ordo">
+              ${icon('download', { size: 16 })}
+              <span>Cargar desde ordo</span>
             </button>
+            <p class="voz-editor__load-ordo-hint">Autocompleta cita, título litúrgico, color y evangelio del domingo elegido.</p>
             <span id="voz-ordo-status" class="voz-editor__status"></span>
           </div>
 
-          <div>
-            <label class="editor__label" for="voz-title">Título (para búsqueda)</label>
-            <input type="text" id="voz-title" class="editor__input" placeholder="Ej. La vid y los sarmientos" value="${escapeHtml(word?.title ?? '')}">
-          </div>
-
-          <div>
-            <label class="editor__label" for="voz-gospel-ref">Referencia del evangelio</label>
-            <input type="text" id="voz-gospel-ref" class="editor__input" placeholder="Jn 14,6" value="${escapeHtml(word?.gospel_ref ?? '')}">
+          <div class="voz-editor__row-2">
+            <div>
+              <label class="editor__label" for="voz-sunday-date">Domingo</label>
+              <input type="date" id="voz-sunday-date" class="editor__input" value="${escapeHtml(word?.sunday_date ?? '')}">
+            </div>
+            <div>
+              <label class="editor__label" for="voz-gospel-ref">Cita</label>
+              <input type="text" id="voz-gospel-ref" class="editor__input" placeholder="Jn 14,6" value="${escapeHtml(word?.gospel_ref ?? '')}">
+            </div>
           </div>
 
           <div>
@@ -126,45 +162,43 @@ function _mountVozForm(container, word, wordId) {
           </div>
 
           <div>
-            <label class="editor__label" for="voz-liturgical-color">Color litúrgico</label>
-            <select id="voz-liturgical-color" class="editor__input">
-              <option value="">— sin color —</option>
-              ${Object.entries({ green: 'Verde', purple: 'Morado', white: 'Blanco', red: 'Rojo' })
-                .map(
-                  ([c, label]) =>
-                    `<option value="${c}"${word?.liturgical_color === c ? ' selected' : ''}>${label}</option>`,
-                )
-                .join('')}
-            </select>
+            <span class="editor__label">Color litúrgico</span>
+            <div class="voz-editor__color-chips" role="radiogroup" aria-label="Color litúrgico" id="voz-color-chips">
+              ${colorChipsHtml(word?.liturgical_color ?? '')}
+            </div>
           </div>
 
           <div>
-            <label class="editor__label" for="voz-body">Voz en off (pegar bloque completo)</label>
+            <label class="editor__label" for="voz-body">Voz en off</label>
             <textarea id="voz-body" class="editor__input editor__input--mono" rows="12">${escapeHtml(word?.voiceover_body ?? '')}</textarea>
+            <p class="voz-editor__hint">La cita bíblica y la reflexión se separan solas</p>
+          </div>
+
+          <div>
+            <label class="editor__label" for="voz-title">Título de búsqueda</label>
+            <input type="text" id="voz-title" class="editor__input" placeholder="Ej. La vid y los sarmientos" value="${escapeHtml(word?.title ?? '')}">
           </div>
 
           <details class="voz-editor__gospel-details">
-            <summary class="voz-editor__gospel-summary">Evangelio del ordo (editable / colapsado)</summary>
+            <summary class="voz-editor__gospel-summary">Evangelio del día</summary>
             <textarea id="voz-gospel-body" class="editor__input editor__input--mono editor__input--gospel" rows="8">${escapeHtml(word?.gospel_body ?? '')}</textarea>
           </details>
-
-          <div id="voz-error" class="voz-editor__error"></div>
-
-          <div class="voz-editor__actions">
-            <button type="button" class="btn btn--secondary btn--icon" id="voz-save-draft">
-              ${icon('save', { size: 16 })} Guardar borrador
-            </button>
-            <button type="button" class="btn btn--primary btn--icon" id="voz-publish">
-              ${icon('check', { size: 16 })} Publicar
-            </button>
-            ${wordId ? `<button type="button" class="btn btn--danger voz-editor__delete-btn" id="voz-delete">Eliminar</button>` : ''}
-          </div>
         </form>
+      </div>
 
-        <!-- Preview en vivo -->
-        <div id="voz-preview" class="voz-preview">
-          <p class="voz-preview__label">Vista previa en vivo</p>
-          <div id="voz-preview-content"></div>
+      <div id="voz-panel-preview" class="voz-editor__panel voz-view" role="tabpanel" aria-labelledby="voz-tab-preview" hidden>
+        <div id="voz-preview-content"></div>
+      </div>
+
+      <div class="voz-editor__footer">
+        <div id="voz-error" class="voz-editor__error"></div>
+        <div class="voz-editor__footer-actions">
+          <button type="button" class="btn btn--secondary btn--icon" id="voz-save-draft">
+            ${icon('save', { size: 16 })} Guardar borrador
+          </button>
+          <button type="button" class="btn btn--primary btn--icon" id="voz-publish">
+            ${icon('check', { size: 16 })} Publicar
+          </button>
         </div>
       </div>
     </div>
@@ -174,47 +208,79 @@ function _mountVozForm(container, word, wordId) {
   const titleSearchInput = container.querySelector('#voz-title');
   const refInput = container.querySelector('#voz-gospel-ref');
   const titleInput = container.querySelector('#voz-liturgical-title');
-  const colorSelect = container.querySelector('#voz-liturgical-color');
+  const colorChipsEl = container.querySelector('#voz-color-chips');
   const bodyArea = container.querySelector('#voz-body');
   const gospelArea = container.querySelector('#voz-gospel-body');
   const previewEl = container.querySelector('#voz-preview-content');
   const statusEl = container.querySelector('#voz-ordo-status');
   const errorEl = container.querySelector('#voz-error');
 
+  let selectedColor = word?.liturgical_color ?? '';
+
   function showError(msg) {
     errorEl.textContent = msg;
     errorEl.style.display = msg ? 'block' : 'none';
   }
 
-  function updatePreview() {
-    const palette = liturgicalPalette(colorSelect.value);
-    const gradient = coverGradient(palette);
-    const { scripture, reflection } = splitVoiceover(bodyArea.value, gospelArea.value);
-    const gospelRef = refInput.value.trim();
-    // El hero usa el contrato de weekly-word.css: asigna custom props litúrgicas
-    // en el propio elemento; los estilos (.voz-view__hero, etc.) los consume ese CSS.
-    previewEl.innerHTML = `
-      <div class="voz-view__hero" style="--liturgical-gradient: ${gradient}; --liturgical-accent: ${palette.accent}; --liturgical-text: ${palette.text}; --liturgical-bg: ${palette.bg ?? 'transparent'};">
-        <p class="voz-view__eyebrow"><span class="voz-view__eyebrow-inner">${icon('gospel', { size: 13 })} Palabra de la semana</span></p>
-        <h2 class="voz-view__title">${escapeHtml(gospelRef || 'Referencia del evangelio')}</h2>
-        ${titleInput.value ? `<p class="voz-view__meta">${escapeHtml(titleInput.value)}</p>` : ''}
-      </div>
-      ${scripture ? `<pre class="voz__prose voz__scripture">${escapeHtml(scripture)}</pre>` : ''}
-      ${
-        reflection
-          ? `
-        <div class="voz__reflection-sep">${icon('sparkles', { size: 12 })} Reflexión</div>
-        <pre class="voz__prose voz__reflection">${escapeHtml(reflection)}</pre>`
-          : ''
-      }
-      ${!scripture && !reflection && bodyArea.value ? `<pre class="voz__prose">${escapeHtml(bodyArea.value)}</pre>` : ''}
-    `;
+  function applyColor(color) {
+    selectedColor = color || '';
+    colorChipsEl.querySelectorAll('.voz-editor__color-chip').forEach((chip) => {
+      chip.setAttribute('aria-checked', String(chip.dataset.color === selectedColor));
+    });
   }
 
-  [bodyArea, gospelArea, refInput, titleInput, colorSelect].forEach((el) => {
+  function updatePreview() {
+    const previewWord = {
+      sunday_date: dateInput.value,
+      gospel_ref: refInput.value.trim(),
+      liturgical_title: titleInput.value.trim(),
+      liturgical_color: selectedColor,
+      voiceover_body: bodyArea.value,
+      gospel_body: gospelArea.value.trim(),
+    };
+    const palette = liturgicalPalette(previewWord.liturgical_color);
+    const gradient = coverGradient(palette);
+    previewEl.innerHTML = vozHeroBodyHtml(previewWord);
+    const heroEl = previewEl.querySelector('.voz-view__hero');
+    if (heroEl) {
+      heroEl.style.setProperty('--liturgical-gradient', gradient);
+      heroEl.style.setProperty('--liturgical-accent', palette.accent);
+      heroEl.style.setProperty('--liturgical-text', palette.text);
+      heroEl.style.setProperty('--liturgical-bg', palette.bg ?? 'transparent');
+    }
+  }
+
+  [bodyArea, gospelArea, refInput, titleInput, dateInput].forEach((el) => {
     el.addEventListener('input', updatePreview);
   });
+  colorChipsEl.addEventListener('click', (e) => {
+    const chip = e.target.closest('.voz-editor__color-chip');
+    if (!chip) return;
+    applyColor(selectedColor === chip.dataset.color ? '' : chip.dataset.color);
+    updatePreview();
+  });
   updatePreview();
+
+  // Segmented Editar / Vista previa: alterna panel visible (uno a la vez).
+  const segTabs = container.querySelectorAll('.voz-editor__seg-tab');
+  const panels = {
+    edit: container.querySelector('#voz-panel-edit'),
+    preview: container.querySelector('#voz-panel-preview'),
+  };
+  segTabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.panel;
+      segTabs.forEach((t) => {
+        const active = t === tab;
+        t.classList.toggle('is-active', active);
+        t.setAttribute('aria-selected', String(active));
+      });
+      Object.entries(panels).forEach(([key, panel]) => {
+        panel.hidden = key !== target;
+      });
+      if (target === 'preview') updatePreview();
+    });
+  });
 
   // La voz en off es "de la semana": ancla cualquier fecha elegida al domingo.
   dateInput.addEventListener('change', () => {
@@ -241,7 +307,7 @@ function _mountVozForm(container, word, wordId) {
       }
       refInput.value = data.gospelRef || '';
       titleInput.value = data.liturgicalTitle || '';
-      colorSelect.value = data.liturgicalColor || '';
+      applyColor(data.liturgicalColor || '');
       gospelArea.value = data.gospelBody || '';
       statusEl.textContent = 'Ordo cargado';
       updatePreview();
@@ -260,7 +326,7 @@ function _mountVozForm(container, word, wordId) {
       return;
     }
     if (!gospel_ref) {
-      showError('Referencia del evangelio requerida');
+      showError('La cita es requerida');
       return;
     }
     if (!voiceover_body) {
@@ -273,7 +339,7 @@ function _mountVozForm(container, word, wordId) {
         gospel_ref,
         title: titleSearchInput.value.trim() || null,
         liturgical_title: titleInput.value.trim() || null,
-        liturgical_color: colorSelect.value || null,
+        liturgical_color: selectedColor || null,
         voiceover_body,
         gospel_body: gospelArea.value.trim() || null,
         published: publish,

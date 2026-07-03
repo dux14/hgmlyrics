@@ -5,10 +5,8 @@
 import '../styles/weekly-word.css';
 import { navigate } from '../router.js';
 import { isAdmin } from '../lib/authStore.js';
-import { splitVoiceover } from '../lib/voiceover.js';
 import { liturgicalPalette, coverGradient } from '../lib/liturgicalColor.js';
-import { voiceoverHero } from '../lib/voiceoverHero.js';
-import { escapeHtml } from '../lib/escape.js';
+import { vozHeroBodyHtml } from '../lib/vozHeroBody.js';
 import { icon } from '../lib/icons.js';
 import { renderAsyncRegion } from '../lib/renderAsync.js';
 import { skelLongText } from '../lib/skeleton.js';
@@ -34,92 +32,41 @@ function getVozFontSize() {
 export async function renderWeeklyWordView(container, word) {
   const palette = liturgicalPalette(word.liturgical_color);
   const gradient = coverGradient(palette);
-  const { scripture, reflection } = splitVoiceover(word.voiceover_body, word.gospel_body);
-  const { pillLabel, bigTitle, metaLine } = voiceoverHero(word);
   const fontSize = getVozFontSize();
 
+  // Hero + cuerpo (cita/reflexión) + evangelio: helper compartido con el
+  // preview de VozEditor (F3c), para que ambas vistas nunca diverjan.
   container.innerHTML = `
     <div class="voz-view fade-in">
-
-      <!-- Hero litúrgico — vars asignadas post-render via style.setProperty() -->
-      <div class="voz-view__hero">
-        ${
-          pillLabel
-            ? `<span class="voz-view__pill"><span class="voz-view__pill-dot"></span>${escapeHtml(pillLabel)}</span>`
-            : ''
-        }
-        <p class="voz-view__eyebrow">
-          <span class="voz-view__eyebrow-inner">${icon('gospel', { size: 15 })} Palabra de la semana</span>
-        </p>
-        <h1 class="voz-view__title">
-          ${escapeHtml(bigTitle)}
-        </h1>
-        <p class="voz-view__meta">
-          ${escapeHtml(metaLine)}
-        </p>
-      </div>
-
-      <!-- Barra de acciones: tamaño de letra -->
-      <div class="voz-view__toolbar">
-        <div class="font-controls" role="group" aria-label="Tamaño de letra">
-          <button class="font-controls__btn" id="voz-font-dec" aria-label="Reducir tamaño de letra">A−</button>
-          <span class="font-controls__label" id="voz-font-label" aria-live="polite">${Math.round(fontSize * 100)}%</span>
-          <button class="font-controls__btn" id="voz-font-inc" aria-label="Aumentar tamaño de letra">A+</button>
-        </div>
-      </div>
-
-      <!-- Bloque Voz en off -->
-      <section class="voz-view__block" aria-label="Voz en off">
-        ${
-          scripture
-            ? `
-        <div class="voz__scripture">
-          <pre class="voz__prose">${escapeHtml(scripture)}</pre>
-        </div>`
-            : ''
-        }
-
-        ${
-          reflection
-            ? `
-        <div class="voz__reflection-sep">
-          ${icon('sparkles', { size: 14 })} Reflexión
-        </div>
-        <pre class="voz__reflection voz__prose">${escapeHtml(reflection)}</pre>`
-            : !scripture
-              ? `
-        <pre class="voz__reflection voz__prose">${escapeHtml(word.voiceover_body || '')}</pre>`
-              : ''
-        }
-      </section>
-
-      <!-- Bloque Evangelio -->
-      ${
-        word.gospel_body
-          ? `
-      <details class="voz-view__block voz-view__gospel">
-        <summary class="voz-view__gospel-label">
-          Evangelio del día · ${escapeHtml(word.gospel_ref)}
-        </summary>
-        <pre class="voz-view__gospel-body">${escapeHtml(word.gospel_body)}</pre>
-        <p class="voz-view__gospel-footnote">
-          Fuente: Ordo · snapshot · editable
-        </p>
-      </details>`
-          : ''
-      }
-
-      ${
-        isAdmin()
-          ? `<button class="btn voz-view__edit-cta" data-action="edit-voz">${icon('pencil', { size: 16 })} Editar voz en off</button>`
-          : ''
-      }
-
+      ${vozHeroBodyHtml(word)}
     </div>
   `;
 
   const viewEl = container.querySelector('.voz-view');
   const heroEl = container.querySelector('.voz-view__hero');
+
+  // Barra de acciones (tamaño de letra): chrome propio de esta vista, no vive
+  // en el helper compartido. Se inserta entre el hero y el cuerpo.
+  heroEl.insertAdjacentHTML(
+    'afterend',
+    `
+    <div class="voz-view__toolbar">
+      <div class="font-controls" role="group" aria-label="Tamaño de letra">
+        <button class="font-controls__btn" id="voz-font-dec" aria-label="Reducir tamaño de letra">A−</button>
+        <span class="font-controls__label" id="voz-font-label" aria-live="polite">${Math.round(fontSize * 100)}%</span>
+        <button class="font-controls__btn" id="voz-font-inc" aria-label="Aumentar tamaño de letra">A+</button>
+      </div>
+    </div>
+  `,
+  );
+
+  if (isAdmin()) {
+    viewEl.insertAdjacentHTML(
+      'beforeend',
+      `<button class="btn voz-view__edit-cta" data-action="edit-voz">${icon('pencil', { size: 16 })} Editar voz en off</button>`,
+    );
+  }
+
   const labelEl = container.querySelector('#voz-font-label');
   let currentSize = fontSize;
 

@@ -30,7 +30,9 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
 process.env.DATABASE_URL = 'postgresql://test';
 
 // Importar handler DESPUÉS de establecer mocks y env
-const handler = (await import('../api/social/search.js')).default;
+const searchModule = await import('../api/social/search.js');
+const handler = searchModule.default;
+const { deriveRelation } = searchModule;
 
 function makeReq(q, scope) {
   const params = new URLSearchParams({ q });
@@ -128,5 +130,24 @@ describe('GET /api/social/search (SEC-21 — escapado LIKE)', () => {
     expect(res.body).toEqual({ results: [] });
     // No debe haber valores capturados (sql no se llamó)
     expect(sqlValues.length).toBe(0);
+  });
+});
+
+describe('deriveRelation', () => {
+  it('friends gana sobre cualquier pendiente', () => {
+    expect(deriveRelation({ isFriend: true, pendingOut: true, pendingIn: false })).toBe('friends');
+  });
+  it('pending_out cuando el viewer envió', () => {
+    expect(deriveRelation({ isFriend: false, pendingOut: true, pendingIn: false })).toBe(
+      'pending_out',
+    );
+  });
+  it('pending_in cuando el viewer recibió', () => {
+    expect(deriveRelation({ isFriend: false, pendingOut: false, pendingIn: true })).toBe(
+      'pending_in',
+    );
+  });
+  it('none sin relación', () => {
+    expect(deriveRelation({ isFriend: false, pendingOut: false, pendingIn: false })).toBe('none');
   });
 });

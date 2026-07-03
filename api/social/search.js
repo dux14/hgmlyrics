@@ -5,6 +5,14 @@ import { allowMethods, withErrors } from '../_lib/http.js';
 /** Escapa metacaracteres LIKE de Postgres (%  _  \) dentro de un valor parametrizado. */
 const escapeLike = (s) => String(s).replace(/[\\%_]/g, '\\$&');
 
+/** Deriva la relación del viewer con un perfil a partir de flags de friendships. */
+export function deriveRelation({ isFriend, pendingOut, pendingIn }) {
+  if (isFriend) return 'friends';
+  if (pendingOut) return 'pending_out';
+  if (pendingIn) return 'pending_in';
+  return 'none';
+}
+
 export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['GET'])) return;
   const viewer = await requireUser(req);
@@ -32,7 +40,14 @@ export default withErrors(async (req, res) => {
   // Friend search must surface other people only — never the viewer's own profile.
   // Visibility: admin scope=all ve a todos; el resto solo is_public OR amigo aceptado.
   const rows = await sql`
-    SELECT p.id, p.username, p.display_name AS "displayName", p.avatar_url AS "avatarUrl"
+    SELECT p.id, p.username, p.display_name AS "displayName", p.avatar_url AS "avatarUrl",
+      EXISTS (SELECT 1 FROM friendships f WHERE f.status = 'accepted'
+        AND ((f.requester_id = ${viewer.id} AND f.addressee_id = p.id)
+          OR (f.requester_id = p.id AND f.addressee_id = ${viewer.id}))) AS "isFriend",
+      EXISTS (SELECT 1 FROM friendships f WHERE f.status = 'pending'
+        AND f.requester_id = ${viewer.id} AND f.addressee_id = p.id) AS "pendingOut",
+      EXISTS (SELECT 1 FROM friendships f WHERE f.status = 'pending'
+        AND f.requester_id = p.id AND f.addressee_id = ${viewer.id}) AS "pendingIn"
     FROM profiles p
     WHERE p.username IS NOT NULL
       AND p.id <> ${viewer.id}
@@ -56,5 +71,13 @@ export default withErrors(async (req, res) => {
     LIMIT 20
   `;
 
-  res.status(200).json({ results: rows });
+  const results = rows.map((r) => ({
+    id: r.id,
+    username: r.username,
+    displayName: r.displayName,
+    avatarUrl: r.avatarUrl,
+    relation: deriveRelation({ isFriend: r.isFriend, pendingOut: r.pendingOut, pendingIn: r.pendingIn }),
+  }));
+
+  res.status(200).json({ results });
 });

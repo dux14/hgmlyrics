@@ -675,10 +675,6 @@
   .list-wizard__rail {
     width: 100%;
   }
-  .list-wizard__datetime {
-    width: fit-content;
-    min-width: 300px;
-  }
   .list-wizard__foot {
     margin-top: var(--space-lg);
   }

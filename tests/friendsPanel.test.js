@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeOther, buildFriendRow, buildSearchRow } from '../src/components/FriendsPanel.js';
+import {
+  normalizeOther,
+  buildFriendRow,
+  buildSearchRow,
+  buildSections,
+} from '../src/components/FriendsPanel.js';
 
 describe('normalizeOther', () => {
   const item = {
@@ -53,5 +58,44 @@ describe('buildSearchRow', () => {
   it('friends: sin botón de acción', () => {
     const html = buildSearchRow({ ...person, relation: 'friends' });
     expect(html).not.toContain('data-act=');
+  });
+});
+
+const mk = (id, uname, viewerAsAddressee) => ({
+  requesterId: viewerAsAddressee ? id : 'V',
+  addresseeId: viewerAsAddressee ? 'V' : id,
+  requesterUsername: viewerAsAddressee ? uname : 'yo',
+  addresseeUsername: viewerAsAddressee ? 'yo' : uname,
+  requesterDisplayName: uname,
+  addresseeDisplayName: uname,
+  requesterAvatarUrl: '',
+  addresseeAvatarUrl: '',
+});
+
+describe('buildSections', () => {
+  it('muestra Solicitudes y Amigos cuando hay de ambos', () => {
+    const html = buildSections(
+      {
+        accepted: [mk('F', 'carla', true)],
+        pendingIncoming: [mk('I', 'ana', true)],
+        pendingOutgoing: [mk('O', 'beto', false)],
+      },
+      'V',
+    );
+    expect(html).toContain('Solicitudes');
+    expect(html).toContain('Amigos');
+    expect(html).toContain('data-act="accept"');
+    expect(html).toContain('data-act="unfriend"');
+  });
+  it('omite Solicitudes si no hay pendientes', () => {
+    const html = buildSections(
+      { accepted: [mk('F', 'carla', true)], pendingIncoming: [], pendingOutgoing: [] },
+      'V',
+    );
+    expect(html).not.toContain('Solicitudes');
+  });
+  it('empty state cuando todo está vacío', () => {
+    const html = buildSections({ accepted: [], pendingIncoming: [], pendingOutgoing: [] }, 'V');
+    expect(html).toContain('empty-state');
   });
 });

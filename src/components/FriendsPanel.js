@@ -163,6 +163,38 @@ export function buildFriendRow(person, { kind }) {
     : html;
 }
 
+function sectionHeader(title, extraClass = '') {
+  return `<h2 class="friend-sec${extraClass ? ' ' + extraClass : ''}">${title}</h2>`;
+}
+
+/** Construye la vista por secciones (Solicitudes → Amigos) a partir del payload de /friends. */
+export function buildSections(data, viewerId) {
+  const accepted = data.accepted || [];
+  const incoming = data.pendingIncoming || [];
+  const outgoing = data.pendingOutgoing || [];
+
+  if (accepted.length === 0 && incoming.length === 0 && outgoing.length === 0) {
+    return `
+      <li class="empty-state">
+        <div class="empty-state__icon">${icon('user-plus', { size: 40 })}</div>
+        <h2 class="empty-state__title">Sin amigos aún</h2>
+        <p class="empty-state__text">Busca usuarios arriba para agregar a alguien.</p>
+      </li>`;
+  }
+
+  let html = '';
+  if (incoming.length || outgoing.length) {
+    html += sectionHeader('Solicitudes');
+    html += incoming.map((it) => buildFriendRow(normalizeOther(it, viewerId), { kind: 'incoming' })).join('');
+    html += outgoing.map((it) => buildFriendRow(normalizeOther(it, viewerId), { kind: 'outgoing' })).join('');
+  }
+  if (accepted.length) {
+    html += sectionHeader('Amigos', 'friend-sec--spaced');
+    html += accepted.map((it) => buildFriendRow(normalizeOther(it, viewerId), { kind: 'friend' })).join('');
+  }
+  return html;
+}
+
 /** Fila de resultado de búsqueda; usa person.relation. */
 export function buildSearchRow(person) {
   let actions;

@@ -9,6 +9,15 @@
  *   --ten/--bass/--sop → --color-voice-tenor/bass/soprano
  */
 
+/* Region async del perfil (regionEl de renderAsyncRegion). display:contents
+   la borra de la caja de layout: .profile-page se comporta como hijo directo
+   de .main__content (conserva el sangrado a sangre completa y el min-height:100%
+   contra .main__content, identico al original). La region sigue en el DOM para
+   pintar el contenido async y para desprenderse al navegar (bug de navegacion #3). */
+.pf-profile-region {
+  display: contents;
+}
+
 /* ── Contenedor de página ── */
 .profile-page {
   max-width: 720px;

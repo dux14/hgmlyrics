@@ -442,19 +442,23 @@ export async function renderProfile(container) {
       return getProfile();
     },
     render: (profile) => {
-      container.innerHTML = `
+      // Pintar en la región (regionEl), no en el container compartido: así se
+      // respeta el contrato de renderAsyncRegion. Si el usuario ya navego fuera
+      // de /perfil, la region quedo desprendida del DOM y este render tardio es
+      // invisible en vez de clobberear la pantalla nueva (bug de navegacion #3).
+      profileRegion.innerHTML = `
         <div class="profile-page profile-page--own fade-in">
           ${buildProfileHeader(profile)}
         </div>
       `;
       // Monta la onda de rango vocal
-      const host = container.querySelector('.pf-wave-host');
+      const host = profileRegion.querySelector('.pf-wave-host');
       if (host && (profile.vocalRangeLow || profile.vocalRangeHigh)) {
         const wave = createWaveRange({ low: profile.vocalRangeLow, high: profile.vocalRangeHigh });
         if (wave) host.appendChild(wave.el);
       }
       // Logout desde la vista de perfil en móvil
-      container.querySelector('#pf-logout')?.addEventListener('click', async () => {
+      profileRegion.querySelector('#pf-logout')?.addEventListener('click', async () => {
         try {
           await signOut();
         } catch (_e) {

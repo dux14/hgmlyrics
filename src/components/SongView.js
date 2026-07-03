@@ -195,6 +195,10 @@ export async function renderSongView(container, songIdOrData) {
     skeleton: () => skelSongDetail(),
     fetcher: () => fetchSongDetail(songId),
     render: (detail) => {
+      // Si el usuario ya navego fuera, la region fue removida del container y
+      // _renderSongBody (que posee el container full-bleed) clobberearia la
+      // pantalla nueva con esta cancion tardia (bug de navegacion #3).
+      if (!container.contains(region)) return;
       _renderSongBody(container, songId, false, detail).catch(() => {
         container.innerHTML = `
           <div class="empty-state">
@@ -271,6 +275,14 @@ async function _renderSongBody(container, songId, isPreview, song) {
   // Leer ?lista= del hash (p. ej. #/song/abc?lista=xyz)
   const _hashQuery = new URLSearchParams((globalThis.location?.hash ?? '').split('?')[1] || '');
   const listId = isPreview ? null : _hashQuery.get('lista') || null;
+
+  // Resolver el contexto de lista (prev/next dentro de la lista) implica
+  // await import('lists') + getList() por red ANTES de pintar el cuerpo abajo.
+  // Sin esto, la pantalla anterior (la lista) queda visible bajo la URL nueva
+  // /song/:id mientras la red resuelve. Pinta un skeleton al instante para
+  // limpiarla ya; el innerHTML del cuerpo lo reemplaza al terminar. Solo aplica
+  // al caso con ?lista= (la rama sin lista y el preview pintan síncronamente).
+  if (listId) container.innerHTML = skelSongDetail();
 
   let adjacent;
   let listName = null;
@@ -798,12 +810,14 @@ async function _renderSongBody(container, songId, isPreview, song) {
   if (hasNav) {
     const listSuffix = listId ? `?lista=${listId}` : '';
     container.querySelector('#nav-prev')?.addEventListener('click', () => {
-      if (adjacent.prev)
-        {navigate(`/song/${adjacent.prev.item_id ?? adjacent.prev.id}${listSuffix}`);}
+      if (adjacent.prev) {
+        navigate(`/song/${adjacent.prev.item_id ?? adjacent.prev.id}${listSuffix}`);
+      }
     });
     container.querySelector('#nav-next')?.addEventListener('click', () => {
-      if (adjacent.next)
-        {navigate(`/song/${adjacent.next.item_id ?? adjacent.next.id}${listSuffix}`);}
+      if (adjacent.next) {
+        navigate(`/song/${adjacent.next.item_id ?? adjacent.next.id}${listSuffix}`);
+      }
     });
   }
 

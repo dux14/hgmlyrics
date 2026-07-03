@@ -413,6 +413,20 @@
   .tuner-scale li[data-active='true'] {
     animation: none;
   }
+
+  .tuner-progress__ring-fill {
+    transition: none;
+  }
+
+  .tuner-train-run__chip[data-state='current'] {
+    animation: none;
+  }
+
+  .metro-pendulum__arm,
+  .metro-pendulum[data-running='true'] .metro-pendulum__arm {
+    animation: none;
+    transform: rotate(0deg);
+  }
 }
 
 .tuner-hint {
@@ -571,18 +585,27 @@
 }
 
 .tuner-progress {
-  height: 8px;
-  background: var(--color-surface);
-  border-radius: var(--border-radius-full);
-  overflow: hidden;
+  display: flex;
+  justify-content: center;
   margin-top: var(--space-md);
 }
 
-.tuner-progress__bar {
-  height: 100%;
-  width: 0%;
-  background: var(--color-brand);
-  transition: width 100ms linear;
+.tuner-progress__ring {
+  transform: rotate(-90deg); /* arranca en las 12, avanza en sentido horario */
+}
+
+.tuner-progress__ring-track {
+  fill: none;
+  stroke: var(--color-surface);
+  stroke-width: 6;
+}
+
+.tuner-progress__ring-fill {
+  fill: none;
+  stroke: var(--color-teal-400);
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 100ms linear;
 }
 
 .tuner-progress__label {
@@ -869,6 +892,52 @@
   font-variant-numeric: tabular-nums;
 }
 
+.tuner-train-run__chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2xs);
+}
+
+.tuner-train-run__chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  padding: 0 0.4rem;
+  border-radius: var(--border-radius-full);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.tuner-train-run__chip[data-state='done'] {
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
+  border-color: color-mix(in srgb, var(--color-success) 40%, transparent);
+  color: var(--color-success);
+}
+
+.tuner-train-run__chip[data-state='current'] {
+  background: color-mix(in srgb, var(--color-teal-400) 20%, transparent);
+  border-color: var(--color-teal-400);
+  color: var(--color-teal-400);
+  animation: tuner-chip-current-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes tuner-chip-current-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-teal-400) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-teal-400) 0%, transparent);
+  }
+}
+
 .tuner-train-run__target {
   font-size: 3rem;
   font-weight: var(--font-weight-bold);
@@ -956,6 +1025,48 @@
   border-color: transparent;
   color: #fff;
 }
+.metro-pendulum {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  height: 3.5rem;
+}
+
+.metro-pendulum__arm {
+  position: relative;
+  width: 2px;
+  height: 100%;
+  background: var(--color-teal-400, #2dd4bf);
+  transform-origin: top center;
+  transform: rotate(0deg); /* en reposo: vertical, no inclinado */
+}
+
+.metro-pendulum__arm::after {
+  content: '';
+  position: absolute;
+  bottom: -0.35rem;
+  left: 50%;
+  width: 0.7rem;
+  height: 0.7rem;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: var(--color-teal-400, #2dd4bf);
+}
+
+.metro-pendulum[data-running='true'] .metro-pendulum__arm {
+  animation: metro-pendulum-swing var(--metro-pendulum-duration, 1000ms) ease-in-out infinite;
+}
+
+@keyframes metro-pendulum-swing {
+  0%,
+  100% {
+    transform: rotate(-18deg);
+  }
+  50% {
+    transform: rotate(18deg);
+  }
+}
+
 .metro-beats {
   display: flex;
   gap: 0.75rem;

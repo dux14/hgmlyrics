@@ -78,6 +78,8 @@ const HUB_GROUPS = [
 ];
 
 const RANGE_STEP_MS = 10000;
+const RANGE_RING_R = 36;
+const RANGE_RING_CIRCUMFERENCE = 2 * Math.PI * RANGE_RING_R;
 
 function parseQuery(query) {
   const out = {};
@@ -252,7 +254,7 @@ function bodyRange(step, currentNote) {
       <div class="tuner-range__step">Paso ${stepNum} / 2</div>
       <h2 class="tuner-range__title">${label}</h2>
       <p class="tuner-range__hint">
-        Cantala sostenida durante <strong>10 segundos</strong>.
+        Canta sostenida durante <strong>10 segundos</strong>.
       </p>
 
       <div class="tuner-readout" id="tuner-readout" data-status="">
@@ -261,7 +263,18 @@ function bodyRange(step, currentNote) {
       </div>
 
       <div class="tuner-progress">
-        <div class="tuner-progress__bar" id="tuner-progress-bar"></div>
+        <svg class="tuner-progress__ring" viewBox="0 0 80 80" width="80" height="80" role="img" aria-label="Progreso de la medicion">
+          <circle class="tuner-progress__ring-track" cx="40" cy="40" r="${RANGE_RING_R}" />
+          <circle
+            class="tuner-progress__ring-fill"
+            id="tuner-progress-ring"
+            cx="40"
+            cy="40"
+            r="${RANGE_RING_R}"
+            stroke-dasharray="${RANGE_RING_CIRCUMFERENCE}"
+            stroke-dashoffset="${RANGE_RING_CIRCUMFERENCE}"
+          />
+        </svg>
       </div>
       <div class="tuner-progress__label" id="tuner-progress-label">0 / 10s</div>
 
@@ -398,6 +411,16 @@ function bodyMetronomo({ bpm, signature, running }) {
               `<button class="metro-sig__btn" data-sig="${s}" aria-selected="${s === signature}">${s}</button>`,
           )
           .join('')}
+      </div>
+
+      <div
+        class="metro-pendulum"
+        id="metro-pendulum"
+        data-running="${running}"
+        style="--metro-pendulum-duration: ${Math.round(120000 / bpm)}ms"
+        aria-hidden="true"
+      >
+        <div class="metro-pendulum__arm"></div>
       </div>
 
       <div class="metro-beats" id="metro-beats" aria-hidden="true">${dots}</div>
@@ -780,9 +803,9 @@ export async function renderTuner(container, opts = {}) {
     rangeTimerId = setInterval(() => {
       const elapsed = performance.now() - rangeStartMs;
       const pct = Math.min(100, (elapsed / RANGE_STEP_MS) * 100);
-      const bar = bodyEl.querySelector('#tuner-progress-bar');
+      const ring = bodyEl.querySelector('#tuner-progress-ring');
       const lbl = bodyEl.querySelector('#tuner-progress-label');
-      if (bar) bar.style.width = `${pct}%`;
+      if (ring) ring.style.strokeDashoffset = `${RANGE_RING_CIRCUMFERENCE * (1 - pct / 100)}`;
       if (lbl) lbl.textContent = `${(elapsed / 1000).toFixed(1)} / 10s`;
       if (elapsed >= RANGE_STEP_MS) {
         finishRangeStep();
@@ -796,7 +819,7 @@ export async function renderTuner(container, opts = {}) {
     // Pick the mode of notes detected during the last 75% of the window.
     const tail = rangeSamples.slice(Math.floor(rangeSamples.length * 0.25));
     if (tail.length < 5) {
-      alert('No detecté una nota sostenida. Intentá de nuevo.');
+      alert('No detecté una nota sostenida. Intenta de nuevo.');
       paintBody();
       return;
     }
@@ -924,9 +947,14 @@ export async function renderTuner(container, opts = {}) {
   function renderExerciseRunner() {
     const st = exercise.push(null); // estado actual sin avanzar
     const target = st.target;
+    const chips = Array.from({ length: st.total }, (_, i) => {
+      const state = i < st.index ? 'done' : i === st.index ? 'current' : 'pending';
+      return `<span class="tuner-train-run__chip" data-state="${state}">${i + 1}</span>`;
+    }).join('');
     bodyEl.innerHTML = `
       <div class="tuner-train-run">
         <div class="tuner-train-run__progress">Nota ${Math.min(st.index + 1, st.total)} / ${st.total}</div>
+        <div class="tuner-train-run__chips" aria-hidden="true">${chips}</div>
         <div class="tuner-train-run__target" id="train-target">${target ? target.label : '—'}</div>
         <button class="btn btn--sm" id="train-ref">${icon('volume-2', { size: 14 })} Tono de referencia</button>
         <div class="tuner-readout" id="tuner-readout" data-status="">
@@ -1087,6 +1115,7 @@ export async function renderTuner(container, opts = {}) {
     const numEl = bodyEl.querySelector('#metro-bpm-num');
     const countEl = bodyEl.querySelector('#metro-count');
     const playBtn = bodyEl.querySelector('#metro-play');
+    const pendulumEl = bodyEl.querySelector('#metro-pendulum');
 
     // El motor puede no existir todavía (primer pintado): créalo y refresca.
     // Guarda: la promesa de idb puede resolver tras cambiar de pestaña; solo
@@ -1101,6 +1130,7 @@ export async function renderTuner(container, opts = {}) {
     const stepBpm = (delta) => {
       const next = metronome.setBpm(metronome.getBpm() + delta);
       if (numEl) numEl.textContent = String(next);
+      if (pendulumEl) pendulumEl.style.setProperty('--metro-pendulum-duration', `${Math.round(120000 / next)}ms`);
       persistMetronome();
     };
 
@@ -1153,10 +1183,12 @@ export async function renderTuner(container, opts = {}) {
         stopMetroVisual();
         playBtn.textContent = 'Iniciar';
         if (countEl) countEl.textContent = '—';
+        if (pendulumEl) pendulumEl.dataset.running = 'false';
       } else {
         metronome.start();
         playBtn.textContent = 'Detener';
         startMetroVisual();
+        if (pendulumEl) pendulumEl.dataset.running = 'true';
       }
     });
 

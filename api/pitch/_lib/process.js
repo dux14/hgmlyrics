@@ -24,9 +24,17 @@ export async function applyPhaseWebhook(sql, jobId, phase, result) {
       return { status: job.status };
     }
     const prevPhases = job.phases ?? {};
+    const incomingStatus = result?.ok === false ? 'failed' : 'done';
+    // Idempotencia por fase: un webhook repetido de una fase ya registrada con el
+    // mismo estado (replay dentro de la ventana anti-replay) no debe re-mergear,
+    // ni duplicar artefactos, ni reiniciar el TTL. Se responde con el estado actual.
+    if (prevPhases[phase]?.status === incomingStatus) {
+      return { status: job.status };
+    }
     const nextPhases = {
       ...prevPhases,
-      [phase]: { status: result?.ok === false ? 'failed' : 'done', error: result?.error ?? null, cost: result?.cost ?? null },
+      // Modal envía ok:false + error solo en fallo; ausencia de ok (undefined) = éxito. Default intencional.
+      [phase]: { status: incomingStatus, error: result?.error ?? null, cost: result?.cost ?? null },
     };
     const nextArtifacts = [...(job.artifacts ?? []), ...(Array.isArray(result?.artifacts) ? result.artifacts : [])];
 

@@ -35,12 +35,17 @@ describe('applyPhaseWebhook', () => {
 
 // sql fake con estado mutable real: el UPDATE de `phases` solo "gana" si el
 // `WHERE phases = $expected` coincide con el estado actual (CAS real), y el
-// UPDATE de `status` persiste el status final + inspecciona el fragmento
-// `extra` (expires_at) que se compone como sub-template anidado.
+// UPDATE de `status` persiste el status final. El fragmento `extra` (expires_at)
+// se construye con una invocación SEPARADA de este mismo `sql` tag (postgres.js
+// invoca tags anidados de forma sincrona), asi que aqui no es async: el valor
+// que retorna esa invocacion queda embebido tal cual en los `vals` de la
+// llamada UPDATE...SET status real, y es sobre ESA llamada que se afirma
+// (no sobre la construccion aislada del fragmento, que existiria igual aunque
+// nunca se interpolara en la query final).
 function makeCasSql({ status = 'running', phases = {}, artifacts = [] } = {}) {
   const state = { status, phases, artifacts };
   const calls = [];
-  const sql = vi.fn(async (strings, ...vals) => {
+  const sql = vi.fn((strings, ...vals) => {
     const q = strings.join('?');
     calls.push({ q, vals });
     if (/SELECT id, status, phases, artifacts\s+FROM pitch_jobs WHERE id/.test(q)) {
@@ -60,6 +65,15 @@ function makeCasSql({ status = 'running', phases = {}, artifacts = [] } = {}) {
       const [finalStatus] = vals;
       state.status = finalStatus;
       return { count: 1 };
+    }
+    // Fragmentos anidados `sql`, expires_at = ${date}`` o `sql``` (vacio). Sentinel
+    // distinguible para poder verificar, en la llamada real de status, cual de
+    // los dos fragmentos quedo efectivamente interpolado.
+    if (strings.length === 2 && /expires_at/.test(strings[0])) {
+      return { __fragment: 'expires_at' };
+    }
+    if (strings.length === 1 && strings[0] === '') {
+      return { __fragment: 'none' };
     }
     return [];
   });
@@ -84,8 +98,9 @@ describe('applyPhaseWebhook — cálculo de estado final', () => {
 
     expect(out.status).toBe('succeeded');
     expect(state.status).toBe('succeeded');
-    const expiresCall = calls.find((c) => /expires_at/.test(c.q) && c.vals[0] instanceof Date);
-    expect(expiresCall).toBeDefined();
+    const statusCall = calls.find((c) => /UPDATE pitch_jobs SET status/.test(c.q));
+    expect(statusCall.vals[0]).toBe('succeeded');
+    expect(statusCall.vals).toContainEqual({ __fragment: 'expires_at' });
   });
 
   it('una fase failed y el resto done → status partial, con expires_at', async () => {
@@ -98,8 +113,9 @@ describe('applyPhaseWebhook — cálculo de estado final', () => {
 
     expect(out.status).toBe('partial');
     expect(state.status).toBe('partial');
-    const expiresCall = calls.find((c) => /expires_at/.test(c.q) && c.vals[0] instanceof Date);
-    expect(expiresCall).toBeDefined();
+    const statusCall = calls.find((c) => /UPDATE pitch_jobs SET status/.test(c.q));
+    expect(statusCall.vals[0]).toBe('partial');
+    expect(statusCall.vals).toContainEqual({ __fragment: 'expires_at' });
   });
 
   it('todas las fases failed → status failed, sin expires_at', async () => {
@@ -111,7 +127,61 @@ describe('applyPhaseWebhook — cálculo de estado final', () => {
 
     expect(out.status).toBe('failed');
     expect(state.status).toBe('failed');
-    const expiresCall = calls.find((c) => /expires_at/.test(c.q) && c.vals[0] instanceof Date);
-    expect(expiresCall).toBeUndefined();
+    const statusCall = calls.find((c) => /UPDATE pitch_jobs SET status/.test(c.q));
+    expect(statusCall.vals[0]).toBe('failed');
+    expect(statusCall.vals).toContainEqual({ __fragment: 'none' });
+  });
+});
+
+describe('applyPhaseWebhook — idempotencia por fase', () => {
+  it('replay de una fase ya done no duplica artefactos ni reinicia TTL', async () => {
+    const phase = REQUIRED_PHASES[0];
+    const { sql, calls } = makeCasSql({
+      status: 'running',
+      phases: { [phase]: { status: 'done', error: null, cost: null } },
+      artifacts: ['existente.wav'],
+    });
+
+    const out = await applyPhaseWebhook(sql, 'j', phase, { ok: true, artifacts: ['nuevo.wav'] });
+
+    expect(out).toEqual({ status: 'running' });
+    expect(calls.some((c) => /UPDATE pitch_jobs\s+SET phases/.test(c.q))).toBe(false);
+    expect(calls.some((c) => /UPDATE pitch_jobs SET status/.test(c.q))).toBe(false);
+  });
+
+  it('webhook sobre un job ya succeeded no ejecuta ningun UPDATE', async () => {
+    const { sql, calls } = makeCasSql({ status: 'succeeded', phases: doneMap(...REQUIRED_PHASES) });
+
+    const out = await applyPhaseWebhook(sql, 'j', REQUIRED_PHASES[0], { ok: true });
+
+    expect(out).toEqual({ status: 'succeeded' });
+    expect(calls.some((c) => /UPDATE pitch_jobs\s+SET phases/.test(c.q))).toBe(false);
+    expect(calls.some((c) => /UPDATE pitch_jobs SET status/.test(c.q))).toBe(false);
+  });
+
+  it('reintenta el CAS cuando otra escritura gana el primer intento', async () => {
+    const rest = REQUIRED_PHASES.slice(0, -1);
+    const last = REQUIRED_PHASES[REQUIRED_PHASES.length - 1];
+    const { sql } = makeCasSql({ phases: doneMap(...rest) });
+
+    let phaseUpdateAttempts = 0;
+    // Envuelve el fake real: el primer intento de UPDATE...SET phases pierde el
+    // CAS (count:0) simulando una escritura concurrente que gano la carrera; el
+    // segundo intento, con el mismo prevPhases (el estado no cambio realmente),
+    // pasa al fake real y gana.
+    const sqlWithForcedRetry = vi.fn((strings, ...vals) => {
+      const q = strings.join('?');
+      if (/UPDATE pitch_jobs\s+SET phases/.test(q)) {
+        phaseUpdateAttempts += 1;
+        if (phaseUpdateAttempts === 1) return { count: 0 };
+      }
+      return sql(strings, ...vals);
+    });
+    sqlWithForcedRetry.json = sql.json;
+
+    const out = await applyPhaseWebhook(sqlWithForcedRetry, 'j', last, { ok: true });
+
+    expect(out.status).toBe('succeeded');
+    expect(phaseUpdateAttempts).toBe(2);
   });
 });

@@ -2,7 +2,9 @@
  * modal.js — Cliente de la app de Modal del Estudio de pistas.
  * Espeja el rol de replicate.js: arrancar el orquestador DAG y verificar el callback firmado.
  */
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac } from 'node:crypto';
+import { timingSafeEqualStr } from './crypto.js';
+import { fetchWithTimeout } from './http.js';
 
 /**
  * Verifica el callback HMAC de Modal: hex(hmac-sha256(`${timestamp}.${body}`)).
@@ -15,10 +17,7 @@ export function verifyModalSignature({ timestamp, signature, body, secret }) {
   const ts = Number(timestamp);
   if (!Number.isFinite(ts) || Math.abs(Date.now() - ts * 1000) > 5 * 60 * 1000) return false;
   const expected = createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
-  const a = Buffer.from(signature, 'hex');
-  const b = Buffer.from(expected, 'hex');
-  if (a.length === 0) return false;
-  return a.length === b.length && timingSafeEqual(a, b);
+  return timingSafeEqualStr(signature, expected);
 }
 
 /**
@@ -40,22 +39,15 @@ export async function invokeModalPipeline(payload) {
   // Fix 3: timeout < maxDuration de plataforma — si Modal no responde en 8s, fallar rápido
   // con un 502 claro en vez de colgar la función hasta su límite (el caller marca el job
   // failed y conserva su reintento existente).
-  let res;
-  try {
-    res = await fetch(endpoint, {
+  const res = await fetchWithTimeout(
+    endpoint,
+    {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-inbound-secret': secret },
       body: JSON.stringify({ fn: 'run_pipeline', ...payload }),
-      signal: AbortSignal.timeout(8000),
-    });
-  } catch (err) {
-    const isTimeout = err?.name === 'AbortError' || err?.name === 'TimeoutError';
-    const e = new Error(
-      isTimeout ? 'Modal no respondió a tiempo.' : `No se pudo contactar a Modal: ${err.message}`,
-    );
-    e.status = 502;
-    throw e;
-  }
+    },
+    { timeoutMs: 8000, label: 'Modal' },
+  );
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
     const e = new Error(`Modal ${res.status}: ${detail.slice(0, 200)}`);

@@ -186,12 +186,29 @@ describe('POST /api/stems/jobs', () => {
     sqlResponses.push([{ n: 0 }]); // cuota libre
     const dupError = Object.assign(new Error('duplicate key value violates unique constraint'), {
       code: '23505',
+      constraint_name: 'stem_jobs_one_active_per_user',
     });
     sqlResponses.push({ __reject: dupError }); // INSERT ... RETURNING → violación de unicidad
     const res = makeRes();
     await handler(authedReq(), res);
     expect(res.statusCode).toBe(429);
     expect(res.body).toEqual({ error: 'quota', reason: 'quota' });
+  });
+
+  it('23505 de OTRA constraint no se enmascara como cuota: se relanza (500)', async () => {
+    sqlResponses.push([{ is_admin: false, studio_beta: true }]); // perfil beta
+    sqlResponses.push([]); // reclamo
+    sqlResponses.push([]); // sin job en proceso
+    sqlResponses.push([{ n: 0 }]); // cuota libre
+    const otherDup = Object.assign(new Error('duplicate key value violates unique constraint'), {
+      code: '23505',
+      constraint_name: 'stem_jobs_pkey',
+    });
+    sqlResponses.push({ __reject: otherDup }); // INSERT ... RETURNING → violación ajena
+    const res = makeRes();
+    await handler(authedReq(), res);
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toEqual({ error: 'Internal error' });
   });
 
   it('crea el job y devuelve upload firmado', async () => {

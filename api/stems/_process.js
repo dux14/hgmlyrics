@@ -2,7 +2,11 @@
  * _process.js — Avance del pipeline cuando una sección del DAG termina.
  * El pipeline v1 (separación de voces por modelo externo) fue eliminado en Task 0.7.
  */
-import { SECTION_KEYS, SECTION_STATUS, applySectionResult, deriveJobStatus } from './_sections.js';
+import { SECTION_KEYS, applySectionResult, deriveJobStatus } from './_sections.js';
+
+// El webhook solo reporta el desenlace de una sección: terminó (done) o falló (failed).
+// Aceptar 'pending'/'running'/'skipped' permitiría "des-terminar" una sección ya resuelta.
+const TERMINAL_SECTION_STATUS = ['done', 'failed'];
 
 /**
  * Aplica el resultado de una sección al job en una transacción con row-lock (FOR UPDATE).
@@ -21,9 +25,10 @@ export async function applySectionWebhook(sql, jobId, section, result) {
     throw e;
   }
 
-  // Fix 4: sin esto, applySectionResult asigna result.status tal cual, sin validar
-  // contra el enum — un status arbitrario del webhook quedaría persistido en DB.
-  if (!SECTION_STATUS.includes(result.status)) {
+  // Fix 4: sin esto, applySectionResult asigna result.status tal cual, sin validar —
+  // un status arbitrario del webhook quedaría persistido. Solo se aceptan terminales:
+  // un 'running'/'pending'/'skipped' entrante revertiría una sección ya resuelta.
+  if (!TERMINAL_SECTION_STATUS.includes(result.status)) {
     const e = new Error('status de sección no válido');
     e.status = 400;
     throw e;

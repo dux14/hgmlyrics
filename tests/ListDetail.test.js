@@ -33,6 +33,17 @@ const waitFor = async (fn, tries = 50) => {
   }
 };
 
+// Fechas futuras dinámicas: el wizard bloquea el avance si la caducidad no es futura,
+// así que fechas fijas caducan con el calendario. `futureISO(n)` para el tope del evento;
+// `futureLocal(n)` para el input datetime-local (formato YYYY-MM-DDTHH:MM, hora local).
+const DAY_MS = 86400000;
+const futureISO = (days) => new Date(Date.now() + days * DAY_MS).toISOString();
+const futureLocal = (days) => {
+  const d = new Date(Date.now() + days * DAY_MS);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 describe('wizard de listas', () => {
   let container;
   beforeEach(() => {
@@ -300,14 +311,14 @@ describe('wizard de listas', () => {
         parent: {
           id: 'evt1',
           name: 'Concierto',
-          expires_at: '2026-06-20T00:00:00Z',
+          expires_at: futureISO(12),
           songs: ['s1', 's2'],
         },
       },
     );
     el.querySelector('#list-detail-name').value = 'Ensayo general';
     el.querySelector('#list-detail-name').dispatchEvent(new Event('input'));
-    el.querySelector('#list-detail-datetime').value = '2026-06-18T20:00';
+    el.querySelector('#list-detail-datetime').value = futureLocal(10);
     el.querySelector('#list-detail-datetime').dispatchEvent(new Event('input'));
     const nextBtn = el.querySelector('#list-wizard-next');
     nextBtn.click(); // paso 2

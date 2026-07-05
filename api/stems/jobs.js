@@ -100,7 +100,9 @@ export default withErrors(async (req, res) => {
     // rechaza el INSERT si ya hay un job activo para este usuario (dos POST /jobs casi
     // simultáneos pasaron el check de arriba antes de que ninguno insertara). El
     // perdedor de la carrera recibe el mismo error que el path de cuota, no un 500.
-    if (err?.code === '23505') {
+    // Se discrimina por constraint: otra violación de unicidad (bug de esquema) no debe
+    // enmascararse como "cuota" — se relanza para que salga un 500 y quede en logs.
+    if (err?.code === '23505' && err?.constraint_name === 'stem_jobs_one_active_per_user') {
       res.status(429).json({ error: 'quota', reason: 'quota' });
       return;
     }

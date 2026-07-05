@@ -46,17 +46,23 @@ beforeEach(() => {
   mockGetUser.mockReset();
 });
 
+// Fechas futuras dinámicas: validateExpiry rechaza `expires_at <= now`, así que fechas
+// fijas caducan con el calendario. `future(n)` = ahora + n días; el orden relativo entre
+// ellas (evento padre después de la sub-lista) es lo que importa para la lógica de anidado.
+const DAY_MS = 86400000;
+const future = (days) => new Date(Date.now() + days * DAY_MS).toISOString();
+
 describe('POST /api/lists', () => {
   it('crea sub-lista válida bajo un evento del usuario', async () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
     sqlResponses.push([
-      { id: 'evt1', owner_id: 'u1', parent_id: null, expires_at: '2026-06-20T00:00:00Z' },
+      { id: 'evt1', owner_id: 'u1', parent_id: null, expires_at: future(20) },
     ]); // SELECT padre
-    sqlResponses.push([{ id: 'sub1', name: 'Ensayo', expires_at: '2026-06-18T00:00:00Z' }]); // INSERT
+    sqlResponses.push([{ id: 'sub1', name: 'Ensayo', expires_at: future(18) }]); // INSERT
     const req = {
       method: 'POST',
       headers: { authorization: 'Bearer t' },
-      body: { name: 'Ensayo', expires_at: '2026-06-18T00:00:00Z', parent_id: 'evt1' },
+      body: { name: 'Ensayo', expires_at: future(18), parent_id: 'evt1' },
     };
     const res = makeRes();
     await indexHandler(req, res);
@@ -67,12 +73,12 @@ describe('POST /api/lists', () => {
   it('rechaza sub-lista cuya caducidad excede al evento (400)', async () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
     sqlResponses.push([
-      { id: 'evt1', owner_id: 'u1', parent_id: null, expires_at: '2026-06-15T00:00:00Z' },
+      { id: 'evt1', owner_id: 'u1', parent_id: null, expires_at: future(15) },
     ]);
     const req = {
       method: 'POST',
       headers: { authorization: 'Bearer t' },
-      body: { name: 'Ensayo', expires_at: '2026-06-20T00:00:00Z', parent_id: 'evt1' },
+      body: { name: 'Ensayo', expires_at: future(20), parent_id: 'evt1' }, // más allá del evento
     };
     const res = makeRes();
     await indexHandler(req, res);
@@ -82,12 +88,12 @@ describe('POST /api/lists', () => {
   it('rechaza colgar de una sub-lista (profundidad, 400)', async () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
     sqlResponses.push([
-      { id: 'sub1', owner_id: 'u1', parent_id: 'evt1', expires_at: '2026-06-18T00:00:00Z' },
+      { id: 'sub1', owner_id: 'u1', parent_id: 'evt1', expires_at: future(18) },
     ]);
     const req = {
       method: 'POST',
       headers: { authorization: 'Bearer t' },
-      body: { name: 'Sub-sub', expires_at: '2026-06-17T00:00:00Z', parent_id: 'sub1' },
+      body: { name: 'Sub-sub', expires_at: future(17), parent_id: 'sub1' },
     };
     const res = makeRes();
     await indexHandler(req, res);
@@ -100,7 +106,7 @@ describe('POST /api/lists', () => {
     const req = {
       method: 'POST',
       headers: { authorization: 'Bearer t' },
-      body: { name: 'Ensayo', expires_at: '2026-06-18T00:00:00Z', parent_id: 'ajeno' },
+      body: { name: 'Ensayo', expires_at: future(18), parent_id: 'ajeno' },
     };
     const res = makeRes();
     await indexHandler(req, res);
@@ -109,11 +115,11 @@ describe('POST /api/lists', () => {
 
   it('crea una lista para el usuario', async () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: 'u1', email: 'a@b.co' } }, error: null });
-    sqlResponses.push([{ id: 'list1', name: 'Mi lista', expires_at: '2026-06-20T00:00:00Z' }]);
+    sqlResponses.push([{ id: 'list1', name: 'Mi lista', expires_at: future(20) }]);
     const req = {
       method: 'POST',
       headers: { authorization: 'Bearer t' },
-      body: { name: 'Mi lista', expires_at: '2026-06-20T00:00:00Z' },
+      body: { name: 'Mi lista', expires_at: future(20) },
     };
     const res = makeRes();
     await indexHandler(req, res);

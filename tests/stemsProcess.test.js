@@ -120,4 +120,18 @@ describe('applySectionWebhook — por sección DAG', () => {
       applySectionWebhook(sql, 'job-1', 'seccionInvalida', { status: 'done' }),
     ).rejects.toMatchObject({ status: 400 });
   });
+
+  it.each(['pending', 'running', 'skipped', 'inventado'])(
+    'status no terminal (%s) → 400 y no des-termina la sección',
+    async (badStatus) => {
+      const sections = initSections(['structure']);
+      sections.structure.status = 'done'; // sección ya resuelta
+      const sql = makeSqlWithBegin({ sections });
+      await expect(
+        applySectionWebhook(sql, 'job-1', 'structure', { status: badStatus }),
+      ).rejects.toMatchObject({ status: 400 });
+      // El estado terminal no fue tocado.
+      expect(sql.state.sections.structure.status).toBe('done');
+    },
+  );
 });

@@ -12,6 +12,27 @@ export function allowMethods(req, res, allowed) {
 }
 
 /**
+ * fetch con timeout que traduce fallos de red (timeout o conexión) a un error 502.
+ * Unifica el patrón que estaba duplicado en modal.js y ordo/[date].js.
+ * @param {string} url
+ * @param {RequestInit} [opts] — opciones de fetch (sin signal; se inyecta el timeout).
+ * @param {{ timeoutMs?: number, label?: string }} [cfg] — label nombra el upstream en el mensaje.
+ * @returns {Promise<Response>} la Response si la red respondió (aunque sea !ok).
+ */
+export async function fetchWithTimeout(url, opts = {}, { timeoutMs = 8000, label = 'El servicio externo' } = {}) {
+  try {
+    return await fetch(url, { ...opts, signal: AbortSignal.timeout(timeoutMs) });
+  } catch (err) {
+    const isTimeout = err?.name === 'AbortError' || err?.name === 'TimeoutError';
+    const e = new Error(
+      isTimeout ? `${label} no respondió a tiempo.` : `No se pudo contactar a ${label}: ${err.message}`,
+    );
+    e.status = 502;
+    throw e;
+  }
+}
+
+/**
  * Async handler wrapper: catches thrown errors and sends a JSON response.
  * Errors with .status get that code; everything else becomes 500.
  */

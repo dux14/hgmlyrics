@@ -1,6 +1,6 @@
 // api/ordo/[date].js
 import { requireAdmin } from '../_lib/auth.js';
-import { allowMethods, withErrors } from '../_lib/http.js';
+import { allowMethods, withErrors, fetchWithTimeout } from '../_lib/http.js';
 import sql from '../_lib/db.js';
 
 const ORDO_API =
@@ -70,17 +70,7 @@ export default withErrors(async (req, res) => {
     throw e;
   }
 
-  let apiRes;
-  try {
-    apiRes = await fetch(ORDO_API, { signal: AbortSignal.timeout(5000) });
-  } catch (err) {
-    if (err.name === 'AbortError' || err.name === 'TimeoutError') {
-      const e = new Error('El servicio externo no respondió a tiempo.');
-      e.status = 502;
-      throw e;
-    }
-    throw err;
-  }
+  const apiRes = await fetchWithTimeout(ORDO_API, {}, { timeoutMs: 5000, label: 'El servicio externo' });
   if (!apiRes.ok) {
     const e = new Error('Ordo no disponible');
     e.status = 502;

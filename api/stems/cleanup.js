@@ -1,6 +1,6 @@
-import { timingSafeEqual } from 'node:crypto';
 import sql from '../_lib/db.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
+import { timingSafeEqualStr } from '../_lib/crypto.js';
 import { deleteStemsPrefix } from '../_lib/storage.js';
 
 // Vercel cron manda Authorization: Bearer ${CRON_SECRET}
@@ -9,10 +9,7 @@ export default withErrors(async (req, res) => {
   const auth = req.headers?.authorization ?? '';
   const secret = process.env.CRON_SECRET;
   const expected = secret ? `Bearer ${secret}` : null;
-  const a = Buffer.from(auth);
-  const b = Buffer.from(expected ?? '');
-  const matches = !!expected && a.length === b.length && timingSafeEqual(a, b);
-  if (!matches) {
+  if (!expected || !timingSafeEqualStr(auth, expected)) {
     res.status(401).json({ error: 'No autorizado' });
     return;
   }
@@ -24,8 +21,14 @@ export default withErrors(async (req, res) => {
   `;
   // Perf: el borrado de Storage de cada job es independiente — Promise.allSettled evita
   // que un borrado fallido aborte el resto (y por ende el cron, maxDuration=60s).
-  await Promise.allSettled(expired.map((job) => deleteStemsPrefix(`${job.user_id}/${job.id}`)));
-  for (const job of expired) {
+  const purgeResults = await Promise.allSettled(
+    expired.map((job) => deleteStemsPrefix(`${job.user_id}/${job.id}`)),
+  );
+  // Solo marcar 'expired' los jobs cuyo storage se borró de verdad. Si el borrado falla,
+  // el job sigue 'done' con expires_at pasado y el próximo cron lo reintenta — evita
+  // storage huérfano que un 'expired' (que nunca se revisita) dejaría para siempre.
+  const purged = expired.filter((_, i) => purgeResults[i].status === 'fulfilled');
+  for (const job of purged) {
     await sql`
       UPDATE stem_jobs SET status = 'expired', stems = NULL, voices = NULL,
         input_path = NULL, updated_at = now()
@@ -70,7 +73,7 @@ export default withErrors(async (req, res) => {
   `;
 
   res.status(200).json({
-    expired: expired.length,
+    expired: purged.length,
     zombies: zombies.length,
     abandoned: abandoned.length,
     failedStorage: orphanStorage.length,

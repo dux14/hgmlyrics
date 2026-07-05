@@ -126,16 +126,16 @@ describe('GET /api/stems/cleanup — auth fail-closed', () => {
     });
   });
 
-  it('Promise.allSettled: un borrado que falla no aborta el resto del barrido ni el cron', async () => {
+  it('Promise.allSettled: un borrado que falla no aborta el resto ni marca el job como expired', async () => {
     process.env.CRON_SECRET = 'supersecret';
 
-    // 2 jobs "expired": el primer deleteStemsPrefix rechaza, el segundo debe seguir corriendo.
+    // 2 jobs "expired": el borrado de job1 rechaza (no debe marcarse expired: quedaría
+    // storage huérfano irrecuperable); el de job2 resuelve y sí se marca. Solo 1 UPDATE.
     sqlResponses.push([
       { id: 'job1', user_id: 'u1' },
       { id: 'job2', user_id: 'u2' },
-    ]); // expired
-    sqlResponses.push([]); // UPDATE expired job1
-    sqlResponses.push([]); // UPDATE expired job2
+    ]); // expired SELECT
+    sqlResponses.push([]); // UPDATE expired job2 (job1 se salta por borrado fallido)
     sqlResponses.push([]); // zombies
     sqlResponses.push([]); // abandoned
     sqlResponses.push([]); // orphanStorage
@@ -154,6 +154,7 @@ describe('GET /api/stems/cleanup — auth fail-closed', () => {
     expect(mockDeleteStemsPrefix).toHaveBeenCalledTimes(2);
     expect(mockDeleteStemsPrefix).toHaveBeenCalledWith('u1/job1');
     expect(mockDeleteStemsPrefix).toHaveBeenCalledWith('u2/job2');
-    expect(res.body.expired).toBe(2);
+    // job1 (borrado fallido) sigue 'done' y se reintentará; solo job2 quedó expired.
+    expect(res.body.expired).toBe(1);
   });
 });

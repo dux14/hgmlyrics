@@ -41,95 +41,114 @@ const postReq = (over = {}) => ({
   ...over,
 });
 
-it('POST sin acceso beta → 403', async () => {
-  routeSql([
-    ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: false }]],
-  ]);
-  const res = makeRes();
-  await handler(postReq(), res);
-  expect(res.status).toHaveBeenCalledWith(403);
-  expect(res.json).toHaveBeenCalledWith({ error: 'beta', reason: 'beta' });
-});
-
-it('POST feliz (beta activo, bajo cuota) → 200 con job + upload', async () => {
-  routeSql([
-    ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: true }]],
-    ['RETURNING id, input_path', []], // reclamo de huérfanos: ninguno
-    ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: 0 }]],
-    ['INSERT INTO pitch_jobs', [{ id: 'j1', status: 'created', profile: 'oss', created_at: 't' }]],
-    ['UPDATE pitch_jobs SET input_path', []],
-  ]);
-  const res = makeRes();
-  await handler(postReq(), res);
-  expect(res.status).toHaveBeenCalledWith(200);
-  expect(res.json).toHaveBeenCalledWith({
-    job: { id: 'j1', status: 'created', profile: 'oss', created_at: 't' },
-    upload: { path: 'p', token: 't' },
+describe('api/pitch/jobs', () => {
+  it('POST sin acceso beta → 403', async () => {
+    routeSql([
+      ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: false }]],
+    ]);
+    const res = makeRes();
+    await handler(postReq(), res);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ error: 'beta', reason: 'beta' });
   });
-  expect(createPitchUploadUrl).toHaveBeenCalledWith('u1/j1/input/a.mp3');
-});
 
-it('POST con cuota agotada (no-admin) → 429', async () => {
-  routeSql([
-    ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: true }]],
-    ['RETURNING id, input_path', []],
-    ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: DAILY_QUOTA }]],
-  ]);
-  const res = makeRes();
-  await handler(postReq(), res);
-  expect(res.status).toHaveBeenCalledWith(429);
-  expect(res.json).toHaveBeenCalledWith({ error: 'quota', reason: 'quota' });
-});
-
-it('POST: carrera del índice único (23505) en el INSERT → 429 igual que cuota', async () => {
-  const dupError = Object.assign(new Error('duplicate key value violates unique constraint'), {
-    code: '23505',
-    constraint_name: 'pitch_jobs_one_active_per_user',
+  it('POST feliz (beta activo, bajo cuota) → 200 con job + upload', async () => {
+    routeSql([
+      ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: true }]],
+      ['RETURNING id, input_path', []], // reclamo de huérfanos: ninguno
+      ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: 0 }]],
+      ['INSERT INTO pitch_jobs', [{ id: 'j1', status: 'created', profile: 'oss', created_at: 't' }]],
+      ['UPDATE pitch_jobs SET input_path', []],
+    ]);
+    const res = makeRes();
+    await handler(postReq(), res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      job: { id: 'j1', status: 'created', profile: 'oss', created_at: 't' },
+      upload: { path: 'p', token: 't' },
+    });
+    expect(createPitchUploadUrl).toHaveBeenCalledWith('u1/j1/input/a.mp3');
   });
-  routeSql([
-    ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: true }]],
-    ['RETURNING id, input_path', []],
-    ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: 0 }]],
-    ['INSERT INTO pitch_jobs', { __reject: dupError }],
-  ]);
-  const res = makeRes();
-  await handler(postReq(), res);
-  expect(res.status).toHaveBeenCalledWith(429);
-  expect(res.json).toHaveBeenCalledWith({ error: 'quota', reason: 'quota' });
-});
 
-it('GET → 200 con jobs + quota', async () => {
-  routeSql([
-    ['SELECT id, status, profile, input_meta', [{ id: 'j1', status: 'succeeded', profile: 'oss' }]],
-    ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: 1 }]],
-    ['SELECT is_admin FROM profiles', [{ is_admin: false }]],
-  ]);
-  const res = makeRes();
-  await handler({ method: 'GET' }, res);
-  expect(res.status).toHaveBeenCalledWith(200);
-  expect(res.json).toHaveBeenCalledWith({
-    jobs: [{ id: 'j1', status: 'succeeded', profile: 'oss' }],
-    quota: { used: 1, limit: DAILY_QUOTA },
+  it('POST con cuota agotada (no-admin) → 429', async () => {
+    routeSql([
+      ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: true }]],
+      ['RETURNING id, input_path', []],
+      ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: DAILY_QUOTA }]],
+    ]);
+    const res = makeRes();
+    await handler(postReq(), res);
+    expect(res.status).toHaveBeenCalledWith(429);
+    expect(res.json).toHaveBeenCalledWith({ error: 'quota', reason: 'quota' });
   });
-});
 
-it('GET admin: quota unlimited', async () => {
-  routeSql([
-    ['SELECT id, status, profile, input_meta', [{ id: 'j1', status: 'succeeded', profile: 'oss' }]],
-    ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: 5 }]],
-    ['SELECT is_admin FROM profiles', [{ is_admin: true }]],
-  ]);
-  const res = makeRes();
-  await handler({ method: 'GET' }, res);
-  expect(res.status).toHaveBeenCalledWith(200);
-  expect(res.json).toHaveBeenCalledWith({
-    jobs: [{ id: 'j1', status: 'succeeded', profile: 'oss' }],
-    quota: { used: 5, limit: null, unlimited: true },
+  it('POST: carrera del índice único (23505) en el INSERT → 429 igual que cuota', async () => {
+    const dupError = Object.assign(new Error('duplicate key value violates unique constraint'), {
+      code: '23505',
+      constraint_name: 'pitch_jobs_one_active_per_user',
+    });
+    routeSql([
+      ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: true }]],
+      ['RETURNING id, input_path', []],
+      ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: 0 }]],
+      ['INSERT INTO pitch_jobs', { __reject: dupError }],
+    ]);
+    const res = makeRes();
+    await handler(postReq(), res);
+    expect(res.status).toHaveBeenCalledWith(429);
+    expect(res.json).toHaveBeenCalledWith({ error: 'quota', reason: 'quota' });
   });
-});
 
-it('método no permitido (DELETE) → 405', async () => {
-  const res = makeRes();
-  await handler({ method: 'DELETE' }, res);
-  expect(res.status).toHaveBeenCalledWith(405);
+  it('POST: 23505 de OTRA constraint no se enmascara como cuota: se relanza (500)', async () => {
+    const otherDup = Object.assign(new Error('duplicate key value violates unique constraint'), {
+      code: '23505',
+      constraint_name: 'otra_constraint_cualquiera',
+    });
+    routeSql([
+      ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: true }]],
+      ['RETURNING id, input_path', []],
+      ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: 0 }]],
+      ['INSERT INTO pitch_jobs', { __reject: otherDup }],
+    ]);
+    const res = makeRes();
+    await handler(postReq(), res);
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Internal error' });
+  });
+
+  it('GET → 200 con jobs + quota', async () => {
+    routeSql([
+      ['SELECT id, status, profile, input_meta', [{ id: 'j1', status: 'succeeded', profile: 'oss' }]],
+      ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: 1 }]],
+      ['SELECT is_admin FROM profiles', [{ is_admin: false }]],
+    ]);
+    const res = makeRes();
+    await handler({ method: 'GET' }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      jobs: [{ id: 'j1', status: 'succeeded', profile: 'oss' }],
+      quota: { used: 1, limit: DAILY_QUOTA },
+    });
+  });
+
+  it('GET admin: quota unlimited', async () => {
+    routeSql([
+      ['SELECT id, status, profile, input_meta', [{ id: 'j1', status: 'succeeded', profile: 'oss' }]],
+      ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: 5 }]],
+      ['SELECT is_admin FROM profiles', [{ is_admin: true }]],
+    ]);
+    const res = makeRes();
+    await handler({ method: 'GET' }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      jobs: [{ id: 'j1', status: 'succeeded', profile: 'oss' }],
+      quota: { used: 5, limit: null, unlimited: true },
+    });
+  });
+
+  it('método no permitido (DELETE) → 405', async () => {
+    const res = makeRes();
+    await handler({ method: 'DELETE' }, res);
+    expect(res.status).toHaveBeenCalledWith(405);
+  });
 });

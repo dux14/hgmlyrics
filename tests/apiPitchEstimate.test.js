@@ -11,8 +11,9 @@ describe('api/pitch/jobs/[id]/estimate', () => {
     sql.json = (o) => o;
     sql.mockImplementation(async (strings) => {
       const q = strings.join('?');
-      if (/SELECT .* FROM pitch_jobs/.test(q))
-        {return [{ id: 'j', user_id: 'u1', status: 'created', profile: 'precision' }];}
+      if (/SELECT .* FROM pitch_jobs/.test(q)) {
+        return [{ id: 'j', user_id: 'u1', status: 'created', profile: 'precision' }];
+      }
       return { count: 1 };
     });
     const res = makeRes();
@@ -45,12 +46,30 @@ describe('api/pitch/jobs/[id]/estimate', () => {
     sql.json = (o) => o;
     sql.mockImplementation(async (strings) => {
       const q = strings.join('?');
-      if (/SELECT .* FROM pitch_jobs/.test(q))
-        {return [{ id: 'j', user_id: 'u1', status, profile: 'precision' }];}
+      if (/SELECT .* FROM pitch_jobs/.test(q)) {
+        return [{ id: 'j', user_id: 'u1', status, profile: 'precision' }];
+      }
       return { count: 1 };
     });
     const res = makeRes();
     await handler({ method: 'POST', query: { id: 'j' }, body: { durationSec: 120 } }, res);
+    expect(res.status).toHaveBeenCalledWith(409);
+  });
+
+  it('carrera CAS: otra transición gana entre SELECT y UPDATE → 409', async () => {
+    sql.json = (o) => o;
+    sql.mockImplementation(async (strings) => {
+      const q = strings.join('?');
+      if (/SELECT .* FROM pitch_jobs/.test(q)) {
+        return [{ id: 'j', user_id: 'u1', status: 'created', profile: 'precision' }];
+      }
+      if (/UPDATE pitch_jobs/.test(q)) {
+        return { count: 0 };
+      }
+      return { count: 1 };
+    });
+    const res = makeRes();
+    await handler({ method: 'POST', query: { id: 'j' }, body: { durationSec: 180 } }, res);
     expect(res.status).toHaveBeenCalledWith(409);
   });
 });

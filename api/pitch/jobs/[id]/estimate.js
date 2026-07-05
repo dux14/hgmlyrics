@@ -24,10 +24,14 @@ export default withErrors(async (req, res) => {
     return;
   }
   const est = estimate(job.profile, durationSec);
-  await sql`
+  const upd = await sql`
     UPDATE pitch_jobs
     SET status = 'awaiting_approval', duration_sec = ${durationSec},
         cost_estimate_lo = ${est.lo}, cost_estimate_hi = ${est.hi}, updated_at = now()
-    WHERE id = ${id}`;
+    WHERE id = ${id} AND status IN ('created', 'uploaded', 'estimating')`;
+  if (upd.count !== 1) {
+    res.status(409).json({ error: 'El job cambió de estado; vuelve a intentar' });
+    return;
+  }
   res.status(200).json({ status: 'awaiting_approval', estimate: est });
 });

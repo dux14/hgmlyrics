@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../api/_lib/db.js', () => ({ default: vi.fn() }));
 vi.mock('../api/_lib/auth.js', () => ({ requireUser: vi.fn(async () => ({ id: 'u1' })) }));
-vi.mock('../api/pitch/_lib/storage.js', () => ({ signPitchDownload: vi.fn(async () => 'https://get') }));
+vi.mock('../api/pitch/_lib/storage.js', () => ({
+  signPitchDownload: vi.fn(async () => 'https://get'),
+}));
 import sql from '../api/_lib/db.js';
 import { signPitchDownload } from '../api/pitch/_lib/storage.js';
 import detail from '../api/pitch/jobs/[id].js';
@@ -11,7 +13,9 @@ beforeEach(() => vi.clearAllMocks());
 
 describe('api/pitch/jobs/[id] (detalle + cancel)', () => {
   it('GET detalle devuelve el job del usuario', async () => {
-    sql.mockImplementation(async () => [{ id: 'j', user_id: 'u1', status: 'running', phases: {}, artifacts: [] }]);
+    sql.mockImplementation(async () => [
+      { id: 'j', user_id: 'u1', status: 'running', phases: {}, artifacts: [] },
+    ]);
     const res = makeRes();
     await detail({ method: 'GET', query: { id: 'j' } }, res);
     expect(res.status).toHaveBeenCalledWith(200);
@@ -38,6 +42,22 @@ describe('api/pitch/jobs/[id] (detalle + cancel)', () => {
     await detail({ method: 'GET', query: { id: 'j' } }, res);
     expect(signPitchDownload).toHaveBeenCalledWith('u1/j/render/x.svg');
     expect(res.body.artifacts[0].url).toBe('https://get');
+  });
+
+  it('GET con artefacto fuera del prefijo del job no lo firma (SEC)', async () => {
+    sql.mockImplementation(async () => [
+      {
+        id: 'j',
+        user_id: 'u1',
+        status: 'succeeded',
+        phases: {},
+        artifacts: [{ storage_uri: 'otro-user/otro-job/render/x.svg', kind: 'svg' }],
+      },
+    ]);
+    const res = makeRes();
+    await detail({ method: 'GET', query: { id: 'j' } }, res);
+    expect(signPitchDownload).not.toHaveBeenCalled();
+    expect(res.body.artifacts[0].url).toBeNull();
   });
 
   it('cancel marca cancelled', async () => {

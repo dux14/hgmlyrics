@@ -2,6 +2,7 @@ import sql from '../../../_lib/db.js';
 import { requireUser } from '../../../_lib/auth.js';
 import { allowMethods, withErrors } from '../../../_lib/http.js';
 import { canTransition } from '../../_lib/state.js';
+import { deletePitchPrefix } from '../../_lib/storage.js';
 
 export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['POST'])) return;
@@ -28,5 +29,6 @@ export default withErrors(async (req, res) => {
     res.status(409).json({ error: 'El job cambió de estado; vuelve a intentar' });
     return;
   }
+  await deletePitchPrefix(`${user.id}/${id}`).catch(() => {}); // #3: liberar storage al cancelar
   res.status(200).json({ status: 'cancelled' });
 });

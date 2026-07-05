@@ -1,9 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../api/_lib/db.js', () => ({ default: vi.fn() }));
 vi.mock('../api/_lib/auth.js', () => ({ requireUser: vi.fn(async () => ({ id: 'u1' })) }));
-vi.mock('../api/pitch/_lib/storage.js', () => ({ signPitchDownload: vi.fn(async () => 'https://signed/get') }));
+vi.mock('../api/pitch/_lib/storage.js', () => ({
+  signPitchDownload: vi.fn(async () => 'https://signed/get'),
+  deletePitchPrefix: vi.fn(async () => {}),
+}));
 vi.mock('../api/pitch/_lib/modal.js', () => ({ invokePitchPipeline: vi.fn(async () => ({ id: 'call1' })) }));
 import sql from '../api/_lib/db.js';
+import { deletePitchPrefix } from '../api/pitch/_lib/storage.js';
 import { invokePitchPipeline } from '../api/pitch/_lib/modal.js';
 import handler from '../api/pitch/jobs/[id]/approve.js';
 import { makeRes } from './helpers/makeRes.js';
@@ -54,7 +58,7 @@ describe('api/pitch/jobs/[id]/approve', () => {
     expect(invokePitchPipeline).not.toHaveBeenCalled();
   });
 
-  it('Modal falla ambos intentos → marca failed (no running) y responde 502', async () => {
+  it('Modal falla ambos intentos → marca failed (no running), purga storage y responde 502', async () => {
     sql.json = (o) => o;
     let failedUpdateCalled = false;
     sql.mockImplementation(async (strings) => {
@@ -69,7 +73,26 @@ describe('api/pitch/jobs/[id]/approve', () => {
     await handler({ method: 'POST', query: { id: 'j' }, headers: {} }, res);
     expect(invokePitchPipeline).toHaveBeenCalledTimes(2);
     expect(failedUpdateCalled).toBe(true);
+    expect(deletePitchPrefix).toHaveBeenCalledWith('u1/j');
     expect(res.status).toHaveBeenCalledWith(502);
+  });
+
+  it('Modal falla ambos intentos pero el job ya cambió de estado (cancelado) → 409, sin purgar storage', async () => {
+    sql.json = (o) => o;
+    sql.mockImplementation(async (strings) => {
+      const q = strings.join('?');
+      if (/SELECT .* FROM pitch_jobs/.test(q)) return [{ id: 'j', user_id: 'u1', status: 'awaiting_approval', profile: 'oss', input_path: 'u1/j/input/a.mp3' }];
+      if (/UPDATE pitch_jobs SET status = 'running'/.test(q)) return { count: 1 };
+      // El CAS a 'failed' pierde: el job dejó 'running' concurrentemente (p.ej. cancelado).
+      if (/UPDATE pitch_jobs SET status = 'failed'/.test(q)) return { count: 0 };
+      return { count: 1 };
+    });
+    invokePitchPipeline.mockRejectedValue(new Error('modal down'));
+    const res = makeRes();
+    await handler({ method: 'POST', query: { id: 'j' }, headers: {} }, res);
+    expect(invokePitchPipeline).toHaveBeenCalledTimes(2);
+    expect(deletePitchPrefix).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(409);
   });
 
   it('Modal falla el 1er intento y pasa el reintento → 202 y no marca failed', async () => {

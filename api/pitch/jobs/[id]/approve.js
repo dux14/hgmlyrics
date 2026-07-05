@@ -1,7 +1,7 @@
 import sql from '../../../_lib/db.js';
 import { requireUser } from '../../../_lib/auth.js';
 import { allowMethods, withErrors } from '../../../_lib/http.js';
-import { signPitchDownload } from '../../_lib/storage.js';
+import { signPitchDownload, deletePitchPrefix } from '../../_lib/storage.js';
 import { invokePitchPipeline } from '../../_lib/modal.js';
 
 export default withErrors(async (req, res) => {
@@ -47,10 +47,20 @@ export default withErrors(async (req, res) => {
     try {
       await invokePitchPipeline(payload);
     } catch (err2) {
-      await sql`UPDATE pitch_jobs SET status = 'failed', error = ${String(err2?.message ?? err2).slice(0, 300)}, updated_at = now() WHERE id = ${id}`;
-      const e = new Error('No se pudo iniciar el procesamiento. Intenta de nuevo.');
-      e.status = 502;
-      throw e;
+      // CAS sobre 'running': esta rama solo parte de running, así que el estado
+      // fijo en el WHERE es seguro. Si ya cambió (p.ej. cancelado durante el
+      // despacho), no lo pisamos a failed ni lanzamos 502.
+      const marked = await sql`
+        UPDATE pitch_jobs SET status = 'failed', error = ${String(err2?.message ?? err2).slice(0, 300)}, updated_at = now()
+        WHERE id = ${id} AND status = 'running'`;
+      if (marked.count === 1) {
+        await deletePitchPrefix(`${user.id}/${id}`).catch(() => {}); // #3: liberar storage del job fallido
+        const e = new Error('No se pudo iniciar el procesamiento. Intenta de nuevo.');
+        e.status = 502;
+        throw e;
+      }
+      res.status(409).json({ error: 'El job cambió de estado durante el despacho' });
+      return;
     }
   }
   res.status(202).json({ status: 'running' });

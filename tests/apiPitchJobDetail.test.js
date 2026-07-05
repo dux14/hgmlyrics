@@ -3,9 +3,10 @@ vi.mock('../api/_lib/db.js', () => ({ default: vi.fn() }));
 vi.mock('../api/_lib/auth.js', () => ({ requireUser: vi.fn(async () => ({ id: 'u1' })) }));
 vi.mock('../api/pitch/_lib/storage.js', () => ({
   signPitchDownload: vi.fn(async () => 'https://get'),
+  deletePitchPrefix: vi.fn(async () => {}),
 }));
 import sql from '../api/_lib/db.js';
-import { signPitchDownload } from '../api/pitch/_lib/storage.js';
+import { signPitchDownload, deletePitchPrefix } from '../api/pitch/_lib/storage.js';
 import detail from '../api/pitch/jobs/[id].js';
 import cancel from '../api/pitch/jobs/[id]/cancel.js';
 import { makeRes } from './helpers/makeRes.js';
@@ -69,6 +70,7 @@ describe('api/pitch/jobs/[id] (detalle + cancel)', () => {
     const res = makeRes();
     await cancel({ method: 'POST', query: { id: 'j' } }, res);
     expect(res.status).toHaveBeenCalledWith(200);
+    expect(deletePitchPrefix).toHaveBeenCalledWith('u1/j');
   });
 
   it('cancel de un estado no cancelable devuelve 409 sin UPDATE', async () => {

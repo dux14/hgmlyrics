@@ -56,7 +56,16 @@ export async function applyPhaseWebhook(sql, jobId, phase, result) {
       const extra = (finalStatus === 'succeeded' || finalStatus === 'partial')
         ? sql`, expires_at = ${new Date(Date.now() + RESULT_TTL_MS)}`
         : sql``;
-      await sql`UPDATE pitch_jobs SET status = ${finalStatus}, updated_at = now() ${extra} WHERE id = ${jobId}`;
+      // CAS sobre el estado leído al inicio (running|partial): si el job cambió de
+      // estado entre el CAS de `phases` y aquí (p.ej. cancelado por el usuario), no
+      // lo pisamos con succeeded/partial/failed.
+      const finalized = await sql`
+        UPDATE pitch_jobs SET status = ${finalStatus}, updated_at = now() ${extra}
+        WHERE id = ${jobId} AND status = ${job.status}`;
+      if (finalized.count !== 1) {
+        const cur = await sql`SELECT status FROM pitch_jobs WHERE id = ${jobId}`;
+        return cur.length ? { status: cur[0].status } : null;
+      }
       return { status: finalStatus };
     }
     return { status: job.status };

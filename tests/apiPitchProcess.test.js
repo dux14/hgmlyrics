@@ -62,7 +62,10 @@ function makeCasSql({ status = 'running', phases = {}, artifacts = [] } = {}) {
       return { count: 1 };
     }
     if (/UPDATE pitch_jobs SET status/.test(q)) {
-      const [finalStatus] = vals;
+      // CAS real: el último valor interpolado es el guard `AND status = ${job.status}`
+      // leído al inicio de la iteración; solo "gana" si sigue vigente.
+      const [finalStatus, , , guardStatus] = vals;
+      if (guardStatus !== state.status) return { count: 0 };
       state.status = finalStatus;
       return { count: 1 };
     }
@@ -130,6 +133,26 @@ describe('applyPhaseWebhook — cálculo de estado final', () => {
     const statusCall = calls.find((c) => /UPDATE pitch_jobs SET status/.test(c.q));
     expect(statusCall.vals[0]).toBe('failed');
     expect(statusCall.vals).toContainEqual({ __fragment: 'none' });
+  });
+
+  it('cancelado concurrentemente entre el CAS de phases y la finalización: no se pisa a succeeded', async () => {
+    const rest = REQUIRED_PHASES.slice(0, -1);
+    const last = REQUIRED_PHASES[REQUIRED_PHASES.length - 1];
+    const { sql } = makeCasSql({ phases: doneMap(...rest) });
+
+    // El UPDATE de status pierde el CAS (job cancelado por el usuario justo antes);
+    // el SELECT posterior confirma el estado real 'cancelled'.
+    const sqlWithCancelRace = vi.fn((strings, ...vals) => {
+      const q = strings.join('?');
+      if (/UPDATE pitch_jobs SET status/.test(q)) return { count: 0 };
+      if (/SELECT status FROM pitch_jobs WHERE id/.test(q)) return [{ status: 'cancelled' }];
+      return sql(strings, ...vals);
+    });
+    sqlWithCancelRace.json = sql.json;
+
+    const out = await applyPhaseWebhook(sqlWithCancelRace, 'j', last, { ok: true });
+
+    expect(out).toEqual({ status: 'cancelled' });
   });
 });
 

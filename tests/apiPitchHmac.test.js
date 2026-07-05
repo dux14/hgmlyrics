@@ -25,6 +25,16 @@ describe('verifyPitchSignature', () => {
       false,
     );
   });
+  it('rechaza timestamp futuro (>5min adelante)', () => {
+    const ts = String(Math.floor(Date.now() / 1000) + 600);
+    expect(verifyPitchSignature({ timestamp: ts, signature: sign(ts, body), body, secret })).toBe(
+      false,
+    );
+  });
+  it('rechaza signature vacía', () => {
+    const ts = String(Math.floor(Date.now() / 1000));
+    expect(verifyPitchSignature({ timestamp: ts, signature: '', body, secret })).toBe(false);
+  });
   it('rechaza timestamp no numérico (no fail-open)', () => {
     expect(verifyPitchSignature({ timestamp: 'abc', signature: 'x', body, secret })).toBe(false);
   });

@@ -4,6 +4,8 @@
  * cuando todas las fases requeridas reportaron.
  */
 export const REQUIRED_PHASES = ['separation', 'f0', 'notes', 'lyrics', 'fusion', 'render'];
+// Fases opcionales de M5: se registran en phases[] pero NO cuentan para succeeded/partial/failed.
+export const OPTIONAL_PHASES = ['gender', 'choir'];
 const MAX_CAS_RETRIES = 5;
 const RESULT_TTL_MS = 48 * 60 * 60 * 1000;
 

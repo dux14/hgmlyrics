@@ -41,6 +41,9 @@ export function checkAccess(profile = {}) {
   return { ok: false, reason: 'beta' };
 }
 
+// Flag experimental (M5): opt-in explícito, a diferencia de STUDIO_GENDER_FLAG (opt-out).
+export function choirEnabled() { return process.env.PITCH_CHOIR === 'on'; }
+
 export function validateUploadMeta({ filename, size, mime } = {}) {
   const fail = (msg) => { const e = new Error(msg); e.status = 400; throw e; };
   if (!filename || typeof filename !== 'string') fail('Falta el nombre del archivo');

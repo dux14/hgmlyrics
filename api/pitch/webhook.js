@@ -1,7 +1,7 @@
 import sql from '../_lib/db.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { verifyPitchSignature } from './_lib/hmac.js';
-import { applyPhaseWebhook, REQUIRED_PHASES } from './_lib/process.js';
+import { applyPhaseWebhook, REQUIRED_PHASES, OPTIONAL_PHASES } from './_lib/process.js';
 
 // Raw body necesario para verificar la firma HMAC (espeja api/stems/webhook.js).
 export const config = {
@@ -39,7 +39,7 @@ export default withErrors(async (req, res) => {
     res.status(400).json({ error: 'jobId/phase requeridos' });
     return;
   }
-  if (!REQUIRED_PHASES.includes(phase)) {
+  if (!REQUIRED_PHASES.includes(phase) && !OPTIONAL_PHASES.includes(phase)) {
     res.status(400).json({ error: `Fase inválida: ${phase}` });
     return;
   }

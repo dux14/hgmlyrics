@@ -3,6 +3,7 @@ import { requireUser } from '../../../_lib/auth.js';
 import { allowMethods, withErrors } from '../../../_lib/http.js';
 import { signPitchDownload, deletePitchPrefix } from '../../_lib/storage.js';
 import { invokePitchPipeline } from '../../_lib/modal.js';
+import { choirEnabled } from '../../_lib/state.js';
 
 export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['POST'])) return;
@@ -41,6 +42,7 @@ export default withErrors(async (req, res) => {
     uploads: {},
     signUploadUrl: `${process.env.PUBLIC_BASE_URL}/api/pitch/sign-upload`,
     webhook: { url: `${process.env.PUBLIC_BASE_URL}/api/pitch/webhook` },
+    flags: { choir: choirEnabled() }, // reintento = mismo pipeline que el approve original
   };
 
   // Dispatch aislado con 1 reintento; si falla, marcar failed (no dejar colgado en running).

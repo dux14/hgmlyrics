@@ -4,6 +4,7 @@ vi.mock('../api/_lib/db.js', () => ({ default: vi.fn() }));
 vi.mock('../api/pitch/_lib/process.js', () => ({
   applyPhaseWebhook: vi.fn(async () => ({ status: 'running' })),
   REQUIRED_PHASES: ['separation', 'f0', 'notes', 'lyrics', 'fusion', 'render'],
+  OPTIONAL_PHASES: ['gender', 'choir'],
 }));
 import handler from '../api/pitch/webhook.js';
 import { applyPhaseWebhook } from '../api/pitch/_lib/process.js';

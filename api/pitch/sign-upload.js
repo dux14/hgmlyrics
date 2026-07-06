@@ -22,9 +22,19 @@ export default withErrors(async (req, res) => {
     return;
   }
 
-  const rows = await sql`SELECT id, user_id FROM pitch_jobs WHERE id = ${jobId}`;
+  const rows = await sql`SELECT id, user_id, status FROM pitch_jobs WHERE id = ${jobId}`;
   if (rows.length === 0) {
     res.status(404).json({ error: 'Job no encontrado' });
+    return;
+  }
+
+  if (rows[0].status !== 'running') {
+    res.status(409).json({ error: 'El job no está en ejecución' });
+    return;
+  }
+
+  if (key.includes('..') || key.startsWith('/') || key.includes('//')) {
+    res.status(400).json({ error: 'key inválida' });
     return;
   }
 

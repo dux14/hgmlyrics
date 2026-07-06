@@ -20,7 +20,7 @@ describe('api/pitch/sign-upload', () => {
   });
 
   it('key fuera de prefijo -> 403', async () => {
-    sql.mockImplementation(async () => [{ id: 'j', user_id: 'u1' }]);
+    sql.mockImplementation(async () => [{ id: 'j', user_id: 'u1', status: 'running' }]);
     const res = makeRes();
     await handler({ method: 'POST', headers: { 'x-inbound-secret': 's' }, body: { jobId: 'j', key: 'otro/x/stems/lead.wav' } }, res);
     expect(res.status).toHaveBeenCalledWith(403);
@@ -34,8 +34,24 @@ describe('api/pitch/sign-upload', () => {
     expect(res.status).toHaveBeenCalledWith(404);
   });
 
+  it('job en estado terminal -> 409', async () => {
+    sql.mockImplementation(async () => [{ id: 'j', user_id: 'u1', status: 'succeeded' }]);
+    const res = makeRes();
+    await handler({ method: 'POST', headers: { 'x-inbound-secret': 's' }, body: { jobId: 'j', key: 'u1/j/stems/lead.wav' } }, res);
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(createPitchSignedPutUrl).not.toHaveBeenCalled();
+  });
+
+  it('key con traversal -> 400', async () => {
+    sql.mockImplementation(async () => [{ id: 'j', user_id: 'u1', status: 'running' }]);
+    const res = makeRes();
+    await handler({ method: 'POST', headers: { 'x-inbound-secret': 's' }, body: { jobId: 'j', key: 'u1/j/../../otro/x' } }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(createPitchSignedPutUrl).not.toHaveBeenCalled();
+  });
+
   it('caso feliz -> 200 con url firmada', async () => {
-    sql.mockImplementation(async () => [{ id: 'j', user_id: 'u1' }]);
+    sql.mockImplementation(async () => [{ id: 'j', user_id: 'u1', status: 'running' }]);
     const res = makeRes();
     await handler({ method: 'POST', headers: { 'x-inbound-secret': 's' }, body: { jobId: 'j', key: 'u1/j/stems/lead.wav' } }, res);
     expect(createPitchSignedPutUrl).toHaveBeenCalledWith('u1/j/stems/lead.wav');

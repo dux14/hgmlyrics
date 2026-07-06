@@ -216,3 +216,22 @@ def detect_modulations(note_events, *, window_sec=4.0, threshold_semitones=3):
         prev_center = center
 
     return mods
+
+
+# ── M5: ensamblado de voces sin letra (genero/coro) ─────────────────────────
+# Orden canonico para voices_present: fijo, no depende del orden de llegada de
+# los webhooks (gender y choir corren en paralelo).
+_VOICE_ORDER = ["lead", "backing", "male", "female", "choir"]
+
+def build_voice_entry(notes: list) -> dict:
+    """Entry de `voices` sin letra (genero/coro): lista plana de eventos de nota
+    (dicts); el solape temporal entre eventos codifica polifonia, no es un error."""
+    return {"notes": [
+        {"start": n["start"], "end": n["end"], "midi": n["midi"], "note": n["note"], "cents": n["cents"]}
+        for n in notes
+    ]}
+
+def merge_voices_present(base: list, extra: list) -> list:
+    """Dedupe + orden canonico (`base` ya trae lead/backing)."""
+    present = set(base) | set(extra)
+    return [v for v in _VOICE_ORDER if v in present]

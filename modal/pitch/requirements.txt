@@ -9,7 +9,12 @@ librosa==0.10.2
 numpy==1.26.4
 fastapi[standard]==0.115.6
 pyphen==0.15.0
-whisperx==3.1.5
+# whisperx 3.3.1: la 3.1.5 pinnea faster-whisper==1.0.1 -> av==11.* (sin wheel en
+# el mirror de Modal, que solo trae av>=12; compilar PyAV 11 falla por pkg-config
+# + ffmpeg 6). 3.3.1 usa faster-whisper==1.1.0 (av>=11 -> wheel de av 12) y mantiene
+# torch>=2 (compatible con torch==2.4.1) + pyannote.audio==3.3.2 (mismo que el
+# Estudio). La 3.3.4+ exige torch>=2.5.1 y rompe el pin. API de lyrics.py sin cambios.
+whisperx==3.3.1
 pyloudnorm==0.1.1
 torchcrepe==0.0.23
 git+https://github.com/asteroid-team/asteroid

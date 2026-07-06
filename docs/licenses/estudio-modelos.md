@@ -2,8 +2,9 @@
 
 > **Nota de monetización:** La app HKN Lyrics no está monetizada, por lo que las
 > licencias NonCommercial (NC) son **aceptables en el estado actual**.
-> Si la app se monetiza en el futuro, **S4 queda BLOQUEADA**: el modelo
-> `chorus_bs_roformer` (Sucial) es CC-BY-NC-SA-4.0 y no permite uso comercial.
+> Si la app se monetiza en el futuro, **S4 y P4 quedan BLOQUEADAS**: el modelo
+> `chorus_bs_roformer` (Sucial) es CC-BY-NC-SA-4.0 y no permite uso comercial,
+> y P4 (coros de Partitura vocal) reutiliza el mismo modelo.
 > La alternativa `bs_roformer_male_female_by_aufr33` tiene licencia **sin confirmar**
 > (ver sección S4).
 
@@ -241,6 +242,40 @@ chorus_bs_roformer 24.13 dB, pero sin restricción NC).
 
 ---
 
+## P4 — Partitura vocal: coros y notas
+
+### Modelo: Basic Pitch
+
+| Campo | Valor |
+|---|---|
+| Tarea | Deteccion de notas musicales (pitch tracking) para transcripcion automatica |
+| Autor | Spotify |
+| Repo | https://github.com/spotify/basic-pitch |
+| Licencia | Apache-2.0 |
+| Uso comercial | Permitido (conservando el aviso NOTICE en distribuciones) |
+| Texto de atribucion | Basic Pitch (Spotify) — Apache-2.0 |
+
+---
+
+### Modelo: chorus_bs_roformer ep_267 (reutilizado de S4)
+
+| Campo | Valor |
+|---|---|
+| Checkpoint | `model_chorus_bs_roformer_ep_267_sdr_24.1275.ckpt` |
+| Tarea | Separacion de coros / genero vocal para el pipeline de Partitura |
+| Autor | Sucial |
+| HuggingFace | https://huggingface.co/Sucial/Chorus_Male_Female_BS_Roformer |
+| Licencia | **CC-BY-NC-SA-4.0** (mismo modelo que S4 del Estudio) |
+| Uso comercial | **NO PERMITIDO** (NC = NonCommercial) |
+| ShareAlike | Si — derivados deben usar la misma licencia |
+| Uso actual (app no monetizada) | Aceptable |
+| Texto de atribucion | chorus_bs_roformer ep_267 (Sucial) — CC-BY-NC-SA-4.0 · Solo uso no comercial |
+
+**Notas:** Si Partitura vocal usa coros/genero y la app se monetiza en el futuro, esta
+ruta queda bloqueada — es el mismo modelo CC-BY-NC-SA-4.0 ya registrado en S4 del Estudio.
+
+---
+
 ## Resumen de licencias por modelo
 
 | Modelo | Sección | Licencia | Uso comercial | Estado |
@@ -261,6 +296,8 @@ chorus_bs_roformer 24.13 dB, pero sin restricción NC).
 | music21 (cuthbertLab) | P3 | BSD-3-Clause | Sí | Confirmado |
 | pretty_midi (craffel) | P3 | MIT | Sí | Confirmado |
 | CairoSVG (Kozea) | P3 | LGPL-3.0 | Sí | Confirmado |
+| Basic Pitch (Spotify) | P4 | Apache-2.0 | Sí | Confirmado |
+| chorus_bs_roformer ep_267 (Sucial) | P4 | CC-BY-NC-SA-4.0 | No | Confirmado |
 
 ---
 
@@ -277,8 +314,9 @@ Estas cadenas son el texto exacto a mostrar en la interfaz del Estudio junto a c
 | **P1 — Partitura vocal: afinacion y analisis** | torchcrepe (envuelve CREPE, marl) — MIT · librosa — ISC |
 | **P2 — Partitura vocal: letra y silabas** | WhisperX (Max Bain) — BSD-2-Clause · Whisper (OpenAI) — MIT · pyphen (Kozea) — GPL/LGPL/MPL |
 | **P3 — Partitura vocal: render y exportacion** | music21 (cuthbertLab) — BSD-3-Clause · pretty_midi (craffel) — MIT · CairoSVG (Kozea) — LGPL-3.0 |
+| **P4 — Partitura vocal: coros y notas** | Basic Pitch (Spotify) — Apache-2.0 · chorus_bs_roformer ep_267 (Sucial) — CC-BY-NC-SA-4.0 · Solo uso no comercial |
 
-> **Advertencia de monetizacion:** Si la app se monetiza, S4 requiere reemplazar
+> **Advertencia de monetizacion:** Si la app se monetiza, S4 y P4 requieren reemplazar
 > `chorus_bs_roformer` (Sucial, CC-BY-NC-SA-4.0) por un modelo con licencia permisiva.
 > Opciones: (a) verificar y usar `bs_roformer_male_female_by_aufr33` si su licencia
 > lo permite; (b) re-entrenar un modelo propio sobre el framework MIT de ZFTurbo.

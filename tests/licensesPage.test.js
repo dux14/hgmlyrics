@@ -39,6 +39,16 @@ describe('renderLicenses', () => {
     expect(text).toContain('cairosvg');
   });
 
+  it('incluye los modelos de coros del pipeline Partitura (P4)', () => {
+    renderLicenses(container);
+    const text = container.textContent;
+
+    expect(text).toContain('Basic Pitch');
+    expect(text).toContain('chorus_bs_roformer');
+    expect(text).toContain('esta ruta queda');
+    expect(text).toContain('bloqueada');
+  });
+
   it('incluye la nota de monetizacion', () => {
     renderLicenses(container);
     expect(container.textContent).toContain('monetizada');

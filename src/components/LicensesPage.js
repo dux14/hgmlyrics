@@ -226,6 +226,36 @@ export function renderLicenses(container) {
 
         <div class="lc-card">
           <div class="lc-card__head">
+            <span class="lc-card__num">P4</span>
+            Partitura vocal - Coros y notas
+          </div>
+          <div class="lc-model">
+            <div class="lc-model__row">
+              <strong>Basic Pitch</strong> — Spotify
+              <span class="lc-badge lc-badge--ok">Apache-2.0</span>
+            </div>
+            <p class="lc-model__detail">
+              Detección de notas musicales (pitch tracking) para la transcripción automática.
+              Repo: <a href="https://github.com/spotify/basic-pitch" target="_blank" rel="noopener">spotify/basic-pitch</a>.
+              Uso comercial permitido. Requiere conservar el aviso NOTICE de Apache-2.0 en las distribuciones.
+            </p>
+          </div>
+          <div class="lc-model">
+            <div class="lc-model__row">
+              <strong>chorus_bs_roformer ep_267</strong> — Sucial
+              <span class="lc-badge lc-badge--nc">NC</span>
+            </div>
+            <p class="lc-model__detail">
+              <a href="https://huggingface.co/Sucial/Chorus_Male_Female_BS_Roformer" target="_blank" rel="noopener">Sucial/Chorus_Male_Female_BS_Roformer</a>.
+              CC-BY-NC-SA-4.0 — uso comercial no permitido. Derivados deben usar la misma licencia.
+              Si Partitura vocal usa coros/género y la app se monetiza en el futuro, esta ruta queda
+              bloqueada (mismo modelo que S4 del Estudio).
+            </p>
+          </div>
+        </div>
+
+        <div class="lc-card">
+          <div class="lc-card__head">
             <span class="lc-card__num">${icon('star', { size: 14 })}</span>
             Créditos y referencias
           </div>

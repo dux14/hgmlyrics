@@ -18,3 +18,7 @@ whisperx==3.3.1
 pyloudnorm==0.1.1
 torchcrepe==0.0.23
 git+https://github.com/asteroid-team/asteroid
+# ── M2 render/export (CPU puro, sin GPU) ─────────────────────────────────────
+cairosvg==2.7.1
+pretty_midi==0.2.10
+music21==9.1.0

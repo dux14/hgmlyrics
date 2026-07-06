@@ -1,0 +1,15 @@
+{
+  "voices_present": ["lead", "backing"],
+  "voices": {
+    "lead": { "lines": [ { "syllables": [
+      {"text":"Me","start":0.31,"end":0.44,"blank":false,"midi":60.0,"cents":-6,"ditto":false,"note":"C4"},
+      {"text":"he","start":0.44,"end":0.55,"blank":false,"midi":60.0,"cents":0,"ditto":true,"note":null},
+      {"text":"vá","start":0.55,"end":0.66,"blank":false,"midi":62.0,"cents":3,"ditto":false,"note":"D4"},
+      {"text":"la","start":0.66,"end":0.70,"blank":true,"midi":null,"cents":null,"note":null}
+    ] } ] },
+    "backing": { "lines": [ { "syllables": [
+      {"text":"oh","start":0.31,"end":0.66,"blank":false,"midi":55.0,"cents":2,"ditto":false,"note":"G3"}
+    ] } ] }
+  },
+  "modulations": [ {"time":0.6,"from":"C4","to":"G4","semitones":7} ]
+}

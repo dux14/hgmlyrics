@@ -100,6 +100,40 @@
 /* ------------------------------------------------------------------ */
 /* Resultado — partitura letra↔nota (hoja tipo karaoke)                  */
 /* ------------------------------------------------------------------ */
+
+/* Selector de voz (lead/backing…): pastillas horizontales, misma familia
+   visual que .chord-toggle. overflow-x:auto para no romper el layout si a
+   futuro hay muchas voces. */
+.partitura__voice-tabs {
+  display: flex;
+  gap: var(--space-xs);
+  overflow-x: auto;
+  margin-bottom: var(--space-md);
+}
+
+.partitura__voice-tab {
+  padding: 8px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  background: transparent;
+  color: var(--color-text);
+  transition: all var(--transition-fast);
+}
+
+.partitura__voice-tab:hover {
+  background: var(--color-surface-hover);
+}
+
+.partitura__voice-tab.is-active {
+  border-color: var(--color-rose-300);
+  background: color-mix(in srgb, var(--color-rose-300) 15%, transparent);
+  color: var(--color-rose-300);
+}
+
 .partitura__voice {
   margin-bottom: var(--space-xl);
 }
@@ -151,4 +185,16 @@
   align-items: center;
   gap: var(--space-sm);
   color: var(--color-rose-300);
+}
+
+/* Aviso secundario de expiración del resultado (48h): mismo tratamiento
+   atenuado que otros avisos secundarios del flujo (tamaño chico, color
+   secundario, icono alineado). */
+.partitura__expires {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-lg);
 }

@@ -41,6 +41,17 @@ export function isAcceptedAudio(file) {
   return ACCEPTED_EXT_RE.test(file.name);
 }
 
+// Formatea expires_at a fecha+hora legible en español neutro (Intl, sin libs de fechas).
+function formatExpiry(iso) {
+  try {
+    return new Intl.DateTimeFormat('es', { dateStyle: 'medium', timeStyle: 'short' }).format(
+      new Date(iso),
+    );
+  } catch {
+    return 'en 48 horas';
+  }
+}
+
 // Guarda de navegación del polling del job activo (mismo patrón que StudioPage#stopPolling):
 // registrada por renderPartituraPage vía hashchange {once:true} para no dejar timers huérfanos.
 function stopPolling() {
@@ -290,9 +301,8 @@ async function renderResult(body, job, quota) {
     analysis = null;
   }
 
-  const voicesHtml = analysis
-    ? (analysis.voices_present ?? []).map((key) => renderVoice(key, analysis.voices?.[key])).join('')
-    : `<p class="partitura__error" role="alert">No se pudo cargar la partitura.</p>`;
+  const voiceKeys = analysis?.voices_present ?? [];
+  let voiceMode = voiceKeys[0] ?? 'all';
 
   const downloadsHtml = others.length
     ? `<ul class="partitura__downloads">${others
@@ -303,12 +313,26 @@ async function renderResult(body, job, quota) {
         .join('')}</ul>`
     : '';
 
+  const expiresHtml = job.expires_at
+    ? `<p class="partitura__expires">${icon('clock', { size: 14 })} Este resultado se borra el ${formatExpiry(job.expires_at)}. Descarga lo que necesites antes.</p>`
+    : '';
+
   body.innerHTML = `
     <div class="partitura__result">
-      ${voicesHtml}
+      <div class="partitura__voices-container">${renderVoicesSection(analysis, voiceKeys, voiceMode)}</div>
       ${downloadsHtml}
+      ${expiresHtml}
     </div>
   `;
+
+  const voicesContainer = body.querySelector('.partitura__voices-container');
+  voicesContainer?.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('[data-voice-mode]');
+    if (!btn) return;
+    voiceMode = btn.dataset.voiceMode;
+    voicesContainer.innerHTML = renderVoicesSection(analysis, voiceKeys, voiceMode);
+  });
+
   appendRestartButton(body, job, quota);
 }
 
@@ -328,6 +352,25 @@ function renderVoice(voiceKey, voice) {
     })
     .join('');
   return `<section class="partitura__voice"><h3>${escapeHtml(voiceKey)}</h3>${lines}</section>`;
+}
+
+// Selector de voces del visor: 'all' superpone todas las voces apiladas (como
+// antes); una key de voiceKeys aisla solo esa voz (alternar, no superposición
+// nota-sobre-nota). El selector solo aparece si hay 2+ voces.
+function renderVoicesSection(analysis, voiceKeys, mode) {
+  if (!analysis) {
+    return `<p class="partitura__error" role="alert">No se pudo cargar la partitura.</p>`;
+  }
+  const keysToShow = mode === 'all' ? voiceKeys : [mode];
+  const voicesHtml = keysToShow.map((key) => renderVoice(key, analysis.voices?.[key])).join('');
+  if (voiceKeys.length < 2) return voicesHtml;
+  const tabs = ['all', ...voiceKeys]
+    .map(
+      (k) =>
+        `<button type="button" class="partitura__voice-tab${k === mode ? ' is-active' : ''}" data-voice-mode="${escapeHtml(k)}">${k === 'all' ? 'Todas' : escapeHtml(k)}</button>`,
+    )
+    .join('');
+  return `<div class="partitura__voice-tabs" role="tablist">${tabs}</div><div class="partitura__voices">${voicesHtml}</div>`;
 }
 
 // Botones tras el resultado: si el job quedó 'partial', ofrece reintentar el

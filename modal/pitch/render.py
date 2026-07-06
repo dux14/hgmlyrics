@@ -1,4 +1,55 @@
+"""Fase render/export: analysis.json (multi-voz) -> SVG + PNG + MIDI + MusicXML.
+Funciones puras (sin I/O de red); run_render (Task 6) hace la subida + webhook."""
+from __future__ import annotations
+from xml.sax.saxutils import escape
+
 from _common import post_webhook
+
+_COL_W, _ROW_H, _SECTION_GAP, _MARGIN = 60, 70, 30, 20
+_VOICE_LABELS = {"lead": "Voz principal", "backing": "Voz de fondo"}
+
+
+def _note_label(syl: dict) -> str:
+    if syl.get("blank"):
+        return "–"
+    if syl.get("ditto"):
+        return "''"
+    return syl.get("note") or "–"
+
+
+def analysis_to_svg(analysis: dict) -> str:
+    voices_present = analysis.get("voices_present", [])
+    voices = analysis.get("voices", {})
+    modulations = analysis.get("modulations", [])
+    max_cols, total_rows = 0, 0
+    for name in voices_present:
+        lines = voices.get(name, {}).get("lines", [])
+        total_rows += 1 + len(lines)
+        for line in lines:
+            max_cols = max(max_cols, len(line.get("syllables", [])))
+    width = _MARGIN * 2 + max(max_cols, 1) * _COL_W
+    height = _MARGIN * 2 + total_rows * _ROW_H + _SECTION_GAP * len(voices_present) + (40 if modulations else 0)
+    parts = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">']
+    y = _MARGIN
+    for name in voices_present:
+        lines = voices.get(name, {}).get("lines", [])
+        parts.append(f'<text x="{_MARGIN}" y="{y + 20}" class="voice-label">{escape(_VOICE_LABELS.get(name, name))}</text>')
+        y += _ROW_H
+        for line in lines:
+            x = _MARGIN
+            for syl in line.get("syllables", []):
+                text = syl.get("text")
+                if text:
+                    parts.append(f'<text x="{x}" y="{y}" class="lyric">{escape(text)}</text>')
+                parts.append(f'<text x="{x}" y="{y + 24}" class="note">{escape(_note_label(syl))}</text>')
+                x += _COL_W
+            y += _ROW_H
+        y += _SECTION_GAP
+    if modulations:
+        legend = "; ".join(f'{m["time"]}s {m["from"]}→{m["to"]} ({m["semitones"]:+d})' for m in modulations)
+        parts.append(f'<text x="{_MARGIN}" y="{y + 20}" class="modulations">Cambios de tono: {escape(legend)}</text>')
+    parts.append("</svg>")
+    return "\n".join(parts)
 
 
 def run_render(job_id, webhook, analysis):

@@ -2,6 +2,8 @@
 """Nodo CPU de la fase 'fusion'. Ensambla analysis.json multi-voz a partir de
 las lineas/silabas transcritas (lyrics) y los eventos de nota por voz (notes).
 Solo ensamblado + I/O (upload + webhook): la logica pura vive en core.py."""
+from __future__ import annotations
+
 import json
 
 from core import fuse_syllables_notes, detect_modulations, merge_voices_present

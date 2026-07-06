@@ -31,16 +31,29 @@ image = (
         "core", "_common", "separation", "f0", "notes", "lyrics", "fusion", "render"
     )
 )
-# Imagen CPU liviana para notes/fusion/render (core.py + numpy/httpx): no paga GPU.
+# Imagen CPU liviana para notes/fusion (core.py + numpy/httpx): no paga GPU.
 # Monta la lista COMPLETA de módulos: Modal 1.x no auto-monta los hermanos y al
 # arrancar un contenedor cpu_image Modal importa pitch_app.py, que hace
 # `from separation/f0/lyrics import ...` a nivel de módulo — sin estos .py el
-# import falla con ModuleNotFoundError antes de correr notes/fusion/render.
+# import falla con ModuleNotFoundError antes de correr notes/fusion.
 # separation/f0/lyrics solo tienen imports baratos top-level (los pesados
 # torch/whisperx/librosa son function-local), así que no encarecen la imagen CPU.
 cpu_image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install("numpy==1.26.4", "httpx==0.27.2")
+    .add_local_python_source(
+        "core", "_common", "separation", "f0", "notes", "lyrics", "fusion", "render"
+    )
+)
+# Imagen CPU para render: igual a cpu_image + libcairo2 (cairosvg) + pretty_midi
+# + music21. Aparte de cpu_image porque render es la unica fase que rasteriza
+# SVG/exporta MIDI/MusicXML; el resto de fases CPU no necesitan estas deps
+# nativas/pesadas. add_local_python_source va al final (mismo orden que
+# cpu_image) por convencion de cacheo de capas de Modal.
+render_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install("libcairo2")
+    .pip_install("numpy==1.26.4", "httpx==0.27.2", "cairosvg==2.7.1", "pretty_midi==0.2.10", "music21==9.1.0")
     .add_local_python_source(
         "core", "_common", "separation", "f0", "notes", "lyrics", "fusion", "render"
     )
@@ -76,9 +89,9 @@ def n_fusion(job_id, webhook, sign_upload_url, inbound_secret, notes_lead, notes
     return run_fusion(job_id, webhook, sign_upload_url, inbound_secret, notes_lead, notes_backing, lines_words)
 
 
-@app.function(image=cpu_image, secrets=_secrets, timeout=30)
-def n_render(job_id, webhook, analysis):
-    return run_render(job_id, webhook, analysis)
+@app.function(image=render_image, secrets=_secrets, timeout=30)
+def n_render(job_id, webhook, sign_upload_url, inbound_secret, analysis):
+    return run_render(job_id, webhook, sign_upload_url, inbound_secret, analysis)
 
 
 @app.function(image=image, secrets=_secrets, timeout=1800)
@@ -122,10 +135,10 @@ def run_pipeline(payload: dict) -> None:
     except Exception:
         skip_rest(5, "fusion fallo"); return
     try:
-        n_render.remote(job_id, webhook, analysis)
+        n_render.remote(job_id, webhook, sign_upload_url, inbound_secret, analysis)
     except Exception:
-        # render (M1) solo postea su webhook; no tiene except propio, así que si
-        # falla, reportamos aquí su ok:false (consistente con las demás fases).
+        # render ya posteo su propio ok:false (mismo patron que fusion); como es
+        # la ultima fase, aqui solo evita que la excepcion suba sin mas.
         skip_rest(5, "render fallo")
 
 

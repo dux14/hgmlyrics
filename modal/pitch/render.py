@@ -3,7 +3,7 @@ Funciones puras (sin I/O de red); run_render (Task 6) hace la subida + webhook."
 from __future__ import annotations
 from xml.sax.saxutils import escape
 
-from _common import post_webhook
+from _common import request_signed_put, upload_put, post_webhook, artifact, extract_storage_key
 
 _COL_W, _ROW_H, _SECTION_GAP, _MARGIN = 60, 70, 30, 20
 _VOICE_LABELS = {"lead": "Voz principal", "backing": "Voz de fondo"}
@@ -98,9 +98,29 @@ def analysis_to_musicxml(analysis: dict) -> bytes:
     return GeneralObjectExporter(score).parse()
 
 
-def run_render(job_id, webhook, analysis):
-    """M1: fase minima, NO genera SVG/PNG/MIDI/MusicXML (eso es M2). Postea
-    'render' con {"ok": True, "artifacts": []} para que el job llegue a
-    'succeeded' con las 6 fases reportadas. Nunca debe ser el motivo de que el
-    job quede en 'partial' en M1. `analysis` se recibe para M2 (aqui no se usa)."""
-    post_webhook(webhook, job_id, "render", {"ok": True, "artifacts": []})
+def run_render(job_id, webhook, sign_upload_url, inbound_secret, analysis):
+    """Genera SVG+PNG+MIDI+MusicXML desde analysis (en memoria), los sube por
+    signed PUT y postea el webhook 'render' con ok:true. En fallo: postea
+    ok:false con el error y re-lanza (nunca deja la fase sin reportar)."""
+    import io
+    try:
+        svg = analysis_to_svg(analysis)
+        png = analysis_to_png(svg)
+        pm = analysis_to_midi(analysis)
+        midi_buf = io.BytesIO(); pm.write(midi_buf); midi_bytes = midi_buf.getvalue()
+        musicxml = analysis_to_musicxml(analysis)
+        files = [
+            ("score_svg", "render/sheet.svg", svg.encode("utf-8"), "image/svg+xml"),
+            ("score_png", "render/sheet.png", png, "image/png"),
+            ("midi", "export/score.mid", midi_bytes, "audio/midi"),
+            ("musicxml", "export/score.musicxml", musicxml, "application/vnd.recordare.musicxml+xml"),
+        ]
+        artifacts = []
+        for kind, key, data, mime in files:
+            put_url = request_signed_put(sign_upload_url, inbound_secret, job_id, key)
+            upload_put(put_url, data, content_type=mime)
+            artifacts.append(artifact(kind, extract_storage_key(put_url), mime))
+        post_webhook(webhook, job_id, "render", {"ok": True, "artifacts": artifacts})
+    except Exception as exc:
+        post_webhook(webhook, job_id, "render", {"ok": False, "error": str(exc)[:400]})
+        raise

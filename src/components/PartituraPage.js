@@ -7,6 +7,10 @@ import '../styles/partitura.css';
 import { icon } from '../lib/icons.js';
 import * as pitchApi from '../lib/pitchApi.js';
 import { skelBlock, skelLine } from '../lib/skeleton.js';
+import { PHASE_ORDER, phaseLabel, phaseProgress, isTerminalStatus } from '../lib/pitchProgress.js';
+
+const POLL_MS = 3000;
+let pollTimer = null;
 
 // Extensiones/MIME aceptados: mismo criterio doble que studioFile.js#isMp3File,
 // ampliado a los formatos que soporta la Partitura (no solo MP3).
@@ -36,10 +40,11 @@ export function isAcceptedAudio(file) {
   return ACCEPTED_EXT_RE.test(file.name);
 }
 
-// Guarda de navegación del polling del job activo. Placeholder no-op: Task 6
-// la completa con el polling real (mismo patrón que StudioPage#stopPolling).
+// Guarda de navegación del polling del job activo (mismo patrón que StudioPage#stopPolling):
+// registrada por renderPartituraPage vía hashchange {once:true} para no dejar timers huérfanos.
 function stopPolling() {
-  // TODO Task 6: detener polling/canal Realtime del job activo.
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
 }
 
 export async function renderPartituraPage(container) {
@@ -57,8 +62,8 @@ export async function renderPartituraPage(container) {
   `;
   const body = container.querySelector('.partitura__body');
 
-  // Referencia forward a Task 6: al salir de #/partitura hay que cortar el polling
-  // del job activo. stopPolling es no-op hasta que Task 6 lo implemente.
+  // Al salir de #/partitura hay que cortar el polling del job activo para no
+  // dejar timers huérfanos (mismo patrón que StudioPage).
   window.addEventListener('hashchange', stopPolling, { once: true });
 
   let quota = { used: 0, limit: 2 };
@@ -191,8 +196,64 @@ function renderCostGate(body, jobId, estimate, quota) {
   });
 }
 
-// Placeholder: Task 6 completa el polling real (Realtime/canal del job activo).
-function startPolling(body) {
-  body.setAttribute('aria-busy', 'true');
-  body.innerHTML = `<p class="partitura__status">Procesando…</p>`;
+// Poll de progreso: consulta getJob cada POLL_MS hasta que el status sea terminal.
+function startPolling(body, jobId, quota) {
+  stopPolling();
+  const tick = async () => {
+    let job;
+    try {
+      job = await pitchApi.getJob(jobId);
+    } catch {
+      // Red intermitente: reintenta en el próximo tick, no corta el poll.
+      return;
+    }
+    if (isTerminalStatus(job.status)) {
+      stopPolling();
+      renderResult(body, job, quota);
+    } else {
+      renderProcessing(body, job);
+    }
+  };
+  pollTimer = setInterval(tick, POLL_MS);
+  void tick();
+}
+
+function renderProcessing(body, job) {
+  body.setAttribute('aria-busy', 'false');
+  const { done, total, pct } = phaseProgress(job.phases);
+  const steps = PHASE_ORDER.map((key) => {
+    const status = job.phases?.[key]?.status;
+    const state = status === 'done' ? 'done' : status === 'failed' ? 'failed' : 'pending';
+    return `<li class="partitura__step partitura__step--${state}">${phaseLabel(key)}</li>`;
+  }).join('');
+  body.innerHTML = `
+    <div class="partitura__processing">
+      <p class="partitura__progress-label">${done}/${total} fases (${pct}%)</p>
+      <div class="partitura__progress-bar"><div style="width:${pct}%"></div></div>
+      <ol class="partitura__steps">${steps}</ol>
+    </div>
+  `;
+}
+
+// TODO Task 7: reemplazar por el visor real (letra↔nota, descarga por artifact).
+function renderResult(body, job, quota) {
+  body.setAttribute('aria-busy', 'false');
+  if (job.status !== 'succeeded' && job.status !== 'partial') {
+    body.innerHTML = `
+      <p class="partitura__error" role="alert">No se pudo generar la partitura.</p>
+      <button type="button" data-action="retry">Volver a intentar</button>
+    `;
+    body
+      .querySelector('[data-action="retry"]')
+      .addEventListener('click', () => renderIdle(body, quota));
+    return;
+  }
+  const items = (job.artifacts ?? [])
+    .map((a) => `<li><a href="${a.url}" target="_blank" rel="noopener">Descargar ${a.kind}</a></li>`)
+    .join('');
+  body.innerHTML = `
+    <div class="partitura__result">
+      <ul class="partitura__artifacts">${items}</ul>
+    </div>
+  `;
 }

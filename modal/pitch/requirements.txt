@@ -22,3 +22,18 @@ git+https://github.com/asteroid-team/asteroid
 cairosvg==2.7.1
 pretty_midi==0.2.10
 music21==9.1.0
+# ── M5 coro opcional (flag PITCH_CHOIR, choir_basicpitch.py) ─────────────────
+# ADVERTENCIA sin resolver (gate del usuario en `modal deploy`): en PyPI,
+# basic-pitch==0.4.0 declara tensorflow<2.15.1 como dependencia INCONDICIONAL
+# para Linux+python>=3.11 (no esta gateada detras de un extra) — instalar
+# CUALQUIER variante de basic-pitch en esta imagen (debian_slim python 3.11)
+# arrastra tensorflow igual, con riesgo real de choque de pines con el stack
+# torch==2.4.1/whisperx/av ya presente. El extra [onnx] no evita esa instalacion
+# de TF (verificado leyendo requires_dist del paquete), pero SI trae onnxruntime
+# para que choir_basicpitch.py pueda pedir explicitamente el modelo .onnx
+# empaquetado (build_icassp_2022_model_path(FilenameSuffix.onnx)) en vez del
+# SavedModel de TF que basic_pitch elegiria por defecto (TF instalado => TF
+# tiene prioridad en su orden interno TF > CoreML > TFLite > ONNX). Esto reduce
+# el uso en runtime de TF, no el riesgo de instalacion — ese riesgo se valida
+# solo en el smoke real de `modal deploy`.
+basic-pitch[onnx]==0.4.0

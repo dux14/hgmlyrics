@@ -43,6 +43,7 @@ export default withErrors(async (req, res) => {
     signUploadUrl: `${process.env.PUBLIC_BASE_URL}/api/pitch/sign-upload`,
     webhook: { url: `${process.env.PUBLIC_BASE_URL}/api/pitch/webhook` },
     flags: { choir: choirEnabled() }, // reintento = mismo pipeline que el approve original
+    reset: true, // fuerza a Modal a relanzar aunque el jobId ya este en su cache de idempotencia
   };
 
   // Dispatch aislado con 1 reintento; si falla, marcar failed (no dejar colgado en running).

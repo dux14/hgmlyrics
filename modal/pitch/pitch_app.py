@@ -241,13 +241,17 @@ def run_pipeline(payload: dict) -> None:
 def start(payload: dict, x_inbound_secret: str = Header(default="")):
     """Espeja stems_app.py::start: valida x-inbound-secret y lanza async.
     Idempotencia: si el jobId ya fue lanzado (reintento de approve ~16s), NO
-    relanza (evita doble facturacion GPU) y devuelve el callId cacheado."""
+    relanza (evita doble facturacion GPU) y devuelve el callId cacheado.
+    EXCEPCION: payload.reset=true (retry.js) fuerza un run nuevo y sobrescribe el
+    cache — el retry es una accion deliberada del usuario, ya serializada por el
+    CAS de retry.js (partial/failed -> running), no un doble-approve accidental.
+    Sin esto, un jobId ya visto nunca podria reintentarse (quedaria como no-op)."""
     if not hmac.compare_digest(x_inbound_secret, os.environ.get("PITCH_MODAL_INBOUND_SECRET", "")):
         raise HTTPException(status_code=401, detail="bad inbound secret")
     job_id = payload.get("jobId")
     if not job_id:
         raise HTTPException(status_code=400, detail="jobId requerido")
-    if job_id in _seen:
+    if not payload.get("reset") and job_id in _seen:
         return {"callId": _seen[job_id], "dedup": True}
     call = run_pipeline.spawn(payload)
     _seen[job_id] = call.object_id

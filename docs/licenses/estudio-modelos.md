@@ -127,6 +127,79 @@ chorus_bs_roformer 24.13 dB, pero sin restricción NC).
 
 ---
 
+## P1 — Partitura vocal: afinación y análisis
+
+### Modelo: torchcrepe
+
+| Campo | Valor |
+|---|---|
+| Version | 0.0.23 |
+| Tarea | Detector de tono (F0) por voz |
+| Repo | https://github.com/maxrmorrison/torchcrepe |
+| Licencia | MIT |
+| Uso comercial | Permitido |
+| Texto de atribución | torchcrepe (maxrmorrison) — MIT |
+
+**Notas:** Envuelve el modelo CREPE (`marl/crepe`), también MIT
+(https://github.com/marl/crepe). Ambas licencias permiten uso comercial.
+
+---
+
+### Modelo: librosa
+
+| Campo | Valor |
+|---|---|
+| Version | 0.10.2 |
+| Tarea | Utilidades de análisis de audio (DSP) |
+| Repo | https://github.com/librosa/librosa |
+| Licencia | ISC |
+| Uso comercial | Permitido |
+| Texto de atribución | librosa — ISC |
+
+---
+
+## P2 — Partitura vocal: letra y sílabas
+
+### Modelo: WhisperX
+
+| Campo | Valor |
+|---|---|
+| Version | 3.1.5 |
+| Tarea | Alineación temporal palabra a palabra de la transcripción |
+| Autor | Max Bain |
+| Repo | https://github.com/m-bain/whisperX |
+| Licencia | BSD-2-Clause |
+| Uso comercial | Permitido |
+| Texto de atribución | WhisperX (Max Bain) — BSD-2-Clause |
+
+---
+
+### Modelo: Whisper
+
+| Campo | Valor |
+|---|---|
+| Tarea | Modelo base de transcripción (usado por WhisperX) |
+| Autor | OpenAI |
+| Repo | https://github.com/openai/whisper |
+| Licencia | MIT |
+| Uso comercial | Permitido |
+| Texto de atribución | Whisper (OpenAI) — MIT |
+
+---
+
+### Modelo: pyphen
+
+| Campo | Valor |
+|---|---|
+| Version | 0.15.0 |
+| Tarea | Silabación (división en sílabas) es_ES / en_US |
+| Repo | https://github.com/Kozea/Pyphen |
+| Licencia | Tri-licencia GPL-2.0 / LGPL-2.1 / MPL-1.1 |
+| Uso comercial | Permitido (vía LGPL/MPL) |
+| Texto de atribución | pyphen (Kozea) — GPL-2.0/LGPL-2.1/MPL-1.1 |
+
+---
+
 ## Resumen de licencias por modelo
 
 | Modelo | Sección | Licencia | Uso comercial | Estado |
@@ -138,6 +211,12 @@ chorus_bs_roformer 24.13 dB, pero sin restricción NC).
 | MedleyVox código (jeonchangbin49) | S3 | Sin licencia explícita | Incierto | Sin confirmar |
 | chorus_bs_roformer ep_267 (Sucial) | S4 | CC-BY-NC-SA-4.0 | No | Confirmado |
 | bs_roformer_male_female (aufr33) | S4 alt. | Sin confirmar | Sin confirmar | Sin confirmar |
+| torchcrepe | P1 | MIT | Sí | Confirmado |
+| CREPE (marl) | P1 | MIT | Sí | Confirmado |
+| librosa | P1 | ISC | Sí | Confirmado |
+| WhisperX (Max Bain) | P2 | BSD-2-Clause | Sí | Confirmado |
+| Whisper (OpenAI) | P2 | MIT | Sí | Confirmado |
+| pyphen (Kozea) | P2 | GPL-2.0/LGPL-2.1/MPL-1.1 | Sí | Confirmado |
 
 ---
 
@@ -151,6 +230,8 @@ Estas cadenas son el texto exacto a mostrar en la interfaz del Estudio junto a c
 | **S2 — Estructura** | SongFormer (ASLP-lab) — CC-BY-4.0 |
 | **S3 — Lead / Backing** | MedleyVox (Cyru5 / Carson Evans) — CC-BY-4.0 |
 | **S4 — Genero vocal** | chorus_bs_roformer ep_267 (Sucial) — CC-BY-NC-SA-4.0 · Solo uso no comercial |
+| **P1 — Partitura vocal: afinacion y analisis** | torchcrepe (envuelve CREPE, marl) — MIT · librosa — ISC |
+| **P2 — Partitura vocal: letra y silabas** | WhisperX (Max Bain) — BSD-2-Clause · Whisper (OpenAI) — MIT · pyphen (Kozea) — GPL/LGPL/MPL |
 
 > **Advertencia de monetizacion:** Si la app se monetiza, S4 requiere reemplazar
 > `chorus_bs_roformer` (Sucial, CC-BY-NC-SA-4.0) por un modelo con licencia permisiva.

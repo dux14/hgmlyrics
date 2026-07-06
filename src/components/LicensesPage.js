@@ -17,7 +17,8 @@ export function renderLicenses(container) {
         <div class="lc-top">
           <h1 class="lc-title">Licencias y créditos</h1>
           <p class="lc-intro">
-            El Estudio usa modelos de inteligencia artificial de terceros para separar y analizar el audio.
+            El Estudio y la Partitura vocal usan modelos de inteligencia artificial de terceros
+            para separar, transcribir y analizar el audio.
             A continuación se listan los modelos, sus autores y sus licencias.
           </p>
         </div>
@@ -108,6 +109,77 @@ export function renderLicenses(container) {
             </div>
             <p class="lc-model__detail">
               El repositorio HuggingFace no era accesible públicamente en la verificación de junio 2026.
+            </p>
+          </div>
+        </div>
+
+        <div class="lc-card">
+          <div class="lc-card__head">
+            <span class="lc-card__num">P1</span>
+            Partitura vocal - Afinación y análisis
+          </div>
+          <div class="lc-model">
+            <div class="lc-model__row">
+              <strong>torchcrepe</strong>
+              <span class="lc-badge lc-badge--ok">MIT</span>
+            </div>
+            <p class="lc-model__detail">
+              Detector de tono (F0) por voz. Envuelve el modelo
+              <a href="https://github.com/marl/crepe" target="_blank" rel="noopener">CREPE (marl/crepe)</a>, también MIT.
+              Repo: <a href="https://github.com/maxrmorrison/torchcrepe" target="_blank" rel="noopener">maxrmorrison/torchcrepe</a>.
+              Uso comercial permitido.
+            </p>
+          </div>
+          <div class="lc-model">
+            <div class="lc-model__row">
+              <strong>librosa</strong>
+              <span class="lc-badge lc-badge--ok">ISC</span>
+            </div>
+            <p class="lc-model__detail">
+              Utilidades de análisis de audio.
+              Repo: <a href="https://github.com/librosa/librosa" target="_blank" rel="noopener">librosa/librosa</a>.
+              Uso comercial permitido.
+            </p>
+          </div>
+        </div>
+
+        <div class="lc-card">
+          <div class="lc-card__head">
+            <span class="lc-card__num">P2</span>
+            Partitura vocal - Letra y sílabas
+          </div>
+          <div class="lc-model">
+            <div class="lc-model__row">
+              <strong>WhisperX</strong> — Max Bain
+              <span class="lc-badge lc-badge--ok">BSD-2-Clause</span>
+            </div>
+            <p class="lc-model__detail">
+              Alineación temporal palabra a palabra de la transcripción.
+              Repo: <a href="https://github.com/m-bain/whisperX" target="_blank" rel="noopener">m-bain/whisperX</a>.
+              Uso comercial permitido.
+            </p>
+          </div>
+          <div class="lc-model">
+            <div class="lc-model__row">
+              <strong>Whisper</strong> — OpenAI
+              <span class="lc-badge lc-badge--ok">MIT</span>
+            </div>
+            <p class="lc-model__detail">
+              Modelo base de transcripción que usa WhisperX.
+              Repo: <a href="https://github.com/openai/whisper" target="_blank" rel="noopener">openai/whisper</a>.
+              Uso comercial permitido.
+            </p>
+          </div>
+          <div class="lc-model">
+            <div class="lc-model__row">
+              <strong>pyphen</strong>
+              <span class="lc-badge lc-badge--ok">GPL/LGPL/MPL</span>
+            </div>
+            <p class="lc-model__detail">
+              Silabación (división en sílabas) es_ES / en_US. Tri-licencia
+              GPL-2.0 / LGPL-2.1 / MPL-1.1.
+              Repo: <a href="https://github.com/Kozea/Pyphen" target="_blank" rel="noopener">Kozea/Pyphen</a>.
+              Uso comercial permitido.
             </p>
           </div>
         </div>

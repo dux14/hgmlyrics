@@ -19,6 +19,17 @@ describe('renderLicenses', () => {
     expect(text).toContain('MedleyVox');
   });
 
+  it('incluye los modelos del pipeline Partitura vocal (P1/P2)', () => {
+    renderLicenses(container);
+    const text = container.textContent;
+
+    expect(text).toContain('torchcrepe');
+    expect(text).toContain('CREPE');
+    expect(text).toContain('WhisperX');
+    expect(text).toContain('pyphen');
+    expect(text).toContain('librosa');
+  });
+
   it('incluye la nota de monetizacion', () => {
     renderLicenses(container);
     expect(container.textContent).toContain('monetizada');

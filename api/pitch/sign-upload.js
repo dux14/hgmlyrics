@@ -6,6 +6,9 @@ import { createPitchSignedPutUrl } from './_lib/storage.js';
 // Llamado por el orquestador Modal (no por el usuario): entrega un PUT firmado
 // hacia pitch-jobs para subir artefactos intermedios. Autenticado por secreto
 // compartido (x-inbound-secret), no por sesión de usuario.
+// `key` es RELATIVA a la carpeta del job (ej. "stems/lead.wav"): el nodo Modal
+// solo conoce jobId, no user_id, así que el prefijo `${user_id}/${jobId}/` se
+// resuelve aquí a partir del DB y se antepone antes de firmar.
 export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['POST'])) return;
 
@@ -33,17 +36,12 @@ export default withErrors(async (req, res) => {
     return;
   }
 
-  if (key.includes('..') || key.startsWith('/') || key.includes('//')) {
+  if (!key.trim() || key.includes('..') || key.startsWith('/') || key.includes('//')) {
     res.status(400).json({ error: 'key inválida' });
     return;
   }
 
-  const prefix = `${rows[0].user_id}/${jobId}/`;
-  if (!key.startsWith(prefix)) {
-    res.status(403).json({ error: 'key fuera del prefijo del job' });
-    return;
-  }
-
-  const url = await createPitchSignedPutUrl(key);
+  const fullKey = `${rows[0].user_id}/${jobId}/${key}`;
+  const url = await createPitchSignedPutUrl(fullKey);
   res.status(200).json({ url });
 });

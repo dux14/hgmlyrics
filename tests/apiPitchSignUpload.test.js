@@ -14,30 +14,22 @@ beforeEach(() => {
 describe('api/pitch/sign-upload', () => {
   it('sin x-inbound-secret -> 401', async () => {
     const res = makeRes();
-    await handler({ method: 'POST', headers: {}, body: { jobId: 'j', key: 'u1/j/stems/lead.wav' } }, res);
+    await handler({ method: 'POST', headers: {}, body: { jobId: 'j', key: 'stems/lead.wav' } }, res);
     expect(res.status).toHaveBeenCalledWith(401);
     expect(sql).not.toHaveBeenCalled();
-  });
-
-  it('key fuera de prefijo -> 403', async () => {
-    sql.mockImplementation(async () => [{ id: 'j', user_id: 'u1', status: 'running' }]);
-    const res = makeRes();
-    await handler({ method: 'POST', headers: { 'x-inbound-secret': 's' }, body: { jobId: 'j', key: 'otro/x/stems/lead.wav' } }, res);
-    expect(res.status).toHaveBeenCalledWith(403);
-    expect(createPitchSignedPutUrl).not.toHaveBeenCalled();
   });
 
   it('job inexistente -> 404', async () => {
     sql.mockImplementation(async () => []);
     const res = makeRes();
-    await handler({ method: 'POST', headers: { 'x-inbound-secret': 's' }, body: { jobId: 'j', key: 'u1/j/stems/lead.wav' } }, res);
+    await handler({ method: 'POST', headers: { 'x-inbound-secret': 's' }, body: { jobId: 'j', key: 'stems/lead.wav' } }, res);
     expect(res.status).toHaveBeenCalledWith(404);
   });
 
   it('job en estado terminal -> 409', async () => {
     sql.mockImplementation(async () => [{ id: 'j', user_id: 'u1', status: 'succeeded' }]);
     const res = makeRes();
-    await handler({ method: 'POST', headers: { 'x-inbound-secret': 's' }, body: { jobId: 'j', key: 'u1/j/stems/lead.wav' } }, res);
+    await handler({ method: 'POST', headers: { 'x-inbound-secret': 's' }, body: { jobId: 'j', key: 'stems/lead.wav' } }, res);
     expect(res.status).toHaveBeenCalledWith(409);
     expect(createPitchSignedPutUrl).not.toHaveBeenCalled();
   });
@@ -45,15 +37,15 @@ describe('api/pitch/sign-upload', () => {
   it('key con traversal -> 400', async () => {
     sql.mockImplementation(async () => [{ id: 'j', user_id: 'u1', status: 'running' }]);
     const res = makeRes();
-    await handler({ method: 'POST', headers: { 'x-inbound-secret': 's' }, body: { jobId: 'j', key: 'u1/j/../../otro/x' } }, res);
+    await handler({ method: 'POST', headers: { 'x-inbound-secret': 's' }, body: { jobId: 'j', key: '../otro/x' } }, res);
     expect(res.status).toHaveBeenCalledWith(400);
     expect(createPitchSignedPutUrl).not.toHaveBeenCalled();
   });
 
-  it('caso feliz -> 200 con url firmada', async () => {
+  it('caso feliz -> 200 con url firmada, key relativa prefijada con user_id/jobId', async () => {
     sql.mockImplementation(async () => [{ id: 'j', user_id: 'u1', status: 'running' }]);
     const res = makeRes();
-    await handler({ method: 'POST', headers: { 'x-inbound-secret': 's' }, body: { jobId: 'j', key: 'u1/j/stems/lead.wav' } }, res);
+    await handler({ method: 'POST', headers: { 'x-inbound-secret': 's' }, body: { jobId: 'j', key: 'stems/lead.wav' } }, res);
     expect(createPitchSignedPutUrl).toHaveBeenCalledWith('u1/j/stems/lead.wav');
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ url: 'https://signed/put' });

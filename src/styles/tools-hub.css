@@ -90,6 +90,11 @@
   background: color-mix(in srgb, var(--color-amber-500) 16%, transparent);
 }
 
+.tools-hub__tile-icon--rose {
+  color: var(--color-rose-300);
+  background: color-mix(in srgb, var(--color-rose-300) 16%, transparent);
+}
+
 /* Texto (nombre + descripcion) */
 .tools-hub__tile-body {
   flex: 1;
@@ -211,11 +216,46 @@
 /* oculta el icono SVG cuando hay capas drift */
 .tools-hub__tile-icon:has(.tools-hub__anim-layers) svg { opacity: 0 }
 
+/* P1 · Notas drift (partitura / rose) — 3 barras que se desplazan lateralmente */
+.tools-hub__anim-notes {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 1;
+}
+.tools-hub__anim-notes i {
+  position: absolute;
+  width: 22px;
+  height: 4px;
+  border-radius: 3px;
+  background: currentColor;
+  opacity: .65;
+}
+.tools-hub__anim-notes i:nth-child(1) { animation: tools-hub-anim-notes-a 3000ms ease-in-out infinite }
+.tools-hub__anim-notes i:nth-child(2) { animation: tools-hub-anim-notes-b 3000ms ease-in-out infinite }
+.tools-hub__anim-notes i:nth-child(3) { animation: tools-hub-anim-notes-c 3000ms ease-in-out infinite }
+@keyframes tools-hub-anim-notes-a {
+  0%, 100% { transform: translate(0, -6px) }
+  50%       { transform: translate(-5px, -6px) }
+}
+@keyframes tools-hub-anim-notes-b {
+  0%, 100% { transform: translate(0, 0) }
+  50%       { transform: translate(5px, 0) }
+}
+@keyframes tools-hub-anim-notes-c {
+  0%, 100% { transform: translate(0, 6px) }
+  50%       { transform: translate(-4px, 6px) }
+}
+/* oculta el icono SVG cuando hay notas drift */
+.tools-hub__tile-icon:has(.tools-hub__anim-notes) svg { opacity: 0 }
+
 /* Respeta prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {
   .tools-hub__anim-eq i,
   .tools-hub__anim-sparkle span,
-  .tools-hub__anim-layers i {
+  .tools-hub__anim-layers i,
+  .tools-hub__anim-notes i {
     animation: none !important;
   }
 }

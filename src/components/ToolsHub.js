@@ -40,6 +40,16 @@ const TOOLS = [
     beta: true,
     anim: 'layers',
   },
+  {
+    id: 'partitura',
+    label: 'Partitura vocal',
+    desc: 'La nota de cada sílaba de la letra',
+    path: '/partitura',
+    iconKey: 'music',
+    tone: 'rose',
+    beta: true,
+    anim: 'notes',
+  },
 ];
 
 /** Genera el markup de animación idle según el tipo de motivo. */
@@ -52,6 +62,9 @@ function animMarkup(anim) {
   }
   if (anim === 'layers') {
     return '<span class="tools-hub__anim-layers" aria-hidden="true"><i></i><i></i><i></i></span>';
+  }
+  if (anim === 'notes') {
+    return '<span class="tools-hub__anim-notes" aria-hidden="true"><i></i><i></i><i></i></span>';
   }
   return '';
 }

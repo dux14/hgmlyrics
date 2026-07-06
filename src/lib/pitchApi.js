@@ -65,6 +65,15 @@ export async function cancelJob(id) {
   return jsonOrThrow(res);
 }
 
+/** Reintenta el pipeline completo de un job failed/partial */
+export async function retryJob(id) {
+  const res = await fetch(`/api/pitch/jobs/${id}/retry`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+  });
+  return jsonOrThrow(res);
+}
+
 export async function getJob(id) {
   const res = await fetch(`/api/pitch/jobs/${id}`, { headers: authHeaders() });
   return jsonOrThrow(res);

@@ -236,6 +236,23 @@ function renderProcessing(body, job) {
   `;
 }
 
+// Reintenta el pipeline completo desde el visor de resultado (job failed/partial):
+// reusa el job existente en vez de volver a idle, que forzaría re-subir el audio.
+// Si el retry falla (ej. 409, el job ya cambió de estado) cae a renderIdle.
+async function handleRetryClick(body, job, quota) {
+  if (job.status !== 'failed' && job.status !== 'partial') {
+    renderIdle(body, quota);
+    return;
+  }
+  body.setAttribute('aria-busy', 'true');
+  try {
+    await pitchApi.retryJob(job.id);
+    startPolling(body, job.id, quota);
+  } catch {
+    renderIdle(body, quota);
+  }
+}
+
 // Visor de resultado: partitura letra↔nota por voz (analysis.json) + descargas
 // agrupadas por kind del resto de artifacts. No asume qué artifacts trae el
 // pipeline más allá de 'analysis' (score_svg/midi/musicxml son de M2, opcionales).
@@ -248,7 +265,7 @@ async function renderResult(body, job, quota) {
     `;
     body
       .querySelector('[data-action="retry"]')
-      .addEventListener('click', () => renderIdle(body, quota));
+      .addEventListener('click', () => handleRetryClick(body, job, quota));
     return;
   }
 
@@ -262,7 +279,7 @@ async function renderResult(body, job, quota) {
         ? 'Listo, pero sin artefactos aún.'
         : 'El proceso terminó parcialmente.';
     body.innerHTML = `<div class="partitura__result"><p class="partitura__status">${msg}</p></div>`;
-    appendRestartButton(body, quota);
+    appendRestartButton(body, job, quota);
     return;
   }
 
@@ -292,7 +309,7 @@ async function renderResult(body, job, quota) {
       ${downloadsHtml}
     </div>
   `;
-  appendRestartButton(body, quota);
+  appendRestartButton(body, job, quota);
 }
 
 // Pinta una voz (lead/backing…) como hoja de karaoke: una línea por línea de
@@ -313,8 +330,17 @@ function renderVoice(voiceKey, voice) {
   return `<section class="partitura__voice"><h3>${escapeHtml(voiceKey)}</h3>${lines}</section>`;
 }
 
-// Botón para volver a idle y procesar otro audio (mismo cupo, sin recargar).
-function appendRestartButton(body, quota) {
+// Botones tras el resultado: si el job quedó 'partial', ofrece reintentar el
+// pipeline completo sobre el mismo job (además de procesar otro audio).
+function appendRestartButton(body, job, quota) {
+  if (job.status === 'partial') {
+    const retryBtn = document.createElement('button');
+    retryBtn.type = 'button';
+    retryBtn.dataset.action = 'retry';
+    retryBtn.textContent = 'Volver a intentar';
+    retryBtn.addEventListener('click', () => handleRetryClick(body, job, quota));
+    body.appendChild(retryBtn);
+  }
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.dataset.action = 'restart';

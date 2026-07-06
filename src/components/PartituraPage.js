@@ -120,8 +120,79 @@ function renderIdle(body, quota) {
   });
 }
 
-// eslint-disable-next-line no-unused-vars -- placeholder: Task 5 completa la subida real.
 async function handleFile(body, file, profile, quota) {
   body.setAttribute('aria-busy', 'true');
-  // TODO Task 5: createJob + uploadInput + (estimate/approve según profile).
+  body.innerHTML = `<p class="partitura__status">Subiendo audio…</p>`;
+  try {
+    const { job, upload } = await pitchApi.createJob(file, { title: null, profile });
+    await pitchApi.uploadInput(upload, file);
+    const durationSec = Math.round(await pitchApi.readAudioDuration(file));
+    const { estimate } = await pitchApi.estimateJob(job.id, durationSec || 1);
+    renderCostGate(body, job.id, estimate, quota);
+  } catch (err) {
+    renderUploadError(body, err, quota);
+  }
+}
+
+function renderUploadError(body, err, quota) {
+  body.setAttribute('aria-busy', 'false');
+  const msg =
+    err.status === 403
+      ? 'Partitura vocal está en beta cerrada. Pide acceso a un admin.'
+      : err.status === 429
+        ? 'Llegaste al límite de jobs de hoy. Intenta mañana.'
+        : (err.message ?? 'No se pudo procesar el audio. Intenta de nuevo.');
+  body.innerHTML = `
+    <p class="partitura__error" role="alert">${msg}</p>
+    <button type="button" data-action="retry">Volver a intentar</button>
+  `;
+  body
+    .querySelector('[data-action="retry"]')
+    .addEventListener('click', () => renderIdle(body, quota));
+}
+
+function renderCostGate(body, jobId, estimate, quota) {
+  body.setAttribute('aria-busy', 'false');
+  const { lo, hi, breakdown } = estimate;
+  const hasUnconfirmed = breakdown.some((item) => !item.confirmed);
+  const items = breakdown
+    .map((item) => {
+      const label = item.label ?? item.phase ?? '';
+      return `<li>${label}${item.confirmed ? '' : ' (*)'}</li>`;
+    })
+    .join('');
+  const note = hasUnconfirmed
+    ? '<p class="partitura__gate-note">(*) estimado, se confirma al terminar</p>'
+    : '';
+  body.innerHTML = `
+    <div class="partitura__gate">
+      <p class="partitura__gate-range">Costo estimado: $${lo} – $${hi}</p>
+      <ul class="partitura__gate-breakdown">${items}</ul>
+      ${note}
+      <div class="partitura__gate-actions">
+        <button type="button" data-action="approve">${icon('check', { size: 18 })} Aprobar</button>
+        <button type="button" data-action="cancel">Cancelar</button>
+      </div>
+    </div>
+  `;
+
+  body.querySelector('[data-action="approve"]').addEventListener('click', async () => {
+    body.setAttribute('aria-busy', 'true');
+    try {
+      await pitchApi.approveJob(jobId);
+      startPolling(body, jobId, quota);
+    } catch (err) {
+      renderUploadError(body, err, quota);
+    }
+  });
+  body.querySelector('[data-action="cancel"]').addEventListener('click', async () => {
+    await pitchApi.cancelJob(jobId).catch(() => {});
+    renderIdle(body, quota);
+  });
+}
+
+// Placeholder: Task 6 completa el polling real (Realtime/canal del job activo).
+function startPolling(body) {
+  body.setAttribute('aria-busy', 'true');
+  body.innerHTML = `<p class="partitura__status">Procesando…</p>`;
 }

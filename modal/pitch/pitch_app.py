@@ -32,10 +32,18 @@ image = (
     )
 )
 # Imagen CPU liviana para notes/fusion/render (core.py + numpy/httpx): no paga GPU.
+# Monta la lista COMPLETA de módulos: Modal 1.x no auto-monta los hermanos y al
+# arrancar un contenedor cpu_image Modal importa pitch_app.py, que hace
+# `from separation/f0/lyrics import ...` a nivel de módulo — sin estos .py el
+# import falla con ModuleNotFoundError antes de correr notes/fusion/render.
+# separation/f0/lyrics solo tienen imports baratos top-level (los pesados
+# torch/whisperx/librosa son function-local), así que no encarecen la imagen CPU.
 cpu_image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install("numpy==1.26.4", "httpx==0.27.2")
-    .add_local_python_source("core", "_common", "notes", "fusion", "render")
+    .add_local_python_source(
+        "core", "_common", "separation", "f0", "notes", "lyrics", "fusion", "render"
+    )
 )
 _secrets = [modal.Secret.from_name("pitch-hmac")]  # PITCH_MODAL_INBOUND_SECRET + PITCH_MODAL_WEBHOOK_SECRET
 
@@ -116,7 +124,9 @@ def run_pipeline(payload: dict) -> None:
     try:
         n_render.remote(job_id, webhook, analysis)
     except Exception:
-        pass  # render ya posteo su propio webhook
+        # render (M1) solo postea su webhook; no tiene except propio, así que si
+        # falla, reportamos aquí su ok:false (consistente con las demás fases).
+        skip_rest(5, "render fallo")
 
 
 @app.function(image=image, secrets=_secrets)

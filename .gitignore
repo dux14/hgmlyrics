@@ -59,3 +59,8 @@ Letras HGM Bogotá_files/
 public/covers.backup/
 .vercel
 .env*
+
+# Python (pipelines de modal/ y venv de test local del pipeline Partitura)
+__pycache__/
+*.pyc
+.venv/

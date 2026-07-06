@@ -4,11 +4,21 @@ las lineas/silabas transcritas (lyrics) y los eventos de nota por voz (notes).
 Solo ensamblado + I/O (upload + webhook): la logica pura vive en core.py."""
 import json
 
-from core import fuse_syllables_notes, detect_modulations
+from core import fuse_syllables_notes, detect_modulations, merge_voices_present
 from _common import request_signed_put, upload_put, post_webhook, artifact, extract_storage_key
 
 
-def run_fusion(job_id, webhook, sign_upload_url, inbound_secret, notes_lead, notes_backing, lines_words):
+def assemble_analysis(base_voices: dict, modulations: list, voices_present_base: list,
+                      extra_voices: dict | None = None) -> dict:
+    """Ensambla analysis.json admitiendo voces extra (genero/coro) sin romper
+    lead/backing. Puro, sin I/O."""
+    voices = {**base_voices, **(extra_voices or {})}
+    voices_present = merge_voices_present(voices_present_base, list((extra_voices or {}).keys()))
+    return {"voices_present": voices_present, "voices": voices, "modulations": modulations}
+
+
+def run_fusion(job_id, webhook, sign_upload_url, inbound_secret, notes_lead, notes_backing, lines_words,
+               extra_voices=None):
     """
     Nodo CPU de la fase 'fusion'. Por cada voz (lead, backing) copia las MISMAS
     lineas/silabas transcritas (lines_words) y corre fuse_syllables_notes contra
@@ -28,14 +38,11 @@ def run_fusion(job_id, webhook, sign_upload_url, inbound_secret, notes_lead, not
                 lines.append({"syllables": syls})
             return lines
 
-        analysis = {
-            "voices_present": ["lead", "backing"],
-            "voices": {
-                "lead": {"lines": voice_lines(notes_lead)},
-                "backing": {"lines": voice_lines(notes_backing)},
-            },
-            "modulations": detect_modulations(notes_lead),
+        base_voices = {
+            "lead": {"lines": voice_lines(notes_lead)},
+            "backing": {"lines": voice_lines(notes_backing)},
         }
+        analysis = assemble_analysis(base_voices, detect_modulations(notes_lead), ["lead", "backing"], extra_voices)
 
         put_url = request_signed_put(sign_upload_url, inbound_secret, job_id, "export/analysis.json")
         upload_put(put_url, json.dumps(analysis, ensure_ascii=False).encode("utf-8"), content_type="application/json")

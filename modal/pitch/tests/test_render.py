@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from render import analysis_to_svg
+from render import analysis_to_svg, analysis_to_png
 
 
 def test_svg_xml_valido_silabas_y_leyenda_modulacion(analysis_small):
@@ -12,3 +12,8 @@ def test_svg_xml_valido_silabas_y_leyenda_modulacion(analysis_small):
     assert "''" in texts
     assert any(t in ("–", "-") for t in texts)
     assert "+7" in svg
+
+
+def test_png_valido(analysis_small):
+    png = analysis_to_png(analysis_to_svg(analysis_small))
+    assert isinstance(png, bytes) and png[:8] == b"\x89PNG\r\n\x1a\n" and len(png) > 100

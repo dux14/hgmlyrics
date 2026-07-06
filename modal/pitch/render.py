@@ -52,6 +52,11 @@ def analysis_to_svg(analysis: dict) -> str:
     return "\n".join(parts)
 
 
+def analysis_to_png(svg: str) -> bytes:
+    import cairosvg  # requiere libcairo2 nativo
+    return cairosvg.svg2png(bytestring=svg.encode("utf-8"))
+
+
 def run_render(job_id, webhook, analysis):
     """M1: fase minima, NO genera SVG/PNG/MIDI/MusicXML (eso es M2). Postea
     'render' con {"ok": True, "artifacts": []} para que el job llegue a

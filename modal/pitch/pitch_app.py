@@ -16,6 +16,8 @@ from notes import run_notes
 from lyrics import run_lyrics
 from fusion import run_fusion
 from render import run_render
+from gender import run_gender
+from choir_basicpitch import run_choir
 
 REQUIRED_PHASES = ["separation", "f0", "notes", "lyrics", "fusion", "render"]
 app = modal.App("hkn-pitch")
@@ -28,7 +30,8 @@ image = (
     .apt_install("ffmpeg", "git")
     .pip_install_from_requirements("requirements.txt")
     .add_local_python_source(
-        "core", "_common", "separation", "f0", "notes", "lyrics", "fusion", "render"
+        "core", "_common", "separation", "f0", "notes", "lyrics", "fusion", "render",
+        "gender", "choir_basicpitch"
     )
 )
 # Imagen CPU liviana para notes/fusion (core.py + numpy/httpx): no paga GPU.
@@ -47,7 +50,8 @@ cpu_image = (
     # pinneada a la de requirements.txt.
     .pip_install("numpy==1.26.4", "httpx==0.27.2", "fastapi==0.115.6")
     .add_local_python_source(
-        "core", "_common", "separation", "f0", "notes", "lyrics", "fusion", "render"
+        "core", "_common", "separation", "f0", "notes", "lyrics", "fusion", "render",
+        "gender", "choir_basicpitch"
     )
 )
 # Imagen CPU para render: igual a cpu_image + libcairo2 (cairosvg) + pretty_midi
@@ -62,7 +66,8 @@ render_image = (
     # y n_render (render_image) crashearia al importar el modulo sin ella.
     .pip_install("numpy==1.26.4", "httpx==0.27.2", "cairosvg==2.7.1", "pretty_midi==0.2.10", "music21==9.1.0", "fastapi==0.115.6")
     .add_local_python_source(
-        "core", "_common", "separation", "f0", "notes", "lyrics", "fusion", "render"
+        "core", "_common", "separation", "f0", "notes", "lyrics", "fusion", "render",
+        "gender", "choir_basicpitch"
     )
 )
 _secrets = [modal.Secret.from_name("pitch-hmac")]  # PITCH_MODAL_INBOUND_SECRET + PITCH_MODAL_WEBHOOK_SECRET
@@ -92,13 +97,26 @@ def n_lyrics(job_id, webhook, sign_upload_url, inbound_secret, lead_bytes):
 
 
 @app.function(image=cpu_image, secrets=_secrets, timeout=60)
-def n_fusion(job_id, webhook, sign_upload_url, inbound_secret, notes_lead, notes_backing, lines_words):
-    return run_fusion(job_id, webhook, sign_upload_url, inbound_secret, notes_lead, notes_backing, lines_words)
+def n_fusion(job_id, webhook, sign_upload_url, inbound_secret, notes_lead, notes_backing, lines_words, extra_voices=None):
+    return run_fusion(job_id, webhook, sign_upload_url, inbound_secret, notes_lead, notes_backing, lines_words, extra_voices)
 
 
 @app.function(image=render_image, secrets=_secrets, timeout=180)
 def n_render(job_id, webhook, sign_upload_url, inbound_secret, analysis):
     return run_render(job_id, webhook, sign_upload_url, inbound_secret, analysis)
+
+
+# Nodos OPCIONALES de M5 (flag PITCH_CHOIR). Fuera de REQUIRED_PHASES: un fallo no
+# cambia succeeded/partial/failed, solo aportan voces extra a analysis.json. Corren
+# sobre el stem lead ya separado (no re-descargan/re-separan).
+@app.function(image=image, secrets=_secrets, gpu="T4", timeout=1200)
+def n_gender(job_id, webhook, sign_upload_url, inbound_secret, lead_bytes):
+    return run_gender(job_id, webhook, sign_upload_url, inbound_secret, lead_bytes)
+
+
+@app.function(image=image, secrets=_secrets, gpu="T4", timeout=900)
+def n_choir(job_id, webhook, sign_upload_url, inbound_secret, lead_bytes):
+    return run_choir(job_id, webhook, sign_upload_url, inbound_secret, lead_bytes)
 
 
 @app.function(image=image, secrets=_secrets, timeout=1800)
@@ -125,20 +143,48 @@ def run_pipeline(payload: dict) -> None:
         lead, backing = n_separation.remote(job_id, webhook, sign_upload_url, inbound_secret, audio_bytes)
     except Exception:
         skip_rest(1, "separacion fallo"); return
+
+    # M5 (opcional): con el stem lead ya disponible, lanza genero/coro en paralelo
+    # a f0/notes/lyrics. NO bloquean ni propagan error (fases opcionales fuera de
+    # REQUIRED_PHASES); se recogen antes de fusion para aportar voces extra.
+    choir_on = bool((payload.get("flags") or {}).get("choir", False))
+    gender_call = n_gender.spawn(job_id, webhook, sign_upload_url, inbound_secret, lead) if choir_on else None
+    choir_call = n_choir.spawn(job_id, webhook, sign_upload_url, inbound_secret, lead) if choir_on else None
+
+    def cancel_optional():
+        # Si una fase REQUERIDA falla y abortamos, cancela los nodos opcionales ya
+        # lanzados: evita GPU huerfana (hasta 1200s) y un webhook tardio que podria
+        # escribir en un job reintentado con el mismo id.
+        for call in (gender_call, choir_call):
+            if call is not None:
+                try:
+                    call.cancel()
+                except Exception:
+                    pass
+
     try:
         f0_lead, f0_backing = n_f0.remote(job_id, webhook, sign_upload_url, inbound_secret, lead, backing)
     except Exception:
-        skip_rest(2, "f0 fallo"); return
+        skip_rest(2, "f0 fallo"); cancel_optional(); return
     try:
         notes_lead, notes_backing = n_notes.remote(job_id, webhook, sign_upload_url, inbound_secret, f0_lead, f0_backing)
     except Exception:
-        skip_rest(3, "notas fallo"); return
+        skip_rest(3, "notas fallo"); cancel_optional(); return
     try:
         lines_words = n_lyrics.remote(job_id, webhook, sign_upload_url, inbound_secret, lead)
     except Exception:
-        skip_rest(4, "letra fallo"); return
+        skip_rest(4, "letra fallo"); cancel_optional(); return
+    # Recoge las voces opcionales (si el flag estaba activo) antes de fusion. Un
+    # nodo caido no bloquea: ya posteo su webhook y no cuenta para el estado final.
+    extra_voices = {}
+    for call in (gender_call, choir_call):
+        if call is not None:
+            try:
+                extra_voices.update(call.get(timeout=900) or {})
+            except Exception:
+                pass
     try:
-        analysis = n_fusion.remote(job_id, webhook, sign_upload_url, inbound_secret, notes_lead, notes_backing, lines_words)
+        analysis = n_fusion.remote(job_id, webhook, sign_upload_url, inbound_secret, notes_lead, notes_backing, lines_words, extra_voices)
     except Exception:
         skip_rest(5, "fusion fallo"); return
     try:

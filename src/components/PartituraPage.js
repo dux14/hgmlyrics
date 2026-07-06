@@ -362,15 +362,17 @@ function renderVoicesSection(analysis, voiceKeys, mode) {
     return `<p class="partitura__error" role="alert">No se pudo cargar la partitura.</p>`;
   }
   const keysToShow = mode === 'all' ? voiceKeys : [mode];
-  const voicesHtml = keysToShow.map((key) => renderVoice(key, analysis.voices?.[key])).join('');
+  const voicesHtml =
+    keysToShow.map((key) => renderVoice(key, analysis.voices?.[key])).join('') ||
+    `<p class="partitura__empty-voice">No hay datos de partitura para esta voz.</p>`;
   if (voiceKeys.length < 2) return voicesHtml;
   const tabs = ['all', ...voiceKeys]
     .map(
       (k) =>
-        `<button type="button" class="partitura__voice-tab${k === mode ? ' is-active' : ''}" data-voice-mode="${escapeHtml(k)}">${k === 'all' ? 'Todas' : escapeHtml(k)}</button>`,
+        `<button type="button" role="tab" aria-selected="${k === mode}" class="partitura__voice-tab${k === mode ? ' is-active' : ''}" data-voice-mode="${escapeHtml(k)}">${k === 'all' ? 'Todas' : escapeHtml(k)}</button>`,
     )
     .join('');
-  return `<div class="partitura__voice-tabs" role="tablist">${tabs}</div><div class="partitura__voices">${voicesHtml}</div>`;
+  return `<div class="partitura__voice-tabs" role="tablist">${tabs}</div><div class="partitura__voices" role="tabpanel">${voicesHtml}</div>`;
 }
 
 // Botones tras el resultado: si el job quedó 'partial', ofrece reintentar el

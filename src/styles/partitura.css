@@ -198,3 +198,11 @@
   font-size: var(--font-size-sm);
   margin-top: var(--space-lg);
 }
+
+/* Voz sin datos (una pestaña de voz aislada sin partitura): aviso atenuado en
+   lugar de un panel vacío sin feedback. */
+.partitura__empty-voice {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  padding: var(--space-md) 0;
+}

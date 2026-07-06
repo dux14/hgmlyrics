@@ -40,7 +40,12 @@ image = (
 # torch/whisperx/librosa son function-local), así que no encarecen la imagen CPU.
 cpu_image = (
     modal.Image.debian_slim(python_version="3.11")
-    .pip_install("numpy==1.26.4", "httpx==0.27.2")
+    # fastapi: NO lo usa notes/fusion, pero pitch_app.py hace `from fastapi import
+    # Header, HTTPException` a nivel de modulo (para el endpoint `start`) y Modal
+    # importa el modulo COMPLETO al bootear cualquier contenedor. Sin fastapi aqui,
+    # n_notes/n_fusion crashean con ModuleNotFoundError antes de correr. Version
+    # pinneada a la de requirements.txt.
+    .pip_install("numpy==1.26.4", "httpx==0.27.2", "fastapi==0.115.6")
     .add_local_python_source(
         "core", "_common", "separation", "f0", "notes", "lyrics", "fusion", "render"
     )
@@ -53,7 +58,9 @@ cpu_image = (
 render_image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("libcairo2")
-    .pip_install("numpy==1.26.4", "httpx==0.27.2", "cairosvg==2.7.1", "pretty_midi==0.2.10", "music21==9.1.0")
+    # fastapi: idem cpu_image — pitch_app.py importa fastapi top-level para `start`,
+    # y n_render (render_image) crashearia al importar el modulo sin ella.
+    .pip_install("numpy==1.26.4", "httpx==0.27.2", "cairosvg==2.7.1", "pretty_midi==0.2.10", "music21==9.1.0", "fastapi==0.115.6")
     .add_local_python_source(
         "core", "_common", "separation", "f0", "notes", "lyrics", "fusion", "render"
     )

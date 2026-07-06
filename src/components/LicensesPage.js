@@ -186,6 +186,46 @@ export function renderLicenses(container) {
 
         <div class="lc-card">
           <div class="lc-card__head">
+            <span class="lc-card__num">P3</span>
+            Partitura vocal - Render y exportación
+          </div>
+          <div class="lc-model">
+            <div class="lc-model__row">
+              <strong>music21</strong>
+              <span class="lc-badge lc-badge--ok">BSD-3-Clause</span>
+            </div>
+            <p class="lc-model__detail">
+              Genera la notación musical y la exporta a MusicXML (partitura editable).
+              Repo: <a href="https://github.com/cuthbertLab/music21" target="_blank" rel="noopener">cuthbertLab/music21</a>.
+              Uso comercial permitido.
+            </p>
+          </div>
+          <div class="lc-model">
+            <div class="lc-model__row">
+              <strong>pretty_midi</strong>
+              <span class="lc-badge lc-badge--ok">MIT</span>
+            </div>
+            <p class="lc-model__detail">
+              Construye y serializa el archivo MIDI (una pista por voz).
+              Repo: <a href="https://github.com/craffel/pretty-midi" target="_blank" rel="noopener">craffel/pretty-midi</a>.
+              Uso comercial permitido.
+            </p>
+          </div>
+          <div class="lc-model">
+            <div class="lc-model__row">
+              <strong>cairosvg</strong>
+              <span class="lc-badge lc-badge--ok">LGPL-3.0</span>
+            </div>
+            <p class="lc-model__detail">
+              Rasteriza la hoja SVG a PNG. Se usa como biblioteca dinámica sin
+              modificarla, por lo que la LGPL permite uso comercial.
+              Repo: <a href="https://github.com/Kozea/CairoSVG" target="_blank" rel="noopener">Kozea/CairoSVG</a>.
+            </p>
+          </div>
+        </div>
+
+        <div class="lc-card">
+          <div class="lc-card__head">
             <span class="lc-card__num">${icon('star', { size: 14 })}</span>
             Créditos y referencias
           </div>

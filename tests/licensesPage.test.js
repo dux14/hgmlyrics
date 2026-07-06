@@ -30,6 +30,15 @@ describe('renderLicenses', () => {
     expect(text).toContain('librosa');
   });
 
+  it('incluye las librerias de render/export del pipeline Partitura (P3)', () => {
+    renderLicenses(container);
+    const text = container.textContent;
+
+    expect(text).toContain('music21');
+    expect(text).toContain('pretty_midi');
+    expect(text).toContain('cairosvg');
+  });
+
   it('incluye la nota de monetizacion', () => {
     renderLicenses(container);
     expect(container.textContent).toContain('monetizada');

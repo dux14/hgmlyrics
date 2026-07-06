@@ -200,6 +200,47 @@ chorus_bs_roformer 24.13 dB, pero sin restricción NC).
 
 ---
 
+## P3 — Partitura vocal: render y exportación
+
+### Librería: music21
+
+| Campo | Valor |
+|---|---|
+| Version | 9.1.0 |
+| Tarea | Genera la notación musical y la exporta a MusicXML |
+| Repo | https://github.com/cuthbertLab/music21 |
+| Licencia | BSD-3-Clause |
+| Uso comercial | Permitido |
+| Texto de atribución | music21 (cuthbertLab) — BSD-3-Clause |
+
+---
+
+### Librería: pretty_midi
+
+| Campo | Valor |
+|---|---|
+| Version | 0.2.10 |
+| Tarea | Construye y serializa el archivo MIDI (una pista por voz) |
+| Repo | https://github.com/craffel/pretty-midi |
+| Licencia | MIT |
+| Uso comercial | Permitido |
+| Texto de atribución | pretty_midi (craffel) — MIT |
+
+---
+
+### Librería: cairosvg
+
+| Campo | Valor |
+|---|---|
+| Version | 2.7.1 |
+| Tarea | Rasteriza la hoja SVG a PNG |
+| Repo | https://github.com/Kozea/CairoSVG |
+| Licencia | LGPL-3.0 |
+| Uso comercial | Permitido (biblioteca dinámica, sin modificarla) |
+| Texto de atribución | CairoSVG (Kozea) — LGPL-3.0 |
+
+---
+
 ## Resumen de licencias por modelo
 
 | Modelo | Sección | Licencia | Uso comercial | Estado |
@@ -217,6 +258,9 @@ chorus_bs_roformer 24.13 dB, pero sin restricción NC).
 | WhisperX (Max Bain) | P2 | BSD-2-Clause | Sí | Confirmado |
 | Whisper (OpenAI) | P2 | MIT | Sí | Confirmado |
 | pyphen (Kozea) | P2 | GPL-2.0/LGPL-2.1/MPL-1.1 | Sí | Confirmado |
+| music21 (cuthbertLab) | P3 | BSD-3-Clause | Sí | Confirmado |
+| pretty_midi (craffel) | P3 | MIT | Sí | Confirmado |
+| CairoSVG (Kozea) | P3 | LGPL-3.0 | Sí | Confirmado |
 
 ---
 
@@ -232,6 +276,7 @@ Estas cadenas son el texto exacto a mostrar en la interfaz del Estudio junto a c
 | **S4 — Genero vocal** | chorus_bs_roformer ep_267 (Sucial) — CC-BY-NC-SA-4.0 · Solo uso no comercial |
 | **P1 — Partitura vocal: afinacion y analisis** | torchcrepe (envuelve CREPE, marl) — MIT · librosa — ISC |
 | **P2 — Partitura vocal: letra y silabas** | WhisperX (Max Bain) — BSD-2-Clause · Whisper (OpenAI) — MIT · pyphen (Kozea) — GPL/LGPL/MPL |
+| **P3 — Partitura vocal: render y exportacion** | music21 (cuthbertLab) — BSD-3-Clause · pretty_midi (craffel) — MIT · CairoSVG (Kozea) — LGPL-3.0 |
 
 > **Advertencia de monetizacion:** Si la app se monetiza, S4 requiere reemplazar
 > `chorus_bs_roformer` (Sucial, CC-BY-NC-SA-4.0) por un modelo con licencia permisiva.

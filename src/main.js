@@ -364,6 +364,12 @@ async function boot() {
     renderStudioPage(mainContent);
   });
 
+  privateRoute('/partitura', async () => {
+    hideFilterBar();
+    const { renderPartituraPage } = await import('./components/PartituraPage.js');
+    renderPartituraPage(mainContent);
+  });
+
   privateRoute('/licencias', async () => {
     hideFilterBar();
     const { renderLicenses } = await import('./components/LicensesPage.js');

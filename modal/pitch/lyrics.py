@@ -44,11 +44,14 @@ def run_lyrics(job_id, webhook, sign_upload_url, inbound_secret, lead_bytes) -> 
 
             language = result["language"]
             # El catalogo (Hakuna) es es/en; WhisperX a veces detecta lenguas
-            # cercanas al espanol (ca/gl/pt) en audio musical corto, y su modelo de
-            # alineacion para esas lenguas puede no cargar. Si no es es/en, cae a es
-            # para el align model y el silabeo.
+            # cercanas al espanol (ca/gl/pt) en audio musical corto. Eso no solo
+            # rompe el align model de esas lenguas: la propia TRANSCRIPCION sale
+            # degradada (texto en catalan/gallego para un tema en espanol). Si el
+            # idioma auto-detectado no es es/en, forzamos es y RE-transcribimos con
+            # ese idioma (no basta clampear el align: el texto ya vendria mal).
             if language not in ("es", "en"):
                 language = "es"
+                result = model.transcribe(audio, batch_size=16, language=language)
             align_model, meta = whisperx.load_align_model(language_code=language, device=device)
             aligned = whisperx.align(result["segments"], align_model, meta, audio, device)
 

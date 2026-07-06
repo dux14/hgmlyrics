@@ -1,0 +1,98 @@
+/* ==========================================================================
+   partitura.css — Partitura vocal (PartituraPage).
+   Tono: --color-rose-300 (mismo acento rosa que usa el tile del hub de
+   herramientas para esta feature).
+   ========================================================================== */
+
+/* ------------------------------------------------------------------ */
+/* Partitura — contenedor raiz                                          */
+/* ------------------------------------------------------------------ */
+.partitura {
+  max-width: var(--max-content-width);
+  margin: 0 auto;
+  /* Sin padding horizontal: el gutter lo aporta .main__content (regla de
+     plataforma: sin espacio muerto arriba ni padding lateral doblado). */
+  padding: var(--space-md) 0 var(--space-2xl);
+}
+
+.partitura__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--space-sm);
+}
+
+.partitura__title svg {
+  color: var(--color-rose-300);
+}
+
+.partitura__sub {
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-lg);
+  line-height: var(--line-height-base, 1.6);
+}
+
+.partitura__error {
+  color: var(--color-danger);
+  margin-top: var(--space-sm);
+}
+
+.partitura__quota {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-sm);
+}
+
+/* ------------------------------------------------------------------ */
+/* Perfiles (oss / precision)                                           */
+/* ------------------------------------------------------------------ */
+.partitura__profiles {
+  display: flex;
+  gap: var(--space-sm);
+  border: 0;
+  padding: 0;
+  margin: 0 0 var(--space-md);
+}
+
+.partitura__profile {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.partitura__profile:has(input:checked) {
+  border-color: var(--color-rose-300);
+  background: color-mix(in srgb, var(--color-rose-300) 10%, transparent);
+}
+
+.partitura__profile-name {
+  font-size: var(--font-size-sm);
+}
+
+/* ------------------------------------------------------------------ */
+/* Dropzone                                                              */
+/* ------------------------------------------------------------------ */
+.partitura__dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-2xl) var(--space-lg);
+  border: 1px dashed var(--color-border);
+  border-radius: 14px;
+  text-align: center;
+  cursor: pointer;
+  color: var(--color-rose-300);
+}
+
+.partitura__dropzone-hint {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}

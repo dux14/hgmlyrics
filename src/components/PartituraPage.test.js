@@ -113,6 +113,7 @@ describe('PartituraPage — subida y cost gate', () => {
 
 describe('PartituraPage — poll de progreso', () => {
   let container;
+  const originalFetch = global.fetch;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -126,10 +127,16 @@ describe('PartituraPage — poll de progreso', () => {
     pitchApi.approveJob.mockReset();
     pitchApi.cancelJob.mockReset();
     pitchApi.getJob.mockReset();
+    // renderResult (Task 7) hace fetch del artifact 'analysis': mock para no
+    // pegarle a la red real con la URL de ejemplo.
+    global.fetch = vi.fn().mockResolvedValue({
+      json: () => Promise.resolve({ voices_present: ['lead'], voices: { lead: { lines: [] } } }),
+    });
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    global.fetch = originalFetch;
   });
 
   it('hace poll con setInterval hasta status terminal y pinta el resultado', async () => {
@@ -178,6 +185,89 @@ describe('PartituraPage — poll de progreso', () => {
     await vi.advanceTimersByTimeAsync(3000);
 
     await vi.advanceTimersByTimeAsync(3000);
+    // renderResult (Task 7) hace fetch del artifact 'analysis' antes de pintar:
+    // flush extra de microtasks para que se asiente el await interno.
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
     expect(container.textContent).toMatch(/descargar|lead|analysis/i);
+  });
+});
+
+describe('PartituraPage — resultado (letra-nota + descargas)', () => {
+  let container;
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    container = document.createElement('div');
+    pitchApi.listJobs.mockReset();
+    pitchApi.listJobs.mockResolvedValue({ jobs: [], quota: { used: 0, limit: 2 } });
+    pitchApi.createJob.mockReset();
+    pitchApi.uploadInput.mockReset();
+    pitchApi.readAudioDuration.mockReset();
+    pitchApi.estimateJob.mockReset();
+    pitchApi.approveJob.mockReset();
+    pitchApi.cancelJob.mockReset();
+    pitchApi.getJob.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    global.fetch = originalFetch;
+  });
+
+  // Corre el flujo completo (subida -> cost gate -> aprobar) hasta que getJob
+  // resuelve 'succeeded' con los artifacts dados, dejando pintado renderResult.
+  async function runToSucceeded(artifacts) {
+    pitchApi.createJob.mockResolvedValue({ job: { id: 'j1' }, upload: { path: 'p', token: 't' } });
+    pitchApi.uploadInput.mockResolvedValue(undefined);
+    pitchApi.readAudioDuration.mockResolvedValue(180);
+    pitchApi.estimateJob.mockResolvedValue({ estimate: { lo: 0, hi: 0.15, breakdown: [] } });
+    pitchApi.approveJob.mockResolvedValue(undefined);
+    pitchApi.getJob.mockResolvedValue({ status: 'succeeded', phases: {}, artifacts });
+
+    await renderPartituraPage(container);
+    const input = container.querySelector('input[type="file"]');
+    const file = new File(['audio'], 'a.mp3', { type: 'audio/mpeg' });
+    Object.defineProperty(input, 'files', { value: [file] });
+    input.dispatchEvent(new Event('change'));
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+    container.querySelector('[data-action="approve"]').dispatchEvent(new Event('click'));
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+  }
+
+  it('pinta la partitura por voz (letra+nota) y agrupa las descargas', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      json: () =>
+        Promise.resolve({
+          voices_present: ['lead'],
+          voices: {
+            lead: {
+              lines: [
+                { syllables: [{ text: 'Me', note: 'C4', ditto: false, blank: false }] },
+              ],
+            },
+          },
+        }),
+    });
+
+    await runToSucceeded([
+      { kind: 'analysis', url: 'https://x/analysis.json' },
+      { kind: 'stem_lead', url: 'https://x/lead.wav' },
+    ]);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(container.textContent).toContain('Me');
+    expect(container.textContent).toContain('C4');
+    expect(container.querySelector('a[href="https://x/lead.wav"]')).toBeTruthy();
+  });
+
+  it('artifacts vacio muestra estado vacio sin romper', async () => {
+    await runToSucceeded([]);
+
+    expect(container.textContent).toMatch(/sin artefactos|no se generaron/i);
   });
 });

@@ -8,6 +8,7 @@ import { icon } from '../lib/icons.js';
 import * as pitchApi from '../lib/pitchApi.js';
 import { skelBlock, skelLine } from '../lib/skeleton.js';
 import { PHASE_ORDER, phaseLabel, phaseProgress, isTerminalStatus } from '../lib/pitchProgress.js';
+import { escapeHtml, safeUrl } from '../lib/escape.js';
 
 const POLL_MS = 3000;
 let pollTimer = null;
@@ -209,7 +210,7 @@ function startPolling(body, jobId, quota) {
     }
     if (isTerminalStatus(job.status)) {
       stopPolling();
-      renderResult(body, job, quota);
+      void renderResult(body, job, quota);
     } else {
       renderProcessing(body, job);
     }
@@ -235,8 +236,10 @@ function renderProcessing(body, job) {
   `;
 }
 
-// TODO Task 7: reemplazar por el visor real (letra↔nota, descarga por artifact).
-function renderResult(body, job, quota) {
+// Visor de resultado: partitura letra↔nota por voz (analysis.json) + descargas
+// agrupadas por kind del resto de artifacts. No asume qué artifacts trae el
+// pipeline más allá de 'analysis' (score_svg/midi/musicxml son de M2, opcionales).
+async function renderResult(body, job, quota) {
   body.setAttribute('aria-busy', 'false');
   if (job.status !== 'succeeded' && job.status !== 'partial') {
     body.innerHTML = `
@@ -248,12 +251,74 @@ function renderResult(body, job, quota) {
       .addEventListener('click', () => renderIdle(body, quota));
     return;
   }
-  const items = (job.artifacts ?? [])
-    .map((a) => `<li><a href="${a.url}" target="_blank" rel="noopener">Descargar ${a.kind}</a></li>`)
-    .join('');
+
+  const artifacts = job.artifacts ?? [];
+  const analysisArt = artifacts.find((a) => a.kind === 'analysis');
+  const others = artifacts.filter((a) => a.kind !== 'analysis' && a.url);
+
+  if (!analysisArt?.url) {
+    const msg =
+      job.status === 'succeeded'
+        ? 'Listo, pero sin artefactos aún.'
+        : 'El proceso terminó parcialmente.';
+    body.innerHTML = `<div class="partitura__result"><p class="partitura__status">${msg}</p></div>`;
+    appendRestartButton(body, quota);
+    return;
+  }
+
+  let analysis = null;
+  try {
+    analysis = await (await fetch(analysisArt.url)).json();
+  } catch {
+    analysis = null;
+  }
+
+  const voicesHtml = analysis
+    ? (analysis.voices_present ?? []).map((key) => renderVoice(key, analysis.voices?.[key])).join('')
+    : `<p class="partitura__error" role="alert">No se pudo cargar la partitura.</p>`;
+
+  const downloadsHtml = others.length
+    ? `<ul class="partitura__downloads">${others
+        .map(
+          (a) =>
+            `<li><a href="${safeUrl(a.url)}" download>${icon('download', { size: 14 })} ${escapeHtml(a.kind)}</a></li>`,
+        )
+        .join('')}</ul>`
+    : '';
+
   body.innerHTML = `
     <div class="partitura__result">
-      <ul class="partitura__artifacts">${items}</ul>
+      ${voicesHtml}
+      ${downloadsHtml}
     </div>
   `;
+  appendRestartButton(body, quota);
+}
+
+// Pinta una voz (lead/backing…) como hoja de karaoke: una línea por línea de
+// letra, una columna por sílaba (texto arriba, nota debajo).
+function renderVoice(voiceKey, voice) {
+  if (!voice?.lines) return '';
+  const lines = voice.lines
+    .map((line) => {
+      const syllables = (line.syllables ?? [])
+        .map((s) => {
+          const label = s.blank ? '' : s.ditto ? "''" : (s.note ?? '');
+          return `<span class="partitura__syl"><span class="partitura__syl-text">${escapeHtml(s.text)}</span><span class="partitura__syl-note">${escapeHtml(label)}</span></span>`;
+        })
+        .join('');
+      return `<p class="partitura__line">${syllables}</p>`;
+    })
+    .join('');
+  return `<section class="partitura__voice"><h3>${escapeHtml(voiceKey)}</h3>${lines}</section>`;
+}
+
+// Botón para volver a idle y procesar otro audio (mismo cupo, sin recargar).
+function appendRestartButton(body, quota) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.dataset.action = 'restart';
+  btn.textContent = 'Procesar otro audio';
+  btn.addEventListener('click', () => renderIdle(body, quota));
+  body.appendChild(btn);
 }

@@ -96,3 +96,59 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
 }
+
+/* ------------------------------------------------------------------ */
+/* Resultado — partitura letra↔nota (hoja tipo karaoke)                  */
+/* ------------------------------------------------------------------ */
+.partitura__voice {
+  margin-bottom: var(--space-xl);
+}
+
+.partitura__voice h3 {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-rose-300);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--space-sm);
+}
+
+.partitura__line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.partitura__syl {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 2ch;
+}
+
+.partitura__syl-text {
+  font-weight: var(--font-weight-bold);
+}
+
+.partitura__syl-note {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  min-height: 1.2em;
+}
+
+.partitura__downloads {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-lg);
+  list-style: none;
+  padding: 0;
+}
+
+.partitura__downloads a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-rose-300);
+}

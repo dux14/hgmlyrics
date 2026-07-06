@@ -70,6 +70,20 @@ render_image = (
         "gender", "choir_basicpitch"
     )
 )
+# Imagen AISLADA para n_choir (Basic Pitch, M5 opcional). basic-pitch[onnx]==0.4.0
+# arrastra TensorFlow como dependencia DURA que chocaria con el stack
+# torch/whisperx/av de la imagen GPU compartida; confinarla aqui blinda el build
+# del pipeline principal. La inferencia corre por onnxruntime (CPU) — el modelo
+# ICASSP es liviano, no necesita GPU. fastapi: pitch_app.py lo importa top-level
+# (endpoint start) y Modal importa el modulo completo al bootear cualquier contenedor.
+choir_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("numpy==1.26.4", "httpx==0.27.2", "fastapi==0.115.6", "basic-pitch[onnx]==0.4.0")
+    .add_local_python_source(
+        "core", "_common", "separation", "f0", "notes", "lyrics", "fusion", "render",
+        "gender", "choir_basicpitch"
+    )
+)
 _secrets = [modal.Secret.from_name("pitch-hmac")]  # PITCH_MODAL_INBOUND_SECRET + PITCH_MODAL_WEBHOOK_SECRET
 
 # Dict persistente para idempotencia por jobId (jobId -> callId del run_pipeline).
@@ -114,7 +128,9 @@ def n_gender(job_id, webhook, sign_upload_url, inbound_secret, lead_bytes):
     return run_gender(job_id, webhook, sign_upload_url, inbound_secret, lead_bytes)
 
 
-@app.function(image=image, secrets=_secrets, gpu="T4", timeout=900)
+# n_choir corre en choir_image AISLADA (Basic Pitch/onnx, CPU): mantiene TF fuera
+# del resto del pipeline. Sin gpu: la inferencia onnx del modelo ICASSP no la necesita.
+@app.function(image=choir_image, secrets=_secrets, timeout=900)
 def n_choir(job_id, webhook, sign_upload_url, inbound_secret, lead_bytes):
     return run_choir(job_id, webhook, sign_upload_url, inbound_secret, lead_bytes)
 

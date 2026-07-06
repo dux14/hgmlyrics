@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from render import analysis_to_svg, analysis_to_png
+from render import analysis_to_svg, analysis_to_png, analysis_to_midi
 
 
 def test_svg_xml_valido_silabas_y_leyenda_modulacion(analysis_small):
@@ -17,3 +17,14 @@ def test_svg_xml_valido_silabas_y_leyenda_modulacion(analysis_small):
 def test_png_valido(analysis_small):
     png = analysis_to_png(analysis_to_svg(analysis_small))
     assert isinstance(png, bytes) and png[:8] == b"\x89PNG\r\n\x1a\n" and len(png) > 100
+
+
+def test_midi_una_pista_por_voz_y_ditto_sostiene(analysis_small):
+    pm = analysis_to_midi(analysis_small)
+    assert len(pm.instruments) == 2
+    lead = next(i for i in pm.instruments if i.name == "lead")
+    backing = next(i for i in pm.instruments if i.name == "backing")
+    assert len(lead.notes) == 2
+    assert lead.notes[0].pitch == 60 and lead.notes[0].start == 0.31 and lead.notes[0].end == 0.55
+    assert lead.notes[1].pitch == 62
+    assert len(backing.notes) == 1 and backing.notes[0].pitch == 55

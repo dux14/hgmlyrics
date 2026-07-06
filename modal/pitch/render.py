@@ -57,6 +57,27 @@ def analysis_to_png(svg: str) -> bytes:
     return cairosvg.svg2png(bytestring=svg.encode("utf-8"))
 
 
+def analysis_to_midi(analysis: dict):
+    import pretty_midi
+    pm = pretty_midi.PrettyMIDI()
+    for name in analysis.get("voices_present", []):
+        inst = pretty_midi.Instrument(program=0, name=name)
+        current = None
+        for line in analysis.get("voices", {}).get(name, {}).get("lines", []):
+            for syl in line.get("syllables", []):
+                if syl.get("blank"):
+                    current = None
+                    continue
+                if syl.get("ditto") and current is not None:
+                    current.end = syl["end"]
+                    continue
+                current = pretty_midi.Note(velocity=90, pitch=int(syl["midi"]),
+                                            start=syl["start"], end=syl["end"])
+                inst.notes.append(current)
+        pm.instruments.append(inst)
+    return pm
+
+
 def run_render(job_id, webhook, analysis):
     """M1: fase minima, NO genera SVG/PNG/MIDI/MusicXML (eso es M2). Postea
     'render' con {"ok": True, "artifacts": []} para que el job llegue a

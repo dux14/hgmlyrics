@@ -133,3 +133,86 @@ def note_events_from_f0(times, f0, conf, *, conf_threshold=0.5, min_note_sec=0.0
             "cents": ev["cents"],
         })
     return result
+
+
+def fuse_syllables_notes(syllables, note_events):
+    """
+    syllables: [{"text","start","end"}] en orden temporal (in-place: añade
+    note/midi/cents/ditto/blank y devuelve la misma lista). Algoritmo: por
+    sílaba, calcular el solapamiento temporal
+    [min(end,ev.end)-max(start,ev.start)] con cada note_event y quedarse con el
+    de mayor solapamiento. Si el máximo solapamiento es < 30% de la duración de
+    la sílaba (o no hay note_events), blank=True, note=midi=cents=None. Si no, y
+    su midi == midi de la ÚLTIMA sílaba no-blank ya etiquetada, ditto=True y
+    note=None (conserva midi/cents para que el front dibuje '"' pero el afinador
+    siga sabiendo la nota); si no, ditto=False y note=midi_to_name(midi).
+    Actualizar el "último midi etiquetado" solo tras procesar cada sílaba
+    no-blank.
+    """
+    last_midi = None
+    for syl in syllables:
+        dur = syl["end"] - syl["start"]
+        best_ev = None
+        best_overlap = 0.0
+        for ev in note_events:
+            overlap = min(syl["end"], ev["end"]) - max(syl["start"], ev["start"])
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_ev = ev
+
+        if best_ev is None or (dur > 0 and best_overlap < 0.3 * dur):
+            syl["blank"] = True
+            syl["note"] = None
+            syl["midi"] = None
+            syl["cents"] = None
+            continue
+
+        syl["blank"] = False
+        syl["midi"] = best_ev["midi"]
+        syl["cents"] = best_ev["cents"]
+        if best_ev["midi"] == last_midi:
+            syl["ditto"] = True
+            syl["note"] = None
+        else:
+            syl["ditto"] = False
+            syl["note"] = midi_to_name(best_ev["midi"])
+        last_midi = best_ev["midi"]
+
+    return syllables
+
+
+def detect_modulations(note_events, *, window_sec=4.0, threshold_semitones=3):
+    """
+    Heurística "mejor esfuerzo" (no detección armónica real): partir la línea de
+    tiempo en ventanas de window_sec desde note_events[0].start; el "centro
+    tonal" de cada ventana = mediana de los midis de los eventos que EMPIEZAN en
+    ella (ventanas sin eventos se omiten). Si el centro de una ventana difiere
+    del de la ventana anterior en >= threshold_semitones, emitir {"time": inicio
+    de la ventana actual, "from": midi_to_name(centro prev), "to":
+    midi_to_name(centro actual), "semitones": actual-prev}. Lista vacía si
+    note_events está vacío o no hay saltos.
+    """
+    if not note_events:
+        return []
+
+    origin = note_events[0]["start"]
+    windows = {}
+    for ev in note_events:
+        idx = int((ev["start"] - origin) // window_sec)
+        windows.setdefault(idx, []).append(ev["midi"])
+
+    mods = []
+    prev_center = None
+    for idx in sorted(windows):
+        center = float(np.median(windows[idx]))
+        if prev_center is not None and abs(center - prev_center) >= threshold_semitones:
+            semitones = round(center - prev_center)
+            mods.append({
+                "time": origin + idx * window_sec,
+                "from": midi_to_name(prev_center),
+                "to": midi_to_name(center),
+                "semitones": semitones,
+            })
+        prev_center = center
+
+    return mods

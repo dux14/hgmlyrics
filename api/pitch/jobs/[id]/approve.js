@@ -37,6 +37,7 @@ export default withErrors(async (req, res) => {
     profile: job.profile,
     input: { getUrl },
     uploads: {}, // Modal firma sus propios PUT vía endpoint dedicado en M1.
+    signUploadUrl: `${process.env.PUBLIC_BASE_URL}/api/pitch/sign-upload`,
     webhook: { url: `${process.env.PUBLIC_BASE_URL}/api/pitch/webhook` },
   };
 

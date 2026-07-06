@@ -24,6 +24,8 @@ describe('api/pitch/jobs/[id]/approve', () => {
     const res = makeRes();
     await handler({ method: 'POST', query: { id: 'j' }, headers: {} }, res);
     expect(invokePitchPipeline).toHaveBeenCalled();
+    const payload = invokePitchPipeline.mock.calls[0][0];
+    expect(payload.signUploadUrl).toMatch(/\/api\/pitch\/sign-upload$/);
     expect(res.status).toHaveBeenCalledWith(202);
   });
 

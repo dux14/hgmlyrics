@@ -70,6 +70,38 @@ describe('api/pitch/jobs', () => {
     expect(createPitchUploadUrl).toHaveBeenCalledWith('u1/j1/input/a.mp3');
   });
 
+  it('POST puebla sha256 en el INSERT cuando el cliente lo envía', async () => {
+    let insertedValues;
+    routeSql([
+      ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: true }]],
+      ['RETURNING id, input_path', []], // reclamo de huérfanos: ninguno
+      ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: 0 }]],
+      ['INSERT INTO pitch_jobs', (values) => {
+        insertedValues = values;
+        return [{ id: 'j1', status: 'created', profile: 'oss', created_at: 't' }];
+      }],
+      ['UPDATE pitch_jobs SET input_path', []],
+    ]);
+    const res = makeRes();
+    await handler(postReq({ body: { filename: 'a.mp3', size: 1024, mime: 'audio/mpeg', sha256: 'a'.repeat(64) } }), res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(insertedValues).toContain('a'.repeat(64));
+  });
+
+  it('POST rechaza sha256 con formato inválido → 400 sin insertar', async () => {
+    let insertCalled = false;
+    routeSql([
+      ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: true }]],
+      ['RETURNING id, input_path', []],
+      ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: 0 }]],
+      ['INSERT INTO pitch_jobs', () => { insertCalled = true; return []; }],
+    ]);
+    const res = makeRes();
+    await handler(postReq({ body: { filename: 'a.mp3', size: 1024, mime: 'audio/mpeg', sha256: 'no-es-un-hash' } }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(insertCalled).toBe(false);
+  });
+
   it('POST con cuota agotada (no-admin) → 429', async () => {
     routeSql([
       ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: true }]],

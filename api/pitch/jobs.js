@@ -2,7 +2,7 @@ import sql from '../_lib/db.js';
 import { requireUser } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { createPitchUploadUrl, deletePitchPrefix } from './_lib/storage.js';
-import { DAILY_QUOTA, checkAccess, validateUploadMeta, sanitizeTitle } from './_lib/state.js';
+import { DAILY_QUOTA, checkAccess, validateUploadMeta, validateSha256, sanitizeTitle } from './_lib/state.js';
 
 async function quotaUsedToday(userId) {
   // Solo cuenta jobs que realmente entraron a procesamiento o terminaron OK.
@@ -70,8 +70,9 @@ export default withErrors(async (req, res) => {
     }
   }
 
-  const { filename, size, mime, title, profile: reqProfile } = req.body ?? {};
+  const { filename, size, mime, title, profile: reqProfile, sha256: rawSha } = req.body ?? {};
   validateUploadMeta({ filename, size, mime });
+  const sha256 = validateSha256(rawSha);
   const chosenProfile = reqProfile === 'precision' ? 'precision' : 'oss';
   const safe = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80);
   const cleanTitle = sanitizeTitle(title, filename);
@@ -79,8 +80,8 @@ export default withErrors(async (req, res) => {
   let rows;
   try {
     rows = await sql`
-      INSERT INTO pitch_jobs (user_id, status, profile, input_meta)
-      VALUES (${user.id}, 'created', ${chosenProfile}, ${sql.json({ filename: safe, title: cleanTitle, size, mime })})
+      INSERT INTO pitch_jobs (user_id, status, profile, input_meta, sha256)
+      VALUES (${user.id}, 'created', ${chosenProfile}, ${sql.json({ filename: safe, title: cleanTitle, size, mime })}, ${sha256})
       RETURNING id, status, profile, created_at
     `;
   } catch (err) {

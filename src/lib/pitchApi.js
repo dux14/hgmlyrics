@@ -9,6 +9,17 @@ function authHeaders() {
   return s ? { Authorization: `Bearer ${s.access_token}` } : {};
 }
 
+/** Calcula el sha256 hex del archivo para idempotencia; best-effort (no bloquea la subida). */
+async function sha256Hex(file) {
+  try {
+    const buf = await file.arrayBuffer();
+    const digest = await crypto.subtle.digest('SHA-256', buf);
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return null; // archivo enorme o browser sin Web Crypto: no bloquea la subida.
+  }
+}
+
 async function jsonOrThrow(res) {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -22,10 +33,11 @@ async function jsonOrThrow(res) {
 
 /** Crea el job y devuelve { job, upload }. `title`/`profile` opcionales → input_meta/profile */
 export async function createJob(file, { title, profile } = {}) {
+  const sha256 = await sha256Hex(file);
   const res = await fetch('/api/pitch/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ filename: file.name, size: file.size, mime: file.type, title, profile }),
+    body: JSON.stringify({ filename: file.name, size: file.size, mime: file.type, title, profile, sha256 }),
   });
   return jsonOrThrow(res);
 }

@@ -49,6 +49,17 @@ export function validateUploadMeta({ filename, size, mime } = {}) {
   if (!mime || !AUDIO_MIMES.has(mime)) fail('Formato no soportado: sube MP3, WAV, M4A, FLAC u OGG');
 }
 
+// sha256 hex de 64 chars, opcional (compatibilidad hacia atrás: clientes viejos sin
+// Web Crypto o falla de cálculo no deben bloquear la subida).
+const SHA256_HEX_RE = /^[a-f0-9]{64}$/;
+export function validateSha256(sha256) {
+  if (sha256 === undefined || sha256 === null) return null;
+  if (typeof sha256 !== 'string' || !SHA256_HEX_RE.test(sha256)) {
+    const e = new Error('sha256 inválido'); e.status = 400; throw e;
+  }
+  return sha256;
+}
+
 const MAX_TITLE_LEN = 120;
 export function sanitizeTitle(raw, fallbackFilename = '') {
   const trimmed = typeof raw === 'string' ? raw.trim() : '';

@@ -64,7 +64,12 @@ function animMarkup(anim) {
     return '<span class="tools-hub__anim-layers" aria-hidden="true"><i></i><i></i><i></i></span>';
   }
   if (anim === 'notes') {
-    return '<span class="tools-hub__anim-notes" aria-hidden="true"><i></i><i></i><i></i></span>';
+    return (
+      '<span class="tools-hub__anim-notes" aria-hidden="true">' +
+      '<i class="tools-hub__staff"></i><i class="tools-hub__staff"></i><i class="tools-hub__staff"></i>' +
+      '<span class="tools-hub__note-runner"><span class="tools-hub__note-dot"></span></span>' +
+      '</span>'
+    );
   }
   return '';
 }

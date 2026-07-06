@@ -216,38 +216,60 @@
 /* oculta el icono SVG cuando hay capas drift */
 .tools-hub__tile-icon:has(.tools-hub__anim-layers) svg { opacity: 0 }
 
-/* P1 · Notas drift (partitura / rose) — 3 barras que se desplazan lateralmente */
+/* P1 · Contorno melódico (partitura / rose) — un punto recorre el tiempo (izq→der)
+   subiendo y bajando según el tono, sobre un pentagrama tenue. Es "tono a lo largo
+   del tiempo": lo que define una partitura vocal. */
 .tools-hub__anim-notes {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
   z-index: 1;
 }
-.tools-hub__anim-notes i {
+/* pentagrama tenue de referencia */
+.tools-hub__staff {
   position: absolute;
-  width: 22px;
-  height: 4px;
-  border-radius: 3px;
+  left: 6px;
+  right: 6px;
+  height: 1.4px;
+  border-radius: 2px;
   background: currentColor;
-  opacity: .65;
+  opacity: .16;
 }
-.tools-hub__anim-notes i:nth-child(1) { animation: tools-hub-anim-notes-a 3000ms ease-in-out infinite }
-.tools-hub__anim-notes i:nth-child(2) { animation: tools-hub-anim-notes-b 3000ms ease-in-out infinite }
-.tools-hub__anim-notes i:nth-child(3) { animation: tools-hub-anim-notes-c 3000ms ease-in-out infinite }
-@keyframes tools-hub-anim-notes-a {
-  0%, 100% { transform: translate(0, -6px) }
-  50%       { transform: translate(-5px, -6px) }
+.tools-hub__staff:nth-child(1) { top: 32% }
+.tools-hub__staff:nth-child(2) { top: 50% }
+.tools-hub__staff:nth-child(3) { top: 68% }
+/* el runner avanza en el tiempo (X lineal); el punto marca el tono (Y ease-in-out) */
+.tools-hub__note-runner {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 8px;
+  width: 0;
+  animation: tools-hub-anim-notes-x 3200ms linear infinite;
 }
-@keyframes tools-hub-anim-notes-b {
-  0%, 100% { transform: translate(0, 0) }
-  50%       { transform: translate(5px, 0) }
+.tools-hub__note-dot {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 5px currentColor;
+  animation: tools-hub-anim-notes-y 3200ms ease-in-out infinite;
 }
-@keyframes tools-hub-anim-notes-c {
-  0%, 100% { transform: translate(0, 6px) }
-  50%       { transform: translate(-4px, 6px) }
+@keyframes tools-hub-anim-notes-x {
+  from { transform: translateX(0) }
+  to   { transform: translateX(26px) }
 }
-/* oculta el icono SVG cuando hay notas drift */
+@keyframes tools-hub-anim-notes-y {
+  0%   { transform: translateY(7px) }
+  22%  { transform: translateY(-7px) }
+  48%  { transform: translateY(1px) }
+  72%  { transform: translateY(-9px) }
+  100% { transform: translateY(7px) }
+}
+/* oculta el icono SVG cuando hay contorno melódico */
 .tools-hub__tile-icon:has(.tools-hub__anim-notes) svg { opacity: 0 }
 
 /* Respeta prefers-reduced-motion */
@@ -255,7 +277,8 @@
   .tools-hub__anim-eq i,
   .tools-hub__anim-sparkle span,
   .tools-hub__anim-layers i,
-  .tools-hub__anim-notes i {
+  .tools-hub__note-runner,
+  .tools-hub__note-dot {
     animation: none !important;
   }
 }

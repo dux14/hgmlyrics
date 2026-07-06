@@ -41,3 +41,6 @@ def test_musicxml_una_parte_por_voz_con_lyrics(analysis_small):
     pitches = [n.pitch.nameWithOctave for n in lead_notes if n.isNote]
     assert "Me" in lyrics and "vá" in lyrics
     assert "C4" in pitches and "D4" in pitches
+    # una sílaba blank conserva su texto: el Rest lleva el lyric (no se pierde la palabra)
+    all_lyrics = [n.lyric for n in lead_notes if n.lyric]
+    assert "la" in all_lyrics

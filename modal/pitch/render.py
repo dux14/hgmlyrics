@@ -88,7 +88,11 @@ def analysis_to_musicxml(analysis: dict) -> bytes:
         for line in analysis.get("voices", {}).get(name, {}).get("lines", []):
             for syl in line.get("syllables", []):
                 if syl.get("blank"):
-                    part.append(music21.note.Rest(quarterLength=1))
+                    rest = music21.note.Rest(quarterLength=1)
+                    text = syl.get("text")
+                    if text:  # blank conserva la palabra: no perderla en la partitura
+                        rest.lyric = text
+                    part.append(rest)
                     continue
                 note_name = syl.get("note") or music21.pitch.Pitch(midi=int(syl["midi"])).nameWithOctave
                 n = music21.note.Note(note_name, quarterLength=1)

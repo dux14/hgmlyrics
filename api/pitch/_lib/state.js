@@ -2,7 +2,7 @@
  * state.js — Dominio de Partitura vocal: máquina de estados, cuota, validación,
  * gating beta. Sin I/O: puro y testeable sin mocks.
  */
-export const DAILY_QUOTA = 2;
+export const DAILY_QUOTA = 2; // beta cerrada: acota el uso operacional de GPU propia (oss y precision corren GPU de Modal, sin USD directo). Revisar contra costo variable para GA.
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
 export const RESULT_TTL_MS = 48 * 60 * 60 * 1000;
 // Estados que ocupan el índice único "un activo por usuario".

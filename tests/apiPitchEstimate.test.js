@@ -20,7 +20,8 @@ describe('api/pitch/jobs/[id]/estimate', () => {
     await handler({ method: 'POST', query: { id: 'j' }, body: { durationSec: 180 } }, res);
     expect(res.status).toHaveBeenCalledWith(200);
     const payload = res.json.mock.calls[0][0];
-    expect(payload.estimate.hi).toBeGreaterThan(0);
+    // precision ahora es OSS sin costo USD (AudioShake descartado): estima 0, igual que oss.
+    expect(payload.estimate.hi).toBe(0);
     expect(payload.status).toBe('awaiting_approval');
   });
 

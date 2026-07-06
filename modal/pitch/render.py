@@ -78,6 +78,26 @@ def analysis_to_midi(analysis: dict):
     return pm
 
 
+def analysis_to_musicxml(analysis: dict) -> bytes:
+    import music21
+    from music21.musicxml.m21ToXml import GeneralObjectExporter
+
+    score = music21.stream.Score()
+    for name in analysis.get("voices_present", []):
+        part = music21.stream.Part(id=name)
+        for line in analysis.get("voices", {}).get(name, {}).get("lines", []):
+            for syl in line.get("syllables", []):
+                if syl.get("blank"):
+                    part.append(music21.note.Rest(quarterLength=1))
+                    continue
+                note_name = syl.get("note") or music21.pitch.Pitch(midi=int(syl["midi"])).nameWithOctave
+                n = music21.note.Note(note_name, quarterLength=1)
+                n.lyric = "''" if syl.get("ditto") else syl.get("text", "")
+                part.append(n)
+        score.insert(0, part)
+    return GeneralObjectExporter(score).parse()
+
+
 def run_render(job_id, webhook, analysis):
     """M1: fase minima, NO genera SVG/PNG/MIDI/MusicXML (eso es M2). Postea
     'render' con {"ok": True, "artifacts": []} para que el job llegue a

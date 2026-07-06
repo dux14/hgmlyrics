@@ -89,7 +89,7 @@ def n_fusion(job_id, webhook, sign_upload_url, inbound_secret, notes_lead, notes
     return run_fusion(job_id, webhook, sign_upload_url, inbound_secret, notes_lead, notes_backing, lines_words)
 
 
-@app.function(image=render_image, secrets=_secrets, timeout=30)
+@app.function(image=render_image, secrets=_secrets, timeout=180)
 def n_render(job_id, webhook, sign_upload_url, inbound_secret, analysis):
     return run_render(job_id, webhook, sign_upload_url, inbound_secret, analysis)
 

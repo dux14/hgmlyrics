@@ -56,11 +56,14 @@ export async function applyPhaseWebhook(sql, jobId, phase, result) {
       const extra = (finalStatus === 'succeeded' || finalStatus === 'partial')
         ? sql`, expires_at = ${new Date(Date.now() + RESULT_TTL_MS)}`
         : sql``;
+      // cost_actual: suma de los `cost` no-null reportados por cada fase. Se
+      // registra siempre, incluso en fallo, para reflejar lo gastado hasta el momento.
+      const costActual = REQUIRED_PHASES.reduce((sum, p) => sum + (Number(nextPhases[p]?.cost) || 0), 0);
       // CAS sobre el estado leído al inicio (running|partial): si el job cambió de
       // estado entre el CAS de `phases` y aquí (p.ej. cancelado por el usuario), no
       // lo pisamos con succeeded/partial/failed.
       const finalized = await sql`
-        UPDATE pitch_jobs SET status = ${finalStatus}, updated_at = now() ${extra}
+        UPDATE pitch_jobs SET status = ${finalStatus}, updated_at = now(), cost_actual = ${costActual} ${extra}
         WHERE id = ${jobId} AND status = ${job.status}`;
       if (finalized.count !== 1) {
         const cur = await sql`SELECT status FROM pitch_jobs WHERE id = ${jobId}`;

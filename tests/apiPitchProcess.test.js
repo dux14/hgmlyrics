@@ -62,9 +62,12 @@ function makeCasSql({ status = 'running', phases = {}, artifacts = [] } = {}) {
       return { count: 1 };
     }
     if (/UPDATE pitch_jobs SET status/.test(q)) {
-      // CAS real: el último valor interpolado es el guard `AND status = ${job.status}`
-      // leído al inicio de la iteración; solo "gana" si sigue vigente.
-      const [finalStatus, , , guardStatus] = vals;
+      // CAS real: el primer valor interpolado es el nuevo status; el último es
+      // siempre el guard `AND status = ${job.status}` leído al inicio de la
+      // iteración (posición robusta a cuántos fragmentos intermedios se agreguen
+      // al SET, p.ej. cost_actual), y solo "gana" si sigue vigente.
+      const finalStatus = vals[0];
+      const guardStatus = vals[vals.length - 1];
       if (guardStatus !== state.status) return { count: 0 };
       state.status = finalStatus;
       return { count: 1 };
@@ -133,6 +136,39 @@ describe('applyPhaseWebhook — cálculo de estado final', () => {
     const statusCall = calls.find((c) => /UPDATE pitch_jobs SET status/.test(c.q));
     expect(statusCall.vals[0]).toBe('failed');
     expect(statusCall.vals).toContainEqual({ __fragment: 'none' });
+  });
+
+  it('job finaliza (succeeded) con costos parciales variados: cost_actual acumula los cost no-null de todas las fases', async () => {
+    const prevPhases = {
+      separation: { status: 'done', error: null, cost: 1 },
+      f0: { status: 'done', error: null, cost: 2 },
+      notes: { status: 'done', error: null, cost: null },
+      lyrics: { status: 'done', error: null, cost: 3 },
+      fusion: { status: 'done', error: null, cost: 4 },
+    };
+    const { sql, state, calls } = makeCasSql({ phases: prevPhases });
+
+    // render reporta cost: null (fase sin costo asociado); las demás ya tenían cost en phases.
+    const out = await applyPhaseWebhook(sql, 'j', 'render', { ok: true, cost: null });
+
+    expect(out.status).toBe('succeeded');
+    expect(state.status).toBe('succeeded');
+    const statusCall = calls.find((c) => /UPDATE pitch_jobs SET status/.test(c.q));
+    expect(statusCall.vals).toContain(10); // 1+2+0+3+4+0
+  });
+
+  it('job finaliza (failed) con fases fallidas: cost_actual también registra lo gastado antes de fallar', async () => {
+    const rest = REQUIRED_PHASES.slice(0, -1);
+    const last = REQUIRED_PHASES[REQUIRED_PHASES.length - 1];
+    const prevPhases = Object.fromEntries(rest.map((p, i) => [p, { status: 'failed', error: 'x', cost: i + 1 }]));
+    const { sql, state, calls } = makeCasSql({ phases: prevPhases });
+
+    const out = await applyPhaseWebhook(sql, 'j', last, { ok: false, error: 'boom', cost: null });
+
+    expect(out.status).toBe('failed');
+    expect(state.status).toBe('failed');
+    const statusCall = calls.find((c) => /UPDATE pitch_jobs SET status/.test(c.q));
+    expect(statusCall.vals).toContain(15); // 1+2+3+4+5 (rest.length === 5)
   });
 
   it('cancelado concurrentemente entre el CAS de phases y la finalización: no se pisa a succeeded', async () => {

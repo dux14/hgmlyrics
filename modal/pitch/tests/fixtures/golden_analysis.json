@@ -1,0 +1,70 @@
+{
+  "lines": [
+    {
+      "syllables": [
+        {
+          "text": "Me",
+          "start": 0.0,
+          "end": 0.5,
+          "blank": false,
+          "midi": 60.0,
+          "cents": 0,
+          "ditto": false,
+          "note": "C4"
+        },
+        {
+          "text": "vo",
+          "start": 0.5,
+          "end": 1.0,
+          "blank": false,
+          "midi": 60.0,
+          "cents": 0,
+          "ditto": true,
+          "note": null
+        },
+        {
+          "text": "y",
+          "start": 1.0,
+          "end": 1.5,
+          "blank": false,
+          "midi": 60.0,
+          "cents": 0,
+          "ditto": true,
+          "note": null
+        }
+      ]
+    },
+    {
+      "syllables": [
+        {
+          "text": "yo",
+          "start": 4.2,
+          "end": 4.7,
+          "blank": false,
+          "midi": 67.0,
+          "cents": 0,
+          "ditto": false,
+          "note": "G4"
+        },
+        {
+          "text": "ya",
+          "start": 4.7,
+          "end": 5.2,
+          "blank": false,
+          "midi": 67.0,
+          "cents": 0,
+          "ditto": true,
+          "note": null
+        }
+      ]
+    }
+  ],
+  "modulations": [
+    {
+      "time": 4.0,
+      "from": "C4",
+      "to": "G4",
+      "semitones": 7
+    }
+  ]
+}

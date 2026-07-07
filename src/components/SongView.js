@@ -285,6 +285,12 @@ async function _renderSongBody(container, songId, isPreview, song) {
   // handler de #enter-stage-btn ya solo registra el listener en este punto,
   // así que para cuando se dispare el click ya está poblada.
   let stageAutoscrollApi = null;
+  // Audio por sección (F5): se resuelve lazy tras el render principal, no
+  // bloquea. sectionsWithAudio alimenta el icono play junto al label de la
+  // sección en la letra; sectionPlayerApi.pause() se engancha al mismo hook
+  // del stage-btn que pausa el autoscroll clásico.
+  let sectionPlayerApi = null;
+  let sectionsWithAudio = new Set();
   // OptionsSheet (T4): visibilidad por voz individual del roster, default
   // todas visibles. Apagar una voz atenúa sus groups en Tono/Acordes+Voz
   // (ver renderSections → visibleVoices).
@@ -538,9 +544,32 @@ async function _renderSongBody(container, songId, isPreview, song) {
         chordsCategory,
         notation: getChordNotation(),
         visibleVoices,
+        sectionsWithAudio,
       });
       if (!isPreview) applyFontSize(fontSize);
+      wireSectionPlayButtons();
     }
+  }
+
+  // Tap en la etiqueta de una sección con audio la reproduce (F5). Se
+  // reconecta en cada reRenderLyrics porque el innerHTML pierde listeners.
+  function wireSectionPlayButtons() {
+    if (!sectionPlayerApi) return;
+    container.querySelectorAll('[data-section-audio]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sectionPlayerApi.playSection(Number(btn.dataset.sectionAudio));
+      });
+    });
+  }
+
+  // Resalta la sección que suena ahora (.lyrics__section--playing); null
+  // apaga el resaltado (pausa, fin de canción, cambio de scope).
+  function highlightPlayingSection(sectionIndex) {
+    container.querySelectorAll('#lyrics-content .lyrics__section').forEach((el) => {
+      const isPlaying = sectionIndex !== null && Number(el.dataset.sectionIndex) === sectionIndex;
+      el.classList.toggle('lyrics__section--playing', isPlaying);
+    });
   }
 
   // Refresca el bubble de tono + hint de cejilla (no requieren re-pintar la
@@ -907,7 +936,10 @@ async function _renderSongBody(container, songId, isPreview, song) {
           const people = rosterByCategory(song, category);
           if (personId && people.length > 1) selectPerson(personId);
         },
-        pauseAutoscroll: () => stageAutoscrollApi?.pauseAutoscroll(),
+        pauseAutoscroll: () => {
+          stageAutoscrollApi?.pauseAutoscroll();
+          sectionPlayerApi?.pause();
+        },
       });
     }
   });
@@ -1048,6 +1080,37 @@ async function _renderSongBody(container, songId, isPreview, song) {
   // ── Feature 1: Autoscroll FAB ──
   stageAutoscrollApi = setupAutoscroll(container, song.id);
 
+  // ── F5: Audio por sección — lazy, no bloquea el render principal. Se
+  // monta solo si hay tracks; import dinámico para no engordar el bundle
+  // de canciones sin audio (la mayoría, mientras se sube). ──
+  if (songId) {
+    let destroyed = false;
+    const destroySectionPlayer = () => {
+      destroyed = true;
+      sectionPlayerApi?.destroy();
+      sectionPlayerApi = null;
+      window.removeEventListener('hashchange', destroySectionPlayer);
+    };
+    window.addEventListener('hashchange', destroySectionPlayer);
+    (async () => {
+      const { fetchSectionAudio } = await import('../lib/sectionAudioApi.js');
+      const tracks = await fetchSectionAudio(songId);
+      if (destroyed || tracks.length === 0) return;
+      const { createSectionPlayer } = await import('./SectionPlayer.js');
+      const sv = container.querySelector('.song-view');
+      if (destroyed || !sv) return;
+      sectionPlayerApi = createSectionPlayer({
+        song,
+        tracks,
+        onSectionFocus: highlightPlayingSection,
+        refetch: () => fetchSectionAudio(songId),
+      });
+      sv.appendChild(sectionPlayerApi.el);
+      sectionsWithAudio = new Set(tracks.map((t) => t.sectionIndex));
+      reRenderLyrics();
+    })();
+  }
+
   // Favorita lives on the song card cover in the list view now.
 }
 
@@ -1173,7 +1236,8 @@ export function renderVoicePanel(song) {
  *           chordsVoiceId?: string|null,
  *           chordsCategory?: string|null,
  *           notation?: 'anglo'|'latin',
- *           visibleVoices?: Set<string>|null }} [opts]
+ *           visibleVoices?: Set<string>|null,
+ *           sectionsWithAudio?: Set<number>|null }} [opts]
  * @returns {string} HTML
  */
 export function renderSections(sections, opts = {}) {
@@ -1187,6 +1251,7 @@ export function renderSections(sections, opts = {}) {
     chordsCategory = null,
     notation = 'anglo',
     visibleVoices = null,
+    sectionsWithAudio = null,
   } = opts;
   const showChords = viewMode === 'chords';
   const colorClass = activeCategory ? `voice-text--${activeCategory}` : '';
@@ -1202,11 +1267,18 @@ export function renderSections(sections, opts = {}) {
 
   return (sections || [])
     .map(
-      (section) => `
-    <div class="lyrics__section lyrics__section--${normalizeSectionType(section.type)}"${
+      (section, sectionIndex) => `
+    <div class="lyrics__section lyrics__section--${normalizeSectionType(section.type)}" data-section-index="${sectionIndex}"${
       typeof section.speedPreset === 'number' ? ` data-speed-preset="${section.speedPreset}"` : ''
     }>
-      <div class="lyrics__section-label">${escapeHtml(section.label)}</div>
+      <div class="lyrics__section-label">
+        ${
+          sectionsWithAudio?.has(sectionIndex)
+            ? `<button class="lyrics__section-play" type="button" data-section-audio="${sectionIndex}" aria-label="Reproducir sección">${icon('play', { size: 12 })}</button>`
+            : ''
+        }
+        <span class="lyrics__section-label-text">${escapeHtml(section.label)}</span>
+      </div>
       ${(section.lines || [])
         .map((line) => {
           const text = line.text || '';

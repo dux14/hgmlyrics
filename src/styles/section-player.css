@@ -1,0 +1,116 @@
+/* section-player.css — Mini-reproductor de audio por sección (F5).
+   Barra sticky dentro de .song-view (NO fixed global): queda pegada al fondo
+   del viewport de scroll de la vista de canción, por encima del bottom-nav
+   global y respetando su altura + safe-area. */
+
+.section-player {
+  position: sticky;
+  bottom: calc(var(--bottom-nav-height, 56px) + env(safe-area-inset-bottom, 0px));
+  z-index: 5;
+  margin-top: var(--space-lg);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--border-radius-md);
+  background: color-mix(in oklch, var(--color-surface) 92%, transparent);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 8px 24px var(--color-shadow);
+}
+
+.section-player__scopes {
+  display: flex;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-sm);
+}
+
+.section-player__scopes[hidden] {
+  display: none;
+}
+
+.section-player__chip {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: var(--font-size-xs);
+}
+
+.section-player__chip--active {
+  border-color: var(--color-teal-500);
+  color: var(--color-teal-500);
+}
+
+.section-player__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.section-player__play,
+.section-player__loop {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+}
+
+.section-player__play {
+  background: var(--color-teal-500);
+  color: var(--color-bg);
+}
+
+.section-player__loop--active {
+  color: var(--color-teal-500);
+}
+
+.section-player__scrubber {
+  flex: 1;
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+}
+
+.section-player__segment {
+  height: 4px;
+  min-width: 6px;
+  border: none;
+  border-radius: 2px;
+  background: var(--color-border);
+  padding: 0;
+}
+
+.section-player__segment--playing {
+  background: var(--color-teal-500);
+}
+
+.section-player__time {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+/* Icono play junto al label de una sección con audio (F5) */
+.lyrics__section-play {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.lyrics__section--playing .lyrics__section-label {
+  color: var(--color-teal-500);
+}
+
+.lyrics__section--playing {
+  border-left-color: var(--color-teal-500);
+}

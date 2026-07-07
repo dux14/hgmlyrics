@@ -24,9 +24,35 @@ import {
   deleteGroupAt,
   applyGroupsForRange,
 } from '../lib/editorSelection.js';
+import {
+  fetchSectionAudio,
+  createSectionAudio,
+  uploadSectionAudioFile,
+  deleteSectionAudio,
+} from '../lib/sectionAudioApi.js';
+import { readAudioDuration } from '../lib/stemsApi.js';
 import { icon } from '../lib/icons.js';
 import { escapeHtml } from '../lib/escape.js';
 import { skelLongText } from '../lib/skeleton.js';
+
+const SECTION_AUDIO_MAX_BYTES = 25 * 1024 * 1024;
+
+// Espeja VOICE_SCOPES del endpoint (api/songs/[id]/section-audio.js): las 4
+// voces SATB + lead/backing del Estudio. '' = Mezcla (voiceScope null).
+const AUDIO_VOICE_SCOPES = [
+  { id: '', label: 'Mezcla' },
+  { id: 'soprano', label: 'Soprano' },
+  { id: 'contralto', label: 'Contralto' },
+  { id: 'tenor', label: 'Tenor' },
+  { id: 'bass', label: 'Bajo' },
+  { id: 'lead', label: 'Voz líder' },
+  { id: 'backing', label: 'Coros' },
+];
+
+function audioScopeLabel(voiceScope) {
+  const found = AUDIO_VOICE_SCOPES.find((s) => s.id === (voiceScope ?? ''));
+  return found ? found.label : voiceScope;
+}
 
 const API_URL = '/api';
 
@@ -503,6 +529,20 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     renderRoster();
   }
 
+  // ─── Audio por sección (admin, subida independiente del guardado) ───
+  // Un solo GET al abrir el editor (fetchSectionAudio ya tolera cualquier
+  // fallo y resuelve []); el resto del flujo (POST/PUT/DELETE) es local por
+  // sección y no bloquea "Guardar canción".
+  let sectionAudioItems = [];
+  const audioUiState = new Map(); // block.id → { expanded, uploading, error }
+
+  function getAudioUi(blockId) {
+    if (!audioUiState.has(blockId)) {
+      audioUiState.set(blockId, { expanded: false, uploading: false, error: null });
+    }
+    return audioUiState.get(blockId);
+  }
+
   // ─── Block Editor Core ───
   const editorRoot = container.querySelector('#block-editor');
 
@@ -511,6 +551,108 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       .map((block, bi) => renderSectionBlock(block, bi, blocks.length))
       .join('');
     updatePreview();
+  }
+
+  function renderSectionAudioControl(block, index) {
+    const items = sectionAudioItems.filter((it) => it.sectionIndex === index);
+    const ui = getAudioUi(block.id);
+    const badge =
+      items.length > 0 ? `<span class="section-audio__badge">${items.length}</span>` : '';
+
+    const rows = items
+      .map(
+        (it) => `
+          <div class="section-audio__row" data-audio-id="${it.id}">
+            <span class="section-audio__row-label">${escapeHtml(audioScopeLabel(it.voiceScope))}${it.label ? ` · ${escapeHtml(it.label)}` : ''}</span>
+            <button class="btn btn--secondary btn--danger btn--compact" data-action="delete-section-audio" data-audio-id="${it.id}" type="button" aria-label="Eliminar audio">${icon('trash', { size: 14 })}</button>
+          </div>`,
+      )
+      .join('');
+
+    return `
+      <div class="section-audio" data-section-audio="${index}">
+        <button class="section-audio__toggle" data-action="toggle-audio" data-section="${index}" type="button" aria-expanded="${ui.expanded}">
+          ${icon('audio-lines', { size: 14 })} Audio${badge}
+          ${icon(ui.expanded ? 'chevron-up' : 'chevron-down', { size: 14 })}
+        </button>
+        ${
+          ui.expanded
+            ? `<div class="section-audio__panel">
+                ${items.length > 0 ? `<div class="section-audio__list">${rows}</div>` : '<p class="section-audio__hint">Sin audio en esta sección.</p>'}
+                <div class="section-audio__upload">
+                  <select class="form-group__input section-audio__scope" data-action="audio-scope" data-section="${index}">
+                    ${AUDIO_VOICE_SCOPES.map((s) => `<option value="${s.id}">${s.label}</option>`).join('')}
+                  </select>
+                  <input class="form-group__input section-audio__label" type="text" placeholder="Etiqueta (opcional)" data-action="audio-label" data-section="${index}" />
+                  <label class="btn btn--secondary section-audio__file-btn">
+                    ${icon('upload', { size: 14 })} Subir audio
+                    <input type="file" accept="audio/*" data-action="upload-audio-file" data-section="${index}" ${ui.uploading ? 'disabled' : ''} hidden />
+                  </label>
+                </div>
+                ${ui.uploading ? '<p class="section-audio__status">Subiendo...</p>' : ''}
+                ${ui.error ? `<p class="section-audio__error" role="alert">${escapeHtml(ui.error)}</p>` : ''}
+              </div>`
+            : ''
+        }
+      </div>`;
+  }
+
+  async function handleSectionAudioUpload(fileInput, index) {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    const block = blocks[index];
+    if (!block) return;
+    const ui = getAudioUi(block.id);
+
+    if (!existingSong) {
+      ui.error = 'Guarda la canción antes de subir audio';
+      ui.expanded = true;
+      renderBlocks();
+      return;
+    }
+
+    if (file.size > SECTION_AUDIO_MAX_BYTES) {
+      ui.error = 'El archivo supera el límite de 25 MB';
+      ui.expanded = true;
+      renderBlocks();
+      return;
+    }
+
+    const panel = fileInput.closest('.section-audio__upload');
+    const voiceScope = panel?.querySelector('[data-action="audio-scope"]')?.value || null;
+    const label = panel?.querySelector('[data-action="audio-label"]')?.value?.trim() || null;
+
+    ui.uploading = true;
+    ui.error = null;
+    ui.expanded = true;
+    renderBlocks();
+
+    try {
+      const durationSec = await readAudioDuration(file);
+      const { uploadUrl, id } = await createSectionAudio(existingSong.id, {
+        sectionIndex: index,
+        voiceScope,
+        label,
+        durationSec: durationSec || null,
+      });
+      await uploadSectionAudioFile(uploadUrl, file);
+      sectionAudioItems = sectionAudioItems.filter(
+        (it) => !(it.sectionIndex === index && it.voiceScope === voiceScope),
+      );
+      sectionAudioItems.push({
+        id,
+        sectionIndex: index,
+        voiceScope,
+        label,
+        durationSec: durationSec || null,
+      });
+      showToast('Audio subido correctamente');
+    } catch (err) {
+      ui.error = err.message || 'No se pudo subir el audio';
+    } finally {
+      ui.uploading = false;
+      renderBlocks();
+    }
   }
 
   function renderSectionBlock(block, index, total) {
@@ -550,6 +692,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
           ${linesHtml}
         </div>
         <button class="section-block__add-line" data-action="add-line" data-section="${index}">+ Agregar línea</button>
+        ${renderSectionAudioControl(block, index)}
       </div>
     `;
   }
@@ -619,6 +762,9 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         blocks[si].type = e.target.value;
         renderBlocks();
       }
+    } else if (e.target.dataset.action === 'upload-audio-file') {
+      const si = parseInt(e.target.dataset.section);
+      handleSectionAudioUpload(e.target, si);
     }
   });
 
@@ -686,6 +832,25 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         blocks.splice(si, 1);
         renderBlocks();
       }
+    } else if (action === 'toggle-audio') {
+      const si = parseInt(btn.dataset.section);
+      const block = blocks[si];
+      if (block) {
+        const ui = getAudioUi(block.id);
+        ui.expanded = !ui.expanded;
+        renderBlocks();
+      }
+    } else if (action === 'delete-section-audio') {
+      if (!existingSong) return;
+      if (!confirm('¿Eliminar el audio de esta sección?')) return;
+      const audioId = btn.dataset.audioId;
+      deleteSectionAudio(existingSong.id, audioId)
+        .then(() => {
+          sectionAudioItems = sectionAudioItems.filter((it) => it.id !== audioId);
+          showToast('Audio eliminado');
+          renderBlocks();
+        })
+        .catch((err) => showToast('Error: ' + err.message));
     }
   });
 
@@ -1174,6 +1339,15 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
 
   // ─── Initial render ───
   renderBlocks();
+
+  // Un solo GET al abrir el editor; fetchSectionAudio ya tolera cualquier
+  // fallo y resuelve [] (los badges simplemente no aparecen).
+  if (editId) {
+    fetchSectionAudio(editId).then((items) => {
+      sectionAudioItems = items;
+      renderBlocks();
+    });
+  }
 
   // ─── Cancel ───
   container

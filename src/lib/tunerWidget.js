@@ -41,20 +41,37 @@ export function createTunerStrip({ getTargetNote } = {}) {
   const el = document.createElement('div');
   el.className = 'tuner-strip';
 
+  /**
+   * Arranca un detector nuevo (o ignora si ya hay uno en vuelo/corriendo).
+   * `detector.start()` es async (getUserMedia + setupAudioGraph): si `stop()`
+   * corre mientras tanto, nulea `detector` sincrónicamente pero pitch.js sigue
+   * abriendo el stream/AudioContext en segundo plano. Guardamos la referencia
+   * `d` y, al resolver, comparamos con `detector` (época): si cambió (stop() la
+   * canceló, o un nuevo start() ya la reemplazó), llamamos `d.stop()` para
+   * liberar lo que acaba de abrirse. Los callbacks (`onPitch`/`onState`) hacen
+   * la misma comprobación para no pisar el estado de un detector más nuevo.
+   */
   function requestMic() {
-    if (!detector) {
-      detector = createPitchDetector({
-        onPitch: (payload) => handlePitch(stabilizer.push(payload)),
-        onError: (err) => {
-          console.warn('[tuner-strip] mic error:', err);
-        },
-        onState: (s) => {
-          micState = s;
-          render();
-        },
-      });
-    }
-    detector.start();
+    if (detector) return; // ya hay uno en vuelo o corriendo
+    const d = createPitchDetector({
+      onPitch: (payload) => {
+        if (detector !== d) return; // detector obsoleto: ignorar
+        handlePitch(stabilizer.push(payload));
+      },
+      onError: (err) => {
+        if (detector !== d) return;
+        console.warn('[tuner-strip] mic error:', err);
+      },
+      onState: (s) => {
+        if (detector !== d) return;
+        micState = s;
+        render();
+      },
+    });
+    detector = d;
+    Promise.resolve(d.start()).then(() => {
+      if (detector !== d) d.stop();
+    });
   }
 
   function handlePitch(stab) {

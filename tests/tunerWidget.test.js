@@ -3,7 +3,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Stub pitch detector (requires AudioContext/getUserMedia) — mismo patrón que tuner.test.js.
 const onPitchRef = { current: null };
 const onStateRef = { current: null };
-const detectorStart = vi.fn();
+// start() por defecto resuelve de inmediato (contrato real de pitch.js: Promise<void>);
+// los tests de carrera lo sobrescriben con mockImplementationOnce para controlarlo a mano.
+const detectorStart = vi.fn(() => Promise.resolve());
 const detectorStop = vi.fn();
 
 vi.mock('../src/lib/pitch.js', () => ({
@@ -99,5 +101,57 @@ describe('createTunerStrip — cents relativos al objetivo', () => {
     const indicator = strip.el.querySelector('#tuner-strip-indicator');
     expect(indicator.style.left).toBe('50%');
     expect(indicator.dataset.status).toBe('ok');
+  });
+});
+
+describe('createTunerStrip — carrera stop() durante start() en vuelo', () => {
+  it('stop() antes de resolver start(): libera igual el mic (evita huerfano)', async () => {
+    let resolveStart;
+    detectorStart.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveStart = resolve;
+        })
+    );
+
+    const strip = createTunerStrip({ getTargetNote: () => null });
+    strip.start(); // requestMic() deja detector.start() en vuelo
+    strip.stop(); // apaga ANTES de resolver: el stop() temprano es no-op real
+    expect(detectorStop).toHaveBeenCalledTimes(1);
+
+    resolveStart();
+    await Promise.resolve();
+    await Promise.resolve(); // deja correr el .then interno de requestMic
+
+    // al resolver, requestMic ve que la epoca cambio (detector !== d) y libera
+    // lo que start() acababa de abrir: segundo stop() = liberacion real.
+    expect(detectorStop).toHaveBeenCalledTimes(2);
+  });
+
+  it('ON-OFF-ON rapido: solo queda un detector activo (el ultimo)', async () => {
+    let resolveFirst;
+    detectorStart
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          })
+      )
+      .mockImplementationOnce(() => Promise.resolve());
+
+    const strip = createTunerStrip({ getTargetNote: () => null });
+    strip.start(); // detector #1 en vuelo
+    strip.stop(); // apaga antes de resolver
+    strip.start(); // vuelve a encender -> detector #2
+
+    resolveFirst();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve(); // resolucion del #2 + limpieza del #1 huerfano
+
+    expect(strip.isRunning()).toBe(true);
+    expect(detectorStart).toHaveBeenCalledTimes(2);
+    // stop temprano del #1 (no-op) + liberacion diferida del #1 tras resolver = 2
+    expect(detectorStop).toHaveBeenCalledTimes(2);
   });
 });

@@ -3,6 +3,11 @@ import { buildLetraLineHTML } from '../src/lib/lyricsRender.js';
 import { transposeChord, transposeNote, buildChordsLineHTML } from '../src/lib/lyricsRender.js';
 import { buildTonoLineHTML } from '../src/lib/lyricsRender.js';
 import { buildMixedLineHTML } from '../src/lib/lyricsRender.js';
+import {
+  transposeKey,
+  buildTransposeBubbleLabel,
+  buildCejillaHint,
+} from '../src/lib/lyricsRender.js';
 
 describe('buildLetraLineHTML', () => {
   it('devuelve texto escapado plano, sin wrappers ni color', () => {
@@ -289,5 +294,77 @@ describe('buildMixedLineHTML — carriles estrictos', () => {
     const html = buildMixedLineHTML({ text: 'abc', groups: [] }, [], 'v1', '', {});
     expect(html).not.toContain('mix-rail--note "');
     expect(html).toContain('class="mix-rail mix-rail--note"');
+  });
+});
+
+describe('transposeKey (T3)', () => {
+  it('key mayor sin semitonos devuelve el símbolo anglo tal cual', () => {
+    expect(transposeKey('G major', 0)).toBe('G');
+  });
+
+  it('key menor agrega el sufijo m', () => {
+    expect(transposeKey('D minor', 0)).toBe('Dm');
+  });
+
+  it('transpone la raíz conservando el modo (Sol +2 → La)', () => {
+    expect(transposeKey('G major', 2)).toBe('A');
+  });
+
+  it('cejilla en 2 sobre D major suena en E', () => {
+    expect(transposeKey('D minor', 2)).toBe('Em');
+  });
+
+  it('respeta useFlats', () => {
+    expect(transposeKey('A major', 1, true)).toBe('Bb');
+  });
+
+  it('key inválida o vacía devuelve null', () => {
+    expect(transposeKey('')).toBeNull();
+    expect(transposeKey(null)).toBeNull();
+    expect(transposeKey('no es un tono')).toBeNull();
+  });
+});
+
+describe('buildTransposeBubbleLabel (T3)', () => {
+  it('con key y semitonos 0: "{tono} · Original" en notación latina', () => {
+    expect(buildTransposeBubbleLabel('G major', 0, false, 'latin')).toBe('Sol · Original');
+  });
+
+  it('con key transpuesta +2: Sol → La (latina)', () => {
+    expect(buildTransposeBubbleLabel('G major', 2, false, 'latin')).toBe('La · +2');
+  });
+
+  it('con key transpuesta negativa muestra el signo −', () => {
+    expect(buildTransposeBubbleLabel('G major', -1, false, 'latin')).toBe('Fa# · −1');
+  });
+
+  it('en notación anglo no traduce', () => {
+    expect(buildTransposeBubbleLabel('G major', 0, false, 'anglo')).toBe('G · Original');
+  });
+
+  it('sin key y semitonos 0: "0 · Original"', () => {
+    expect(buildTransposeBubbleLabel(null, 0, false, 'latin')).toBe('0 · Original');
+  });
+
+  it('sin key y semitonos +2: solo "+2"', () => {
+    expect(buildTransposeBubbleLabel(null, 2, false, 'latin')).toBe('+2');
+  });
+
+  it('sin key y semitonos negativos: "−3"', () => {
+    expect(buildTransposeBubbleLabel(undefined, -3, false, 'latin')).toBe('−3');
+  });
+});
+
+describe('buildCejillaHint (T3)', () => {
+  it('con key: "Cejilla {n} · suena en {tono real}" (D + cejilla 2 → Mi)', () => {
+    expect(buildCejillaHint('D major', 2, false, 'latin')).toBe('Cejilla 2 · suena en Mi');
+  });
+
+  it('en notación anglo no traduce', () => {
+    expect(buildCejillaHint('D major', 2, false, 'anglo')).toBe('Cejilla 2 · suena en E');
+  });
+
+  it('sin key cae al texto plano previo', () => {
+    expect(buildCejillaHint(null, 2, false, 'latin')).toBe('Cejilla: 2');
   });
 });

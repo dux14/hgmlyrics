@@ -194,8 +194,16 @@
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(120% 100% at 30% 0, color-mix(in oklch, var(--color-teal-500) 35%, transparent), transparent 55%),
-    radial-gradient(120% 90% at 90% 10%, color-mix(in oklch, var(--color-violet-400) 30%, transparent), transparent 60%);
+    radial-gradient(
+      120% 100% at 30% 0,
+      color-mix(in oklch, var(--color-teal-500) 35%, transparent),
+      transparent 55%
+    ),
+    radial-gradient(
+      120% 90% at 90% 10%,
+      color-mix(in oklch, var(--color-violet-400) 30%, transparent),
+      transparent 60%
+    );
   pointer-events: none;
 }
 
@@ -782,7 +790,10 @@
 }
 
 /* === Song List (fila limpia: carátula + título + álbum + voz) === */
-.song-list { display: flex; flex-direction: column; }
+.song-list {
+  display: flex;
+  flex-direction: column;
+}
 .song-list-row {
   display: flex;
   align-items: center;
@@ -791,11 +802,32 @@
   border-bottom: 1px solid var(--color-border);
   cursor: pointer;
 }
-.song-list-row:hover { background: color-mix(in srgb, var(--color-primary) 6%, transparent); }
-.song-list-row__thumb { width: 40px; height: 40px; border-radius: var(--border-radius-sm); object-fit: cover; flex: 0 0 40px; }
-.song-list-row__text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.song-list-row__title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.song-list-row__album { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+.song-list-row:hover {
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+}
+.song-list-row__thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--border-radius-sm);
+  object-fit: cover;
+  flex: 0 0 40px;
+}
+.song-list-row__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.song-list-row__title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.song-list-row__album {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
 
 /* === Song Table === */
 .song-table-container {
@@ -1300,11 +1332,30 @@
   color: #fff;
 }
 
-.transpose-value {
+/* Bubble de tono (T3): centro tappable del control −½/+½, reset a Original. */
+.transpose-bubble {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 96px;
+  padding: 4px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-full);
+  background: transparent;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-bold);
-  min-width: 28px;
-  text-align: center;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.transpose-bubble:hover {
+  background: var(--color-surface-hover);
+}
+
+.transpose-bubble:active {
+  background: var(--color-primary);
+  color: #fff;
 }
 
 .transpose-notation-toggle {

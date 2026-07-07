@@ -23,8 +23,11 @@ import {
   buildChordsLineHTML,
   buildTonoLineHTML,
   buildMixedLineHTML,
+  buildTransposeBubbleLabel,
+  buildCejillaHint,
 } from '../lib/lyricsRender.js';
 import { getChordNotation } from '../lib/chordNotation.js';
+import { getTranspose, setTranspose } from '../lib/transposeStore.js';
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { isFavorite, toggleFavorite } from '../lib/favorites.js';
@@ -248,8 +251,11 @@ async function _renderSongBody(container, songId, isPreview, song) {
   // la rama de acordes existente.
   let viewMode = 'lyrics';
   let showChords = false;
-  let transposeSemitones = 0;
-  let useFlats = false;
+  // Transposición persistida por canción (T3); preview no persiste (no hay id
+  // estable de sesión ni beneficio de recordarla para una vista efímera).
+  const savedTranspose = !isPreview ? getTranspose(songId) : { semitones: 0, useFlats: false };
+  let transposeSemitones = savedTranspose.semitones;
+  let useFlats = savedTranspose.useFlats;
   // Modo Tono: solo con el flag voz_tono. activeRosterId/activeCategory dirigen
   // el disclosure categoría→persona del modo notas.
   const tonoEnabled = isFeatureEnabled('voz_tono');
@@ -406,18 +412,20 @@ async function _renderSongBody(container, songId, isPreview, song) {
               song.cejilla && song.cejilla > 0
                 ? `<div class="cejilla-badge" title="Colocar cejilla en el traste ${song.cejilla}">
                      <span class="cejilla-badge__icon">${icon('audio-lines', { size: 15 })}</span>
-                     <span class="cejilla-badge__text">Cejilla: ${song.cejilla}</span>
+                     <span class="cejilla-badge__text" id="cejilla-badge-text">${escapeHtml(buildCejillaHint(song.key, song.cejilla, useFlats, getChordNotation()))}</span>
                    </div>`
                 : ''
             }
             ${
               hasChords
                 ? `<div class="transpose-controls" id="transpose-controls">
-                     <button class="transpose-btn" id="transpose-down">−½</button>
-                     <span class="transpose-value" id="transpose-value">0</span>
-                     <button class="transpose-btn" id="transpose-up">+½</button>
+                     <button class="transpose-btn" id="transpose-down" aria-label="Bajar medio tono">−½</button>
+                     <button class="transpose-bubble" id="transpose-bubble" type="button" aria-label="${escapeHtml(`Tono: ${buildTransposeBubbleLabel(song.key, transposeSemitones, useFlats, getChordNotation())}. Toca para restablecer al original.`)}">
+                       <span id="transpose-bubble-text">${escapeHtml(buildTransposeBubbleLabel(song.key, transposeSemitones, useFlats, getChordNotation()))}</span>
+                     </button>
+                     <button class="transpose-btn" id="transpose-up" aria-label="Subir medio tono">+½</button>
                      <span class="filter-separator"></span>
-                     <button class="transpose-notation-toggle" id="notation-toggle">♯ / ♭</button>
+                     <button class="transpose-notation-toggle" id="notation-toggle">${useFlats ? '♭ → ♯' : '♯ / ♭'}</button>
                    </div>`
                 : ''
             }
@@ -498,6 +506,27 @@ async function _renderSongBody(container, songId, isPreview, song) {
         notation: getChordNotation(),
       });
       if (!isPreview) applyFontSize(fontSize);
+    }
+  }
+
+  // Refresca el bubble de tono + hint de cejilla (no requieren re-pintar la
+  // letra completa) y persiste la transposición por canción (T3).
+  function refreshTransposeUI() {
+    if (!isPreview) setTranspose(songId, { semitones: transposeSemitones, useFlats });
+    const notation = getChordNotation();
+    const bubbleTextEl = container.querySelector('#transpose-bubble-text');
+    const bubbleLabel = buildTransposeBubbleLabel(song.key, transposeSemitones, useFlats, notation);
+    if (bubbleTextEl) bubbleTextEl.textContent = bubbleLabel;
+    const bubbleBtn = container.querySelector('#transpose-bubble');
+    if (bubbleBtn) {
+      bubbleBtn.setAttribute(
+        'aria-label',
+        `Tono: ${bubbleLabel}. Toca para restablecer al original.`,
+      );
+    }
+    const cejillaTextEl = container.querySelector('#cejilla-badge-text');
+    if (cejillaTextEl && song.cejilla) {
+      cejillaTextEl.textContent = buildCejillaHint(song.key, song.cejilla, useFlats, notation);
     }
   }
 
@@ -791,19 +820,28 @@ async function _renderSongBody(container, songId, isPreview, song) {
   if (hasChords) {
     container.querySelector('#transpose-down')?.addEventListener('click', () => {
       transposeSemitones--;
-      container.querySelector('#transpose-value').textContent = transposeSemitones;
+      refreshTransposeUI();
       reRenderLyrics();
     });
 
     container.querySelector('#transpose-up')?.addEventListener('click', () => {
       transposeSemitones++;
-      container.querySelector('#transpose-value').textContent = transposeSemitones;
+      refreshTransposeUI();
+      reRenderLyrics();
+    });
+
+    // Tap en el bubble central = reset a Original.
+    container.querySelector('#transpose-bubble')?.addEventListener('click', () => {
+      if (transposeSemitones === 0) return;
+      transposeSemitones = 0;
+      refreshTransposeUI();
       reRenderLyrics();
     });
 
     container.querySelector('#notation-toggle')?.addEventListener('click', () => {
       useFlats = !useFlats;
       container.querySelector('#notation-toggle').textContent = useFlats ? '♭ → ♯' : '♯ / ♭';
+      refreshTransposeUI();
       reRenderLyrics();
     });
   }
@@ -834,14 +872,16 @@ async function _renderSongBody(container, songId, isPreview, song) {
       onSelectCategory: (cat) => selectCategory(cat),
       onTranspose: (dir) => {
         transposeSemitones += dir;
-        const tv = container.querySelector('#transpose-value');
-        if (tv) tv.textContent = transposeSemitones;
+        refreshTransposeUI();
         const vt = document.querySelector('#vsheet-tono');
         if (vt) vt.textContent = transposeSemitones;
         reRenderLyrics();
       },
       onToggleNotation: () => {
         useFlats = !useFlats;
+        refreshTransposeUI();
+        const notationBtn = container.querySelector('#notation-toggle');
+        if (notationBtn) notationBtn.textContent = useFlats ? '♭ → ♯' : '♯ / ♭';
         reRenderLyrics();
       },
       onFont: (dir) => {
@@ -1060,7 +1100,11 @@ export function renderSections(sections, opts = {}) {
 
           // ── Acordes: letra atenuada + acordes flotantes ──
           if (showChords && line.chords?.length > 0) {
-            const inner = buildChordsLineHTML(text, line.chords, { transposeSemitones, useFlats, notation });
+            const inner = buildChordsLineHTML(text, line.chords, {
+              transposeSemitones,
+              useFlats,
+              notation,
+            });
             return `<p class="lyrics__line lyrics__line--chords">${inner}</p>`;
           }
           if (showChords) {

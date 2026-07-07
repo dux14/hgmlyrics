@@ -57,6 +57,57 @@ export function transposeNote(note, semitones, useFlats = false) {
   return `${useFlats ? NOTES_FLAT[newIdx] : NOTES_SHARP[newIdx]}${octave}`;
 }
 
+const KEY_RE = /^([A-G][#b]?)\s+(major|minor)$/i;
+
+/**
+ * Transpone el tono de una canción (formato "G major"/"D minor", constraint
+ * de la columna `songs.key`) a un símbolo de acorde anglo por semitonos, listo
+ * para `displayChord`. Entrada inválida/vacía → null (canción sin tono).
+ * @param {string} key
+ * @param {number} [semitones]
+ * @param {boolean} [useFlats]
+ * @returns {string|null}
+ */
+export function transposeKey(key, semitones = 0, useFlats = false) {
+  const m = KEY_RE.exec(String(key || '').trim());
+  if (!m) return null;
+  const symbol = m[2].toLowerCase() === 'minor' ? `${m[1]}m` : m[1];
+  return semitones ? transposeChord(symbol, semitones, useFlats) : symbol;
+}
+
+/**
+ * Etiqueta del bubble de tono (T3): "Sol · Original" / "La · +2" con key;
+ * "0 · Original" / "+2" sin key (la canción no tiene tono asignado).
+ * @param {string} key
+ * @param {number} semitones
+ * @param {boolean} useFlats
+ * @param {'anglo'|'latin'} notation
+ * @returns {string}
+ */
+export function buildTransposeBubbleLabel(key, semitones, useFlats, notation) {
+  const sign = semitones > 0 ? '+' : semitones < 0 ? '−' : '';
+  const deviation = semitones === 0 ? 'Original' : `${sign}${Math.abs(semitones)}`;
+  const transposedSymbol = transposeKey(key, semitones, useFlats);
+  if (!transposedSymbol) return semitones === 0 ? `0 · ${deviation}` : deviation;
+  return `${displayChord(transposedSymbol, notation)} · ${deviation}`;
+}
+
+/**
+ * Hint de cejilla (T3): "Cejilla {n} · suena en {tono real}" cuando hay key
+ * (la cejilla SUBE el tono sonante: +n semitonos sobre el tono original).
+ * Sin key, cae al texto plano previo.
+ * @param {string} key
+ * @param {number} cejilla
+ * @param {boolean} useFlats
+ * @param {'anglo'|'latin'} notation
+ * @returns {string}
+ */
+export function buildCejillaHint(key, cejilla, useFlats, notation) {
+  const symbol = transposeKey(key, cejilla, useFlats);
+  if (!symbol) return `Cejilla: ${cejilla}`;
+  return `Cejilla ${cejilla} · suena en ${displayChord(symbol, notation)}`;
+}
+
 /**
  * Modo Acordes (GA): letra atenuada (~55%) + acordes flotantes anclados a su
  * carácter (no parten palabras). `pos` se clampa a [0, len].
@@ -73,7 +124,11 @@ export function buildChordsLineHTML(text, chords, opts = {}) {
   const notation = opts.notation || 'anglo';
   const labels = (Array.isArray(chords) ? chords : []).map((c) => {
     const ch = transposeSemitones !== 0 ? transposeChord(c.ch, transposeSemitones, useFlats) : c.ch;
-    return { pos: Math.min(Math.max(c.pos || 0, 0), len), text: displayChord(ch, notation), className: 'chord-label' };
+    return {
+      pos: Math.min(Math.max(c.pos || 0, 0), len),
+      text: displayChord(ch, notation),
+      className: 'chord-label',
+    };
   });
   return buildAnnotatedLineHTML(str, { labels, baseClass: 'lyrics__letra-dim' });
 }

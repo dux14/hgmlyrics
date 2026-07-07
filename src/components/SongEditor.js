@@ -7,7 +7,7 @@
  */
 
 import { fetchSongDetail, refreshData, invalidateSongDetailCache } from '../lib/store.js';
-import { parseImportText, songToChordPro } from '../lib/importParse.js';
+import { songToChordPro } from '../lib/importParse.js';
 import { MUSICAL_KEYS, chordProKeyToCanonical } from '../lib/musicKeys.js';
 import { navigate } from '../router.js';
 import { getSession, isFeatureEnabled } from '../lib/authStore.js';
@@ -19,14 +19,10 @@ import {
   getVoiceLabel,
   isValidNote,
 } from '../lib/voiceSystem.js';
-import {
-  normalizeRange,
-  buildCharStripHTML,
-  deleteGroupAt,
-  applyGroupsForRange,
-  collectUsedChords,
-} from '../lib/editorSelection.js';
 import { getChordNotation } from '../lib/chordNotation.js';
+import { openChordEditorModal } from './editor/ChordEditorModal.js';
+import { openTonoEditorModal } from './editor/TonoEditorModal.js';
+import { openImportModal } from './editor/ImportModal.js';
 import {
   fetchSectionAudio,
   createSectionAudio,
@@ -890,7 +886,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       }
     } else if (action === 'open-chords') {
       const found = findLine(btn.dataset.lineId);
-      if (found) openChordEditor(found.line);
+      if (found) openChordEditorModal(found.line, { blocks, onClose: renderBlocks });
     } else if (action === 'toggle-annotation') {
       const found = findLine(btn.dataset.lineId);
       if (found) {
@@ -906,7 +902,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     } else if (action === 'open-tono') {
       if (!v2Enabled) return;
       const found = findLine(btn.dataset.lineId);
-      if (found) openTonoEditor(found.line);
+      if (found) openTonoEditorModal(found.line, { voiceRoster, onClose: renderBlocks });
     } else if (action === 'move-section-up') {
       const si = parseInt(btn.dataset.section);
       if (si > 0) {
@@ -955,385 +951,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     }
   });
 
-  // ─── Tono editor por línea (v2, gated): silabación + voz→sílaba + notas ───
-  //
-  // Modal autocontenido. Muta line.syllables (Task 3) y line.voiceLines (Task 4)
-  // directamente sobre el objeto de la línea en `blocks`. La selección de
-  // sílabas reusa el modelo tap-anchor-extend del editor de voces, pero a nivel
-  // de sílaba en vez de carácter.
-  // ─── Editor de Voces y Tono por LÍNEA (v3, gated por voz_tono) ───
-  // Flujo: 1) tap inicio→tap fin sobre las letras (rango de caracteres),
-  // 2) elegir voz del roster, 3) escribir nota a mano (validada, opcional),
-  // 4) "Agregar grupo". Lista de grupos con borrar. Muta line.groups.
-  function openTonoEditor(line) {
-    if (!Array.isArray(line.groups)) line.groups = [];
-
-    const sel = { anchor: null, focus: null }; // índices de carácter
-    let perVoice = {}; // voiceId → { included, note, invalid }
-    let formError = '';
-
-    const overlay = document.createElement('div');
-    overlay.className = 'import-modal__overlay';
-    document.body.appendChild(overlay);
-    // El modal se crea UNA vez; render() solo actualiza su contenido (evita que
-    // la animación de entrada se reproduzca en cada interacción).
-    const modalEl = document.createElement('div');
-    modalEl.className = 'import-modal tono-editor';
-    overlay.appendChild(modalEl);
-
-    function close() {
-      overlay.remove();
-      renderBlocks();
-    }
-
-    function currentRange() {
-      if (sel.anchor === null) return null;
-      if (sel.focus === null) return { start: sel.anchor, end: sel.anchor + 1 };
-      return normalizeRange(sel.anchor, sel.focus);
-    }
-
-    function rosterVoice(id) {
-      return voiceRoster.find((v) => v.id === id) || null;
-    }
-
-    // Siembra el estado por voz desde los grupos que coinciden con el rango actual.
-    function seedPerVoice() {
-      const range = currentRange();
-      const map = {};
-      for (const v of voiceRoster) {
-        const g = range
-          ? line.groups.find(
-              (x) => x.start === range.start && x.end === range.end && x.voiceId === v.id,
-            )
-          : null;
-        const note = g && g.note !== null && g.note !== undefined ? g.note : '';
-        map[v.id] = { included: !!g, note, invalid: false };
-      }
-      return map;
-    }
-
-    function render() {
-      const text = line.text || '';
-      const range = currentRange();
-      const strip = buildCharStripHTML(text, range);
-
-      const voiceRows =
-        voiceRoster.length === 0
-          ? '<p class="tono-editor__hint">Añade voces en el roster (arriba) para asignar.</p>'
-          : voiceRoster
-              .map((v) => {
-                const st = perVoice[v.id] || { included: false, note: '', invalid: false };
-                const on = st.included;
-                return `<div class="voice-note-row">
-                  <button class="voice-pick${on ? ' voice-pick--active' : ''}" data-voice="${v.id}" type="button" aria-pressed="${on}">
-                    <span class="voice-pick__dot" style="--current-voice: var(--color-voice-${v.category})"></span>
-                    ${escapeHtml(v.name || getVoiceLabel(v.category))}
-                  </button>
-                  <input class="form-group__input voice-note-row__note${st.invalid ? ' form-group__input--invalid' : ''}" data-note-for="${v.id}" type="text" value="${escapeHtml(st.note)}" placeholder="Ej: B3 (vacío = sin nota)" aria-invalid="${st.invalid}" />
-                </div>`;
-              })
-              .join('');
-
-      const groupRows =
-        line.groups.length === 0
-          ? '<p class="tono-editor__hint">Aún no hay grupos en esta línea.</p>'
-          : line.groups
-              .map((g, i) => {
-                const v = rosterVoice(g.voiceId);
-                const cat = v?.category || 'soprano';
-                const vname = v
-                  ? escapeHtml(v.name || getVoiceLabel(v.category))
-                  : '(voz eliminada)';
-                const seg = escapeHtml(text.slice(g.start, g.end)) || '·';
-                const noteHtml =
-                  g.note === null || g.note === undefined || g.note === ''
-                    ? `<span class="group-row__note group-row__note--pending voice-text--${cat}">—</span>`
-                    : `<span class="group-row__note">${escapeHtml(g.note)}</span>`;
-                return `<div class="group-row">
-                  <span class="group-row__seg">${seg}</span>
-                  <span class="group-row__voice"><span class="voice-pick__dot" style="--current-voice: var(--color-voice-${cat})"></span>${vname}</span>
-                  ${noteHtml}
-                  <button class="group-row__del" data-del-idx="${i}" type="button" aria-label="Eliminar grupo">${icon('trash', { size: 14 })}</button>
-                </div>`;
-              })
-              .join('');
-
-      modalEl.innerHTML = `
-          <div class="import-modal__header">
-            <h3 class="import-modal__title">${icon('music', { size: 18 })} Voces y tono</h3>
-            <button class="import-modal__close" data-tono="close" aria-label="Cerrar">${icon('close', { size: 18 })}</button>
-          </div>
-
-          <div class="tono-editor__step">
-            <div class="tono-editor__step-head"><span>1 · Toca el inicio y el fin del rango</span></div>
-            <div class="char-strip">${strip}</div>
-          </div>
-
-          <div class="tono-editor__step">
-            <div class="tono-editor__step-head"><span>2 · Notas por voz (vacío = esa voz no canta el rango)</span></div>
-            <div class="voice-note-grid">${voiceRows}</div>
-            <button class="btn btn--primary btn--icon tono-editor__apply-btn" data-tono="apply" type="button"${range ? '' : ' disabled'}>${icon('plus', { size: 14 })} Agregar grupos del rango</button>
-            ${formError ? `<p class="tono-editor__error" role="alert">${escapeHtml(formError)}</p>` : ''}
-          </div>
-
-          <div class="tono-editor__step">
-            <div class="tono-editor__step-head"><span>Grupos de la línea</span></div>
-            <div class="group-list">${groupRows}</div>
-          </div>
-
-          <div class="import-modal__actions">
-            <button class="btn btn--primary" data-tono="done" type="button">Listo</button>
-          </div>`;
-    }
-
-    // Escribir una nota actualiza el estado SIN re-render (preserva el caret) y
-    // auto-incluye la voz; el chip se actualiza directamente por DOM.
-    overlay.addEventListener('input', (e) => {
-      const id = e.target.dataset.noteFor;
-      if (!id || !perVoice[id]) return;
-      perVoice[id].note = e.target.value;
-      perVoice[id].invalid = false;
-      if (e.target.value.trim() !== '') perVoice[id].included = true;
-      const chip = overlay.querySelector(`.voice-pick[data-voice="${id}"]`);
-      if (chip) {
-        chip.classList.toggle('voice-pick--active', perVoice[id].included);
-        chip.setAttribute('aria-pressed', String(perVoice[id].included));
-      }
-      e.target.classList.remove('form-group__input--invalid');
-    });
-
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) return close();
-      const tono = e.target.closest('[data-tono]')?.dataset.tono;
-      if (tono === 'close' || tono === 'done') return close();
-      if (tono === 'apply') {
-        const range = currentRange();
-        if (!range) return;
-        let bad = false;
-        for (const v of voiceRoster) {
-          const st = perVoice[v.id];
-          const raw = st ? st.note.trim() : '';
-          if (st && st.included && raw !== '' && !isValidNote(raw)) {
-            st.invalid = true;
-            bad = true;
-          }
-        }
-        if (bad) {
-          formError = 'Corrige las notas inválidas (notación científica, ej: B3).';
-          render();
-          return;
-        }
-        formError = '';
-        const perVoiceArray = voiceRoster.map((v) => {
-          const st = perVoice[v.id] || { included: false, note: '' };
-          const raw = st.note.trim();
-          return { voiceId: v.id, included: st.included, note: raw === '' ? null : raw };
-        });
-        line.groups = applyGroupsForRange(line.groups, range, perVoiceArray);
-        sel.anchor = null;
-        sel.focus = null;
-        perVoice = seedPerVoice();
-        render();
-        return;
-      }
-      const voiceBtn = e.target.closest('[data-voice]');
-      if (voiceBtn) {
-        const id = voiceBtn.dataset.voice;
-        if (perVoice[id]) {
-          perVoice[id].included = !perVoice[id].included;
-          render();
-        }
-        return;
-      }
-      const delBtn = e.target.closest('[data-del-idx]');
-      if (delBtn) {
-        const i = Number.parseInt(delBtn.dataset.delIdx, 10);
-        if (!Number.isNaN(i)) {
-          line.groups = deleteGroupAt(line.groups, i);
-          perVoice = seedPerVoice();
-          render();
-        }
-        return;
-      }
-      const charBtn = e.target.closest('.char-cell');
-      if (charBtn) {
-        const i = Number.parseInt(charBtn.dataset.char, 10);
-        if (Number.isNaN(i)) return;
-        if (sel.anchor === null || sel.focus !== null) {
-          sel.anchor = i;
-          sel.focus = null;
-        } else {
-          sel.focus = i;
-        }
-        perVoice = seedPerVoice();
-        render();
-      }
-    });
-
-    perVoice = seedPerVoice();
-    render();
-  }
-
-  /** Popup de Acordes por rango (pos = inicio del rango). Muta line.chords=[{ch,pos}]. */
-  function openChordEditor(line) {
-    if (!Array.isArray(line.chords)) line.chords = [];
-    const overlay = document.createElement('div');
-    overlay.className = 'import-modal__overlay';
-    document.body.appendChild(overlay);
-    // Modal persistente: render() solo actualiza su contenido, así la animación
-    // de entrada (modalIn) no se reproduce en cada interacción.
-    const modalEl = document.createElement('div');
-    modalEl.className = 'import-modal tono-editor';
-    overlay.appendChild(modalEl);
-
-    const sel = { anchor: null, focus: null };
-    let chordDraft = '';
-
-    const close = () => {
-      overlay.remove();
-      renderBlocks();
-    };
-    const currentRange = () => {
-      if (sel.anchor === null) return null;
-      if (sel.focus === null) return { start: sel.anchor, end: sel.anchor + 1 };
-      return normalizeRange(sel.anchor, sel.focus);
-    };
-    const setChord = (pos, ch) => {
-      const clean = (ch || '').trim();
-      const existing = line.chords.find((c) => c.pos === pos);
-      if (!clean) {
-        line.chords = line.chords.filter((c) => c.pos !== pos);
-      } else if (existing) {
-        existing.ch = clean;
-      } else {
-        line.chords.push({ ch: clean, pos });
-      }
-      line.chords.sort((a, b) => a.pos - b.pos);
-    };
-
-    function render() {
-      const text = line.text || '';
-      const range = currentRange();
-      const strip = buildCharStripHTML(text, range);
-      const pos = range ? range.start : null;
-      const existing = pos === null ? null : line.chords.find((c) => c.pos === pos);
-
-      const chordRows =
-        line.chords.length === 0
-          ? '<p class="tono-editor__hint">Aún no hay acordes en esta línea.</p>'
-          : line.chords
-              .map((c) => {
-                const at = escapeHtml(text.slice(c.pos, c.pos + 1)) || '⌑';
-                return `<div class="group-row">
-                  <span class="group-row__seg">${escapeHtml(c.ch)}</span>
-                  <span class="group-row__voice">en "${at}" (pos ${c.pos})</span>
-                  <button class="group-row__del" data-del-pos="${c.pos}" type="button" aria-label="Quitar acorde">${icon('trash', { size: 14 })}</button>
-                </div>`;
-              })
-              .join('');
-
-      const canAdd = pos !== null;
-      const usedChords = collectUsedChords(blocks);
-      const quickBarHtml =
-        usedChords.length === 0
-          ? ''
-          : `<div class="quick-chord-bar">
-              <span class="quick-chord-bar__label">Acordes usados</span>
-              <div class="quick-chord-bar__chips">
-                ${usedChords
-                  .map(
-                    (ch) =>
-                      `<button class="quick-chord-bar__chip" data-quick-chord="${escapeHtml(ch)}" type="button"${canAdd ? '' : ' disabled'}>${escapeHtml(ch)}</button>`,
-                  )
-                  .join('')}
-              </div>
-            </div>`;
-      modalEl.innerHTML = `
-          <div class="import-modal__header">
-            <h3 class="import-modal__title">${icon('audio-lines', { size: 18 })} Acordes</h3>
-            <button class="import-modal__close" data-chord="close" aria-label="Cerrar">${icon('close', { size: 18 })}</button>
-          </div>
-
-          <div class="tono-editor__step">
-            <div class="tono-editor__step-head"><span>1 · Toca dónde empieza el acorde</span></div>
-            <div class="char-strip">${strip}</div>
-          </div>
-
-          <div class="tono-editor__step">
-            <div class="tono-editor__step-head"><span>2 · Acorde</span></div>
-            ${quickBarHtml}
-            <div class="chord-editor__assign">
-              <input class="form-group__input" data-chord="input" type="text" value="${escapeHtml(chordDraft || existing?.ch || '')}" placeholder="Ej: Am, F#m, G7" />
-              <button class="btn btn--primary" data-chord="apply" type="button"${canAdd ? '' : ' disabled'}>${icon('plus', { size: 14 })} Guardar</button>
-            </div>
-          </div>
-
-          <div class="tono-editor__step">
-            <div class="tono-editor__step-head"><span>Acordes de la línea</span></div>
-            <div class="group-list">${chordRows}</div>
-          </div>
-
-          <div class="import-modal__actions">
-            <button class="btn btn--primary" data-chord="done" type="button">Listo</button>
-          </div>`;
-    }
-
-    overlay.addEventListener('input', (e) => {
-      if (e.target.dataset.chord === 'input') chordDraft = e.target.value;
-    });
-
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) return close();
-      const act = e.target.closest('[data-chord]')?.dataset.chord;
-      if (act === 'close' || act === 'done') return close();
-      if (act === 'apply') {
-        const range = currentRange();
-        if (!range) return;
-        setChord(range.start, chordDraft);
-        sel.anchor = null;
-        sel.focus = null;
-        chordDraft = '';
-        render();
-        return;
-      }
-      const quickBtn = e.target.closest('[data-quick-chord]');
-      if (quickBtn) {
-        const range = currentRange();
-        if (!range) return;
-        setChord(range.start, quickBtn.dataset.quickChord);
-        sel.anchor = null;
-        sel.focus = null;
-        chordDraft = '';
-        render();
-        return;
-      }
-      const delBtn = e.target.closest('[data-del-pos]');
-      if (delBtn) {
-        const p = Number.parseInt(delBtn.dataset.delPos, 10);
-        if (!Number.isNaN(p)) {
-          setChord(p, '');
-          render();
-        }
-        return;
-      }
-      const charBtn = e.target.closest('.char-cell');
-      if (charBtn) {
-        const i = Number.parseInt(charBtn.dataset.char, 10);
-        if (Number.isNaN(i)) return;
-        if (sel.anchor === null || sel.focus !== null) {
-          sel.anchor = i;
-          sel.focus = null;
-        } else {
-          sel.focus = i;
-        }
-        chordDraft = '';
-        render();
-      }
-    });
-
-    render();
-  }
-
   // Add section button
   container.querySelector('#add-section-btn').addEventListener('click', () => {
     const verseCount = blocks.filter((b) => b.type === 'verse').length;
@@ -1351,7 +968,15 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
 
   // ─── Import Modal ───
   container.querySelector('#import-btn').addEventListener('click', () => {
-    showImportModal();
+    openImportModal({
+      onImport: (parsed) => {
+        if (parsed.length > 0) {
+          blocks.push(...parsed);
+          renderBlocks();
+        }
+        fillMetaFromImport(parsed.meta);
+      },
+    });
   });
 
   // Rellena metadata (title/artist/key/capo) desde directivas ChordPro SOLO si
@@ -1397,74 +1022,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     a.remove();
     setTimeout(() => URL.revokeObjectURL(href), 1000);
   });
-
-  function showImportModal() {
-    const overlay = document.createElement('div');
-    overlay.className = 'import-modal__overlay';
-    overlay.innerHTML = `
-      <div class="import-modal">
-        <div class="import-modal__header">
-          <h3 class="import-modal__title">${icon('download', { size: 18 })} Importar letra</h3>
-          <button class="import-modal__close" id="import-close" aria-label="Cerrar">${icon('close', { size: 18 })}</button>
-        </div>
-        <p class="import-modal__hint">
-          Pega las letras. Las secciones se detectan con <code>[Verso 1]</code>, <code>[Coro]</code>, etc.
-          o con directivas ChordPro (<code>{start_of_chorus}</code>, <code>{title:}</code>...).
-          Las líneas vacías separan secciones automáticamente.
-        </p>
-        <textarea class="import-modal__textarea" id="import-textarea" placeholder="[Verso 1]\nPrimera línea de la canción\nSegunda línea\n\n[Coro]\nEstribillo aquí..."></textarea>
-        <div class="import-modal__preview" id="import-preview">
-          <p class="import-modal__placeholder">La vista previa aparecerá aquí...</p>
-        </div>
-        <div class="import-modal__actions">
-          <button class="btn btn--secondary" id="import-cancel-btn">Cancelar</button>
-          <button class="btn btn--primary" id="import-confirm-btn">Importar</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(overlay);
-
-    const textarea = overlay.querySelector('#import-textarea');
-    const previewEl = overlay.querySelector('#import-preview');
-
-    textarea.addEventListener('input', () => {
-      const parsed = parseImportText(textarea.value);
-      if (parsed.length === 0) {
-        previewEl.innerHTML =
-          '<p class="import-modal__placeholder">La vista previa aparecerá aquí...</p>';
-        return;
-      }
-      previewEl.innerHTML = parsed
-        .map(
-          (block) =>
-            `<div class="import-preview__section">
-          <div class="import-preview__label">${escapeHtml(block.label)}</div>
-          ${block.lines.map((l) => `<div class="import-preview__line">${escapeHtml(l.text)}</div>`).join('')}
-        </div>`,
-        )
-        .join('');
-    });
-
-    overlay.querySelector('#import-close').addEventListener('click', () => overlay.remove());
-    overlay.querySelector('#import-cancel-btn').addEventListener('click', () => overlay.remove());
-    overlay.querySelector('#import-confirm-btn').addEventListener('click', () => {
-      const parsed = parseImportText(textarea.value);
-      if (parsed.length > 0) {
-        blocks.push(...parsed);
-        renderBlocks();
-      }
-      fillMetaFromImport(parsed.meta);
-      overlay.remove();
-    });
-
-    // Close on overlay click
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
-    });
-
-    textarea.focus();
-  }
 
   // ─── Initial render ───
   renderBlocks();

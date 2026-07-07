@@ -27,7 +27,7 @@ import {
   buildCejillaHint,
 } from '../lib/lyricsRender.js';
 import { getChordNotation, setChordNotation } from '../lib/chordNotation.js';
-import { getTranspose, setTranspose } from '../lib/transposeStore.js';
+import { getTranspose, setTranspose, normalizeSemitones } from '../lib/transposeStore.js';
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { isFavorite, toggleFavorite } from '../lib/favorites.js';
@@ -73,6 +73,17 @@ function saveFontSize(size) {
   } catch (_e) {
     /* ignore */
   }
+}
+
+// Una categoría está "atenuada" cuando NINGUNA de sus voces está en
+// visibleVoices (OptionsSheet, T4/T5). Compartida por updateHeroChips (T5,
+// refresco in-place) y renderHeroVoiceChips (pintado inicial) para no
+// duplicar la fórmula.
+// @param {object} song @param {string} category @param {Set<string>} visibleVoices
+// @returns {boolean}
+function categoryIsDimmed(song, category, visibleVoices) {
+  const catVoiceIds = rosterByCategory(song, category).map((v) => v.id);
+  return catVoiceIds.length > 0 && catVoiceIds.every((id) => !visibleVoices.has(id));
 }
 
 function songHasChords(song) {
@@ -687,8 +698,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
       const isActive = category === activeCategory;
       chip.classList.toggle('hero-voice-chip--active', isActive);
       chip.setAttribute('aria-pressed', String(isActive));
-      const catVoiceIds = rosterByCategory(song, category).map((v) => v.id);
-      const isDimmed = catVoiceIds.length > 0 && catVoiceIds.every((id) => !visibleVoices.has(id));
+      const isDimmed = categoryIsDimmed(song, category, visibleVoices);
       chip.classList.toggle('hero-voice-chip--dimmed', isDimmed);
     });
   }
@@ -882,13 +892,13 @@ async function _renderSongBody(container, songId, isPreview, song) {
   // Chord toggle — only transpose and notation for full mode (already set up above)
   if (hasChords) {
     container.querySelector('#transpose-down')?.addEventListener('click', () => {
-      transposeSemitones--;
+      transposeSemitones = normalizeSemitones(transposeSemitones - 1);
       refreshTransposeUI();
       reRenderLyrics();
     });
 
     container.querySelector('#transpose-up')?.addEventListener('click', () => {
-      transposeSemitones++;
+      transposeSemitones = normalizeSemitones(transposeSemitones + 1);
       refreshTransposeUI();
       reRenderLyrics();
     });
@@ -947,10 +957,22 @@ async function _renderSongBody(container, songId, isPreview, song) {
         if (visibleVoices.has(voiceId)) visibleVoices.delete(voiceId);
         else visibleVoices.add(voiceId);
         updateHeroChips();
+        // La letra pintada solo depende de la voz/categoría activa en Tono
+        // (activeRosterId/activeCategory) o en Acordes+Voz (chordsVoiceId/
+        // chordsCategory) — ver effectiveVoiceId en renderSections. Apagar
+        // una voz que no interviene en el pintado actual no necesita
+        // reconstruir la letra completa, solo los chips del hero.
+        const voiceCategory = (song.voiceRoster || []).find((v) => v.id === voiceId)?.category;
+        const affectsRender =
+          voiceId === activeRosterId ||
+          voiceId === chordsVoiceId ||
+          (!!activeCategory && voiceCategory === activeCategory) ||
+          (!!chordsCategory && voiceCategory === chordsCategory);
+        if (!affectsRender) return;
         reRenderLyrics();
       },
       onTranspose: (dir) => {
-        transposeSemitones += dir;
+        transposeSemitones = normalizeSemitones(transposeSemitones + dir);
         refreshTransposeUI();
         syncTonoBubble();
         reRenderLyrics();
@@ -1028,8 +1050,7 @@ function renderHeroVoiceChips(song, activeCategory, visibleVoices) {
   const chips = categories
     .map((c) => {
       const isActive = c === activeCategory;
-      const catVoiceIds = rosterByCategory(song, c).map((v) => v.id);
-      const isDimmed = catVoiceIds.length > 0 && catVoiceIds.every((id) => !visibleVoices.has(id));
+      const isDimmed = categoryIsDimmed(song, c, visibleVoices);
       // "A" de Alto (mockup) para contralto; label accesible completo aparte.
       const initial = c === 'contralto' ? 'A' : getVoiceLabel(c).charAt(0).toUpperCase();
       const cls = [
@@ -1222,7 +1243,7 @@ export function renderSections(sections, opts = {}) {
           // ── Tono: voz activa coloreada + nota flotante ──
           if (viewMode === 'tono' && activeVoiceId) {
             if (text.trim() === '') return `<p class="lyrics__line">&nbsp;</p>`;
-            const inner = buildTonoLineHTML(line, effectiveVoiceId, colorClass);
+            const inner = buildTonoLineHTML(line, effectiveVoiceId, colorClass, { notation });
             return `<p class="lyrics__line lyrics__line--tono">${inner}</p>`;
           }
 

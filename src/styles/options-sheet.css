@@ -245,3 +245,101 @@
 .song-toolbar__options:active {
   background: color-mix(in srgb, var(--color-teal-500) 15%, transparent);
 }
+
+/* === Animación de entrada/salida (espeja go-to-sheet.css) === */
+
+@keyframes osheet-in {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes osheet-out {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+}
+@keyframes osheet-dim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes osheet-dim-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes osheet-in-desktop {
+  from {
+    transform: translateX(-50%) translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes osheet-out-desktop {
+  from {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-50%) translateY(12px);
+    opacity: 0;
+  }
+}
+
+.osheet {
+  animation: osheet-in 180ms ease-out;
+}
+.osheet-dim {
+  animation: osheet-dim-in 180ms ease-out;
+}
+.osheet--closing,
+.osheet-dim--closing {
+  pointer-events: none; /* ignora clicks mientras la hoja sale */
+}
+.osheet--closing {
+  animation: osheet-out 150ms ease-in forwards;
+}
+.osheet-dim--closing {
+  animation: osheet-dim-out 150ms ease-in forwards;
+}
+
+/* Desktop centra con translateX(-50%): la animación mobile (translateY puro)
+   pisaría ese transform y el sheet saltaría al borde izquierdo durante la
+   entrada/salida — variante que compone ambos. Va DESPUÉS de las reglas base
+   para ganar el empate de especificidad por orden de aparición. */
+@media (min-width: 768px) {
+  .osheet {
+    animation: osheet-in-desktop 180ms ease-out;
+  }
+  .osheet--closing {
+    animation: osheet-out-desktop 150ms ease-in forwards;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .osheet,
+  .osheet-dim,
+  .osheet--closing,
+  .osheet-dim--closing {
+    animation: none;
+  }
+}

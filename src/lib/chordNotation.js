@@ -18,6 +18,21 @@ const ROOT_TO_LATIN = {
 const ROOT_RE = /^([A-G])([#b]?)/;
 
 /**
+ * Parsea la raíz de un símbolo de acorde/nota anglosajón (letra + accidental
+ * opcional) del resto del símbolo (sufijo de acorde, octava de nota, bajo…).
+ * Entradas irreconocibles → null. Usado por `toLatin` y por `transposeChord`
+ * (lyricsRender.js) para no duplicar la regex de raíz.
+ * @param {string} sym
+ * @returns {{ root: string, accidental: string, rest: string } | null}
+ */
+export function parseChordRoot(sym) {
+  const str = String(sym || '');
+  const m = ROOT_RE.exec(str);
+  if (!m) return null;
+  return { root: m[1], accidental: m[2], rest: str.slice(m[0].length) };
+}
+
+/**
  * Traduce la raíz (y el bajo tras `/`, si existe) de un símbolo de acorde
  * anglosajón a notación latina, preservando accidentales y sufijos.
  * Entradas irreconocibles pasan intactas.
@@ -32,16 +47,37 @@ export function toLatin(ch) {
   const bassPart = slashIdx === -1 ? null : str.slice(slashIdx + 1);
 
   const translateRoot = (part) => {
-    const m = ROOT_RE.exec(part);
-    if (!m) return part;
-    const latin = ROOT_TO_LATIN[m[1]];
+    const parsed = parseChordRoot(part);
+    if (!parsed) return part;
+    const latin = ROOT_TO_LATIN[parsed.root];
     if (!latin) return part;
-    return latin + m[2] + part.slice(m[0].length);
+    return latin + parsed.accidental + parsed.rest;
   };
 
   const latinRoot = translateRoot(rootPart);
   if (bassPart === null) return latinRoot;
   return `${latinRoot}/${translateRoot(bassPart)}`;
+}
+
+const NOTE_RE = /^([A-G])([#b]?)(-?\d+)$/;
+
+/**
+ * Traduce una nota en notación científica ('G4', 'D#4') a su nombre en la
+ * notación solicitada, preservando accidental y octava ('G4'→'Sol4' en
+ * latin). La octava se mantiene siempre — información útil para coristas.
+ * Entrada irreconocible o notation !== 'latin' pasa intacta.
+ * @param {string} note
+ * @param {'anglo'|'latin'} notation
+ * @returns {string}
+ */
+export function displayNote(note, notation) {
+  const str = String(note ?? '');
+  if (notation !== 'latin') return str;
+  const m = NOTE_RE.exec(str);
+  if (!m) return str;
+  const latin = ROOT_TO_LATIN[m[1]];
+  if (!latin) return str;
+  return `${latin}${m[2]}${m[3]}`;
 }
 
 /**

@@ -3,7 +3,14 @@
  * y persistencia del setting global.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { toLatin, displayChord, getChordNotation, setChordNotation } from '../src/lib/chordNotation.js';
+import {
+  toLatin,
+  displayChord,
+  displayNote,
+  parseChordRoot,
+  getChordNotation,
+  setChordNotation,
+} from '../src/lib/chordNotation.js';
 
 describe('toLatin', () => {
   it('convierte raíces simples', () => {
@@ -48,6 +55,38 @@ describe('toLatin', () => {
     expect(toLatin(undefined)).toBe('');
     expect(toLatin('N.C.')).toBe('N.C.');
     expect(toLatin('H')).toBe('H');
+  });
+});
+
+describe('parseChordRoot (FIX 6 — parseo de raíz compartido)', () => {
+  it('separa raíz, accidental y resto', () => {
+    expect(parseChordRoot('Dm7')).toEqual({ root: 'D', accidental: '', rest: 'm7' });
+    expect(parseChordRoot('G#')).toEqual({ root: 'G', accidental: '#', rest: '' });
+    expect(parseChordRoot('Bb/D')).toEqual({ root: 'B', accidental: 'b', rest: '/D' });
+  });
+
+  it('entrada irreconocible → null', () => {
+    expect(parseChordRoot('')).toBeNull();
+    expect(parseChordRoot('H')).toBeNull();
+    expect(parseChordRoot(null)).toBeNull();
+  });
+});
+
+describe('displayNote (FIX 2 — notación en notas científicas)', () => {
+  it('latin traduce preservando accidental y octava', () => {
+    expect(displayNote('G4', 'latin')).toBe('Sol4');
+    expect(displayNote('D#4', 'latin')).toBe('Re#4');
+    expect(displayNote('Bb3', 'latin')).toBe('Sib3');
+  });
+
+  it('anglo (u otro valor) es passthrough', () => {
+    expect(displayNote('G4', 'anglo')).toBe('G4');
+    expect(displayNote('G4', 'lo-que-sea')).toBe('G4');
+  });
+
+  it('entrada irreconocible pasa intacta', () => {
+    expect(displayNote('xx', 'latin')).toBe('xx');
+    expect(displayNote(null, 'latin')).toBe('');
   });
 });
 

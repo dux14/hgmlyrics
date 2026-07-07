@@ -19,6 +19,10 @@ import { icon } from '../lib/icons.js';
 import { escapeHtml } from '../lib/escape.js';
 
 const ORDER = ['soprano', 'contralto', 'tenor', 'bass'];
+const CLOSE_FALLBACK_MS = 200;
+
+/** @type {{ dim: HTMLElement, sheet: HTMLElement, close: Function } | null} */
+let openEls = null;
 
 /**
  * Filas de VOCES VISIBLES: una por voz del roster (no colapsada por
@@ -42,6 +46,8 @@ export function buildVoiceOptionRows(song) {
 
 /**
  * Abre el bottom-sheet de opciones sobre el body.
+ * Idempotente: si ya hay una hoja abierta, devuelve el controlador vivo (no
+ * abre una segunda) — mismo patrón que GoToSheet.
  * Retorna { close, sheet } para control externo.
  *
  * @param {{
@@ -65,6 +71,10 @@ export function buildVoiceOptionRows(song) {
  * @returns {{ close: () => void, sheet: HTMLElement }}
  */
 export function openOptionsSheet(opts) {
+  if (openEls) return { close: openEls.close, sheet: openEls.sheet };
+  // Reapertura rápida: retira cualquier hoja anterior aún saliendo (animación).
+  document.querySelectorAll('.osheet--closing, .osheet-dim--closing').forEach((el) => el.remove());
+
   const rows = buildVoiceOptionRows(opts.song);
   const visibleVoices = opts.visibleVoices instanceof Set ? opts.visibleVoices : new Set();
   const notation = opts.notation === 'anglo' ? 'anglo' : 'latin';
@@ -160,19 +170,45 @@ export function openOptionsSheet(opts) {
     ${autoscrollSectionHtml}
   `;
 
-  function onKeydown(e) {
-    if (e.key === 'Escape') close();
+  let closed = false;
+  function unmount() {
+    dim.remove();
+    sheet.remove();
+    document.removeEventListener('keydown', onKeydown);
   }
 
   function close() {
+    if (closed) return;
+    closed = true;
+    // Se libera de inmediato para permitir reapertura durante la animación de salida.
+    openEls = null;
     document.removeEventListener('keydown', onKeydown);
-    dim.remove();
-    sheet.remove();
     opts.onClose?.();
+
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) {
+      unmount();
+      return;
+    }
+
+    dim.classList.add('osheet-dim--closing');
+    sheet.classList.add('osheet--closing');
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      unmount();
+    };
+    sheet.addEventListener('animationend', finish, { once: true });
+    setTimeout(finish, CLOSE_FALLBACK_MS);
   }
 
-  dim.addEventListener('click', close);
+  function onKeydown(e) {
+    if (e.key === 'Escape') close();
+  }
   document.addEventListener('keydown', onKeydown);
+
+  dim.addEventListener('click', close);
 
   sheet.querySelectorAll('[data-voice-id]').forEach((b) =>
     b.addEventListener('click', () => {
@@ -215,5 +251,21 @@ export function openOptionsSheet(opts) {
   document.body.append(dim, sheet);
   sheet.focus();
 
+  openEls = { dim, sheet, close };
   return { close, sheet };
+}
+
+/**
+ * Cierra la hoja de opciones si está abierta (dispara la salida animada).
+ * No-op si no hay hoja abierta.
+ */
+export function closeOptionsSheet() {
+  openEls?.close();
+}
+
+/**
+ * @returns {boolean} true si la hoja de opciones está abierta.
+ */
+export function isOptionsSheetOpen() {
+  return openEls !== null;
 }

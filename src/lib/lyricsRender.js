@@ -7,7 +7,7 @@
  */
 import { buildAnnotatedLineHTML, groupsForVoice } from './voiceSystem.js';
 import { escapeHtml as esc } from './escape.js';
-import { displayChord } from './chordNotation.js';
+import { displayChord, displayNote, parseChordRoot } from './chordNotation.js';
 
 /**
  * Modo Letra (GA): texto blanco plano, escapado, sin etiquetas ni color.
@@ -28,13 +28,14 @@ const NORMALIZE = { Db: 'C#', Eb: 'D#', Fb: 'E', Gb: 'F#', Ab: 'G#', Bb: 'A#', C
  * @returns {string}
  */
 export function transposeChord(chord, semitones, useFlats) {
-  return chord.replace(/^([A-G][#b]?)/, (_, root) => {
-    const normalized = NORMALIZE[root] || root;
-    const idx = NOTES_SHARP.indexOf(normalized);
-    if (idx === -1) return root;
-    const newIdx = (((idx + semitones) % 12) + 12) % 12;
-    return useFlats ? NOTES_FLAT[newIdx] : NOTES_SHARP[newIdx];
-  });
+  const parsed = parseChordRoot(chord);
+  if (!parsed) return chord;
+  const root = parsed.root + parsed.accidental;
+  const normalized = NORMALIZE[root] || root;
+  const idx = NOTES_SHARP.indexOf(normalized);
+  if (idx === -1) return chord;
+  const newIdx = (((idx + semitones) % 12) + 12) % 12;
+  return (useFlats ? NOTES_FLAT[newIdx] : NOTES_SHARP[newIdx]) + parsed.rest;
 }
 
 /**
@@ -157,12 +158,14 @@ const hasNote = (g) => g.note !== null && g.note !== undefined && g.note !== '';
  * @param {object} line  línea v3 con {text, groups}
  * @param {string} voiceId  id de la voz activa (roster)
  * @param {string} colorClass  clase de color de categoría, p.ej. 'voice-text--soprano'
+ * @param {{ notation?: 'anglo'|'latin' }} [opts]
  * @returns {string} HTML
  */
-export function buildTonoLineHTML(line, voiceId, colorClass) {
+export function buildTonoLineHTML(line, voiceId, colorClass, opts = {}) {
   const text = line?.text || '';
   const groups = groupsForVoice(line, voiceId);
   const cls = colorClass || '';
+  const notation = opts.notation || 'anglo';
   // Semántica Wave 4: el color vive en la palabra mientras el grupo no tiene
   // nota; cuando la nota existe, el color se muda a ella y la palabra va blanca.
   const spans = groups.map((g) => ({
@@ -172,7 +175,7 @@ export function buildTonoLineHTML(line, voiceId, colorClass) {
   }));
   const labels = groups.filter(hasNote).map((g) => ({
     pos: g.start,
-    text: g.note,
+    text: displayNote(g.note, notation),
     className: cls ? `${cls} tono-note` : 'tono-note',
   }));
   return buildAnnotatedLineHTML(text, { spans, labels, baseClass: 'lyrics__tono-dim' });
@@ -211,7 +214,8 @@ export function buildMixedLineHTML(line, chords, voiceId, colorClass, opts = {})
   const noteByPos = new Map();
   for (const g of groups) {
     if (g.start < g.end && hasNote(g) && !noteByPos.has(g.start)) {
-      noteByPos.set(g.start, semis !== 0 ? transposeNote(g.note, semis, useFlats) : g.note);
+      const note = semis !== 0 ? transposeNote(g.note, semis, useFlats) : g.note;
+      noteByPos.set(g.start, displayNote(note, notation));
     }
   }
 

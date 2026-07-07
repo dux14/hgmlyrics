@@ -1,7 +1,24 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { buildVoiceOptionRows, openOptionsSheet } from '../src/components/OptionsSheet.js';
+import {
+  buildVoiceOptionRows,
+  openOptionsSheet,
+  closeOptionsSheet,
+  isOptionsSheetOpen,
+} from '../src/components/OptionsSheet.js';
+
+function flushClose() {
+  // El desmontaje ocurre tras animationend o el timeout de respaldo (~200ms).
+  vi.advanceTimersByTime(250);
+}
 
 afterEach(() => {
+  // Libera el singleton entre tests (mismo patrón que GoToSheet): sin esto,
+  // una hoja abierta y no cerrada en un test deja `openEls` vivo y el
+  // siguiente `openOptionsSheet` no monta nada nuevo.
+  vi.useFakeTimers();
+  closeOptionsSheet();
+  flushClose();
+  vi.useRealTimers();
   document.body.innerHTML = '';
 });
 
@@ -150,18 +167,33 @@ describe('openOptionsSheet — interacción', () => {
   });
 
   it('click en el overlay cierra el sheet y llama onClose', () => {
+    vi.useFakeTimers();
     const onClose = vi.fn();
     openOptionsSheet({ song: baseSong(), visibleVoices: new Set(), showTono: false, onClose });
     document.querySelector('.osheet-dim').click();
+    flushClose();
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(document.querySelector('.osheet')).toBeNull();
   });
 
   it('Escape cierra el sheet', () => {
+    vi.useFakeTimers();
     const onClose = vi.fn();
     openOptionsSheet({ song: baseSong(), visibleVoices: new Set(), showTono: false, onClose });
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    flushClose();
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(document.querySelector('.osheet')).toBeNull();
+  });
+
+  it('singleton: abrir mientras ya hay una hoja abierta no monta una segunda', () => {
+    vi.useFakeTimers();
+    openOptionsSheet({ song: baseSong(), visibleVoices: new Set(), showTono: false });
+    expect(isOptionsSheetOpen()).toBe(true);
+    openOptionsSheet({ song: baseSong(), visibleVoices: new Set(), showTono: false });
+    expect(document.querySelectorAll('.osheet')).toHaveLength(1);
+    closeOptionsSheet();
+    flushClose();
+    expect(isOptionsSheetOpen()).toBe(false);
   });
 });

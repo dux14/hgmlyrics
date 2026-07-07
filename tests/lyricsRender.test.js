@@ -135,6 +135,16 @@ describe('buildTonoLineHTML', () => {
     expect(html).toContain('lyrics__tono-dim');
     expect(lyricsOnly(html)).toBe('Santo es el Señor');
   });
+
+  it('notation latin traduce la nota flotante preservando octava (FIX 2)', () => {
+    const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano', { notation: 'latin' });
+    expect(html).toContain('>Si3<');
+  });
+
+  it('sin opts (default anglo) deja la nota intacta', () => {
+    const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano');
+    expect(html).toContain('>B3<');
+  });
 });
 
 describe('transposeNote', () => {
@@ -294,6 +304,13 @@ describe('buildMixedLineHTML — carriles estrictos', () => {
     const html = buildMixedLineHTML({ text: 'abc', groups: [] }, [], 'v1', '', {});
     expect(html).not.toContain('mix-rail--note "');
     expect(html).toContain('class="mix-rail mix-rail--note"');
+  });
+
+  it('notation latin traduce acorde Y nota del riel (FIX 2)', () => {
+    const html = buildMixedLineHTML(line, chords, 'v1', 'voice-text--tenor', { notation: 'latin' });
+    expect(html).toContain('>Re</i>');
+    expect(html).toContain('>Si3</i>');
+    expect(html).toContain('>La3</i>');
   });
 });
 

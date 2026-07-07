@@ -7,9 +7,12 @@ function makeStab(opts = {}) {
   let t = 0;
   const stab = createPitchStabilizer({ now: () => t, ...opts });
   return {
-    push(hz) {
+    // `confidence` opcional: si se omite, el sample queda exactamente igual
+    // que antes (sin la propiedad) para no alterar la suite de compat.
+    push(hz, confidence) {
       t += 33;
-      return stab.push({ hz, rms: 0.1 });
+      const sample = confidence === undefined ? { hz, rms: 0.1 } : { hz, rms: 0.1, confidence };
+      return stab.push(sample);
     },
     reset: stab.reset,
     clock: { advance: (ms) => (t += ms) },
@@ -78,6 +81,45 @@ describe('pitchStabilizer — reset', () => {
     for (let i = 0; i < 6; i++) s.push(220);
     s.reset();
     expect(s.push(null)).toBeNull();
+  });
+});
+
+describe('pitchStabilizer — confianza baja se trata como null', () => {
+  it('confidence 0.3 hace hold y no contamina la mediana', () => {
+    const s = makeStab();
+    for (let i = 0; i < 6; i++) s.push(220); // A3 estable
+    const out = s.push(300, 0.3); // baja confianza: como si hz fuera null
+    expect(out.held).toBe(true);
+    expect(out.note).toBe('A');
+    expect(out.octave).toBe(3);
+    // la mediana no se contaminó con el 300: el siguiente frame normal
+    // sigue exactamente en 220, no arrastra el outlier descartado.
+    const next = s.push(220);
+    expect(next.hz).toBeCloseTo(220, 5);
+  });
+});
+
+describe('pitchStabilizer — histéresis adaptativa a la confianza', () => {
+  it('confidence alta (0.9) confirma el cambio en noteStableFrames (3), igual que hoy', () => {
+    const s = makeStab({ noteStableFrames: 3, medianWindow: 1, emaAlpha: 1 });
+    const a3 = noteToFrequency('A3');
+    const as3 = noteToFrequency('A#3');
+    for (let i = 0; i < 5; i++) s.push(a3);
+    expect(s.push(as3, 0.9).note).toBe('A');
+    expect(s.push(as3, 0.9).note).toBe('A');
+    expect(s.push(as3, 0.9).note).toBe('A#');
+  });
+
+  it('confidence media (0.55, entre minConfidence y strongConfidence) exige noteStableFrames+2 (5)', () => {
+    const s = makeStab({ noteStableFrames: 3, medianWindow: 1, emaAlpha: 1 });
+    const a3 = noteToFrequency('A3');
+    const as3 = noteToFrequency('A#3');
+    for (let i = 0; i < 5; i++) s.push(a3);
+    expect(s.push(as3, 0.55).note).toBe('A');
+    expect(s.push(as3, 0.55).note).toBe('A');
+    expect(s.push(as3, 0.55).note).toBe('A'); // a los 3 frames aún no cambia
+    expect(s.push(as3, 0.55).note).toBe('A'); // 4
+    expect(s.push(as3, 0.55).note).toBe('A#'); // 5: confirma
   });
 });
 

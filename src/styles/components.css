@@ -224,6 +224,44 @@
   align-items: flex-start;
 }
 
+/* === Hero voice chips (T5) — selector rápido S·A·T·B === */
+.hero-voice-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: var(--space-sm);
+}
+
+.hero-voice-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--voice-chip-color, var(--color-border));
+  background: transparent;
+  color: var(--voice-chip-color, var(--color-text));
+  font-size: 0.8rem;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.hero-voice-chip--active {
+  background: var(--voice-chip-color, var(--color-primary));
+  color: var(--color-neutral-900);
+}
+
+.hero-voice-chip--dimmed {
+  opacity: 0.4;
+}
+
 .song-view__title {
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-bold);

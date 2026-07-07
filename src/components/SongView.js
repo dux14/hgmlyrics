@@ -361,6 +361,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
               <div class="voice-bar__female" style="width: ${100 - (song.voicePercent?.male ?? 50)}%"></div>
             </div>
           </div>
+          ${tonoAvailable ? renderHeroVoiceChips(song, activeCategory, visibleVoices) : ''}
         </div>
       </div>
 
@@ -646,6 +647,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
       c.classList.toggle('tono-chip--active', isActive);
       c.setAttribute('aria-pressed', String(isActive));
     });
+    updateHeroChips();
     renderPersonRow();
     // Autoselección si la categoría tiene una sola persona.
     const people = rosterByCategory(song, category);
@@ -655,6 +657,36 @@ async function _renderSongBody(container, songId, isPreview, song) {
       updateActiveVoiceHeading();
       reRenderLyrics();
     }
+  }
+
+  // Des-selecciona la voz activa (chip del hero o categoría de tono ya activa).
+  // El modo Tono soporta "sin voz activa" (placeholder "Elige una categoría"),
+  // así que NO se fuerza la vuelta a modo Letra — se queda en el modo actual.
+  function deselectVoice() {
+    activeCategory = null;
+    activeRosterId = null;
+    container.querySelectorAll('#tono-category-row .tono-chip').forEach((c) => {
+      c.classList.remove('tono-chip--active');
+      c.setAttribute('aria-pressed', 'false');
+    });
+    updateHeroChips();
+    renderPersonRow();
+    updateActiveVoiceHeading();
+    reRenderLyrics();
+  }
+
+  // Sincroniza los chips del hero con el estado activo (fuente de verdad
+  // única: activeCategory) y su atenuación por visibleVoices (T5).
+  function updateHeroChips() {
+    container.querySelectorAll('#hero-voice-chips .hero-voice-chip').forEach((chip) => {
+      const category = chip.dataset.category;
+      const isActive = category === activeCategory;
+      chip.classList.toggle('hero-voice-chip--active', isActive);
+      chip.setAttribute('aria-pressed', String(isActive));
+      const catVoiceIds = rosterByCategory(song, category).map((v) => v.id);
+      const isDimmed = catVoiceIds.length > 0 && catVoiceIds.every((id) => !visibleVoices.has(id));
+      chip.classList.toggle('hero-voice-chip--dimmed', isDimmed);
+    });
   }
 
   // Al entrar a Tono sin selección previa, preseleccionar la primera categoría
@@ -678,19 +710,41 @@ async function _renderSongBody(container, songId, isPreview, song) {
   if (!isPreview) applyFontSize(fontSize);
   applyModeVisibility();
 
+  // Cambia de modo (Letra/Acordes/Tono); `skipTonoAutoselect` evita la
+  // preselección de la 1ª categoría cuando quien llama ya va a elegir una
+  // (chip del hero, T5) para no pintar dos veces.
+  function switchViewMode(mode, { skipTonoAutoselect = false } = {}) {
+    viewMode = mode;
+    showChords = viewMode === 'chords';
+    container
+      .querySelectorAll('.chord-toggle__btn')
+      .forEach((c) => c.classList.toggle('chord-toggle__btn--active', c.dataset.mode === mode));
+    applyModeVisibility();
+    if (viewMode === 'tono' && !skipTonoAutoselect) ensureTonoSelection();
+    reRenderLyrics();
+  }
+
   // Mode toggle (Letra / Acordes / Tono) — works in both normal and preview mode
   if (showToggle) {
     container.querySelectorAll('[data-mode]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        viewMode = btn.dataset.mode;
-        showChords = viewMode === 'chords';
-        container
-          .querySelectorAll('.chord-toggle__btn')
-          .forEach((c) => c.classList.toggle('chord-toggle__btn--active', c === btn));
-        applyModeVisibility();
-        if (viewMode === 'tono') ensureTonoSelection();
-        reRenderLyrics();
-      });
+      btn.addEventListener('click', () => switchViewMode(btn.dataset.mode));
+    });
+  }
+
+  // ── Chips SATB del hero (T5): selector rápido de voz, activeCategory como
+  // única fuente de verdad con el grid de tono-filters. ──
+  function selectCategoryFromHero(category) {
+    if (activeCategory === category) {
+      deselectVoice();
+      return;
+    }
+    if (viewMode !== 'tono') switchViewMode('tono', { skipTonoAutoselect: true });
+    selectCategory(category);
+  }
+
+  if (tonoAvailable) {
+    container.querySelectorAll('#hero-voice-chips [data-category]').forEach((chip) => {
+      chip.addEventListener('click', () => selectCategoryFromHero(chip.dataset.category));
     });
   }
 
@@ -888,6 +942,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
       onToggleVoice: (voiceId) => {
         if (visibleVoices.has(voiceId)) visibleVoices.delete(voiceId);
         else visibleVoices.add(voiceId);
+        updateHeroChips();
         reRenderLyrics();
       },
       onTranspose: (dir) => {
@@ -951,6 +1006,47 @@ function rosterCategories(song) {
   const order = ['soprano', 'contralto', 'tenor', 'bass'];
   const present = new Set((song.voiceRoster || []).map((v) => v.category));
   return order.filter((c) => present.has(c));
+}
+
+/**
+ * Fila de chips SATB en el hero (T5): selector rápido de voz activa, una
+ * sola fuente de verdad con `activeCategory` (el mismo estado del modo Tono).
+ * Solo se pinta si tonoAvailable — no duplica el voice-badge general (ese
+ * describe el reparto de la canción, este es un control interactivo).
+ * Una categoría con todas sus voces apagadas en `visibleVoices` se atenúa
+ * pero sigue siendo tappable.
+ * @param {object} song @param {string|null} activeCategory @param {Set<string>} visibleVoices
+ * @returns {string}
+ */
+function renderHeroVoiceChips(song, activeCategory, visibleVoices) {
+  const categories = rosterCategories(song);
+  if (categories.length === 0) return '';
+  const chips = categories
+    .map((c) => {
+      const isActive = c === activeCategory;
+      const catVoiceIds = rosterByCategory(song, c).map((v) => v.id);
+      const isDimmed = catVoiceIds.length > 0 && catVoiceIds.every((id) => !visibleVoices.has(id));
+      // "A" de Alto (mockup) para contralto; label accesible completo aparte.
+      const initial = c === 'contralto' ? 'A' : getVoiceLabel(c).charAt(0).toUpperCase();
+      const cls = [
+        'hero-voice-chip',
+        isActive ? 'hero-voice-chip--active' : '',
+        isDimmed ? 'hero-voice-chip--dimmed' : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
+      return `
+      <button
+        type="button"
+        class="${cls}"
+        data-category="${c}"
+        style="--voice-chip-color: var(--color-voice-${c})"
+        aria-pressed="${isActive}"
+        aria-label="Voz: ${escapeHtml(getVoiceLabel(c))}"
+      >${initial}</button>`;
+    })
+    .join('');
+  return `<div class="hero-voice-chips" id="hero-voice-chips" role="group" aria-label="Selector rápido de voz">${chips}</div>`;
 }
 
 /**

@@ -44,6 +44,25 @@ import { skelRowList } from '../lib/skeleton.js';
 
 /* global CSS */
 
+// Cache en memoria de búsquedas de usuarios (admin invitando a una lista):
+// evita repetir el mismo query al servidor mientras el admin edita invitados
+// o vuelve a escribir algo ya buscado. TTL 5 min, cap 50 entradas (se borra
+// la más vieja al insertar una nueva).
+const SEARCH_USERS_CACHE_TTL_MS = 5 * 60_000;
+const SEARCH_USERS_CACHE_MAX = 50;
+const searchUsersCache = new Map();
+
+async function cachedSearchUsers(q) {
+  const hit = searchUsersCache.get(q);
+  if (hit && Date.now() - hit.at < SEARCH_USERS_CACHE_TTL_MS) return hit.results;
+  const results = await searchUsers(q);
+  if (searchUsersCache.size >= SEARCH_USERS_CACHE_MAX) {
+    searchUsersCache.delete(searchUsersCache.keys().next().value);
+  }
+  searchUsersCache.set(q, { at: Date.now(), results });
+  return results;
+}
+
 function expiryChipHtml(expiresAt) {
   const text = formatExpiry(expiresAt);
   if (!text) return '';
@@ -727,7 +746,7 @@ function renderEditor(container, listData, opts = {}) {
       if (admin) {
         const seq = ++searchSeq;
         searchTimer = setTimeout(async () => {
-          const results = await searchUsers(q);
+          const results = await cachedSearchUsers(q);
           if (seq !== searchSeq) return; // llegó una respuesta vieja
           const matches = results.filter((u) => !excluded.has(u.id));
           friendResultsEl.innerHTML = matches.length

@@ -627,6 +627,15 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     ui.expanded = true;
     renderBlocks();
 
+    // Si el slot ya tenía audio, el POST de más abajo lo upsertea reusando la
+    // MISMA storage_key (ver postSectionAudio en api/songs/[id]/section-audio.js)
+    // — el archivo viejo no se toca hasta que el PUT lo sobrescribe. Lo
+    // guardamos antes para decidir la compensación si el PUT falla.
+    const hadExistingAudio = sectionAudioItems.some(
+      (it) => it.sectionIndex === index && it.voiceScope === voiceScope,
+    );
+    let createdId = null;
+
     try {
       const durationSec = await readAudioDuration(file);
       const { uploadUrl, id } = await createSectionAudio(existingSong.id, {
@@ -635,6 +644,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         label,
         durationSec: durationSec || null,
       });
+      createdId = id;
       await uploadSectionAudioFile(uploadUrl, file);
       sectionAudioItems = sectionAudioItems.filter(
         (it) => !(it.sectionIndex === index && it.voiceScope === voiceScope),
@@ -648,6 +658,28 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       });
       showToast('Audio subido correctamente');
     } catch (err) {
+      // El POST (createSectionAudio) ya upsertea la fila antes del PUT; si fue
+      // el PUT el que falló, la fila quedó apuntando a una key sin archivo (o,
+      // en una re-subida, al archivo viejo intacto). El POST fallando no crea
+      // nada, así que no hay nada que compensar en ese caso (createdId nulo).
+      if (createdId && !hadExistingAudio) {
+        // Slot nuevo: sin archivo en storage, la fila quedó rota. Best-effort,
+        // no debe tapar el error original que se muestra abajo.
+        try {
+          await deleteSectionAudio(existingSong.id, createdId);
+        } catch {
+          // silencioso a propósito
+        }
+      } else if (createdId && hadExistingAudio) {
+        // Re-subida: el archivo viejo sigue en storage bajo la misma key —
+        // borrar la fila lo dejaría huérfano. Solo re-sincronizamos el estado
+        // local con el servidor (que aún referencia el audio viejo).
+        try {
+          sectionAudioItems = await fetchSectionAudio(existingSong.id);
+        } catch {
+          // best-effort; conserva sectionAudioItems tal como estaba
+        }
+      }
       ui.error = err.message || 'No se pudo subir el audio';
     } finally {
       ui.uploading = false;

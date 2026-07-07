@@ -11,6 +11,7 @@ import {
   clearBackable,
   initRouter,
   getCurrentPath,
+  onRouteChange,
 } from './router.js';
 
 /** Espera a que se procese el hashchange/popstate (jsdom los despacha async). */
@@ -112,5 +113,63 @@ describe('router — capa backable (focus de búsqueda)', () => {
 
     expect(onBack).not.toHaveBeenCalled();
     expect(getCurrentPath()).toBe('/buscar');
+  });
+});
+
+describe('router — onRouteChange()', () => {
+  beforeEach(async () => {
+    await resetHistory();
+  });
+
+  it('se dispara con navigate(path, {replace:true}) aunque replaceState no emita hashchange', async () => {
+    // Bug confirmado: destroySectionPlayer solo escuchaba 'hashchange', que
+    // replaceState() no dispara — logout (AuthButton) y redirects de
+    // guardedRoute dejaban estado de la ruta anterior sin limpiar.
+    initRouter();
+    navigate('/song/abc');
+    await tick();
+
+    const cb = vi.fn();
+    onRouteChange(cb);
+
+    navigate('/login', { replace: true });
+
+    expect(cb).toHaveBeenCalledTimes(1);
+    expect(getCurrentPath()).toBe('/login');
+  });
+
+  it('también se dispara en navegación normal (push) y en popstate', async () => {
+    // Cada initRouter() de este archivo re-registra su propio listener de
+    // 'hashchange' sobre el mismo `window` (jsdom no aísla entre tests), así
+    // que el conteo absoluto de llamadas no es estable entre tests — se mide
+    // el delta que produce cada navegación puntual.
+    initRouter();
+    const cb = vi.fn();
+    onRouteChange(cb);
+
+    navigate('/albumes');
+    await tick();
+    const afterPush = cb.mock.calls.length;
+    expect(afterPush).toBeGreaterThanOrEqual(1);
+
+    goBack();
+    await tick();
+    expect(cb.mock.calls.length).toBeGreaterThan(afterPush);
+  });
+
+  it('la función de desuscripción detiene las notificaciones futuras', async () => {
+    initRouter();
+    const cb = vi.fn();
+    const unsubscribe = onRouteChange(cb);
+
+    navigate('/albumes');
+    await tick();
+    expect(cb.mock.calls.length).toBeGreaterThanOrEqual(1);
+
+    unsubscribe();
+    cb.mockClear();
+    navigate('/album/x');
+    await tick();
+    expect(cb).not.toHaveBeenCalled();
   });
 });

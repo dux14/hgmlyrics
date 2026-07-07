@@ -20,6 +20,7 @@ vi.mock('../src/lib/store.js', () => ({
 
 vi.mock('../src/router.js', () => ({
   navigate: vi.fn(),
+  onRouteChange: vi.fn(() => vi.fn()),
 }));
 
 vi.mock('../src/lib/authStore.js', () => ({

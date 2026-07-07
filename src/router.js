@@ -39,6 +39,34 @@ let pendingPush = false;
  */
 let backable = null;
 
+/**
+ * Callbacks a notificar en cada resolve() de ruta (push, replace o popstate),
+ * antes de despachar el handler de la ruta destino. A diferencia del patrón
+ * local `addEventListener('hashchange', ...)` que usan StudioPage/WorldPage/
+ * Tuner/PartituraPage, este hook se dispara también con
+ * `navigate(path, { replace: true })` — replaceState no emite 'hashchange',
+ * así que ese patrón se lo pierde (bug confirmado: logout y redirects de
+ * guardedRoute no limpiaban estado de la ruta anterior). resolve() es el
+ * choke-point común a los tres tipos de navegación, por eso es el punto
+ * correcto para este hook.
+ * @type {Array<() => void>}
+ */
+let routeChangeListeners = [];
+
+/**
+ * Suscribe un callback a cada resolución de ruta (cualquier navegación,
+ * incluyendo replace). Úsalo para destruir estado de la pantalla actual antes
+ * de que se monte la siguiente. Devuelve una función para desuscribirse.
+ * @param {() => void} cb
+ * @returns {() => void}
+ */
+export function onRouteChange(cb) {
+  routeChangeListeners.push(cb);
+  return () => {
+    routeChangeListeners = routeChangeListeners.filter((l) => l !== cb);
+  };
+}
+
 /** Sella la entrada actual del history con el índice de sesión dado. */
 function stampHistory(idx) {
   const prev = window.history.state;
@@ -166,6 +194,8 @@ function resolve() {
     return;
   }
   currentRoute = fullPath;
+
+  for (const cb of routeChangeListeners) cb();
 
   for (const [pattern, handler] of routes) {
     const params = matchRoute(pattern, path);

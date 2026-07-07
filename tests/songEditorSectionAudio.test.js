@@ -177,4 +177,66 @@ describe('SongEditor — control de audio por sección', () => {
     expect(sectionAudioApi.deleteSectionAudio).not.toHaveBeenCalled();
     expect(container.querySelector('.section-audio__row')).not.toBeNull();
   });
+
+  // ── Compensación si el PUT falla tras el POST ──
+  // createSectionAudio (POST) upsertea la fila y devuelve la signed URL ANTES
+  // de que uploadSectionAudioFile (PUT) suba el archivo. Si el PUT falla:
+  //  - slot nuevo → la fila quedó sin archivo real en storage: hay que borrarla.
+  //  - re-subida (slot con audio previo) → la storage_key es la MISMA (ver
+  //    api/songs/[id]/section-audio.js), así que el archivo VIEJO sigue intacto;
+  //    borrar la fila lo dejaría huérfano — solo hay que re-sincronizar estado.
+  describe('compensación tras fallo del PUT', () => {
+    it('slot nuevo: borra la fila recién creada y no marca éxito', async () => {
+      sectionAudioApi.createSectionAudio.mockResolvedValue({
+        uploadUrl: 'https://put/x',
+        key: 'song-1/section-0.mp3',
+        id: 'a1',
+      });
+      sectionAudioApi.uploadSectionAudioFile.mockRejectedValue(new Error('red caída'));
+      sectionAudioApi.deleteSectionAudio.mockResolvedValue(undefined);
+
+      await renderAndOpenAudioPanel();
+
+      const fileInput = container.querySelector('[data-action="upload-audio-file"]');
+      const file = new File(['contenido'], 'audio.mp3', { type: 'audio/mpeg' });
+      Object.defineProperty(fileInput, 'files', { value: [file] });
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+      await vi.waitFor(() =>
+        expect(sectionAudioApi.deleteSectionAudio).toHaveBeenCalledWith('song-1', 'a1'),
+      );
+      expect(container.querySelector('.section-audio__badge')).toBeNull();
+      expect(container.querySelector('.section-audio__error')?.textContent).toContain('red caída');
+    });
+
+    it('re-subida a slot existente: NO borra y re-sincroniza el estado con el servidor', async () => {
+      const existing = { id: 'a1', sectionIndex: 0, voiceScope: null, label: null, durationSec: 30 };
+      sectionAudioApi.fetchSectionAudio.mockResolvedValue([existing]);
+      sectionAudioApi.createSectionAudio.mockResolvedValue({
+        uploadUrl: 'https://put/x',
+        key: 'song-1/section-0.mp3',
+        id: 'a1',
+      });
+      sectionAudioApi.uploadSectionAudioFile.mockRejectedValue(new Error('red caída'));
+
+      await renderAndOpenAudioPanel();
+
+      // Re-sincronización tras el fallo: el servidor sigue viendo el audio
+      // viejo (el PUT nunca sobreescribió el archivo en storage).
+      sectionAudioApi.fetchSectionAudio.mockResolvedValueOnce([existing]);
+
+      const fileInput = container.querySelector('[data-action="upload-audio-file"]');
+      const file = new File(['contenido'], 'audio.mp3', { type: 'audio/mpeg' });
+      Object.defineProperty(fileInput, 'files', { value: [file] });
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+      await vi.waitFor(() =>
+        expect(container.querySelector('.section-audio__error')?.textContent).toContain(
+          'red caída',
+        ),
+      );
+      expect(sectionAudioApi.deleteSectionAudio).not.toHaveBeenCalled();
+      expect(container.querySelector('.section-audio__badge')?.textContent).toBe('1');
+    });
+  });
 });

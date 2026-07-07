@@ -10,7 +10,7 @@
 import { getSongById, fetchSongDetail, getAdjacentSongs } from '../lib/store.js';
 import { renderAsyncRegion } from '../lib/renderAsync.js';
 import { skelSongDetail } from '../lib/skeleton.js';
-import { navigate } from '../router.js';
+import { navigate, onRouteChange } from '../router.js';
 import {
   upgradeLegacySong,
   rosterByCategory,
@@ -1085,13 +1085,17 @@ async function _renderSongBody(container, songId, isPreview, song) {
   // de canciones sin audio (la mayoría, mientras se sube). ──
   if (songId) {
     let destroyed = false;
+    // onRouteChange (no 'hashchange'): navigate(path, {replace:true}) usa
+    // history.replaceState y NO dispara 'hashchange' (ver router.js), pero sí
+    // pasa por resolve() — logout (AuthButton) y redirects de guardedRoute
+    // dejaban el SectionPlayer vivo (audio sonando) tras salir de la canción.
     const destroySectionPlayer = () => {
       destroyed = true;
       sectionPlayerApi?.destroy();
       sectionPlayerApi = null;
-      window.removeEventListener('hashchange', destroySectionPlayer);
+      unsubscribeRouteChange();
     };
-    window.addEventListener('hashchange', destroySectionPlayer);
+    const unsubscribeRouteChange = onRouteChange(destroySectionPlayer);
     (async () => {
       const { fetchSectionAudio } = await import('../lib/sectionAudioApi.js');
       const tracks = await fetchSectionAudio(songId);

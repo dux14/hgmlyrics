@@ -11,6 +11,7 @@ const mockSignInWithOtp = vi.fn();
 const mockSignOut = vi.fn();
 
 vi.mock('../src/lib/supabase.js', () => ({
+  AUTH_STORAGE_KEY: 'sb-test-ref-auth-token',
   supabase: {
     auth: {
       getSession: mockGetSession,

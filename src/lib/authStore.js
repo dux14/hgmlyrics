@@ -4,7 +4,7 @@
  * Mirrors the pattern from store.js: getXxx() snapshots, subscribe(fn),
  * mutations only via exported actions. Wraps supabase.auth.onAuthStateChange.
  */
-import { supabase } from './supabase.js';
+import { supabase, AUTH_STORAGE_KEY } from './supabase.js';
 // Sin ciclo: router.js nunca importa authStore (usa el adapter de configureAuth).
 import { refresh, getCurrentPath } from '../router.js';
 
@@ -30,20 +30,20 @@ const PROFILE_CACHE_KEY = 'hkn-profile-cache';
 const RETRY_DELAYS_MS = [2000, 5000, 15000, 30000, 60000];
 let retryTimeoutId = null;
 let retryStep = 0;
+// Evita que un 'online' dispare un segundo refreshSession() mientras el
+// intento programado por backoff ya está en vuelo (issue Minor T3).
+let refreshInFlight = false;
 
-/** Deriva la key de storage de auth-js (`sb-<ref>-auth-token`) desde la URL de Supabase. */
-function getAuthStorageKey() {
-  const url = import.meta.env.VITE_SUPABASE_URL || '';
-  const match = url.match(/^https:\/\/([^.]+)\.supabase\.co/);
-  return match ? `sb-${match[1]}-auth-token` : null;
-}
-
-/** @returns {object|null} sesión persistida por auth-js si trae refresh_token, o null. */
+/**
+ * @returns {object|null} sesión persistida por auth-js si trae refresh_token, o null.
+ * Lee AUTH_STORAGE_KEY de supabase.js (misma fuente que storageKey del
+ * cliente) en vez de re-derivar la convención `sb-<ref>-auth-token` acá: si
+ * alguna vez se pasa un storageKey custom, ambos quedan sincronizados solos.
+ */
 function readPersistedSession() {
-  const key = getAuthStorageKey();
-  if (!key) return null;
+  if (!AUTH_STORAGE_KEY) return null;
   try {
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return parsed && parsed.refresh_token ? parsed : null;
@@ -56,7 +56,7 @@ function cacheProfileSnapshot() {
   try {
     localStorage.setItem(
       PROFILE_CACHE_KEY,
-      JSON.stringify({ profile: state.profile, flags: state.flags })
+      JSON.stringify({ profile: state.profile, flags: state.flags }),
     );
   } catch (_e) {
     /* Safari private mode u otro storage lleno/bloqueado: no es crítico. */
@@ -82,7 +82,11 @@ function clearProfileCache() {
 
 /** Reintenta el refresh en background mientras dure pendingSession (T1). */
 async function attemptRefresh() {
-  if (!state.pendingSession) return;
+  // El 'online' listener puede disparar un intento mientras el que ya venía
+  // por backoff sigue esperando refreshSession(): sin este guard, si ambos
+  // fallan, ambos reprograman y queda un timer huérfano sin rastrear.
+  if (!state.pendingSession || refreshInFlight) return;
+  refreshInFlight = true;
   try {
     // auth-js lee el refresh token de storage solo. Además de emitir
     // TOKEN_REFRESHED via onAuthStateChange (que también limpia pendingSession
@@ -96,6 +100,8 @@ async function attemptRefresh() {
     }
   } catch (e) {
     console.warn('refreshSession retry failed', e);
+  } finally {
+    refreshInFlight = false;
   }
   scheduleRetry();
 }
@@ -213,13 +219,18 @@ export async function refreshProfile() {
       cacheProfileSnapshot();
       return true;
     }
+    // El server respondió y dijo que no (401/403/500...): sesión sin perfil
+    // válido, no queremos dejar UI admin colgada de un caché tras una
+    // revocación real. Acá sí nuleamos.
     state.profile = null;
     state.flags = [];
     return false;
   } catch (e) {
+    // El fetch LANZÓ (red caída, timeout): el server nunca habló. No es una
+    // revocación, es un fallo transitorio — conservamos el último
+    // profile/flags en memoria (p. ej. el restaurado del caché en modo
+    // pendingSession) en vez de nulearlo encima.
     console.warn('refreshProfile failed', e);
-    state.profile = null;
-    state.flags = [];
     return false;
   }
 }

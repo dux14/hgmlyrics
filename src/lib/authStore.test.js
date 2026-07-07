@@ -13,7 +13,12 @@ vi.mock('../router.js', () => ({
   getCurrentPath: vi.fn(() => '/perfil'),
 }));
 
+const AUTH_STORAGE_KEY = 'sb-omntufksfhezqtqgmhlp-auth-token';
+
 vi.mock('./supabase.js', () => ({
+  // Mismo valor que exporta el supabase.js real para VITE_SUPABASE_URL de
+  // .env.local: authStore.js debe leer ESTA constante, no re-derivarla.
+  AUTH_STORAGE_KEY: 'sb-omntufksfhezqtqgmhlp-auth-token',
   supabase: {
     auth: {
       getSession: vi.fn(),
@@ -24,8 +29,6 @@ vi.mock('./supabase.js', () => ({
     },
   },
 }));
-
-const AUTH_STORAGE_KEY = 'sb-omntufksfhezqtqgmhlp-auth-token';
 const PROFILE_CACHE_KEY = 'hkn-profile-cache';
 
 function makeSession(overrides = {}) {
@@ -96,6 +99,51 @@ describe('initAuthStore — boot normal', () => {
   });
 });
 
+describe('refreshProfile — fallo transitorio vs. definitivo', () => {
+  it('fetch que lanza (fallo de red) conserva el ultimo profile/flags en memoria', async () => {
+    const { store, supabase } = await loadStore();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: makeSession() } });
+    supabase.auth.onAuthStateChange.mockImplementation(() => {});
+    // El primer refreshProfile() del boot es exitoso y deja un profile "bueno".
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ profile: { username: 'restaurado' }, flags: ['f1'] }),
+    });
+
+    await store.initAuthStore();
+    expect(store.getProfile()).toEqual({ username: 'restaurado' });
+
+    // Un refresh posterior falla por RED (el fetch lanza, el server nunca habló).
+    globalThis.fetch.mockRejectedValueOnce(new Error('network down'));
+    const ok = await store.refreshProfile();
+
+    expect(ok).toBe(false);
+    expect(store.getProfile()).toEqual({ username: 'restaurado' });
+    expect(store.isFeatureEnabled('f1')).toBe(true);
+  });
+
+  it('respuesta non-ok del server (401/403/500) nulea el profile como hoy', async () => {
+    const { store, supabase } = await loadStore();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: makeSession() } });
+    supabase.auth.onAuthStateChange.mockImplementation(() => {});
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ profile: { username: 'restaurado' }, flags: ['f1'] }),
+    });
+
+    await store.initAuthStore();
+    expect(store.getProfile()).toEqual({ username: 'restaurado' });
+
+    // El server SI respondio (401: token revocado) — acá sí queremos nulear.
+    globalThis.fetch.mockResolvedValueOnce({ ok: false, status: 401 });
+    const ok = await store.refreshProfile();
+
+    expect(ok).toBe(false);
+    expect(store.getProfile()).toBeNull();
+    expect(store.isFeatureEnabled('f1')).toBe(false);
+  });
+});
+
 describe('initAuthStore — restauracion optimista (T1)', () => {
   it('getSession() null pero con refresh_token persistido entra en pendingSession y queda autenticado', async () => {
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
@@ -136,7 +184,7 @@ describe('initAuthStore — restauracion optimista (T1)', () => {
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
     localStorage.setItem(
       PROFILE_CACHE_KEY,
-      JSON.stringify({ profile: { username: 'cached' }, flags: ['cached-flag'] })
+      JSON.stringify({ profile: { username: 'cached' }, flags: ['cached-flag'] }),
     );
     const { store, supabase } = await loadStore();
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
@@ -174,6 +222,40 @@ describe('initAuthStore — restauracion optimista (T1)', () => {
 
     await vi.advanceTimersByTimeAsync(2000);
     expect(supabase.auth.refreshSession).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(supabase.auth.refreshSession).toHaveBeenCalledTimes(2);
+  });
+
+  it('online mientras un intento por backoff sigue en vuelo no dispara un segundo refreshSession', async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
+    const { store, supabase } = await loadStore();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    supabase.auth.onAuthStateChange.mockImplementation(() => {});
+    let resolveRefresh;
+    supabase.auth.refreshSession.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRefresh = resolve;
+        }),
+    );
+
+    await store.initAuthStore();
+
+    // Dispara el intento programado por backoff (2s); queda en vuelo.
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(supabase.auth.refreshSession).toHaveBeenCalledTimes(1);
+
+    // 'online' llega mientras ese intento sigue esperando refreshSession():
+    // el guard in-flight debe hacer no-op esta segunda entrada.
+    fireOnline();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(supabase.auth.refreshSession).toHaveBeenCalledTimes(1);
+
+    // El intento en vuelo termina fallando: recién ahí reprograma un unico timer.
+    resolveRefresh({ data: { session: null }, error: new Error('still offline') });
+    await vi.advanceTimersByTimeAsync(0);
 
     await vi.advanceTimersByTimeAsync(5000);
     expect(supabase.auth.refreshSession).toHaveBeenCalledTimes(2);
@@ -276,7 +358,7 @@ describe('initAuthStore — restauracion optimista (T1)', () => {
       () =>
         new Promise((resolve) => {
           resolveRefresh = resolve;
-        })
+        }),
     );
 
     await store.initAuthStore();
@@ -314,7 +396,7 @@ describe('initAuthStore — restauracion optimista (T1)', () => {
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
     localStorage.setItem(
       PROFILE_CACHE_KEY,
-      JSON.stringify({ profile: { username: 'cached' }, flags: [] })
+      JSON.stringify({ profile: { username: 'cached' }, flags: [] }),
     );
     const { store, supabase } = await loadStore();
     supabase.auth.getSession.mockResolvedValueOnce({ data: { session: null } });
@@ -411,7 +493,7 @@ describe('signOut', () => {
   it('limpia el cache de perfil', async () => {
     localStorage.setItem(
       PROFILE_CACHE_KEY,
-      JSON.stringify({ profile: { username: 'ana' }, flags: [] })
+      JSON.stringify({ profile: { username: 'ana' }, flags: [] }),
     );
     const { store, supabase } = await loadStore();
     supabase.auth.signOut.mockResolvedValue({});
@@ -419,5 +501,41 @@ describe('signOut', () => {
     await store.signOut();
 
     expect(localStorage.getItem(PROFILE_CACHE_KEY)).toBeNull();
+  });
+});
+
+describe('AUTH_STORAGE_KEY — fuente unica compartida con supabase.js', () => {
+  it('lee la key persistida bajo la AUTH_STORAGE_KEY que exporta supabase.js, no una re-derivada localmente', async () => {
+    // Sobreescribe el mock de supabase.js con una AUTH_STORAGE_KEY distinta a
+    // la convención `sb-<ref>-auth-token`: si authStore.js todavía la
+    // re-derivara por su cuenta (regex local), este test fallaría porque
+    // buscaría la sesión bajo la key vieja en vez de la key custom.
+    try {
+      vi.doMock('./supabase.js', () => ({
+        AUTH_STORAGE_KEY: 'custom-storage-key-no-estandar',
+        supabase: {
+          auth: {
+            getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
+            onAuthStateChange: vi.fn(),
+            exchangeCodeForSession: vi.fn(),
+            refreshSession: vi.fn().mockResolvedValue({}),
+            signOut: vi.fn(),
+          },
+        },
+      }));
+      vi.resetModules();
+      localStorage.setItem(
+        'custom-storage-key-no-estandar',
+        JSON.stringify({ refresh_token: 'rtok' }),
+      );
+      const store = await import('./authStore.js');
+
+      await store.initAuthStore();
+
+      expect(store.isAuthenticated()).toBe(true);
+    } finally {
+      vi.doUnmock('./supabase.js');
+      vi.resetModules();
+    }
   });
 });

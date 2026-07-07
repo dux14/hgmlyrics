@@ -70,6 +70,27 @@ export default defineConfig({
               },
             },
           },
+          {
+            // Portadas/avatares subidos servidos por el backend propio.
+            urlPattern: /\/uploads\/.*\.(?:webp|png|jpe?g|gif|avif)$/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'img-uploads',
+              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 30, purgeOnQuotaError: true },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Imágenes en Supabase Storage (URLs absolutas de otro origen).
+            urlPattern: ({ url, request }) =>
+              request.destination === 'image' && url.hostname.endsWith('.supabase.co'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'img-storage',
+              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 30, purgeOnQuotaError: true },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           // Google Fonts eliminado: fuentes self-hosted en public/fonts/ (precache via globPatterns woff2)
         ],
       },

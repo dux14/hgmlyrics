@@ -70,9 +70,8 @@ async function update(req, res, id) {
   // separado de links.js). Si vienen, se guardan en la MISMA transacción que
   // la canción — un link inválido revierte también el UPDATE de songs.
   const hasLinks = s.platformLinks !== undefined || s.voiceLinks !== undefined;
-  let result;
   await sql.begin(async (tx) => {
-    result = await tx`
+    const result = await tx`
       UPDATE songs SET
         title = ${s.title},
         artist = ${s.artist ?? null},
@@ -92,15 +91,19 @@ async function update(req, res, id) {
         key = ${key}
       WHERE id = ${id}
     `;
+    // La canción pudo borrarse concurrentemente: si el UPDATE no afecto filas,
+    // abortamos ANTES de tocar links (si no, el INSERT viola la FK song_id y
+    // el error de Postgres sin .status tapa el 404 con un 500).
+    if (result.count === 0) {
+      const err = new Error('Song not found');
+      err.status = 404;
+      throw err;
+    }
     if (hasLinks) {
       await persistLinksInTx(tx, id, s.platformLinks ?? [], s.voiceLinks ?? []);
     }
   });
 
-  if (result.count === 0) {
-    res.status(404).json({ error: 'Song not found' });
-    return;
-  }
   invalidateListCache();
   res.status(200).json({ success: true });
 }

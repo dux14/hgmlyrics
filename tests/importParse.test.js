@@ -154,4 +154,62 @@ describe('songToChordPro + round-trip', () => {
       }));
     expect(strip(secondPass)).toEqual(strip(firstPass));
   });
+
+  it('escapa corchetes literales de la letra al exportar', () => {
+    const song = {
+      title: 'T',
+      sections: [
+        {
+          type: 'verse',
+          label: 'Verso 1',
+          lines: [{ text: 'grito [A] los cuatro vientos', chords: [] }],
+        },
+      ],
+    };
+    const exported = songToChordPro(song);
+    expect(exported).toContain('grito \\[A\\] los cuatro vientos');
+  });
+
+  it('round-trip estable con corchetes literales en la letra (sin acorde fantasma)', () => {
+    const song = {
+      title: 'T',
+      sections: [
+        {
+          type: 'verse',
+          label: 'Verso 1',
+          lines: [{ text: 'grito [A] los cuatro vientos', chords: [] }],
+        },
+      ],
+    };
+    const exported = songToChordPro(song);
+    const reimported = parseImportText(exported);
+    expect(reimported[0].lines[0].text).toBe('grito [A] los cuatro vientos');
+    expect(reimported[0].lines[0].chords).toEqual([]);
+  });
+
+  it('corchete literal conviviendo con un acorde real en la misma línea', () => {
+    const song = {
+      title: 'T',
+      sections: [
+        {
+          type: 'verse',
+          label: 'Verso 1',
+          lines: [{ text: 'grito [A] fuerte y claro', chords: [{ ch: 'Dm', pos: 0 }] }],
+        },
+      ],
+    };
+    const exported = songToChordPro(song);
+    const reimported = parseImportText(exported);
+    expect(reimported[0].lines[0].text).toBe('grito [A] fuerte y claro');
+    expect(reimported[0].lines[0].chords).toEqual([{ ch: 'Dm', pos: 0 }]);
+  });
+
+  it('ChordPro externo normal (sin backslashes) sigue intacto', () => {
+    const blocks = parseImportText('[Verso 1]\n[Am]Sal de [E]ti');
+    expect(blocks[0].lines[0].text).toBe('Sal de ti');
+    expect(blocks[0].lines[0].chords).toEqual([
+      { ch: 'Am', pos: 0 },
+      { ch: 'E', pos: 7 },
+    ]);
+  });
 });

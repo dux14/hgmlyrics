@@ -14,7 +14,9 @@ import { canonicalToChordProKey } from './musicKeys.js';
 const CHORD_ROOT = '[A-G][#b]?';
 const CHORD_BODY = '(?:(?:maj|min|dim|aug|sus|add|m)?[0-9]{0,2}(?:[#b][0-9]{1,2})?){0,3}(?:/[A-G][#b]?)?';
 const CHORD_FULL_RE = new RegExp(`^${CHORD_ROOT}${CHORD_BODY}$`);
-const INLINE_CHORD_RE = new RegExp(`\\[(${CHORD_ROOT}${CHORD_BODY})\\]`, 'g');
+// El lookbehind negativo excluye `\[acorde]`: un corchete de apertura escapado
+// es letra literal, no delimitador de acorde (ver escape/unescapeLiteralBrackets).
+const INLINE_CHORD_RE = new RegExp(`(?<!\\\\)\\[(${CHORD_ROOT}${CHORD_BODY})\\]`, 'g');
 
 /** Directivas ChordPro reconocidas: forma corta y larga → acción. */
 const META_DIRECTIVES = {
@@ -184,6 +186,11 @@ export function parseImportText(text) {
   return blocks;
 }
 
+/** Des-escapa `\[`/`\]` → `[`/`]` en un fragmento de letra ya sin acordes. */
+function unescapeLiteralBrackets(text) {
+  return text.replace(/\\\[/g, '[').replace(/\\\]/g, ']');
+}
+
 /** Parse inline chords [Am]text [F]text → { text, chords }. */
 export function parseLineChords(lineText) {
   const chords = [];
@@ -192,11 +199,13 @@ export function parseLineChords(lineText) {
   let lastEnd = 0;
   let match;
   while ((match = INLINE_CHORD_RE.exec(lineText)) !== null) {
-    cleanText += lineText.slice(lastEnd, match.index);
+    // Des-escapar ANTES de acumular: si no, el corrimiento de longitud al
+    // quitar backslashes desalinearia el pos de los acordes siguientes.
+    cleanText += unescapeLiteralBrackets(lineText.slice(lastEnd, match.index));
     chords.push({ ch: match[1], pos: cleanText.length });
     lastEnd = match.index + match[0].length;
   }
-  cleanText += lineText.slice(lastEnd);
+  cleanText += unescapeLiteralBrackets(lineText.slice(lastEnd));
   return { text: cleanText, chords: chords.length > 0 ? chords : undefined };
 }
 
@@ -218,18 +227,23 @@ const CHORDPRO_SECTION_DIRECTIVE = {
   bridge: ['start_of_bridge', 'end_of_bridge'],
 };
 
+/** Escapa `[`/`]` literales de la letra → `\[`/`\]` para no chocar con [Acorde]. */
+function escapeLiteralBrackets(text) {
+  return text.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+}
+
 /** Reinserta chords ({pos, ch}) como [Acorde] inline en el texto de una línea. */
 function lineToChordProText(line) {
   if (line.annotation) return `{comment: ${line.text}}`;
   const chords = Array.isArray(line.chords) ? [...line.chords].sort((a, b) => a.pos - b.pos) : [];
-  if (chords.length === 0) return line.text;
+  if (chords.length === 0) return escapeLiteralBrackets(line.text);
   let out = '';
   let lastPos = 0;
   for (const c of chords) {
-    out += line.text.slice(lastPos, c.pos) + `[${c.ch}]`;
+    out += escapeLiteralBrackets(line.text.slice(lastPos, c.pos)) + `[${c.ch}]`;
     lastPos = c.pos;
   }
-  out += line.text.slice(lastPos);
+  out += escapeLiteralBrackets(line.text.slice(lastPos));
   return out;
 }
 

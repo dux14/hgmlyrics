@@ -115,6 +115,21 @@ describe('PUT /api/songs/[id].js — guardado atómico con links', () => {
     expect(insertCallsFor('song_platform_links')).toHaveLength(0);
     expect(insertCallsFor('song_voice_links')).toHaveLength(0);
   });
+
+  it('canción borrada concurrentemente (UPDATE count:0) con links en el body: 404, no toca links', async () => {
+    mockTx.mockResolvedValueOnce({ count: 0 }); // el UPDATE es la primera sentencia de la tx
+    const req = makeReq({
+      title: 'X',
+      platformLinks: [{ platform: 'youtube', url: 'https://youtube.com/x' }],
+      voiceLinks: [],
+    });
+    const res = makeRes();
+    await handler(req, res);
+    expect(res._status).toBe(404);
+    // El count:0 se comprueba ANTES de persistLinksInTx: nunca llega a insertar.
+    expect(insertCallsFor('song_platform_links')).toHaveLength(0);
+    expect(insertCallsFor('song_voice_links')).toHaveLength(0);
+  });
 });
 
 describe('POST /api/songs/index.js — creación atómica con links', () => {

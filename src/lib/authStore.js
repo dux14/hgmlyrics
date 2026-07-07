@@ -84,13 +84,34 @@ function clearProfileCache() {
 async function attemptRefresh() {
   if (!state.pendingSession) return;
   try {
-    // auth-js lee el refresh token de storage solo; si tiene éxito emite
-    // TOKEN_REFRESHED via onAuthStateChange, que limpia pendingSession ahí.
-    await supabase.auth.refreshSession();
+    // auth-js lee el refresh token de storage solo. Además de emitir
+    // TOKEN_REFRESHED via onAuthStateChange (que también limpia pendingSession),
+    // resolvemos el éxito aquí mismo de forma idempotente: no asumimos el
+    // orden/timing en que auth-js dispara ese evento respecto a esta promesa.
+    const { data, error } = await supabase.auth.refreshSession();
+    if (!error && data?.session) {
+      clearPendingSession(data.session);
+      return;
+    }
   } catch (e) {
     console.warn('refreshSession retry failed', e);
   }
   scheduleRetry();
+}
+
+/**
+ * Marca pendingSession como resuelto con éxito: setea la sesión, detiene el
+ * retry y refresca el perfil. Idempotente — la llama tanto attemptRefresh
+ * (éxito directo de refreshSession) como el handler de TOKEN_REFRESHED
+ * (evento de auth-js), cualquiera que llegue primero.
+ */
+async function clearPendingSession(session) {
+  if (!state.pendingSession) return;
+  state.pendingSession = false;
+  stopPendingRetry();
+  state.session = session;
+  await refreshProfile();
+  notify();
 }
 
 function scheduleRetry() {

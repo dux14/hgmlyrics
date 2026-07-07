@@ -39,15 +39,33 @@ async function loadStore() {
   return { store, supabase };
 }
 
+// El listener 'online' real de globalThis persiste entre tests (distintas
+// instancias de módulo via vi.resetModules() no lo desregistran solas), lo
+// que contaminaría el conteo de llamadas de tests siguientes. Interceptamos
+// add/removeEventListener para 'online' con un registro propio por test, en
+// vez de depender del bus de eventos real de jsdom.
+let onlineHandlers = [];
+
 beforeEach(() => {
   localStorage.clear();
   vi.clearAllMocks();
+  onlineHandlers = [];
   vi.stubGlobal('navigator', { onLine: true });
   vi.spyOn(globalThis, 'fetch').mockResolvedValue({
     ok: true,
     json: async () => ({ profile: { username: 'ana' }, flags: ['f1'] }),
   });
+  vi.spyOn(globalThis, 'addEventListener').mockImplementation((type, fn) => {
+    if (type === 'online') onlineHandlers.push(fn);
+  });
+  vi.spyOn(globalThis, 'removeEventListener').mockImplementation((type, fn) => {
+    if (type === 'online') onlineHandlers = onlineHandlers.filter((h) => h !== fn);
+  });
 });
+
+function fireOnline() {
+  onlineHandlers.forEach((fn) => fn());
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -161,7 +179,67 @@ describe('initAuthStore — restauracion optimista (T1)', () => {
     expect(supabase.auth.refreshSession).toHaveBeenCalledTimes(2);
   });
 
+  it('refreshSession() exitoso detiene el loop de retry sin esperar TOKEN_REFRESHED', async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
+    const { store, supabase } = await loadStore();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    // onAuthStateChange nunca dispara TOKEN_REFRESHED en este test: el éxito
+    // debe resolverse solo con la respuesta de refreshSession() (issue 2).
+    supabase.auth.onAuthStateChange.mockImplementation(() => {});
+    const rotated = makeSession({ access_token: 'tok-rotado' });
+    supabase.auth.refreshSession.mockResolvedValue({ data: { session: rotated }, error: null });
+
+    await store.initAuthStore();
+    expect(store.isAuthenticated()).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(supabase.auth.refreshSession).toHaveBeenCalledTimes(1);
+    expect(store.getSession()).toEqual(rotated);
+    expect(store.isAuthenticated()).toBe(true);
+
+    // Si quedara un timer redundante programado, avanzar el siguiente escalón
+    // de backoff (5s) dispararía una segunda llamada. No debe pasar.
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(supabase.auth.refreshSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('listener online dispara refreshSession de inmediato y se remueve al salir de pending', async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
+    const { store, supabase } = await loadStore();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    let handler;
+    supabase.auth.onAuthStateChange.mockImplementation((fn) => {
+      handler = fn;
+    });
+    supabase.auth.refreshSession.mockResolvedValue({});
+
+    await store.initAuthStore();
+    expect(supabase.auth.refreshSession).not.toHaveBeenCalled();
+    expect(onlineHandlers.length).toBe(1);
+
+    // Antes de que venza el primer backoff (2s), llega el evento 'online':
+    // debe reintentar ya, sin esperar el timer en curso.
+    fireOnline();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(supabase.auth.refreshSession).toHaveBeenCalledTimes(1);
+
+    // Sale de pendingSession (TOKEN_REFRESHED) → el listener debe quedar removido.
+    await handler('TOKEN_REFRESHED', makeSession());
+    expect(store.isAuthenticated()).toBe(true);
+    expect(onlineHandlers.length).toBe(0);
+
+    // Un 'online' posterior a salir de pending no debe llamar refreshSession de nuevo
+    // (no hay handler activo: el array ya está vacío, fireOnline() es un no-op).
+    fireOnline();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(supabase.auth.refreshSession).toHaveBeenCalledTimes(1);
+  });
+
   it('TOKEN_REFRESHED via onAuthStateChange limpia pendingSession', async () => {
+    vi.useFakeTimers();
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
     const { store, supabase } = await loadStore();
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });

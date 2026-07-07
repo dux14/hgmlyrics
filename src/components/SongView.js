@@ -947,6 +947,32 @@ export function renderVoicePanel(song) {
     </div>`;
 }
 
+/** Slugs de sección con identidad visual fija (spec F1 D1 §3). */
+const KNOWN_SECTION_TYPES = ['verse', 'chorus', 'bridge', 'prechorus', 'intro', 'outro'];
+
+/** Sinónimos español/legacy → slug conocido, para datos que no pasaron por guessType(). */
+const SECTION_TYPE_ALIASES = {
+  verso: 'verse',
+  estribillo: 'chorus',
+  coro: 'chorus',
+  puente: 'bridge',
+  'pre-estribillo': 'prechorus',
+  'pre-coro': 'prechorus',
+  precoro: 'prechorus',
+};
+
+/**
+ * Normaliza `section.type` a uno de los 6 slugs conocidos, para poder pintar
+ * la identidad visual fija por tipo. Tipos desconocidos caen a 'verse'.
+ * @param {string} [type]
+ * @returns {string}
+ */
+export function normalizeSectionType(type) {
+  const slug = (type || '').toString().trim().toLowerCase();
+  if (KNOWN_SECTION_TYPES.includes(slug)) return slug;
+  return SECTION_TYPE_ALIASES[slug] || 'verse';
+}
+
 /**
  * Render del cuerpo del lector (string puro). Letra blanco plano; Acordes con
  * acordes flotantes + letra atenuada; Tono con la voz activa coloreada + nota.
@@ -979,7 +1005,7 @@ export function renderSections(sections, opts = {}) {
   return (sections || [])
     .map(
       (section) => `
-    <div class="lyrics__section lyrics__section--${section.type}"${
+    <div class="lyrics__section lyrics__section--${normalizeSectionType(section.type)}"${
       typeof section.speedPreset === 'number' ? ` data-speed-preset="${section.speedPreset}"` : ''
     }>
       <div class="lyrics__section-label">${escapeHtml(section.label)}</div>

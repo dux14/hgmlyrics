@@ -69,6 +69,21 @@
   --color-chord-l:           #2e7d32;
   --color-chord-d:           #a5d6a7;
 
+  /* ── Secciones de letra — identidad fija por TIPO (spec F1 D1 §3). Se
+     reusan las rampas oklch ya definidas arriba, sin inventar hex nuevos. ── */
+  --color-section-verse-l:      var(--color-neutral-600);
+  --color-section-verse-d:      var(--color-neutral-400);
+  --color-section-chorus-l:     var(--color-teal-600);
+  --color-section-chorus-d:     var(--color-teal-400);
+  --color-section-bridge-l:     var(--color-violet-600);
+  --color-section-bridge-d:     var(--color-violet-400);
+  --color-section-prechorus-l:  var(--color-amber-600);
+  --color-section-prechorus-d:  var(--color-amber-400);
+  --color-section-intro-l:      var(--color-neutral-600);
+  --color-section-intro-d:      var(--color-neutral-400);
+  --color-section-outro-l:      var(--color-neutral-600);
+  --color-section-outro-d:      var(--color-neutral-400);
+
   /* ── Acentos de galería (decorativos, no-acción) — AUDIT-360 §5.1 ── */
   --color-rose-300: #f9a8d4;   /* acento rosa usado por F2–F4 (chips, detalles) */
   /* violet claro de galería (#c4b5fd) = --color-violet-300 (rampa oficial). */

@@ -155,6 +155,14 @@
   --color-chord-hover: #c8e6c9;
   --color-chord-hover-bg: rgba(165, 214, 167, 0.22);
 
+  /* Section colors — identidad fija por tipo (dark mode) */
+  --color-section-verse: var(--color-section-verse-d);
+  --color-section-chorus: var(--color-section-chorus-d);
+  --color-section-bridge: var(--color-section-bridge-d);
+  --color-section-prechorus: var(--color-section-prechorus-d);
+  --color-section-intro: var(--color-section-intro-d);
+  --color-section-outro: var(--color-section-outro-d);
+
   /* Semantic — no varían por tema */
   --color-success: #4caf50;
   --color-warning: #ff9800;
@@ -292,6 +300,14 @@
   --color-chord-hover: #1b5e20;
   --color-chord-hover-bg: rgba(46, 125, 50, 0.2);
 
+  /* Section colors — identidad fija por tipo (light mode) */
+  --color-section-verse: var(--color-section-verse-l);
+  --color-section-chorus: var(--color-section-chorus-l);
+  --color-section-bridge: var(--color-section-bridge-l);
+  --color-section-prechorus: var(--color-section-prechorus-l);
+  --color-section-intro: var(--color-section-intro-l);
+  --color-section-outro: var(--color-section-outro-l);
+
   /* Alias — variante light */
   --color-brand: #01ccd9;
   --color-action: var(--color-amber-500);
@@ -342,6 +358,14 @@
     --color-chord-bg: rgba(46, 125, 50, 0.1);
     --color-chord-hover: #1b5e20;
     --color-chord-hover-bg: rgba(46, 125, 50, 0.2);
+
+    /* Section colors — identidad fija por tipo (light mode) */
+    --color-section-verse: var(--color-section-verse-l);
+    --color-section-chorus: var(--color-section-chorus-l);
+    --color-section-bridge: var(--color-section-bridge-l);
+    --color-section-prechorus: var(--color-section-prechorus-l);
+    --color-section-intro: var(--color-section-intro-l);
+    --color-section-outro: var(--color-section-outro-l);
 
     /* Alias — variante light */
     --color-brand: #01ccd9;

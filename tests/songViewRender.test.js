@@ -55,6 +55,32 @@ describe('renderSections (modo Letra)', () => {
   });
 });
 
+describe('renderSections — identidad visual por tipo de sección', () => {
+  it('type conocido (coro) produce la clase del tipo', () => {
+    const html = renderSections(
+      [{ type: 'chorus', label: 'Coro', lines: [{ text: 'la la' }] }],
+      { viewMode: 'lyrics' },
+    );
+    expect(html).toContain('lyrics__section--chorus');
+  });
+
+  it('sinónimo en español (estribillo) normaliza a chorus', () => {
+    const html = renderSections(
+      [{ type: 'estribillo', label: 'Coro', lines: [{ text: 'la la' }] }],
+      { viewMode: 'lyrics' },
+    );
+    expect(html).toContain('lyrics__section--chorus');
+  });
+
+  it('type desconocido cae al fallback verse', () => {
+    const html = renderSections(
+      [{ type: 'algo-raro', label: 'X', lines: [{ text: 'la la' }] }],
+      { viewMode: 'lyrics' },
+    );
+    expect(html).toContain('lyrics__section--verse');
+  });
+});
+
 describe('renderSections (modo Acordes)', () => {
   it('acorde flotante + letra atenuada', () => {
     const html = renderSections(sections, { viewMode: 'chords' });

@@ -306,12 +306,37 @@
 
 .lyrics__section {
   margin-bottom: var(--space-xl);
+  padding-left: var(--space-md);
+  border-left: 2px solid var(--color-border);
   transition: opacity var(--transition-base);
 }
 
-/* Labeled divider: identidad Ambient Kinetic — Syncopate + teal para que las
-   etiquetas de sección (VERSO, CORO…) sean puntos de navegación visual claros.
-   La hairline rule de la derecha sigue siendo --color-border (quieta). */
+/* Identidad fija por TIPO de sección (spec F1 D1 §3): la barra lateral y la
+   etiqueta comparten el color del tipo (verso=neutro, coro=teal, puente=violet,
+   pre-coro=amber, intro/outro=neutro). NO son 4+ colores simultáneos sobre la
+   letra: solo acento en el borde + etiqueta, el texto sigue --color-text. */
+.lyrics__section--verse {
+  border-left-color: var(--color-section-verse);
+}
+.lyrics__section--chorus {
+  border-left-color: var(--color-section-chorus);
+}
+.lyrics__section--bridge {
+  border-left-color: var(--color-section-bridge);
+}
+.lyrics__section--prechorus {
+  border-left-color: var(--color-section-prechorus);
+}
+.lyrics__section--intro {
+  border-left-color: var(--color-section-intro);
+}
+.lyrics__section--outro {
+  border-left-color: var(--color-section-outro);
+}
+
+/* Labeled divider: identidad Ambient Kinetic — Syncopate en chip versalitas
+   (VERSO, CORO…), color por tipo de sección. La hairline rule de la derecha
+   sigue siendo --color-border (quieta). */
 .lyrics__section-label {
   display: flex;
   align-items: center;
@@ -323,6 +348,25 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   margin-bottom: var(--space-sm);
+}
+
+.lyrics__section--verse .lyrics__section-label {
+  color: var(--color-section-verse);
+}
+.lyrics__section--chorus .lyrics__section-label {
+  color: var(--color-section-chorus);
+}
+.lyrics__section--bridge .lyrics__section-label {
+  color: var(--color-section-bridge);
+}
+.lyrics__section--prechorus .lyrics__section-label {
+  color: var(--color-section-prechorus);
+}
+.lyrics__section--intro .lyrics__section-label {
+  color: var(--color-section-intro);
+}
+.lyrics__section--outro .lyrics__section-label {
+  color: var(--color-section-outro);
 }
 
 .lyrics__section-label::after {

@@ -85,12 +85,13 @@ async function attemptRefresh() {
   if (!state.pendingSession) return;
   try {
     // auth-js lee el refresh token de storage solo. Además de emitir
-    // TOKEN_REFRESHED via onAuthStateChange (que también limpia pendingSession),
-    // resolvemos el éxito aquí mismo de forma idempotente: no asumimos el
-    // orden/timing en que auth-js dispara ese evento respecto a esta promesa.
+    // TOKEN_REFRESHED via onAuthStateChange (que también limpia pendingSession
+    // llamando a esta misma función), resolvemos el éxito aquí mismo: no
+    // asumimos el orden/timing en que auth-js dispara ese evento respecto a
+    // esta promesa.
     const { data, error } = await supabase.auth.refreshSession();
     if (!error && data?.session) {
-      clearPendingSession(data.session);
+      await clearPendingSession(data.session);
       return;
     }
   } catch (e) {
@@ -101,9 +102,17 @@ async function attemptRefresh() {
 
 /**
  * Marca pendingSession como resuelto con éxito: setea la sesión, detiene el
- * retry y refresca el perfil. Idempotente — la llama tanto attemptRefresh
- * (éxito directo de refreshSession) como el handler de TOKEN_REFRESHED
- * (evento de auth-js), cualquiera que llegue primero.
+ * retry y refresca el perfil. Único punto de salida de pendingSession —
+ * tanto attemptRefresh (éxito directo de refreshSession) como la rama
+ * "if (session)" de onAuthStateChange (evento TOKEN_REFRESHED de auth-js) la
+ * llaman en vez de duplicar la limpieza inline.
+ *
+ * El guard `if (!state.pendingSession) return` es lo que la hace idempotente:
+ * desde auth-js 2.106, con BroadcastChannel multi-pestaña activo por
+ * defecto, un TOKEN_REFRESHED puede llegar por un camino async separado del
+ * refreshSession() que ya estemos esperando aquí mismo — cualquiera de los
+ * dos caminos que llegue primero limpia pendingSession; el segundo entra al
+ * guard y no repite el fetch de perfil ni el notify.
  */
 async function clearPendingSession(session) {
   if (!state.pendingSession) return;
@@ -259,13 +268,18 @@ export async function initAuthStore() {
   supabase.auth.onAuthStateChange(async (event, session) => {
     state.session = session;
     if (session) {
-      if (state.pendingSession) {
-        state.pendingSession = false;
-        stopPendingRetry();
-      }
       signOutRecheckAttempted = false;
-      await refreshProfile();
-      notify();
+      if (state.pendingSession) {
+        // TOKEN_REFRESHED (u otro evento con sesión) llegó mientras había un
+        // reintento en curso: clearPendingSession() es idempotente frente al
+        // camino de attemptRefresh, cualquiera de los dos que llegue primero.
+        await clearPendingSession(session);
+      } else {
+        // Sesión normal, sin pendingSession de por medio (login, refresh
+        // automático de auth-js sin boot offline, etc).
+        await refreshProfile();
+        notify();
+      }
       return;
     }
 

@@ -258,6 +258,57 @@ describe('initAuthStore — restauracion optimista (T1)', () => {
     expect(store.isAuthenticated()).toBe(true);
   });
 
+  it('TOKEN_REFRESHED concurrente con attemptRefresh no duplica fetch de perfil ni notify', async () => {
+    // auth-js 2.106 usa BroadcastChannel multi-pestaña por defecto: un
+    // TOKEN_REFRESHED puede llegar por ese camino async ANTES de que resuelva
+    // el refreshSession() que attemptRefresh ya está esperando. Ambos caminos
+    // convergen en clearPendingSession(), que debe ser idempotente.
+    vi.useFakeTimers();
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
+    const { store, supabase } = await loadStore();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    let handler;
+    supabase.auth.onAuthStateChange.mockImplementation((fn) => {
+      handler = fn;
+    });
+    let resolveRefresh;
+    supabase.auth.refreshSession.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRefresh = resolve;
+        })
+    );
+
+    await store.initAuthStore();
+    const notifySpy = vi.fn();
+    store.subscribe(notifySpy);
+
+    // Primer intento de attemptRefresh (backoff a los 2s); queda colgado
+    // esperando la respuesta de refreshSession().
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(supabase.auth.refreshSession).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+
+    // Llega TOKEN_REFRESHED por el otro camino (broadcast) antes de que la
+    // promesa local de refreshSession() resuelva.
+    const rotated = makeSession({ access_token: 'tok-broadcast' });
+    await handler('TOKEN_REFRESHED', rotated);
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(notifySpy).toHaveBeenCalledTimes(1);
+    expect(store.getSession()).toEqual(rotated);
+
+    // Ahora resuelve el refreshSession() local con su propia sesión:
+    // attemptRefresh debe entrar al guard de clearPendingSession (ya no hay
+    // pendingSession) y no repetir fetch/notify.
+    resolveRefresh({ data: { session: makeSession({ access_token: 'tok-local' }) }, error: null });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(notifySpy).toHaveBeenCalledTimes(1);
+    expect(store.getSession()).toEqual(rotated);
+  });
+
   it('SIGNED_OUT definitivo tras pendingSession limpia el cache de perfil', async () => {
     vi.useFakeTimers();
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));

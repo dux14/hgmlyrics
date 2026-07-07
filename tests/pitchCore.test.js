@@ -4,6 +4,7 @@ import {
   detectPitchDetailed,
   analyzeBuffer,
   createWindower,
+  createOverlapWindower,
 } from '../src/lib/pitchCore.js';
 
 const SAMPLE_RATE = 44100;
@@ -119,5 +120,73 @@ describe('createWindower', () => {
     w.push(new Float32Array(128).fill(0.5));
     w.reset();
     expect(w.push(new Float32Array(128).fill(0.5))).toBeNull();
+  });
+});
+
+describe('createOverlapWindower', () => {
+  /** Empuja `n` muestras en frames de 128 (tamaño real del worklet) y devuelve la última ventana. */
+  function pushRamp(w, n, start = 0) {
+    let out = null;
+    let value = start;
+    for (let pushed = 0; pushed < n; pushed += 128) {
+      const frame = new Float32Array(128);
+      for (let i = 0; i < 128; i++) frame[i] = value++;
+      const w2 = w.push(frame);
+      if (w2) out = w2;
+    }
+    return out;
+  }
+
+  it('la primera ventana llega al completar fftSize muestras', () => {
+    const w = createOverlapWindower(512, 128);
+    expect(pushRamp(w, 384)).toBeNull(); // 384/512: aún no llena
+    const first = pushRamp(w, 128); // 512/512
+    expect(first).toBeInstanceOf(Float32Array);
+    expect(first.length).toBe(512);
+  });
+
+  it('las siguientes ventanas llegan cada hop, con las últimas fftSize muestras en orden', () => {
+    const w = createOverlapWindower(512, 128);
+    pushRamp(w, 512, 0); // llena la primera ventana (muestras 0..511)
+    const w2 = pushRamp(w, 128, 512); // 128 muestras nuevas (512..639) → ventana 128..639
+    expect(w2).not.toBeNull();
+    // monotónico creciente (rampa) y el último elemento es la última muestra pusheada (639).
+    for (let i = 1; i < w2.length; i++) expect(w2[i]).toBeGreaterThan(w2[i - 1]);
+    expect(w2[w2.length - 1]).toBe(639);
+    expect(w2[0]).toBe(128);
+  });
+
+  it('reset() vuelve al estado inicial (la siguiente ventana necesita fftSize de nuevo)', () => {
+    const w = createOverlapWindower(512, 128);
+    pushRamp(w, 512);
+    w.reset();
+    expect(pushRamp(w, 384)).toBeNull();
+    expect(pushRamp(w, 128)).toBeInstanceOf(Float32Array);
+  });
+
+  it('un seno de 440Hz pusheado en frames de 128 produce ventanas donde detectPitch detecta ~440', () => {
+    const w = createOverlapWindower(2048, 512);
+    const totalSamples = 2048 + 512 * 3;
+    let detected = null;
+    for (let pushed = 0; pushed < totalSamples; pushed += 128) {
+      const frame = new Float32Array(128);
+      for (let i = 0; i < 128; i++) {
+        const t = pushed + i;
+        frame[i] = 0.5 * Math.sin((2 * Math.PI * 440 * t) / SAMPLE_RATE);
+      }
+      const window = w.push(frame);
+      if (window) detected = detectPitch(window, SAMPLE_RATE);
+    }
+    expect(detected).not.toBeNull();
+    expect(Math.abs(1200 * Math.log2(detected / 440))).toBeLessThan(5);
+  });
+
+  it('la ventana devuelta es el mismo objeto reutilizado entre emisiones', () => {
+    const w = createOverlapWindower(512, 128);
+    const w1 = pushRamp(w, 512);
+    const w2 = pushRamp(w, 128);
+    expect(w1).not.toBeNull();
+    expect(w2).not.toBeNull();
+    expect(w1).toBe(w2);
   });
 });

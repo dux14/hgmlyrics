@@ -188,3 +188,65 @@ export function createWindower(fftSize) {
     },
   };
 }
+
+/**
+ * Ring buffer de `fftSize` muestras que expone ventanas SOLAPADAS: cada `hop`
+ * muestras nuevas acumuladas (una vez alcanzado `fftSize` al menos una vez),
+ * devuelve la ventana completa con las últimas `fftSize` muestras en orden
+ * temporal correcto. Es el equivalente de un STFT clásico (p.ej. fftSize 2048 /
+ * hop 512 → solapamiento 4x) sin subir la tasa de mensajes del consumidor,
+ * que sigue agregando entre emisiones.
+ *
+ * A diferencia de `createWindower`, la ventana devuelta es un buffer scratch
+ * REUTILIZADO entre llamadas (sin allocaciones por push): el consumidor debe
+ * leerla sincrónicamente antes del siguiente `push`, nunca retenerla ni
+ * encolarla — el siguiente `push` la sobreescribe.
+ *
+ * Si un único `push` acumula muestras suficientes para cruzar varios hops
+ * (frame de entrada mayor que `hop`), solo se devuelve la ventana del último
+ * hop cruzado; las intermedias no se conservan (no hay backlog que vaciar).
+ * En el worklet los frames son de 128 muestras y `hop` es múltiplo de 128,
+ * así que en la práctica se cruza como mucho un hop por `push`.
+ *
+ * @param {number} fftSize Tamaño de la ventana.
+ * @param {number} hop Muestras nuevas entre cada ventana emitida.
+ * @returns {{ push: (frame: Float32Array|number[]) => Float32Array|null, reset: () => void }}
+ */
+export function createOverlapWindower(fftSize, hop) {
+  const ring = new Float32Array(fftSize);
+  const scratch = new Float32Array(fftSize);
+  let writePos = 0;
+  let filled = false;
+  let newSinceEmit = 0;
+  return {
+    push(frame) {
+      let out = null;
+      for (let i = 0; i < frame.length; i++) {
+        ring[writePos] = frame[i];
+        writePos++;
+        if (writePos === fftSize) {
+          writePos = 0;
+          filled = true; // dio la vuelta completa: ya hay fftSize muestras acumuladas
+        }
+        newSinceEmit++;
+        if (filled && newSinceEmit >= hop) {
+          // la muestra más vieja de la ventana es la próxima a sobreescribir (writePos).
+          let idx = writePos;
+          for (let j = 0; j < fftSize; j++) {
+            scratch[j] = ring[idx];
+            idx++;
+            if (idx === fftSize) idx = 0;
+          }
+          out = scratch;
+          newSinceEmit = 0;
+        }
+      }
+      return out;
+    },
+    reset() {
+      writePos = 0;
+      filled = false;
+      newSinceEmit = 0;
+    },
+  };
+}

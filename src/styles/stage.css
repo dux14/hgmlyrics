@@ -1,88 +1,190 @@
-/* stage.css — Modo escenario (F1d). Overlay song-first + chrome glass. */
+/* stage.css — Modo escenario v2: teleprompter (F2 D2). Overlay negro fijo,
+   independiente del theme (fondo #000 siempre, aunque el resto de la app esté
+   en claro). */
 
-/* El Lector ocupa toda la pantalla; oculta el shell. */
+/* El resto del shell no se ve mientras el escenario está activo. */
 body.stage-active .header,
 body.stage-active .bottom-nav,
 body.stage-active .sidebar,
 body.stage-active .sidebar-overlay { display: none !important; }
 body.stage-active { overflow: hidden; }
 
+/* El Lector real queda cubierto por el overlay; solo se marca por si algún
+   estilo del Lector lo necesita (compat con reglas previas). */
 .song-view--stage {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  margin: 0;
-  max-width: none;
-  height: 100svh;
-  height: 100dvh;
-  overflow-y: auto;
-  background: var(--color-bg);
-  padding: clamp(1.5rem, 6vw, 4rem) clamp(1rem, 5vw, 3rem) 40svh;
 }
 
-/* En escenario, ocultar el cromo del Lector que no es la letra. */
-.song-view--stage .song-view__header,
-.song-view--stage .song-toolbar,
-.song-view--stage .tool-box,
-.song-view--stage .font-controls { display: none; }
-
-/* Chrome auto-ocultable */
-.stage-chrome {
+.stage-v2 {
   position: fixed;
   inset: 0;
   z-index: 1001;
-  pointer-events: none; /* solo las barras reciben eventos */
-  opacity: 0;
-  transition: opacity 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+  color: #fff;
+  height: 100svh;
+  height: 100dvh;
+  overflow: hidden;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
-.stage-chrome--visible { opacity: 1; }
 
-.stage-chrome__top,
-.stage-chrome__bottom {
-  position: absolute;
-  left: 0;
-  right: 0;
+/* ── Top: label de sección (color fijo por tipo) + indicador de wake lock ── */
+.stage-v2__top {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  pointer-events: auto;
-  background: color-mix(in oklab, var(--color-surface) 75%, transparent);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  padding: 1rem 1.25rem 0.5rem;
 }
-.stage-chrome__top { top: 0; justify-content: space-between; padding-top: max(0.75rem, env(safe-area-inset-top)); }
-.stage-chrome__bottom { bottom: 0; justify-content: center; padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
 
-.stage-chrome__btn {
+.stage-v2__section-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-section-verse-d);
+}
+.stage-v2__section-label--verse { color: var(--color-section-verse-d); }
+.stage-v2__section-label--chorus { color: var(--color-section-chorus-d); }
+.stage-v2__section-label--bridge { color: var(--color-section-bridge-d); }
+.stage-v2__section-label--prechorus { color: var(--color-section-prechorus-d); }
+.stage-v2__section-label--intro { color: var(--color-section-intro-d); }
+.stage-v2__section-label--outro { color: var(--color-section-outro-d); }
+
+.stage-v2__wakelock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ── Barra de progreso vertical fina, pegada al borde derecho ── */
+.stage-v2__progress {
+  position: absolute;
+  top: env(safe-area-inset-top);
+  bottom: env(safe-area-inset-bottom);
+  right: 0.375rem;
+  width: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.stage-v2__progress-fill {
+  width: 100%;
+  height: 0%;
+  border-radius: 2px;
+  background: var(--color-brand, #01ccd9);
+  transition: height 0.2s ease;
+}
+
+/* ── Cuerpo: previa / actual / siguiente ── */
+.stage-v2__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(0.75rem, 3vh, 1.5rem);
+  padding: 0 clamp(1rem, 6vw, 4rem);
+  text-align: center;
+  cursor: pointer;
+}
+
+.stage-v2__line {
+  font-size: clamp(1rem, 4vw, 1.4rem);
+  line-height: 1.3;
+  color: #fff;
+  max-width: 100%;
+}
+.stage-v2__line--prev { opacity: 0.35; }
+.stage-v2__line--next { opacity: 0.5; }
+
+.stage-v2__current {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+}
+
+.stage-v2__chords {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 1.5rem;
+}
+.stage-v2__chip {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-brand, #01ccd9);
+}
+.stage-v2__chip--note {
+  color: #fff;
+  background: color-mix(in oklab, var(--color-brand, #01ccd9) 30%, transparent);
+  border-radius: var(--border-radius-md, 8px);
+  padding: 0.1rem 0.5rem;
+}
+
+.stage-v2__text {
+  font-weight: 700;
+  color: #fff;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+.stage-v2__text--spoken {
+  font-style: italic;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.stage-v2__hint {
+  position: absolute;
+  bottom: max(5.5rem, calc(5.5rem + env(safe-area-inset-bottom)));
+  left: 0;
+  right: 0;
+  margin: 0;
+  font-size: 0.8rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.stage-v2__hint--hidden { opacity: 0; }
+
+/* ── Controles flotantes inferiores ── */
+.stage-v2__controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1rem max(0.75rem, env(safe-area-inset-bottom));
+}
+.stage-v2__btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 44px;
   min-height: 44px;
   border: none;
-  border-radius: var(--border-radius-md, 8px);
-  background: transparent;
-  color: var(--color-text);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
   cursor: pointer;
-  font-weight: 600;
 }
-.stage-chrome__btn:hover { background: color-mix(in oklab, var(--color-text) 12%, transparent); }
-
-.stage-chrome__wakelock {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.8rem;
-  color: var(--color-brand);
-}
-
-/* FAB de autoscroll re-parentado a la barra inferior del escenario. */
-.autoscroll-fab--stage {
-  position: static;
-  inset: auto;
-}
+.stage-v2__btn:hover { background: rgba(255, 255, 255, 0.16); }
+.stage-v2__btn:disabled { opacity: 0.3; cursor: default; }
+.stage-v2__btn--exit { background: rgba(255, 255, 255, 0.14); }
 
 @media (prefers-reduced-motion: reduce) {
-  .stage-chrome { transition: none; }
+  .stage-v2__progress-fill,
+  .stage-v2__hint { transition: none; }
 }

@@ -881,7 +881,14 @@ async function _renderSongBody(container, songId, isPreview, song) {
 
   container.querySelector('#enter-stage-btn')?.addEventListener('click', () => {
     const sv = container.querySelector('.song-view');
-    if (sv) enterStage(sv);
+    if (sv) {
+      enterStage(sv, {
+        song,
+        getActiveVoice: () => activeRosterId,
+        getTranspose: () => ({ semitones: transposeSemitones, useFlats }),
+        getNotation: () => getChordNotation(),
+      });
+    }
   });
 
   // Title → links page

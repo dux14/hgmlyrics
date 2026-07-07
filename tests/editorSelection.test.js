@@ -5,6 +5,7 @@ import {
   addGroupEntry,
   deleteGroupAt,
   applyGroupsForRange,
+  collectUsedChords,
 } from '../src/lib/editorSelection.js';
 
 describe('normalizeRange', () => {
@@ -140,5 +141,45 @@ describe('applyGroupsForRange', () => {
     const out = applyGroupsForRange(groups, range, [{ voiceId: 'v1', included: true, note: 'B3' }]);
     expect(out).not.toBe(groups);
     expect(groups).toHaveLength(0);
+  });
+});
+
+describe('collectUsedChords', () => {
+  function block(lines) {
+    return { lines };
+  }
+
+  it('cuenta y ordena por frecuencia descendente', () => {
+    const blocks = [
+      block([
+        { chords: [{ pos: 0, ch: 'D' }, { pos: 4, ch: 'G' }] },
+        { chords: [{ pos: 0, ch: 'D' }] },
+      ]),
+      block([{ chords: [{ pos: 0, ch: 'D' }] }]),
+    ];
+    expect(collectUsedChords(blocks)).toEqual(['D', 'G']);
+  });
+
+  it('únicos: no repite un acorde ya contado', () => {
+    const blocks = [block([{ chords: [{ pos: 0, ch: 'Am' }, { pos: 2, ch: 'Am' }] }])];
+    expect(collectUsedChords(blocks)).toEqual(['Am']);
+  });
+
+  it('empate → conserva el orden de primera aparición', () => {
+    const blocks = [
+      block([{ chords: [{ pos: 0, ch: 'F' }, { pos: 2, ch: 'C' }] }]),
+    ];
+    expect(collectUsedChords(blocks)).toEqual(['F', 'C']);
+  });
+
+  it('sin acordes en ninguna línea → array vacío', () => {
+    const blocks = [block([{ chords: [] }, { text: 'hola' }])];
+    expect(collectUsedChords(blocks)).toEqual([]);
+  });
+
+  it('tolera blocks/lines/chords ausentes', () => {
+    expect(collectUsedChords(null)).toEqual([]);
+    expect(collectUsedChords([{}])).toEqual([]);
+    expect(collectUsedChords([{ lines: [{}] }])).toEqual([]);
   });
 });

@@ -11,7 +11,7 @@ import { parseImportText, songToChordPro } from '../lib/importParse.js';
 import { MUSICAL_KEYS, chordProKeyToCanonical } from '../lib/musicKeys.js';
 import { navigate } from '../router.js';
 import { getSession, isFeatureEnabled } from '../lib/authStore.js';
-import { renderSongView } from './SongView.js';
+import { renderSections } from './SongView.js';
 import {
   CANONICAL_VOICE_ORDER,
   VOICE_LINK_TYPES,
@@ -24,7 +24,9 @@ import {
   buildCharStripHTML,
   deleteGroupAt,
   applyGroupsForRange,
+  collectUsedChords,
 } from '../lib/editorSelection.js';
+import { getChordNotation } from '../lib/chordNotation.js';
 import {
   fetchSectionAudio,
   createSectionAudio,
@@ -37,6 +39,7 @@ import { escapeHtml } from '../lib/escape.js';
 import { skelLongText } from '../lib/skeleton.js';
 
 const SECTION_AUDIO_MAX_BYTES = 25 * 1024 * 1024;
+const PREVIEW_DEBOUNCE_MS = 300;
 
 // Espeja VOICE_SCOPES del endpoint (api/songs/[id]/section-audio.js): las 4
 // voces SATB + lead/backing del Estudio. '' = Mezcla (voiceScope null).
@@ -314,14 +317,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         </div>
       </div>
 
-      <!-- Live Preview -->
-      <div class="editor__section">
-        <h2 class="editor__section-title">Vista previa</h2>
-        <div class="editor__preview" id="block-preview">
-          <div id="preview-content"></div>
-        </div>
-      </div>
-
       <!-- Save error (inline, gated visibility) -->
       <div class="editor__save-error" id="editor-save-error" role="alert" hidden></div>
 
@@ -555,6 +550,60 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     return audioUiState.get(blockId);
   }
 
+  // ─── Vista previa por sección (en vivo) ───
+  // Reusa renderSections (el pipeline real del lector) en vez de imitar el
+  // render. Cada sección tiene su propio toggle + debounce: escribir en una
+  // línea NUNCA dispara un renderBlocks completo (perdería el foco/caret),
+  // solo re-pinta el panel de SU sección, y solo si está expandido.
+  const previewUiState = new Map(); // block.id → { expanded }
+  const previewTimers = new Map(); // block.id → timeout id
+
+  function getPreviewUi(blockId) {
+    if (!previewUiState.has(blockId)) previewUiState.set(blockId, { expanded: false });
+    return previewUiState.get(blockId);
+  }
+
+  function renderSectionPreviewContent(block) {
+    const [section] = blocksToSectionsV3([block]);
+    if (!section || section.lines.length === 0) {
+      return '<p class="editor__preview-hint">Agrega letra para ver la vista previa.</p>';
+    }
+    // viewMode 'chords': muestra letra + acordes flotantes (si hay) — más útil
+    // en el editor que 'lyrics' (que oculta los acordes por completo).
+    return renderSections([section], { viewMode: 'chords', notation: getChordNotation() });
+  }
+
+  function schedulePreviewUpdate(blockId) {
+    if (!getPreviewUi(blockId).expanded) return;
+    const existing = previewTimers.get(blockId);
+    if (existing) clearTimeout(existing);
+    previewTimers.set(
+      blockId,
+      setTimeout(() => {
+        previewTimers.delete(blockId);
+        const panel = editorRoot.querySelector(`[data-section-preview-content="${blockId}"]`);
+        const block = blocks.find((b) => b.id === blockId);
+        if (panel && block) panel.innerHTML = renderSectionPreviewContent(block);
+      }, PREVIEW_DEBOUNCE_MS),
+    );
+  }
+
+  function renderSectionPreviewControl(block, index) {
+    const ui = getPreviewUi(block.id);
+    return `
+      <div class="section-preview" data-section-preview="${index}">
+        <button class="section-preview__toggle" data-action="toggle-preview" data-section="${index}" type="button" aria-expanded="${ui.expanded}">
+          ${icon('eye', { size: 14 })} Vista previa
+          ${icon(ui.expanded ? 'chevron-up' : 'chevron-down', { size: 14 })}
+        </button>
+        ${
+          ui.expanded
+            ? `<div class="section-preview__panel" data-section-preview-content="${block.id}">${renderSectionPreviewContent(block)}</div>`
+            : ''
+        }
+      </div>`;
+  }
+
   // ─── Block Editor Core ───
   const editorRoot = container.querySelector('#block-editor');
 
@@ -562,7 +611,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     editorRoot.innerHTML = blocks
       .map((block, bi) => renderSectionBlock(block, bi, blocks.length))
       .join('');
-    updatePreview();
   }
 
   function renderSectionAudioControl(block, index) {
@@ -736,6 +784,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
           ${linesHtml}
         </div>
         <button class="section-block__add-line" data-action="add-line" data-section="${index}">+ Agregar línea</button>
+        ${renderSectionPreviewControl(block, index)}
         ${renderSectionAudioControl(block, index)}
       </div>
     `;
@@ -776,13 +825,13 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       const found = findLine(e.target.dataset.lineId);
       if (found) {
         found.line.text = e.target.value;
-        updatePreview();
+        schedulePreviewUpdate(found.block.id);
       }
     } else if (action === 'change-label') {
       const si = parseInt(e.target.dataset.section);
       if (blocks[si]) {
         blocks[si].label = e.target.value;
-        updatePreview();
+        schedulePreviewUpdate(blocks[si].id);
       }
     } else if (action === 'change-speed') {
       if (!v2Enabled) return;
@@ -876,6 +925,14 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         blocks.splice(si, 1);
         renderBlocks();
       }
+    } else if (action === 'toggle-preview') {
+      const si = parseInt(btn.dataset.section);
+      const block = blocks[si];
+      if (block) {
+        const ui = getPreviewUi(block.id);
+        ui.expanded = !ui.expanded;
+        renderBlocks();
+      }
     } else if (action === 'toggle-audio') {
       const si = parseInt(btn.dataset.section);
       const block = blocks[si];
@@ -927,7 +984,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     function close() {
       overlay.remove();
       renderBlocks();
-      updatePreview();
     }
 
     function currentRange() {
@@ -1136,7 +1192,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     const close = () => {
       overlay.remove();
       renderBlocks();
-      updatePreview();
     };
     const currentRange = () => {
       if (sel.anchor === null) return null;
@@ -1178,6 +1233,21 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
               .join('');
 
       const canAdd = pos !== null;
+      const usedChords = collectUsedChords(blocks);
+      const quickBarHtml =
+        usedChords.length === 0
+          ? ''
+          : `<div class="quick-chord-bar">
+              <span class="quick-chord-bar__label">Acordes usados</span>
+              <div class="quick-chord-bar__chips">
+                ${usedChords
+                  .map(
+                    (ch) =>
+                      `<button class="quick-chord-bar__chip" data-quick-chord="${escapeHtml(ch)}" type="button"${canAdd ? '' : ' disabled'}>${escapeHtml(ch)}</button>`,
+                  )
+                  .join('')}
+              </div>
+            </div>`;
       modalEl.innerHTML = `
           <div class="import-modal__header">
             <h3 class="import-modal__title">${icon('audio-lines', { size: 18 })} Acordes</h3>
@@ -1191,6 +1261,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
 
           <div class="tono-editor__step">
             <div class="tono-editor__step-head"><span>2 · Acorde</span></div>
+            ${quickBarHtml}
             <div class="chord-editor__assign">
               <input class="form-group__input" data-chord="input" type="text" value="${escapeHtml(chordDraft || existing?.ch || '')}" placeholder="Ej: Am, F#m, G7" />
               <button class="btn btn--primary" data-chord="apply" type="button"${canAdd ? '' : ' disabled'}>${icon('plus', { size: 14 })} Guardar</button>
@@ -1219,6 +1290,17 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         const range = currentRange();
         if (!range) return;
         setChord(range.start, chordDraft);
+        sel.anchor = null;
+        sel.focus = null;
+        chordDraft = '';
+        render();
+        return;
+      }
+      const quickBtn = e.target.closest('[data-quick-chord]');
+      if (quickBtn) {
+        const range = currentRange();
+        if (!range) return;
+        setChord(range.start, quickBtn.dataset.quickChord);
         sel.anchor = null;
         sel.focus = null;
         chordDraft = '';
@@ -1382,49 +1464,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     });
 
     textarea.focus();
-  }
-
-  // ─── Preview ───
-  function updatePreview() {
-    const previewEl = container.querySelector('#preview-content');
-    const sections = blocksToSectionsV3(blocks);
-    if (sections.length === 0 || sections.every((s) => s.lines.length === 0)) {
-      previewEl.innerHTML =
-        '<p class="editor__preview-hint">Agrega secciones y letras para ver la vista previa.</p>';
-      return;
-    }
-
-    // Build a draft song object for renderSongView
-    const title = container.querySelector('#song-title')?.value?.trim() || 'Sin título';
-    const artist = container.querySelector('#song-artist')?.value?.trim() || 'Hakuna Group Music';
-    const album = container.querySelector('#song-album')?.value?.trim() || '';
-    const year = container.querySelector('#song-year')?.value || '';
-    const genre = container.querySelector('#song-genre')?.value?.trim() || '';
-    const malePercent = Number.parseInt(container.querySelector('#voice-range')?.value) || 50;
-    let voiceType;
-    if (malePercent >= 70) voiceType = 'male';
-    else if (malePercent <= 30) voiceType = 'female';
-    else voiceType = 'mixed';
-
-    const draftSong = {
-      isPreview: true,
-      title,
-      artist,
-      album,
-      year,
-      genre,
-      voiceType,
-      voicePercent: { male: malePercent, female: 100 - malePercent },
-      coverImage: '',
-      sections,
-    };
-
-    if (v2Enabled && voiceRoster.length > 0) {
-      draftSong.schemaVersion = 3;
-      draftSong.voiceRoster = voiceRoster;
-    }
-
-    renderSongView(previewEl, draftSong);
   }
 
   // ─── Initial render ───

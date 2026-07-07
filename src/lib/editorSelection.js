@@ -89,6 +89,27 @@ export function deleteGroupAt(groups, idx) {
  * @param {Array<{voiceId:string, included:boolean, note:string|null}>} perVoice
  * @returns {Array}
  */
+/**
+ * Acordes únicos ya usados en toda la canción, ordenados por frecuencia
+ * descendente (empates conservan el orden de primera aparición — Map
+ * preserva orden de inserción y Array#sort es estable). Pura: no toca DOM.
+ * Usada por la quick-chord-bar del editor de acordes (tap = re-uso rápido).
+ * @param {Array<{lines:Array<{chords?:Array<{ch:string,pos:number}>}>}>} blocks
+ * @returns {string[]}
+ */
+export function collectUsedChords(blocks) {
+  const counts = new Map();
+  for (const block of blocks || []) {
+    for (const line of block.lines || []) {
+      for (const c of line.chords || []) {
+        if (!c?.ch) continue;
+        counts.set(c.ch, (counts.get(c.ch) || 0) + 1);
+      }
+    }
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([ch]) => ch);
+}
+
 export function applyGroupsForRange(groups, range, perVoice) {
   let list = Array.isArray(groups) ? groups.slice() : [];
   const items = Array.isArray(perVoice) ? perVoice : [];

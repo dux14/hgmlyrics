@@ -348,26 +348,6 @@
   font-size: 0.875rem;
 }
 
-/* ── Vista previa de letras ── */
-.editor__preview {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  padding: var(--space-lg);
-  margin-top: var(--space-md);
-  max-height: 500px;
-  overflow-y: auto;
-}
-
-.editor__preview-title {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: var(--space-md);
-}
-
 /* Texto de marcador de posición en previsualizaciones */
 .editor__preview-hint,
 .import-modal__placeholder {
@@ -538,6 +518,40 @@
 }
 
 /* ── Audio por sección (admin) ── */
+/* ── Vista previa en vivo por sección ── */
+.section-preview {
+  border-top: 1px dashed var(--color-border);
+}
+
+.section-preview__toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.section-preview__toggle:hover {
+  color: var(--color-brand);
+  background: var(--color-surface);
+}
+
+.section-preview__toggle svg:last-child {
+  margin-left: auto;
+}
+
+.section-preview__panel {
+  padding: 0 var(--space-md) var(--space-md);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
 .section-audio {
   border-top: 1px dashed var(--color-border);
 }
@@ -1179,6 +1193,48 @@
   gap: 0.5rem;
   align-items: center;
   flex-wrap: wrap;
+}
+
+/* ── Barra de acordes rápidos (acordes ya usados en la canción) ── */
+.quick-chord-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+
+.quick-chord-bar__label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.quick-chord-bar__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.quick-chord-bar__chip {
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.quick-chord-bar__chip:hover:not(:disabled) {
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+}
+
+.quick-chord-bar__chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ── Overrides tema claro ── */

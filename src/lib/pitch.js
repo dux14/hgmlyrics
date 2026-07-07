@@ -8,7 +8,7 @@
  * No external deps. Single-window analysis (~46 ms @ 44.1 kHz / 2048).
  */
 
-import { detectPitch } from './pitchCore.js';
+import { detectPitchDetailed } from './pitchCore.js';
 export { detectPitch } from './pitchCore.js';
 
 /**
@@ -18,7 +18,7 @@ export { detectPitch } from './pitchCore.js';
  *   response to a user gesture (iOS Safari requirement).
  *
  * @param {{
- *   onPitch: (info: { hz: number, rms: number }) => void,
+ *   onPitch: (info: { hz: number, rms: number, confidence: number }) => void,
  *   onError?: (err: Error) => void,
  *   onState?: (state: 'requesting' | 'running' | 'stopped' | 'denied') => void,
  *   fftSize?: number,
@@ -45,7 +45,17 @@ export function createPitchDetector(opts) {
     onState('requesting');
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false },
+        // AGC/EC/NS desactivados: el AGC del celular bombea la ganancia y
+        // degrada el RMS gate y la confianza del detector; channelCount 1
+        // evita el downmix estéreo que a veces cancela fase. Chromium tiene
+        // bugs donde estos "off" no se aplican de verdad, por eso el log de
+        // settings reales debajo.
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          channelCount: 1,
+        },
       });
     } catch (e) {
       onState('denied');
@@ -53,10 +63,23 @@ export function createPitchDetector(opts) {
       return;
     }
 
+    // Diagnóstico: qué aplicó realmente el navegador (Chromium a veces ignora los "off").
+    const settings = stream.getAudioTracks?.()?.[0]?.getSettings?.();
+    // eslint-disable-next-line no-console -- diagnóstico intencional de captura
+    console.info('[tuner] mic settings:', settings);
+
     const AC = window.AudioContext || window.webkitAudioContext;
     ctx = new AC();
     if (ctx.state === 'suspended') await ctx.resume();
     const source = ctx.createMediaStreamSource(stream);
+
+    // High-pass a 75 Hz: quita retumbe/DC/ruido de manipulación del teléfono
+    // que contamina el CMNDF en graves, en ambos caminos (worklet y analyser).
+    const highpass = ctx.createBiquadFilter();
+    highpass.type = 'highpass';
+    highpass.frequency.value = 75;
+    highpass.Q.value = 0.707;
+    source.connect(highpass);
 
     // Camino moderno: YIN en el hilo de audio. Si falla, fallback a AnalyserNode.
     if (ctx.audioWorklet && typeof globalThis.AudioWorkletNode === 'function') {
@@ -69,7 +92,7 @@ export function createPitchDetector(opts) {
         // Mantener vivo el grafo (quirk iOS) con una ganancia silenciosa.
         const silentGain = ctx.createGain();
         silentGain.gain.value = 0;
-        source.connect(workletNode);
+        highpass.connect(workletNode);
         workletNode.connect(silentGain);
         silentGain.connect(ctx.destination);
         if (ctx.state === 'suspended') await ctx.resume();
@@ -85,10 +108,10 @@ export function createPitchDetector(opts) {
       }
     }
 
-    startWithAnalyser(source);
+    startWithAnalyser(highpass);
   }
 
-  function startWithAnalyser(source) {
+  function startWithAnalyser(highpass) {
     analyser = ctx.createAnalyser();
     analyser.fftSize = fftSize;
     analyser.smoothingTimeConstant = 0;
@@ -98,7 +121,7 @@ export function createPitchDetector(opts) {
     // The silent gain prevents feedback while keeping the graph alive.
     const silentGain = ctx.createGain();
     silentGain.gain.value = 0;
-    source.connect(analyser);
+    highpass.connect(analyser);
     analyser.connect(silentGain);
     silentGain.connect(ctx.destination);
     buffer = new Float32Array(analyser.fftSize);
@@ -114,8 +137,8 @@ export function createPitchDetector(opts) {
         let sum = 0;
         for (let i = 0; i < buffer.length; i++) sum += buffer[i] * buffer[i];
         const rms = Math.sqrt(sum / buffer.length);
-        const hz = detectPitch(buffer, ctx.sampleRate);
-        onPitch({ hz: hz !== null ? hz : null, rms });
+        const result = detectPitchDetailed(buffer, ctx.sampleRate);
+        onPitch({ hz: result?.hz ?? null, rms, confidence: result?.confidence ?? 0 });
       }
       rafId = requestAnimationFrame(tick);
     };

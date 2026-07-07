@@ -6,7 +6,7 @@
 import { signInWithGoogle, signInWithMagicLink, verifyEmailOtp } from '../lib/authStore.js';
 import { icon } from '../lib/icons.js';
 import { navigate } from '../router.js';
-import { isSafeRedirect } from './AuthCallback.js';
+import { getNextParam, isSafeRedirect } from '../lib/urlParams.js';
 
 const GOOGLE_ICON_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -14,18 +14,6 @@ const GOOGLE_ICON_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"/>
 </svg>`;
-
-/**
- * Lee ?next= del query dentro del hash, igual que AuthCallback.js.
- * @returns {string|null}
- */
-function getNextParam() {
-  const hash = globalThis.location.hash;
-  const qIdx = hash.indexOf('?');
-  if (qIdx === -1) return null;
-  const params = new URLSearchParams(hash.slice(qIdx + 1));
-  return params.get('next');
-}
 
 function offlinePane(container) {
   container.innerHTML = `
@@ -105,11 +93,14 @@ function render(container, opts = {}) {
             id="otp-input"
             placeholder="Código del correo"
             aria-label="Código del correo"
+            aria-describedby="otp-error"
+            required
             inputmode="numeric"
             pattern="[0-9]*"
             maxlength="8"
             autocomplete="one-time-code"
           />
+          <div class="auth-error" id="otp-error" style="display:none;"></div>
           <button type="submit" class="auth-btn" id="otp-btn">
             Entrar con código
           </button>
@@ -140,6 +131,8 @@ function render(container, opts = {}) {
   // lo reutiliza para verifyEmailOtp, sin pedirlo de nuevo.
   let sentEmail = null;
   const otpForm = container.querySelector('#otp-form');
+  const otpInput = container.querySelector('#otp-input');
+  const otpErrEl = container.querySelector('#otp-error');
 
   container.querySelector('#magic-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -150,6 +143,8 @@ function render(container, opts = {}) {
     errEl.style.display = 'none';
     okEl.style.display = 'none';
     otpForm.style.display = 'none';
+    otpErrEl.style.display = 'none';
+    otpInput.value = '';
     btn.disabled = true;
     btn.textContent = 'Enviando...';
 
@@ -171,10 +166,13 @@ function render(container, opts = {}) {
   otpForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!sentEmail) return;
-    const token = container.querySelector('#otp-input').value.trim();
-    const errEl = container.querySelector('#email-error');
+    const token = otpInput.value.trim();
+    // Guard temprano: sin esto un submit vacío gastaría el rate limit de
+    // verifyOtp contra Supabase sin ninguna chance de acertar.
+    if (!token) return;
+    const okEl = container.querySelector('#email-success');
     const btn = container.querySelector('#otp-btn');
-    errEl.style.display = 'none';
+    otpErrEl.style.display = 'none';
     btn.disabled = true;
     btn.textContent = 'Verificando...';
 
@@ -183,8 +181,11 @@ function render(container, opts = {}) {
     btn.textContent = 'Entrar con código';
 
     if (error) {
-      errEl.textContent = error.message;
-      errEl.style.display = 'block';
+      // Oculta el banner de éxito del enlace: con un código inválido no
+      // deben quedar ambos mensajes apilados.
+      okEl.style.display = 'none';
+      otpErrEl.textContent = error.message;
+      otpErrEl.style.display = 'block';
       return;
     }
 

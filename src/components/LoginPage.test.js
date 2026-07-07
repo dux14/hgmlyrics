@@ -99,7 +99,7 @@ describe('login con código OTP', () => {
     expect(navigate).toHaveBeenCalledWith('/');
   });
 
-  it('código incorrecto muestra el error y rehabilita el botón', async () => {
+  it('código incorrecto muestra el error propio del otp-form, oculta el éxito y rehabilita el botón', async () => {
     const c = document.querySelector('#c');
     renderLoginPage(c);
     await sendMagicLink(c);
@@ -115,9 +115,39 @@ describe('login con código OTP', () => {
     await Promise.resolve();
 
     expect(navigate).not.toHaveBeenCalled();
-    const errEl = c.querySelector('#email-error');
+    const errEl = c.querySelector('#otp-error');
     expect(errEl.textContent).toContain('Código inválido');
     expect(errEl.style.display).not.toBe('none');
     expect(otpBtn.disabled).toBe(false);
+    // El banner de "Listo, revisa tu correo" no debe quedar apilado con el error.
+    expect(c.querySelector('#email-success').style.display).toBe('none');
+    // El input queda conectado al error para lectores de pantalla.
+    expect(c.querySelector('#otp-input').getAttribute('aria-describedby')).toBe('otp-error');
+  });
+
+  it('código vacío no llama a verifyEmailOtp (guard, evita gastar rate limit)', async () => {
+    const c = document.querySelector('#c');
+    renderLoginPage(c);
+    await sendMagicLink(c);
+
+    c.querySelector('#otp-input').value = '';
+    c.querySelector('#otp-form').dispatchEvent(new Event('submit'));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(verifyEmailOtp).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('reenviar el enlace limpia el código anterior', async () => {
+    const c = document.querySelector('#c');
+    renderLoginPage(c);
+    await sendMagicLink(c);
+
+    c.querySelector('#otp-input').value = '11112222';
+
+    await sendMagicLink(c);
+
+    expect(c.querySelector('#otp-input').value).toBe('');
   });
 });

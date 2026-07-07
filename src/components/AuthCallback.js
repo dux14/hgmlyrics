@@ -8,29 +8,12 @@
 import { getSession, needsOnboarding } from '../lib/authStore.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
+import { getNextParam, isSafeRedirect } from '../lib/urlParams.js';
 
-function getNextParam() {
-  const hash = globalThis.location.hash;
-  const qIdx = hash.indexOf('?');
-  if (qIdx === -1) return null;
-  const params = new URLSearchParams(hash.slice(qIdx + 1));
-  return params.get('next');
-}
-
-/**
- * Returns true only for relative internal paths.
- * Rejects //evil.com and /\evil open-redirect patterns.
- * @param {string|null} next
- * @returns {boolean}
- */
-export function isSafeRedirect(next) {
-  return (
-    typeof next === 'string' &&
-    next.startsWith('/') &&
-    !next.startsWith('//') &&
-    !next.startsWith('/\\')
-  );
-}
+// Re-export por compatibilidad: isSafeRedirect vivía acá antes de moverse a
+// lib/urlParams.js (T3 quality review); queda disponible para quien todavía
+// la importe desde este módulo.
+export { isSafeRedirect };
 
 /**
  * Render the auth callback screen.

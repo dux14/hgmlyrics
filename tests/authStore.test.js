@@ -83,7 +83,7 @@ describe('authStore', () => {
     expect(isAdmin()).toBe(true);
   });
 
-  it('subscribers notified on SIGNED_OUT', async () => {
+  it('subscribers notified on SIGNED_OUT (logout propio, sin recheck)', async () => {
     mockGetSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } });
     globalThis.fetch.mockResolvedValueOnce({
       ok: true,
@@ -92,8 +92,15 @@ describe('authStore', () => {
     await initAuthStore();
     const spy = vi.fn();
     subscribe(spy);
+
+    // signOut() marca el SIGNED_OUT que sigue como propio: el handler debe
+    // saltarse el recheck de T2 por completo (sin timers reales de 1.5s) e
+    // ir directo al kick. Si esto no funcionara, el segundo getSession()
+    // (sin mock encolado) lanzaría y el test tardaría ~1.5s reales en CI.
+    await signOut();
     await authStateChangeHandler('SIGNED_OUT', null);
-    expect(spy).toHaveBeenCalledWith({ session: null, profile: null });
+
+    expect(spy).toHaveBeenCalledWith({ session: null, profile: null, pending: false });
     expect(isAuthenticated()).toBe(false);
   });
 

@@ -97,6 +97,32 @@ describe('initAuthStore — boot normal', () => {
     await store.initAuthStore();
 
     expect(store.isAuthenticated()).toBe(false);
+    expect(store.isPendingSession()).toBe(false);
+  });
+
+  it('notify() incluye pending en el snapshot para que la UI pueda distinguir el estado optimista', async () => {
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
+    const { store, supabase } = await loadStore();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    let handler;
+    supabase.auth.onAuthStateChange.mockImplementation((fn) => {
+      handler = fn;
+    });
+    const spy = vi.fn();
+
+    await store.initAuthStore();
+    expect(store.isPendingSession()).toBe(true);
+    store.subscribe(spy);
+
+    // TOKEN_REFRESHED saca de pendingSession vía clearPendingSession(): el
+    // notify() resultante debe reportar pending: false.
+    await handler('TOKEN_REFRESHED', makeSession());
+
+    expect(spy).toHaveBeenCalledWith({
+      session: makeSession(),
+      profile: { username: 'ana' },
+      pending: false,
+    });
   });
 });
 
@@ -392,6 +418,41 @@ describe('initAuthStore — restauracion optimista (T1)', () => {
     expect(store.getSession()).toEqual(rotated);
   });
 
+  it('INITIAL_SESSION(null) durante pendingSession no toca nada (auth-js la emite siempre tras boot)', async () => {
+    // GoTrueClient._emitInitialSession dispara SIEMPRE un INITIAL_SESSION con
+    // la sesión actual justo después de registrar el listener. En boot
+    // offline con token expirado esa sesión es null y llega milisegundos
+    // después de que initAuthStore ya armó pendingSession — no debe
+    // interpretarse como un logout.
+    vi.useFakeTimers();
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
+    localStorage.setItem(
+      PROFILE_CACHE_KEY,
+      JSON.stringify({ profile: { username: 'cached' }, flags: ['cached-flag'] }),
+    );
+    const { store, supabase } = await loadStore();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    let handler;
+    supabase.auth.onAuthStateChange.mockImplementation((fn) => {
+      handler = fn;
+    });
+    supabase.auth.refreshSession.mockResolvedValue({});
+
+    await store.initAuthStore();
+    expect(store.isPendingSession()).toBe(true);
+    expect(store.isAuthenticated()).toBe(true);
+
+    await handler('INITIAL_SESSION', null);
+
+    expect(store.isPendingSession()).toBe(true);
+    expect(store.isAuthenticated()).toBe(true);
+    expect(store.getProfile()).toEqual({ username: 'cached' });
+    expect(localStorage.getItem(PROFILE_CACHE_KEY)).not.toBeNull();
+    // No debe haber disparado el flujo de kick: getSession solo se llamó una
+    // vez, la del boot.
+    expect(supabase.auth.getSession).toHaveBeenCalledTimes(1);
+  });
+
   it('SIGNED_OUT definitivo tras pendingSession limpia el cache de perfil', async () => {
     vi.useFakeTimers();
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
@@ -486,6 +547,73 @@ describe('onAuthStateChange — SIGNED_OUT resiliente (T2)', () => {
     await handler('SIGNED_OUT', null);
 
     expect(supabase.auth.getSession.mock.calls.length).toBe(callsBefore);
+    expect(store.isAuthenticated()).toBe(false);
+  });
+
+  it('SIGNED_OUT no intencional: el callback resuelve sin llamar getSession() en el mismo tick (evita el deadlock de auth-js)', async () => {
+    // auth-js sostiene un lock interno durante signOut(): _notifyAllSubscribers
+    // hace `await Promise.all(callbacks)` ANTES de resolver. Si este callback
+    // llamara (y esperara) a getSession() antes de retornar, esa llamada
+    // reintentaría el mismo lock y quedaría esperando a que signOut()
+    // termine -> deadlock circular, el logout se cuelga para siempre.
+    vi.useFakeTimers();
+    const { store, supabase, handler } = await bootWithSession();
+    supabase.auth.getSession.mockClear();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+
+    await handler('SIGNED_OUT', null);
+    // El callback ya resolvió: NO debe haber llamado getSession() todavía.
+    expect(supabase.auth.getSession).not.toHaveBeenCalled();
+
+    // El recheck corre diferido, en un macrotask (setTimeout) aparte.
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(supabase.auth.getSession).toHaveBeenCalledTimes(1);
+    expect(store.isAuthenticated()).toBe(false);
+  });
+
+  it('signOut() propio salta el recheck por completo y va directo al kick, sin llamar getSession() ni esperar', async () => {
+    vi.useFakeTimers();
+    const { store, supabase, handler } = await bootWithSession();
+    supabase.auth.signOut.mockResolvedValue({});
+    supabase.auth.getSession.mockClear();
+
+    await store.signOut();
+    await handler('SIGNED_OUT', null);
+
+    // Nada de recheck: ni siquiera se volvió a llamar getSession().
+    expect(supabase.auth.getSession).not.toHaveBeenCalled();
+    const { refresh } = await import('../router.js');
+    expect(refresh).toHaveBeenCalled();
+    expect(store.isAuthenticated()).toBe(false);
+
+    // Avanzar el tiempo no debe disparar nada adicional (no quedó nada
+    // diferido programado).
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(supabase.auth.getSession).not.toHaveBeenCalled();
+  });
+
+  it('recheck exitoso resetea signOutRecheckAttempted: un episodio nuevo puede volver a intentarlo', async () => {
+    vi.useFakeTimers();
+    const { store, supabase, handler } = await bootWithSession();
+    const rotated = makeSession({ access_token: 'tok-rotado-1' });
+    supabase.auth.getSession.mockResolvedValue({ data: { session: rotated } });
+
+    // Episodio 1: se recupera con éxito.
+    await handler('SIGNED_OUT', null);
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(store.getSession()).toEqual(rotated);
+    expect(store.isAuthenticated()).toBe(true);
+
+    // Episodio 2, independiente: otra rotación falla en esta pestaña. Si el
+    // flag no se hubiera reseteado tras la recuperación exitosa, este
+    // SIGNED_OUT caería directo al kick sin intentar el recheck.
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    const callsBefore = supabase.auth.getSession.mock.calls.length;
+
+    await handler('SIGNED_OUT', null);
+    await vi.advanceTimersByTimeAsync(1500);
+
+    expect(supabase.auth.getSession.mock.calls.length).toBeGreaterThan(callsBefore);
     expect(store.isAuthenticated()).toBe(false);
   });
 });

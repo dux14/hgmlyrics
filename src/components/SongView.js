@@ -368,7 +368,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
       ${
         !isPreview
           ? `
-      <!-- Controls toolbar — grouped by function -->
+      <!-- Controls toolbar — one scrollable row grouped by function -->
       <div class="song-toolbar">
         <!-- Zone: Reading -->
         <div class="song-toolbar__group">
@@ -378,6 +378,21 @@ async function _renderSongBody(container, songId, isPreview, song) {
             <button class="font-controls__btn" id="font-increase" aria-label="Aumentar tamaño de letra">A+</button>
             <button class="font-controls__btn font-controls__stage" id="enter-stage-btn" aria-label="Modo escenario">${icon('maximize', { size: 18 })}</button>
           </div>
+          ${
+            hasChords
+              ? `
+          <div class="transpose-controls" id="transpose-controls" style="margin-bottom: 0;">
+            <button class="transpose-btn" id="transpose-down" aria-label="Bajar medio tono">−½</button>
+            <button class="transpose-bubble" id="transpose-bubble" type="button" aria-label="${escapeHtml(`Tono: ${buildTransposeBubbleLabel(song.key, transposeSemitones, useFlats, getChordNotation())}. Toca para restablecer al original.`)}">
+              <span id="transpose-bubble-text">${escapeHtml(buildTransposeBubbleLabel(song.key, transposeSemitones, useFlats, getChordNotation()))}</span>
+            </button>
+            <button class="transpose-btn" id="transpose-up" aria-label="Subir medio tono">+½</button>
+            <span class="filter-separator"></span>
+            <button class="transpose-notation-toggle" id="notation-toggle">${useFlats ? '♭ → ♯' : '♯ / ♭'}</button>
+          </div>
+          `
+              : ''
+          }
           ${
             showToggle
               ? `
@@ -406,36 +421,25 @@ async function _renderSongBody(container, songId, isPreview, song) {
       </div>
 
       ${
-        hasChords || (song.cejilla && song.cejilla > 0)
+        (song.cejilla && song.cejilla > 0) || mixAvailable
           ? `
-      <!-- Wave 4: cajas temáticas del modo Acordes — Guitarra y Voz -->
+      <!-- Wave 4: cajas temáticas del modo Acordes — Guitarra (cejilla) y Voz -->
       <div class="chords-extras" id="chords-extras" style="display: none;">
+        ${
+          song.cejilla && song.cejilla > 0
+            ? `
         <div class="tool-box">
           <div class="tool-box__title">${icon('audio-lines', { size: 13 })} Guitarra</div>
           <div class="tool-box__row">
-            ${
-              song.cejilla && song.cejilla > 0
-                ? `<div class="cejilla-badge" title="Colocar cejilla en el traste ${song.cejilla}">
-                     <span class="cejilla-badge__icon">${icon('audio-lines', { size: 15 })}</span>
-                     <span class="cejilla-badge__text" id="cejilla-badge-text">${escapeHtml(buildCejillaHint(song.key, song.cejilla, useFlats, getChordNotation()))}</span>
-                   </div>`
-                : ''
-            }
-            ${
-              hasChords
-                ? `<div class="transpose-controls" id="transpose-controls">
-                     <button class="transpose-btn" id="transpose-down" aria-label="Bajar medio tono">−½</button>
-                     <button class="transpose-bubble" id="transpose-bubble" type="button" aria-label="${escapeHtml(`Tono: ${buildTransposeBubbleLabel(song.key, transposeSemitones, useFlats, getChordNotation())}. Toca para restablecer al original.`)}">
-                       <span id="transpose-bubble-text">${escapeHtml(buildTransposeBubbleLabel(song.key, transposeSemitones, useFlats, getChordNotation()))}</span>
-                     </button>
-                     <button class="transpose-btn" id="transpose-up" aria-label="Subir medio tono">+½</button>
-                     <span class="filter-separator"></span>
-                     <button class="transpose-notation-toggle" id="notation-toggle">${useFlats ? '♭ → ♯' : '♯ / ♭'}</button>
-                   </div>`
-                : ''
-            }
+            <div class="cejilla-badge" title="Colocar cejilla en el traste ${song.cejilla}">
+              <span class="cejilla-badge__icon">${icon('audio-lines', { size: 15 })}</span>
+              <span class="cejilla-badge__text" id="cejilla-badge-text">${escapeHtml(buildCejillaHint(song.key, song.cejilla, useFlats, getChordNotation()))}</span>
+            </div>
           </div>
         </div>
+        `
+            : ''
+        }
         ${mixAvailable ? renderVoicePanel(song) : ''}
       </div>
       `

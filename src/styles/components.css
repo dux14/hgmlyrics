@@ -207,6 +207,7 @@
   pointer-events: none;
 }
 
+/* Hero compacto (T6): 80px fijo en todas las resoluciones — ver spec D1. */
 .song-view__cover {
   width: 80px;
   height: 80px;
@@ -262,8 +263,9 @@
   opacity: 0.4;
 }
 
+/* Hero compacto (T6): tamaño fijo 1.35rem — no crece en desktop, ver spec D1. */
 .song-view__title {
-  font-size: var(--font-size-xl);
+  font-size: 1.35rem;
   font-weight: var(--font-weight-bold);
   margin-bottom: var(--space-xs);
   line-height: var(--line-height-tight);
@@ -294,16 +296,17 @@
   opacity: 0.65;
 }
 
+/* Artista/álbum/año: línea secundaria discreta, sin competir con el título. */
 .song-view__album {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
-  margin-bottom: var(--space-sm);
+  margin-bottom: var(--space-xs);
 }
 
 .song-view__year {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-sm);
 }
 
 /* === Font Size Controls === */
@@ -621,13 +624,6 @@
   gap: var(--space-sm);
   flex-wrap: wrap;
 }
-/* Dentro de la caja, la transposición pierde su caja propia (sin doble marco) */
-.tool-box .transpose-controls {
-  background: transparent;
-  border: none;
-  padding: 0;
-  margin-bottom: 0;
-}
 
 /* Panel Voz */
 .voice-panel__title {
@@ -929,18 +925,25 @@
   color: var(--color-text-secondary);
 }
 
-/* === Song View — controls toolbar (grouped by function) === */
+/* === Song View — controls toolbar (grouped by function) ===
+   Fila única scrolleable horizontal (T6): en mobile no cabe todo el set de
+   controles, así que en vez de apilar se deja una sola fila con overflow-x;
+   en desktop hay ancho de sobra y se permite wrap (ver media query abajo). */
 .song-toolbar {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: var(--space-sm);
   margin-bottom: var(--space-md);
+  overflow-x: auto;
 }
 
 .song-toolbar__group {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
   gap: var(--space-sm);
 }
 
@@ -953,15 +956,6 @@
 
 /* === Tablet/Desktop Song View === */
 @media (min-width: 768px) {
-  .song-view__cover {
-    width: 100px;
-    height: 100px;
-  }
-
-  .song-view__title {
-    font-size: var(--font-size-2xl);
-  }
-
   .voice-filter {
     justify-content: flex-start;
   }
@@ -970,15 +964,16 @@
     justify-content: flex-start;
   }
 
-  /* Lay the control zones in a single row, separated by quiet dividers. */
+  /* Sobra ancho: el wrap ya no es necesario y el scroll queda solo como red
+     de seguridad; separa los grupos con dividers discretos. */
   .song-toolbar {
-    flex-direction: row;
     flex-wrap: wrap;
-    align-items: center;
+    overflow-x: visible;
     gap: var(--space-md);
   }
 
   .song-toolbar__group {
+    flex-wrap: wrap;
     gap: var(--space-md);
   }
 
@@ -1158,32 +1153,37 @@
   white-space: nowrap;
 }
 
-/* === Chord Toggle (F6) === */
+/* === Chord Toggle — segmented control de modos (F6, pill T6) ===
+   Tabs pill ambient-kinetic: fondo surface, activo con el acento cyan de
+   marca (--color-primary). El ámbar (--color-accent) queda reservado para
+   acciones (fav, cejilla) — no es un modo, así que no aplica aquí. */
 .chord-toggle {
   display: inline-flex;
-  border-radius: var(--border-radius-sm);
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--border-radius-full);
   border: 1px solid var(--color-border);
-  overflow: hidden;
+  background: var(--color-surface);
   margin-bottom: var(--space-md);
 }
 
 .chord-toggle__btn {
-  padding: 8px 16px;
+  padding: 6px 14px;
+  border-radius: var(--border-radius-full);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   transition: all var(--transition-fast);
   cursor: pointer;
   background: transparent;
-  color: var(--color-text);
+  color: var(--color-text-secondary);
   border: none;
 }
 
-/* Amber = accion activa; inset para que el anillo no sea recortado por
-   overflow:hidden del contenedor .chord-toggle. */
 .chord-toggle__btn--active {
-  background: color-mix(in oklch, var(--color-amber-500) 15%, var(--color-surface));
-  color: var(--color-amber-500);
-  box-shadow: inset 0 0 0 2px var(--color-amber-500);
+  background: color-mix(in oklch, var(--color-primary) 18%, var(--color-surface));
+  color: var(--color-primary);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-primary) 45%, transparent);
 }
 
 /* === Cejilla Badge === */

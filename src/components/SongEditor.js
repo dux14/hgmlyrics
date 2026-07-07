@@ -7,7 +7,8 @@
  */
 
 import { fetchSongDetail, refreshData, invalidateSongDetailCache } from '../lib/store.js';
-import { parseImportText } from '../lib/importParse.js';
+import { parseImportText, songToChordPro } from '../lib/importParse.js';
+import { MUSICAL_KEYS, chordProKeyToCanonical } from '../lib/musicKeys.js';
 import { navigate } from '../router.js';
 import { getSession, isFeatureEnabled } from '../lib/authStore.js';
 import { renderSongView } from './SongView.js';
@@ -237,6 +238,16 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
             <label class="form-group__label" for="song-cejilla">Cejilla</label>
             <input class="form-group__input" id="song-cejilla" type="number" min="0" max="12" placeholder="0" value="${existingSong?.cejilla || ''}" />
           </div>
+          <div class="form-group">
+            <label class="form-group__label" for="song-key">Tono</label>
+            <select class="form-group__input" id="song-key">
+              <option value="">Sin especificar</option>
+              ${MUSICAL_KEYS.map(
+                (k) =>
+                  `<option value="${k}"${existingSong?.key === k ? ' selected' : ''}>${k}</option>`,
+              ).join('')}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -298,7 +309,8 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         <div class="block-editor" id="block-editor"></div>
         <div class="block-editor__controls">
           <button class="btn btn--secondary block-editor__add-section" id="add-section-btn">+ Agregar sección</button>
-          <button class="btn btn--secondary block-editor__import-btn" id="import-btn">${icon('download', { size: 16 })} Importar texto</button>
+          <button class="btn btn--secondary block-editor__import-btn" id="import-btn">${icon('download', { size: 16 })} Importar letra</button>
+          <button class="btn btn--secondary block-editor__export-btn" id="export-chordpro-btn" type="button">${icon('download', { size: 16 })} Exportar ChordPro</button>
         </div>
       </div>
 
@@ -1260,17 +1272,62 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     showImportModal();
   });
 
+  // Rellena metadata (title/artist/key/capo) desde directivas ChordPro SOLO si
+  // el campo del formulario está vacío — nunca pisa un valor ya cargado.
+  function fillMetaFromImport(meta) {
+    if (!meta) return;
+    const titleEl = container.querySelector('#song-title');
+    if (meta.title && titleEl && !titleEl.value.trim()) titleEl.value = meta.title;
+    const artistEl = container.querySelector('#song-artist');
+    if (meta.artist && artistEl && !artistEl.value.trim()) artistEl.value = meta.artist;
+    const keyEl = container.querySelector('#song-key');
+    if (meta.key && keyEl && !keyEl.value) {
+      const canonical = chordProKeyToCanonical(meta.key);
+      if (canonical) keyEl.value = canonical;
+    }
+    const cejillaEl = container.querySelector('#song-cejilla');
+    if (meta.capo !== undefined && cejillaEl && !cejillaEl.value) {
+      cejillaEl.value = String(meta.capo);
+    }
+  }
+
+  // ─── Export ChordPro ───
+  container.querySelector('#export-chordpro-btn').addEventListener('click', () => {
+    const title = container.querySelector('#song-title')?.value?.trim() || 'Sin título';
+    const artist = container.querySelector('#song-artist')?.value?.trim() || '';
+    const key = container.querySelector('#song-key')?.value || '';
+    const cejilla = container.querySelector('#song-cejilla')?.value || '';
+    const song = {
+      title,
+      artist,
+      key,
+      cejilla,
+      sections: blocksToSectionsV3(blocks),
+    };
+    const text = songToChordPro(song);
+    const blob = new Blob([text], { type: 'text/plain' });
+    const href = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = `${title}.cho`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(href), 1000);
+  });
+
   function showImportModal() {
     const overlay = document.createElement('div');
     overlay.className = 'import-modal__overlay';
     overlay.innerHTML = `
       <div class="import-modal">
         <div class="import-modal__header">
-          <h3 class="import-modal__title">${icon('download', { size: 18 })} Importar texto</h3>
+          <h3 class="import-modal__title">${icon('download', { size: 18 })} Importar letra</h3>
           <button class="import-modal__close" id="import-close" aria-label="Cerrar">${icon('close', { size: 18 })}</button>
         </div>
         <p class="import-modal__hint">
           Pega las letras. Las secciones se detectan con <code>[Verso 1]</code>, <code>[Coro]</code>, etc.
+          o con directivas ChordPro (<code>{start_of_chorus}</code>, <code>{title:}</code>...).
           Las líneas vacías separan secciones automáticamente.
         </p>
         <textarea class="import-modal__textarea" id="import-textarea" placeholder="[Verso 1]\nPrimera línea de la canción\nSegunda línea\n\n[Coro]\nEstribillo aquí..."></textarea>
@@ -1315,6 +1372,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         blocks.push(...parsed);
         renderBlocks();
       }
+      fillMetaFromImport(parsed.meta);
       overlay.remove();
     });
 
@@ -1514,6 +1572,7 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
 
     // 2. Save song data
     const cejilla = Number.parseInt(container.querySelector('#song-cejilla').value) || null;
+    const key = container.querySelector('#song-key')?.value || null;
 
     const newSong = {
       id: songId,
@@ -1528,6 +1587,7 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
       coverImage,
       albumOrder,
       cejilla,
+      key,
       sections: blocksToSectionsV3(blocks),
     };
 

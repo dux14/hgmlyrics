@@ -657,6 +657,57 @@ describe('signOut', () => {
 
     expect(localStorage.getItem(PROFILE_CACHE_KEY)).toBeNull();
   });
+
+  it('signOut() con error resetea intentionalSignOut: un SIGNED_OUT posterior si intenta el recheck', async () => {
+    // supabase.auth.signOut() puede retornar { error } (o lanzar) sin haber
+    // emitido SIGNED_OUT (auth-js corta temprano sin _removeSession ante
+    // ciertos errores). Si intentionalSignOut se quedara pegado en true, el
+    // proximo SIGNED_OUT legitimo (rotacion multi-pestana) se saltaria el
+    // recheck de T2 sin motivo.
+    vi.useFakeTimers();
+    const { store, supabase } = await loadStore();
+    supabase.auth.getSession.mockResolvedValueOnce({ data: { session: makeSession() } });
+    let handler;
+    supabase.auth.onAuthStateChange.mockImplementation((fn) => {
+      handler = fn;
+    });
+    await store.initAuthStore();
+
+    supabase.auth.signOut.mockResolvedValueOnce({ error: new Error('network down') });
+    await store.signOut();
+
+    supabase.auth.getSession.mockClear();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+
+    await handler('SIGNED_OUT', null);
+    await vi.advanceTimersByTimeAsync(1500);
+
+    // Si el flag se hubiera quedado en true, esto seria 0 (kick directo, sin
+    // recheck).
+    expect(supabase.auth.getSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('signOut() que lanza tambien resetea intentionalSignOut', async () => {
+    vi.useFakeTimers();
+    const { store, supabase } = await loadStore();
+    supabase.auth.getSession.mockResolvedValueOnce({ data: { session: makeSession() } });
+    let handler;
+    supabase.auth.onAuthStateChange.mockImplementation((fn) => {
+      handler = fn;
+    });
+    await store.initAuthStore();
+
+    supabase.auth.signOut.mockRejectedValueOnce(new Error('boom'));
+    await expect(store.signOut()).rejects.toThrow('boom');
+
+    supabase.auth.getSession.mockClear();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+
+    await handler('SIGNED_OUT', null);
+    await vi.advanceTimersByTimeAsync(1500);
+
+    expect(supabase.auth.getSession).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('AUTH_STORAGE_KEY — fuente unica compartida con supabase.js', () => {

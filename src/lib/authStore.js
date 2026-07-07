@@ -494,5 +494,22 @@ export async function signOut() {
   // explícito y síncrono con la intención de logout (no depender del timing
   // del evento asíncrono de auth-js).
   clearProfileCache();
-  return supabase.auth.signOut();
+  try {
+    const result = await supabase.auth.signOut();
+    if (result?.error) {
+      // supabase.auth.signOut() puede retornar temprano SIN _removeSession
+      // (y por lo tanto sin emitir SIGNED_OUT) ante un sessionError que no
+      // sea AuthSessionMissingError, o un error de red no ignorado del
+      // signOut admin. Si nunca llega el SIGNED_OUT propio, el flag se
+      // quedaría pegado en true para siempre y el próximo SIGNED_OUT
+      // legítimo (rotación multi-pestaña) saltaría el recheck de T2 sin
+      // razón. Lo revertimos acá.
+      intentionalSignOut = false;
+    }
+    return result;
+  } catch (e) {
+    // Misma razón que arriba: si signOut() lanza, tampoco emitió SIGNED_OUT.
+    intentionalSignOut = false;
+    throw e;
+  }
 }

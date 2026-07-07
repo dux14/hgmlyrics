@@ -24,6 +24,7 @@ import {
   buildTonoLineHTML,
   buildMixedLineHTML,
 } from '../lib/lyricsRender.js';
+import { getChordNotation } from '../lib/chordNotation.js';
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { isFavorite, toggleFavorite } from '../lib/favorites.js';
@@ -456,7 +457,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
 
       <!-- Lyrics -->
       <div class="lyrics" id="lyrics-content">
-        ${renderSections(song.sections || [], { viewMode, transposeSemitones, useFlats, activeVoiceId: activeRosterId, activeCategory, chordsVoiceId, chordsCategory })}
+        ${renderSections(song.sections || [], { viewMode, transposeSemitones, useFlats, activeVoiceId: activeRosterId, activeCategory, chordsVoiceId, chordsCategory, notation: getChordNotation() })}
       </div>
 
       ${
@@ -494,6 +495,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
         activeCategory,
         chordsVoiceId,
         chordsCategory,
+        notation: getChordNotation(),
       });
       if (!isPreview) applyFontSize(fontSize);
     }
@@ -955,7 +957,8 @@ export function renderVoicePanel(song) {
  *           useFlats?: boolean, activeVoiceId?: string|null,
  *           activeCategory?: string|null,
  *           chordsVoiceId?: string|null,
- *           chordsCategory?: string|null }} [opts]
+ *           chordsCategory?: string|null,
+ *           notation?: 'anglo'|'latin' }} [opts]
  * @returns {string} HTML
  */
 export function renderSections(sections, opts = {}) {
@@ -967,6 +970,7 @@ export function renderSections(sections, opts = {}) {
     activeCategory = null,
     chordsVoiceId = null,
     chordsCategory = null,
+    notation = 'anglo',
   } = opts;
   const showChords = viewMode === 'chords';
   const colorClass = activeCategory ? `voice-text--${activeCategory}` : '';
@@ -1017,6 +1021,7 @@ export function renderSections(sections, opts = {}) {
               {
                 transposeSemitones,
                 useFlats,
+                notation,
               },
             );
             return `<p class="lyrics__line lyrics__line--mix">${inner}</p>`;
@@ -1029,7 +1034,7 @@ export function renderSections(sections, opts = {}) {
 
           // ── Acordes: letra atenuada + acordes flotantes ──
           if (showChords && line.chords?.length > 0) {
-            const inner = buildChordsLineHTML(text, line.chords, { transposeSemitones, useFlats });
+            const inner = buildChordsLineHTML(text, line.chords, { transposeSemitones, useFlats, notation });
             return `<p class="lyrics__line lyrics__line--chords">${inner}</p>`;
           }
           if (showChords) {

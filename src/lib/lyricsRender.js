@@ -7,6 +7,7 @@
  */
 import { buildAnnotatedLineHTML, groupsForVoice } from './voiceSystem.js';
 import { escapeHtml as esc } from './escape.js';
+import { displayChord } from './chordNotation.js';
 
 /**
  * Modo Letra (GA): texto blanco plano, escapado, sin etiquetas ni color.
@@ -61,7 +62,7 @@ export function transposeNote(note, semitones, useFlats = false) {
  * carácter (no parten palabras). `pos` se clampa a [0, len].
  * @param {string} text
  * @param {Array<{pos:number,ch:string}>} chords
- * @param {{ transposeSemitones?:number, useFlats?:boolean }} [opts]
+ * @param {{ transposeSemitones?:number, useFlats?:boolean, notation?:'anglo'|'latin' }} [opts]
  * @returns {string} HTML
  */
 export function buildChordsLineHTML(text, chords, opts = {}) {
@@ -69,9 +70,10 @@ export function buildChordsLineHTML(text, chords, opts = {}) {
   const len = str.length;
   const transposeSemitones = opts.transposeSemitones || 0;
   const useFlats = !!opts.useFlats;
+  const notation = opts.notation || 'anglo';
   const labels = (Array.isArray(chords) ? chords : []).map((c) => {
     const ch = transposeSemitones !== 0 ? transposeChord(c.ch, transposeSemitones, useFlats) : c.ch;
-    return { pos: Math.min(Math.max(c.pos || 0, 0), len), text: ch, className: 'chord-label' };
+    return { pos: Math.min(Math.max(c.pos || 0, 0), len), text: displayChord(ch, notation), className: 'chord-label' };
   });
   return buildAnnotatedLineHTML(str, { labels, baseClass: 'lyrics__letra-dim' });
 }
@@ -131,7 +133,7 @@ export function buildTonoLineHTML(line, voiceId, colorClass) {
  * @param {Array<{pos:number,ch:string}>} chords
  * @param {string} voiceId voz activa (roster)
  * @param {string} colorClass p.ej. 'voice-text--tenor'
- * @param {{ transposeSemitones?: number, useFlats?: boolean }} [opts]
+ * @param {{ transposeSemitones?: number, useFlats?: boolean, notation?:'anglo'|'latin' }} [opts]
  * @returns {string} HTML
  */
 export function buildMixedLineHTML(line, chords, voiceId, colorClass, opts = {}) {
@@ -139,6 +141,7 @@ export function buildMixedLineHTML(line, chords, voiceId, colorClass, opts = {})
   const len = text.length;
   const semis = opts.transposeSemitones || 0;
   const useFlats = !!opts.useFlats;
+  const notation = opts.notation || 'anglo';
   const cls = colorClass || '';
   const groups = groupsForVoice(line, voiceId);
 
@@ -146,7 +149,8 @@ export function buildMixedLineHTML(line, chords, voiceId, colorClass, opts = {})
   for (const c of Array.isArray(chords) ? chords : []) {
     const pos = Math.min(Math.max(c.pos || 0, 0), len);
     if (!chordByPos.has(pos)) {
-      chordByPos.set(pos, semis !== 0 ? transposeChord(c.ch, semis, useFlats) : c.ch);
+      const ch = semis !== 0 ? transposeChord(c.ch, semis, useFlats) : c.ch;
+      chordByPos.set(pos, displayChord(ch, notation));
     }
   }
   const noteByPos = new Map();

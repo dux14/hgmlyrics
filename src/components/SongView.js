@@ -33,8 +33,18 @@ import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { isFavorite, toggleFavorite } from '../lib/favorites.js';
 import '../styles/favorites.css';
 import { openOptionsSheet } from './OptionsSheet.js';
-import { presetToSpeed, stepToward, shouldShowFab } from '../lib/autoscroll.js';
+import {
+  presetToSpeed,
+  stepToward,
+  shouldShowFab,
+  AUTOSCROLL_SPEED_MIN,
+  AUTOSCROLL_SPEED_MAX,
+  getAutoscrollSpeed,
+  saveAutoscrollSpeed,
+  speedToPercentLabel,
+} from '../lib/autoscroll.js';
 import { escapeHtml } from '../lib/escape.js';
+import { buildVoiceChipHTML } from '../lib/voiceChips.js';
 import { enterStage } from './StageMode.js';
 import { normalizeSectionType } from '../lib/sectionTypes.js';
 
@@ -44,11 +54,7 @@ const FONT_MIN = 0.875;
 const FONT_MAX = 2.5;
 
 // Autoscroll config
-const AUTOSCROLL_SPEED_KEY = 'hkn-autoscroll-speed';
-const AUTOSCROLL_SPEED_MIN = 0.01;
-const AUTOSCROLL_SPEED_MAX = 2.0;
 const AUTOSCROLL_SPEED_STEP = 0.05;
-const AUTOSCROLL_SPEED_DEFAULT = 0.5;
 const AUTOSCROLL_BASE_PX_PER_FRAME = 1.8;
 const AUTOSCROLL_COLLAPSE_DELAY = 1500;
 // Fracción del paso manual aplicada por frame al converger hacia el preset de
@@ -273,6 +279,12 @@ async function _renderSongBody(container, songId, isPreview, song) {
   const tonoEnabled = isFeatureEnabled('voz_tono');
   let activeCategory = null;
   let activeRosterId = null;
+  // API de setupAutoscroll (FIX 1): pauseAutoscroll detiene el motor rAF del
+  // autoscroll clásico al entrar al escenario, para que no siga corriendo
+  // detrás del overlay. Se asigna al llamar setupAutoscroll más abajo; el
+  // handler de #enter-stage-btn ya solo registra el listener en este punto,
+  // así que para cuando se dispare el click ya está poblada.
+  let stageAutoscrollApi = null;
   // OptionsSheet (T4): visibilidad por voz individual del roster, default
   // todas visibles. Apagar una voz atenúa sus groups en Tono/Acordes+Voz
   // (ver renderSections → visibleVoices).
@@ -888,7 +900,14 @@ async function _renderSongBody(container, songId, isPreview, song) {
         getActiveVoice: () => activeRosterId,
         getTranspose: () => ({ semitones: transposeSemitones, useFlats }),
         getNotation: () => getChordNotation(),
-        setActiveVoice: (category) => selectCategory(category),
+        setActiveVoice: (category, personId) => {
+          selectCategory(category);
+          // selectCategory ya autoselecciona la única persona cuando hay una
+          // sola; con 2+ personas, respeta la que muestra el chip del stage.
+          const people = rosterByCategory(song, category);
+          if (personId && people.length > 1) selectPerson(personId);
+        },
+        pauseAutoscroll: () => stageAutoscrollApi?.pauseAutoscroll(),
       });
     }
   });
@@ -1027,7 +1046,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
   });
 
   // ── Feature 1: Autoscroll FAB ──
-  setupAutoscroll(container, song.id);
+  stageAutoscrollApi = setupAutoscroll(container, song.id);
 
   // Favorita lives on the song card cover in the list view now.
 }
@@ -1057,28 +1076,13 @@ function renderHeroVoiceChips(song, activeCategory, visibleVoices) {
   const categories = rosterCategories(song);
   if (categories.length === 0) return '';
   const chips = categories
-    .map((c) => {
-      const isActive = c === activeCategory;
-      const isDimmed = categoryIsDimmed(song, c, visibleVoices);
-      // "A" de Alto (mockup) para contralto; label accesible completo aparte.
-      const initial = c === 'contralto' ? 'A' : getVoiceLabel(c).charAt(0).toUpperCase();
-      const cls = [
-        'hero-voice-chip',
-        isActive ? 'hero-voice-chip--active' : '',
-        isDimmed ? 'hero-voice-chip--dimmed' : '',
-      ]
-        .filter(Boolean)
-        .join(' ');
-      return `
-      <button
-        type="button"
-        class="${cls}"
-        data-category="${c}"
-        style="--voice-chip-color: var(--color-voice-${c})"
-        aria-pressed="${isActive}"
-        aria-label="Voz: ${escapeHtml(getVoiceLabel(c))}"
-      >${initial}</button>`;
-    })
+    .map((c) =>
+      buildVoiceChipHTML(c, {
+        active: c === activeCategory,
+        dimmed: categoryIsDimmed(song, c, visibleVoices),
+        prefix: 'hero-voice-chip',
+      }),
+    )
     .join('');
   return `<div class="hero-voice-chips" id="hero-voice-chips" role="group" aria-label="Selector rápido de voz">${chips}</div>`;
 }
@@ -1294,36 +1298,16 @@ function applyFontSize(size) {
 
 /* ─── Feature 1: Autoscroll ─── */
 
-function getAutoscrollSpeed(songId) {
-  try {
-    const perSong = songId && localStorage.getItem(`${AUTOSCROLL_SPEED_KEY}:${songId}`);
-    const stored = perSong ?? localStorage.getItem(AUTOSCROLL_SPEED_KEY);
-    if (stored) {
-      const val = Number.parseFloat(stored);
-      if (val >= AUTOSCROLL_SPEED_MIN && val <= AUTOSCROLL_SPEED_MAX) return val;
-    }
-  } catch (_e) {
-    /* ignore */
-  }
-  return AUTOSCROLL_SPEED_DEFAULT;
-}
-
-function saveAutoscrollSpeed(speed, songId) {
-  try {
-    const key = songId ? `${AUTOSCROLL_SPEED_KEY}:${songId}` : AUTOSCROLL_SPEED_KEY;
-    localStorage.setItem(key, speed.toString());
-  } catch (_e) {
-    /* ignore */
-  }
-}
-
 const PLAY_ICON_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7L8 5z"/></svg>`;
 const PAUSE_ICON_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6V5zm8 0h4v14h-4V5z"/></svg>`;
 
-function speedToPercentLabel(speed) {
-  return `${Math.round(speed * 100)}%`;
-}
-
+/**
+ * Monta el FAB de autoscroll clásico y su motor rAF de scroll continuo.
+ * @param {HTMLElement} _container
+ * @param {string} songId
+ * @returns {{ pauseAutoscroll: () => void }} API mínima para consumidores
+ *   externos (StageMode la usa para detener el motor al entrar al escenario).
+ */
 function setupAutoscroll(_container, songId) {
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let scrollSpeed = getAutoscrollSpeed(songId);
@@ -1352,7 +1336,6 @@ function setupAutoscroll(_container, songId) {
   let headerVisible = true; // al cargar estás en el tope → header visible
 
   function applyFabVisibility() {
-    if (fab.classList.contains('autoscroll-fab--stage')) return; // en escenario lo controla StageMode
     fab.classList.toggle('autoscroll-fab--hidden', !shouldShowFab(headerVisible, isScrolling));
   }
   applyFabVisibility(); // estado inicial: oculto en el header
@@ -1563,4 +1546,6 @@ function setupAutoscroll(_container, songId) {
     window.removeEventListener('hashchange', cleanup);
   }
   window.addEventListener('hashchange', cleanup);
+
+  return { pauseAutoscroll: stopScroll };
 }

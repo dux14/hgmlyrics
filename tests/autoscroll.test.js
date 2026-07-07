@@ -1,5 +1,13 @@
-import { describe, it, expect } from 'vitest';
-import { presetToSpeed, stepToward, shouldShowFab } from '../src/lib/autoscroll.js';
+import { describe, it, expect, beforeEach } from 'vitest';
+import {
+  presetToSpeed,
+  stepToward,
+  shouldShowFab,
+  getAutoscrollSpeed,
+  saveAutoscrollSpeed,
+  speedToPercentLabel,
+  AUTOSCROLL_SPEED_DEFAULT,
+} from '../src/lib/autoscroll.js';
 
 describe('presetToSpeed', () => {
   const range = { min: 0.5, max: 3 };
@@ -30,6 +38,41 @@ describe('stepToward', () => {
   });
   it('si ya está en el objetivo, lo mantiene', () => {
     expect(stepToward(1.5, 1.5, 0.2)).toBeCloseTo(1.5);
+  });
+});
+
+// FIX 6: helpers de velocidad compartidos entre SongView y StageMode.
+describe('getAutoscrollSpeed / saveAutoscrollSpeed', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('sin nada guardado, devuelve el default', () => {
+    expect(getAutoscrollSpeed('song-1')).toBe(AUTOSCROLL_SPEED_DEFAULT);
+  });
+
+  it('guarda y lee por canción, sin pisar la clave global', () => {
+    saveAutoscrollSpeed(1.2, 'song-1');
+    expect(getAutoscrollSpeed('song-1')).toBeCloseTo(1.2);
+    expect(getAutoscrollSpeed('song-2')).toBe(AUTOSCROLL_SPEED_DEFAULT);
+  });
+
+  it('sin songId, guarda y lee la clave global', () => {
+    saveAutoscrollSpeed(0.8, undefined);
+    expect(getAutoscrollSpeed(undefined)).toBeCloseTo(0.8);
+  });
+
+  it('valor guardado fuera de rango se ignora y devuelve el default', () => {
+    localStorage.setItem('hkn-autoscroll-speed:song-1', '99');
+    expect(getAutoscrollSpeed('song-1')).toBe(AUTOSCROLL_SPEED_DEFAULT);
+  });
+});
+
+describe('speedToPercentLabel', () => {
+  it('formatea la velocidad como porcentaje redondeado', () => {
+    expect(speedToPercentLabel(0.5)).toBe('50%');
+    expect(speedToPercentLabel(1)).toBe('100%');
+    expect(speedToPercentLabel(0.654)).toBe('65%');
   });
 });
 

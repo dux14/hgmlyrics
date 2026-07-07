@@ -137,19 +137,28 @@ describe('enterStage/exitStage', () => {
     expect(document.getElementById('stage-v2-text').textContent).toBe('Primera línea');
   });
 
-  it('tap en el area central pausa/reanuda el avance automático', () => {
+  it('tap en el area central (controles visibles) pausa/reanuda el avance automático', () => {
     vi.useFakeTimers();
     const sv = mountSongView();
     enterStage(sv, { song: buildSong() });
     const overlay = document.querySelector('.stage-v2');
     const tapArea = document.getElementById('stage-v2-tap');
+    const controls = document.getElementById('stage-v2-controls');
+    expect(controls.classList.contains('stage-v2__controls--hidden')).toBe(false); // parte de controles visibles
 
-    tapArea.click(); // pausa
+    tapArea.click(); // controles visibles → pausa
     expect(overlay.classList.contains('stage-v2--paused')).toBe(true);
     vi.advanceTimersByTime(60000);
     expect(document.getElementById('stage-v2-text').textContent).toBe('Primera línea'); // sin avanzar
 
-    tapArea.click(); // reanuda
+    // La pausa larga auto-ocultó los controles: el próximo tap solo los
+    // despierta (FIX 4), no reanuda todavía.
+    expect(controls.classList.contains('stage-v2__controls--hidden')).toBe(true);
+    tapArea.click();
+    expect(controls.classList.contains('stage-v2__controls--hidden')).toBe(false);
+    expect(overlay.classList.contains('stage-v2--paused')).toBe(true); // sigue pausado
+
+    tapArea.click(); // controles ya visibles → reanuda
     expect(overlay.classList.contains('stage-v2--paused')).toBe(false);
     vi.advanceTimersByTime(8000); // > 7.4s (velocidad default 0.5) pero < 2 intervalos
     expect(document.getElementById('stage-v2-text').textContent).toBe('Segunda línea');
@@ -315,6 +324,23 @@ describe('controles flotantes: auto-hide 3s, A±', () => {
     vi.useRealTimers();
   });
 
+  it('tap con controles ocultos solo los despierta, sin pausar (FIX 4)', () => {
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong() });
+    const overlay = document.querySelector('.stage-v2');
+    const controls = document.getElementById('stage-v2-controls');
+    const tapArea = document.getElementById('stage-v2-tap');
+
+    vi.advanceTimersByTime(3000);
+    expect(controls.classList.contains('stage-v2__controls--hidden')).toBe(true);
+
+    tapArea.click();
+    expect(controls.classList.contains('stage-v2__controls--hidden')).toBe(false);
+    expect(overlay.classList.contains('stage-v2--paused')).toBe(false); // no togglea pausa
+    vi.useRealTimers();
+  });
+
   it('A+ aumenta la escala de fuente y la persiste; A- la reduce', () => {
     const sv = mountSongView();
     enterStage(sv, { song: buildSong() });
@@ -367,6 +393,36 @@ describe('chips de voz S·A·T·B en el escenario', () => {
 
     document.querySelector('[data-category="tenor"]').click();
 
-    expect(setActiveVoice).toHaveBeenCalledWith('tenor');
+    expect(setActiveVoice).toHaveBeenCalledWith('tenor', 'tenor-1');
+  });
+});
+
+describe('FIX 1: detiene el autoscroll clásico al entrar al escenario', () => {
+  it('llama a ctx.pauseAutoscroll una vez al entrar', () => {
+    const sv = mountSongView();
+    const pauseAutoscroll = vi.fn();
+    enterStage(sv, { song: buildSong(), pauseAutoscroll });
+    expect(pauseAutoscroll).toHaveBeenCalledTimes(1);
+  });
+
+  it('sin ctx.pauseAutoscroll no revienta', () => {
+    const sv = mountSongView();
+    expect(() => enterStage(sv, { song: buildSong() })).not.toThrow();
+  });
+});
+
+describe('FIX 3: zona muerta de gestos (movimiento bajo el umbral de swipe)', () => {
+  it('un movimiento de 20px (bajo los 40px de swipe) pausa igual que un tap', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong() });
+    const overlay = document.querySelector('.stage-v2');
+    const tapArea = document.getElementById('stage-v2-tap');
+
+    dispatchPointer(tapArea, 'pointerdown', 100, 100);
+    dispatchPointer(document, 'pointermove', 100, 120);
+    dispatchPointer(document, 'pointerup', 100, 120); // dy=20px, bajo SWIPE_THRESHOLD_PX
+    tapArea.click(); // el navegador dispara click tras el pointerup
+
+    expect(overlay.classList.contains('stage-v2--paused')).toBe(true);
   });
 });

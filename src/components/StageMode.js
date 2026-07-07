@@ -2,41 +2,24 @@ import { icon } from '../lib/icons.js';
 import { escapeHtml } from '../lib/escape.js';
 import { createWakeLock } from '../lib/wakeLock.js';
 import { requestStageFullscreen, exitStageFullscreen } from '../lib/fullscreen.js';
-import { groupsForVoice, rosterByCategory, CANONICAL_VOICE_ORDER, getVoiceLabel } from '../lib/voiceSystem.js';
+import { groupsForVoice, rosterByCategory, CANONICAL_VOICE_ORDER } from '../lib/voiceSystem.js';
 import { transposeChord, transposeNote } from '../lib/lyricsRender.js';
 import { displayChord, displayNote } from '../lib/chordNotation.js';
-import { presetToSpeed } from '../lib/autoscroll.js';
+import {
+  presetToSpeed,
+  AUTOSCROLL_SPEED_MIN,
+  AUTOSCROLL_SPEED_MAX,
+  getAutoscrollSpeed as readBaseSpeed,
+  saveAutoscrollSpeed as saveBaseSpeed,
+  speedToPercentLabel,
+} from '../lib/autoscroll.js';
+import { buildVoiceChipHTML } from '../lib/voiceChips.js';
 import { normalizeSectionType, SECTION_TYPE_LABELS } from '../lib/sectionTypes.js';
 import '../styles/stage.css';
 
-// ── Velocidad: continua (px/frame, hkn-autoscroll-speed) → segundos por línea ──
-const AUTOSCROLL_SPEED_KEY = 'hkn-autoscroll-speed';
-const AUTOSCROLL_SPEED_MIN = 0.01;
-const AUTOSCROLL_SPEED_MAX = 2.0;
-const AUTOSCROLL_SPEED_DEFAULT = 0.5;
 // Duración por línea en los extremos de velocidad: lento = 9s, rápido = 2.5s.
 const SECONDS_PER_LINE_SLOW = 9;
 const SECONDS_PER_LINE_FAST = 2.5;
-
-/**
- * Lee la velocidad continua guardada por SongView (autoscroll clásico),
- * por canción o global. Best-effort: localStorage roto → default.
- * @param {string|undefined} songId
- * @returns {number} velocidad en [AUTOSCROLL_SPEED_MIN, AUTOSCROLL_SPEED_MAX]
- */
-function readBaseSpeed(songId) {
-  try {
-    const perSong = songId && localStorage.getItem(`${AUTOSCROLL_SPEED_KEY}:${songId}`);
-    const stored = perSong ?? localStorage.getItem(AUTOSCROLL_SPEED_KEY);
-    if (stored) {
-      const val = Number.parseFloat(stored);
-      if (val >= AUTOSCROLL_SPEED_MIN && val <= AUTOSCROLL_SPEED_MAX) return val;
-    }
-  } catch {
-    /* localStorage puede fallar (Safari privado, cuota) */
-  }
-  return AUTOSCROLL_SPEED_DEFAULT;
-}
 
 /**
  * Mapea velocidad continua → segundos por línea. Interpolación lineal:
@@ -49,25 +32,6 @@ export function speedToSecondsPerLine(speed) {
   const clamped = Math.max(AUTOSCROLL_SPEED_MIN, Math.min(AUTOSCROLL_SPEED_MAX, speed));
   const normalized = (clamped - AUTOSCROLL_SPEED_MIN) / (AUTOSCROLL_SPEED_MAX - AUTOSCROLL_SPEED_MIN);
   return SECONDS_PER_LINE_SLOW - normalized * (SECONDS_PER_LINE_SLOW - SECONDS_PER_LINE_FAST);
-}
-
-/**
- * Persiste la velocidad ajustada por gesto en la misma clave que el
- * autoscroll clásico de SongView (por canción si hay songId, si no global).
- * @param {number} speed @param {string|undefined} songId
- */
-function saveBaseSpeed(speed, songId) {
-  try {
-    const key = songId ? `${AUTOSCROLL_SPEED_KEY}:${songId}` : AUTOSCROLL_SPEED_KEY;
-    localStorage.setItem(key, speed.toString());
-  } catch {
-    /* localStorage puede fallar (Safari privado, cuota) */
-  }
-}
-
-/** @param {number} speed @returns {string} p.ej. "65%" */
-function speedToPercentLabel(speed) {
-  return `${Math.round(speed * 100)}%`;
 }
 
 // ── Escala de fuente del teleprompter (controles A−/A+) ──
@@ -175,7 +139,6 @@ export function projectLines(song, ctx = {}) {
 const HINT_DURATION_MS = 4000;
 const FEEDBACK_DURATION_MS = 1000;
 const CONTROLS_HIDE_MS = 3000;
-const TAP_THRESHOLD_PX = 10;
 const SWIPE_THRESHOLD_PX = 40;
 const GESTURE_SPEED_STEP = 0.1;
 
@@ -227,19 +190,7 @@ function renderVoiceChips(song, activeCategory) {
   const categories = CANONICAL_VOICE_ORDER.filter((c) => rosterByCategory(song, c).length > 0);
   if (categories.length === 0) return '';
   return categories
-    .map((c) => {
-      const isActive = c === activeCategory;
-      const initial = c === 'contralto' ? 'A' : getVoiceLabel(c).charAt(0).toUpperCase();
-      return `
-      <button
-        type="button"
-        class="stage-v2__voice-chip${isActive ? ' stage-v2__voice-chip--active' : ''}"
-        data-category="${c}"
-        style="--voice-chip-color: var(--color-voice-${c})"
-        aria-pressed="${isActive}"
-        aria-label="Voz: ${escapeHtml(getVoiceLabel(c))}"
-      >${initial}</button>`;
-    })
+    .map((c) => buildVoiceChipHTML(c, { active: c === activeCategory, prefix: 'stage-v2__voice-chip' }))
     .join('');
 }
 
@@ -324,7 +275,7 @@ function selectStageVoice(s, category) {
     chip.classList.toggle('stage-v2__voice-chip--active', isActive);
     chip.setAttribute('aria-pressed', String(isActive));
   });
-  if (typeof s.ctx.setActiveVoice === 'function') s.ctx.setActiveVoice(category);
+  if (typeof s.ctx.setActiveVoice === 'function') s.ctx.setActiveVoice(category, people[0].id);
 }
 
 /** Muestra los controles flotantes y reprograma su auto-ocultado a los 3s. */
@@ -366,11 +317,17 @@ function togglePause(s) {
  * @param {{ song: object, getActiveVoice?: () => string|null,
  *           getTranspose?: () => {semitones:number, useFlats:boolean},
  *           getNotation?: () => 'anglo'|'latin',
- *           setActiveVoice?: (category: string) => void }} ctx contexto vivo desde SongView;
- *           setActiveVoice sincroniza el chip S·A·T·B del escenario con el selector de voz de SongView.
+ *           setActiveVoice?: (category: string, personId?: string) => void,
+ *           pauseAutoscroll?: () => void }} ctx contexto vivo desde SongView;
+ *           setActiveVoice sincroniza el chip S·A·T·B del escenario con el selector de voz de SongView
+ *           (personId elige la persona concreta cuando la categoría tiene 2+ voces);
+ *           pauseAutoscroll detiene el motor de autoscroll clásico, que si no seguiría
+ *           corriendo detrás del overlay.
  */
 export function enterStage(songViewEl, ctx = {}) {
   if (session || !songViewEl || !ctx.song) return; // idempotente
+
+  if (typeof ctx.pauseAutoscroll === 'function') ctx.pauseAutoscroll();
 
   const songId = ctx.song.id;
   const activeVoiceId = typeof ctx.getActiveVoice === 'function' ? ctx.getActiveVoice() : null;
@@ -438,22 +395,28 @@ export function enterStage(songViewEl, ctx = {}) {
   session.hintTimer = setTimeout(() => els.hint.classList.add('stage-v2__hint--hidden'), HINT_DURATION_MS);
   showControls(session);
 
-  // Tap en el área central (no en los controles ni chips) = pausa/reanuda.
-  // Un swipe ya manejado por onPointerUp marca suppressClick para no pausar además.
+  // Tap en el área central (no en los controles ni chips): si los controles
+  // están ocultos (auto-hide), el tap solo los despierta (patrón estándar de
+  // players); si ya están visibles, pausa/reanuda además de reprogramar su
+  // auto-ocultado. Un swipe real (onPointerUp) marca suppressClick para que
+  // este click no pause encima.
   const onTap = (e) => {
     if (e.target.closest('.stage-v2__controls') || e.target.closest('.stage-v2__voice-chips')) return;
     if (session.suppressClick) {
       session.suppressClick = false;
       return;
     }
+    const controlsHidden = els.controls.classList.contains('stage-v2__controls--hidden');
     showControls(session);
+    if (controlsHidden) return; // solo despierta los controles, no pausa
     togglePause(session);
   };
   els.tapArea.addEventListener('click', onTap);
 
   // Gestos: swipe vertical = velocidad ±, swipe horizontal = línea sig/ant.
-  // Umbral de tap (<10px) vs swipe (>=40px); por debajo de ambos no hace nada
-  // (lo resuelve el listener de click de arriba).
+  // Por debajo del umbral de swipe (40px) en ambos ejes no es un gesto real
+  // (zona muerta): se deja sin suprimir para que el click de arriba actúe
+  // como un tap normal.
   const onPointerDown = (e) => {
     if (e.target.closest('.stage-v2__controls') || e.target.closest('.stage-v2__voice-chips')) return;
     session.gesture = { startX: e.clientX, startY: e.clientY, lastX: e.clientX, lastY: e.clientY };
@@ -471,12 +434,14 @@ export function enterStage(songViewEl, ctx = {}) {
     const dy = (e.clientY ?? g.lastY) - g.startY;
     const adx = Math.abs(dx);
     const ady = Math.abs(dy);
-    if (adx < TAP_THRESHOLD_PX && ady < TAP_THRESHOLD_PX) return; // tap: lo maneja onTap
+    const isVerticalSwipe = ady > adx && ady >= SWIPE_THRESHOLD_PX;
+    const isHorizontalSwipe = adx > ady && adx >= SWIPE_THRESHOLD_PX;
+    if (!isVerticalSwipe && !isHorizontalSwipe) return; // sin umbral cruzado: lo maneja onTap
     session.suppressClick = true;
     showControls(session);
-    if (ady > adx && ady >= SWIPE_THRESHOLD_PX) {
+    if (isVerticalSwipe) {
       adjustSpeed(session, dy < 0 ? GESTURE_SPEED_STEP : -GESTURE_SPEED_STEP);
-    } else if (adx > ady && adx >= SWIPE_THRESHOLD_PX) {
+    } else {
       goTo(session, session.index + (dx < 0 ? 1 : -1));
     }
   };

@@ -2,6 +2,51 @@
  * autoscroll.js — utilidades puras para scroll dinámico.
  */
 
+// ── Velocidad continua (px/frame), compartida por el autoscroll clásico
+// (SongView) y el gesto de velocidad del stage (StageMode).
+export const AUTOSCROLL_SPEED_KEY = 'hkn-autoscroll-speed';
+export const AUTOSCROLL_SPEED_MIN = 0.01;
+export const AUTOSCROLL_SPEED_MAX = 2.0;
+export const AUTOSCROLL_SPEED_DEFAULT = 0.5;
+
+/**
+ * Lee la velocidad continua guardada, por canción o global.
+ * Best-effort: localStorage roto (Safari privado, cuota) → default.
+ * @param {string|undefined} songId
+ * @returns {number} velocidad en [AUTOSCROLL_SPEED_MIN, AUTOSCROLL_SPEED_MAX]
+ */
+export function getAutoscrollSpeed(songId) {
+  try {
+    const perSong = songId && localStorage.getItem(`${AUTOSCROLL_SPEED_KEY}:${songId}`);
+    const stored = perSong ?? localStorage.getItem(AUTOSCROLL_SPEED_KEY);
+    if (stored) {
+      const val = Number.parseFloat(stored);
+      if (val >= AUTOSCROLL_SPEED_MIN && val <= AUTOSCROLL_SPEED_MAX) return val;
+    }
+  } catch {
+    /* localStorage puede fallar (Safari privado, cuota) */
+  }
+  return AUTOSCROLL_SPEED_DEFAULT;
+}
+
+/**
+ * Persiste la velocidad continua, por canción si hay songId, si no global.
+ * @param {number} speed @param {string|undefined} songId
+ */
+export function saveAutoscrollSpeed(speed, songId) {
+  try {
+    const key = songId ? `${AUTOSCROLL_SPEED_KEY}:${songId}` : AUTOSCROLL_SPEED_KEY;
+    localStorage.setItem(key, speed.toString());
+  } catch {
+    /* localStorage puede fallar (Safari privado, cuota) */
+  }
+}
+
+/** @param {number} speed @returns {string} p.ej. "65%" */
+export function speedToPercentLabel(speed) {
+  return `${Math.round(speed * 100)}%`;
+}
+
 /**
  * Mapea un speedPreset (0–100) al multiplicador de velocidad del autoscroll.
  * @param {number|null|undefined} preset

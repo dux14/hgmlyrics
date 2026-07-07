@@ -15,7 +15,7 @@ import { renderSections } from './SongView.js';
 import {
   CANONICAL_VOICE_ORDER,
   VOICE_LINK_TYPES,
-  validateSongV3,
+  validateSongPreSave,
   getVoiceLabel,
   isValidNote,
 } from '../lib/voiceSystem.js';
@@ -1191,12 +1191,21 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
     if (roster.length > 0) {
       newSong.schemaVersion = 3;
       newSong.voiceRoster = roster;
-      try {
-        validateSongV3(newSong);
-      } catch (e) {
-        showSaveError(container, `No se pudo guardar (tono): ${e.message}`);
-        return;
-      }
+    }
+
+    // Links en el mismo payload: el back los guarda en la MISMA transacción
+    // que la canción (guardado atómico, ver api/songs/[id].js).
+    const links = collectLinks(container, voiceLinkItems);
+    newSong.platformLinks = links.platforms;
+    newSong.voiceLinks = links.voices;
+
+    // Validación pre-guardado: bloquea el envío con un mensaje legible por
+    // sección/línea (acorde fuera de texto, nota inválida, etc.) en vez de
+    // dejar que el back rechace el request con el "Error guardando" opaco.
+    const { valid, errors } = validateSongPreSave(newSong);
+    if (!valid) {
+      showSaveError(container, errors[0]);
+      return;
     }
 
     const method = existingSong ? 'PUT' : 'POST';
@@ -1211,15 +1220,9 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
       body: JSON.stringify(newSong),
     });
 
-    if (!res.ok) throw new Error('Error guardando la canción');
-
-    const links = collectLinks(container, voiceLinkItems);
-    if (links.platforms.length > 0 || links.voices.length > 0) {
-      await fetch(`${API_URL}/songs/${songId}/links`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(links),
-      });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error(data?.error || 'Error guardando la canción');
     }
 
     // El SW cachea el detalle (StaleWhileRevalidate); sin esto el lector

@@ -879,3 +879,92 @@ describe('buildAnnotatedLineHTML', () => {
     expect(html).toContain('F#&lt;');
   });
 });
+
+import { validateSongPreSave } from '../src/lib/voiceSystem.js';
+
+describe('validateSongPreSave', () => {
+  const base = () => ({
+    sections: [
+      {
+        label: 'Verso 1',
+        lines: [
+          { text: 'Santo', chords: [{ pos: 0, ch: 'D' }] },
+          { text: 'Es el Señor', chords: [] },
+        ],
+      },
+    ],
+  });
+
+  it('acepta una canción v1 sin problemas', () => {
+    const result = validateSongPreSave(base());
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  it('rechaza un acorde con pos fuera del texto, con mensaje por sección/línea', () => {
+    const s = base();
+    s.sections[0].lines[0].chords[0].pos = 99;
+    const result = validateSongPreSave(s);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toMatch(/Verso 1, línea 1/);
+    expect(result.errors[0]).toMatch(/fuera del texto/);
+  });
+
+  it('usa "Sección N" cuando la sección no tiene label', () => {
+    const s = { sections: [{ lines: [{ text: 'ab', chords: [{ pos: 9, ch: 'D' }] }] }] };
+    const result = validateSongPreSave(s);
+    expect(result.errors[0]).toMatch(/Sección 1, línea 1/);
+  });
+
+  it('rechaza un acorde vacío', () => {
+    const s = base();
+    s.sections[0].lines[0].chords[0].ch = '   ';
+    const result = validateSongPreSave(s);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toMatch(/acorde vacío/);
+  });
+
+  it('rechaza un group v3 con nota inválida, ubicado por sección/línea', () => {
+    const s = {
+      schemaVersion: 3,
+      voiceRoster: [{ id: 'sop1', category: 'soprano' }],
+      sections: [
+        {
+          label: 'Coro',
+          lines: [{ text: 'Santo', groups: [{ start: 0, end: 5, voiceId: 'sop1', note: 'X1' }] }],
+        },
+      ],
+    };
+    const result = validateSongPreSave(s);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toMatch(/Coro, línea 1/);
+    expect(result.errors[0]).toMatch(/nota asignada no es válida/);
+  });
+
+  it('rechaza un group que referencia una voz fuera del elenco', () => {
+    const s = {
+      schemaVersion: 3,
+      voiceRoster: [{ id: 'sop1', category: 'soprano' }],
+      sections: [
+        { lines: [{ text: 'Santo', groups: [{ start: 0, end: 5, voiceId: 'ghost', note: null }] }] },
+      ],
+    };
+    const result = validateSongPreSave(s);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toMatch(/no está en el elenco/);
+  });
+
+  it('traduce el mensaje técnico de validateSongV3 cuando no hay error de sección/línea', () => {
+    const s = {
+      schemaVersion: 3,
+      voiceRoster: [
+        { id: 'sop1', category: 'soprano' },
+        { id: 'sop1', category: 'tenor' },
+      ],
+      sections: [],
+    };
+    const result = validateSongPreSave(s);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).not.toMatch(/roster/); // sin jerga técnica
+    expect(result.errors[0]).toMatch(/identificador repetido/);
+  });
+});

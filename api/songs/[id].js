@@ -4,6 +4,7 @@ import { allowMethods, withErrors } from '../_lib/http.js';
 import { invalidateListCache } from './index.js';
 import { isValidKey } from '../../src/lib/musicKeys.js';
 import { validateSongV2, validateSongV3 } from '../../src/lib/voiceSystem.js';
+import { persistLinksInTx } from '../_lib/songLinks.js';
 
 function normalizeKey(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -64,26 +65,38 @@ async function update(req, res, id) {
       return;
     }
   }
-  const result = await sql`
-    UPDATE songs SET
-      title = ${s.title},
-      artist = ${s.artist ?? null},
-      album = ${s.album ?? null},
-      album_slug = ${s.albumSlug ?? null},
-      year = ${s.year ?? null},
-      genre = ${s.genre ?? null},
-      voice_type = ${s.voiceType ?? null},
-      voice_percent_male = ${s.voicePercent?.male ?? 50},
-      voice_percent_female = ${s.voicePercent?.female ?? 50},
-      cover_image = ${s.coverImage ?? null},
-      sections = ${sql.json(s.sections ?? [])},
-      voice_roster = ${sql.json(s.voiceRoster ?? [])},
-      schema_version = ${s.schemaVersion ?? 1},
-      album_order = ${s.albumOrder ?? 0},
-      cejilla = ${s.cejilla ?? null},
-      key = ${key}
-    WHERE id = ${id}
-  `;
+  // platformLinks/voiceLinks son opcionales: si no vienen, el comportamiento
+  // es el de siempre (el editor viejo/SongLinks.js siguen usando el PUT
+  // separado de links.js). Si vienen, se guardan en la MISMA transacción que
+  // la canción — un link inválido revierte también el UPDATE de songs.
+  const hasLinks = s.platformLinks !== undefined || s.voiceLinks !== undefined;
+  let result;
+  await sql.begin(async (tx) => {
+    result = await tx`
+      UPDATE songs SET
+        title = ${s.title},
+        artist = ${s.artist ?? null},
+        album = ${s.album ?? null},
+        album_slug = ${s.albumSlug ?? null},
+        year = ${s.year ?? null},
+        genre = ${s.genre ?? null},
+        voice_type = ${s.voiceType ?? null},
+        voice_percent_male = ${s.voicePercent?.male ?? 50},
+        voice_percent_female = ${s.voicePercent?.female ?? 50},
+        cover_image = ${s.coverImage ?? null},
+        sections = ${sql.json(s.sections ?? [])},
+        voice_roster = ${sql.json(s.voiceRoster ?? [])},
+        schema_version = ${s.schemaVersion ?? 1},
+        album_order = ${s.albumOrder ?? 0},
+        cejilla = ${s.cejilla ?? null},
+        key = ${key}
+      WHERE id = ${id}
+    `;
+    if (hasLinks) {
+      await persistLinksInTx(tx, id, s.platformLinks ?? [], s.voiceLinks ?? []);
+    }
+  });
+
   if (result.count === 0) {
     res.status(404).json({ error: 'Song not found' });
     return;

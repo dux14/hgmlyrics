@@ -464,6 +464,94 @@ export function validateSongV3(song) {
 }
 
 /**
+ * Traduce mensajes técnicos de validateSongV2/V3 a español legible para
+ * alguien no técnico (sin jerga tipo "roster"/"group"/"schemaVersion").
+ * @param {string} message @returns {string}
+ */
+function translateValidationMessage(message) {
+  if (message.startsWith('schemaVersion debe ser'))
+    {return 'La canción tiene un formato de datos inesperado. Vuelve a abrir el editor.';}
+  if (message.startsWith('category inválida en roster'))
+    {return 'El elenco de voces tiene una categoría no reconocida.';}
+  if (message.startsWith('id de roster duplicado'))
+    {return 'El elenco de voces tiene un identificador repetido.';}
+  if (message.startsWith('referenceKey'))
+    {return 'Una voz del elenco tiene una nota de referencia inválida.';}
+  if (message === 'spoken debe ser boolean') return 'Hay un valor inválido en una línea hablada.';
+  if (message === 'group fuera de rango' || message === 'syllable fuera de rango')
+    {return 'Hay una asignación de voz que no coincide con el texto de la línea.';}
+  if (message.startsWith('group referencia roster inexistente'))
+    {return 'Hay una asignación de voz que no corresponde a ninguna voz del elenco.';}
+  if (message.startsWith('voiceLines referencia roster inexistente'))
+    {return 'Hay una línea de voz que no corresponde a ninguna voz del elenco.';}
+  if (message.startsWith('nota inválida')) return 'Hay una nota musical inválida.';
+  if (message === 'chord pos fuera de rango') return 'Hay un acorde ubicado fuera del texto.';
+  if (message === 'chord vacío') return 'Hay un acorde vacío.';
+  if (message === 'syllables solapadas (overlap)') return 'Hay sílabas que se solapan en una línea.';
+  if (message === 'sungSyllables y notes con length distinto (no alineados)')
+    {return 'Las notas de una voz no coinciden con sus sílabas.';}
+  if (message === 'sungSyllables fuera de índice')
+    {return 'Una voz referencia una sílaba que no existe.';}
+  return message;
+}
+
+/**
+ * Valida una canción antes de guardarla y devuelve errores legibles
+ * (español neutro, sin tecnicismos), ubicados por sección/línea cuando es
+ * posible. No lanza: el llamador decide qué hacer con el resultado (bloquear
+ * el guardado, mostrar el primer error inline, etc.).
+ * @param {object} song
+ * @returns {{valid: boolean, errors: string[]}}
+ */
+export function validateSongPreSave(song) {
+  const errors = [];
+  const roster = song?.voiceRoster || [];
+  const ids = new Set(roster.map((v) => v.id));
+
+  (song?.sections || []).forEach((section, si) => {
+    const sectionLabel = section.label || `Sección ${si + 1}`;
+    (section.lines || []).forEach((line, li) => {
+      const where = `${sectionLabel}, línea ${li + 1}`;
+      const len = (line.text || '').length;
+
+      for (const c of line.chords || []) {
+        if (!(c.pos >= 0 && c.pos <= len)) {
+          errors.push(`${where}: el acorde está fuera del texto`);
+        } else if (typeof c.ch !== 'string' || c.ch.trim() === '') {
+          errors.push(`${where}: hay un acorde vacío`);
+        }
+      }
+
+      for (const g of line.groups || []) {
+        if (!(g.start >= 0 && g.end > g.start && g.end <= len)) {
+          errors.push(`${where}: una asignación de voz está fuera del texto`);
+        } else if (!ids.has(g.voiceId)) {
+          errors.push(`${where}: asigna una voz que no está en el elenco`);
+        } else if (g.note !== null && g.note !== undefined && !isValidNote(g.note)) {
+          errors.push(`${where}: la nota asignada no es válida`);
+        }
+      }
+    });
+  });
+
+  if (errors.length === 0 && song?.schemaVersion === 3) {
+    try {
+      validateSongV3(song);
+    } catch (e) {
+      errors.push(translateValidationMessage(e.message));
+    }
+  } else if (errors.length === 0 && song?.schemaVersion === 2) {
+    try {
+      validateSongV2(song);
+    } catch (e) {
+      errors.push(translateValidationMessage(e.message));
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+/**
  * Deriva los voiceRanges (rangos de carácter por categoría) para el coloreado
  * del modo Letra, a partir de syllables + voiceLines. Agrupa sílabas contiguas
  * con el mismo conjunto de categorías; ignora extensores de melisma (ancho cero).

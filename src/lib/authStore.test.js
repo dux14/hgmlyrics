@@ -26,6 +26,7 @@ vi.mock('./supabase.js', () => ({
       exchangeCodeForSession: vi.fn(),
       refreshSession: vi.fn(),
       signOut: vi.fn(),
+      verifyOtp: vi.fn(),
     },
   },
 }));
@@ -486,6 +487,32 @@ describe('onAuthStateChange — SIGNED_OUT resiliente (T2)', () => {
 
     expect(supabase.auth.getSession.mock.calls.length).toBe(callsBefore);
     expect(store.isAuthenticated()).toBe(false);
+  });
+});
+
+describe('verifyEmailOtp', () => {
+  it('llama a supabase.auth.verifyOtp con email, token y type email', async () => {
+    const { store, supabase } = await loadStore();
+    supabase.auth.verifyOtp.mockResolvedValue({ data: { session: makeSession() }, error: null });
+
+    const result = await store.verifyEmailOtp('ana@correo.com', '12345678');
+
+    expect(supabase.auth.verifyOtp).toHaveBeenCalledWith({
+      email: 'ana@correo.com',
+      token: '12345678',
+      type: 'email',
+    });
+    expect(result).toEqual({ data: { session: makeSession() }, error: null });
+  });
+
+  it('propaga el error cuando verifyOtp falla', async () => {
+    const { store, supabase } = await loadStore();
+    const error = new Error('token invalido');
+    supabase.auth.verifyOtp.mockResolvedValue({ data: { session: null }, error });
+
+    const result = await store.verifyEmailOtp('ana@correo.com', '00000000');
+
+    expect(result.error).toBe(error);
   });
 });
 

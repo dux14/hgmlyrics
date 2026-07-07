@@ -383,6 +383,17 @@ export async function signInWithMagicLink(email) {
   });
 }
 
+/**
+ * Verifica el código OTP de 8 dígitos que llega en el mismo correo del
+ * magic link (T3). Funciona en cualquier navegador/pestaña porque no
+ * depende del code_verifier de PKCE que sí requiere el enlace.
+ * @param {string} email
+ * @param {string} token
+ */
+export async function verifyEmailOtp(email, token) {
+  return supabase.auth.verifyOtp({ email, token, type: 'email' });
+}
+
 export async function signOut() {
   // El handler de SIGNED_OUT también limpia el caché, pero lo hacemos aquí
   // explícito y síncrono con la intención de logout (no depender del timing

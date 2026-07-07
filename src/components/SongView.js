@@ -26,13 +26,13 @@ import {
   buildTransposeBubbleLabel,
   buildCejillaHint,
 } from '../lib/lyricsRender.js';
-import { getChordNotation } from '../lib/chordNotation.js';
+import { getChordNotation, setChordNotation } from '../lib/chordNotation.js';
 import { getTranspose, setTranspose } from '../lib/transposeStore.js';
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { isFavorite, toggleFavorite } from '../lib/favorites.js';
 import '../styles/favorites.css';
-import { openVoiceSheet } from './VoiceSheet.js';
+import { openOptionsSheet } from './OptionsSheet.js';
 import { presetToSpeed, stepToward, shouldShowFab } from '../lib/autoscroll.js';
 import { escapeHtml } from '../lib/escape.js';
 import { enterStage } from './StageMode.js';
@@ -261,6 +261,10 @@ async function _renderSongBody(container, songId, isPreview, song) {
   const tonoEnabled = isFeatureEnabled('voz_tono');
   let activeCategory = null;
   let activeRosterId = null;
+  // OptionsSheet (T4): visibilidad por voz individual del roster, default
+  // todas visibles. Apagar una voz atenúa sus groups en Tono/Acordes+Voz
+  // (ver renderSections → visibleVoices).
+  const visibleVoices = new Set((song.voiceRoster || []).map((v) => v.id));
 
   const hasChords = songHasChords(song);
   // Vista combinada (Acordes+Voz, Wave 4): voz activa del modo Acordes,
@@ -384,7 +388,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
           `
               : ''
           }
-          <button class="song-toolbar__voices" id="open-voice-sheet" aria-label="Control de voces">${icon('sliders', { size: 18 })}</button>
+          <button class="song-toolbar__options" id="open-options-sheet" aria-label="Opciones">${icon('sliders', { size: 18 })}</button>
           <button class="fav-btn${!isPreview && songId && isFavorite(songId) ? ' is-on' : ''}" id="fav-btn" aria-label="Agregar a favoritos">${icon('heart', { size: 18 })}</button>
         </div>
 
@@ -465,7 +469,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
 
       <!-- Lyrics -->
       <div class="lyrics" id="lyrics-content">
-        ${renderSections(song.sections || [], { viewMode, transposeSemitones, useFlats, activeVoiceId: activeRosterId, activeCategory, chordsVoiceId, chordsCategory, notation: getChordNotation() })}
+        ${renderSections(song.sections || [], { viewMode, transposeSemitones, useFlats, activeVoiceId: activeRosterId, activeCategory, chordsVoiceId, chordsCategory, notation: getChordNotation(), visibleVoices })}
       </div>
 
       ${
@@ -504,6 +508,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
         chordsVoiceId,
         chordsCategory,
         notation: getChordNotation(),
+        visibleVoices,
       });
       if (!isPreview) applyFontSize(fontSize);
     }
@@ -861,27 +866,57 @@ async function _renderSongBody(container, songId, isPreview, song) {
     });
   }
 
-  // ── VoiceSheet: control de voces (solo movil, <768px) ──
-  container.querySelector('#open-voice-sheet')?.addEventListener('click', () => {
-    openVoiceSheet({
+  // ── OptionsSheet (T4): menú de opciones unificado, todas las resoluciones ──
+  container.querySelector('#open-options-sheet')?.addEventListener('click', () => {
+    const syncTonoBubble = () => {
+      const label = buildTransposeBubbleLabel(song.key, transposeSemitones, useFlats, getChordNotation());
+      const el = document.querySelector('#osheet-tono');
+      if (el) {
+        el.textContent = label;
+        el.setAttribute('aria-label', `Tono: ${label}. Toca para restablecer al original.`);
+      }
+    };
+    openOptionsSheet({
       song,
-      activeCategory,
-      transposeValue: transposeSemitones,
+      visibleVoices,
+      showTono: hasChords,
+      tonoLabel: buildTransposeBubbleLabel(song.key, transposeSemitones, useFlats, getChordNotation()),
       useFlats,
+      notation: getChordNotation(),
       fontLabel: fontSize.toFixed(2),
-      onSelectCategory: (cat) => selectCategory(cat),
+      autoscrollLabel: document.querySelector('#autoscroll-speed-label')?.textContent || '',
+      onToggleVoice: (voiceId) => {
+        if (visibleVoices.has(voiceId)) visibleVoices.delete(voiceId);
+        else visibleVoices.add(voiceId);
+        reRenderLyrics();
+      },
       onTranspose: (dir) => {
         transposeSemitones += dir;
         refreshTransposeUI();
-        const vt = document.querySelector('#vsheet-tono');
-        if (vt) vt.textContent = transposeSemitones;
+        syncTonoBubble();
         reRenderLyrics();
       },
-      onToggleNotation: () => {
+      onResetTranspose: () => {
+        if (transposeSemitones === 0) return;
+        transposeSemitones = 0;
+        refreshTransposeUI();
+        syncTonoBubble();
+        reRenderLyrics();
+      },
+      onToggleAccidental: () => {
         useFlats = !useFlats;
         refreshTransposeUI();
+        syncTonoBubble();
         const notationBtn = container.querySelector('#notation-toggle');
         if (notationBtn) notationBtn.textContent = useFlats ? '♭ → ♯' : '♯ / ♭';
+        const accidentalBtn = document.querySelector('.osheet__accidental');
+        if (accidentalBtn) accidentalBtn.textContent = useFlats ? '♭' : '♯';
+        reRenderLyrics();
+      },
+      onNotationChange: (value) => {
+        setChordNotation(value);
+        refreshTransposeUI();
+        syncTonoBubble();
         reRenderLyrics();
       },
       onFont: (dir) => {
@@ -890,8 +925,13 @@ async function _renderSongBody(container, songId, isPreview, song) {
         saveFontSize(fontSize);
         const fl = container.querySelector('#font-size-label');
         if (fl) fl.textContent = fontSize.toFixed(2);
-        const vf = document.querySelector('#vsheet-font');
-        if (vf) vf.textContent = fontSize.toFixed(2);
+        const of = document.querySelector('#osheet-font');
+        if (of) of.textContent = fontSize.toFixed(2);
+      },
+      onAutoscroll: (dir) => {
+        const btn = document.querySelector(dir === 1 ? '#autoscroll-faster' : '#autoscroll-slower');
+        btn?.click();
+        return document.querySelector('#autoscroll-speed-label')?.textContent || '';
       },
     });
   });
@@ -1024,7 +1064,8 @@ export function normalizeSectionType(type) {
  *           activeCategory?: string|null,
  *           chordsVoiceId?: string|null,
  *           chordsCategory?: string|null,
- *           notation?: 'anglo'|'latin' }} [opts]
+ *           notation?: 'anglo'|'latin',
+ *           visibleVoices?: Set<string>|null }} [opts]
  * @returns {string} HTML
  */
 export function renderSections(sections, opts = {}) {
@@ -1037,10 +1078,19 @@ export function renderSections(sections, opts = {}) {
     chordsVoiceId = null,
     chordsCategory = null,
     notation = 'anglo',
+    visibleVoices = null,
   } = opts;
   const showChords = viewMode === 'chords';
   const colorClass = activeCategory ? `voice-text--${activeCategory}` : '';
   const mixColorClass = chordsCategory ? `voice-text--${chordsCategory}` : '';
+  // OptionsSheet (T4): una voz apagada en VOCES VISIBLES no debe pintar sus
+  // groups resaltados en Tono/Acordes+Voz — se logra pasando null como
+  // voiceId a los builders (groupsForVoice(line, null) → sin groups, texto
+  // base atenuado). Sin `visibleVoices` (back-compat, p.ej. tests/preview
+  // existentes) no se filtra nada.
+  const isVoiceVisible = (id) => !visibleVoices || !id || visibleVoices.has(id);
+  const effectiveVoiceId = isVoiceVisible(activeVoiceId) ? activeVoiceId : null;
+  const effectiveChordsVoiceId = isVoiceVisible(chordsVoiceId) ? chordsVoiceId : null;
 
   return (sections || [])
     .map(
@@ -1072,7 +1122,7 @@ export function renderSections(sections, opts = {}) {
           // ── Tono: voz activa coloreada + nota flotante ──
           if (viewMode === 'tono' && activeVoiceId) {
             if (text.trim() === '') return `<p class="lyrics__line">&nbsp;</p>`;
-            const inner = buildTonoLineHTML(line, activeVoiceId, colorClass);
+            const inner = buildTonoLineHTML(line, effectiveVoiceId, colorClass);
             return `<p class="lyrics__line lyrics__line--tono">${inner}</p>`;
           }
 
@@ -1082,7 +1132,7 @@ export function renderSections(sections, opts = {}) {
             const inner = buildMixedLineHTML(
               line,
               line.chords || [],
-              chordsVoiceId,
+              effectiveChordsVoiceId,
               mixColorClass,
               {
                 transposeSemitones,

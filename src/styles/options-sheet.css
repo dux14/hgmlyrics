@@ -1,0 +1,247 @@
+/* options-sheet.css — Bottom-sheet "Opciones" unificado (T4, todas las resoluciones) */
+
+/* Overlay con glass blur */
+.osheet-dim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 300;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+/* Sheet principal — móvil: bottom sheet ancho completo.
+   Desktop (≥768px): mismo patrón visual, centrado, ancho máx 480px. */
+.osheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 301;
+  border-radius: 22px 22px 0 0;
+  background: color-mix(in srgb, var(--color-surface) 90%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid var(--color-border);
+  border-bottom: none;
+  padding: var(--space-md) var(--space-md)
+    calc(var(--space-md) + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+@media (min-width: 768px) {
+  .osheet {
+    left: 50%;
+    right: auto;
+    bottom: var(--space-lg, 2rem);
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 480px;
+    border-radius: 22px;
+    border-bottom: 1px solid var(--color-border);
+  }
+}
+
+/* Asa de arrastre — solo tiene sentido como affordance móvil */
+.osheet__grab {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border);
+  margin: 0 auto var(--space-xs);
+  flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+  .osheet__grab {
+    display: none;
+  }
+}
+
+.osheet__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.osheet__section:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+/* Títulos de sección (Syncopate) */
+.osheet__h {
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+/* Lista de voces */
+.osheet__voices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.osheet__voice-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) 0;
+}
+
+.osheet__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.osheet__voice-info {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.osheet__voice-name {
+  font-size: 0.95rem;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.osheet__voice-ref {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+/* Switch de visibilidad */
+.osheet__switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 11px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.osheet__switch.is-on {
+  background: color-mix(in srgb, var(--color-teal-500) 35%, transparent);
+  border-color: var(--color-teal-500);
+}
+
+.osheet__switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-text-secondary);
+  transition: transform 0.15s, background 0.15s;
+}
+
+.osheet__switch.is-on .osheet__switch-knob {
+  transform: translateX(16px);
+  background: var(--color-teal-500);
+}
+
+/* Controles en fila (tono / tamaño / velocidad) */
+.osheet__seg {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.osheet__seg button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.9rem;
+  min-width: 2.5rem;
+  min-height: 2rem;
+  transition: background 0.12s;
+}
+
+.osheet__seg button:active {
+  background: color-mix(in srgb, var(--color-teal-500) 18%, transparent);
+}
+
+.osheet__bubble {
+  flex: 1;
+  min-width: 4rem;
+}
+
+.osheet__accidental {
+  margin-left: var(--space-sm);
+  color: var(--color-text-secondary);
+}
+
+.osheet__val {
+  min-width: 2.5rem;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+}
+
+/* Segmented control de notación */
+.osheet__seg--notation {
+  gap: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  overflow: hidden;
+  width: 100%;
+}
+
+.osheet__seg--notation .osheet__seg-btn,
+.osheet__seg--notation button {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  min-height: 2.25rem;
+}
+
+.osheet__seg-btn.is-active {
+  background: color-mix(in srgb, var(--color-teal-500) 18%, transparent);
+  color: var(--color-teal-500);
+}
+
+/* ── Botón disparador: siempre visible, cualquier resolución ── */
+.song-toolbar__options {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--border-radius-sm);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background 0.12s;
+  flex-shrink: 0;
+}
+
+.song-toolbar__options:active {
+  background: color-mix(in srgb, var(--color-teal-500) 15%, transparent);
+}

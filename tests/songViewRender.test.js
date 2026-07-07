@@ -109,6 +109,65 @@ describe('renderSections (modo Tono)', () => {
   });
 });
 
+describe('renderSections — visibleVoices (OptionsSheet T4)', () => {
+  it('voz activa oculta en visibleVoices: sin nota flotante ni coloreado, texto base atenuado', () => {
+    const html = renderSections(sections, {
+      viewMode: 'tono',
+      activeVoiceId: 'sop1',
+      activeCategory: 'soprano',
+      visibleVoices: new Set(), // sop1 apagada
+    });
+    expect(html).not.toContain('voice-text--soprano');
+    expect(html).not.toContain('float-label');
+    expect(html).not.toContain('>B3<');
+    expect(html).toContain('lyrics__tono-dim');
+  });
+
+  it('voz activa visible en visibleVoices: se comporta como sin filtro', () => {
+    const html = renderSections(sections, {
+      viewMode: 'tono',
+      activeVoiceId: 'sop1',
+      activeCategory: 'soprano',
+      visibleVoices: new Set(['sop1']),
+    });
+    expect(html).toContain('float-label voice-text--soprano');
+    expect(html).toContain('>B3<');
+  });
+
+  it('sin visibleVoices (back-compat) no filtra nada', () => {
+    const html = renderSections(sections, {
+      viewMode: 'tono',
+      activeVoiceId: 'sop1',
+      activeCategory: 'soprano',
+    });
+    expect(html).toContain('float-label voice-text--soprano');
+  });
+
+  it('chordsVoiceId oculto en modo Acordes+Voz cae a rieles sin nota de voz', () => {
+    const mixSections = [
+      {
+        type: 'verse',
+        label: 'E1',
+        lines: [
+          {
+            text: 'Santo',
+            groups: [{ start: 0, end: 5, voiceId: 'ten1', note: 'D4' }],
+            chords: [{ pos: 0, ch: 'G' }],
+          },
+        ],
+      },
+    ];
+    const html = renderSections(mixSections, {
+      viewMode: 'chords',
+      chordsVoiceId: 'ten1',
+      chordsCategory: 'tenor',
+      visibleVoices: new Set(), // ten1 apagada
+    });
+    expect(html).toContain('mix-seg');
+    expect(html).not.toContain('>D4<');
+  });
+});
+
 const spokenSections = [
   {
     type: 'verse',

@@ -148,3 +148,47 @@ export async function deleteStemsPrefix(prefix) {
     await supabase.storage.from(STEMS_BUCKET).remove(toDelete);
   }
 }
+
+// ──────────────────────────────────────────────
+// Audio por sección — bucket privado 'song-audio'
+// ──────────────────────────────────────────────
+const SONG_AUDIO_BUCKET = 'song-audio';
+
+/**
+ * Signed PUT URL para que el admin suba (o re-suba) el mp3 de una sección.
+ * upsert:true — lección del bug de pitch: re-subir la misma key no debe dar
+ * 400 "resource already exists".
+ * @param {string} key - p.ej. `${songId}/section-0-tenor.mp3`
+ * @returns {Promise<string>} URL firmada (PUT)
+ */
+export async function createSongAudioSignedPutUrl(key) {
+  const { data, error } = await supabase.storage
+    .from(SONG_AUDIO_BUCKET)
+    .createSignedUploadUrl(key, { upsert: true });
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+/**
+ * Signed URL de descarga (6h por defecto, mismo TTL que stems). Se re-firma
+ * en cada GET de listado para que la URL nunca quede vieja en el front.
+ * @param {string} key
+ * @param {number} [expiresIn]
+ */
+export async function signSongAudioDownload(key, expiresIn = 21600) {
+  const { data, error } = await supabase.storage
+    .from(SONG_AUDIO_BUCKET)
+    .createSignedUrl(key, expiresIn);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+/**
+ * Borra un objeto del bucket song-audio. Best-effort: ignora "not found" para
+ * que el DELETE de la fila no falle si el objeto ya no estaba (p.ej. borrado manual).
+ * @param {string} key
+ */
+export async function deleteSongAudioObject(key) {
+  const { error } = await supabase.storage.from(SONG_AUDIO_BUCKET).remove([key]);
+  if (error && !/not.*found/i.test(error.message || '')) throw error;
+}

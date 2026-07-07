@@ -9,9 +9,10 @@ import * as pitchApi from '../lib/pitchApi.js';
 import { skelBlock, skelLine } from '../lib/skeleton.js';
 import { PHASE_ORDER, phaseLabel, phaseProgress, isTerminalStatus } from '../lib/pitchProgress.js';
 import { escapeHtml, safeUrl } from '../lib/escape.js';
+import { createPoller } from '../lib/poller.js';
 
 const POLL_MS = 3000;
-let pollTimer = null;
+let poller = null;
 
 // Extensiones/MIME aceptados: mismo criterio doble que studioFile.js#isMp3File,
 // ampliado a los formatos que soporta la Partitura (no solo MP3).
@@ -55,8 +56,8 @@ function formatExpiry(iso) {
 // Guarda de navegación del polling del job activo (mismo patrón que StudioPage#stopPolling):
 // registrada por renderPartituraPage vía hashchange {once:true} para no dejar timers huérfanos.
 function stopPolling() {
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = null;
+  if (poller) poller.stop();
+  poller = null;
 }
 
 export async function renderPartituraPage(container) {
@@ -226,8 +227,8 @@ function startPolling(body, jobId, quota) {
       renderProcessing(body, job);
     }
   };
-  pollTimer = setInterval(tick, POLL_MS);
-  void tick();
+  poller = createPoller(tick, POLL_MS);
+  poller.start({ immediate: true });
 }
 
 function renderProcessing(body, job) {

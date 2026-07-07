@@ -30,9 +30,10 @@ import { escapeHtml as escHtml, safeUrl } from '../lib/escape.js';
 import { subscribe, isOffline } from '../lib/offlineState.js';
 import { renderAsyncRegion } from '../lib/renderAsync.js';
 import { skelRowList } from '../lib/skeleton.js';
+import { createPoller } from '../lib/poller.js';
 
 const MAX_DURATION_S = 10.5 * 60;
-let pollTimer = null;
+let poller = null;
 let jobChannel = null; // { leave } del Realtime del job activo
 const SAFETY_POLL_MS = 30000; // red de seguridad + reconciliación server-side
 const NO_PUSH_POLL_MS = 10000; // si el canal no conecta, refrescar más seguido
@@ -42,8 +43,8 @@ let _unsubOffline = null; // suscripción al estado de red (panel de revisión)
 // Teardown completo: detiene el timer Y desregistra la guarda de navegación.
 // Se usa al desmontar la página o al navegar fuera de #/estudio.
 function stopPolling() {
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = null;
+  if (poller) poller.stop();
+  poller = null;
   if (jobChannel) {
     jobChannel.leave();
     jobChannel = null;
@@ -285,7 +286,7 @@ async function startUpload(body, file, title, enabledSections, quota) {
 
 function watchJob(body, jobId, quota, filename) {
   // Teardown previo del timer/canal (sin tocar la guarda de navegación).
-  if (pollTimer) clearInterval(pollTimer);
+  if (poller) poller.stop();
   if (jobChannel) {
     jobChannel.leave();
     jobChannel = null;
@@ -330,18 +331,21 @@ function watchJob(body, jobId, quota, filename) {
   });
 
   // Render inicial + poll de seguridad (también dispara la reconciliación).
+  // Pausa sola con la pestaña oculta (createPoller).
   void refresh();
-  pollTimer = setInterval(refresh, SAFETY_POLL_MS);
+  poller = createPoller(refresh, SAFETY_POLL_MS);
+  poller.start();
 
   // Si el push no conectó en ~6s, refrescar más seguido (modo sin push).
-  // Capturamos la referencia del interval activo: si para entonces stopPolling
+  // Capturamos la referencia del poller activo: si para entonces stopPolling
   // o una nueva llamada a watchJob lo reemplazaron, este timeout no debe tocar
   // el poll vigente (evita resucitar un poll fantasma de un job anterior).
-  const safetyTimer = pollTimer;
+  const safetyPoller = poller;
   setTimeout(() => {
-    if (!pushAlive && pollTimer === safetyTimer) {
-      clearInterval(pollTimer);
-      pollTimer = setInterval(refresh, NO_PUSH_POLL_MS);
+    if (!pushAlive && poller === safetyPoller) {
+      poller.stop();
+      poller = createPoller(refresh, NO_PUSH_POLL_MS);
+      poller.start();
     }
   }, 6000);
 }

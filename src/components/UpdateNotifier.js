@@ -7,19 +7,21 @@
  *
  * Debug: Call `window.__showUpdateBanner()` in console to test the banner.
  */
+import { createPoller } from '../lib/poller.js';
 
 const DATA_POLL_INTERVAL = 10 * 60_000; // Check every 10 min while tab is visible
 const FORCE_UPDATE_MS = 24 * 60 * 60 * 1000; // 24 hours
 let lastDataVersion = null;
 let updateAvailableSince = null;
 let swRegistration = null;
+const dataPoller = createPoller(pollDataVersion, DATA_POLL_INTERVAL);
 
 export function initUpdateNotifier() {
   // 1. Listen for SW updates (app code changes)
   listenForSWUpdate();
 
-  // 2. Poll for data changes (new songs)
-  pollDataVersion();
+  // 2. Poll for data changes (new songs) — pausa con la pestaña oculta.
+  dataPoller.start({ immediate: true });
 
   // 3. Debug helper — accessible from browser console
   globalThis.__showUpdateBanner = () => {
@@ -54,10 +56,6 @@ function listenForSWUpdate() {
 }
 
 async function pollDataVersion() {
-  if (document.visibilityState === 'hidden') {
-    setTimeout(pollDataVersion, DATA_POLL_INTERVAL);
-    return;
-  }
   try {
     const res = await fetch('/api/version');
     if (res.ok) {
@@ -71,8 +69,6 @@ async function pollDataVersion() {
   } catch (_) {
     /* offline — skip */
   }
-
-  setTimeout(pollDataVersion, DATA_POLL_INTERVAL);
 }
 
 function showUpdateBanner() {

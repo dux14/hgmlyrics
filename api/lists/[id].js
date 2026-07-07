@@ -60,9 +60,13 @@ export default withErrors(async (req, res) => {
         JOIN profiles p ON p.id = m.user_id WHERE m.list_id = ${id}
       `,
       sql`
-        SELECT c.id, c.name, c.expires_at,
-               (SELECT count(*)::int FROM ephemeral_list_items i WHERE i.list_id = c.id) AS song_count
+        SELECT c.id, c.name, c.expires_at, COALESCE(i.song_count, 0) AS song_count
         FROM ephemeral_lists c
+        LEFT JOIN (
+          SELECT list_id, count(*)::int AS song_count
+          FROM ephemeral_list_items
+          GROUP BY list_id
+        ) i ON i.list_id = c.id
         WHERE c.parent_id = ${id} AND c.expires_at > now()
         ORDER BY c.expires_at ASC
       `,

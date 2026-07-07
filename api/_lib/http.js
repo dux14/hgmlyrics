@@ -12,6 +12,20 @@ export function allowMethods(req, res, allowed) {
 }
 
 /**
+ * Cache CDN para endpoints PÚBLICOS (sin auth). Nunca usar en endpoints que
+ * lean el header Authorization: el edge cache de Vercel serviría la respuesta
+ * cacheada a cualquier usuario.
+ * s-maxage: frescura en el edge; stale-while-revalidate: sirve stale mientras
+ * revalida en background; stale-if-error: sirve stale si la función falla.
+ */
+export function cachePublic(res, { sMaxage = 60, swr = 86400, sie = 86400 } = {}) {
+  res.setHeader(
+    'Cache-Control',
+    `public, max-age=0, s-maxage=${sMaxage}, stale-while-revalidate=${swr}, stale-if-error=${sie}`,
+  );
+}
+
+/**
  * fetch con timeout que traduce fallos de red (timeout o conexión) a un error 502.
  * Unifica el patrón que estaba duplicado en modal.js y ordo/[date].js.
  * @param {string} url
@@ -19,13 +33,19 @@ export function allowMethods(req, res, allowed) {
  * @param {{ timeoutMs?: number, label?: string }} [cfg] — label nombra el upstream en el mensaje.
  * @returns {Promise<Response>} la Response si la red respondió (aunque sea !ok).
  */
-export async function fetchWithTimeout(url, opts = {}, { timeoutMs = 8000, label = 'El servicio externo' } = {}) {
+export async function fetchWithTimeout(
+  url,
+  opts = {},
+  { timeoutMs = 8000, label = 'El servicio externo' } = {},
+) {
   try {
     return await fetch(url, { ...opts, signal: AbortSignal.timeout(timeoutMs) });
   } catch (err) {
     const isTimeout = err?.name === 'AbortError' || err?.name === 'TimeoutError';
     const e = new Error(
-      isTimeout ? `${label} no respondió a tiempo.` : `No se pudo contactar a ${label}: ${err.message}`,
+      isTimeout
+        ? `${label} no respondió a tiempo.`
+        : `No se pudo contactar a ${label}: ${err.message}`,
     );
     e.status = 502;
     throw e;

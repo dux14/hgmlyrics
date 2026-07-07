@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import sql from './_lib/db.js';
-import { allowMethods, withErrors } from './_lib/http.js';
+import { allowMethods, cachePublic, withErrors } from './_lib/http.js';
 
 export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['GET'])) return;
@@ -10,5 +10,6 @@ export default withErrors(async (req, res) => {
   // without exposing the actual write timestamp.
   const raw = rows[0].data_version; // postgres.js returns bigint as string
   const dataVersion = createHash('sha1').update(String(raw)).digest('hex').slice(0, 16);
+  cachePublic(res, { sMaxage: 60, swr: 300, sie: 3600 });
   res.status(200).json({ dataVersion });
 });

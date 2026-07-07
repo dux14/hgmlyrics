@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { resolveEnabledFlags } from '../../src/lib/featureFlags.js';
+import { getFlagsCatalog } from './flagsCache.js';
 
 const URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -86,13 +87,7 @@ export async function requireFlag(req, sql, key) {
   const user = await requireUser(req);
   const profileRows = await sql`SELECT username FROM profiles WHERE id = ${user.id}`;
   const username = profileRows[0]?.username ?? null;
-  const catalog = await sql`SELECT key, enabled_global AS "enabledGlobal" FROM feature_flags`;
-  const assignments = await sql`
-    SELECT flag_key AS "flagKey", email, username
-    FROM feature_flag_users
-    WHERE lower(email) = lower(${user.email ?? ''})
-       OR lower(username) = lower(${username ?? ''})
-  `;
+  const { catalog, assignments } = await getFlagsCatalog();
   const enabled = resolveEnabledFlags(catalog, assignments, { email: user.email, username });
   if (!enabled.includes(key)) {
     const e = new Error('Feature not enabled');

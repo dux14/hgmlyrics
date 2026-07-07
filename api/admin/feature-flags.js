@@ -1,6 +1,7 @@
 import sql from '../_lib/db.js';
 import { requireAdmin } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
+import { invalidateFlags } from '../_lib/flagsCache.js';
 
 // GET    → { flags: [{key, description, enabledGlobal, users:[{email,username}]}] }
 // POST   → body { flagKey, email?, username? } agrega asignación
@@ -30,6 +31,7 @@ async function addAssignment(req, res) {
     VALUES (${flagKey}, ${email ?? null}, ${username ?? null})
     ON CONFLICT DO NOTHING
   `;
+  invalidateFlags();
   res.status(200).json({ success: true });
 }
 
@@ -45,6 +47,7 @@ async function removeAssignment(req, res) {
       AND email IS NOT DISTINCT FROM ${email ?? null}
       AND username IS NOT DISTINCT FROM ${username ?? null}
   `;
+  invalidateFlags();
   res.status(200).json({ success: true });
 }
 

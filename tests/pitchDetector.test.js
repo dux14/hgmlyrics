@@ -42,13 +42,28 @@ function fakeAudio({ withWorklet }) {
   window.AudioContext = vi.fn(function () {
     return ctx;
   });
-  const getSettings = vi.fn(() => ({ autoGainControl: false, channelCount: 1 }));
-  const getUserMedia = vi.fn().mockResolvedValue({
-    getTracks: () => [{ stop: vi.fn() }],
-    getAudioTracks: () => [{ getSettings }],
+  // Track real (extiende EventTarget) para poder disparar 'ended' desde los
+  // tests y controlar readyState/muted, igual que un MediaStreamTrack real.
+  const tracks = [];
+  function makeTrack() {
+    const track = Object.assign(new globalThis.EventTarget(), {
+      readyState: 'live',
+      muted: false,
+      stop: vi.fn(),
+      getSettings: vi.fn(() => ({ autoGainControl: false, channelCount: 1 })),
+    });
+    tracks.push(track);
+    return track;
+  }
+  const getUserMedia = vi.fn().mockImplementation(() => {
+    const track = makeTrack();
+    return Promise.resolve({
+      getTracks: () => [track],
+      getAudioTracks: () => [track],
+    });
   });
   navigator.mediaDevices = { getUserMedia };
-  return { ctx, node, analyser, highpass, source, getUserMedia };
+  return { ctx, node, analyser, highpass, source, getUserMedia, tracks };
 }
 
 beforeEach(() => {
@@ -148,5 +163,95 @@ describe('createPitchDetector — high-pass', () => {
     expect(source.connect).toHaveBeenCalledWith(highpass);
     expect(highpass.connect).toHaveBeenCalledWith(analyser);
     det.stop();
+  });
+});
+
+describe('createPitchDetector — recuperación tras background/foreground', () => {
+  beforeEach(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+  });
+
+  it('el track "ended" con página visible relanza getUserMedia y vuelve a emitir "running"', async () => {
+    const { getUserMedia, tracks } = fakeAudio({ withWorklet: false });
+    const states = [];
+    const det = createPitchDetector({ onPitch: vi.fn(), onState: (s) => states.push(s) });
+    await det.start();
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(states.at(-1)).toBe('running');
+
+    tracks[0].dispatchEvent(new Event('ended'));
+
+    await vi.waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(2));
+    expect(states.at(-1)).toBe('running');
+    // No debió emitir 'stopped' en el medio de la recuperación.
+    expect(states).not.toContain('stopped');
+
+    det.stop();
+  });
+
+  it('el track "ended" con página oculta solo marca needsRecovery (no relanza getUserMedia aún)', async () => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    const { getUserMedia, tracks } = fakeAudio({ withWorklet: false });
+    const det = createPitchDetector({ onPitch: vi.fn() });
+    await det.start();
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+
+    tracks[0].dispatchEvent(new Event('ended'));
+    // Todavía oculta: no debe relanzar getUserMedia de inmediato.
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+
+    det.stop();
+  });
+
+  it('visibilitychange a visible con ctx suspendido llama a ctx.resume()', async () => {
+    const { ctx } = fakeAudio({ withWorklet: false });
+    const det = createPitchDetector({ onPitch: vi.fn() });
+    await det.start();
+    ctx.state = 'suspended';
+
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    expect(ctx.resume).toHaveBeenCalled();
+    det.stop();
+  });
+
+  it('tras la gracia de 300ms, un track muted en visibilitychange dispara recover()', async () => {
+    vi.useFakeTimers();
+    try {
+      const { getUserMedia, tracks } = fakeAudio({ withWorklet: false });
+      const det = createPitchDetector({ onPitch: vi.fn() });
+      await det.start();
+      expect(getUserMedia).toHaveBeenCalledTimes(1);
+
+      tracks[0].muted = true;
+      document.dispatchEvent(new Event('visibilitychange'));
+      // Antes de la gracia, no debe recuperar todavía.
+      expect(getUserMedia).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(300);
+      expect(getUserMedia).toHaveBeenCalledTimes(2);
+
+      det.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('tras stop(), visibilitychange y "ended" no relanzan getUserMedia ni emiten estados', async () => {
+    const { getUserMedia, tracks } = fakeAudio({ withWorklet: false });
+    const states = [];
+    const det = createPitchDetector({ onPitch: vi.fn(), onState: (s) => states.push(s) });
+    await det.start();
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    const track = tracks[0];
+
+    det.stop();
+    states.length = 0;
+
+    document.dispatchEvent(new Event('visibilitychange'));
+    track.dispatchEvent(new Event('ended'));
+
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(states).toEqual([]);
   });
 });

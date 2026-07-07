@@ -11,11 +11,31 @@
 import { detectPitchDetailed } from './pitchCore.js';
 export { detectPitch } from './pitchCore.js';
 
+// AGC/EC/NS desactivados: el AGC del celular bombea la ganancia y degrada el
+// RMS gate y la confianza del detector; channelCount 1 evita el downmix
+// estéreo que a veces cancela fase. Chromium tiene bugs donde estos "off" no
+// se aplican de verdad (de ahí el log de settings reales en start()).
+const MIC_CONSTRAINTS = {
+  audio: {
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false,
+    channelCount: 1,
+  },
+};
+
+// Gracia tras volver a foreground antes de decidir si el mic quedó muerto:
+// da tiempo a que iOS reporte readyState/muted actualizados.
+const RECOVERY_GRACE_MS = 300;
+
 /**
  * Create a live pitch detector. Returns a controller with `start()`/`stop()`.
  * - Requires a secure context with `navigator.mediaDevices.getUserMedia`.
  * - AudioContext is created lazily inside `start()` so it can run in
  *   response to a user gesture (iOS Safari requirement).
+ * - Auto-recupera el micrófono si el SO lo suspende o mata al pasar la app
+ *   a background (frecuente en iOS Safari, que además usa el estado no
+ *   estándar 'interrupted' en el AudioContext).
  *
  * @param {{
  *   onPitch: (info: { hz: number, rms: number, confidence: number }) => void,
@@ -39,24 +59,16 @@ export function createPitchDetector(opts) {
   let running = false;
   let buffer = null;
   let workletNode = null;
+  // Guardia anti-reentrada de recover() y bandera para "recupera al volver".
+  let recovering = false;
+  let needsRecovery = false;
+  let recoveryTimer = null;
 
   async function start() {
     if (running) return;
     onState('requesting');
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        // AGC/EC/NS desactivados: el AGC del celular bombea la ganancia y
-        // degrada el RMS gate y la confianza del detector; channelCount 1
-        // evita el downmix estéreo que a veces cancela fase. Chromium tiene
-        // bugs donde estos "off" no se aplican de verdad, por eso el log de
-        // settings reales debajo.
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-          channelCount: 1,
-        },
-      });
+      stream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
     } catch (e) {
       onState('denied');
       onError(e instanceof Error ? e : new Error(String(e)));
@@ -68,10 +80,20 @@ export function createPitchDetector(opts) {
     // eslint-disable-next-line no-console -- diagnóstico intencional de captura
     console.info('[tuner] mic settings:', settings);
 
+    await setupAudioGraph(stream);
+    attachRecoveryListeners();
+  }
+
+  /**
+   * Arma el grafo de Web Audio a partir de un MediaStream ya concedido:
+   * AudioContext → source → highpass → (worklet | analyser fallback).
+   * Reutilizable por `start()` y por `recover()` tras recuperar el mic.
+   */
+  async function setupAudioGraph(mediaStream) {
     const AC = window.AudioContext || window.webkitAudioContext;
     ctx = new AC();
     if (ctx.state === 'suspended') await ctx.resume();
-    const source = ctx.createMediaStreamSource(stream);
+    const source = ctx.createMediaStreamSource(mediaStream);
 
     // High-pass a 75 Hz: quita retumbe/DC/ruido de manipulación del teléfono
     // que contamina el CMNDF en graves, en ambos caminos (worklet y analyser).
@@ -145,8 +167,12 @@ export function createPitchDetector(opts) {
     rafId = requestAnimationFrame(tick);
   }
 
-  function stop() {
-    running = false;
+  /**
+   * Suelta SOLO los recursos de audio (worklet/analyser/rAF/stream/ctx) sin
+   * tocar `running` ni emitir 'stopped'. Lo usan tanto `stop()` como
+   * `recover()` (que necesita desarmar el grafo viejo antes de rearmarlo).
+   */
+  function releaseAudioGraph() {
     if (rafId !== null) cancelAnimationFrame(rafId);
     rafId = null;
     if (workletNode) {
@@ -155,6 +181,8 @@ export function createPitchDetector(opts) {
       workletNode = null;
     }
     if (stream) {
+      const track = stream.getAudioTracks?.()?.[0];
+      if (track) track.removeEventListener('ended', handleTrackEnded);
       stream.getTracks().forEach((t) => t.stop());
       stream = null;
     }
@@ -164,6 +192,84 @@ export function createPitchDetector(opts) {
     }
     analyser = null;
     buffer = null;
+  }
+
+  function handleTrackEnded() {
+    if (!running || recovering) return;
+    if (document.visibilityState === 'visible') {
+      recover();
+    } else {
+      // Página oculta: no hay contexto de usuario para re-pedir el mic
+      // (ni falta que hace). Se resuelve al volver a foreground.
+      needsRecovery = true;
+    }
+  }
+
+  function handleVisibilityChange() {
+    if (!running || recovering) return;
+    if (document.visibilityState !== 'visible') return;
+    // Cubre 'suspended' y el estado no estándar 'interrupted' de iOS Safari.
+    if (ctx && ctx.state !== 'running') {
+      ctx.resume().catch(() => {});
+    }
+    if (recoveryTimer !== null) clearTimeout(recoveryTimer);
+    recoveryTimer = setTimeout(() => {
+      recoveryTimer = null;
+      if (!running || recovering) return;
+      const track = stream?.getAudioTracks?.()?.[0];
+      const trackDead = Boolean(track) && (track.readyState === 'ended' || track.muted === true);
+      if (trackDead || needsRecovery) recover();
+    }, RECOVERY_GRACE_MS);
+  }
+
+  function attachRecoveryListeners() {
+    const track = stream?.getAudioTracks?.()?.[0];
+    if (track) track.addEventListener('ended', handleTrackEnded);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pageshow', handleVisibilityChange);
+  }
+
+  function detachRecoveryListeners() {
+    const track = stream?.getAudioTracks?.()?.[0];
+    if (track) track.removeEventListener('ended', handleTrackEnded);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+    window.removeEventListener('pageshow', handleVisibilityChange);
+    if (recoveryTimer !== null) {
+      clearTimeout(recoveryTimer);
+      recoveryTimer = null;
+    }
+  }
+
+  /**
+   * Reintenta el mic tras una suspensión/kill del SO en background. Con el
+   * permiso ya concedido, getUserMedia no vuelve a preguntar en Android ni
+   * desktop; en iOS la app ya está en foreground con la sesión activa.
+   * No emite 'stopped' mientras reintenta: la UI sigue mostrando "running".
+   */
+  async function recover() {
+    if (!running || recovering) return;
+    recovering = true;
+    needsRecovery = false;
+    releaseAudioGraph();
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+      await setupAudioGraph(stream);
+      attachRecoveryListeners();
+    } catch (e) {
+      console.warn('[tuner] mic recovery failed:', e);
+      releaseAudioGraph();
+      running = false;
+      detachRecoveryListeners();
+      onState('stopped');
+    } finally {
+      recovering = false;
+    }
+  }
+
+  function stop() {
+    running = false;
+    detachRecoveryListeners();
+    releaseAudioGraph();
     onState('stopped');
   }
 

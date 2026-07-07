@@ -6,11 +6,13 @@ vi.mock('../src/lib/authStore.js', () => ({
 }));
 
 import { getAcceptedFriends } from '../src/lib/friends.js';
+import { _clearCache } from '../src/lib/prefetch.js';
 
 describe('getAcceptedFriends', () => {
   beforeEach(() => {
     mockGetSession.mockReset();
     mockGetSession.mockReturnValue({ access_token: 'tok', user: { id: 'viewer1' } });
+    _clearCache(); // getFriends() cachea 'social:friends' — evita fugas entre tests
   });
 
   it('normaliza al "otro" usuario cuando el viewer es addressee', async () => {

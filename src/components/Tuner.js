@@ -25,6 +25,7 @@ import {
 } from '../lib/notes.js';
 import { fetchSongDetail } from '../lib/store.js';
 import { getSession, refreshProfile, getProfile } from '../lib/authStore.js';
+import { invalidateMyProfile } from '../lib/profileCache.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
 import {
@@ -891,6 +892,7 @@ export async function renderTuner(container, opts = {}) {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       await refreshProfile();
+      invalidateMyProfile();
       bodyEl.innerHTML = `
         <div class="tuner-empty">
           <h2>${icon('check-circle', { size: 22 })} Listo</h2>

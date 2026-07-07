@@ -1,5 +1,6 @@
 /** friends.js — lectura normalizada de amigos aceptados del usuario. */
 import { getSession } from './authStore.js';
+import { getFriends } from './profileCache.js';
 
 const PENDING_EVT = 'hkn:pending-friends-changed';
 
@@ -23,11 +24,7 @@ export async function getAcceptedFriends() {
   const session = getSession();
   const viewerId = session?.user?.id;
   try {
-    const res = await fetch('/api/social/friends', {
-      headers: { Authorization: `Bearer ${session?.access_token}` },
-    });
-    if (!res.ok) return [];
-    const data = await res.json().catch(() => null);
+    const data = await getFriends();
     const accepted = data?.accepted || [];
     return accepted.map((item) => {
       const otherIsRequester = item.requesterId !== viewerId;
@@ -56,13 +53,8 @@ export async function getAcceptedFriends() {
  * @returns {Promise<number>}
  */
 export async function getPendingIncomingCount() {
-  const session = getSession();
   try {
-    const res = await fetch('/api/social/friends', {
-      headers: { Authorization: `Bearer ${session?.access_token}` },
-    });
-    if (!res.ok) return 0;
-    const data = await res.json().catch(() => null);
+    const data = await getFriends();
     return Array.isArray(data?.pendingIncoming) ? data.pendingIncoming.length : 0;
   } catch {
     return 0;

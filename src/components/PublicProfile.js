@@ -9,15 +9,11 @@ import '../styles/profile.css';
 import { renderAsyncRegion } from '../lib/renderAsync.js';
 import { skelProfile } from '../lib/skeleton.js';
 import { createWaveRange } from './vocal-range/waveRange.js';
-
-async function fetchProfile(username) {
-  const token = getSession()?.access_token;
-  const res = await fetch(`/api/profile/${encodeURIComponent(username)}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) return null;
-  return res.json();
-}
+import {
+  getPublicProfile,
+  invalidatePublicProfile,
+  invalidateFriends,
+} from '../lib/profileCache.js';
 
 async function sendFriendRequest(username) {
   const token = getSession()?.access_token;
@@ -55,13 +51,13 @@ async function acceptFriend(requesterId) {
  * @param {string} username
  */
 export async function renderPublicProfile(container, username) {
-  // Shell + región async (sin caché previa: perfil público siempre se carga fresco).
+  // Shell + región async; SWR compartida (getPublicProfile) con TTL 5 min.
   container.innerHTML = `<div class="pp__region" aria-busy="true"></div>`;
   const region = container.querySelector('.pp__region');
 
   renderAsyncRegion(region, {
     skeleton: () => skelProfile(),
-    fetcher: () => fetchProfile(username),
+    fetcher: () => getPublicProfile(username),
     render: (data) => {
       const { profile, favorites, friendCount, isOwn, friendStatus } = data;
       const displayName = escapeHtml(profile.displayName || profile.username);
@@ -179,6 +175,8 @@ export async function renderPublicProfile(container, username) {
           try {
             const ok = await sendFriendRequest(profile.username);
             if (ok) {
+              invalidateFriends();
+              invalidatePublicProfile(profile.username);
               addBtn.textContent = 'Solicitud enviada';
               addBtn.classList.add('pf-btn-action--sent');
               // queda deshabilitado a propósito tras éxito
@@ -202,6 +200,8 @@ export async function renderPublicProfile(container, username) {
           try {
             const ok = await removeFriend(profile.id);
             if (ok) {
+              invalidateFriends();
+              invalidatePublicProfile(profile.username);
               rmBtn.textContent = 'Eliminado';
               rmBtn.classList.add('pf-btn-action--sent');
             } else {
@@ -223,6 +223,8 @@ export async function renderPublicProfile(container, username) {
           try {
             const ok = await acceptFriend(profile.id);
             if (ok) {
+              invalidateFriends();
+              invalidatePublicProfile(profile.username);
               acceptBtn.textContent = 'Solicitud aceptada';
               acceptBtn.classList.add('pf-btn-action--sent');
             } else {

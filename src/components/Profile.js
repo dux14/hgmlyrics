@@ -10,6 +10,7 @@ import { compressImageToLimit } from '../lib/imageCompress.js'; // usados por re
 import { escapeHtml } from '../lib/escape.js';
 import { createWaveRange } from './vocal-range/waveRange.js';
 import { isFounder, founderCrownHtml } from '../lib/founders.js';
+import { getMyProfile, invalidateMyProfile } from '../lib/profileCache.js';
 import '../styles/profile.css';
 
 const VOICE_TYPES = [
@@ -334,6 +335,7 @@ export async function renderProfileEdit(container) {
         }
         const url = await uploadAvatar(prepared);
         await refreshProfile();
+        invalidateMyProfile();
         avatarPreview.src = url;
         avatarRemoveBtn.style.display = 'flex';
         avatarError.style.display = 'none';
@@ -353,6 +355,7 @@ export async function renderProfileEdit(container) {
       try {
         const url = await deleteAvatar();
         await refreshProfile();
+        invalidateMyProfile();
         avatarPreview.src = url || '';
         avatarRemoveBtn.style.display = 'none';
       } catch (e) {
@@ -394,6 +397,7 @@ export async function renderProfileEdit(container) {
           return;
         }
         await refreshProfile();
+        invalidateMyProfile();
         okEl.style.display = 'block';
       } finally {
         submitBtn.disabled = false;
@@ -437,10 +441,7 @@ export async function renderProfile(container) {
   renderAsyncRegion(profileRegion, {
     cached: getProfile() || undefined,
     skeleton: () => skelProfile(),
-    fetcher: async () => {
-      await refreshProfile();
-      return getProfile();
-    },
+    fetcher: getMyProfile,
     render: (profile) => {
       // Pintar en la región (regionEl), no en el container compartido: así se
       // respeta el contrato de renderAsyncRegion. Si el usuario ya navego fuera

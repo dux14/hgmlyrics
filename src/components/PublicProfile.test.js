@@ -20,6 +20,7 @@ vi.mock('./vocal-range/waveRange.js', () => ({
 }));
 
 import { renderPublicProfile } from './PublicProfile.js';
+import { _clearCache } from '../lib/prefetch.js';
 
 // Perfil base reutilizable en los tests
 function makeProfileData(overrides = {}) {
@@ -51,6 +52,7 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe('renderPublicProfile — SEC-X1: avatarUrl escapado en img src', () => {
   beforeEach(() => {
+    _clearCache(); // getPublicProfile() cachea por username — evita fugas entre tests
     globalThis.fetch = vi.fn();
   });
 
@@ -127,6 +129,7 @@ describe('renderPublicProfile — SEC-X1: avatarUrl escapado en img src', () => 
 
 describe('renderPublicProfile — UI Ambient Kinetic (Task 4 F2a)', () => {
   beforeEach(() => {
+    _clearCache(); // getPublicProfile() cachea por username — evita fugas entre tests
     globalThis.fetch = vi.fn(() =>
       Promise.resolve({
         ok: true,
@@ -312,6 +315,7 @@ describe('renderPublicProfile — UI Ambient Kinetic (Task 4 F2a)', () => {
 
 describe('renderPublicProfile — Task 7: estado de amistad + rango vocal', () => {
   beforeEach(() => {
+    _clearCache(); // getPublicProfile() cachea por username — evita fugas entre tests
     globalThis.fetch = vi.fn(() =>
       Promise.resolve({
         ok: true,

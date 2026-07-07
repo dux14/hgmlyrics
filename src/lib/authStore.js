@@ -120,6 +120,13 @@ export async function initAuthStore() {
       // nada que re-evaluar y re-resolver duplicaría el render del login.
       const path = getCurrentPath().split('?')[0];
       if (path !== '/login') refresh();
+      // idb persiste entre usuarios en el mismo dispositivo: invalidar la cache
+      // por-usuario para que el siguiente login no vea datos del anterior.
+      const { invalidateMyProfile, invalidateFriends } = await import('./profileCache.js');
+      const { invalidateWeeklyWords } = await import('./weeklyWords.js');
+      invalidateMyProfile();
+      invalidateFriends();
+      invalidateWeeklyWords();
     }
   });
 }

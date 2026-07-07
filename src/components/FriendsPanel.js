@@ -9,6 +9,7 @@ import { isFounder, founderCrownHtml } from '../lib/founders.js';
 import { icon } from '../lib/icons.js';
 import { renderAsyncRegion } from '../lib/renderAsync.js';
 import { skelRowList } from '../lib/skeleton.js';
+import { getFriends, invalidateFriends } from '../lib/profileCache.js';
 
 let searchTimer = null;
 
@@ -23,16 +24,6 @@ async function api(path, opts = {}) {
     },
   });
   return { ok: res.ok, status: res.status, data: await res.json().catch(() => null) };
-}
-
-async function fetchList() {
-  return (
-    (await api('/api/social/friends')).data || {
-      accepted: [],
-      pendingIncoming: [],
-      pendingOutgoing: [],
-    }
-  );
 }
 
 async function searchUsers(q) {
@@ -175,8 +166,11 @@ export function renderFriendsPanel(container) {
   let listCache = { accepted: [], pendingIncoming: [], pendingOutgoing: [] };
   let searching = false;
 
-  async function reloadList() {
-    const data = await fetchList();
+  // fresh=true fuerza refetch (tras una mutacion propia); fresh=false permite
+  // servir la cache SWR compartida (getFriends, TTL 5 min).
+  async function reloadList({ fresh = false } = {}) {
+    if (fresh) invalidateFriends();
+    const data = await getFriends();
     emitPendingChanged(Array.isArray(data.pendingIncoming) ? data.pendingIncoming.length : 0);
     return data;
   }
@@ -237,7 +231,7 @@ export function renderFriendsPanel(container) {
   async function doAction(act, id) {
     if (act === 'accept') await respondRequest(id, 'accept');
     else await removeFriendship(id); // reject | cancel | unfriend
-    listCache = await reloadList();
+    listCache = await reloadList({ fresh: true });
     if (searching) {
       const q = searchInput.value.trim();
       if (q.length >= 2) await runSearch(q);
@@ -293,7 +287,7 @@ export function renderFriendsPanel(container) {
       b.classList.add('friend-pill--pending');
       b.dataset.act = 'cancel';
       b.disabled = false;
-      listCache = await reloadList();
+      listCache = await reloadList({ fresh: true });
     } else if (r.status === 409) {
       b.textContent = 'Ya existe';
     } else {

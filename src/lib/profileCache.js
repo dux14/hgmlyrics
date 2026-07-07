@@ -7,7 +7,8 @@ import { getSession, refreshProfile, getProfile } from './authStore.js';
 const TTL = 5 * 60 * 1000;
 
 async function fetchMyProfile() {
-  await refreshProfile();
+  const ok = await refreshProfile();
+  if (!ok) throw new Error('fetchMyProfile: refreshProfile failed');
   return getProfile();
 }
 
@@ -20,15 +21,16 @@ async function fetchPublicProfile(username) {
   return res.json();
 }
 
+const EMPTY_FRIENDS = { accepted: [], pendingIncoming: [], pendingOutgoing: [] };
+
 async function fetchFriends() {
-  const empty = { accepted: [], pendingIncoming: [], pendingOutgoing: [] };
   const token = getSession()?.access_token;
   const res = await fetch('/api/social/friends', {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) return empty;
+  if (!res.ok) throw new Error(`fetchFriends failed: ${res.status}`);
   const data = await res.json().catch(() => null);
-  return data || empty;
+  return data || EMPTY_FRIENDS;
 }
 
 export async function getMyProfile() {
@@ -42,8 +44,14 @@ export async function getPublicProfile(username) {
   return data;
 }
 export async function getFriends() {
-  const { data } = await cached('social:friends', fetchFriends, { ttl: TTL });
-  return data;
+  // Sin stale disponible, cached() propaga: devolvemos defaults SIN cachearlos
+  // (cached() solo cachea fetches exitosos), así el próximo intento reintenta la red.
+  try {
+    const { data } = await cached('social:friends', fetchFriends, { ttl: TTL });
+    return data;
+  } catch {
+    return EMPTY_FRIENDS;
+  }
 }
 export function invalidateMyProfile() {
   invalidate('profile:me');

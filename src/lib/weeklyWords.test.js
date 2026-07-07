@@ -31,4 +31,17 @@ describe('getWeeklyWords', () => {
     await getWeeklyWords();
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
+
+  it('un 500 transitorio sin cache previa no se cachea: la siguiente llamada reintenta la red', async () => {
+    global.fetch.mockResolvedValueOnce({ ok: false, status: 500 });
+    const first = await getWeeklyWords();
+    expect(first).toEqual([]); // degrada, pero sin cachear el error
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ weeklyWords: [{ id: 'w1' }] }),
+    });
+    const second = await getWeeklyWords();
+    expect(second).toEqual([{ id: 'w1' }]);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
 });

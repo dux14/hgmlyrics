@@ -6,9 +6,10 @@ vi.mock('idb-keyval', () => ({
   get: vi.fn(async () => undefined),
   set: vi.fn(async () => {}),
   del: vi.fn(async () => {}),
+  keys: vi.fn(async () => []),
 }));
 
-import { cached, readCached, warm, invalidate, _clearCache } from './prefetch.js';
+import { cached, readCached, warm, invalidate, invalidatePrefix, _clearCache } from './prefetch.js';
 
 beforeEach(() => {
   _clearCache();
@@ -72,5 +73,17 @@ describe('invalidate', () => {
     expect(readCached('k')).toBeUndefined();
     const r = await cached('k', async () => ['v2'], { ttl: 10_000 });
     expect(r).toEqual({ data: ['v2'], fromCache: false });
+  });
+});
+
+describe('invalidatePrefix', () => {
+  it('borra todas las keys de memoria que empiezan con el prefijo, sin tocar otras', async () => {
+    await cached('profile:ana', async () => ['ana'], { ttl: 10_000 });
+    await cached('profile:me', async () => ['me'], { ttl: 10_000 });
+    await cached('social:friends', async () => ['friends'], { ttl: 10_000 });
+    invalidatePrefix('profile:');
+    expect(readCached('profile:ana')).toBeUndefined();
+    expect(readCached('profile:me')).toBeUndefined();
+    expect(readCached('social:friends')).toEqual(['friends']);
   });
 });

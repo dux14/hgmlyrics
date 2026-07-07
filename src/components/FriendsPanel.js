@@ -9,7 +9,12 @@ import { isFounder, founderCrownHtml } from '../lib/founders.js';
 import { icon } from '../lib/icons.js';
 import { renderAsyncRegion } from '../lib/renderAsync.js';
 import { skelRowList } from '../lib/skeleton.js';
-import { getFriends, invalidateFriends } from '../lib/profileCache.js';
+import {
+  getFriends,
+  invalidateFriends,
+  invalidateMyProfile,
+  invalidatePublicProfile,
+} from '../lib/profileCache.js';
 
 let searchTimer = null;
 
@@ -228,10 +233,15 @@ export function renderFriendsPanel(container) {
     wireActions(listEl);
   }
 
-  async function doAction(act, id) {
+  async function doAction(act, id, username) {
     if (act === 'accept') await respondRequest(id, 'accept');
     else await removeFriendship(id); // reject | cancel | unfriend
     listCache = await reloadList({ fresh: true });
+    // accept/unfriend cambian friendCount propio; reject/cancel cambian el
+    // friendStatus visto desde el perfil de la contraparte. Invalidar ambos
+    // sin distinguir el caso exacto es más simple y el costo es un refetch.
+    invalidateMyProfile();
+    if (username) invalidatePublicProfile(username);
     if (searching) {
       const q = searchInput.value.trim();
       if (q.length >= 2) await runSearch(q);
@@ -271,7 +281,8 @@ export function renderFriendsPanel(container) {
           await sendAdd(b);
           return;
         }
-        await doAction(act, b.dataset.id);
+        const username = b.closest('.friend-row')?.dataset.username;
+        await doAction(act, b.dataset.id, username);
       });
     });
   }
@@ -288,6 +299,7 @@ export function renderFriendsPanel(container) {
       b.dataset.act = 'cancel';
       b.disabled = false;
       listCache = await reloadList({ fresh: true });
+      invalidatePublicProfile(b.dataset.username);
     } else if (r.status === 409) {
       b.textContent = 'Ya existe';
     } else {

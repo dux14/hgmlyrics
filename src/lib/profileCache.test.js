@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('./authStore.js', () => ({
   getSession: vi.fn(() => ({ access_token: 'token123' })),
-  refreshProfile: vi.fn(async () => {}),
+  refreshProfile: vi.fn(async () => true),
   getProfile: vi.fn(() => ({ id: 'u1', username: 'yo' })),
 }));
 
@@ -42,6 +42,16 @@ describe('getMyProfile', () => {
     await getMyProfile();
     expect(refreshProfile).toHaveBeenCalledTimes(2);
   });
+
+  it('si refreshProfile falla (res.ok=false internamente) no cachea un perfil vacío', async () => {
+    refreshProfile.mockResolvedValueOnce(false);
+    await expect(getMyProfile()).rejects.toThrow();
+    // El fallo no quedó cacheado: el siguiente intento vuelve a refrescar.
+    refreshProfile.mockResolvedValueOnce(true);
+    const second = await getMyProfile();
+    expect(second).toEqual({ id: 'u1', username: 'yo' });
+    expect(refreshProfile).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('getPublicProfile', () => {
@@ -70,6 +80,19 @@ describe('getFriends', () => {
     await getFriends();
     invalidateFriends();
     await getFriends();
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('un 500 transitorio sin cache previa devuelve defaults SIN cachearlos', async () => {
+    global.fetch.mockResolvedValueOnce({ ok: false, status: 500 });
+    const first = await getFriends();
+    expect(first).toEqual({ accepted: [], pendingIncoming: [], pendingOutgoing: [] });
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ accepted: [{ id: 'f1' }], pendingIncoming: [], pendingOutgoing: [] }),
+    });
+    const second = await getFriends();
+    expect(second).toEqual({ accepted: [{ id: 'f1' }], pendingIncoming: [], pendingOutgoing: [] });
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 });

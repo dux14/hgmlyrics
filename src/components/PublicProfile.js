@@ -13,6 +13,7 @@ import {
   getPublicProfile,
   invalidatePublicProfile,
   invalidateFriends,
+  invalidateMyProfile,
 } from '../lib/profileCache.js';
 
 async function sendFriendRequest(username) {
@@ -177,6 +178,8 @@ export async function renderPublicProfile(container, username) {
             if (ok) {
               invalidateFriends();
               invalidatePublicProfile(profile.username);
+              // Nota: enviar solicitud no cambia friendCount todavía (solo al
+              // aceptar/eliminar), así que profile:me no se invalida aquí.
               addBtn.textContent = 'Solicitud enviada';
               addBtn.classList.add('pf-btn-action--sent');
               // queda deshabilitado a propósito tras éxito
@@ -202,6 +205,7 @@ export async function renderPublicProfile(container, username) {
             if (ok) {
               invalidateFriends();
               invalidatePublicProfile(profile.username);
+              invalidateMyProfile(); // friendCount propio tambien cambia
               rmBtn.textContent = 'Eliminado';
               rmBtn.classList.add('pf-btn-action--sent');
             } else {
@@ -225,6 +229,7 @@ export async function renderPublicProfile(container, username) {
             if (ok) {
               invalidateFriends();
               invalidatePublicProfile(profile.username);
+              invalidateMyProfile(); // friendCount propio tambien cambia
               acceptBtn.textContent = 'Solicitud aceptada';
               acceptBtn.classList.add('pf-btn-action--sent');
             } else {

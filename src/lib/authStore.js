@@ -52,12 +52,13 @@ export function needsOnboarding() {
 
 /**
  * Fetch /api/auth/me and cache the profile.
+ * @returns {Promise<boolean>} false si el fetch falló (sesión sin perfil ≠ error).
  */
 export async function refreshProfile() {
   if (!state.session) {
     state.profile = null;
     state.flags = [];
-    return;
+    return true;
   }
   try {
     const res = await fetch('/api/auth/me', {
@@ -67,14 +68,16 @@ export async function refreshProfile() {
       const data = await res.json();
       state.profile = data.profile;
       state.flags = Array.isArray(data.flags) ? data.flags : [];
-    } else {
-      state.profile = null;
-      state.flags = [];
+      return true;
     }
+    state.profile = null;
+    state.flags = [];
+    return false;
   } catch (e) {
     console.warn('refreshProfile failed', e);
     state.profile = null;
     state.flags = [];
+    return false;
   }
 }
 
@@ -122,11 +125,16 @@ export async function initAuthStore() {
       if (path !== '/login') refresh();
       // idb persiste entre usuarios en el mismo dispositivo: invalidar la cache
       // por-usuario para que el siguiente login no vea datos del anterior.
-      const { invalidateMyProfile, invalidateFriends } = await import('./profileCache.js');
+      // profile:<username> se invalida por PREFIJO (no solo profile:me): cada
+      // entrada contiene isOwn/friendStatus calculados PARA el viewer saliente.
+      const { invalidatePrefix } = await import('./prefetch.js');
+      const { invalidateFriends } = await import('./profileCache.js');
       const { invalidateWeeklyWords } = await import('./weeklyWords.js');
-      invalidateMyProfile();
+      const { clearSearchUsersCache } = await import('./searchUsersCache.js');
+      invalidatePrefix('profile:');
       invalidateFriends();
       invalidateWeeklyWords();
+      clearSearchUsersCache();
     }
   });
 }

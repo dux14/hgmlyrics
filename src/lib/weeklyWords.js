@@ -11,13 +11,20 @@ async function fetchWeeklyWords() {
   const session = getSession();
   const headers = session ? { Authorization: `Bearer ${session.access_token}` } : {};
   const res = await fetch('/api/weekly-words', { headers });
-  const jsonBody = res.ok ? await res.json() : {};
+  if (!res.ok) throw new Error(`fetchWeeklyWords failed: ${res.status}`);
+  const jsonBody = await res.json();
   return jsonBody.weeklyWords ?? [];
 }
 
 export async function getWeeklyWords() {
-  const { data } = await cached(KEY, fetchWeeklyWords, { ttl: TTL });
-  return data;
+  // Un 500/401 transitorio no debe cachearse como "sin voz en off": cached()
+  // lanza y cae al stale de mem/idb si lo hay; sin nada previo, propaga.
+  try {
+    const { data } = await cached(KEY, fetchWeeklyWords, { ttl: TTL });
+    return data;
+  } catch {
+    return [];
+  }
 }
 
 export function warmWeeklyWords() {

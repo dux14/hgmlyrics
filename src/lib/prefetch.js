@@ -1,6 +1,6 @@
 // src/lib/prefetch.js
 // Cache SWR mínima (memoria + idb como respaldo offline) y warm-up en idle.
-import { get, set, del } from 'idb-keyval';
+import { get, set, del, keys } from 'idb-keyval';
 
 const TTL_MS = 60_000; // frescura en memoria
 const mem = new Map(); // key -> { data, ts }
@@ -37,6 +37,28 @@ export function _clearCache() {
 export function invalidate(key) {
   mem.delete(key);
   idbDel(key);
+}
+
+/**
+ * Invalida todas las keys que empiecen con `prefix` (memoria + idb).
+ * Útil cuando no se conoce el listado exacto de keys (p. ej. profile:<username>
+ * por cada perfil visitado) y hay que purgarlas todas de una — típicamente en
+ * logout, para no dejar datos calculados para un viewer visibles al siguiente.
+ * @param {string} prefix
+ */
+export function invalidatePrefix(prefix) {
+  for (const key of mem.keys()) {
+    if (key.startsWith(prefix)) mem.delete(key);
+  }
+  Promise.resolve()
+    .then(async () => {
+      const allKeys = await keys();
+      const stale = allKeys.filter(
+        (k) => typeof k === 'string' && k.startsWith(`prefetch:${prefix}`),
+      );
+      await Promise.all(stale.map((k) => del(k)));
+    })
+    .catch(() => {}); // jsdom / sin IndexedDB: degradar a memoria
 }
 
 /**

@@ -1,5 +1,24 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { enterStage, exitStage, projectLines, speedToSecondsPerLine } from '../src/components/StageMode.js';
+
+// Stub pitch detector (requiere AudioContext/getUserMedia, no disponible en jsdom).
+// Mismo patrón que tests/tuner.test.js: el afinador embebido (F3) crea el
+// detector recién al activarse el toggle, así que basta un stub inerte.
+const detectorStart = vi.fn();
+const detectorStop = vi.fn();
+vi.mock('../src/lib/pitch.js', () => ({
+  createPitchDetector: vi.fn(() => ({
+    start: detectorStart,
+    stop: detectorStop,
+    isRunning: () => false,
+  })),
+}));
+
+import {
+  enterStage,
+  exitStage,
+  projectLines,
+  speedToSecondsPerLine,
+} from '../src/components/StageMode.js';
 
 function mountSongView() {
   document.body.innerHTML = `<div class="song-view" id="sv"></div>`;
@@ -30,7 +49,11 @@ function buildSong(overrides = {}) {
             text: 'Segunda línea',
             groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'D4' }],
           },
-          { text: 'Hablado sin nota', spoken: true, groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'E4' }] },
+          {
+            text: 'Hablado sin nota',
+            spoken: true,
+            groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'E4' }],
+          },
         ],
       },
     ],
@@ -43,6 +66,8 @@ beforeEach(() => {
   document.body.innerHTML = '';
   document.body.className = '';
   localStorage.clear();
+  detectorStart.mockClear();
+  detectorStop.mockClear();
 });
 
 afterEach(() => {
@@ -378,18 +403,26 @@ describe('chips de voz S·A·T·B en el escenario', () => {
 
     expect(document.querySelector('.stage-v2')).toBeTruthy(); // sigue en el escenario
     expect(document.getElementById('stage-v2-chords').textContent).toContain('G3');
-    expect(document.querySelector('[data-category="tenor"]').classList.contains('stage-v2__voice-chip--active')).toBe(
-      true,
-    );
-    expect(document.querySelector('[data-category="soprano"]').classList.contains('stage-v2__voice-chip--active')).toBe(
-      false,
-    );
+    expect(
+      document
+        .querySelector('[data-category="tenor"]')
+        .classList.contains('stage-v2__voice-chip--active'),
+    ).toBe(true);
+    expect(
+      document
+        .querySelector('[data-category="soprano"]')
+        .classList.contains('stage-v2__voice-chip--active'),
+    ).toBe(false);
   });
 
   it('sincroniza la voz elegida con SongView vía ctx.setActiveVoice', () => {
     const sv = mountSongView();
     const setActiveVoice = vi.fn();
-    enterStage(sv, { song: buildMultiVoiceSong(), getActiveVoice: () => 'soprano-1', setActiveVoice });
+    enterStage(sv, {
+      song: buildMultiVoiceSong(),
+      getActiveVoice: () => 'soprano-1',
+      setActiveVoice,
+    });
 
     document.querySelector('[data-category="tenor"]').click();
 
@@ -424,5 +457,49 @@ describe('FIX 3: zona muerta de gestos (movimiento bajo el umbral de swipe)', ()
     tapArea.click(); // el navegador dispara click tras el pointerup
 
     expect(overlay.classList.contains('stage-v2--paused')).toBe(true);
+  });
+});
+
+describe('F3: afinador embebido en el toggle del stage', () => {
+  it('el toggle nace apagado (mic nunca auto-arranca al entrar)', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong() });
+    const toggle = document.querySelector('.stage-v2__btn--tuner');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(document.getElementById('stage-v2-tuner-row').hidden).toBe(true);
+    expect(detectorStart).not.toHaveBeenCalled();
+  });
+
+  it('activar el toggle muestra la franja y arranca el detector; desactivarlo lo para', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    const toggle = document.querySelector('.stage-v2__btn--tuner');
+
+    toggle.click();
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(document.getElementById('stage-v2-tuner-row').hidden).toBe(false);
+    expect(detectorStart).toHaveBeenCalledTimes(1);
+
+    toggle.click();
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(document.getElementById('stage-v2-tuner-row').hidden).toBe(true);
+    expect(detectorStop).toHaveBeenCalledTimes(1);
+  });
+
+  it('exitStage para SIEMPRE el detector, incluso con el toggle encendido', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.querySelector('.stage-v2__btn--tuner').click();
+    expect(detectorStart).toHaveBeenCalledTimes(1);
+
+    exitStage();
+    expect(detectorStop).toHaveBeenCalledTimes(1);
+  });
+
+  it('no crashea si se sale del stage sin haber encendido el toggle', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong() });
+    expect(() => exitStage()).not.toThrow();
+    expect(detectorStop).not.toHaveBeenCalled(); // nunca se creó/arrancó el detector
   });
 });

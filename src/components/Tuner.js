@@ -43,6 +43,7 @@ import { createExercise } from '../lib/exerciseEngine.js';
 import { get, set } from 'idb-keyval';
 import { createMetronome, TIME_SIGNATURES, DEFAULT_BPM } from '../lib/metronome.js';
 import { centsToBarPercent } from '../lib/tunerGauge.js';
+import { colorFromCents } from '../lib/tunerWidget.js';
 
 /** Formatea un valor de cents con signo explícito: "+5¢", "-3¢", "0¢". */
 const fmtCents = (c) => `${c > 0 ? '+' : ''}${c}¢`;
@@ -102,13 +103,6 @@ function parseQuery(query) {
     out[decodeURIComponent(k)] = v ? decodeURIComponent(v) : '';
   }
   return out;
-}
-
-function colorFromCents(cents) {
-  const abs = Math.abs(cents);
-  if (abs < 10) return 'ok';
-  if (abs < 30) return 'warn';
-  return 'bad';
 }
 
 function renderGauge() {

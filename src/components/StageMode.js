@@ -15,6 +15,8 @@ import {
 } from '../lib/autoscroll.js';
 import { buildVoiceChipHTML } from '../lib/voiceChips.js';
 import { normalizeSectionType, SECTION_TYPE_LABELS } from '../lib/sectionTypes.js';
+import { createTunerStrip } from '../lib/tunerWidget.js';
+import { noteToMidi } from '../lib/notes.js';
 import '../styles/stage.css';
 
 // Duración por línea en los extremos de velocidad: lento = 9s, rápido = 2.5s.
@@ -93,7 +95,8 @@ function computeBaseFontRem(length) {
  *           getNotation?: () => 'anglo'|'latin',
  *           songId?: string }} [ctx]
  * @returns {Array<{sectionType:string, sectionLabel:string, text:string,
- *           chords:string[], note:string|null, spoken:boolean, seconds:number}>}
+ *           chords:string[], note:string|null, noteRaw:string|null, spoken:boolean,
+ *           seconds:number}>}
  */
 export function projectLines(song, ctx = {}) {
   const activeVoiceId = typeof ctx.getActiveVoice === 'function' ? ctx.getActiveVoice() : null;
@@ -120,17 +123,18 @@ export function projectLines(song, ctx = {}) {
         .map((ch) => displayChord(ch, notation));
 
       let note = null;
+      let noteRaw = null; // anglo, ya transpuesta (sin displayNote) — la usa el afinador embebido (F3)
       if (!spoken && activeVoiceId) {
         const withNote = groupsForVoice(line, activeVoiceId).find(
           (g) => g.note !== null && g.note !== undefined && g.note !== '',
         );
         if (withNote) {
-          const raw = semitones ? transposeNote(withNote.note, semitones, useFlats) : withNote.note;
-          note = displayNote(raw, notation);
+          noteRaw = semitones ? transposeNote(withNote.note, semitones, useFlats) : withNote.note;
+          note = displayNote(noteRaw, notation);
         }
       }
 
-      lines.push({ sectionType, sectionLabel, text, chords, note, spoken, seconds });
+      lines.push({ sectionType, sectionLabel, text, chords, note, noteRaw, spoken, seconds });
     }
   }
   return lines;
@@ -164,6 +168,7 @@ function buildOverlay() {
       <p class="stage-v2__hint" id="stage-v2-hint">Toca para pausar el auto-scroll · desliza para velocidad</p>
       <p class="stage-v2__feedback" id="stage-v2-feedback" hidden></p>
     </div>
+    <div class="stage-v2__tuner-row" id="stage-v2-tuner-row" hidden></div>
     <div class="stage-v2__controls" id="stage-v2-controls">
       <div class="stage-v2__controls-group">
         <button class="stage-v2__btn stage-v2__btn--font" id="stage-v2-font-decrease" type="button" aria-label="Reducir tamaño de letra">A−</button>
@@ -228,6 +233,10 @@ function renderZone(s) {
 
   els.prevBtn.disabled = index === 0;
   els.nextBtn.disabled = index === lines.length - 1;
+
+  if (s.tunerStrip) {
+    s.tunerStrip.setTargetNote(cur.noteRaw ? noteToMidi(cur.noteRaw) : null);
+  }
 }
 
 /** Re-proyecta `s.lines` con la voz activa/velocidad vigentes, preservando el índice. */
@@ -354,6 +363,8 @@ export function enterStage(songViewEl, ctx = {}) {
     hint: overlay.querySelector('#stage-v2-hint'),
     feedback: overlay.querySelector('#stage-v2-feedback'),
     progressFill: overlay.querySelector('#stage-v2-progress-fill'),
+    tunerRow: overlay.querySelector('#stage-v2-tuner-row'),
+    tunerSlot: overlay.querySelector('#stage-v2-tuner-slot'),
     controls: overlay.querySelector('#stage-v2-controls'),
     prevBtn: overlay.querySelector('#stage-v2-prev'),
     nextBtn: overlay.querySelector('#stage-v2-next'),
@@ -382,10 +393,43 @@ export function enterStage(songViewEl, ctx = {}) {
     hideControlsTimer: null,
     gesture: null,
     wl,
+    tunerOn: false,
+    tunerStrip: null,
   };
 
   const activeCategory = (ctx.song.voiceRoster || []).find((v) => v.id === activeVoiceId)?.category ?? null;
   els.voiceChips.innerHTML = renderVoiceChips(ctx.song, activeCategory);
+
+  // F3: afinador embebido. La franja vive oculta en su propia fila hasta que
+  // se activa el toggle; el toggle ES el gesto de usuario para el mic (nunca
+  // auto-start al re-entrar al escenario — `tunerOn` nace en false en cada
+  // `enterStage`, no se persiste en localStorage).
+  const tunerStrip = createTunerStrip({
+    getTargetNote: () => {
+      const cur = session.lines[session.index];
+      return cur?.noteRaw ? noteToMidi(cur.noteRaw) : null;
+    },
+  });
+  els.tunerRow.appendChild(tunerStrip.el);
+  session.tunerStrip = tunerStrip;
+
+  const tunerToggleBtn = document.createElement('button');
+  tunerToggleBtn.type = 'button';
+  tunerToggleBtn.className = 'stage-v2__btn stage-v2__btn--tuner';
+  tunerToggleBtn.setAttribute('aria-label', 'Activar afinador');
+  tunerToggleBtn.setAttribute('aria-pressed', 'false');
+  tunerToggleBtn.innerHTML = icon('mic', { size: 20 });
+  els.tunerSlot.appendChild(tunerToggleBtn);
+
+  const onTunerToggle = () => {
+    session.tunerOn = !session.tunerOn;
+    tunerToggleBtn.setAttribute('aria-pressed', String(session.tunerOn));
+    els.tunerRow.hidden = !session.tunerOn;
+    if (session.tunerOn) tunerStrip.start();
+    else tunerStrip.stop();
+    showControls(session);
+  };
+  tunerToggleBtn.addEventListener('click', onTunerToggle);
 
   wl.acquire();
   if (wl.supported) els.wakelock.hidden = false;
@@ -515,6 +559,8 @@ export function enterStage(songViewEl, ctx = {}) {
     onKey,
     onVis,
     onNav,
+    onTunerToggle,
+    tunerToggleBtn,
   });
 }
 
@@ -541,6 +587,9 @@ export function exitStage() {
     onKey,
     onVis,
     onNav,
+    onTunerToggle,
+    tunerToggleBtn,
+    tunerStrip,
   } = session;
 
   clearTimeout(timer);
@@ -561,6 +610,10 @@ export function exitStage() {
   document.removeEventListener('visibilitychange', onVis);
   window.removeEventListener('hashchange', onNav);
   window.removeEventListener('popstate', onNav);
+  tunerToggleBtn.removeEventListener('click', onTunerToggle);
+
+  // Mic nunca queda abierto al salir del escenario, esté el toggle en on o off.
+  tunerStrip.stop();
 
   wl.release();
   exitStageFullscreen();

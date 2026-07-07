@@ -220,7 +220,7 @@ body.stage-active { overflow: hidden; }
   justify-content: center;
   gap: 0.75rem;
 }
-/* Hueco reservado para el toggle del afinador (F3); vacío por ahora. */
+/* Hueco del toggle del afinador embebido (F3): el botón se inyecta en runtime. */
 .stage-v2__controls-group--tuner { min-width: 44px; }
 
 .stage-v2__btn {
@@ -244,4 +244,92 @@ body.stage-active { overflow: hidden; }
   .stage-v2__progress-fill,
   .stage-v2__hint,
   .stage-v2__controls { transition: none; }
+}
+
+/* ── F3: afinador embebido — toggle + franja fija sobre los controles ── */
+.stage-v2__btn--tuner[aria-pressed='true'] { background: var(--color-brand, #01ccd9); color: #000; }
+
+.stage-v2__tuner-row { padding: 0 1.25rem 0.5rem; }
+
+.tuner-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 48px;
+  padding: 0.4rem 0.9rem;
+  border-radius: var(--border-radius-full, 999px);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tuner-strip__label {
+  flex: 0 0 auto;
+  min-width: 2.5rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #fff;
+  text-align: center;
+}
+
+.tuner-strip__track {
+  position: relative;
+  flex: 1;
+  height: 6px;
+  border-radius: var(--border-radius-full, 999px);
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+
+.tuner-strip__center {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  left: 50%;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.5);
+  transform: translateX(-50%);
+}
+
+.tuner-strip__indicator {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.6);
+  transform: translateX(-50%);
+  transition:
+    left 120ms ease-out,
+    background-color 120ms ease-out;
+}
+.tuner-strip__indicator[data-status='ok'] { background: var(--color-success); }
+.tuner-strip__indicator[data-status='warn'] { background: var(--color-warn); }
+.tuner-strip__indicator[data-status='bad'] { background: var(--color-danger); }
+
+.tuner-strip__hint {
+  flex: 0 0 100%;
+  margin: 0.35rem 0 0;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+}
+
+.tuner-strip__gate { display: flex; justify-content: center; width: 100%; }
+
+.tuner-strip__grant {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 40px;
+  padding: 0 1rem;
+  border: none;
+  border-radius: var(--border-radius-full, 999px);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tuner-strip__indicator { transition: none; }
 }

@@ -6,6 +6,10 @@ function mountSongView() {
   return document.getElementById('sv');
 }
 
+function dispatchPointer(el, type, x, y) {
+  el.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: x, clientY: y }));
+}
+
 function buildSong(overrides = {}) {
   return {
     id: 'song-1',
@@ -188,5 +192,181 @@ describe('enterStage/exitStage', () => {
     enterStage(sv, { song: buildSong() });
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(document.querySelector('.stage-v2')).toBeNull();
+  });
+});
+
+function buildMultiVoiceSong() {
+  return buildSong({
+    voiceRoster: [
+      { id: 'soprano-1', name: 'Soprano', category: 'soprano' },
+      { id: 'tenor-1', name: 'Tenor', category: 'tenor' },
+    ],
+    sections: [
+      {
+        type: 'verse',
+        label: 'Verso 1',
+        lines: [
+          {
+            text: 'Primera línea',
+            chords: [{ pos: 0, ch: 'C' }],
+            groups: [
+              { start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' },
+              { start: 0, end: 7, voiceId: 'tenor-1', note: 'G3' },
+            ],
+          },
+          { text: 'Nota de ambiente', annotation: true },
+          {
+            text: 'Segunda línea',
+            groups: [
+              { start: 0, end: 7, voiceId: 'soprano-1', note: 'D4' },
+              { start: 0, end: 7, voiceId: 'tenor-1', note: 'A3' },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+}
+
+describe('gestos (swipe vertical/horizontal, tap vs swipe)', () => {
+  it('swipe vertical hacia arriba aumenta la velocidad, persiste y muestra feedback', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong() });
+    const tapArea = document.getElementById('stage-v2-tap');
+    const feedback = document.getElementById('stage-v2-feedback');
+
+    dispatchPointer(tapArea, 'pointerdown', 100, 300);
+    dispatchPointer(document, 'pointermove', 100, 200);
+    dispatchPointer(document, 'pointerup', 100, 200); // dy=-100 (arriba) >= 40px
+
+    expect(feedback.hidden).toBe(false);
+    expect(feedback.textContent).toMatch(/Velocidad/);
+    const stored = Number.parseFloat(localStorage.getItem('hkn-autoscroll-speed:song-1'));
+    expect(stored).toBeGreaterThan(0.5); // default
+  });
+
+  it('swipe vertical hacia abajo reduce la velocidad', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong() });
+    const tapArea = document.getElementById('stage-v2-tap');
+
+    dispatchPointer(tapArea, 'pointerdown', 100, 200);
+    dispatchPointer(document, 'pointermove', 100, 300);
+    dispatchPointer(document, 'pointerup', 100, 300); // dy=+100 (abajo) >= 40px
+
+    const stored = Number.parseFloat(localStorage.getItem('hkn-autoscroll-speed:song-1'));
+    expect(stored).toBeLessThan(0.5);
+  });
+
+  it('swipe horizontal hacia la izquierda avanza a la línea siguiente', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong() });
+    const tapArea = document.getElementById('stage-v2-tap');
+
+    dispatchPointer(tapArea, 'pointerdown', 300, 300);
+    dispatchPointer(document, 'pointermove', 200, 300);
+    dispatchPointer(document, 'pointerup', 200, 300); // dx=-100 >= 40px
+
+    expect(document.getElementById('stage-v2-text').textContent).toBe('Segunda línea');
+  });
+
+  it('swipe horizontal hacia la derecha retrocede a la línea anterior', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong() });
+    const tapArea = document.getElementById('stage-v2-tap');
+    // Primero avanza una línea para tener a dónde retroceder.
+    document.getElementById('stage-v2-next').click();
+    expect(document.getElementById('stage-v2-text').textContent).toBe('Segunda línea');
+
+    dispatchPointer(tapArea, 'pointerdown', 200, 300);
+    dispatchPointer(document, 'pointermove', 300, 300);
+    dispatchPointer(document, 'pointerup', 300, 300); // dx=+100 >= 40px
+
+    expect(document.getElementById('stage-v2-text').textContent).toBe('Primera línea');
+  });
+
+  it('un tap corto (<10px) no dispara swipe y sigue pausando via click', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong() });
+    const tapArea = document.getElementById('stage-v2-tap');
+    const overlay = document.querySelector('.stage-v2');
+
+    dispatchPointer(tapArea, 'pointerdown', 100, 100);
+    dispatchPointer(document, 'pointerup', 103, 102); // desplazamiento < 10px
+    tapArea.click(); // el navegador dispara click tras un pointerup sin arrastre
+
+    expect(overlay.classList.contains('stage-v2--paused')).toBe(true);
+  });
+});
+
+describe('controles flotantes: auto-hide 3s, A±', () => {
+  it('los controles se ocultan a los 3s y reaparecen con un tap', () => {
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong() });
+    const controls = document.getElementById('stage-v2-controls');
+    expect(controls.classList.contains('stage-v2__controls--hidden')).toBe(false);
+
+    vi.advanceTimersByTime(3000);
+    expect(controls.classList.contains('stage-v2__controls--hidden')).toBe(true);
+
+    document.getElementById('stage-v2-tap').click();
+    expect(controls.classList.contains('stage-v2__controls--hidden')).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it('A+ aumenta la escala de fuente y la persiste; A- la reduce', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong() });
+    const currentEl = document.getElementById('stage-v2-current');
+    const baseSize = Number.parseFloat(currentEl.style.fontSize);
+
+    document.getElementById('stage-v2-font-increase').click();
+    const biggerSize = Number.parseFloat(currentEl.style.fontSize);
+    expect(biggerSize).toBeGreaterThan(baseSize);
+    expect(Number.parseFloat(localStorage.getItem('hkn-stage-font-scale'))).toBeCloseTo(1.1);
+
+    document.getElementById('stage-v2-font-decrease').click();
+    document.getElementById('stage-v2-font-decrease').click();
+    const smallerSize = Number.parseFloat(currentEl.style.fontSize);
+    expect(smallerSize).toBeLessThan(baseSize);
+  });
+});
+
+describe('chips de voz S·A·T·B en el escenario', () => {
+  it('pinta un chip por categoría presente en el roster, con la voz activa marcada', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildMultiVoiceSong(), getActiveVoice: () => 'soprano-1' });
+    const chips = document.querySelectorAll('#stage-v2-voice-chips [data-category]');
+    expect(chips).toHaveLength(2); // soprano + tenor (no contralto/bajo en el roster)
+    const sopranoChip = document.querySelector('[data-category="soprano"]');
+    expect(sopranoChip.classList.contains('stage-v2__voice-chip--active')).toBe(true);
+  });
+
+  it('tap en un chip cambia la voz activa y la nota mostrada sin salir del escenario', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildMultiVoiceSong(), getActiveVoice: () => 'soprano-1' });
+    expect(document.getElementById('stage-v2-chords').textContent).toContain('C4');
+
+    document.querySelector('[data-category="tenor"]').click();
+
+    expect(document.querySelector('.stage-v2')).toBeTruthy(); // sigue en el escenario
+    expect(document.getElementById('stage-v2-chords').textContent).toContain('G3');
+    expect(document.querySelector('[data-category="tenor"]').classList.contains('stage-v2__voice-chip--active')).toBe(
+      true,
+    );
+    expect(document.querySelector('[data-category="soprano"]').classList.contains('stage-v2__voice-chip--active')).toBe(
+      false,
+    );
+  });
+
+  it('sincroniza la voz elegida con SongView vía ctx.setActiveVoice', () => {
+    const sv = mountSongView();
+    const setActiveVoice = vi.fn();
+    enterStage(sv, { song: buildMultiVoiceSong(), getActiveVoice: () => 'soprano-1', setActiveVoice });
+
+    document.querySelector('[data-category="tenor"]').click();
+
+    expect(setActiveVoice).toHaveBeenCalledWith('tenor');
   });
 });

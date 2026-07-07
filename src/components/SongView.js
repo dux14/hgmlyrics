@@ -36,6 +36,7 @@ import { openOptionsSheet } from './OptionsSheet.js';
 import { presetToSpeed, stepToward, shouldShowFab } from '../lib/autoscroll.js';
 import { escapeHtml } from '../lib/escape.js';
 import { enterStage } from './StageMode.js';
+import { normalizeSectionType } from '../lib/sectionTypes.js';
 
 const FONT_SIZE_KEY = 'hkn-lyrics-font-size';
 const FONT_STEP = 0.125; // rem
@@ -887,6 +888,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
         getActiveVoice: () => activeRosterId,
         getTranspose: () => ({ semitones: transposeSemitones, useFlats }),
         getNotation: () => getChordNotation(),
+        setActiveVoice: (category) => selectCategory(category),
       });
     }
   });
@@ -1153,32 +1155,6 @@ export function renderVoicePanel(song) {
         <div class="voice-panel__people" id="voice-panel-people" role="group" aria-label="Voz"></div>
       </div>
     </div>`;
-}
-
-/** Slugs de sección con identidad visual fija (spec F1 D1 §3). */
-const KNOWN_SECTION_TYPES = ['verse', 'chorus', 'bridge', 'prechorus', 'intro', 'outro'];
-
-/** Sinónimos español/legacy → slug conocido, para datos que no pasaron por guessType(). */
-const SECTION_TYPE_ALIASES = {
-  verso: 'verse',
-  estribillo: 'chorus',
-  coro: 'chorus',
-  puente: 'bridge',
-  'pre-estribillo': 'prechorus',
-  'pre-coro': 'prechorus',
-  precoro: 'prechorus',
-};
-
-/**
- * Normaliza `section.type` a uno de los 6 slugs conocidos, para poder pintar
- * la identidad visual fija por tipo. Tipos desconocidos caen a 'verse'.
- * @param {string} [type]
- * @returns {string}
- */
-export function normalizeSectionType(type) {
-  const slug = (type || '').toString().trim().toLowerCase();
-  if (KNOWN_SECTION_TYPES.includes(slug)) return slug;
-  return SECTION_TYPE_ALIASES[slug] || 'verse';
 }
 
 /**

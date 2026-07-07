@@ -3,12 +3,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const navigate = vi.fn();
 vi.mock('../router.js', () => ({ navigate: (...a) => navigate(...a) }));
 let admin = true;
-vi.mock('../lib/authStore.js', () => ({ isAdmin: () => admin }));
-vi.mock('../lib/supabase.js', () => ({
-  supabase: { auth: { getSession: vi.fn(async () => ({ data: { session: null } })) } },
-}));
+vi.mock('../lib/authStore.js', () => ({ isAdmin: () => admin, getSession: () => null }));
 
 import { renderVoicesAlbumView } from './VoicesAlbumView.js';
+import { _clearCache } from '../lib/prefetch.js';
 
 // Espera hasta que fn() devuelva un valor truthy (máx `tries` ciclos de event-loop).
 const waitFor = async (fn, tries = 50) => {
@@ -23,6 +21,7 @@ const waitFor = async (fn, tries = 50) => {
 describe('VoicesAlbumView editar por fila', () => {
   beforeEach(() => {
     navigate.mockClear();
+    _clearCache(); // getWeeklyWords() cachea 'weekly-words' — evita fugas entre tests
     globalThis.fetch = vi.fn(async () => ({
       ok: true,
       json: async () => ({
@@ -58,6 +57,7 @@ describe('VoicesAlbumView jerarquía título + hero', () => {
   beforeEach(() => {
     navigate.mockClear();
     admin = true;
+    _clearCache(); // getWeeklyWords() cachea 'weekly-words' — evita fugas entre tests
     globalThis.fetch = vi.fn(async () => ({
       ok: true,
       json: async () => ({

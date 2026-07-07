@@ -5,7 +5,7 @@
 import { navigate, openBackable, closeBackable, clearBackable } from '../router.js';
 import { getState, getAlbums } from '../lib/store.js';
 import { resolveCoverUrl } from './songRow.js';
-import { isAuthenticated, getSession } from '../lib/authStore.js';
+import { isAuthenticated } from '../lib/authStore.js';
 import { isFavorite } from '../lib/favorites.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { escapeHtml } from '../lib/escape.js';
@@ -13,6 +13,7 @@ import { songTile } from './songTile.js';
 import { searchEverything } from '../lib/search.js';
 import { renderAsyncRegion } from '../lib/renderAsync.js';
 import { skelRowList } from '../lib/skeleton.js';
+import { getWeeklyWords } from '../lib/weeklyWords.js';
 
 /** PRNG determinista (mulberry32) — para barajar estable por sesión. */
 function mulberry32(seed) {
@@ -107,18 +108,11 @@ function vozCard(ww) {
 }
 
 /**
- * Trae las voces en off para el rail del hub. El endpoint exige token
- * (requireUser), y /buscar es una ruta guardada, asi que la sesion siempre existe:
- * tomamos el access_token del authStore (sin depender de supabase directamente).
+ * Trae las voces en off para el rail del hub. Fuente única SWR: `getWeeklyWords()`
+ * (fetch autenticado + cache compartida con Home/otras vistas).
  */
 async function fetchVocesEnOff() {
-  const token = getSession()?.access_token;
-  const res = await fetch('/api/weekly-words', {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!res.ok) throw new Error('weekly-words fetch failed');
-  const body = await res.json();
-  return body.weeklyWords ?? [];
+  return getWeeklyWords();
 }
 
 /**

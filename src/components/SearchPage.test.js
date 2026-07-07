@@ -59,9 +59,11 @@ import { isFavorite } from '../lib/favorites.js';
 import { icon } from '../lib/icons.js';
 import { openBackable } from '../router.js';
 import { renderSearchPage } from './SearchPage.js';
+import { _clearCache } from '../lib/prefetch.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  _clearCache(); // getWeeklyWords() cachea 'weekly-words' — evita fugas entre tests
   global.fetch = vi.fn().mockResolvedValue({
     ok: true,
     json: async () => ({}),

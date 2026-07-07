@@ -40,6 +40,7 @@ import { renderToolsHub } from './components/ToolsHub.js';
 import { renderHome } from './components/Home.js';
 import { renderBottomNav, updateBottomNavActive } from './components/BottomNav.js';
 import { closeGoToSheet } from './components/GoToSheet.js';
+import { getWeeklyWords, warmWeeklyWords } from './lib/weeklyWords.js';
 
 // Initialize theme immediately to avoid flash
 initTheme();
@@ -59,24 +60,15 @@ function showPageSkeleton() {
 
 /**
  * Carga weekly_words publicadas para incluirlas en el índice de búsqueda.
+ * Fuente única SWR: `getWeeklyWords()` (fetch autenticado + cache compartida).
  * @returns {Promise<Array>}
  */
 async function loadWeeklyWordsForIndex() {
   try {
-    const { supabase } = await import('./lib/supabase.js');
-    const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionData?.session?.access_token;
-    const res = await fetch('/api/weekly-words', {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (res.ok) {
-      const body = await res.json();
-      return body.weeklyWords ?? [];
-    }
+    return await getWeeklyWords();
   } catch (_e) {
-    /* ignore */
+    return [];
   }
-  return [];
 }
 
 /**
@@ -429,6 +421,9 @@ async function boot() {
   } catch (_) {
     // offlineCache module not critical
   }
+
+  // Precalienta weekly-words en idle solo si hay sesion (el endpoint exige auth).
+  if (isAuthenticated()) warmWeeklyWords();
 
   // PWA: chip global de estado offline
   try {

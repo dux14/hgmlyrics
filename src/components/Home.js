@@ -4,13 +4,14 @@ import '../styles/home.css';
 import { navigate } from '../router.js';
 import { getState, getAlbums } from '../lib/store.js';
 import { createSongCard } from './SongList.js';
-import { isAuthenticated, getSession } from '../lib/authStore.js';
+import { isAuthenticated } from '../lib/authStore.js';
 import { icon } from '../lib/icons.js';
 import { escapeHtml } from '../lib/escape.js';
 import { urgencyOf, sortByUrgency, countdownLabel } from '../lib/listUrgency.js';
 import { resolveCoverUrl } from './songRow.js';
 import { listMyLists, warmList } from '../lib/lists.js';
 import { cached } from '../lib/prefetch.js';
+import { getWeeklyWords } from '../lib/weeklyWords.js';
 import { getFavoriteIds } from '../lib/favorites.js';
 import { isVigente } from './VoicesAlbumView.js';
 import { voiceoverCoverHtml } from '../lib/voiceoverCover.js';
@@ -129,14 +130,6 @@ function listsSkeletonHtml() {
 
 function vozSkeletonHtml() {
   return `<div class="home__voz-skeleton" aria-hidden="true"></div>`;
-}
-
-async function fetchWeeklyWords() {
-  const session = getSession();
-  const headers = session ? { Authorization: `Bearer ${session.access_token}` } : {};
-  const res = await fetch('/api/weekly-words', { headers });
-  const jsonBody = res.ok ? await res.json() : {};
-  return jsonBody.weeklyWords ?? [];
 }
 
 /**
@@ -287,7 +280,7 @@ export async function renderHome(container, { today = new Date().toISOString().s
 
   // ── Async: Voz en off ────────────────────────────────────────
   try {
-    const { data: words } = await cached('weekly-words', fetchWeeklyWords);
+    const words = await getWeeklyWords();
     // Elegir la más reciente entre las vigentes (sunday_date ≤ hoy).
     // No se asume orden de la API: se toma el máximo sunday_date explícitamente.
     const vigente = words

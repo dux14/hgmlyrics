@@ -7,11 +7,11 @@ import { navigate } from '../router.js';
 import { isAdmin } from '../lib/authStore.js';
 import { liturgicalPalette, coverGradient } from '../lib/liturgicalColor.js';
 import { escapeHtml } from '../lib/escape.js';
-import { supabase } from '../lib/supabase.js';
 import { icon } from '../lib/icons.js';
 import { renderAsyncRegion } from '../lib/renderAsync.js';
 import { skelTracklist } from '../lib/skeleton.js';
 import { voiceoverHero } from '../lib/voiceoverHero.js';
+import { getWeeklyWords } from '../lib/weeklyWords.js';
 
 /**
  * Dado un sunday_date (YYYY-MM-DD), ¿es la del domingo más reciente (≤ hoy)?
@@ -78,16 +78,7 @@ export async function renderVoicesAlbumView(container) {
   `;
   const region = container.querySelector('.voz-album__region');
 
-  const fetcher = async () => {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionData?.session?.access_token;
-    const res = await fetch('/api/weekly-words', {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) throw new Error('weekly-words fetch failed');
-    const body = await res.json();
-    return body.weeklyWords ?? [];
-  };
+  const fetcher = () => getWeeklyWords();
 
   const paintList = (words) => {
     const today = new Date().toISOString().slice(0, 10);

@@ -13,6 +13,7 @@ import { icon } from '../lib/icons.js';
 import { getSession } from '../lib/authStore.js';
 import { renderAsyncRegion } from '../lib/renderAsync.js';
 import { skelLongText } from '../lib/skeleton.js';
+import { invalidateWeeklyWords } from '../lib/weeklyWords.js';
 
 // Colores litúrgicos disponibles como chips (mismos values que liturgical_color).
 const COLOR_OPTIONS = ['green', 'purple', 'white', 'red'];
@@ -347,6 +348,7 @@ function _mountVozForm(container, word, wordId) {
         gospel_body: gospelArea.value.trim() || null,
         published: publish,
       });
+      invalidateWeeklyWords();
       navigate(`/voz/${saved.id}`);
     } catch (e) {
       showError(e.message);
@@ -360,6 +362,7 @@ function _mountVozForm(container, word, wordId) {
     if (!confirm('¿Eliminar esta voz en off? Esta acción no se puede deshacer.')) return;
     try {
       await fetch(`/api/weekly-words/${wordId}`, { method: 'DELETE', headers: authHeader() });
+      invalidateWeeklyWords();
       navigate('/voces');
     } catch (e) {
       showError(e.message);

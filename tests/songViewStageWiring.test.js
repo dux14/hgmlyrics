@@ -141,3 +141,50 @@ describe('SongView → StageMode: contrato de ctx (FIX 1 y FIX 2)', () => {
     );
   });
 });
+
+describe('FINDING 2: SongView resincroniza capas al salir del escenario (ctx.onExit)', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+    capturedCtx = null;
+  });
+
+  it('ctx.onExit refresca aria-pressed y la letra renderizada tras togglear una capa dentro del stage', async () => {
+    const { setLayer } = await import('../src/lib/layerStore.js');
+    const song = buildSong('song-4', [{ id: 'sop1', name: 'Soprano', category: 'soprano' }]);
+    // La canción necesita acordes para que #layer-chords se pinte en la toolbar.
+    song.sections[0].lines[0].chords = [{ pos: 0, ch: 'D' }];
+    getSongById.mockReturnValue(song);
+    const container = document.createElement('div');
+    await renderSongView(container, 'song-4');
+    container.querySelector('#enter-stage-btn').click();
+    expect(capturedCtx.onExit).toBeTypeOf('function');
+
+    // Simula el toggle DENTRO del stage (StageMode llama setLayer directamente).
+    setLayer('chords', true);
+    capturedCtx.onExit();
+
+    expect(container.querySelector('#layer-chords').getAttribute('aria-pressed')).toBe('true');
+    const line = container.querySelector('#lyrics-content .lyrics__line');
+    expect(line.classList.contains('lyrics__line--chords')).toBe(true);
+  });
+});
+
+describe('FINDING 4: el afinador flotante se cierra al entrar al escenario', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+    capturedCtx = null;
+  });
+
+  it('#hero-tuner-mic abierto + entrar al escenario destruye el afinador flotante', async () => {
+    const song = buildSong('song-5', [{ id: 'sop1', name: 'Soprano', category: 'soprano' }]);
+    getSongById.mockReturnValue(song);
+    const container = document.createElement('div');
+    await renderSongView(container, 'song-5');
+
+    container.querySelector('#hero-tuner-mic').click();
+    expect(document.querySelector('.floating-tuner')).toBeTruthy();
+
+    container.querySelector('#enter-stage-btn').click();
+    expect(document.querySelector('.floating-tuner')).toBeNull();
+  });
+});

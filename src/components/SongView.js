@@ -271,6 +271,14 @@ async function _renderSongBody(container, songId, isPreview, song) {
   }
 
   let fontSize = getFontSize();
+  // Modo Tono: solo con el flag voz_tono. activeRosterId/activeCategory dirigen
+  // el disclosure categoría→persona del modo notas.
+  const tonoEnabled = isFeatureEnabled('voz_tono');
+  // hasChords/tonoAvailable se adelantan (antes vivían más abajo) porque la
+  // derivación de viewMode (FIX finding 1) los necesita para intersectar la
+  // preferencia global de capas con lo que la canción realmente soporta.
+  const hasChords = songHasChords(song);
+  const tonoAvailable = tonoEnabled && (song.voiceRoster || []).length > 0;
   // viewMode: 'lyrics' | 'chords' | 'tono' | 'mixed'. showChords se deriva para
   // no tocar la rama de acordes existente. 'mixed' es la combinación de las
   // capas Acordes+Tono (T3, toolbar de capas) — no es un modo exclusivo nuevo,
@@ -280,11 +288,19 @@ async function _renderSongBody(container, songId, isPreview, song) {
   let showChords = false;
   // Capas de lectura (T3): Acordes y Tono ya no son un mode exclusivo en la
   // toolbar — son dos toggles independientes persistidos globalmente
-  // (layerStore). Solo aplican fuera de preview: el preview conserva el toggle
-  // viejo Letra/Acordes/Tono (chord-toggle) tal cual, sin tocarlo.
+  // (layerStore). `layers` es la preferencia GLOBAL cruda (persistida sin
+  // tocar); `getEffectiveLayers` (FIX finding 1, CRITICAL) la intersecta con
+  // hasChords/tonoAvailable de ESTA canción para que una capa encendida en
+  // otra canción con acordes no sangre en una sin acordes (sin control para
+  // apagarla, porque el toggle ni se pinta). Solo aplican fuera de preview: el
+  // preview conserva el toggle viejo Letra/Acordes/Tono (chord-toggle) tal
+  // cual, sin tocarlo.
   const layers = getLayers();
+  function getEffectiveLayers() {
+    return { chords: layers.chords && hasChords, tono: layers.tono && tonoAvailable };
+  }
   if (!isPreview) {
-    viewMode = deriveViewMode(layers);
+    viewMode = deriveViewMode(getEffectiveLayers());
     showChords = viewMode === 'chords' || viewMode === 'mixed';
   }
   // Transposición persistida por canción (T3); preview no persiste (no hay id
@@ -292,9 +308,6 @@ async function _renderSongBody(container, songId, isPreview, song) {
   const savedTranspose = !isPreview ? getTranspose(songId) : { semitones: 0, useFlats: false };
   let transposeSemitones = savedTranspose.semitones;
   let useFlats = savedTranspose.useFlats;
-  // Modo Tono: solo con el flag voz_tono. activeRosterId/activeCategory dirigen
-  // el disclosure categoría→persona del modo notas.
-  const tonoEnabled = isFeatureEnabled('voz_tono');
   let activeCategory = null;
   let activeRosterId = null;
   // API de setupAutoscroll (FIX 1): pauseAutoscroll detiene el motor rAF del
@@ -318,7 +331,6 @@ async function _renderSongBody(container, songId, isPreview, song) {
   // (ver renderSections → visibleVoices).
   const visibleVoices = new Set((song.voiceRoster || []).map((v) => v.id));
 
-  const hasChords = songHasChords(song);
   // Vista combinada (Acordes+Voz, Wave 4): voz activa del modo Acordes,
   // independiente de la de Tono. Solo con flag voz_tono + roster + acordes.
   let chordsCategory = null;
@@ -378,9 +390,8 @@ async function _renderSongBody(container, songId, isPreview, song) {
     adjacent = getAdjacentSongs(songId);
   }
   const hasNav = !isPreview && (adjacent.prev || adjacent.next);
-  // El modo Tono está disponible si el flag está activo y la canción tiene
-  // roster de voces. La fila toggle aparece si hay acordes o si hay Tono.
-  const tonoAvailable = tonoEnabled && (song.voiceRoster || []).length > 0;
+  // La fila toggle aparece si hay acordes o si hay Tono (hasChords/tonoAvailable
+  // ya se calcularon arriba, junto a viewMode).
   const showToggle = hasChords || tonoAvailable;
 
   container.innerHTML = `
@@ -684,7 +695,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
     layers[name] = !layers[name];
     setLayer(name, layers[name]);
     container.querySelector(`#layer-${name}`)?.setAttribute('aria-pressed', String(layers[name]));
-    viewMode = deriveViewMode(layers);
+    viewMode = deriveViewMode(getEffectiveLayers());
     showChords = viewMode === 'chords' || viewMode === 'mixed';
     applyModeVisibility();
     if (layers.tono && !skipTonoAutoselect) ensureTonoSelection();
@@ -861,9 +872,31 @@ async function _renderSongBody(container, songId, isPreview, song) {
     });
   }
 
+  // Al salir del escenario (FIX finding 2): StageMode togglea capas
+  // directamente contra layerStore (mismo storage global), así que el closure
+  // de SongView (layers/viewMode/aria-pressed/letra pintada) queda obsoleto si
+  // el usuario las cambió adentro. Relee getLayers(), re-deriva viewMode (con
+  // la misma intersección de disponibilidad de finding 1) y re-pinta.
+  function resyncLayersFromStore() {
+    const fresh = getLayers();
+    layers.chords = fresh.chords;
+    layers.tono = fresh.tono;
+    container.querySelector('#layer-chords')?.setAttribute('aria-pressed', String(layers.chords));
+    container.querySelector('#layer-tono')?.setAttribute('aria-pressed', String(layers.tono));
+    viewMode = deriveViewMode(getEffectiveLayers());
+    showChords = viewMode === 'chords' || viewMode === 'mixed';
+    applyModeVisibility();
+    reRenderLyrics();
+  }
+
   container.querySelector('#enter-stage-btn')?.addEventListener('click', () => {
     const sv = container.querySelector('.song-view');
     if (sv) {
+      // FIX finding 4: el afinador flotante (mic en vivo) no se pausa solo al
+      // entrar al escenario — se destruye, mismo patrón que el route-change
+      // teardown (destroyFloatingTuner más arriba).
+      floatingTunerApi?.destroy();
+      floatingTunerApi = null;
       enterStage(sv, {
         song,
         getActiveVoice: () => activeRosterId,
@@ -880,6 +913,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
           stageAutoscrollApi?.pauseAutoscroll();
           sectionPlayerApi?.pause();
         },
+        onExit: resyncLayersFromStore,
       });
     }
   });

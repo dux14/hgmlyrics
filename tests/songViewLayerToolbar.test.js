@@ -188,6 +188,25 @@ describe('SongView — toolbar de capas (T3)', () => {
     expect(line.classList.contains('lyrics__line--tono')).toBe(true);
   });
 
+  it('FINDING 1: capa Acordes global on (encendida en otra canción) no sangra en una canción sin acordes', async () => {
+    const { setLayer } = await import('../src/lib/layerStore.js');
+    setLayer('chords', true); // preferencia global, simula haberla encendido en otra canción con acordes
+
+    const song = buildSong('song-toolbar-nochords', { withChords: false, withRoster: true });
+    getSongById.mockReturnValue(song);
+    const container = document.createElement('div');
+    await renderSongView(container, 'song-toolbar-nochords');
+
+    // Sin acordes en la canción, el toggle ni siquiera se pinta (showToggle
+    // gatea por hasChords/tonoAvailable) — no hay control para apagarlo.
+    expect(container.querySelector('#layer-chords')).toBeNull();
+
+    const line = container.querySelector('#lyrics-content .lyrics__line');
+    expect(line.classList.contains('lyrics__line--chords')).toBe(false);
+    expect(line.classList.contains('lyrics__line--no-chord')).toBe(false);
+    expect(line.textContent.trim()).toBe('Santo es el Señor');
+  });
+
   it('las capas persisten entre renders (layerStore)', async () => {
     const song = buildSong('song-toolbar-6');
     getSongById.mockReturnValue(song);

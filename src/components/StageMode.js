@@ -257,7 +257,16 @@ function renderChordsRow(entry) {
 function buildCurrentLineHTML(s, cur) {
   if (cur.spoken || cur.text.trim() === '') return buildLetraLineHTML(cur.text);
 
-  const viewMode = deriveViewMode(getLayers());
+  // FIX finding 1 (CRITICAL): `getLayers()` es la preferencia GLOBAL del
+  // dispositivo — sin intersectarla con lo que ESTA canción soporta
+  // (s.hasChords/s.tonoAvailable, calculados en enterStage), una capa
+  // encendida en otra canción con acordes sangraba acá también, sin control
+  // para apagarla (el toggle #stage-layer-chords ni se pinta si !hasChords).
+  const rawLayers = getLayers();
+  const viewMode = deriveViewMode({
+    chords: rawLayers.chords && s.hasChords,
+    tono: rawLayers.tono && s.tonoAvailable,
+  });
   const { semitones = 0, useFlats = false } =
     (typeof s.ctx.getTranspose === 'function' ? s.ctx.getTranspose() : null) || {};
   const notation = typeof s.ctx.getNotation === 'function' ? s.ctx.getNotation() : 'anglo';
@@ -439,11 +448,12 @@ function togglePause(s) {
  *           getTranspose?: () => {semitones:number, useFlats:boolean},
  *           getNotation?: () => 'anglo'|'latin',
  *           setActiveVoice?: (category: string, personId?: string) => void,
- *           pauseAutoscroll?: () => void }} ctx contexto vivo desde SongView;
+ *           pauseAutoscroll?: () => void, onExit?: () => void }} ctx contexto vivo desde SongView;
  *           setActiveVoice sincroniza el chip S·A·T·B del escenario con el selector de voz de SongView
  *           (personId elige la persona concreta cuando la categoría tiene 2+ voces);
  *           pauseAutoscroll detiene el motor de autoscroll clásico, que si no seguiría
- *           corriendo detrás del overlay.
+ *           corriendo detrás del overlay; onExit (FIX finding 2) se llama al salir del
+ *           escenario para que SongView resincronice su estado de capas con layerStore.
  */
 export function enterStage(songViewEl, ctx = {}) {
   if (session || !songViewEl || !ctx.song) return; // idempotente
@@ -501,6 +511,8 @@ export function enterStage(songViewEl, ctx = {}) {
     els,
     song: ctx.song,
     ctx,
+    hasChords,
+    tonoAvailable,
     lines,
     index: 0,
     speed: readBaseSpeed(songId),
@@ -642,7 +654,10 @@ export function enterStage(songViewEl, ctx = {}) {
     showControls(session);
     openOptionsSheet({
       song: session.song,
-      visibleVoices: new Set((session.song.voiceRoster || []).map((v) => v.id)),
+      // FIX finding 3: el stage no tiene onToggleVoice (no hay concepto de
+      // "voz atenuada" acá) — showVoices: false oculta la sección para no
+      // pintar switches que no hacen nada.
+      showVoices: false,
       showTono: false,
       notation: typeof session.ctx.getNotation === 'function' ? session.ctx.getNotation() : 'anglo',
       fontLabel: session.fontScale.toFixed(2),
@@ -731,6 +746,7 @@ export function exitStage() {
     overlay,
     els,
     wl,
+    ctx,
     timer,
     hintTimer,
     feedbackTimer,
@@ -787,4 +803,10 @@ export function exitStage() {
   document.body.classList.remove('stage-active');
 
   session = null;
+
+  // FIX finding 2: SongView resincroniza su closure (layers/viewMode/
+  // aria-pressed/letra) desde layerStore acá — el toggle #stage-layer-chords/
+  // tono adentro del escenario ya lo persistió, pero la vista normal no se
+  // enteraba hasta el próximo render completo.
+  ctx.onExit?.();
 }

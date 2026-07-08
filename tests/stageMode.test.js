@@ -479,6 +479,15 @@ describe('T6: sheet de opciones compartido (font+velocidad) desde #stage-open-op
     expect(document.querySelector('#osheet-tono')).toBeNull(); // sin setter de transposición en el stage
   });
 
+  it('FIX finding 3: el sheet del stage no trae VOCES VISIBLES (sin onToggleVoice, quedaban switches muertos)', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.getElementById('stage-open-options').click();
+    const headers = Array.from(document.querySelectorAll('.osheet__h')).map((h) => h.textContent);
+    expect(headers).not.toContain('VOCES VISIBLES');
+    expect(document.querySelector('.osheet__voices')).toBeNull();
+  });
+
   it('A+ del sheet aumenta la escala de fuente del stage y la persiste', () => {
     const sv = mountSongView();
     enterStage(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -544,6 +553,22 @@ describe('T6: paridad de capas en la línea actual (mismos markers que la vista 
     const line = { text: 'Primera línea', groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' }] };
     const expected = buildTonoLineHTML(line, 'soprano-1', 'voice-text--soprano', { notation: 'anglo' });
     expect(document.getElementById('stage-v2-text').innerHTML).toBe(expected);
+  });
+
+  it('FINDING 1: capa Acordes global on pero canción sin acordes → markers de buildLetraLineHTML (sin sangrado)', () => {
+    setLayer('chords', true); // preferencia global, encendida en otra canción con acordes
+    const songSinAcordes = buildSong({
+      sections: [
+        {
+          type: 'verse',
+          label: 'Verso 1',
+          lines: [{ text: 'Primera línea', chords: [], groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' }] }],
+        },
+      ],
+    });
+    const sv = mountSongView();
+    enterStage(sv, { song: songSinAcordes, getActiveVoice: () => 'soprano-1' });
+    expect(document.getElementById('stage-v2-text').innerHTML).toBe(buildLetraLineHTML('Primera línea'));
   });
 
   it('ambas capas on: markers de buildMixedLineHTML', () => {

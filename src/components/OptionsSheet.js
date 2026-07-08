@@ -2,20 +2,19 @@
  * OptionsSheet.js — Bottom-sheet "Opciones" unificado (T4, evoluciona VoiceSheet.js).
  *
  * Disponible en TODAS las resoluciones (en desktop: ancho máx 480px centrado
- * vía CSS, mismo patrón visual que móvil). Secciones:
- *  - VOCES VISIBLES: una fila por voz del roster (no por categoría) con punto
- *    de color, nombre, registro (referenceKey) y switch de visibilidad.
+ * vía CSS, mismo patrón visual que móvil). Secciones, en este orden:
  *  - TONO: stepper ±½ + bubble (tap = reset) + toggle ♯/♭.
  *  - NOTACIÓN: segmented control Do Re Mi / A B C (chordNotation.js).
- *  - TAMAÑO: A−/valor/A+.
- *  - VELOCIDAD (autoscroll): −/valor/+.
+ *  - TAMAÑO DE LETRA: A−/valor/A+.
+ *  - AUTO-SCROLL: −/valor/+.
+ *  - VOCES VISIBLES: una fila por voz del roster (no por categoría) con punto
+ *    de color, nombre, registro (referenceKey) y switch de visibilidad.
  *
  * No introduce lógica nueva de dominio; es aditivo sobre los closures de
  * SongView.js (mismos handlers que la toolbar principal — una sola fuente
  * de verdad del estado).
  */
 
-import { icon } from '../lib/icons.js';
 import { escapeHtml } from '../lib/escape.js';
 
 const ORDER = ['soprano', 'contralto', 'tenor', 'bass'];
@@ -92,7 +91,7 @@ export function openOptionsSheet(opts) {
   const voicesSectionHtml = rows.length
     ? `
     <div class="osheet__section">
-      <div class="osheet__h syn">Voces visibles</div>
+      <div class="osheet__h syn">VOCES VISIBLES</div>
       <div class="osheet__voices">
         ${rows
           .map((r) => {
@@ -122,11 +121,11 @@ export function openOptionsSheet(opts) {
   const tonoSectionHtml = opts.showTono
     ? `
     <div class="osheet__section">
-      <div class="osheet__h syn">Tono</div>
+      <div class="osheet__h syn">TONO</div>
       <div class="osheet__seg">
-        <button data-act="tdown" aria-label="Bajar medio tono">${icon('chevron-left', { size: 16 })}</button>
+        <button data-act="tdown" aria-label="Bajar medio tono">−½</button>
         <button class="osheet__bubble" data-act="treset" id="osheet-tono" aria-label="Tono: ${escapeHtml(opts.tonoLabel || '')}. Toca para restablecer al original.">${escapeHtml(opts.tonoLabel || '')}</button>
-        <button data-act="tup" aria-label="Subir medio tono" style="transform: rotate(180deg)">${icon('chevron-left', { size: 16 })}</button>
+        <button data-act="tup" aria-label="Subir medio tono">+½</button>
         <button data-act="accidental" class="osheet__accidental" aria-label="Alternar sostenidos y bemoles">${opts.useFlats ? '♭' : '♯'}</button>
       </div>
     </div>`
@@ -134,7 +133,7 @@ export function openOptionsSheet(opts) {
 
   const notationSectionHtml = `
     <div class="osheet__section">
-      <div class="osheet__h syn">Notación</div>
+      <div class="osheet__h syn">NOTACIÓN</div>
       <div class="osheet__seg osheet__seg--notation" role="group" aria-label="Notación de acordes">
         <button class="osheet__seg-btn${notation === 'latin' ? ' is-active' : ''}" data-notation="latin" aria-pressed="${notation === 'latin'}">Do Re Mi</button>
         <button class="osheet__seg-btn${notation === 'anglo' ? ' is-active' : ''}" data-notation="anglo" aria-pressed="${notation === 'anglo'}">A B C</button>
@@ -143,7 +142,7 @@ export function openOptionsSheet(opts) {
 
   const sizeSectionHtml = `
     <div class="osheet__section">
-      <div class="osheet__h syn">Tamaño</div>
+      <div class="osheet__h syn">TAMAÑO DE LETRA</div>
       <div class="osheet__seg">
         <button data-act="fdown" aria-label="Reducir tamaño de letra">A−</button>
         <span class="osheet__val" id="osheet-font">${escapeHtml(opts.fontLabel || '')}</span>
@@ -153,7 +152,7 @@ export function openOptionsSheet(opts) {
 
   const autoscrollSectionHtml = `
     <div class="osheet__section">
-      <div class="osheet__h syn">Velocidad</div>
+      <div class="osheet__h syn">AUTO-SCROLL</div>
       <div class="osheet__seg">
         <button data-act="asdown" aria-label="Autoscroll más lento">−</button>
         <span class="osheet__val" id="osheet-autoscroll">${escapeHtml(opts.autoscrollLabel || '')}</span>
@@ -163,11 +162,11 @@ export function openOptionsSheet(opts) {
 
   sheet.innerHTML = `
     <div class="osheet__grab"></div>
-    ${voicesSectionHtml}
     ${tonoSectionHtml}
     ${notationSectionHtml}
     ${sizeSectionHtml}
     ${autoscrollSectionHtml}
+    ${voicesSectionHtml}
   `;
 
   let closed = false;

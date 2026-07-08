@@ -824,21 +824,6 @@ async function _renderSongBody(container, songId, isPreview, song) {
     });
   }
 
-  // Font controls
-  container.querySelector('#font-decrease')?.addEventListener('click', () => {
-    fontSize = Math.max(FONT_MIN, fontSize - FONT_STEP);
-    applyFontSize(fontSize);
-    saveFontSize(fontSize);
-    container.querySelector('#font-size-label').textContent = fontSize.toFixed(2);
-  });
-
-  container.querySelector('#font-increase')?.addEventListener('click', () => {
-    fontSize = Math.min(FONT_MAX, fontSize + FONT_STEP);
-    applyFontSize(fontSize);
-    saveFontSize(fontSize);
-    container.querySelector('#font-size-label').textContent = fontSize.toFixed(2);
-  });
-
   container.querySelector('#enter-stage-btn')?.addEventListener('click', () => {
     const sv = container.querySelector('.song-view');
     if (sv) {
@@ -866,36 +851,6 @@ async function _renderSongBody(container, songId, isPreview, song) {
   container.querySelector('#song-title-link')?.addEventListener('click', () => {
     navigate(`/song/${songId}/links`);
   });
-
-  // Chord toggle — only transpose and notation for full mode (already set up above)
-  if (hasChords) {
-    container.querySelector('#transpose-down')?.addEventListener('click', () => {
-      transposeSemitones = normalizeSemitones(transposeSemitones - 1);
-      refreshTransposeUI();
-      reRenderLyrics();
-    });
-
-    container.querySelector('#transpose-up')?.addEventListener('click', () => {
-      transposeSemitones = normalizeSemitones(transposeSemitones + 1);
-      refreshTransposeUI();
-      reRenderLyrics();
-    });
-
-    // Tap en el bubble central = reset a Original.
-    container.querySelector('#transpose-bubble')?.addEventListener('click', () => {
-      if (transposeSemitones === 0) return;
-      transposeSemitones = 0;
-      refreshTransposeUI();
-      reRenderLyrics();
-    });
-
-    container.querySelector('#notation-toggle')?.addEventListener('click', () => {
-      useFlats = !useFlats;
-      container.querySelector('#notation-toggle').textContent = useFlats ? '♭ → ♯' : '♯ / ♭';
-      refreshTransposeUI();
-      reRenderLyrics();
-    });
-  }
 
   // Album / lista navigation
   if (hasNav) {
@@ -976,8 +931,6 @@ async function _renderSongBody(container, songId, isPreview, song) {
         useFlats = !useFlats;
         refreshTransposeUI();
         syncTonoBubble();
-        const notationBtn = container.querySelector('#notation-toggle');
-        if (notationBtn) notationBtn.textContent = useFlats ? '♭ → ♯' : '♯ / ♭';
         const accidentalBtn = document.querySelector('.osheet__accidental');
         if (accidentalBtn) accidentalBtn.textContent = useFlats ? '♭' : '♯';
         reRenderLyrics();

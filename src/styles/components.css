@@ -192,26 +192,6 @@
   flex-shrink: 0;
 }
 
-.fav-btn--cover {
-  position: absolute;
-  right: -6px;
-  bottom: -6px;
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.fav-btn--cover::after {
-  content: '';
-  position: absolute;
-  inset: -8px; /* hit-area >= 44px */
-}
-
 .song-view__cover {
   width: 80px;
   height: 80px;

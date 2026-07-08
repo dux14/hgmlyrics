@@ -151,6 +151,32 @@
   border-color: color-mix(in srgb, var(--color-action) 30%, transparent);
 }
 
+/* Variante flotante sobre la carátula del hero (T1): mismo origen sin layer
+   que .fav-btn (favorites.css se importa directo desde JS, sin @layer), así
+   que gana por orden de declaración. min-width/min-height redeclarados para
+   neutralizar el clamp de 40px de la base. */
+.fav-btn--cover {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fav-btn--cover::after {
+  content: '';
+  position: absolute;
+  inset: -8px; /* hit-area >= 44px */
+}
+
 /* Estado activo: corazón ámbar con glow */
 .fav-btn.is-on {
   color: var(--color-action);

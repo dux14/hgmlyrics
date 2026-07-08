@@ -28,7 +28,7 @@ import {
 } from '../lib/lyricsRender.js';
 import { getChordNotation, setChordNotation, displayNote } from '../lib/chordNotation.js';
 import { getTranspose, setTranspose, normalizeSemitones } from '../lib/transposeStore.js';
-import { getLayers, setLayer } from '../lib/layerStore.js';
+import { getLayers, setLayer, deriveViewMode } from '../lib/layerStore.js';
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { isFavorite, toggleFavorite } from '../lib/favorites.js';
@@ -283,14 +283,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
   // viejo Letra/Acordes/Tono (chord-toggle) tal cual, sin tocarlo.
   const layers = getLayers();
   if (!isPreview) {
-    viewMode =
-      layers.chords && layers.tono
-        ? 'mixed'
-        : layers.tono
-          ? 'tono'
-          : layers.chords
-            ? 'chords'
-            : 'lyrics';
+    viewMode = deriveViewMode(layers);
     showChords = viewMode === 'chords' || viewMode === 'mixed';
   }
   // Transposición persistida por canción (T3); preview no persiste (no hay id
@@ -689,14 +682,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
     layers[name] = !layers[name];
     setLayer(name, layers[name]);
     container.querySelector(`#layer-${name}`)?.setAttribute('aria-pressed', String(layers[name]));
-    viewMode =
-      layers.chords && layers.tono
-        ? 'mixed'
-        : layers.tono
-          ? 'tono'
-          : layers.chords
-            ? 'chords'
-            : 'lyrics';
+    viewMode = deriveViewMode(layers);
     showChords = viewMode === 'chords' || viewMode === 'mixed';
     applyModeVisibility();
     if (layers.tono && !skipTonoAutoselect) ensureTonoSelection();

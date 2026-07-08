@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { getLayers, setLayer } from '../src/lib/layerStore.js';
+import { getLayers, setLayer, deriveViewMode } from '../src/lib/layerStore.js';
 
 describe('layerStore', () => {
   beforeEach(() => {
@@ -39,5 +39,34 @@ describe('layerStore', () => {
     };
     expect(() => setLayer('chords', true)).not.toThrow();
     Storage.prototype.setItem = original;
+  });
+
+  it('tolera JSON malformado en storage (default)', () => {
+    localStorage.setItem('hkn-lyrics-layers', '{not json');
+    expect(getLayers()).toEqual({ chords: false, tono: false });
+  });
+
+  it('setLayer con nombre desconocido no hace nada', () => {
+    setLayer('chords', true);
+    setLayer('bogus', true);
+    expect(getLayers()).toEqual({ chords: true, tono: false });
+  });
+});
+
+describe('deriveViewMode', () => {
+  it('ambas capas apagadas → lyrics', () => {
+    expect(deriveViewMode({ chords: false, tono: false })).toBe('lyrics');
+  });
+
+  it('solo chords → chords', () => {
+    expect(deriveViewMode({ chords: true, tono: false })).toBe('chords');
+  });
+
+  it('solo tono → tono', () => {
+    expect(deriveViewMode({ chords: false, tono: true })).toBe('tono');
+  });
+
+  it('ambas capas encendidas → mixed', () => {
+    expect(deriveViewMode({ chords: true, tono: true })).toBe('mixed');
   });
 });

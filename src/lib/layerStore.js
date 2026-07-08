@@ -43,3 +43,19 @@ export function setLayer(name, on) {
     // best-effort — la persistencia es una mejora, no un requisito.
   }
 }
+
+/**
+ * Deriva el `viewMode` interno de SongView/StageMode a partir de las capas.
+ * 'mixed' es la combinación de ambas capas encendidas (T3, toolbar de capas);
+ * no es exclusivo con 'chords' — ver renderSections en SongView.js. Helper
+ * puro, sin acceso a storage, para que SongView (render inicial + toggleLayer)
+ * y StageMode (T6) compartan el mismo mapeo.
+ * @param {{ chords: boolean, tono: boolean }} layers
+ * @returns {'lyrics'|'chords'|'tono'|'mixed'}
+ */
+export function deriveViewMode(layers) {
+  if (layers?.chords && layers?.tono) return 'mixed';
+  if (layers?.tono) return 'tono';
+  if (layers?.chords) return 'chords';
+  return 'lyrics';
+}

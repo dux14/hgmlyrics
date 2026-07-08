@@ -67,8 +67,8 @@ const SAMPLE_FLAGS = [
     users: [{ email: 'samu@x.com', username: 'samu' }],
   },
   {
-    key: 'afinador_shortcut',
-    description: 'Shortcut afinador',
+    key: 'estudio_beta',
+    description: 'Acceso al estudio de pistas beta',
     enabledGlobal: true,
     users: [],
   },
@@ -214,7 +214,7 @@ describe('renderAdminFlagsPage — buscador y agregar', () => {
 
     expect(capturedBody).not.toBeNull();
     expect(capturedBody.action).toBe('assign');
-    expect(capturedBody.flagKey).toBe('afinador_shortcut');
+    expect(capturedBody.flagKey).toBe('estudio_beta');
     expect(capturedBody.users).toEqual([{ username: 'mari' }]);
   });
 });
@@ -449,7 +449,7 @@ describe('renderAdminFlagsPage — estado de búsqueda entre cards', () => {
     await flush();
 
     const first = container.querySelectorAll('.ff-item')[0]; // voz_tono
-    const second = container.querySelectorAll('.ff-item')[1]; // afinador_shortcut
+    const second = container.querySelectorAll('.ff-item')[1]; // estudio_beta
 
     const searchA = first.querySelector('.ff-search');
     searchA.value = 'mari';

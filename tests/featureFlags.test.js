@@ -3,8 +3,7 @@ import { resolveEnabledFlags, FLAG_KEYS } from '../src/lib/featureFlags.js';
 
 describe('FLAG_KEYS', () => {
   it('expone las keys de la iniciativa', () => {
-    expect(FLAG_KEYS).toContain('voz_tono');
-    expect(FLAG_KEYS).toContain('afinador_shortcut');
+    expect(FLAG_KEYS).toEqual(['voz_tono']);
   });
 });
 

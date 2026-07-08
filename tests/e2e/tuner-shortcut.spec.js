@@ -11,8 +11,8 @@ import { test, expect } from '@playwright/test';
  *   - BASE_URL apunta a un deploy/preview.
  *   - USER_STORAGE_STATE: storageState de un usuario CON el flag `voz_tono`
  *     asignado (sesión Supabase persistida en localStorage). El flag
- *     `afinador_shortcut` quedó huérfano tras este rediseño — el mic ya no
- *     depende de él.
+ *     `afinador_shortcut` quedó huérfano tras este rediseño y fue eliminado
+ *     del catálogo — el mic nunca dependió de él.
  *   - SONG_V2_ID: id de una canción v2 cuyo roster tiene una voz con
  *     referenceKey derivable (referenceKey explícito o primera nota cantada).
  *

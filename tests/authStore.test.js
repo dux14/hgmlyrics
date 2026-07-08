@@ -137,6 +137,6 @@ describe('isFeatureEnabled', () => {
   it('devuelve true cuando el flag está presente', () => {
     __setFlagsForTest(['voz_tono']);
     expect(isFeatureEnabled('voz_tono')).toBe(true);
-    expect(isFeatureEnabled('afinador_shortcut')).toBe(false);
+    expect(isFeatureEnabled('flag_inexistente')).toBe(false);
   });
 });

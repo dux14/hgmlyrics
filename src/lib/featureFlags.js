@@ -6,7 +6,7 @@
  */
 
 /** Keys conocidas de la iniciativa (para autocompletado/uso en componentes). */
-export const FLAG_KEYS = Object.freeze(['voz_tono', 'afinador_shortcut']);
+export const FLAG_KEYS = Object.freeze(['voz_tono']);
 
 /**
  * @param {Array<{key:string, enabledGlobal:boolean}>} catalog

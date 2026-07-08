@@ -170,6 +170,24 @@ describe('SongView — toolbar de capas (T3)', () => {
     expect(line.classList.contains('lyrics__line--mix')).toBe(true);
   });
 
+  it('solo #layer-tono on con voz activa: aparece el render tono (buildTonoLineHTML)', async () => {
+    const song = buildSong('song-toolbar-4b');
+    getSongById.mockReturnValue(song);
+    const container = document.createElement('div');
+    await renderSongView(container, 'song-toolbar-4b');
+
+    // ensureTonoSelection ya preselecciona la 1ª categoría (soprano) al
+    // encender la capa; se elige tenor explícitamente para no toparse con un
+    // chip que ya viene activo (que desactivaría en vez de activar).
+    container.querySelector('#layer-tono').click();
+    container.querySelector('#hero-voice-chips [data-category="tenor"]').click();
+
+    expect(container.querySelector('#layer-tono').getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('#layer-chords').getAttribute('aria-pressed')).toBe('false');
+    const line = container.querySelector('#lyrics-content .lyrics__line');
+    expect(line.classList.contains('lyrics__line--tono')).toBe(true);
+  });
+
   it('las capas persisten entre renders (layerStore)', async () => {
     const song = buildSong('song-toolbar-6');
     getSongById.mockReturnValue(song);

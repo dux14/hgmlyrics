@@ -186,16 +186,18 @@ describe('renderSearchPage', () => {
   });
 
   it('coverBySlug preserva la URL http del cover del álbum (no la corta a nombre de archivo)', async () => {
-    const remote =
-      'https://x.supabase.co/storage/v1/object/public/covers-uploads/abc-reina.webp';
+    const remote = 'https://x.supabase.co/storage/v1/object/public/covers-uploads/abc-reina.webp';
     getAlbums.mockReturnValue([
       { slug: 'reina-de-colombia', name: 'Reina de Colombia', coverImage: remote, year: 2026 },
     ]);
     getState.mockReturnValue({
       songs: [
         {
-          id: '1', title: 'Reina de Colombia', album: 'Reina de Colombia',
-          albumSlug: 'reina-de-colombia', coverImage: remote,
+          id: '1',
+          title: 'Reina de Colombia',
+          album: 'Reina de Colombia',
+          albumSlug: 'reina-de-colombia',
+          coverImage: remote,
         },
       ],
       filtered: [],
@@ -210,7 +212,10 @@ describe('renderSearchPage', () => {
 
   it('baraja las canciones incluyendo todas (sin pérdidas) en cada render', async () => {
     const songs = Array.from({ length: 8 }, (_, i) => ({
-      id: String(i), title: `T${i}`, album: 'A', coverImage: '',
+      id: String(i),
+      title: `T${i}`,
+      album: 'A',
+      coverImage: '',
     }));
     getState.mockReturnValue({ songs, filtered: songs });
 
@@ -300,10 +305,13 @@ describe('renderSearchPage', () => {
   it('✕ con texto limpia el input pero mantiene search-focus y muestra el hub', async () => {
     const { searchEverything } = await import('../lib/search.js');
     searchEverything.mockReturnValue({
-      songs: [{ id: '1', title: 'Refugio', album: 'A' }], albums: [], voces: [],
+      songs: [{ id: '1', title: 'Refugio', album: 'A' }],
+      albums: [],
+      voces: [],
     });
     getState.mockReturnValue({
-      songs: [{ id: '1', title: 'Refugio', album: 'A', coverImage: '' }], filtered: [],
+      songs: [{ id: '1', title: 'Refugio', album: 'A', coverImage: '' }],
+      filtered: [],
     });
     const container = document.createElement('div');
     await renderSearchPage(container);
@@ -334,7 +342,8 @@ describe('renderSearchPage', () => {
     const { navigate } = await import('../router.js');
     searchEverything.mockReturnValue({
       songs: [{ id: '42', title: 'Gracia', album: 'Álbum X', coverImage: '' }],
-      albums: [], voces: [],
+      albums: [],
+      voces: [],
     });
     getState.mockReturnValue({ songs: [], filtered: [] });
     const container = document.createElement('div');
@@ -352,7 +361,35 @@ describe('renderSearchPage', () => {
 
     // search-focus debe haberse limpiado ANTES de navegar
     expect(document.body.classList.contains('search-focus')).toBe(false);
-    expect(navigate).toHaveBeenCalledWith('/song/42');
+    expect(navigate).toHaveBeenCalledWith('/song/42', { replace: true });
+  });
+
+  it('click en fila .search-row consume la capa backable SIN history.back (regresión: no entraba a la canción)', async () => {
+    // closeBackable dispara history.back(), que compite con el push de navigate()
+    // y en navegador real devuelve a /buscar. El contrato correcto: descartar la
+    // capa con clearBackable y REEMPLAZAR su entrada con el destino.
+    const { searchEverything } = await import('../lib/search.js');
+    const { navigate, closeBackable, clearBackable } = await import('../router.js');
+    searchEverything.mockReturnValue({
+      songs: [{ id: '42', title: 'Gracia', album: 'Álbum X', coverImage: '' }],
+      albums: [],
+      voces: [],
+    });
+    getState.mockReturnValue({ songs: [], filtered: [] });
+    const container = document.createElement('div');
+    await renderSearchPage(container);
+
+    const input = container.querySelector('.search-bar input[type="search"]');
+    input.dispatchEvent(new Event('focus'));
+    input.value = 'gracia';
+    input.dispatchEvent(new Event('input'));
+    clearBackable.mockClear(); // ignora el clearBackable del montaje
+
+    container.querySelector('.search-row').click();
+
+    expect(closeBackable).not.toHaveBeenCalled();
+    expect(clearBackable).toHaveBeenCalledOnce();
+    expect(navigate).toHaveBeenCalledWith('/song/42', { replace: true });
   });
 
   it('con matches → .search-row con subtítulos correctos por tipo', async () => {

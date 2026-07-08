@@ -19,7 +19,8 @@ import { getWeeklyWords } from '../lib/weeklyWords.js';
 function mulberry32(seed) {
   let a = seed >>> 0;
   return function () {
-    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
@@ -27,7 +28,10 @@ function mulberry32(seed) {
 }
 function seedFromString(str) {
   let h = 2166136261 >>> 0;
-  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
   return h >>> 0;
 }
 /** Fisher-Yates sembrado. Pura: mismo (arr, seedStr) → misma permutación. */
@@ -53,7 +57,9 @@ async function ensureColors() {
   try {
     const res = await fetch('/cover-colors.json');
     if (res.ok) colorMap = await res.json();
-  } catch (_e) { /* fallback a colores neutros */ }
+  } catch (_e) {
+    /* fallback a colores neutros */
+  }
   colorsLoaded = true;
 }
 
@@ -103,7 +109,10 @@ function vozCard(ww) {
       <div class="voz-card__title">${escapeHtml(ww.title || ww.liturgical_title || 'Voz en off')}</div>
       <div class="voz-card__ref">${escapeHtml(ww.gospel_ref || '')}</div>
     </div>`;
-  a.addEventListener('click', (e) => { e.preventDefault(); navigate(`/voz/${ww.id}`); });
+  a.addEventListener('click', (e) => {
+    e.preventDefault();
+    navigate(`/voz/${ww.id}`);
+  });
   return a;
 }
 
@@ -260,7 +269,10 @@ export async function renderSearchPage(container, weeklyWords = null) {
       a.className = 'search-row';
       a.href = `/song/${s.id}`;
       a.innerHTML = `<img class="search-row__cover" src="${resolveCoverUrl(s)}" alt="" width="56" height="56" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'"><div class="search-row__info"><div class="search-row__title">${escapeHtml(s.title)}</div><div class="search-row__sub">Canción · ${escapeHtml(s.album || '')}</div></div>`;
-      a.addEventListener('click', (e) => { e.preventDefault(); requestExitFocus(); navigate(`/song/${s.id}`); });
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        navigateFromFocus(`/song/${s.id}`);
+      });
       return a;
     });
     section('Álbumes', foundAlbums, (al) => {
@@ -268,7 +280,10 @@ export async function renderSearchPage(container, weeklyWords = null) {
       a.className = 'search-row';
       a.href = `/buscar?album=${encodeURIComponent(al.slug)}`;
       a.innerHTML = `<img class="search-row__cover" src="${resolveCoverUrl(al)}" alt="" width="56" height="56" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'"><div class="search-row__info"><div class="search-row__title">${escapeHtml(al.name)}</div><div class="search-row__sub">Álbum · ${escapeHtml(al.artist || 'Hakuna Group Music')}</div></div>`;
-      a.addEventListener('click', (e) => { e.preventDefault(); requestExitFocus(); navigate(`/buscar?album=${encodeURIComponent(al.slug)}`); });
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        navigateFromFocus(`/buscar?album=${encodeURIComponent(al.slug)}`);
+      });
       return a;
     });
     section('Voz en off', foundVoces, (v) => {
@@ -276,9 +291,31 @@ export async function renderSearchPage(container, weeklyWords = null) {
       a.className = 'search-row';
       a.href = `/voz/${v.id}`;
       a.innerHTML = `<div class="search-row__cover search-row__cover--gospel">${icon('gospel', { size: 18 })}</div><div class="search-row__info"><div class="search-row__title">${escapeHtml(v.title || v.liturgical_title || 'Voz en off')}</div><div class="search-row__sub">Voz en off · ${escapeHtml(v.gospel_ref || '')}</div></div>`;
-      a.addEventListener('click', (e) => { e.preventDefault(); requestExitFocus(); navigate(`/voz/${v.id}`); });
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        navigateFromFocus(`/voz/${v.id}`);
+      });
       return a;
     });
+  }
+
+  /**
+   * Navega a un destino desde el modo focus. NO usa closeBackable(): su
+   * history.back() asíncrono compite con el push de navigate() y el navegador
+   * termina aplicando el back DESPUÉS del push, devolviendo a /buscar (bug: los
+   * resultados no navegaban). En su lugar la entrada backable se descarta y se
+   * REEMPLAZA por el destino: sin carrera, y el atrás desde el destino vuelve
+   * a /buscar como se espera.
+   */
+  function navigateFromFocus(path) {
+    exitFocusVisual();
+    if (overlayOpen) {
+      overlayOpen = false;
+      clearBackable();
+      navigate(path, { replace: true });
+    } else {
+      navigate(path);
+    }
   }
 
   /** Restaura el estado visual fuera del focus. No toca el history (uso interno). */
@@ -291,7 +328,9 @@ export async function renderSearchPage(container, weeklyWords = null) {
     cancelBtn.hidden = true;
     resultsBox.innerHTML = '';
     // Restaurar cualquier filtro de álbum aplicado por albumCard antes del focus.
-    hub.querySelectorAll('.song-tile').forEach((t) => { t.style.display = ''; });
+    hub.querySelectorAll('.song-tile').forEach((t) => {
+      t.style.display = '';
+    });
   }
 
   /** Cierre disparado por el atrás nativo (vía la capa backable del router). */

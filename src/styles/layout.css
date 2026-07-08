@@ -25,12 +25,26 @@
   padding: 0 var(--space-md);
   gap: var(--space-sm);
   z-index: var(--z-header);
-  transition: background-color var(--transition-base);
+  transform: translateY(0);
+  transition:
+    background-color var(--transition-base),
+    transform 200ms ease-out;
 }
 
 /* El atributo [hidden] pierde contra `display: flex` de autor; forzar ocultado. */
 .header[hidden] {
   display: none;
+}
+
+/* Auto-ocultable al desplazarse (solo vista de canción, ver SongView.js). */
+.header--auto-hide {
+  transform: translateY(-100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .header {
+    transition: background-color var(--transition-base);
+  }
 }
 
 .header__logo {

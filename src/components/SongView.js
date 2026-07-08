@@ -49,6 +49,7 @@ import {
 import { escapeHtml } from '../lib/escape.js';
 import { enterStage } from './StageMode.js';
 import { normalizeSectionType } from '../lib/sectionTypes.js';
+import { attachAutoHideHeader } from '../lib/scrollHeader.js';
 
 const FONT_SIZE_KEY = 'hkn-lyrics-font-size';
 const FONT_STEP = 0.125; // rem
@@ -724,6 +725,14 @@ async function _renderSongBody(container, songId, isPreview, song) {
       unsubscribeFloatingTunerRoute();
     };
     const unsubscribeFloatingTunerRoute = onRouteChange(destroyFloatingTuner);
+  }
+
+  // ── Header auto-ocultable al desplazarse (solo esta vista). Wiring +
+  // teardown viven en scrollHeader.js (testeable sin montar la vista
+  // completa); acá solo se engancha al header global si existe.
+  if (!isPreview) {
+    const headerEl = document.getElementById('app-header');
+    if (headerEl) attachAutoHideHeader(headerEl, onRouteChange);
   }
 
   // ── Panel Voz (selector único, Acordes+Tono) ──

@@ -241,7 +241,7 @@ describe('enterStage/exitStage', () => {
     vi.useRealTimers();
   });
 
-  it('el boton salir cierra el escenario', () => {
+  it('el botón salir cierra el escenario', () => {
     const sv = mountSongView();
     enterStage(sv, { song: buildSong() });
     document.getElementById('stage-exit').click();

@@ -593,7 +593,7 @@
 }
 
 /* Surface glass — el panel flota visualmente sobre el contenido de la
-   cancion con un fondo semitransparente + desenfoque ambient. */
+   canción con un fondo semitransparente + desenfoque ambient. */
 .tool-box {
   background: color-mix(in oklch, var(--color-surface) 85%, transparent);
   border: 1px solid var(--color-border);

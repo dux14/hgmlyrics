@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 function makeContainer() {
-  // Notacion anglo fija: displayNote() por defecto usa latin (Do Re Mi) via
+  // Notación anglo fija: displayNote() por defecto usa latin (Do Re Mi) via
   // getChordNotation(), y este test verifica el texto literal de la nota.
   localStorage.setItem('hkn-chord-notation', 'anglo');
   const el = document.createElement('div');
@@ -49,7 +49,7 @@ describe('FloatingTuner — barra flotante bajo demanda', () => {
     expect(container.textContent).toContain('nota objetivo');
   });
 
-  it('el boton X tiene aria-label "Cerrar afinador"', () => {
+  it('el botón X tiene aria-label "Cerrar afinador"', () => {
     const container = makeContainer();
     openFloatingTuner(container, { note: 'F#3', voiceLabel: 'Contralto' });
     const closeBtn = container.querySelector('[aria-label="Cerrar afinador"]');
@@ -110,7 +110,7 @@ describe('FloatingTuner — barra flotante bajo demanda', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('mueve el foco al boton de cerrar al abrir', () => {
+  it('mueve el foco al botón de cerrar al abrir', () => {
     const container = makeContainer();
     openFloatingTuner(container, { note: 'F#3', voiceLabel: 'Contralto' });
     const closeBtn = container.querySelector('[aria-label="Cerrar afinador"]');

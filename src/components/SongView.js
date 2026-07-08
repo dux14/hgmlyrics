@@ -145,8 +145,8 @@ function getVoiceTypeLabel(voiceType) {
 }
 
 /**
- * Muestra un toast indicando si la cancion fue agregada o eliminada de favoritos.
- * El boton "Deshacer" llama toggleFavorite de nuevo y actualiza el btn.
+ * Muestra un toast indicando si la canción fue agregada o eliminada de favoritos.
+ * El botón "Deshacer" llama toggleFavorite de nuevo y actualiza el btn.
  * @param {boolean} added
  * @param {string} songId
  * @param {HTMLElement} favBtn
@@ -223,7 +223,7 @@ export async function renderSongView(container, songIdOrData) {
     render: (detail) => {
       // Si el usuario ya navego fuera, la region fue removida del container y
       // _renderSongBody (que posee el container full-bleed) clobberearia la
-      // pantalla nueva con esta cancion tardia (bug de navegacion #3).
+      // pantalla nueva con esta canción tardía (bug de navegación #3).
       if (!container.contains(region)) return;
       _renderSongBody(container, songId, false, detail)
         .then(() => recordVisit(songId))
@@ -565,16 +565,6 @@ async function _renderSongBody(container, songId, isPreview, song) {
   function refreshTransposeUI() {
     if (!isPreview) setTranspose(songId, { semitones: transposeSemitones, useFlats });
     const notation = getChordNotation();
-    const bubbleTextEl = container.querySelector('#transpose-bubble-text');
-    const bubbleLabel = buildTransposeBubbleLabel(song.key, transposeSemitones, useFlats, notation);
-    if (bubbleTextEl) bubbleTextEl.textContent = bubbleLabel;
-    const bubbleBtn = container.querySelector('#transpose-bubble');
-    if (bubbleBtn) {
-      bubbleBtn.setAttribute(
-        'aria-label',
-        `Tono: ${bubbleLabel}. Toca para restablecer al original.`,
-      );
-    }
     const cejillaTextEl = container.querySelector('#cejilla-badge-text');
     if (cejillaTextEl && song.cejilla) {
       cejillaTextEl.textContent = buildCejillaHint(song.key, song.cejilla, useFlats, notation);
@@ -992,8 +982,6 @@ async function _renderSongBody(container, songId, isPreview, song) {
         fontSize = Math.min(FONT_MAX, Math.max(FONT_MIN, fontSize + dir * FONT_STEP));
         applyFontSize(fontSize);
         saveFontSize(fontSize);
-        const fl = container.querySelector('#font-size-label');
-        if (fl) fl.textContent = fontSize.toFixed(2);
         const of = document.querySelector('#osheet-font');
         if (of) of.textContent = fontSize.toFixed(2);
       },

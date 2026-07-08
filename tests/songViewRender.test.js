@@ -280,7 +280,7 @@ describe('renderVoicePanel', () => {
 });
 
 describe('preview del editor — paridad de voz', () => {
-  it('renderSongView en modo preview incluye filtros de Tono y panel Voz', async () => {
+  it('renderSongView en modo preview incluye chips de voz del hero y panel Voz', async () => {
     const { renderSongView } = await import('../src/components/SongView.js');
     const container = document.createElement('div');
     const draft = {
@@ -303,7 +303,7 @@ describe('preview del editor — paridad de voz', () => {
       ],
     };
     await renderSongView(container, draft);
-    expect(container.querySelector('#tono-filters')).not.toBeNull();
+    expect(container.querySelector('#hero-voice-chips')).not.toBeNull();
     expect(container.querySelector('#voice-panel')).not.toBeNull();
   });
 });

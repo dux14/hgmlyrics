@@ -123,9 +123,9 @@ describe('SongView → StageMode: contrato de ctx (FIX 1 y FIX 2)', () => {
 
     capturedCtx.setActiveVoice('tenor', 'ten2');
 
-    expect(
-      container.querySelector('#tono-person-row [data-roster-id="ten2"]').classList.contains('tono-chip--active'),
-    ).toBe(true);
+    // El grid de tono-filters se eliminó (T2 hero chips); se verifica el
+    // estado interno vía el mismo getter que consume StageMode.
+    expect(capturedCtx.getActiveVoice()).toBe('ten2');
   });
 
   it('setActiveVoice(category, personId) con una sola persona no duplica la selección', async () => {

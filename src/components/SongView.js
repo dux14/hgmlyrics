@@ -15,7 +15,6 @@ import {
   upgradeLegacySong,
   rosterByCategory,
   getVoiceLabel,
-  tonoGeneralForVoice,
   firstNoteForVoice,
 } from '../lib/voiceSystem.js';
 import {
@@ -25,8 +24,9 @@ import {
   buildMixedLineHTML,
   buildTransposeBubbleLabel,
   buildCejillaHint,
+  transposeNote,
 } from '../lib/lyricsRender.js';
-import { getChordNotation, setChordNotation } from '../lib/chordNotation.js';
+import { getChordNotation, setChordNotation, displayNote } from '../lib/chordNotation.js';
 import { getTranspose, setTranspose, normalizeSemitones } from '../lib/transposeStore.js';
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
@@ -45,7 +45,6 @@ import {
   speedToPercentLabel,
 } from '../lib/autoscroll.js';
 import { escapeHtml } from '../lib/escape.js';
-import { buildVoiceChipHTML } from '../lib/voiceChips.js';
 import { enterStage } from './StageMode.js';
 import { normalizeSectionType } from '../lib/sectionTypes.js';
 
@@ -396,7 +395,15 @@ async function _renderSongBody(container, songId, isPreview, song) {
               <div class="voice-bar__female" style="width: ${100 - (song.voicePercent?.male ?? 50)}%"></div>
             </div>
           </div>
-          ${tonoAvailable ? renderHeroVoiceChips(song, activeCategory, visibleVoices) : ''}
+          ${
+            tonoAvailable
+              ? renderHeroVoiceChips(song, activeCategory, visibleVoices, {
+                  transposeSemitones,
+                  useFlats,
+                  notation: getChordNotation(),
+                })
+              : ''
+          }
         </div>
       </div>
 
@@ -479,8 +486,6 @@ async function _renderSongBody(container, songId, isPreview, song) {
       `
           : ''
       }
-
-      ${tonoAvailable ? renderTonoFilters(song) : ''}
       `
           : `
       ${
@@ -502,7 +507,6 @@ async function _renderSongBody(container, songId, isPreview, song) {
           ? `<div class="chords-extras" id="chords-extras" style="display: none;">${renderVoicePanel(song)}</div>`
           : ''
       }
-      ${tonoAvailable ? renderTonoFilters(song) : ''}
       `
       }
 
@@ -595,176 +599,75 @@ async function _renderSongBody(container, songId, isPreview, song) {
     if (cejillaTextEl && song.cejilla) {
       cejillaTextEl.textContent = buildCejillaHint(song.key, song.cejilla, useFlats, notation);
     }
+    updateHeroChips();
   }
 
   // Show controls relevant to the current mode: cejilla + transposition belong
-  // to chords mode; tono filters to tono mode.
+  // to chords mode.
   function applyModeVisibility() {
-    const isTono = viewMode === 'tono';
     const chordsExtrasEl = container.querySelector('#chords-extras');
     if (chordsExtrasEl) chordsExtrasEl.style.display = showChords ? 'flex' : 'none';
-    const tonoFiltersEl = container.querySelector('#tono-filters');
-    if (tonoFiltersEl) tonoFiltersEl.style.display = isTono ? '' : 'none';
     // Re-asegura el estado del panel Voz al cambiar de modo (defensivo).
     syncVoicePanel();
   }
 
-  // ── Tono mode: disclosure categoría → persona ──
-  function updateActiveVoiceHeading() {
-    const headingEl = container.querySelector('#tono-active-voice');
-    if (!headingEl) return;
-    if (!activeRosterId) {
-      headingEl.textContent = activeCategory ? 'Elige una voz' : 'Elige una categoría';
-      updateTuneAction();
-      return;
-    }
-    const voice = (song.voiceRoster || []).find((v) => v.id === activeRosterId);
-    headingEl.textContent = voice ? `Voz activa: ${voice.name}` : '';
-    updateTuneAction();
-  }
-
-  // Dos botones: Afinar · tono general (referenceKey o 1ª nota) y Afinar · 1ª nota.
-  // Sólo con activeRosterId y el flag afinador_shortcut; si no hay notas, no aparece.
-  // En preview no hay song.id (draft del editor) → sin botones (URL rota si no).
-  function updateTuneAction() {
-    const slot = container.querySelector('#tono-tune-action');
-    if (!slot) return;
-    if (isPreview || !activeRosterId || !isFeatureEnabled('afinador_shortcut')) {
-      slot.innerHTML = '';
-      return;
-    }
-    const general = tonoGeneralForVoice(song, activeRosterId);
-    const first = firstNoteForVoice(song, activeRosterId);
-    const btns = [];
-    if (general) {
-      btns.push(
-        `<button class="btn btn--sm" data-ref="${escapeHtml(general)}">${icon('mic', { size: 14 })} Afinar · ${escapeHtml(general)}</button>`,
-      );
-    }
-    if (first && first !== general) {
-      btns.push(
-        `<button class="btn btn--sm" data-ref="${escapeHtml(first)}">${icon('mic', { size: 14 })} 1ª nota · ${escapeHtml(first)}</button>`,
-      );
-    }
-    slot.innerHTML = btns.join('');
-    slot.querySelectorAll('[data-ref]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const ref = btn.dataset.ref;
-        navigate(
-          `/afinador?mode=song&songId=${encodeURIComponent(song.id)}` +
-            `&ref=${encodeURIComponent(ref)}&from=${encodeURIComponent(song.id)}`,
-        );
-      });
-    });
-  }
-
-  function renderPersonRow() {
-    const rowEl = container.querySelector('#tono-person-row');
-    if (!rowEl) return;
-    if (!activeCategory) {
-      rowEl.innerHTML = '';
-      return;
-    }
-    const people = rosterByCategory(song, activeCategory);
-    // Una sola persona en la categoría: el chip de categoría ya la representa,
-    // así que la fila de persona sería un duplicado. selectCategory ya la
-    // autoselecciona; no renderizamos nada aquí.
-    if (people.length <= 1) {
-      rowEl.innerHTML = '';
-      return;
-    }
-    rowEl.innerHTML = people
-      .map((p) => {
-        const note = tonoGeneralForVoice(song, p.id);
-        const noteHtml = note ? `<span class="tono-chip__note">${escapeHtml(note)}</span>` : '';
-        return `
-        <button class="tono-chip tono-chip--person${p.id === activeRosterId ? ' tono-chip--active' : ''}" data-roster-id="${p.id}" aria-pressed="${p.id === activeRosterId}">
-          <span class="voice-filter__label-text">${escapeHtml(p.name)}</span>
-          ${noteHtml}
-        </button>`;
-      })
-      .join('');
-    rowEl.querySelectorAll('[data-roster-id]').forEach((btn) => {
-      btn.addEventListener('click', () => selectPerson(btn.dataset.rosterId));
-    });
-  }
-
   function selectPerson(rosterId) {
     activeRosterId = rosterId;
-    container.querySelectorAll('#tono-person-row .tono-chip').forEach((c) => {
-      const isActive = c.dataset.rosterId === rosterId;
-      c.classList.toggle('tono-chip--active', isActive);
-      c.setAttribute('aria-pressed', String(isActive));
-    });
-    updateActiveVoiceHeading();
     reRenderLyrics();
   }
 
   function selectCategory(category) {
     activeCategory = category;
     activeRosterId = null;
-    container.querySelectorAll('#tono-category-row .tono-chip').forEach((c) => {
-      const isActive = c.dataset.category === category;
-      c.classList.toggle('tono-chip--active', isActive);
-      c.setAttribute('aria-pressed', String(isActive));
-    });
     updateHeroChips();
-    renderPersonRow();
     // Autoselección si la categoría tiene una sola persona.
     const people = rosterByCategory(song, category);
     if (people.length === 1) {
       selectPerson(people[0].id);
     } else {
-      updateActiveVoiceHeading();
       reRenderLyrics();
     }
   }
 
-  // Des-selecciona la voz activa (chip del hero o categoría de tono ya activa).
-  // El modo Tono soporta "sin voz activa" (placeholder "Elige una categoría"),
-  // así que NO se fuerza la vuelta a modo Letra — se queda en el modo actual.
+  // Des-selecciona la voz activa (chip del hero).
+  // El modo Tono soporta "sin voz activa" (letra sin resaltar), así que NO se
+  // fuerza la vuelta a modo Letra — se queda en el modo actual.
   function deselectVoice() {
     activeCategory = null;
     activeRosterId = null;
-    container.querySelectorAll('#tono-category-row .tono-chip').forEach((c) => {
-      c.classList.remove('tono-chip--active');
-      c.setAttribute('aria-pressed', 'false');
-    });
     updateHeroChips();
-    renderPersonRow();
-    updateActiveVoiceHeading();
     reRenderLyrics();
   }
 
   // Sincroniza los chips del hero con el estado activo (fuente de verdad
-  // única: activeCategory) y su atenuación por visibleVoices (T5).
+  // única: activeCategory), su atenuación por visibleVoices (T5) y la nota
+  // (transposición/notación actuales, T2).
   function updateHeroChips() {
     container.querySelectorAll('#hero-voice-chips .hero-voice-chip').forEach((chip) => {
       const category = chip.dataset.category;
       const isActive = category === activeCategory;
-      chip.classList.toggle('hero-voice-chip--active', isActive);
+      chip.classList.toggle('is-active', isActive);
       chip.setAttribute('aria-pressed', String(isActive));
       const isDimmed = categoryIsDimmed(song, category, visibleVoices);
       chip.classList.toggle('hero-voice-chip--dimmed', isDimmed);
+      const noteEl = chip.querySelector('.hero-voice-chip__note');
+      if (noteEl) {
+        noteEl.textContent =
+          heroChipNote(song, category, {
+            transposeSemitones,
+            useFlats,
+            notation: getChordNotation(),
+          }) || '';
+      }
     });
   }
 
   // Al entrar a Tono sin selección previa, preseleccionar la primera categoría
   // (y su persona si es única) para que el modo muestre algo de inmediato.
   function ensureTonoSelection() {
-    if (activeCategory) {
-      updateActiveVoiceHeading();
-      return;
-    }
+    if (activeCategory) return;
     const categories = rosterCategories(song);
     if (categories.length > 0) selectCategory(categories[0]);
-  }
-
-  if (tonoAvailable) {
-    container.querySelectorAll('#tono-category-row [data-category]').forEach((btn) => {
-      btn.addEventListener('click', () => selectCategory(btn.dataset.category));
-    });
-    updateActiveVoiceHeading();
   }
 
   if (!isPreview) applyFontSize(fontSize);
@@ -791,8 +694,8 @@ async function _renderSongBody(container, songId, isPreview, song) {
     });
   }
 
-  // ── Chips SATB del hero (T5): selector rápido de voz, activeCategory como
-  // única fuente de verdad con el grid de tono-filters. ──
+  // ── Chips SATB del hero (T2): único selector de voz, activeCategory como
+  // fuente de verdad. ──
   function selectCategoryFromHero(category) {
     if (activeCategory === category) {
       deselectVoice();
@@ -1145,64 +1048,57 @@ function rosterCategories(song) {
 }
 
 /**
- * Fila de chips SATB en el hero (T5): selector rápido de voz activa, una
- * sola fuente de verdad con `activeCategory` (el mismo estado del modo Tono).
- * Solo se pinta si tonoAvailable — no duplica el voice-badge general (ese
- * describe el reparto de la canción, este es un control interactivo).
- * Una categoría con todas sus voces apagadas en `visibleVoices` se atenúa
- * pero sigue siendo tappable.
- * @param {object} song @param {string|null} activeCategory @param {Set<string>} visibleVoices
- * @returns {string}
+ * Nota de referencia de una categoría para el chip del hero: la 1ª nota no
+ * nula de su primera voz (representativa cuando hay 2+ personas), transpuesta
+ * y en la notación actuales — mismas utilidades que StageMode.projectLines.
+ * @param {object} song @param {string} category
+ * @param {{ transposeSemitones?: number, useFlats?: boolean, notation?: 'anglo'|'latin' }} [opts]
+ * @returns {string|null}
  */
-function renderHeroVoiceChips(song, activeCategory, visibleVoices) {
-  const categories = rosterCategories(song);
-  if (categories.length === 0) return '';
-  const chips = categories
-    .map((c) =>
-      buildVoiceChipHTML(c, {
-        active: c === activeCategory,
-        dimmed: categoryIsDimmed(song, c, visibleVoices),
-        prefix: 'hero-voice-chip',
-      }),
-    )
-    .join('');
-  return `<div class="hero-voice-chips" id="hero-voice-chips" role="group" aria-label="Selector rápido de voz">${chips}</div>`;
+function heroChipNote(song, category, opts = {}) {
+  const { transposeSemitones = 0, useFlats = false, notation = 'anglo' } = opts;
+  const voice = rosterByCategory(song, category)[0];
+  if (!voice) return null;
+  const raw = firstNoteForVoice(song, voice.id);
+  if (!raw) return null;
+  const transposed = transposeSemitones ? transposeNote(raw, transposeSemitones, useFlats) : raw;
+  return displayNote(transposed, notation);
 }
 
 /**
- * Header del modo Tono: categorías en grid 2×2; al elegir una con varias voces
- * se despliega el panel lateral de voces. La nota (tono general) va dentro del
- * chip. Dos botones Afinar (tono general / 1ª nota) bajo el grid.
- * @param {object} song
+ * Fila de chips SATB en el hero (T2): único selector de voz de la canción
+ * (reemplaza el grid 2×2 de tono-filters, "Voz activa: …" y la fila Afinar).
+ * Una sola fuente de verdad con `activeCategory` (mismo estado del modo Tono).
+ * Cada chip trae su nota de referencia; la fila cierra con el botón de afinar
+ * (T5 conecta el handler). Una categoría con todas sus voces apagadas en
+ * `visibleVoices` se atenúa pero sigue siendo tappable.
+ * @param {object} song @param {string|null} activeCategory @param {Set<string>} visibleVoices
+ * @param {{ transposeSemitones?: number, useFlats?: boolean, notation?: 'anglo'|'latin' }} [opts]
  * @returns {string}
  */
-function renderTonoFilters(song) {
+function renderHeroVoiceChips(song, activeCategory, visibleVoices, opts = {}) {
   const categories = rosterCategories(song);
-  const catChips = categories
+  if (categories.length === 0) return '';
+  const chips = categories
     .map((c) => {
-      const people = rosterByCategory(song, c);
-      // Nota en el chip sólo si la categoría tiene una sola voz (su tono general).
-      const note = people.length === 1 ? tonoGeneralForVoice(song, people[0].id) : null;
-      const noteHtml = note ? `<span class="tono-chip__note">${escapeHtml(note)}</span>` : '';
+      const active = c === activeCategory;
+      const dimmed = categoryIsDimmed(song, c, visibleVoices);
+      const initial = c === 'contralto' ? 'A' : getVoiceLabel(c).charAt(0).toUpperCase();
+      const note = heroChipNote(song, c, opts);
+      const cls = ['hero-voice-chip', active ? 'is-active' : '', dimmed ? 'hero-voice-chip--dimmed' : '']
+        .filter(Boolean)
+        .join(' ');
       return `
-      <button class="tono-chip tono-chip--category" data-category="${c}" aria-pressed="false">
-        <span class="voice-filter__dot" style="background: var(--color-voice-${c})"></span>
-        <span class="voice-filter__label-text">${escapeHtml(getVoiceLabel(c))}</span>
-        ${noteHtml}
+      <button type="button" class="${cls}" data-category="${c}" aria-pressed="${active}" aria-label="Voz: ${escapeHtml(getVoiceLabel(c))}">
+        <span class="hero-voice-chip__dot" style="background: var(--color-voice-${c})"></span>
+        ${initial} <b class="hero-voice-chip__note">${escapeHtml(note || '')}</b>
       </button>`;
     })
     .join('');
-  return `
-    <div class="lyrics__tono-filters" id="tono-filters" style="display: none;">
-      <div class="lyrics__tono-grid">
-        <div class="lyrics__tono-categories" id="tono-category-row" role="group" aria-label="Categoría de voz">
-          ${catChips}
-        </div>
-        <div class="lyrics__tono-voices" id="tono-person-row" role="group" aria-label="Voz"></div>
-      </div>
-      <p class="lyrics__tono-active" id="tono-active-voice" aria-live="polite"></p>
-      <div class="lyrics__tono-tune" id="tono-tune-action"></div>
-    </div>`;
+  return `<div class="hero-voice-chips" id="hero-voice-chips" role="group" aria-label="Selector rápido de voz">
+    ${chips}
+    <button type="button" class="hero-voice-chip__mic" id="hero-tuner-mic" aria-label="Afinar mi voz">${icon('mic', { size: 15 })}</button>
+  </div>`;
 }
 
 /**

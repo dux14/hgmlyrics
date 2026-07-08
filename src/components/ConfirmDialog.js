@@ -31,7 +31,7 @@ export function confirmDialog({
         <p class="import-modal__hint"></p>
         <div class="import-modal__actions">
           <button class="btn btn--secondary" data-confirm="no" type="button">${escapeHtml(cancelLabel)}</button>
-          <button class="btn btn--primary${danger ? ' btn--danger' : ''}" data-confirm="yes" type="button">${escapeHtml(confirmLabel)}</button>
+          <button class="btn ${danger ? 'btn--secondary btn--danger' : 'btn--primary'}" data-confirm="yes" type="button">${escapeHtml(confirmLabel)}</button>
         </div>
       </div>
     `;

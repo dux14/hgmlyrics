@@ -46,15 +46,18 @@ describe('confirmDialog', () => {
     expect(overlayEl()).toBeNull();
   });
 
-  it('danger: true agrega clase modificadora al botón confirmar', () => {
+  it('danger: true usa btn--secondary btn--danger (no btn--primary)', () => {
     confirmDialog({ title: 'T', body: 'B', danger: true });
     const btn = overlayEl().querySelector('[data-confirm="yes"]');
+    expect(btn.classList.contains('btn--secondary')).toBe(true);
     expect(btn.classList.contains('btn--danger')).toBe(true);
+    expect(btn.classList.contains('btn--primary')).toBe(false);
   });
 
-  it('sin danger no agrega la clase modificadora', () => {
+  it('sin danger usa btn--primary sin btn--danger', () => {
     confirmDialog({ title: 'T', body: 'B' });
     const btn = overlayEl().querySelector('[data-confirm="yes"]');
+    expect(btn.classList.contains('btn--primary')).toBe(true);
     expect(btn.classList.contains('btn--danger')).toBe(false);
   });
 

@@ -35,6 +35,7 @@ import { isFavorite, toggleFavorite } from '../lib/favorites.js';
 import { recordVisit } from '../lib/recentVisits.js';
 import '../styles/favorites.css';
 import { openOptionsSheet } from './OptionsSheet.js';
+import { openFloatingTuner } from './FloatingTuner.js';
 import {
   presetToSpeed,
   stepToward,
@@ -308,6 +309,10 @@ async function _renderSongBody(container, songId, isPreview, song) {
   // del stage-btn que pausa el autoscroll clásico.
   let sectionPlayerApi = null;
   let sectionsWithAudio = new Set();
+  // Afinador flotante (T5): bajo demanda desde #hero-tuner-mic, null hasta
+  // que se abre. updateHeroChips() lo refresca junto con los chips para que
+  // la nota objetivo siga a la voz activa/transposición sin lógica aparte.
+  let floatingTunerApi = null;
   // OptionsSheet (T4): visibilidad por voz individual del roster, default
   // todas visibles. Apagar una voz atenúa sus groups en Tono/Acordes+Voz
   // (ver renderSections → visibleVoices).
@@ -635,6 +640,13 @@ async function _renderSongBody(container, songId, isPreview, song) {
           }) || '';
       }
     });
+    if (floatingTunerApi) {
+      floatingTunerApi.setNote(
+        activeCategory
+          ? heroChipTargetNote(song, activeCategory, { transposeSemitones, useFlats })
+          : null,
+      );
+    }
   }
 
   // Al entrar a Tono sin selección previa, preseleccionar la primera categoría
@@ -719,6 +731,41 @@ async function _renderSongBody(container, songId, isPreview, song) {
     container.querySelectorAll('#hero-voice-chips [data-category]').forEach((chip) => {
       chip.addEventListener('click', () => selectCategoryFromHero(chip.dataset.category));
     });
+
+    // ── Afinador flotante (T5): mic del hero, bajo demanda. Toggle simple —
+    // un segundo click en el mismo mic cierra la barra en vez de apilar otra.
+    // Se monta en document.body (mismo patrón que autoscroll-fab) para que el
+    // `position: fixed` no dependa de ancestros del árbol de la vista.
+    container.querySelector('#hero-tuner-mic')?.addEventListener('click', () => {
+      if (floatingTunerApi) {
+        floatingTunerApi.destroy();
+        floatingTunerApi = null;
+        return;
+      }
+      floatingTunerApi = openFloatingTuner(document.body, {
+        note: activeCategory
+          ? heroChipTargetNote(song, activeCategory, { transposeSemitones, useFlats })
+          : null,
+        voiceLabel: activeCategory ? getVoiceLabel(activeCategory) : 'Afinador',
+        onClose: () => {
+          floatingTunerApi = null;
+        },
+      });
+    });
+
+    // El afinador flotante no depende del audio por sección (F5): se destruye
+    // en su propia suscripción a onRouteChange, mismo patrón que
+    // destroySectionPlayer más abajo (logout/redirects no deben dejarlo vivo).
+    // Solo fuera de preview: el preview (editor) no navega por router, no hay
+    // ruta de la que salir.
+    if (!isPreview) {
+      const destroyFloatingTuner = () => {
+        floatingTunerApi?.destroy();
+        floatingTunerApi = null;
+        unsubscribeFloatingTunerRoute();
+      };
+      const unsubscribeFloatingTunerRoute = onRouteChange(destroyFloatingTuner);
+    }
   }
 
   // ── Vista combinada: panel Voz del modo Acordes (Wave 4) ──
@@ -1019,13 +1066,27 @@ function rosterCategories(song) {
  * @returns {string|null}
  */
 function heroChipNote(song, category, opts = {}) {
-  const { transposeSemitones = 0, useFlats = false, notation = 'anglo' } = opts;
+  const { notation = 'anglo' } = opts;
+  const transposed = heroChipTargetNote(song, category, opts);
+  return transposed ? displayNote(transposed, notation) : null;
+}
+
+/**
+ * Nota objetivo de una categoría en formato científico crudo ("F#3"), ya
+ * transpuesta pero SIN pasar por `displayNote` — la usa el afinador flotante
+ * (T5), que necesita el formato parseable por `noteToMidi`, no el de
+ * presentación.
+ * @param {object} song @param {string} category
+ * @param {{ transposeSemitones?: number, useFlats?: boolean }} [opts]
+ * @returns {string|null}
+ */
+function heroChipTargetNote(song, category, opts = {}) {
+  const { transposeSemitones = 0, useFlats = false } = opts;
   const voice = rosterByCategory(song, category)[0];
   if (!voice) return null;
   const raw = firstNoteForVoice(song, voice.id);
   if (!raw) return null;
-  const transposed = transposeSemitones ? transposeNote(raw, transposeSemitones, useFlats) : raw;
-  return displayNote(transposed, notation);
+  return transposeSemitones ? transposeNote(raw, transposeSemitones, useFlats) : raw;
 }
 
 /**
@@ -1048,7 +1109,11 @@ function renderHeroVoiceChips(song, activeCategory, visibleVoices, opts = {}) {
       const dimmed = categoryIsDimmed(song, c, visibleVoices);
       const initial = categoryInitial(c);
       const note = heroChipNote(song, c, opts);
-      const cls = ['hero-voice-chip', active ? 'is-active' : '', dimmed ? 'hero-voice-chip--dimmed' : '']
+      const cls = [
+        'hero-voice-chip',
+        active ? 'is-active' : '',
+        dimmed ? 'hero-voice-chip--dimmed' : '',
+      ]
         .filter(Boolean)
         .join(' ');
       return `

@@ -95,8 +95,8 @@ describe('SongEditor — vista previa en vivo por sección', () => {
     const panel = container.querySelector('.section-preview__panel');
     expect(panel).not.toBeNull();
     expect(panel.textContent).toContain('Primera línea');
-    // Notación global por defecto es 'latin' (getChordNotation) → C se pinta "Do".
-    expect(panel.querySelector('.chord-label')?.textContent).toBe('Do');
+    // Notación global por defecto es 'anglo' (getChordNotation) → C se pinta "C".
+    expect(panel.querySelector('.chord-label')?.textContent).toBe('C');
   });
 
   it('debounce: varias ediciones seguidas producen UN solo repintado, 300ms tras la última', async () => {
@@ -124,11 +124,11 @@ describe('SongEditor — vista previa en vivo por sección', () => {
     expect(panel().textContent).not.toContain('Primera línea');
   });
 
-  it('notación global anglo: el mismo acorde se pinta como "C" (no "Do")', async () => {
-    localStorage.setItem('hkn-chord-notation', 'anglo');
+  it('notación global latin explícita: el mismo acorde se pinta como "Do" (no "C")', async () => {
+    localStorage.setItem('hkn-chord-notation', 'latin');
     await renderAndOpenPreview();
     const panel = container.querySelector('.section-preview__panel');
-    expect(panel.querySelector('.chord-label')?.textContent).toBe('C');
+    expect(panel.querySelector('.chord-label')?.textContent).toBe('Do');
   });
 
   it('sección sin letra muestra el hint en vez de renderSections', async () => {

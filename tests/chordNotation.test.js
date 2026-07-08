@@ -109,23 +109,23 @@ describe('getChordNotation / setChordNotation', () => {
     localStorage.clear();
   });
 
-  it('default es latin', () => {
-    expect(getChordNotation()).toBe('latin');
-  });
-
-  it('persiste anglo', () => {
-    setChordNotation('anglo');
+  it('default es anglo (A-B-C)', () => {
     expect(getChordNotation()).toBe('anglo');
   });
 
   it('persiste latin explícito', () => {
-    setChordNotation('anglo');
     setChordNotation('latin');
     expect(getChordNotation()).toBe('latin');
   });
 
-  it('valor inválido guardado cae a default latin al leer', () => {
+  it('persiste anglo tras elegir latin', () => {
+    setChordNotation('latin');
+    setChordNotation('anglo');
+    expect(getChordNotation()).toBe('anglo');
+  });
+
+  it('valor inválido guardado cae a default anglo al leer', () => {
     localStorage.setItem('hkn-chord-notation', 'algo-raro');
-    expect(getChordNotation()).toBe('latin');
+    expect(getChordNotation()).toBe('anglo');
   });
 });

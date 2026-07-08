@@ -105,8 +105,8 @@ describe('SongView — chips SATB del hero (T5)', () => {
     const container = document.createElement('div');
     await renderSongView(container, buildDraft(fullRoster));
     const chip = container.querySelector('#hero-voice-chips [data-category="contralto"]');
-    // Notación por defecto de la app es latina (getChordNotation → 'latin').
-    expect(chip.textContent.replace(/\s+/g, ' ').trim()).toBe('A Si3');
+    // Notación por defecto de la app es anglo (getChordNotation → 'anglo').
+    expect(chip.textContent.replace(/\s+/g, ' ').trim()).toBe('A B3');
     expect(chip.getAttribute('aria-label')).toContain('Contralto');
   });
 
@@ -116,7 +116,7 @@ describe('SongView — chips SATB del hero (T5)', () => {
     const chip = container.querySelector('#hero-voice-chips [data-category="tenor"]');
     const noteEl = chip.querySelector('b');
     expect(noteEl).toBeTruthy();
-    expect(noteEl.textContent).toBe('Si3');
+    expect(noteEl.textContent).toBe('B3');
   });
 
   it('fila del hero termina en un único botón #hero-tuner-mic', async () => {

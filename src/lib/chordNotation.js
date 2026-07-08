@@ -92,17 +92,18 @@ export function displayChord(ch, notation) {
 }
 
 const CHORD_NOTATION_KEY = 'hkn-chord-notation';
-const DEFAULT_NOTATION = 'latin';
+const DEFAULT_NOTATION = 'anglo';
 
 /**
  * Lee el setting global persistente de notación (localStorage). Default
- * 'latin' — el público hispano y el mockup mandan. Tolera localStorage roto.
+ * 'anglo' (A-B-C) — decisión del pase visual 8-jul; 'latin' queda como
+ * elección explícita del usuario. Tolera localStorage roto.
  * @returns {'anglo'|'latin'}
  */
 export function getChordNotation() {
   try {
     const stored = localStorage.getItem(CHORD_NOTATION_KEY);
-    return stored === 'anglo' ? 'anglo' : DEFAULT_NOTATION;
+    return stored === 'latin' ? 'latin' : DEFAULT_NOTATION;
   } catch {
     return DEFAULT_NOTATION;
   }

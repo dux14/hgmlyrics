@@ -385,12 +385,14 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  font-size: var(--font-size-xs);
+  /* T7: sin token 10-11px en la escala (xs=12px, sm=14px) — literal según
+     spec para que el label sostenga la jerarquía sin la barra lateral. */
+  font-size: 11px;
   font-family: var(--font-display);
   font-weight: var(--font-weight-semibold);
   color: var(--color-teal-500);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 1.5px;
   margin-bottom: var(--space-sm);
 }
 

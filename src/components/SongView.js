@@ -28,6 +28,7 @@ import {
 } from '../lib/lyricsRender.js';
 import { getChordNotation, setChordNotation, displayNote } from '../lib/chordNotation.js';
 import { getTranspose, setTranspose, normalizeSemitones } from '../lib/transposeStore.js';
+import { getLayers, setLayer } from '../lib/layerStore.js';
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { isFavorite, toggleFavorite } from '../lib/favorites.js';
@@ -269,10 +270,29 @@ async function _renderSongBody(container, songId, isPreview, song) {
   }
 
   let fontSize = getFontSize();
-  // viewMode: 'lyrics' | 'chords' | 'tono'. showChords se deriva para no tocar
-  // la rama de acordes existente.
+  // viewMode: 'lyrics' | 'chords' | 'tono' | 'mixed'. showChords se deriva para
+  // no tocar la rama de acordes existente. 'mixed' es la combinación de las
+  // capas Acordes+Tono (T3, toolbar de capas) — no es un modo exclusivo nuevo,
+  // solo la representación interna de "ambas capas encendidas" para
+  // renderSections/reRenderLyrics.
   let viewMode = 'lyrics';
   let showChords = false;
+  // Capas de lectura (T3): Acordes y Tono ya no son un mode exclusivo en la
+  // toolbar — son dos toggles independientes persistidos globalmente
+  // (layerStore). Solo aplican fuera de preview: el preview conserva el toggle
+  // viejo Letra/Acordes/Tono (chord-toggle) tal cual, sin tocarlo.
+  const layers = getLayers();
+  if (!isPreview) {
+    viewMode =
+      layers.chords && layers.tono
+        ? 'mixed'
+        : layers.tono
+          ? 'tono'
+          : layers.chords
+            ? 'chords'
+            : 'lyrics';
+    showChords = viewMode === 'chords' || viewMode === 'mixed';
+  }
   // Transposición persistida por canción (T3); preview no persiste (no hay id
   // estable de sesión ni beneficio de recordarla para una vista efímera).
   const savedTranspose = !isPreview ? getTranspose(songId) : { semitones: 0, useFlats: false };
@@ -411,55 +431,16 @@ async function _renderSongBody(container, songId, isPreview, song) {
       ${
         !isPreview
           ? `
-      <!-- Controls toolbar — one scrollable row grouped by function -->
+      <!-- Controls toolbar — capas de lectura (T3): Acordes/Tono como toggles
+           independientes, no exclusivos. A−/A+ y transpose viven ahora solo en
+           el sheet de opciones (#open-options-sheet). -->
       <div class="song-toolbar">
-        <!-- Zone: Reading -->
-        <div class="song-toolbar__group">
-          <div class="font-controls" style="margin-bottom: 0;">
-            <button class="font-controls__btn" id="font-decrease" aria-label="Reducir tamaño de letra">A−</button>
-            <span class="font-controls__label" id="font-size-label">${fontSize.toFixed(2)}</span>
-            <button class="font-controls__btn" id="font-increase" aria-label="Aumentar tamaño de letra">A+</button>
-            <button class="font-controls__btn font-controls__stage" id="enter-stage-btn" aria-label="Modo escenario">${icon('maximize', { size: 18 })}</button>
-          </div>
-          ${
-            hasChords
-              ? `
-          <div class="transpose-controls" id="transpose-controls" style="margin-bottom: 0;">
-            <button class="transpose-btn" id="transpose-down" aria-label="Bajar medio tono">−½</button>
-            <button class="transpose-bubble" id="transpose-bubble" type="button" aria-label="${escapeHtml(`Tono: ${buildTransposeBubbleLabel(song.key, transposeSemitones, useFlats, getChordNotation())}. Toca para restablecer al original.`)}">
-              <span id="transpose-bubble-text">${escapeHtml(buildTransposeBubbleLabel(song.key, transposeSemitones, useFlats, getChordNotation()))}</span>
-            </button>
-            <button class="transpose-btn" id="transpose-up" aria-label="Subir medio tono">+½</button>
-            <span class="filter-separator"></span>
-            <button class="transpose-notation-toggle" id="notation-toggle">${useFlats ? '♭ → ♯' : '♯ / ♭'}</button>
-          </div>
-          `
-              : ''
-          }
-          ${
-            showToggle
-              ? `
-          <div class="chord-toggle" id="chord-toggle" style="margin-bottom: 0;">
-            <button class="chord-toggle__btn chord-toggle__btn--active" data-mode="lyrics">Letra</button>
-            ${hasChords ? `<button class="chord-toggle__btn" data-mode="chords">Acordes</button>` : ''}
-            ${tonoAvailable ? `<button class="chord-toggle__btn" data-mode="tono">Tono</button>` : ''}
-          </div>
-          `
-              : ''
-          }
-          <button class="song-toolbar__options" id="open-options-sheet" aria-label="Opciones">${icon('sliders', { size: 18 })}</button>
-        </div>
-
-        ${
-          isAdmin()
-            ? `
-        <!-- Zone: Actions -->
-        <div class="song-toolbar__group song-toolbar__group--actions">
-          <a href="#/admin/edit/${song.id}?from=${song.id}" class="btn btn--secondary song-toolbar__btn">${icon('pencil', { size: 16 })} Editar</a>
-        </div>
-        `
-            : ''
-        }
+        ${hasChords ? `<button class="layer-toggle" id="layer-chords" aria-pressed="${layers.chords}">Acordes</button>` : ''}
+        ${tonoAvailable ? `<button class="layer-toggle" id="layer-tono" aria-pressed="${layers.tono}">Tono</button>` : ''}
+        <span class="song-toolbar__spacer"></span>
+        <button class="song-toolbar__icon" id="enter-stage-btn" aria-label="Modo escenario">${icon('maximize', { size: 18 })}</button>
+        <button class="song-toolbar__icon" id="open-options-sheet" aria-label="Opciones">${icon('sliders', { size: 18 })}</button>
+        ${isAdmin() ? `<a href="#/admin/edit/${song.id}?from=${song.id}" class="song-toolbar__icon" aria-label="Editar">${icon('pencil', { size: 16 })}</a>` : ''}
       </div>
 
       ${
@@ -679,7 +660,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
   // (chip del hero, T5) para no pintar dos veces.
   function switchViewMode(mode, { skipTonoAutoselect = false } = {}) {
     viewMode = mode;
-    showChords = viewMode === 'chords';
+    showChords = viewMode === 'chords' || viewMode === 'mixed';
     container
       .querySelectorAll('.chord-toggle__btn')
       .forEach((c) => c.classList.toggle('chord-toggle__btn--active', c.dataset.mode === mode));
@@ -688,12 +669,50 @@ async function _renderSongBody(container, songId, isPreview, song) {
     reRenderLyrics();
   }
 
-  // Mode toggle (Letra / Acordes / Tono) — works in both normal and preview mode
+  // Mode toggle (Letra / Acordes / Tono) — solo queda en preview (chord-toggle
+  // viejo, sin tocar). Fuera de preview la toolbar usa capas independientes
+  // (toggleLayer) en vez de este mode exclusivo.
   if (showToggle) {
     container.querySelectorAll('[data-mode]').forEach((btn) => {
       btn.addEventListener('click', () => switchViewMode(btn.dataset.mode));
     });
   }
+
+  // ── Capas de lectura (T3): Acordes y Tono como toggles independientes ──
+  // Reemplaza el mode exclusivo de la toolbar fuera de preview. `layers` es la
+  // fuente de verdad persistida (layerStore); `viewMode`/`showChords` se
+  // derivan de ella para reusar el mismo camino de render que preview
+  // (renderSections/reRenderLyrics), agregando 'mixed' como combinación de
+  // ambas capas encendidas. `skipTonoAutoselect` evita la preselección de
+  // categoría cuando quien llama (chip del hero) ya va a elegir una.
+  function toggleLayer(name, { skipTonoAutoselect = false } = {}) {
+    layers[name] = !layers[name];
+    setLayer(name, layers[name]);
+    container.querySelector(`#layer-${name}`)?.setAttribute('aria-pressed', String(layers[name]));
+    viewMode =
+      layers.chords && layers.tono
+        ? 'mixed'
+        : layers.tono
+          ? 'tono'
+          : layers.chords
+            ? 'chords'
+            : 'lyrics';
+    showChords = viewMode === 'chords' || viewMode === 'mixed';
+    applyModeVisibility();
+    if (layers.tono && !skipTonoAutoselect) ensureTonoSelection();
+    reRenderLyrics();
+    // Crossfade 150ms ease-out (CSS respeta prefers-reduced-motion, ver
+    // .lyrics--layer-fade en components.css).
+    const lyricsEl = container.querySelector('#lyrics-content');
+    if (lyricsEl) {
+      lyricsEl.classList.remove('lyrics--layer-fade');
+      void lyricsEl.offsetWidth; // reflow: reinicia la animación en clicks seguidos
+      lyricsEl.classList.add('lyrics--layer-fade');
+    }
+  }
+
+  container.querySelector('#layer-chords')?.addEventListener('click', () => toggleLayer('chords'));
+  container.querySelector('#layer-tono')?.addEventListener('click', () => toggleLayer('tono'));
 
   // ── Chips SATB del hero (T2): único selector de voz, activeCategory como
   // fuente de verdad. ──
@@ -702,7 +721,11 @@ async function _renderSongBody(container, songId, isPreview, song) {
       deselectVoice();
       return;
     }
-    if (viewMode !== 'tono') switchViewMode('tono', { skipTonoAutoselect: true });
+    if (isPreview) {
+      if (viewMode !== 'tono') switchViewMode('tono', { skipTonoAutoselect: true });
+    } else if (!layers.tono) {
+      toggleLayer('tono', { skipTonoAutoselect: true });
+    }
     selectCategory(category);
   }
 
@@ -1146,7 +1169,7 @@ export function renderVoicePanel(song) {
  * Cuando se pasa `chordsVoiceId` en modo `chords`, cada línea se renderiza en
  * vista combinada (3 rieles: acorde / letra / nota de voz).
  * @param {Array} sections
- * @param {{ viewMode?: 'lyrics'|'chords'|'tono', transposeSemitones?: number,
+ * @param {{ viewMode?: 'lyrics'|'chords'|'tono'|'mixed', transposeSemitones?: number,
  *           useFlats?: boolean, activeVoiceId?: string|null,
  *           activeCategory?: string|null,
  *           chordsVoiceId?: string|null,
@@ -1169,7 +1192,11 @@ export function renderSections(sections, opts = {}) {
     visibleVoices = null,
     sectionsWithAudio = null,
   } = opts;
-  const showChords = viewMode === 'chords';
+  // 'mixed' (T3, toolbar de capas): capas Acordes+Tono encendidas a la vez —
+  // no exclusivo con 'chords'. Reusa el mismo riel de 3 pistas de la vista
+  // combinada (Acordes + Voz), con o sin voz elegida en el panel.
+  const showChords = viewMode === 'chords' || viewMode === 'mixed';
+  const showMixed = viewMode === 'mixed';
   const colorClass = activeCategory ? `voice-text--${activeCategory}` : '';
   const mixColorClass = chordsCategory ? `voice-text--${chordsCategory}` : '';
   // OptionsSheet (T4): una voz apagada en VOCES VISIBLES no debe pintar sus
@@ -1222,8 +1249,9 @@ export function renderSections(sections, opts = {}) {
             return `<p class="lyrics__line lyrics__line--tono">${inner}</p>`;
           }
 
-          // ── Combinada (Acordes + Voz): 3 rieles estrictos ──
-          if (showChords && chordsVoiceId) {
+          // ── Combinada (Acordes + Voz, o capa Acordes+Tono ambas on): 3 rieles
+          //    estrictos. Sin voz elegida los rieles de nota quedan vacíos. ──
+          if ((showChords && chordsVoiceId) || showMixed) {
             if (text.trim() === '') return `<p class="lyrics__line">&nbsp;</p>`;
             const inner = buildMixedLineHTML(
               line,

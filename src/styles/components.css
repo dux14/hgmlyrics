@@ -970,6 +970,77 @@
   min-height: 40px;
 }
 
+.song-toolbar__spacer {
+  flex: 1 1 auto;
+}
+
+.song-toolbar__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.song-toolbar__icon:hover {
+  background: var(--color-surface-hover);
+}
+
+.song-toolbar__icon:active {
+  background: color-mix(in srgb, var(--color-teal-500) 15%, transparent);
+}
+
+/* === Layer toggles (T3) — Acordes/Tono independientes, NO exclusivos ===
+   A diferencia de .chord-toggle (segmented control, cyan primary), cada capa
+   es su propio pill on/off; el acento es teal para no chocar con el cyan de
+   marca del viejo mode toggle (que sigue vivo en preview). */
+.layer-toggle {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-radius: var(--border-radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.layer-toggle[aria-pressed='true'] {
+  border-color: color-mix(in oklch, var(--color-teal-500) 45%, transparent);
+  color: var(--color-teal-500);
+  background: color-mix(in oklch, var(--color-teal-500) 8%, var(--color-surface));
+}
+
+/* Crossfade al alternar capas (T3): 150ms ease-out, sin animación si el
+   usuario prefiere movimiento reducido. */
+@keyframes lyricsLayerFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.lyrics--layer-fade {
+  animation: lyricsLayerFade 150ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lyrics--layer-fade {
+    animation: none;
+  }
+}
+
 /* === Tablet/Desktop Song View === */
 @media (min-width: 768px) {
   .voice-filter {

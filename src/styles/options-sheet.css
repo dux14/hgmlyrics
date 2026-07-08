@@ -227,25 +227,6 @@
   color: var(--color-teal-500);
 }
 
-/* ── Botón disparador: siempre visible, cualquier resolución ── */
-.song-toolbar__options {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: var(--border-radius-sm);
-  border: 1px solid var(--color-border);
-  background: transparent;
-  color: var(--color-text);
-  cursor: pointer;
-  transition: background 0.12s;
-  flex-shrink: 0;
-}
-
-.song-toolbar__options:active {
-  background: color-mix(in srgb, var(--color-teal-500) 15%, transparent);
-}
-
 /* === Animación de entrada/salida (espeja go-to-sheet.css) === */
 
 @keyframes osheet-in {

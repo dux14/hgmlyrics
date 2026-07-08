@@ -27,12 +27,7 @@ import {
   speedToSecondsPerLine,
 } from '../src/components/StageMode.js';
 import { getLayers, setLayer } from '../src/lib/layerStore.js';
-import {
-  buildLetraLineHTML,
-  buildChordsLineHTML,
-  buildTonoLineHTML,
-  buildMixedLineHTML,
-} from '../src/lib/lyricsRender.js';
+import { buildLetraLineHTML, buildChordsLineHTML, buildTonoLineHTML } from '../src/lib/lyricsRender.js';
 import { closeOptionsSheet } from '../src/components/OptionsSheet.js';
 
 function mountSongView() {
@@ -575,16 +570,26 @@ describe('T6: paridad de capas en la línea actual (mismos markers que la vista 
     expect(document.getElementById('stage-v2-text').innerHTML).toBe(buildLetraLineHTML('Primera línea'));
   });
 
-  it('ambas capas on: markers de buildMixedLineHTML', () => {
+  it('modos excluyentes: activar Tono con Acordes on apaga Acordes (mixed ya no es alcanzable)', () => {
     setLayer('chords', true);
-    setLayer('tono', true);
+    setLayer('tono', true); // el store apaga chords al encender tono (exclusión mutua)
     const sv = mountSongView();
     enterStage(sv, { song: buildLayeredSong(), getActiveVoice: () => 'soprano-1' });
     const line = { text: 'Primera línea', groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' }] };
-    const expected = buildMixedLineHTML(line, [{ pos: 0, ch: 'C' }], 'soprano-1', 'voice-text--soprano', {
-      notation: 'anglo',
-    });
+    const expected = buildTonoLineHTML(line, 'soprano-1', 'voice-text--soprano', { notation: 'anglo' });
     expect(document.getElementById('stage-v2-text').innerHTML).toBe(expected);
+    expect(document.getElementById('stage-layer-chords').getAttribute('aria-pressed')).toBe('false');
+    expect(document.getElementById('stage-layer-tono').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('#stage-layer-tono togglea con #stage-layer-chords activo: apaga chords y resincroniza ambos botones', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildLayeredSong(), getActiveVoice: () => 'soprano-1' });
+    document.getElementById('stage-layer-chords').click();
+    document.getElementById('stage-layer-tono').click();
+    expect(document.getElementById('stage-layer-chords').getAttribute('aria-pressed')).toBe('false');
+    expect(document.getElementById('stage-layer-tono').getAttribute('aria-pressed')).toBe('true');
+    expect(getLayers()).toEqual({ chords: false, tono: true });
   });
 });
 

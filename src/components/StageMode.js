@@ -266,6 +266,11 @@ function buildCurrentLineHTML(s, cur) {
   const colorClass = category ? `voice-text--${category}` : '';
   const line = { text: cur.text, groups: cur.groups };
 
+  // Pivote modos excluyentes (post-QA visual): getLayers() ya normaliza
+  // exclusión mutua, así que 'mixed' no puede derivarse desde el store —
+  // rama muerta salvo un valor persistido viejo pre-pivote sin normalizar.
+  // Acordes+Voz dentro del escenario (equivalente al panel Voz de SongView)
+  // queda fuera de alcance por ahora; el stage solo ofrece Acordes o Tono.
   if (viewMode === 'mixed') {
     return buildMixedLineHTML(line, cur.chordsRaw, s.activeVoiceId, colorClass, {
       transposeSemitones: semitones,
@@ -363,18 +368,20 @@ function adjustSpeedFromSheet(s, dir) {
 }
 
 /**
- * Togglea una capa de lectura (Acordes/Tono) DENTRO del escenario. Estado
- * global compartido con la vista normal (layerStore) — togglear acá y salir
- * deja la vista normal en el mismo estado (paridad). Solo re-pinta la línea
- * actual; no reproyecta ni reinicia el motor de avance.
+ * Togglea un modo de lectura (Acordes/Tono) DENTRO del escenario. Estado
+ * global compartido con la vista normal (layerStore, excluyente: activar uno
+ * apaga el otro) — togglear acá y salir deja la vista normal en el mismo
+ * estado (paridad). Ambos botones se resincronizan tras el toggle (no solo
+ * el tocado) porque el store puede haber apagado el otro. Solo re-pinta la
+ * línea actual; no reproyecta ni reinicia el motor de avance.
  * @param {object} s @param {'chords'|'tono'} name
  */
 function toggleStageLayer(s, name) {
   const layers = getLayers();
-  const next = !layers[name];
-  setLayer(name, next);
-  const btn = s.els[name === 'chords' ? 'layerChordsBtn' : 'layerTonoBtn'];
-  btn?.setAttribute('aria-pressed', String(next));
+  setLayer(name, !layers[name]);
+  const fresh = getLayers();
+  s.els.layerChordsBtn?.setAttribute('aria-pressed', String(fresh.chords));
+  s.els.layerTonoBtn?.setAttribute('aria-pressed', String(fresh.tono));
   renderZone(s);
   showControls(s);
 }

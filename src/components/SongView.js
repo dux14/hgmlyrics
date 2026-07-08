@@ -372,15 +372,22 @@ async function _renderSongBody(container, songId, isPreview, song) {
         ${
           coverUrl
             ? `
-        <img
-          class="song-view__cover"
-          src="${coverUrl}"
-          alt="Portada de ${escapeHtml(song.album || '')}"
-          width="80"
-          height="80"
-          decoding="async"
-          onerror="this.src='${COVER_PLACEHOLDER}'"
-        />
+        <div class="song-view__cover-wrap">
+          <img
+            class="song-view__cover"
+            src="${coverUrl}"
+            alt="Portada de ${escapeHtml(song.album || '')}"
+            width="80"
+            height="80"
+            decoding="async"
+            onerror="this.src='${COVER_PLACEHOLDER}'"
+          />
+          ${
+            !isPreview
+              ? `<button class="fav-btn fav-btn--cover${songId && isFavorite(songId) ? ' is-on' : ''}" id="fav-btn" aria-label="Agregar a favoritos">${icon('heart', { size: 16 })}</button>`
+              : ''
+          }
+        </div>
         `
             : ''
         }
@@ -439,7 +446,6 @@ async function _renderSongBody(container, songId, isPreview, song) {
               : ''
           }
           <button class="song-toolbar__options" id="open-options-sheet" aria-label="Opciones">${icon('sliders', { size: 18 })}</button>
-          <button class="fav-btn${!isPreview && songId && isFavorite(songId) ? ' is-on' : ''}" id="fav-btn" aria-label="Agregar a favoritos">${icon('heart', { size: 18 })}</button>
         </div>
 
         ${

@@ -186,28 +186,32 @@
   isolation: isolate;
 }
 
-/* Ambient Kinetic — gradiente teal/violeta de identidad; z-index -1 para que
-   el contenido del header quede siempre sobre la capa de color. */
-.song-view__header::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background:
-    radial-gradient(
-      120% 100% at 30% 0,
-      color-mix(in oklch, var(--color-teal-500) 35%, transparent),
-      transparent 55%
-    ),
-    radial-gradient(
-      120% 90% at 90% 10%,
-      color-mix(in oklch, var(--color-violet-400) 30%, transparent),
-      transparent 60%
-    );
-  pointer-events: none;
+/* Hero compacto (T6): 80px fijo en todas las resoluciones — ver spec D1. */
+.song-view__cover-wrap {
+  position: relative;
+  flex-shrink: 0;
 }
 
-/* Hero compacto (T6): 80px fijo en todas las resoluciones — ver spec D1. */
+.fav-btn--cover {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fav-btn--cover::after {
+  content: '';
+  position: absolute;
+  inset: -8px; /* hit-area >= 44px */
+}
+
 .song-view__cover {
   width: 80px;
   height: 80px;

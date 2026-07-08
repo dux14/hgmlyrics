@@ -15,12 +15,20 @@ function authHeader() {
   return { Authorization: `Bearer ${session?.access_token ?? ''}` };
 }
 
+// Envuelve fetch: una falla de red (offline, DNS) no debe propagar un throw
+// hasta el caller, o el control que disparó la acción queda deshabilitado
+// para siempre sin feedback. Se normaliza a la misma forma que un !res.ok
+// del servidor, así los callers solo necesitan chequear `res.ok`.
 async function api(method, body) {
-  return fetch('/api/admin/feature-flags', {
-    method,
-    headers: { 'Content-Type': 'application/json', ...authHeader() },
-    body: JSON.stringify(body),
-  });
+  try {
+    return await fetch('/api/admin/feature-flags', {
+      method,
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    return { ok: false, status: 0, json: async () => ({}) };
+  }
 }
 
 // Cache de perfiles por montaje del panel (evita refetch en cada re-render).

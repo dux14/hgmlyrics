@@ -255,6 +255,36 @@ describe('renderAdminFlagsPage — switch global', () => {
 
     expect(toggle.checked).toBe(false);
   });
+
+  it('un rechazo de red revierte el switch, muestra toast de error y lo re-habilita', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, opts = {}) => {
+      if (url === '/api/admin/feature-flags' && (!opts.method || opts.method === 'GET')) {
+        return { ok: true, json: async () => ({ flags: SAMPLE_FLAGS }) };
+      }
+      if (url === '/api/admin/profiles') {
+        return { ok: true, json: async () => ({ users: SAMPLE_USERS }) };
+      }
+      if (url === '/api/admin/feature-flags' && opts.method === 'POST') {
+        throw new Error('network down');
+      }
+      return { ok: false, json: async () => ({}) };
+    });
+    const container = makeContainer();
+    renderAdminFlagsPage(container);
+    await flush();
+
+    const first = container.querySelectorAll('.ff-item')[0];
+    const toggle = first.querySelector('.ff-global');
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change', { bubbles: true }));
+    await flush();
+
+    expect(toggle.checked).toBe(false);
+    expect(toggle.disabled).toBe(false);
+    const toast = document.querySelector('.toast');
+    expect(toast).not.toBeNull();
+    expect(toast.classList.contains('toast--error')).toBe(true);
+  });
 });
 
 describe('renderAdminFlagsPage — quitar chip', () => {
@@ -284,6 +314,30 @@ describe('renderAdminFlagsPage — quitar chip', () => {
     expect(call.title).toBe('Quitar acceso');
     expect(capturedMethod).toBe('DELETE');
     expect(capturedBody.flagKey).toBe('voz_tono');
+  });
+
+  it('con !res.ok muestra toast de error y re-habilita el botón', async () => {
+    mockFetch({
+      onAction: (method, body) => {
+        if (method === 'DELETE' && !body.action) {
+          return { ok: false, status: 500, json: async () => ({}) };
+        }
+        return null;
+      },
+    });
+    const container = makeContainer();
+    renderAdminFlagsPage(container);
+    await flush();
+
+    const first = container.querySelectorAll('.ff-item')[0];
+    const chipRemove = first.querySelector('.ff-chip button');
+    chipRemove.click();
+    await flush();
+
+    const toast = document.querySelector('.toast');
+    expect(toast.textContent).toBe('No se pudo quitar el acceso');
+    expect(toast.classList.contains('toast--error')).toBe(true);
+    expect(chipRemove.disabled).toBe(false);
   });
 });
 
@@ -338,6 +392,35 @@ describe('renderAdminFlagsPage — crear flag', () => {
       key: 'nueva_flag',
       description: 'Una flag nueva',
     });
+  });
+
+  it('key duplicada (409) muestra toast "La flag ya existe" y re-habilita el botón', async () => {
+    mockFetch({
+      onAction: (method, body) => {
+        if (method === 'POST' && body.action === 'create') {
+          return { ok: false, status: 409, json: async () => ({ error: 'La flag ya existe' }) };
+        }
+        return null;
+      },
+    });
+    const container = makeContainer();
+    renderAdminFlagsPage(container);
+    await flush();
+
+    const keyInput = container.querySelector('#ff-new-key');
+    const descInput = container.querySelector('#ff-new-desc');
+    const form = container.querySelector('.ff-create-form');
+    const submitBtn = form.querySelector('button[type="submit"]');
+
+    keyInput.value = 'ya_existe';
+    descInput.value = 'x';
+    form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+    await flush();
+
+    const toast = document.querySelector('.toast');
+    expect(toast.textContent).toBe('La flag ya existe');
+    expect(toast.classList.contains('toast--error')).toBe(true);
+    expect(submitBtn.disabled).toBe(false);
   });
 });
 

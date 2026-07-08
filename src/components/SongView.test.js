@@ -83,8 +83,13 @@ describe('renderSongView — SEC-03: year y genre escapados en metadatos', () =>
     // Render como preview (objeto directo) para evitar IntersectionObserver/FAB
     await renderSongView(container, { ...song, isPreview: true });
 
-    // No debe haber <img> con onerror ni <script> en el DOM
-    expect(container.querySelector('img[onerror]')).toBeNull();
+    // El payload de genre no debe ejecutarse como un <img> real inyectado
+    // (distinto del <img> legítimo de la carátula, que también trae onerror
+    // propio desde T1 — ver song-view__cover-wrap).
+    const maliciousImg = [...container.querySelectorAll('img')].find(
+      (img) => img.getAttribute('src') === 'x',
+    );
+    expect(maliciousImg).toBeUndefined();
     expect(container.querySelector('script')).toBeNull();
 
     // El texto del año debe aparecer escapado

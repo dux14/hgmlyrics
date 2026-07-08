@@ -41,6 +41,7 @@ vi.mock('../src/lib/favorites.js', () => ({
 
 const { renderSongView } = await import('../src/components/SongView.js');
 const { getSongById } = await import('../src/lib/store.js');
+const { COVER_PLACEHOLDER } = await import('../src/lib/icons.js');
 
 // jsdom no implementa matchMedia ni IntersectionObserver; setupAutoscroll los
 // usa para reduced-motion y los presets de velocidad por sección.
@@ -63,12 +64,12 @@ globalThis.IntersectionObserver =
     disconnect() {}
   };
 
-function buildSong(id) {
+function buildSong(id, { coverImage = '/covers/santo.webp' } = {}) {
   return {
     id,
     title: 'Santo',
     schemaVersion: 3,
-    coverImage: '/covers/santo.webp',
+    coverImage,
     sections: [{ type: 'verse', label: 'V', lines: [{ text: 'Santo es el Señor', groups: [] }] }],
   };
 }
@@ -102,6 +103,18 @@ describe('SongView — favorito sobre la carátula (hero sin degradado)', () => 
     const toolbar = container.querySelector('.song-toolbar');
     expect(toolbar).toBeTruthy();
     expect(toolbar.querySelector('#fav-btn')).toBeNull();
+  });
+
+  it('sin carátula: el wrap y el fav-btn se pintan igual, con el placeholder como src', async () => {
+    const song = buildSong('song-cover-4', { coverImage: '' });
+    getSongById.mockReturnValue(song);
+    const container = document.createElement('div');
+    await renderSongView(container, 'song-cover-4');
+
+    const wrap = container.querySelector('.song-view__cover-wrap');
+    expect(wrap).toBeTruthy();
+    expect(wrap.querySelector('#fav-btn')).toBeTruthy();
+    expect(wrap.querySelector('.song-view__cover').getAttribute('src')).toBe(COVER_PLACEHOLDER);
   });
 
   it('el click en el fav-btn de la carátula sigue toggleando la clase is-on', async () => {

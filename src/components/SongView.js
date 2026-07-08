@@ -369,13 +369,10 @@ async function _renderSongBody(container, songId, isPreview, song) {
     <div class="song-view fade-in">
       <!-- Song Header -->
       <div class="song-view__header">
-        ${
-          coverUrl
-            ? `
         <div class="song-view__cover-wrap">
           <img
             class="song-view__cover"
-            src="${coverUrl}"
+            src="${coverUrl || COVER_PLACEHOLDER}"
             alt="Portada de ${escapeHtml(song.album || '')}"
             width="80"
             height="80"
@@ -388,9 +385,6 @@ async function _renderSongBody(container, songId, isPreview, song) {
               : ''
           }
         </div>
-        `
-            : ''
-        }
         <div class="song-view__meta">
           <h1 class="song-view__title${!isPreview ? ' song-view__title--linked' : ''}" id="song-title-link">${escapeHtml(song.title || 'Sin título')}${!isPreview ? '<svg class="song-view__link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' : ''}</h1>
           <p class="song-view__album">${escapeHtml(song.artist || '')} — ${escapeHtml(song.album || '')}</p>

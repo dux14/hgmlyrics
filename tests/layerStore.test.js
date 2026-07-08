@@ -10,17 +10,27 @@ describe('layerStore', () => {
     expect(getLayers()).toEqual({ chords: false, tono: false });
   });
 
-  it('persiste toggles independientes', () => {
+  it('las capas son excluyentes: activar una apaga la otra', () => {
     setLayer('chords', true);
     setLayer('tono', true);
-    expect(getLayers()).toEqual({ chords: true, tono: true });
+    expect(getLayers()).toEqual({ chords: false, tono: true });
   });
 
-  it('permite apagar una capa sin afectar la otra', () => {
-    setLayer('chords', true);
+  it('activar chords apaga tono si estaba activo', () => {
     setLayer('tono', true);
+    setLayer('chords', true);
+    expect(getLayers()).toEqual({ chords: true, tono: false });
+  });
+
+  it('apagar la capa activa deja letra (ninguna capa)', () => {
+    setLayer('chords', true);
     setLayer('chords', false);
-    expect(getLayers()).toEqual({ chords: false, tono: true });
+    expect(getLayers()).toEqual({ chords: false, tono: false });
+  });
+
+  it('normaliza un valor persistido viejo con ambas capas en true (chords gana)', () => {
+    localStorage.setItem('hkn-lyrics-layers', JSON.stringify({ chords: true, tono: true }));
+    expect(getLayers()).toEqual({ chords: true, tono: false });
   });
 
   it('tolera localStorage roto (getItem lanza)', () => {

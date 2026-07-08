@@ -116,6 +116,7 @@ describe('SongView — toolbar de capas (T3)', () => {
 
     expect(toolbar.querySelector('#enter-stage-btn')).toBeTruthy();
     expect(toolbar.querySelector('#open-options-sheet')).toBeTruthy();
+    expect(toolbar.querySelector('#hero-tuner-mic')).toBeTruthy();
   });
 
   it('sin acordes ni roster: no se pintan los toggles de capa', async () => {
@@ -155,7 +156,7 @@ describe('SongView — toolbar de capas (T3)', () => {
     expect(container.querySelector('.chord-label')).toBeTruthy();
   });
 
-  it('ambas capas on: aparece el render mixto (buildMixedLineHTML)', async () => {
+  it('modos excluyentes: activar Tono con Acordes activo apaga Acordes (OR, no mixed)', async () => {
     const song = buildSong('song-toolbar-5');
     getSongById.mockReturnValue(song);
     const container = document.createElement('div');
@@ -164,23 +165,49 @@ describe('SongView — toolbar de capas (T3)', () => {
     container.querySelector('#layer-chords').click();
     container.querySelector('#layer-tono').click();
 
-    expect(container.querySelector('#layer-chords').getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('#layer-chords').getAttribute('aria-pressed')).toBe('false');
     expect(container.querySelector('#layer-tono').getAttribute('aria-pressed')).toBe('true');
     const line = container.querySelector('#lyrics-content .lyrics__line');
-    expect(line.classList.contains('lyrics__line--mix')).toBe(true);
+    expect(line.classList.contains('lyrics__line--mix')).toBe(false);
   });
 
-  it('solo #layer-tono on con voz activa: aparece el render tono (buildTonoLineHTML)', async () => {
+  it('tap sobre la capa ya activa vuelve a Letra', async () => {
+    const song = buildSong('song-toolbar-5b');
+    getSongById.mockReturnValue(song);
+    const container = document.createElement('div');
+    await renderSongView(container, 'song-toolbar-5b');
+
+    container.querySelector('#layer-chords').click();
+    container.querySelector('#layer-chords').click();
+
+    expect(container.querySelector('#layer-chords').getAttribute('aria-pressed')).toBe('false');
+    const line = container.querySelector('#lyrics-content .lyrics__line');
+    expect(line.classList.contains('lyrics__line--chords')).toBe(false);
+  });
+
+  it('Tono sin voz elegida: panel Voz visible, letra plana (fallback) hasta seleccionar', async () => {
     const song = buildSong('song-toolbar-4b');
     getSongById.mockReturnValue(song);
     const container = document.createElement('div');
     await renderSongView(container, 'song-toolbar-4b');
 
-    // ensureTonoSelection ya preselecciona la 1ª categoría (soprano) al
-    // encender la capa; se elige tenor explícitamente para no toparse con un
-    // chip que ya viene activo (que desactivaría en vez de activar).
     container.querySelector('#layer-tono').click();
-    container.querySelector('#hero-voice-chips [data-category="tenor"]').click();
+
+    expect(container.querySelector('#layer-tono').getAttribute('aria-pressed')).toBe('true');
+    const line = container.querySelector('#lyrics-content .lyrics__line');
+    expect(line.classList.contains('lyrics__line--tono')).toBe(false);
+    expect(container.querySelector('#voice-panel')).toBeTruthy();
+    expect(container.querySelector('#chords-extras').style.display).toBe('flex');
+  });
+
+  it('solo #layer-tono on + voz elegida en el panel: aparece el render tono (buildTonoLineHTML)', async () => {
+    const song = buildSong('song-toolbar-4c');
+    getSongById.mockReturnValue(song);
+    const container = document.createElement('div');
+    await renderSongView(container, 'song-toolbar-4c');
+
+    container.querySelector('#layer-tono').click();
+    container.querySelector('#voice-panel-categories [data-category="tenor"]').click();
 
     expect(container.querySelector('#layer-tono').getAttribute('aria-pressed')).toBe('true');
     expect(container.querySelector('#layer-chords').getAttribute('aria-pressed')).toBe('false');

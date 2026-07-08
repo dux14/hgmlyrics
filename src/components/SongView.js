@@ -26,7 +26,7 @@ import {
   buildCejillaHint,
   transposeNote,
 } from '../lib/lyricsRender.js';
-import { getChordNotation, setChordNotation, displayNote } from '../lib/chordNotation.js';
+import { getChordNotation, setChordNotation } from '../lib/chordNotation.js';
 import { getTranspose, setTranspose, normalizeSemitones } from '../lib/transposeStore.js';
 import { getLayers, setLayer, deriveViewMode } from '../lib/layerStore.js';
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
@@ -47,7 +47,6 @@ import {
   speedToPercentLabel,
 } from '../lib/autoscroll.js';
 import { escapeHtml } from '../lib/escape.js';
-import { categoryInitial } from '../lib/voiceChips.js';
 import { enterStage } from './StageMode.js';
 import { normalizeSectionType } from '../lib/sectionTypes.js';
 
@@ -83,17 +82,6 @@ function saveFontSize(size) {
   } catch (_e) {
     /* ignore */
   }
-}
-
-// Una categoría está "atenuada" cuando NINGUNA de sus voces está en
-// visibleVoices (OptionsSheet, T4/T5). Compartida por updateHeroChips (T5,
-// refresco in-place) y renderHeroVoiceChips (pintado inicial) para no
-// duplicar la fórmula.
-// @param {object} song @param {string} category @param {Set<string>} visibleVoices
-// @returns {boolean}
-function categoryIsDimmed(song, category, visibleVoices) {
-  const catVoiceIds = rosterByCategory(song, category).map((v) => v.id);
-  return catVoiceIds.length > 0 && catVoiceIds.every((id) => !visibleVoices.has(id));
 }
 
 function songHasChords(song) {
@@ -271,8 +259,8 @@ async function _renderSongBody(container, songId, isPreview, song) {
   }
 
   let fontSize = getFontSize();
-  // Modo Tono: solo con el flag voz_tono. activeRosterId/activeCategory dirigen
-  // el disclosure categoría→persona del modo notas.
+  // Modo Tono: solo con el flag voz_tono. chordsCategory/chordsVoiceId (panel
+  // Voz unificado) dirigen el disclosure categoría→persona del modo notas.
   const tonoEnabled = isFeatureEnabled('voz_tono');
   // hasChords/tonoAvailable se adelantan (antes vivían más abajo) porque la
   // derivación de viewMode (FIX finding 1) los necesita para intersectar la
@@ -308,8 +296,6 @@ async function _renderSongBody(container, songId, isPreview, song) {
   const savedTranspose = !isPreview ? getTranspose(songId) : { semitones: 0, useFlats: false };
   let transposeSemitones = savedTranspose.semitones;
   let useFlats = savedTranspose.useFlats;
-  let activeCategory = null;
-  let activeRosterId = null;
   // API de setupAutoscroll (FIX 1): pauseAutoscroll detiene el motor rAF del
   // autoscroll clásico al entrar al escenario, para que no siga corriendo
   // detrás del overlay. Se asigna al llamar setupAutoscroll más abajo; el
@@ -322,21 +308,27 @@ async function _renderSongBody(container, songId, isPreview, song) {
   // del stage-btn que pausa el autoscroll clásico.
   let sectionPlayerApi = null;
   let sectionsWithAudio = new Set();
-  // Afinador flotante (T5): bajo demanda desde #hero-tuner-mic, null hasta
-  // que se abre. updateHeroChips() lo refresca junto con los chips para que
-  // la nota objetivo siga a la voz activa/transposición sin lógica aparte.
+  // Afinador flotante (T5): bajo demanda desde el mic de la toolbar, null
+  // hasta que se abre. Siempre disponible (afinador libre sin voz
+  // seleccionada); refreshActiveVoiceNote() lo refresca junto con la voz
+  // activa para que la nota objetivo la siga sin lógica aparte.
   let floatingTunerApi = null;
   // OptionsSheet (T4): visibilidad por voz individual del roster, default
   // todas visibles. Apagar una voz atenúa sus groups en Tono/Acordes+Voz
   // (ver renderSections → visibleVoices).
   const visibleVoices = new Set((song.voiceRoster || []).map((v) => v.id));
 
-  // Vista combinada (Acordes+Voz, Wave 4): voz activa del modo Acordes,
-  // independiente de la de Tono. Solo con flag voz_tono + roster + acordes.
+  // Selector de voz UNIFICADO (pivote modos excluyentes, post-QA visual): un
+  // solo concepto de "mi voz" para Acordes (mezcla acordes+voz) y Tono (notas
+  // por sílaba) — antes eran dos estados independientes (activeCategory/
+  // activeRosterId para Tono via chips del hero, chordsCategory/chordsVoiceId
+  // para Acordes+Voz via el panel). El panel Voz (renderVoicePanel) es ahora
+  // EL selector en ambos modos; disponible siempre que haya roster (ya no
+  // requiere acordes).
   let chordsCategory = null;
   let chordsVoiceId = null;
   let voicePanelOpen = false;
-  const mixAvailable = tonoEnabled && (song.voiceRoster || []).length > 0 && hasChords;
+  const voicePanelAvailable = tonoAvailable;
 
   const voiceBadgeClass = getVoiceBadgeClass(song.voiceType);
   const voiceLabel = getVoiceTypeLabel(song.voiceType);
@@ -425,37 +417,33 @@ async function _renderSongBody(container, songId, isPreview, song) {
               <div class="voice-bar__female" style="width: ${100 - (song.voicePercent?.male ?? 50)}%"></div>
             </div>
           </div>
-          ${
-            tonoAvailable
-              ? renderHeroVoiceChips(song, activeCategory, visibleVoices, {
-                  transposeSemitones,
-                  useFlats,
-                  notation: getChordNotation(),
-                })
-              : ''
-          }
         </div>
       </div>
 
       ${
         !isPreview
           ? `
-      <!-- Controls toolbar — capas de lectura (T3): Acordes/Tono como toggles
-           independientes, no exclusivos. A−/A+ y transpose viven ahora solo en
-           el sheet de opciones (#open-options-sheet). -->
+      <!-- Controls toolbar — modos excluyentes Letra/Acordes/Tono (pivote
+           post-QA visual): #layer-chords/#layer-tono son un OR (activar uno
+           apaga el otro; tap sobre el activo vuelve a Letra), exclusividad
+           impuesta por layerStore. El mic del afinador vive acá, siempre
+           visible (afinador libre si no hay voz elegida). A−/A+ y transpose
+           viven solo en el sheet de opciones (#open-options-sheet). -->
       <div class="song-toolbar">
         ${hasChords ? `<button class="layer-toggle" id="layer-chords" aria-pressed="${layers.chords}">Acordes</button>` : ''}
         ${tonoAvailable ? `<button class="layer-toggle" id="layer-tono" aria-pressed="${layers.tono}">Tono</button>` : ''}
         <span class="song-toolbar__spacer"></span>
+        <button class="song-toolbar__icon" id="hero-tuner-mic" aria-label="Afinar mi voz">${icon('mic', { size: 18 })}</button>
         <button class="song-toolbar__icon" id="enter-stage-btn" aria-label="Modo escenario">${icon('maximize', { size: 18 })}</button>
         <button class="song-toolbar__icon" id="open-options-sheet" aria-label="Opciones">${icon('sliders', { size: 18 })}</button>
         ${isAdmin() ? `<a href="#/admin/edit/${song.id}?from=${song.id}" class="song-toolbar__icon" aria-label="Editar">${icon('pencil', { size: 16 })}</a>` : ''}
       </div>
 
       ${
-        (song.cejilla && song.cejilla > 0) || mixAvailable
+        (song.cejilla && song.cejilla > 0) || voicePanelAvailable
           ? `
-      <!-- Wave 4: cajas temáticas del modo Acordes — Guitarra (cejilla) y Voz -->
+      <!-- Cajas temáticas — Guitarra (cejilla, modo Acordes) y Voz (selector
+           único para "mi tono" en Acordes y para la voz activa en Tono). -->
       <div class="chords-extras" id="chords-extras" style="display: none;">
         ${
           song.cejilla && song.cejilla > 0
@@ -472,7 +460,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
         `
             : ''
         }
-        ${mixAvailable ? renderVoicePanel(song) : ''}
+        ${voicePanelAvailable ? renderVoicePanel(song) : ''}
       </div>
       `
           : ''
@@ -494,7 +482,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
           : ''
       }
       ${
-        mixAvailable
+        voicePanelAvailable
           ? `<div class="chords-extras" id="chords-extras" style="display: none;">${renderVoicePanel(song)}</div>`
           : ''
       }
@@ -503,7 +491,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
 
       <!-- Lyrics -->
       <div class="lyrics" id="lyrics-content">
-        ${renderSections(song.sections || [], { viewMode, transposeSemitones, useFlats, activeVoiceId: activeRosterId, activeCategory, chordsVoiceId, chordsCategory, notation: getChordNotation(), visibleVoices })}
+        ${renderSections(song.sections || [], { viewMode, transposeSemitones, useFlats, activeVoiceId: chordsVoiceId, activeCategory: chordsCategory, chordsVoiceId, chordsCategory, notation: getChordNotation(), visibleVoices })}
       </div>
 
       ${
@@ -537,8 +525,8 @@ async function _renderSongBody(container, songId, isPreview, song) {
         viewMode,
         transposeSemitones,
         useFlats,
-        activeVoiceId: activeRosterId,
-        activeCategory,
+        activeVoiceId: chordsVoiceId,
+        activeCategory: chordsCategory,
         chordsVoiceId,
         chordsCategory,
         notation: getChordNotation(),
@@ -580,125 +568,113 @@ async function _renderSongBody(container, songId, isPreview, song) {
     if (cejillaTextEl && song.cejilla) {
       cejillaTextEl.textContent = buildCejillaHint(song.key, song.cejilla, useFlats, notation);
     }
-    updateHeroChips();
+    refreshActiveVoiceNote();
   }
 
   // Show controls relevant to the current mode: cejilla + transposition belong
-  // to chords mode.
+  // to chords mode; el panel Voz vive acá también para Tono.
   function applyModeVisibility() {
     const chordsExtrasEl = container.querySelector('#chords-extras');
-    if (chordsExtrasEl) chordsExtrasEl.style.display = showChords ? 'flex' : 'none';
+    if (chordsExtrasEl) {
+      chordsExtrasEl.style.display = showChords || viewMode === 'tono' ? 'flex' : 'none';
+    }
     // Re-asegura el estado del panel Voz al cambiar de modo (defensivo).
     syncVoicePanel();
   }
 
+  // Selector de voz unificado (panel #voice-panel): sirve tanto a Acordes
+  // ("mi tono" → mezcla acordes+voz) como a Tono (notas por sílaba de la voz
+  // activa) — un solo estado, chordsCategory/chordsVoiceId, sin importar el
+  // modo. selectPerson/selectCategory también los usa el chip S·A·T·B del
+  // escenario (setActiveVoice, StageMode) para mantener paridad.
   function selectPerson(rosterId) {
-    activeRosterId = rosterId;
+    chordsVoiceId = rosterId;
+    renderChordsPersonRow();
+    syncVoicePanel();
+    refreshActiveVoiceNote();
     reRenderLyrics();
   }
 
   function selectCategory(category) {
-    activeCategory = category;
-    activeRosterId = null;
-    updateHeroChips();
+    chordsCategory = category;
+    chordsVoiceId = null;
+    renderChordsPersonRow();
+    refreshActiveVoiceNote();
     // Autoselección si la categoría tiene una sola persona.
     const people = rosterByCategory(song, category);
     if (people.length === 1) {
       selectPerson(people[0].id);
     } else {
+      syncVoicePanel();
       reRenderLyrics();
     }
   }
 
-  // Des-selecciona la voz activa (chip del hero).
-  // El modo Tono soporta "sin voz activa" (letra sin resaltar), así que NO se
-  // fuerza la vuelta a modo Letra — se queda en el modo actual.
-  function deselectVoice() {
-    activeCategory = null;
-    activeRosterId = null;
-    updateHeroChips();
+  // Limpia la voz seleccionada (botón de cierre del panel). Tono soporta "sin
+  // voz activa" (letra sin resaltar, fallback existente en renderSections), así
+  // que NO se fuerza la vuelta a modo Letra — se queda en el modo actual.
+  function clearVoiceSelection() {
+    chordsVoiceId = null;
+    chordsCategory = null;
+    voicePanelOpen = false;
+    syncVoicePanel();
+    renderChordsPersonRow();
+    refreshActiveVoiceNote();
     reRenderLyrics();
   }
 
-  // Sincroniza los chips del hero con el estado activo (fuente de verdad
-  // única: activeCategory), su atenuación por visibleVoices (T5) y la nota
-  // (transposición/notación actuales, T2).
-  function updateHeroChips() {
-    container.querySelectorAll('#hero-voice-chips .hero-voice-chip').forEach((chip) => {
-      const category = chip.dataset.category;
-      const isActive = category === activeCategory;
-      chip.classList.toggle('is-active', isActive);
-      chip.setAttribute('aria-pressed', String(isActive));
-      const isDimmed = categoryIsDimmed(song, category, visibleVoices);
-      chip.classList.toggle('hero-voice-chip--dimmed', isDimmed);
-      const noteEl = chip.querySelector('.hero-voice-chip__note');
-      if (noteEl) {
-        noteEl.textContent =
-          heroChipNote(song, category, {
-            transposeSemitones,
-            useFlats,
-            notation: getChordNotation(),
-          }) || '';
-      }
-    });
-    if (floatingTunerApi) {
-      floatingTunerApi.setNote(
-        activeCategory
-          ? heroChipTargetNote(song, activeCategory, { transposeSemitones, useFlats })
-          : null,
-      );
-    }
-  }
-
-  // Al entrar a Tono sin selección previa, preseleccionar la primera categoría
-  // (y su persona si es única) para que el modo muestre algo de inmediato.
-  function ensureTonoSelection() {
-    if (activeCategory) return;
-    const categories = rosterCategories(song);
-    if (categories.length > 0) selectCategory(categories[0]);
+  // Refresca la nota objetivo del afinador flotante (si está abierto) según la
+  // voz activa (chordsCategory) y la transposición/notación actuales. Es lo
+  // único que sobrevive de la vieja updateHeroChips() tras quitar los chips
+  // del hero (T5 → toolbar); el resto (chip DOM, atenuado) ya no aplica.
+  function refreshActiveVoiceNote() {
+    if (!floatingTunerApi) return;
+    floatingTunerApi.setNote(
+      chordsCategory ? heroChipTargetNote(song, chordsCategory, { transposeSemitones, useFlats }) : null,
+    );
   }
 
   if (!isPreview) applyFontSize(fontSize);
   applyModeVisibility();
 
-  // Cambia de modo (Letra/Acordes/Tono); `skipTonoAutoselect` evita la
-  // preselección de la 1ª categoría cuando quien llama ya va a elegir una
-  // (chip del hero, T5) para no pintar dos veces.
-  function switchViewMode(mode, { skipTonoAutoselect = false } = {}) {
+  // Cambia de modo (Letra/Acordes/Tono) — solo lo usa el chord-toggle viejo
+  // del preview, sin tocar.
+  function switchViewMode(mode) {
     viewMode = mode;
     showChords = viewMode === 'chords' || viewMode === 'mixed';
     container
       .querySelectorAll('.chord-toggle__btn')
       .forEach((c) => c.classList.toggle('chord-toggle__btn--active', c.dataset.mode === mode));
     applyModeVisibility();
-    if (viewMode === 'tono' && !skipTonoAutoselect) ensureTonoSelection();
     reRenderLyrics();
   }
 
   // Mode toggle (Letra / Acordes / Tono) — solo queda en preview (chord-toggle
-  // viejo, sin tocar). Fuera de preview la toolbar usa capas independientes
-  // (toggleLayer) en vez de este mode exclusivo.
+  // viejo, sin tocar). Fuera de preview la toolbar usa los modos excluyentes
+  // (toggleLayer) en vez de este mode toggle.
   if (showToggle) {
     container.querySelectorAll('[data-mode]').forEach((btn) => {
       btn.addEventListener('click', () => switchViewMode(btn.dataset.mode));
     });
   }
 
-  // ── Capas de lectura (T3): Acordes y Tono como toggles independientes ──
-  // Reemplaza el mode exclusivo de la toolbar fuera de preview. `layers` es la
-  // fuente de verdad persistida (layerStore); `viewMode`/`showChords` se
-  // derivan de ella para reusar el mismo camino de render que preview
-  // (renderSections/reRenderLyrics), agregando 'mixed' como combinación de
-  // ambas capas encendidas. `skipTonoAutoselect` evita la preselección de
-  // categoría cuando quien llama (chip del hero) ya va a elegir una.
-  function toggleLayer(name, { skipTonoAutoselect = false } = {}) {
-    layers[name] = !layers[name];
-    setLayer(name, layers[name]);
-    container.querySelector(`#layer-${name}`)?.setAttribute('aria-pressed', String(layers[name]));
+  // ── Modos excluyentes Letra/Acordes/Tono (pivote post-QA visual) ──
+  // `layers` es la fuente de verdad persistida (layerStore, exclusiva); tras
+  // togglear se relee fresca del store para reflejar la exclusividad que el
+  // store ya impuso (activar una apaga la otra) — el estado local no puede
+  // limitarse a invertir el propio booleano o queda desincronizado. Sin
+  // auto-preselección de voz: al entrar a Tono el panel queda visible y la
+  // letra se pinta plana (fallback existente) hasta que el usuario elige.
+  function toggleLayer(name) {
+    setLayer(name, !layers[name]);
+    const fresh = getLayers();
+    layers.chords = fresh.chords;
+    layers.tono = fresh.tono;
+    container.querySelector('#layer-chords')?.setAttribute('aria-pressed', String(layers.chords));
+    container.querySelector('#layer-tono')?.setAttribute('aria-pressed', String(layers.tono));
     viewMode = deriveViewMode(getEffectiveLayers());
     showChords = viewMode === 'chords' || viewMode === 'mixed';
     applyModeVisibility();
-    if (layers.tono && !skipTonoAutoselect) ensureTonoSelection();
     reRenderLyrics();
     // Crossfade 150ms ease-out (CSS respeta prefers-reduced-motion, ver
     // .lyrics--layer-fade en components.css).
@@ -713,63 +689,44 @@ async function _renderSongBody(container, songId, isPreview, song) {
   container.querySelector('#layer-chords')?.addEventListener('click', () => toggleLayer('chords'));
   container.querySelector('#layer-tono')?.addEventListener('click', () => toggleLayer('tono'));
 
-  // ── Chips SATB del hero (T2): único selector de voz, activeCategory como
-  // fuente de verdad. ──
-  function selectCategoryFromHero(category) {
-    if (activeCategory === category) {
-      deselectVoice();
+  // ── Afinador flotante: mic de la toolbar, bajo demanda. Toggle simple — un
+  // segundo click en el mismo mic cierra la barra en vez de apilar otra. Se
+  // monta en document.body (mismo patrón que autoscroll-fab) para que el
+  // `position: fixed` no dependa de ancestros del árbol de la vista. Siempre
+  // disponible (no gated por tonoAvailable): sin voz activa es un afinador
+  // libre, igual que el de Herramientas.
+  container.querySelector('#hero-tuner-mic')?.addEventListener('click', () => {
+    if (floatingTunerApi) {
+      floatingTunerApi.destroy();
+      floatingTunerApi = null;
       return;
     }
-    if (isPreview) {
-      if (viewMode !== 'tono') switchViewMode('tono', { skipTonoAutoselect: true });
-    } else if (!layers.tono) {
-      toggleLayer('tono', { skipTonoAutoselect: true });
-    }
-    selectCategory(category);
+    floatingTunerApi = openFloatingTuner(document.body, {
+      note: chordsCategory
+        ? heroChipTargetNote(song, chordsCategory, { transposeSemitones, useFlats })
+        : null,
+      voiceLabel: chordsCategory ? getVoiceLabel(chordsCategory) : 'Afinador',
+      onClose: () => {
+        floatingTunerApi = null;
+      },
+    });
+  });
+
+  // El afinador flotante no depende del audio por sección (F5): se destruye
+  // en su propia suscripción a onRouteChange, mismo patrón que
+  // destroySectionPlayer más abajo (logout/redirects no deben dejarlo vivo).
+  // Solo fuera de preview: el preview (editor) no navega por router, no hay
+  // ruta de la que salir.
+  if (!isPreview) {
+    const destroyFloatingTuner = () => {
+      floatingTunerApi?.destroy();
+      floatingTunerApi = null;
+      unsubscribeFloatingTunerRoute();
+    };
+    const unsubscribeFloatingTunerRoute = onRouteChange(destroyFloatingTuner);
   }
 
-  if (tonoAvailable) {
-    container.querySelectorAll('#hero-voice-chips [data-category]').forEach((chip) => {
-      chip.addEventListener('click', () => selectCategoryFromHero(chip.dataset.category));
-    });
-
-    // ── Afinador flotante (T5): mic del hero, bajo demanda. Toggle simple —
-    // un segundo click en el mismo mic cierra la barra en vez de apilar otra.
-    // Se monta en document.body (mismo patrón que autoscroll-fab) para que el
-    // `position: fixed` no dependa de ancestros del árbol de la vista.
-    container.querySelector('#hero-tuner-mic')?.addEventListener('click', () => {
-      if (floatingTunerApi) {
-        floatingTunerApi.destroy();
-        floatingTunerApi = null;
-        return;
-      }
-      floatingTunerApi = openFloatingTuner(document.body, {
-        note: activeCategory
-          ? heroChipTargetNote(song, activeCategory, { transposeSemitones, useFlats })
-          : null,
-        voiceLabel: activeCategory ? getVoiceLabel(activeCategory) : 'Afinador',
-        onClose: () => {
-          floatingTunerApi = null;
-        },
-      });
-    });
-
-    // El afinador flotante no depende del audio por sección (F5): se destruye
-    // en su propia suscripción a onRouteChange, mismo patrón que
-    // destroySectionPlayer más abajo (logout/redirects no deben dejarlo vivo).
-    // Solo fuera de preview: el preview (editor) no navega por router, no hay
-    // ruta de la que salir.
-    if (!isPreview) {
-      const destroyFloatingTuner = () => {
-        floatingTunerApi?.destroy();
-        floatingTunerApi = null;
-        unsubscribeFloatingTunerRoute();
-      };
-      const unsubscribeFloatingTunerRoute = onRouteChange(destroyFloatingTuner);
-    }
-  }
-
-  // ── Vista combinada: panel Voz del modo Acordes (Wave 4) ──
+  // ── Panel Voz (selector único, Acordes+Tono) ──
   function syncVoicePanel() {
     const panel = container.querySelector('#voice-panel');
     if (!panel) return;
@@ -785,7 +742,15 @@ async function _renderSongBody(container, songId, isPreview, song) {
         ? `${icon('mic', { size: 13 })} Voz · ${escapeHtml(voice.name)}`
         : `${icon('mic', { size: 13 })} Voz`;
     }
-    if (close) close.hidden = !chordsVoiceId;
+    if (close) {
+      close.hidden = !chordsVoiceId;
+      // En Tono, quitar la voz no significa "solo acordes" — el texto se
+      // adapta al modo vigente.
+      close.innerHTML =
+        viewMode === 'tono'
+          ? `${icon('close', { size: 12 })} Quitar voz`
+          : `${icon('close', { size: 12 })} Solo acordes`;
+    }
     panel.querySelectorAll('#voice-panel-categories .tono-chip').forEach((c) => {
       const isActive = c.dataset.category === chordsCategory;
       c.classList.toggle('tono-chip--active', isActive);
@@ -814,45 +779,18 @@ async function _renderSongBody(container, songId, isPreview, song) {
       )
       .join('');
     rowEl.querySelectorAll('[data-mix-roster-id]').forEach((btn) => {
-      btn.addEventListener('click', () => selectChordsPerson(btn.dataset.mixRosterId));
+      btn.addEventListener('click', () => selectPerson(btn.dataset.mixRosterId));
     });
   }
 
-  function selectChordsPerson(rosterId) {
-    chordsVoiceId = rosterId;
-    renderChordsPersonRow();
-    syncVoicePanel();
-    reRenderLyrics();
-  }
-
-  function selectChordsCategory(category) {
-    chordsCategory = category;
-    chordsVoiceId = null;
-    renderChordsPersonRow();
-    const people = rosterByCategory(song, category);
-    if (people.length === 1) {
-      selectChordsPerson(people[0].id);
-    } else {
-      syncVoicePanel();
-      reRenderLyrics();
-    }
-  }
-
-  if (mixAvailable) {
+  if (voicePanelAvailable) {
     container.querySelector('#voice-panel-toggle')?.addEventListener('click', () => {
       voicePanelOpen = !voicePanelOpen;
       syncVoicePanel();
     });
-    container.querySelector('#voice-panel-close')?.addEventListener('click', () => {
-      chordsVoiceId = null;
-      chordsCategory = null;
-      voicePanelOpen = false;
-      syncVoicePanel();
-      renderChordsPersonRow();
-      reRenderLyrics();
-    });
+    container.querySelector('#voice-panel-close')?.addEventListener('click', () => clearVoiceSelection());
     container.querySelectorAll('#voice-panel-categories [data-category]').forEach((btn) => {
-      btn.addEventListener('click', () => selectChordsCategory(btn.dataset.category));
+      btn.addEventListener('click', () => selectCategory(btn.dataset.category));
     });
   }
 
@@ -899,7 +837,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
       floatingTunerApi = null;
       enterStage(sv, {
         song,
-        getActiveVoice: () => activeRosterId,
+        getActiveVoice: () => chordsVoiceId,
         getTranspose: () => ({ semitones: transposeSemitones, useFlats }),
         getNotation: () => getChordNotation(),
         setActiveVoice: (category, personId) => {
@@ -970,18 +908,14 @@ async function _renderSongBody(container, songId, isPreview, song) {
       onToggleVoice: (voiceId) => {
         if (visibleVoices.has(voiceId)) visibleVoices.delete(voiceId);
         else visibleVoices.add(voiceId);
-        updateHeroChips();
-        // La letra pintada solo depende de la voz/categoría activa en Tono
-        // (activeRosterId/activeCategory) o en Acordes+Voz (chordsVoiceId/
-        // chordsCategory) — ver effectiveVoiceId en renderSections. Apagar
-        // una voz que no interviene en el pintado actual no necesita
-        // reconstruir la letra completa, solo los chips del hero.
+        refreshActiveVoiceNote();
+        // La letra pintada solo depende de la voz/categoría activa (selector
+        // único: chordsVoiceId/chordsCategory) — ver effectiveVoiceId en
+        // renderSections. Apagar una voz que no interviene en el pintado
+        // actual no necesita reconstruir la letra completa.
         const voiceCategory = (song.voiceRoster || []).find((v) => v.id === voiceId)?.category;
         const affectsRender =
-          voiceId === activeRosterId ||
-          voiceId === chordsVoiceId ||
-          (!!activeCategory && voiceCategory === activeCategory) ||
-          (!!chordsCategory && voiceCategory === chordsCategory);
+          voiceId === chordsVoiceId || (!!chordsCategory && voiceCategory === chordsCategory);
         if (!affectsRender) return;
         reRenderLyrics();
       },
@@ -1080,24 +1014,9 @@ function rosterCategories(song) {
 }
 
 /**
- * Nota de referencia de una categoría para el chip del hero: la 1ª nota no
- * nula de su primera voz (representativa cuando hay 2+ personas), transpuesta
- * y en la notación actuales — mismas utilidades que StageMode.projectLines.
- * @param {object} song @param {string} category
- * @param {{ transposeSemitones?: number, useFlats?: boolean, notation?: 'anglo'|'latin' }} [opts]
- * @returns {string|null}
- */
-function heroChipNote(song, category, opts = {}) {
-  const { notation = 'anglo' } = opts;
-  const transposed = heroChipTargetNote(song, category, opts);
-  return transposed ? displayNote(transposed, notation) : null;
-}
-
-/**
- * Nota objetivo de una categoría en formato científico crudo ("F#3"), ya
- * transpuesta pero SIN pasar por `displayNote` — la usa el afinador flotante
- * (T5), que necesita el formato parseable por `noteToMidi`, no el de
- * presentación.
+ * Nota objetivo de la voz activa en formato científico crudo ("F#3"), ya
+ * transpuesta pero SIN pasar por `displayNote` — la usa el afinador flotante,
+ * que necesita el formato parseable por `noteToMidi`, no el de presentación.
  * @param {object} song @param {string} category
  * @param {{ transposeSemitones?: number, useFlats?: boolean }} [opts]
  * @returns {string|null}
@@ -1109,46 +1028,6 @@ function heroChipTargetNote(song, category, opts = {}) {
   const raw = firstNoteForVoice(song, voice.id);
   if (!raw) return null;
   return transposeSemitones ? transposeNote(raw, transposeSemitones, useFlats) : raw;
-}
-
-/**
- * Fila de chips SATB en el hero (T2): único selector de voz de la canción
- * (reemplaza el grid 2×2 de tono-filters, "Voz activa: …" y la fila Afinar).
- * Una sola fuente de verdad con `activeCategory` (mismo estado del modo Tono).
- * Cada chip trae su nota de referencia; la fila cierra con el botón de afinar
- * (T5 conecta el handler). Una categoría con todas sus voces apagadas en
- * `visibleVoices` se atenúa pero sigue siendo tappable.
- * @param {object} song @param {string|null} activeCategory @param {Set<string>} visibleVoices
- * @param {{ transposeSemitones?: number, useFlats?: boolean, notation?: 'anglo'|'latin' }} [opts]
- * @returns {string}
- */
-function renderHeroVoiceChips(song, activeCategory, visibleVoices, opts = {}) {
-  const categories = rosterCategories(song);
-  if (categories.length === 0) return '';
-  const chips = categories
-    .map((c) => {
-      const active = c === activeCategory;
-      const dimmed = categoryIsDimmed(song, c, visibleVoices);
-      const initial = categoryInitial(c);
-      const note = heroChipNote(song, c, opts);
-      const cls = [
-        'hero-voice-chip',
-        active ? 'is-active' : '',
-        dimmed ? 'hero-voice-chip--dimmed' : '',
-      ]
-        .filter(Boolean)
-        .join(' ');
-      return `
-      <button type="button" class="${cls}" data-category="${c}" aria-pressed="${active}" aria-label="Voz: ${escapeHtml(getVoiceLabel(c))}">
-        <span class="hero-voice-chip__dot" style="background: var(--color-voice-${c})"></span>
-        ${initial} <b class="hero-voice-chip__note">${escapeHtml(note || '')}</b>
-      </button>`;
-    })
-    .join('');
-  return `<div class="hero-voice-chips" id="hero-voice-chips" role="group" aria-label="Selector rápido de voz">
-    ${chips}
-    <button type="button" class="hero-voice-chip__mic" id="hero-tuner-mic" aria-label="Afinar mi voz">${icon('mic', { size: 15 })}</button>
-  </div>`;
 }
 
 /**

@@ -62,74 +62,24 @@ const fullRoster = [
   { id: 'bas1', name: 'Bajo', category: 'bass' },
 ];
 
-describe('SongView — chips SATB del hero (T5)', () => {
-  it('sin roster de voces: no se pintan chips (tonoAvailable false)', async () => {
+// La fila de chips SATB del hero se eliminó (pivote a modos excluyentes
+// Letra/Acordes/Tono, post-QA visual): el selector de voz único ahora vive
+// en el panel Voz (#voice-panel), compartido por Acordes ("mi tono") y Tono.
+describe('SongView — fila de chips SATB del hero: eliminada', () => {
+  it('no se pinta #hero-voice-chips ni el mic viejo del hero, con o sin roster', async () => {
+    const container = document.createElement('div');
+    await renderSongView(container, buildDraft(fullRoster));
+    expect(container.querySelector('#hero-voice-chips')).toBeNull();
+    expect(container.querySelector('.hero-voice-chip')).toBeNull();
+  });
+
+  it('sin roster de voces: tampoco se pinta el panel Voz', async () => {
     const container = document.createElement('div');
     await renderSongView(container, buildDraft([]));
-    expect(container.querySelector('#hero-voice-chips')).toBeNull();
+    expect(container.querySelector('#voice-panel')).toBeNull();
   });
 
-  it('con roster completo: un chip por categoría en orden canónico', async () => {
-    const container = document.createElement('div');
-    await renderSongView(container, buildDraft(fullRoster));
-    const chips = [...container.querySelectorAll('#hero-voice-chips [data-category]')];
-    expect(chips.map((c) => c.dataset.category)).toEqual([
-      'soprano',
-      'contralto',
-      'tenor',
-      'bass',
-    ]);
-  });
-
-  it('ninguna voz activa al montar: todos los chips con aria-pressed=false', async () => {
-    const container = document.createElement('div');
-    await renderSongView(container, buildDraft(fullRoster));
-    const chips = [...container.querySelectorAll('#hero-voice-chips [data-category]')];
-    expect(chips.every((c) => c.getAttribute('aria-pressed') === 'false')).toBe(true);
-  });
-
-  it('roster parcial: solo se pintan chips de las categorías presentes', async () => {
-    const container = document.createElement('div');
-    await renderSongView(
-      container,
-      buildDraft([
-        { id: 'ten1', name: 'Tenor', category: 'tenor' },
-        { id: 'bas1', name: 'Bajo', category: 'bass' },
-      ]),
-    );
-    const chips = [...container.querySelectorAll('#hero-voice-chips [data-category]')];
-    expect(chips.map((c) => c.dataset.category)).toEqual(['tenor', 'bass']);
-  });
-
-  it('contralto usa inicial "A" con label accesible completo', async () => {
-    const container = document.createElement('div');
-    await renderSongView(container, buildDraft(fullRoster));
-    const chip = container.querySelector('#hero-voice-chips [data-category="contralto"]');
-    // Notación por defecto de la app es anglo (getChordNotation → 'anglo').
-    expect(chip.textContent.replace(/\s+/g, ' ').trim()).toBe('A B3');
-    expect(chip.getAttribute('aria-label')).toContain('Contralto');
-  });
-
-  it('cada chip trae la nota (firstNoteForVoice, notación actual) en un <b>', async () => {
-    const container = document.createElement('div');
-    await renderSongView(container, buildDraft(fullRoster));
-    const chip = container.querySelector('#hero-voice-chips [data-category="tenor"]');
-    const noteEl = chip.querySelector('b');
-    expect(noteEl).toBeTruthy();
-    expect(noteEl.textContent).toBe('B3');
-  });
-
-  it('fila del hero termina en un único botón #hero-tuner-mic', async () => {
-    const container = document.createElement('div');
-    await renderSongView(container, buildDraft(fullRoster));
-    const mics = container.querySelectorAll('#hero-tuner-mic');
-    expect(mics.length).toBe(1);
-    expect(mics[0].closest('#hero-voice-chips')).toBeTruthy();
-    // Es el último elemento de la fila (cierra la fila de chips).
-    expect(container.querySelector('#hero-voice-chips').lastElementChild).toBe(mics[0]);
-  });
-
-  it('no queda en el DOM el grid de tarjetas de voz ni el texto "Voz activa"', async () => {
+  it('no queda en el DOM ningún residuo del grid viejo de voz', async () => {
     const container = document.createElement('div');
     await renderSongView(container, buildDraft(fullRoster));
     expect(container.querySelector('#tono-category-row')).toBeNull();
@@ -140,60 +90,72 @@ describe('SongView — chips SATB del hero (T5)', () => {
   });
 });
 
-describe('SongView — interacción de chips SATB', () => {
-  it('tap en un chip inactivo: lo marca activo (is-active) y cambia a modo tono', async () => {
+describe('SongView — selector de voz unificado (panel Voz) en modo Tono, preview', () => {
+  it('con roster: cambiar a modo Tono muestra el panel Voz con una categoría por chip', async () => {
     const container = document.createElement('div');
     await renderSongView(container, buildDraft(fullRoster));
 
-    // Arranca en modo Letra.
-    expect(container.querySelector('[data-mode="lyrics"]').classList).toContain(
-      'chord-toggle__btn--active',
-    );
+    container.querySelector('[data-mode="tono"]').click();
 
-    const chip = container.querySelector('#hero-voice-chips [data-category="tenor"]');
-    chip.click();
-
-    // Cambió a modo Tono.
-    expect(container.querySelector('[data-mode="tono"]').classList).toContain(
-      'chord-toggle__btn--active',
-    );
-    // El chip del hero queda activo.
-    expect(chip.classList.contains('is-active')).toBe(true);
-    expect(chip.getAttribute('aria-pressed')).toBe('true');
+    const panel = container.querySelector('#voice-panel');
+    expect(panel).toBeTruthy();
+    expect(container.querySelector('#chords-extras').style.display).toBe('flex');
+    const chips = [...container.querySelectorAll('#voice-panel-categories [data-category]')];
+    expect(chips.map((c) => c.dataset.category)).toEqual(['soprano', 'contralto', 'tenor', 'bass']);
   });
 
-  it('tap sobre el chip ya activo: deselecciona (quita is-active) y se queda en modo tono', async () => {
+  it('sin voz elegida: la letra se pinta plana (fallback existente)', async () => {
     const container = document.createElement('div');
     await renderSongView(container, buildDraft(fullRoster));
 
-    const chip = container.querySelector('#hero-voice-chips [data-category="tenor"]');
-    chip.click(); // selecciona
-    chip.click(); // deselecciona
+    container.querySelector('[data-mode="tono"]').click();
 
-    expect(chip.classList.contains('is-active')).toBe(false);
-    expect(chip.getAttribute('aria-pressed')).toBe('false');
-    // Se queda en modo Tono (estado "sin voz activa" ya válido hoy).
-    expect(container.querySelector('[data-mode="tono"]').classList).toContain(
-      'chord-toggle__btn--active',
-    );
+    const line = container.querySelector('#lyrics-content .lyrics__line');
+    expect(line.classList.contains('lyrics__line--tono')).toBe(false);
+    expect(line.textContent.trim()).toBe('Santo es el Señor');
   });
 
-  it('activar otro chip desactiva el anterior (una sola voz activa a la vez)', async () => {
+  it('elegir una categoría del panel activa el render tono para esa voz', async () => {
     const container = document.createElement('div');
     await renderSongView(container, buildDraft(fullRoster));
 
-    container.querySelector('#hero-voice-chips [data-category="bass"]').click();
-    container.querySelector('#hero-voice-chips [data-category="soprano"]').click();
+    container.querySelector('[data-mode="tono"]').click();
+    container.querySelector('#voice-panel-categories [data-category="tenor"]').click();
+
+    const line = container.querySelector('#lyrics-content .lyrics__line');
+    expect(line.classList.contains('lyrics__line--tono')).toBe(true);
+    expect(
+      container.querySelector('#voice-panel-categories [data-category="tenor"]').getAttribute('aria-pressed'),
+    ).toBe('true');
+  });
+
+  it('elegir otra categoría reemplaza la selección previa (una sola voz activa a la vez)', async () => {
+    const container = document.createElement('div');
+    await renderSongView(container, buildDraft(fullRoster));
+
+    container.querySelector('[data-mode="tono"]').click();
+    container.querySelector('#voice-panel-categories [data-category="bass"]').click();
+    container.querySelector('#voice-panel-categories [data-category="soprano"]').click();
 
     expect(
-      container
-        .querySelector('#hero-voice-chips [data-category="bass"]')
-        .classList.contains('is-active'),
-    ).toBe(false);
+      container.querySelector('#voice-panel-categories [data-category="bass"]').getAttribute('aria-pressed'),
+    ).toBe('false');
     expect(
-      container
-        .querySelector('#hero-voice-chips [data-category="soprano"]')
-        .classList.contains('is-active'),
-    ).toBe(true);
+      container.querySelector('#voice-panel-categories [data-category="soprano"]').getAttribute('aria-pressed'),
+    ).toBe('true');
+  });
+
+  it('cerrar el panel (Quitar voz) vuelve a la letra plana sin salir de modo Tono', async () => {
+    const container = document.createElement('div');
+    await renderSongView(container, buildDraft(fullRoster));
+
+    container.querySelector('[data-mode="tono"]').click();
+    container.querySelector('#voice-panel-categories [data-category="tenor"]').click();
+    container.querySelector('#voice-panel-toggle').click(); // expande el panel para exponer el cierre
+    container.querySelector('#voice-panel-close').click();
+
+    const line = container.querySelector('#lyrics-content .lyrics__line');
+    expect(line.classList.contains('lyrics__line--tono')).toBe(false);
+    expect(container.querySelector('[data-mode="tono"]').classList).toContain('chord-toggle__btn--active');
   });
 });

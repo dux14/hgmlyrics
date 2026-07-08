@@ -198,6 +198,30 @@ describe('SongView — toolbar de capas (T3)', () => {
     expect(line.classList.contains('lyrics__line--tono')).toBe(false);
     expect(container.querySelector('#voice-panel')).toBeTruthy();
     expect(container.querySelector('#chords-extras').style.display).toBe('flex');
+    // BUG: sin voz elegida, el panel debe abrir expandido (es el camino para
+    // elegir voz) — no colapsado con los chips de categoria ocultos.
+    expect(container.querySelector('#voice-panel-toggle').getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelector('#voice-panel-body').hidden).toBe(false);
+  });
+
+  it('BUG: activar Tono con voz ya elegida no fuerza el panel a abrirse (respeta el estado colapsado actual)', async () => {
+    const song = buildSong('song-toolbar-4d');
+    getSongById.mockReturnValue(song);
+    const container = document.createElement('div');
+    await renderSongView(container, 'song-toolbar-4d');
+
+    // Elige voz en modo Acordes primero (panel se abre manualmente y se cierra).
+    container.querySelector('#layer-chords').click();
+    container.querySelector('#voice-panel-toggle').click(); // abre
+    container.querySelector('#voice-panel-categories [data-category="tenor"]').click();
+    container.querySelector('#voice-panel-toggle').click(); // colapsa de nuevo
+    expect(container.querySelector('#voice-panel-toggle').getAttribute('aria-expanded')).toBe('false');
+
+    // Cambia a Tono: ya hay voz elegida, no debe forzar la expansion.
+    container.querySelector('#layer-tono').click();
+
+    expect(container.querySelector('#layer-tono').getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('#voice-panel-toggle').getAttribute('aria-expanded')).toBe('false');
   });
 
   it('solo #layer-tono on + voz elegida en el panel: aparece el render tono (buildTonoLineHTML)', async () => {

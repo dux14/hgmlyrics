@@ -675,6 +675,10 @@ async function _renderSongBody(container, songId, isPreview, song) {
     container.querySelector('#layer-tono')?.setAttribute('aria-pressed', String(layers.tono));
     viewMode = deriveViewMode(getEffectiveLayers());
     showChords = viewMode === 'chords' || viewMode === 'mixed';
+    // Al activar Tono sin voz elegida, el panel debe abrirse expandido: es el
+    // camino para seleccionar la voz (spec del pivote), no tiene sentido
+    // mostrarlo colapsado. Con voz ya elegida se respeta el estado actual.
+    if (name === 'tono' && layers.tono && !chordsVoiceId) voicePanelOpen = true;
     applyModeVisibility();
     reRenderLyrics();
     // Crossfade 150ms ease-out (CSS respeta prefers-reduced-motion, ver

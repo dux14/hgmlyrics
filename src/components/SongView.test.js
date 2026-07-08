@@ -3,7 +3,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 
 vi.mock('../lib/store.js', () => ({
   getSongById: vi.fn(),
@@ -104,6 +104,15 @@ describe('renderSongView — SEC-03: year y genre escapados en metadatos', () =>
 });
 
 describe('renderSections — Task 7: play visible en label con audio, sin barra lateral', () => {
+  // El mock de icon() es compartido por todo el archivo (vi.mock arriba); si
+  // no se restaura tras sobreescribirlo aquí, tests agregados más adelante
+  // heredarían el svg falso (fallo orden-dependiente, sin clearMocks en
+  // vitest.config.js).
+  afterEach(() => {
+    // Restaura el comportamiento original del mock (vi.mock arriba: () => '').
+    icon.mockReturnValue('');
+  });
+
   it('el label de una sección CON audio incluye el icono play; una sin audio, no', () => {
     icon.mockReturnValue('<svg data-icon="play"></svg>');
     const sections = [

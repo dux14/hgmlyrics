@@ -1,5 +1,4 @@
 import { icon } from '../lib/icons.js';
-import { escapeHtml } from '../lib/escape.js';
 import { createWakeLock } from '../lib/wakeLock.js';
 import { requestStageFullscreen, exitStageFullscreen } from '../lib/fullscreen.js';
 import { groupsForVoice, rosterByCategory, CANONICAL_VOICE_ORDER } from '../lib/voiceSystem.js';
@@ -191,7 +190,6 @@ function buildOverlay(opts = {}) {
     <div class="stage-v2__body" id="stage-v2-tap">
       <div class="stage-v2__line stage-v2__line--prev" id="stage-v2-prev-line"></div>
       <div class="stage-v2__current" id="stage-v2-current">
-        <div class="stage-v2__chords" id="stage-v2-chords"></div>
         <div class="stage-v2__text" id="stage-v2-text"></div>
       </div>
       <div class="stage-v2__line stage-v2__line--next" id="stage-v2-next-line"></div>
@@ -235,22 +233,16 @@ function renderVoiceChips(song, activeCategory) {
     .join('');
 }
 
-function renderChordsRow(entry) {
-  const chips = [];
-  if (entry.note) {
-    chips.push(`<span class="stage-v2__chip stage-v2__chip--note">${escapeHtml(entry.note)}</span>`);
-  }
-  for (const ch of entry.chords) {
-    chips.push(`<span class="stage-v2__chip">${escapeHtml(ch)}</span>`);
-  }
-  return chips.join('');
-}
-
 /**
  * Renderiza la línea actual con el MISMO pipeline de builders que SongView
  * (lyricsRender.js), según la capa activa (layerStore, T6 — paridad con la
- * vista normal). El chip compacto nota/acordes (`renderChordsRow`) sigue
- * vivo aparte, sin depender de las capas (lo usa el afinador embebido).
+ * vista normal). FIX finding A (code-review post-T6): el row legacy
+ * `renderChordsRow`/`#stage-v2-chords` (chips compactos nota/acordes) se
+ * eliminó — quedaba pintado SIEMPRE detrás del render por capas y en
+ * tono/mixed se solapaba visualmente con las notas por sílaba. Paridad ahora
+ * es simple: capa chords on → acordes inline vía el builder; off → sin
+ * acordes, igual que la vista normal. El afinador embebido lee `cur.noteRaw`
+ * directo (no depende de este render).
  * @param {object} s sesión @param {object} cur línea proyectada actual
  * @returns {string} HTML
  */
@@ -304,7 +296,6 @@ function renderZone(s) {
   els.currentText.innerHTML = buildCurrentLineHTML(s, cur);
   els.currentText.classList.toggle('stage-v2__text--spoken', cur.spoken);
   els.currentEl.style.fontSize = `${(computeBaseFontRem(cur.text.length) * s.fontScale).toFixed(2)}rem`;
-  els.chords.innerHTML = renderChordsRow(cur);
 
   els.sectionLabel.textContent = cur.sectionLabel;
   els.sectionLabel.className = `stage-v2__section-label stage-v2__section-label--${cur.sectionType}`;
@@ -483,7 +474,6 @@ export function enterStage(songViewEl, ctx = {}) {
     tapArea: overlay.querySelector('#stage-v2-tap'),
     prevLine: overlay.querySelector('#stage-v2-prev-line'),
     currentEl: overlay.querySelector('#stage-v2-current'),
-    chords: overlay.querySelector('#stage-v2-chords'),
     currentText: overlay.querySelector('#stage-v2-text'),
     nextLine: overlay.querySelector('#stage-v2-next-line'),
     hint: overlay.querySelector('#stage-v2-hint'),

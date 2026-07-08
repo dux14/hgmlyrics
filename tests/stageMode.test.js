@@ -555,6 +555,14 @@ describe('T6: paridad de capas en la línea actual (mismos markers que la vista 
     expect(document.getElementById('stage-v2-text').innerHTML).toBe(expected);
   });
 
+  it('FIX finding A: sin row legacy `#stage-v2-chords` superpuesto al render por capas', () => {
+    setLayer('tono', true);
+    const sv = mountSongView();
+    enterStage(sv, { song: buildLayeredSong(), getActiveVoice: () => 'soprano-1' });
+    expect(document.getElementById('stage-v2-chords')).toBeNull();
+    expect(document.querySelector('.stage-v2__chords')).toBeNull();
+  });
+
   it('FINDING 1: capa Acordes global on pero canción sin acordes → markers de buildLetraLineHTML (sin sangrado)', () => {
     setLayer('chords', true); // preferencia global, encendida en otra canción con acordes
     const songSinAcordes = buildSong({
@@ -629,14 +637,19 @@ describe('chips de voz S·A·T·B en el escenario', () => {
   });
 
   it('tap en un chip cambia la voz activa y la nota mostrada sin salir del escenario', () => {
+    // FIX finding A: el row legacy `#stage-v2-chords` se eliminó (quedaba
+    // superpuesto al render por capas) — la nota ahora solo se pinta vía el
+    // render por capas (`#stage-v2-text`), así que esta aserción necesita la
+    // capa Tono encendida para que la nota sea observable.
+    setLayer('tono', true);
     const sv = mountSongView();
     enterStage(sv, { song: buildMultiVoiceSong(), getActiveVoice: () => 'soprano-1' });
-    expect(document.getElementById('stage-v2-chords').textContent).toContain('C4');
+    expect(document.getElementById('stage-v2-text').textContent).toContain('C4');
 
     document.querySelector('[data-category="tenor"]').click();
 
     expect(document.querySelector('.stage-v2')).toBeTruthy(); // sigue en el escenario
-    expect(document.getElementById('stage-v2-chords').textContent).toContain('G3');
+    expect(document.getElementById('stage-v2-text').textContent).toContain('G3');
     expect(
       document
         .querySelector('[data-category="tenor"]')

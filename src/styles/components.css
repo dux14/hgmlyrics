@@ -2137,7 +2137,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px;
+  min-width: 44px;
+  min-height: 44px;
   background: transparent;
   border: none;
   color: var(--color-text-secondary);

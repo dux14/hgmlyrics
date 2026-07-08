@@ -51,20 +51,36 @@ export function openFloatingTuner(container, { note = null, voiceLabel = '', onC
   el.appendChild(strip.el);
   container.appendChild(el);
 
+  const closeBtn = el.querySelector('.floating-tuner__close');
+
+  // Escape cierra igual que la X (mismo patrón que OptionsSheet.js): el
+  // listener vive en document porque la barra no atrapa foco (no es un
+  // modal), y se retira SIEMPRE en destroy() sin importar la salida (X,
+  // Escape, re-click del mic que la cierra, o route change en SongView.js).
+  function onKeydown(e) {
+    if (e.key === 'Escape') {
+      destroy();
+      onClose?.();
+    }
+  }
+  document.addEventListener('keydown', onKeydown);
+
   let destroyed = false;
   function destroy() {
     if (destroyed) return;
     destroyed = true;
+    document.removeEventListener('keydown', onKeydown);
     strip.stop();
     el.remove();
   }
 
-  el.querySelector('.floating-tuner__close').addEventListener('click', () => {
+  closeBtn.addEventListener('click', () => {
     destroy();
     onClose?.();
   });
 
   strip.start();
+  closeBtn.focus();
 
   function setNote(nextNote) {
     currentNote = nextNote ?? null;

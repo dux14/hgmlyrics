@@ -89,4 +89,31 @@ describe('FloatingTuner — barra flotante bajo demanda', () => {
     expect(container.querySelector('.floating-tuner').textContent).toContain('A4');
     expect(instance.setTargetNote).toHaveBeenCalled();
   });
+
+  it('Escape cierra igual que la X y llama onClose', () => {
+    const container = makeContainer();
+    const onClose = vi.fn();
+    openFloatingTuner(container, { note: 'F#3', voiceLabel: 'Contralto', onClose });
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('.floating-tuner')).toBeNull();
+  });
+
+  it('el listener de Escape no queda colgado tras destroy (un 2do Escape no re-llama onClose)', () => {
+    const container = makeContainer();
+    const onClose = vi.fn();
+    const tuner = openFloatingTuner(container, { note: 'F#3', voiceLabel: 'Contralto', onClose });
+    tuner.destroy();
+    expect(() =>
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })),
+    ).not.toThrow();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('mueve el foco al boton de cerrar al abrir', () => {
+    const container = makeContainer();
+    openFloatingTuner(container, { note: 'F#3', voiceLabel: 'Contralto' });
+    const closeBtn = container.querySelector('[aria-label="Cerrar afinador"]');
+    expect(document.activeElement).toBe(closeBtn);
+  });
 });

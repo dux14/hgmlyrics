@@ -1,197 +1,70 @@
 import { navigate } from '../router.js';
 import { getState } from '../lib/store.js';
 import { icon } from '../lib/icons.js';
-import { getSession, isAdmin } from '../lib/authStore.js';
-import { mountAdminWorldPanel } from './AdminWorldPanel.js';
 import { escapeHtml as escapeHtmlLocal } from '../lib/escape.js';
+
+const HUB_CARDS = [
+  {
+    id: 'create',
+    path: '/admin/create',
+    iconName: 'plus',
+    title: 'Crear canción',
+    desc: 'Agregar una canción nueva a la wiki.',
+  },
+  {
+    id: 'edit',
+    path: '/admin/edit',
+    iconName: 'pencil',
+    title: 'Modificar canción',
+    desc: 'Buscar y editar una canción existente.',
+  },
+  {
+    id: 'voz',
+    path: '/admin/voz/nueva',
+    iconName: 'gospel',
+    title: 'Voces en off',
+    desc: 'Publicar una nueva voz en off.',
+  },
+  {
+    id: 'flags',
+    path: '/admin/flags',
+    iconName: 'flag',
+    title: 'Feature Flags',
+    desc: 'Asignar funciones experimentales a usuarios.',
+  },
+  {
+    id: 'mundo',
+    path: '/admin/mundo',
+    iconName: 'globe',
+    title: 'Mundo Virtual',
+    desc: 'Administrar mapas y tilesets del mundo.',
+  },
+];
 
 export function renderAdminDashboard(container) {
   container.innerHTML = `
     <div class="admin-dashboard fade-in">
-      <h1 class="editor__title admin-dashboard__title">Panel de Administracion</h1>
+      <h1 class="editor__title admin-dashboard__title">Panel de administración</h1>
 
-      <div class="admin-actions">
-        <button class="btn btn--primary admin-action-btn" id="btn-create">
-          ${icon('plus', { size: 20 })} Crear nueva cancion
-        </button>
-        <button class="btn btn--secondary admin-action-btn" id="btn-edit">
-          ${icon('pencil', { size: 20 })} Modificar cancion existente
-        </button>
-        <button class="btn btn--secondary admin-action-btn" id="btn-voz">
-          ${icon('gospel', { size: 20 })} Voces en off
-        </button>
+      <div class="admin-hub">
+        ${HUB_CARDS.map(
+          (card) => `
+          <button class="admin-hub__card" id="admin-hub-${card.id}">
+            ${icon(card.iconName, { size: 24 })}
+            <span class="admin-hub__card-text">
+              <span class="admin-hub__card-title">${card.title}</span>
+              <span class="admin-hub__card-desc">${card.desc}</span>
+            </span>
+          </button>`,
+        ).join('')}
       </div>
-
-      <section class="ff-section" id="ff-section">
-        <h2 class="ff-section__title">${icon('flag', { size: 18 })} Feature Flags</h2>
-        <div id="ff-list" class="ff-list"></div>
-      </section>
-
-      <div id="wm-panel-mount"></div>
     </div>
   `;
 
-  container.querySelector('#btn-create').addEventListener('click', () => {
-    navigate('/admin/create');
-  });
-
-  container.querySelector('#btn-edit').addEventListener('click', () => {
-    navigate('/admin/edit');
-  });
-
-  container.querySelector('#btn-voz')?.addEventListener('click', () => {
-    navigate('/admin/voz/nueva');
-  });
-
-  wireFeatureFlags(container);
-  loadFlags(container);
-
-  // Panel de mundos: solo visible para admins (doble chequeo UX; el server
-  // también aplica requireAdmin en todos los endpoints de world-map).
-  if (isAdmin()) {
-    const wmMount = container.querySelector('#wm-panel-mount');
-    if (wmMount) mountAdminWorldPanel(wmMount);
-  }
-}
-
-function authHeader() {
-  const session = getSession();
-  return { Authorization: `Bearer ${session?.access_token ?? ''}` };
-}
-
-// Cache de perfiles cargados una sola vez por sesión del panel.
-let _profilesCache = null;
-
-/** Solo para tests: reinicia el cache de perfiles entre casos. */
-export function __resetProfilesCache() {
-  _profilesCache = null;
-}
-
-async function loadProfiles() {
-  if (_profilesCache) return _profilesCache;
-  try {
-    const res = await fetch('/api/admin/profiles', { headers: authHeader() });
-    if (!res.ok) return [];
-    const { users } = await res.json();
-    _profilesCache = users;
-    return users;
-  } catch {
-    return [];
-  }
-}
-
-function buildSelectHtml(allUsers, assignedUsernames) {
-  const assigned = new Set(assignedUsernames.map((u) => u.toLowerCase()));
-  const available = allUsers.filter((u) => !assigned.has((u.username ?? '').toLowerCase()));
-
-  if (available.length === 0) {
-    return `
-      <select class="ff-select" disabled>
-        <option value="">Todos agregados</option>
-      </select>
-      <button class="btn btn--primary btn--sm ff-add" disabled>Agregar</button>`;
-  }
-
-  const options = available
-    .map((u) => {
-      const label = u.displayName
-        ? `${escapeHtmlLocal(u.displayName)} (@${escapeHtmlLocal(u.username)})`
-        : `@${escapeHtmlLocal(u.username)}`;
-      return `<option value="${escapeHtmlLocal(u.username)}">${label}</option>`;
-    })
-    .join('');
-
-  return `
-    <select class="ff-select">
-      <option value="" disabled selected>Selecciona un usuario…</option>
-      ${options}
-    </select>
-    <button class="btn btn--primary btn--sm ff-add">Agregar</button>`;
-}
-
-async function loadFlags(root) {
-  const listEl = root.querySelector('#ff-list');
-  if (!listEl) return;
-  try {
-    const [flagsRes, allUsers] = await Promise.all([
-      fetch('/api/admin/feature-flags', { headers: authHeader() }),
-      loadProfiles(),
-    ]);
-    if (!flagsRes.ok) {
-      listEl.textContent = 'No se pudieron cargar los flags.';
-      return;
-    }
-    const { flags } = await flagsRes.json();
-    listEl.innerHTML = flags
-      .map((f) => {
-        const assignedUsernames = f.users.map((u) => u.username).filter(Boolean);
-        return `
-      <div class="ff-item" data-flag="${escapeHtmlLocal(f.key)}">
-        <div class="ff-item__head"><strong>${escapeHtmlLocal(f.key)}</strong><span>${escapeHtmlLocal(f.description ?? '')}</span></div>
-        <ul class="ff-item__users">
-          ${f.users
-            .map(
-              (u) =>
-                `<li>${escapeHtmlLocal(u.email ?? u.username)}
-                   <button class="btn btn--secondary btn--sm ff-remove" data-email="${escapeHtmlLocal(u.email ?? '')}" data-username="${escapeHtmlLocal(u.username ?? '')}">Quitar</button>
-                 </li>`,
-            )
-            .join('')}
-        </ul>
-        <div class="ff-item__add">
-          ${buildSelectHtml(allUsers, assignedUsernames)}
-        </div>
-      </div>`;
-      })
-      .join('');
-  } catch (e) {
-    console.warn('loadFlags failed', e);
-    listEl.textContent = 'No se pudieron cargar los flags.';
-  }
-}
-
-function wireFeatureFlags(root) {
-  const listEl = root.querySelector('#ff-list');
-  if (!listEl) return;
-
-  listEl.addEventListener('click', async (e) => {
-    const addBtn = e.target.closest('.ff-add');
-    const removeBtn = e.target.closest('.ff-remove');
-    const item = e.target.closest('.ff-item');
-    if (!item) return;
-    const flagKey = item.dataset.flag;
-
-    if (addBtn) {
-      const select = item.querySelector('.ff-select');
-      const username = (select?.value ?? '').trim();
-      if (!username) return;
-      try {
-        await fetch('/api/admin/feature-flags', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeader() },
-          body: JSON.stringify({ flagKey, username }),
-        });
-        await loadFlags(root);
-      } catch (err) {
-        console.warn('add flag assignment failed', err);
-      }
-      return;
-    }
-
-    if (removeBtn) {
-      const email = removeBtn.dataset.email || null;
-      const username = removeBtn.dataset.username || null;
-      try {
-        await fetch('/api/admin/feature-flags', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json', ...authHeader() },
-          body: JSON.stringify({ flagKey, email, username }),
-        });
-        await loadFlags(root);
-      } catch (err) {
-        console.warn('remove flag assignment failed', err);
-      }
-    }
+  HUB_CARDS.forEach((card) => {
+    container.querySelector(`#admin-hub-${card.id}`).addEventListener('click', () => {
+      navigate(card.path);
+    });
   });
 }
 
@@ -201,8 +74,10 @@ export function renderAdminEditList(container) {
   container.innerHTML = `
     <div class="admin-edit-list fade-in">
       <div class="admin-header-row">
-        <h1 class="editor__title">Modificar Cancion</h1>
-        <button class="btn btn--secondary admin-back-btn" id="btn-back">← Volver</button>
+        <button class="btn btn--back" id="btn-back">
+          ${icon('arrow-left', { size: 18 })} Volver
+        </button>
+        <h1 class="editor__title">Modificar canción</h1>
       </div>
 
       <div class="form-group">

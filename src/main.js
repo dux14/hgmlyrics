@@ -268,6 +268,26 @@ async function boot() {
     { adminOnly: true },
   );
 
+  privateRoute(
+    '/admin/flags',
+    async () => {
+      hideFilterBar();
+      const { renderAdminFlagsPage } = await import('./components/AdminFlagsPage.js');
+      renderAdminFlagsPage(mainContent);
+    },
+    { adminOnly: true },
+  );
+
+  privateRoute(
+    '/admin/mundo',
+    async () => {
+      hideFilterBar();
+      const { renderAdminWorldPage } = await import('./components/AdminWorldPage.js');
+      renderAdminWorldPage(mainContent);
+    },
+    { adminOnly: true },
+  );
+
   privateRoute('/perfil', () => {
     hideFilterBar();
     hideHeader();

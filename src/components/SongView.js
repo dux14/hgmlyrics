@@ -31,6 +31,7 @@ import { getTranspose, setTranspose, normalizeSemitones } from '../lib/transpose
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { isFavorite, toggleFavorite } from '../lib/favorites.js';
+import { recordVisit } from '../lib/recentVisits.js';
 import '../styles/favorites.css';
 import { openOptionsSheet } from './OptionsSheet.js';
 import {
@@ -202,6 +203,7 @@ export async function renderSongView(container, songIdOrData) {
   if (cachedSong?.sections?.length) {
     // Canción ya en caché con secciones: render directo sin skeleton.
     await _renderSongBody(container, songId, false, cachedSong);
+    recordVisit(songId);
     return;
   }
 
@@ -221,13 +223,15 @@ export async function renderSongView(container, songIdOrData) {
       // _renderSongBody (que posee el container full-bleed) clobberearia la
       // pantalla nueva con esta cancion tardia (bug de navegacion #3).
       if (!container.contains(region)) return;
-      _renderSongBody(container, songId, false, detail).catch(() => {
-        container.innerHTML = `
+      _renderSongBody(container, songId, false, detail)
+        .then(() => recordVisit(songId))
+        .catch(() => {
+          container.innerHTML = `
           <div class="empty-state">
             <h2 class="empty-state__title">No se pudo cargar la canción</h2>
             <a class="btn btn--primary" href="#/">Volver al inicio</a>
           </div>`;
-      });
+        });
     },
     empty: () => `
       <div class="empty-state fade-in">
@@ -997,7 +1001,12 @@ async function _renderSongBody(container, songId, isPreview, song) {
   // ── OptionsSheet (T4): menú de opciones unificado, todas las resoluciones ──
   container.querySelector('#open-options-sheet')?.addEventListener('click', () => {
     const syncTonoBubble = () => {
-      const label = buildTransposeBubbleLabel(song.key, transposeSemitones, useFlats, getChordNotation());
+      const label = buildTransposeBubbleLabel(
+        song.key,
+        transposeSemitones,
+        useFlats,
+        getChordNotation(),
+      );
       const el = document.querySelector('#osheet-tono');
       if (el) {
         el.textContent = label;
@@ -1008,7 +1017,12 @@ async function _renderSongBody(container, songId, isPreview, song) {
       song,
       visibleVoices,
       showTono: hasChords,
-      tonoLabel: buildTransposeBubbleLabel(song.key, transposeSemitones, useFlats, getChordNotation()),
+      tonoLabel: buildTransposeBubbleLabel(
+        song.key,
+        transposeSemitones,
+        useFlats,
+        getChordNotation(),
+      ),
       useFlats,
       notation: getChordNotation(),
       fontLabel: fontSize.toFixed(2),

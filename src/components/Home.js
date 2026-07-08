@@ -15,6 +15,7 @@ import { getWeeklyWords } from '../lib/weeklyWords.js';
 import { getFavoriteIds } from '../lib/favorites.js';
 import { isVigente } from './VoicesAlbumView.js';
 import { voiceoverCoverHtml } from '../lib/voiceoverCover.js';
+import { getRecentVisitIds } from '../lib/recentVisits.js';
 
 /**
  * Ordena canciones por año desc y acota al límite indicado.
@@ -26,6 +27,31 @@ export function selectRecent(songs, limit = 6) {
   return [...(songs || [])]
     .sort((a, b) => (b.year || 0) - (a.year || 0) || (b.albumOrder || 0) - (a.albumOrder || 0))
     .slice(0, limit);
+}
+
+/**
+ * Selecciona las canciones para la sección "Reciente": primero las
+ * visitadas por el usuario (en orden de visita), y si faltan para llegar
+ * al límite, rellena con las más nuevas del catálogo (heurística de
+ * selectRecent), sin duplicar.
+ * @param {Array} songs
+ * @param {string[]} visitIds IDs visitados, del más reciente al más antiguo.
+ * @param {number} [limit=6]
+ * @returns {Array}
+ */
+export function selectRecentlyVisited(songs, visitIds, limit = 6) {
+  const byId = new Map((songs || []).map((s) => [s.id, s]));
+  const visited = (visitIds || [])
+    .map((id) => byId.get(id))
+    .filter(Boolean)
+    .slice(0, limit);
+
+  if (visited.length >= limit) return visited;
+
+  const seen = new Set(visited.map((s) => s.id));
+  const fill = selectRecent(songs, limit + visited.length).filter((s) => !seen.has(s.id));
+
+  return [...visited, ...fill].slice(0, limit);
 }
 
 /**
@@ -137,10 +163,13 @@ function vozSkeletonHtml() {
  * @param {HTMLElement} container
  * @param {{ today?: string }} [opts] Inyectable en tests (YYYY-MM-DD). Producción usa Date.now.
  */
-export async function renderHome(container, { today = new Date().toISOString().slice(0, 10) } = {}) {
+export async function renderHome(
+  container,
+  { today = new Date().toISOString().slice(0, 10) } = {},
+) {
   const { songs } = getState();
   const albums = getAlbums().slice(0, 5);
-  const recent = selectRecent(songs, 6);
+  const recent = selectRecentlyVisited(songs, getRecentVisitIds(), 6);
   const favIds = getFavoriteIds();
   const favSongs = favIds
     .map((id) => songs.find((s) => s.id === id))
@@ -233,18 +262,20 @@ export async function renderHome(container, { today = new Date().toISOString().s
   `;
 
   // Navegación genérica por data-nav
-  container.querySelectorAll('[data-nav]').forEach((el) =>
-    el.addEventListener('click', () => navigate(el.dataset.nav)),
-  );
+  container
+    .querySelectorAll('[data-nav]')
+    .forEach((el) => el.addEventListener('click', () => navigate(el.dataset.nav)));
 
   // Strip de canciones recientes
   const recentStrip = container.querySelector('#home-recent-strip');
   recent.forEach((song, i) => recentStrip?.appendChild(createSongCard(song, i)));
 
   // Cards de álbum individuales
-  container.querySelectorAll('[data-album-slug]').forEach((el) =>
-    el.addEventListener('click', () => navigate(`/album/${el.dataset.albumSlug}`)),
-  );
+  container
+    .querySelectorAll('[data-album-slug]')
+    .forEach((el) =>
+      el.addEventListener('click', () => navigate(`/album/${el.dataset.albumSlug}`)),
+    );
 
   // Strip de favoritos
   const favStrip = container.querySelector('#home-fav-strip');
@@ -259,9 +290,11 @@ export async function renderHome(container, { today = new Date().toISOString().s
       const listsBody = container.querySelector('#home-listas-body');
       if (listsBody) {
         listsBody.innerHTML = renderListsBody(lists, today, { limit: 3 });
-        listsBody.querySelectorAll('[data-list-id]').forEach((el) =>
-          el.addEventListener('click', () => navigate(`/lista/${el.dataset.listId}`)),
-        );
+        listsBody
+          .querySelectorAll('[data-list-id]')
+          .forEach((el) =>
+            el.addEventListener('click', () => navigate(`/lista/${el.dataset.listId}`)),
+          );
         listsBody
           .querySelector('[data-create-list]')
           ?.addEventListener('click', () => navigate('/lista/nueva'));

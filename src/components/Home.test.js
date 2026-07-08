@@ -13,6 +13,7 @@ vi.mock('../lib/prefetch.js', () => ({
   warm: vi.fn(),
 }));
 vi.mock('../lib/favorites.js', () => ({ getFavoriteIds: vi.fn() }));
+vi.mock('../lib/recentVisits.js', () => ({ getRecentVisitIds: vi.fn() }));
 vi.mock('../lib/icons.js', () => ({ icon: vi.fn((name) => `[${name}]`) }));
 vi.mock('../lib/escape.js', () => ({ escapeHtml: (s) => String(s ?? '') }));
 vi.mock('./SongList.js', () => ({
@@ -33,11 +34,12 @@ vi.mock('./VoicesAlbumView.js', () => ({
   isVigente: vi.fn((date, today) => String(date).slice(0, 10) <= today),
 }));
 
-import { selectRecent, renderHome, renderListsBody } from './Home.js';
+import { selectRecent, selectRecentlyVisited, renderHome, renderListsBody } from './Home.js';
 import { getState, getAlbums } from '../lib/store.js';
 import { isAuthenticated } from '../lib/authStore.js';
 import { listMyLists } from '../lib/lists.js';
 import { getFavoriteIds } from '../lib/favorites.js';
+import { getRecentVisitIds } from '../lib/recentVisits.js';
 import { navigate } from '../router.js';
 
 // ── Fixtures ─────────────────────────────────────────────────────────
@@ -72,6 +74,7 @@ beforeEach(() => {
   getAlbums.mockReturnValue(ALBUMS);
   isAuthenticated.mockReturnValue(false);
   getFavoriteIds.mockReturnValue([]);
+  getRecentVisitIds.mockReturnValue([]);
   vi.stubGlobal('fetch', FETCH_FAIL);
 });
 
@@ -90,6 +93,34 @@ describe('selectRecent', () => {
 
   it('devuelve array vacío si songs es undefined', () => {
     expect(selectRecent(undefined, 6)).toEqual([]);
+  });
+});
+
+// ── selectRecentlyVisited ─────────────────────────────────────────────
+describe('selectRecentlyVisited', () => {
+  it('prioriza las visitadas en el orden de visita', () => {
+    const result = selectRecentlyVisited(SONGS, ['s3', 's1'], 6);
+    expect(result.map((s) => s.id)).toEqual(['s3', 's1', 's2']);
+  });
+
+  it('rellena con selectRecent (year desc) hasta el límite', () => {
+    const result = selectRecentlyVisited(SONGS, ['s3'], 2);
+    expect(result.map((s) => s.id)).toEqual(['s3', 's1']);
+  });
+
+  it('ignora ids visitados que ya no existen en el catálogo', () => {
+    const result = selectRecentlyVisited(SONGS, ['s9', 's2'], 2);
+    expect(result.map((s) => s.id)).toEqual(['s2', 's1']);
+  });
+
+  it('respeta el límite', () => {
+    const result = selectRecentlyVisited(SONGS, ['s1', 's2', 's3'], 1);
+    expect(result.map((s) => s.id)).toEqual(['s1']);
+  });
+
+  it('sin visitas, se comporta como selectRecent', () => {
+    const result = selectRecentlyVisited(SONGS, [], 6);
+    expect(result.map((s) => s.id)).toEqual(selectRecent(SONGS, 6).map((s) => s.id));
   });
 });
 
@@ -286,9 +317,7 @@ describe('renderHome — Listas', () => {
 
   it('muestra singular cuando song_count es 1', async () => {
     isAuthenticated.mockReturnValue(true);
-    listMyLists.mockResolvedValue([
-      { id: 'l2', name: 'Sola', song_count: 1, expires_at: null },
-    ]);
+    listMyLists.mockResolvedValue([{ id: 'l2', name: 'Sola', song_count: 1, expires_at: null }]);
     const c = mkContainer();
     await renderHome(c, { today: '2026-06-30' });
 
@@ -325,9 +354,7 @@ describe('renderHome — Listas', () => {
     const c = mkContainer();
     await renderHome(c, { today: '2026-06-30' });
 
-    const btn = [...c.querySelectorAll('.home__all')].find((b) =>
-      b.closest('#section-listas'),
-    );
+    const btn = [...c.querySelectorAll('.home__all')].find((b) => b.closest('#section-listas'));
     expect(btn).not.toBeNull();
     btn.click();
     expect(navigate).toHaveBeenCalledWith('/listas');
@@ -591,10 +618,7 @@ describe('renderListsBody (helper exportado)', () => {
     expect(html).toContain('Aún no tienes listas');
   });
   it('renderiza una fila por lista + botón crear', () => {
-    const html = renderListsBody(
-      [{ id: 'l1', name: 'Domingo', song_count: 3 }],
-      today,
-    );
+    const html = renderListsBody([{ id: 'l1', name: 'Domingo', song_count: 3 }], today);
     expect(html).toContain('data-list-id="l1"');
     expect(html).toContain('Domingo');
     expect(html).toContain('data-create-list');

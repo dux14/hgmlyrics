@@ -7,7 +7,7 @@ import { invalidateFlags } from '../_lib/flagsCache.js';
 // POST   → body { flagKey, email?, username? } agrega asignación (contrato actual)
 //        → body { action:'create', key, description } crea flag en el catálogo
 //        → body { action:'toggle-global', key, enabled } activa/desactiva global
-//        → body { action:'assign', key, users:[{email?,username?}] } asigna en lote
+//        → body { action:'assign', flagKey, users:[{email?,username?}] } asigna en lote
 // DELETE → body { flagKey, email?, username? } quita asignación (contrato actual)
 //        → body { action:'flag', key } borra la flag del catálogo (cascade en asignaciones)
 
@@ -104,9 +104,9 @@ async function toggleGlobal(req, res) {
 }
 
 async function assignBatch(req, res) {
-  const { key, users } = req.body ?? {};
-  if (typeof key !== 'string' || !key) {
-    badRequest(res, 'key es requerida');
+  const { flagKey, users } = req.body ?? {};
+  if (typeof flagKey !== 'string' || !flagKey) {
+    badRequest(res, 'flagKey es requerida');
     return;
   }
   if (!Array.isArray(users) || users.length < 1 || users.length > 100) {
@@ -121,7 +121,7 @@ async function assignBatch(req, res) {
       badRequest(res, 'cada usuario requiere email o username');
       return;
     }
-    rows.push({ flag_key: key, email, username });
+    rows.push({ flag_key: flagKey, email, username });
   }
   await sql`
     INSERT INTO feature_flag_users ${sql(rows)}

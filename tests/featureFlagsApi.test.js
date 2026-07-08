@@ -126,7 +126,7 @@ describe('POST feature-flags action:assign', () => {
   it('users válidos: un único INSERT multi-fila, 200', async () => {
     const req = makeReq('POST', {
       action: 'assign',
-      key: 'voz_tono',
+      flagKey: 'voz_tono',
       users: [{ username: 'a' }, { email: 'b@c.d' }],
     });
     const res = makeRes();
@@ -137,7 +137,7 @@ describe('POST feature-flags action:assign', () => {
   });
 
   it('users vacío: 400', async () => {
-    const req = makeReq('POST', { action: 'assign', key: 'voz_tono', users: [] });
+    const req = makeReq('POST', { action: 'assign', flagKey: 'voz_tono', users: [] });
     const res = makeRes();
     await handler(req, res);
     expect(res._status).toBe(400);
@@ -146,7 +146,7 @@ describe('POST feature-flags action:assign', () => {
 
   it('users > 100: 400', async () => {
     const users = Array.from({ length: 101 }, (_, i) => ({ username: `u${i}` }));
-    const req = makeReq('POST', { action: 'assign', key: 'voz_tono', users });
+    const req = makeReq('POST', { action: 'assign', flagKey: 'voz_tono', users });
     const res = makeRes();
     await handler(req, res);
     expect(res._status).toBe(400);
@@ -154,7 +154,7 @@ describe('POST feature-flags action:assign', () => {
   });
 
   it('usuario sin email ni username: 400', async () => {
-    const req = makeReq('POST', { action: 'assign', key: 'voz_tono', users: [{}] });
+    const req = makeReq('POST', { action: 'assign', flagKey: 'voz_tono', users: [{}] });
     const res = makeRes();
     await handler(req, res);
     expect(res._status).toBe(400);

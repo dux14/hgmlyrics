@@ -60,8 +60,8 @@ function chipHtml(u) {
 }
 
 function flagItemHtml(f) {
-  const globalId = `ff-global-${f.key}`;
-  const searchId = `ff-search-${f.key}`;
+  const globalId = `ff-global-${escapeHtml(f.key)}`;
+  const searchId = `ff-search-${escapeHtml(f.key)}`;
   return `
     <div class="ff-item" data-flag="${escapeHtml(f.key)}">
       <div class="ff-item__head">

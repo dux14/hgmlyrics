@@ -13,12 +13,27 @@ vi.mock('../src/lib/pitch.js', () => ({
   })),
 }));
 
+// Stub authStore (requiere supabase.js/router.js) — mismo patrón que
+// tests/songViewStageWiring.test.js. 'voz_tono' siempre on para poder probar
+// el toggle #stage-layer-tono sin depender del catálogo real de flags.
+vi.mock('../src/lib/authStore.js', () => ({
+  isFeatureEnabled: vi.fn(() => true),
+}));
+
 import {
   enterStage,
   exitStage,
   projectLines,
   speedToSecondsPerLine,
 } from '../src/components/StageMode.js';
+import { getLayers, setLayer } from '../src/lib/layerStore.js';
+import {
+  buildLetraLineHTML,
+  buildChordsLineHTML,
+  buildTonoLineHTML,
+  buildMixedLineHTML,
+} from '../src/lib/lyricsRender.js';
+import { closeOptionsSheet } from '../src/components/OptionsSheet.js';
 
 function mountSongView() {
   document.body.innerHTML = `<div class="song-view" id="sv"></div>`;
@@ -125,6 +140,33 @@ describe('projectLines', () => {
     const spokenLine = lines.find((l) => l.spoken);
     expect(spokenLine.note).toBeNull();
   });
+
+  it('T6: conserva chords[] crudos (chordsRaw) y TODAS las notas por sílaba (groups), no solo la primera', () => {
+    const song = buildSong({
+      sections: [
+        {
+          type: 'verse',
+          label: 'Verso 1',
+          lines: [
+            {
+              text: 'Primera línea',
+              chords: [{ pos: 0, ch: 'C' }],
+              groups: [
+                { start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' },
+                { start: 8, end: 13, voiceId: 'soprano-1', note: 'D4' },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const lines = projectLines(song, { getActiveVoice: () => 'soprano-1' });
+    expect(lines[0].chordsRaw).toEqual([{ pos: 0, ch: 'C' }]);
+    expect(lines[0].groups).toHaveLength(2);
+    expect(lines[0].groups.map((g) => g.note)).toEqual(['C4', 'D4']);
+    // El campo `note` (chip compacto, compat) sigue siendo solo la primera.
+    expect(lines[0].note).toBe('C4');
+  });
 });
 
 describe('enterStage/exitStage', () => {
@@ -202,7 +244,7 @@ describe('enterStage/exitStage', () => {
   it('el boton salir cierra el escenario', () => {
     const sv = mountSongView();
     enterStage(sv, { song: buildSong() });
-    document.getElementById('stage-v2-exit').click();
+    document.getElementById('stage-exit').click();
     expect(document.querySelector('.stage-v2')).toBeNull();
   });
 
@@ -333,7 +375,7 @@ describe('gestos (swipe vertical/horizontal, tap vs swipe)', () => {
   });
 });
 
-describe('controles flotantes: auto-hide 3s, A±', () => {
+describe('controles flotantes: auto-hide 3s', () => {
   it('los controles se ocultan a los 3s y reaparecen con un tap', () => {
     vi.useFakeTimers();
     const sv = mountSongView();
@@ -365,22 +407,175 @@ describe('controles flotantes: auto-hide 3s, A±', () => {
     expect(overlay.classList.contains('stage-v2--paused')).toBe(false); // no togglea pausa
     vi.useRealTimers();
   });
+});
 
-  it('A+ aumenta la escala de fuente y la persiste; A- la reduce', () => {
+describe('T6: controles del stage — capas + sliders + salir, sin A−/A+', () => {
+  it('incluye #stage-layer-chords, #stage-layer-tono, #stage-open-options y #stage-exit', () => {
     const sv = mountSongView();
-    enterStage(sv, { song: buildSong() });
+    enterStage(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    expect(document.getElementById('stage-layer-chords')).toBeTruthy();
+    expect(document.getElementById('stage-layer-tono')).toBeTruthy();
+    expect(document.getElementById('stage-open-options')).toBeTruthy();
+    expect(document.getElementById('stage-exit')).toBeTruthy();
+  });
+
+  it('NO incluye A−/A+', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    expect(document.querySelector('[aria-label="Reducir tamaño de letra"]')).toBeNull();
+    expect(document.querySelector('[aria-label="Aumentar tamaño de letra"]')).toBeNull();
+  });
+
+  it('#stage-layer-chords togglea la capa, comparte estado con layerStore y no resetea índice ni timer', () => {
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.getElementById('stage-v2-next').click(); // index=1: "Segunda línea"
+    expect(document.getElementById('stage-v2-text').textContent).toBe('Segunda línea');
+
+    document.getElementById('stage-layer-chords').click();
+    expect(document.getElementById('stage-layer-chords').getAttribute('aria-pressed')).toBe('true');
+    expect(getLayers().chords).toBe(true); // paridad: mismo estado que la vista normal
+    expect(document.getElementById('stage-v2-text').textContent).toBe('Segunda línea'); // índice preservado
+
+    vi.advanceTimersByTime(8000); // el motor de avance sigue vivo tras el toggle
+    expect(document.getElementById('stage-v2-text').textContent).not.toBe('Segunda línea');
+    vi.useRealTimers();
+  });
+
+  it('#stage-layer-tono togglea la capa tono y persiste en layerStore', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.getElementById('stage-layer-tono').click();
+    expect(document.getElementById('stage-layer-tono').getAttribute('aria-pressed')).toBe('true');
+    expect(getLayers().tono).toBe(true);
+  });
+});
+
+describe('T6: sheet de opciones compartido (font+velocidad) desde #stage-open-options', () => {
+  afterEach(() => closeOptionsSheet());
+
+  it('abre el sheet compartido con los grupos TAMAÑO y AUTO-SCROLL, sin TONO', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.getElementById('stage-open-options').click();
+    expect(document.querySelector('.osheet')).toBeTruthy();
+    expect(document.querySelector('#osheet-font')).toBeTruthy();
+    expect(document.querySelector('#osheet-autoscroll')).toBeTruthy();
+    expect(document.querySelector('#osheet-tono')).toBeNull(); // sin setter de transposición en el stage
+  });
+
+  it('A+ del sheet aumenta la escala de fuente del stage y la persiste', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
     const currentEl = document.getElementById('stage-v2-current');
     const baseSize = Number.parseFloat(currentEl.style.fontSize);
 
-    document.getElementById('stage-v2-font-increase').click();
+    document.getElementById('stage-open-options').click();
+    document.querySelector('[data-act="fup"]').click();
+
     const biggerSize = Number.parseFloat(currentEl.style.fontSize);
     expect(biggerSize).toBeGreaterThan(baseSize);
     expect(Number.parseFloat(localStorage.getItem('hkn-stage-font-scale'))).toBeCloseTo(1.1);
+  });
 
-    document.getElementById('stage-v2-font-decrease').click();
-    document.getElementById('stage-v2-font-decrease').click();
-    const smallerSize = Number.parseFloat(currentEl.style.fontSize);
-    expect(smallerSize).toBeLessThan(baseSize);
+  it('+ de AUTO-SCROLL del sheet acelera el motor de avance sin reabrir el escenario', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong() });
+    document.getElementById('stage-open-options').click();
+    document.querySelector('[data-act="asup"]').click();
+    expect(document.querySelector('#osheet-autoscroll').textContent).toMatch(/%/);
+    const stored = Number.parseFloat(localStorage.getItem('hkn-autoscroll-speed:song-1'));
+    expect(stored).toBeGreaterThan(0.5); // default
+  });
+});
+
+describe('T6: paridad de capas en la línea actual (mismos markers que la vista normal)', () => {
+  function buildLayeredSong() {
+    return buildSong({
+      sections: [
+        {
+          type: 'verse',
+          label: 'Verso 1',
+          lines: [
+            {
+              text: 'Primera línea',
+              chords: [{ pos: 0, ch: 'C' }],
+              groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' }],
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  it('ambas capas off: markers de buildLetraLineHTML', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildLayeredSong(), getActiveVoice: () => 'soprano-1' });
+    expect(document.getElementById('stage-v2-text').innerHTML).toBe(buildLetraLineHTML('Primera línea'));
+  });
+
+  it('capa Acordes on: markers de buildChordsLineHTML', () => {
+    setLayer('chords', true);
+    const sv = mountSongView();
+    enterStage(sv, { song: buildLayeredSong(), getActiveVoice: () => 'soprano-1' });
+    const expected = buildChordsLineHTML('Primera línea', [{ pos: 0, ch: 'C' }], { notation: 'anglo' });
+    expect(document.getElementById('stage-v2-text').innerHTML).toBe(expected);
+  });
+
+  it('capa Tono on: markers de buildTonoLineHTML', () => {
+    setLayer('tono', true);
+    const sv = mountSongView();
+    enterStage(sv, { song: buildLayeredSong(), getActiveVoice: () => 'soprano-1' });
+    const line = { text: 'Primera línea', groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' }] };
+    const expected = buildTonoLineHTML(line, 'soprano-1', 'voice-text--soprano', { notation: 'anglo' });
+    expect(document.getElementById('stage-v2-text').innerHTML).toBe(expected);
+  });
+
+  it('ambas capas on: markers de buildMixedLineHTML', () => {
+    setLayer('chords', true);
+    setLayer('tono', true);
+    const sv = mountSongView();
+    enterStage(sv, { song: buildLayeredSong(), getActiveVoice: () => 'soprano-1' });
+    const line = { text: 'Primera línea', groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' }] };
+    const expected = buildMixedLineHTML(line, [{ pos: 0, ch: 'C' }], 'soprano-1', 'voice-text--soprano', {
+      notation: 'anglo',
+    });
+    expect(document.getElementById('stage-v2-text').innerHTML).toBe(expected);
+  });
+});
+
+describe('T6: FAB de auto-scroll (#stage-autoscroll-fab) siempre presente', () => {
+  it.each([
+    ['lyrics', false, false],
+    ['chords', true, false],
+    ['tono', false, true],
+    ['mixed', true, true],
+  ])('existe en el estado de capas "%s"', (_label, chords, tono) => {
+    setLayer('chords', chords);
+    setLayer('tono', tono);
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    expect(document.getElementById('stage-autoscroll-fab')).toBeTruthy();
+  });
+
+  it('togglea pausa/reanuda el motor de avance e invierte el icono', () => {
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong() });
+    const overlay = document.querySelector('.stage-v2');
+    const fab = document.getElementById('stage-autoscroll-fab');
+
+    fab.click();
+    expect(overlay.classList.contains('stage-v2--paused')).toBe(true);
+    vi.advanceTimersByTime(60000);
+    expect(document.getElementById('stage-v2-text').textContent).toBe('Primera línea'); // sin avanzar
+
+    fab.click();
+    expect(overlay.classList.contains('stage-v2--paused')).toBe(false);
+    vi.advanceTimersByTime(8000);
+    expect(document.getElementById('stage-v2-text').textContent).toBe('Segunda línea');
+    vi.useRealTimers();
   });
 });
 

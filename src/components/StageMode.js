@@ -3,8 +3,15 @@ import { escapeHtml } from '../lib/escape.js';
 import { createWakeLock } from '../lib/wakeLock.js';
 import { requestStageFullscreen, exitStageFullscreen } from '../lib/fullscreen.js';
 import { groupsForVoice, rosterByCategory, CANONICAL_VOICE_ORDER } from '../lib/voiceSystem.js';
-import { transposeChord, transposeNote } from '../lib/lyricsRender.js';
-import { displayChord, displayNote } from '../lib/chordNotation.js';
+import {
+  transposeChord,
+  transposeNote,
+  buildLetraLineHTML,
+  buildChordsLineHTML,
+  buildTonoLineHTML,
+  buildMixedLineHTML,
+} from '../lib/lyricsRender.js';
+import { displayChord, displayNote, setChordNotation } from '../lib/chordNotation.js';
 import {
   presetToSpeed,
   AUTOSCROLL_SPEED_MIN,
@@ -17,6 +24,9 @@ import { buildVoiceChipHTML } from '../lib/voiceChips.js';
 import { normalizeSectionType, SECTION_TYPE_LABELS } from '../lib/sectionTypes.js';
 import { createTunerStrip } from '../lib/tunerWidget.js';
 import { noteToMidi } from '../lib/notes.js';
+import { getLayers, setLayer, deriveViewMode } from '../lib/layerStore.js';
+import { isFeatureEnabled } from '../lib/authStore.js';
+import { openOptionsSheet } from './OptionsSheet.js';
 import '../styles/stage.css';
 
 // Duración por línea en los extremos de velocidad: lento = 9s, rápido = 2.5s.
@@ -34,6 +44,15 @@ export function speedToSecondsPerLine(speed) {
   const clamped = Math.max(AUTOSCROLL_SPEED_MIN, Math.min(AUTOSCROLL_SPEED_MAX, speed));
   const normalized = (clamped - AUTOSCROLL_SPEED_MIN) / (AUTOSCROLL_SPEED_MAX - AUTOSCROLL_SPEED_MIN);
   return SECONDS_PER_LINE_SLOW - normalized * (SECONDS_PER_LINE_SLOW - SECONDS_PER_LINE_FAST);
+}
+
+/**
+ * Réplica local del helper homónimo de SongView.js (T6, paridad de capas):
+ * decide si el toggle #stage-layer-chords tiene sentido para la canción.
+ * @param {object} song @returns {boolean}
+ */
+function songHasChords(song) {
+  return (song?.sections || []).some((s) => s.lines?.some((l) => l.chords && l.chords.length > 0));
 }
 
 // ── Escala de fuente del teleprompter (controles A−/A+) ──
@@ -95,8 +114,8 @@ function computeBaseFontRem(length) {
  *           getNotation?: () => 'anglo'|'latin',
  *           songId?: string }} [ctx]
  * @returns {Array<{sectionType:string, sectionLabel:string, text:string,
- *           chords:string[], note:string|null, noteRaw:string|null, spoken:boolean,
- *           seconds:number}>}
+ *           chords:string[], chordsRaw:Array<{pos:number,ch:string}>, groups:Array,
+ *           note:string|null, noteRaw:string|null, spoken:boolean, seconds:number}>}
  */
 export function projectLines(song, ctx = {}) {
   const activeVoiceId = typeof ctx.getActiveVoice === 'function' ? ctx.getActiveVoice() : null;
@@ -117,10 +136,17 @@ export function projectLines(song, ctx = {}) {
       if (line.annotation) continue;
       const spoken = !!line.spoken;
       const text = line.text || '';
-      const chords = [...(line.chords || [])]
-        .sort((a, b) => (a.pos || 0) - (b.pos || 0))
+      // chordsRaw: copia ordenada SIN transponer ni formatear — la usan los
+      // builders de lyricsRender.js (T6, paridad de capas), que transponen y
+      // formatean por su cuenta a partir de `opts`. `chords` (abajo) sigue
+      // siendo la versión ya lista para el chip compacto del stage.
+      const chordsRaw = [...(line.chords || [])].sort((a, b) => (a.pos || 0) - (b.pos || 0));
+      const chords = chordsRaw
         .map((c) => (semitones ? transposeChord(c.ch, semitones, useFlats) : c.ch))
         .map((ch) => displayChord(ch, notation));
+      // groups: crudos (sin transponer), para que buildTonoLineHTML/buildMixedLineHTML
+      // pinten TODAS las notas por sílaba de la voz activa, no solo la primera.
+      const groups = line.groups || [];
 
       let note = null;
       let noteRaw = null; // anglo, ya transpuesta (sin displayNote) — la usa el afinador embebido (F3)
@@ -134,7 +160,7 @@ export function projectLines(song, ctx = {}) {
         }
       }
 
-      lines.push({ sectionType, sectionLabel, text, chords, note, noteRaw, spoken, seconds });
+      lines.push({ sectionType, sectionLabel, text, chords, chordsRaw, groups, note, noteRaw, spoken, seconds });
     }
   }
   return lines;
@@ -148,7 +174,11 @@ const GESTURE_SPEED_STEP = 0.1;
 
 let session = null; // { songViewEl, overlay, els, song, ctx, lines, index, speed, songId, activeVoiceId, fontScale, paused, timer, hintTimer, feedbackTimer, hideControlsTimer, gesture, wl, handlers } | null
 
-function buildOverlay() {
+/**
+ * @param {{ hasChords?: boolean, tonoAvailable?: boolean }} [opts]
+ */
+function buildOverlay(opts = {}) {
+  const { hasChords = false, tonoAvailable = false } = opts;
   const overlay = document.createElement('div');
   overlay.className = 'stage-v2';
   overlay.innerHTML = `
@@ -168,16 +198,22 @@ function buildOverlay() {
       <p class="stage-v2__hint" id="stage-v2-hint">Toca para pausar el auto-scroll · desliza para velocidad</p>
       <p class="stage-v2__feedback" id="stage-v2-feedback" hidden></p>
     </div>
+    <button class="stage-v2__autoscroll-fab" id="stage-autoscroll-fab" type="button" aria-label="Pausar avance automático">
+      <span id="stage-autoscroll-fab-icon">${icon('pause', { size: 22 })}</span>
+    </button>
     <div class="stage-v2__tuner-row" id="stage-v2-tuner-row" hidden></div>
     <div class="stage-v2__controls" id="stage-v2-controls">
       <div class="stage-v2__controls-group">
-        <button class="stage-v2__btn stage-v2__btn--font" id="stage-v2-font-decrease" type="button" aria-label="Reducir tamaño de letra">A−</button>
-        <button class="stage-v2__btn stage-v2__btn--font" id="stage-v2-font-increase" type="button" aria-label="Aumentar tamaño de letra">A+</button>
+        ${hasChords ? `<button class="layer-toggle" id="stage-layer-chords" type="button" aria-pressed="false">Acordes</button>` : ''}
+        ${tonoAvailable ? `<button class="layer-toggle" id="stage-layer-tono" type="button" aria-pressed="false">Tono</button>` : ''}
       </div>
       <div class="stage-v2__controls-group">
         <button class="stage-v2__btn" id="stage-v2-prev" type="button" aria-label="Línea anterior">${icon('chevron-left', { size: 22 })}</button>
-        <button class="stage-v2__btn stage-v2__btn--exit" id="stage-v2-exit" type="button" aria-label="Salir del modo escenario">${icon('close', { size: 22 })}</button>
+        <button class="stage-v2__btn stage-v2__btn--exit" id="stage-exit" type="button" aria-label="Salir del modo escenario">${icon('close', { size: 22 })}</button>
         <button class="stage-v2__btn" id="stage-v2-next" type="button" aria-label="Siguiente línea">${icon('chevron-right', { size: 22 })}</button>
+      </div>
+      <div class="stage-v2__controls-group">
+        <button class="stage-v2__btn" id="stage-open-options" type="button" aria-label="Opciones">${icon('sliders', { size: 18 })}</button>
       </div>
       <div class="stage-v2__controls-group stage-v2__controls-group--tuner" id="stage-v2-tuner-slot"></div>
     </div>`;
@@ -210,6 +246,42 @@ function renderChordsRow(entry) {
   return chips.join('');
 }
 
+/**
+ * Renderiza la línea actual con el MISMO pipeline de builders que SongView
+ * (lyricsRender.js), según la capa activa (layerStore, T6 — paridad con la
+ * vista normal). El chip compacto nota/acordes (`renderChordsRow`) sigue
+ * vivo aparte, sin depender de las capas (lo usa el afinador embebido).
+ * @param {object} s sesión @param {object} cur línea proyectada actual
+ * @returns {string} HTML
+ */
+function buildCurrentLineHTML(s, cur) {
+  if (cur.spoken || cur.text.trim() === '') return buildLetraLineHTML(cur.text);
+
+  const viewMode = deriveViewMode(getLayers());
+  const { semitones = 0, useFlats = false } =
+    (typeof s.ctx.getTranspose === 'function' ? s.ctx.getTranspose() : null) || {};
+  const notation = typeof s.ctx.getNotation === 'function' ? s.ctx.getNotation() : 'anglo';
+  const category = (s.song.voiceRoster || []).find((v) => v.id === s.activeVoiceId)?.category ?? null;
+  const colorClass = category ? `voice-text--${category}` : '';
+  const line = { text: cur.text, groups: cur.groups };
+
+  if (viewMode === 'mixed') {
+    return buildMixedLineHTML(line, cur.chordsRaw, s.activeVoiceId, colorClass, {
+      transposeSemitones: semitones,
+      useFlats,
+      notation,
+    });
+  }
+  if (viewMode === 'tono') {
+    if (!s.activeVoiceId) return buildLetraLineHTML(cur.text);
+    return buildTonoLineHTML(line, s.activeVoiceId, colorClass, { notation });
+  }
+  if (viewMode === 'chords') {
+    return buildChordsLineHTML(cur.text, cur.chordsRaw, { transposeSemitones: semitones, useFlats, notation });
+  }
+  return buildLetraLineHTML(cur.text);
+}
+
 /** Pinta las 3 zonas (previa/actual/siguiente) + label de sección + progreso. */
 function renderZone(s) {
   const { lines, index, els } = s;
@@ -220,7 +292,7 @@ function renderZone(s) {
   els.prevLine.textContent = prev ? prev.text : '';
   els.nextLine.textContent = next ? next.text : '';
 
-  els.currentText.textContent = cur.text;
+  els.currentText.innerHTML = buildCurrentLineHTML(s, cur);
   els.currentText.classList.toggle('stage-v2__text--spoken', cur.spoken);
   els.currentEl.style.fontSize = `${(computeBaseFontRem(cur.text.length) * s.fontScale).toFixed(2)}rem`;
   els.chords.innerHTML = renderChordsRow(cur);
@@ -260,16 +332,51 @@ function showFeedback(s, text) {
   }, FEEDBACK_DURATION_MS);
 }
 
-/** Ajusta la velocidad de avance ±GESTURE_SPEED_STEP, persiste y re-proyecta. */
-function adjustSpeed(s, delta) {
-  const next = Math.max(AUTOSCROLL_SPEED_MIN, Math.min(AUTOSCROLL_SPEED_MAX, s.speed + delta));
-  if (next === s.speed) return; // ya en el límite, sin feedback
+/** Aplica una velocidad ya clampada: persiste, re-proyecta y reprograma el timer. */
+function applySpeed(s, next) {
   s.speed = next;
   saveBaseSpeed(next, s.songId);
   recomputeLines(s);
   renderZone(s);
   scheduleAdvance(s);
+}
+
+/** Ajusta la velocidad de avance ±GESTURE_SPEED_STEP (gestos), con feedback flotante. */
+function adjustSpeed(s, delta) {
+  const next = Math.max(AUTOSCROLL_SPEED_MIN, Math.min(AUTOSCROLL_SPEED_MAX, s.speed + delta));
+  if (next === s.speed) return; // ya en el límite, sin feedback
+  applySpeed(s, next);
   showFeedback(s, `Velocidad ${speedToPercentLabel(next)}`);
+}
+
+/**
+ * Ajusta la velocidad desde el grupo AUTO-SCROLL del sheet compartido (T6):
+ * mismo paso/clamp que los gestos, sin el toast flotante (el sheet ya
+ * muestra el valor en su propio label). Devuelve la etiqueta para que
+ * OptionsSheet actualice `#osheet-autoscroll`.
+ * @param {object} s @param {1|-1} dir @returns {string}
+ */
+function adjustSpeedFromSheet(s, dir) {
+  const next = Math.max(AUTOSCROLL_SPEED_MIN, Math.min(AUTOSCROLL_SPEED_MAX, s.speed + dir * GESTURE_SPEED_STEP));
+  if (next !== s.speed) applySpeed(s, next);
+  return speedToPercentLabel(s.speed);
+}
+
+/**
+ * Togglea una capa de lectura (Acordes/Tono) DENTRO del escenario. Estado
+ * global compartido con la vista normal (layerStore) — togglear acá y salir
+ * deja la vista normal en el mismo estado (paridad). Solo re-pinta la línea
+ * actual; no reproyecta ni reinicia el motor de avance.
+ * @param {object} s @param {'chords'|'tono'} name
+ */
+function toggleStageLayer(s, name) {
+  const layers = getLayers();
+  const next = !layers[name];
+  setLayer(name, next);
+  const btn = s.els[name === 'chords' ? 'layerChordsBtn' : 'layerTonoBtn'];
+  btn?.setAttribute('aria-pressed', String(next));
+  renderZone(s);
+  showControls(s);
 }
 
 /** Cambia la voz activa DENTRO del escenario (chip S·A·T·B); sincroniza con SongView. */
@@ -315,6 +422,11 @@ function goTo(s, index) {
 function togglePause(s) {
   s.paused = !s.paused;
   s.els.overlay.classList.toggle('stage-v2--paused', s.paused);
+  s.els.autoscrollFabIcon.innerHTML = icon(s.paused ? 'play' : 'pause', { size: 22 });
+  s.els.autoscrollFab.setAttribute(
+    'aria-label',
+    s.paused ? 'Reanudar avance automático' : 'Pausar avance automático',
+  );
   if (s.paused) clearTimeout(s.timer);
   else scheduleAdvance(s);
 }
@@ -343,12 +455,16 @@ export function enterStage(songViewEl, ctx = {}) {
   const lines = projectLines(ctx.song, { ...ctx, getActiveVoice: () => activeVoiceId, songId });
   if (lines.length === 0) return; // nada que proyectar
 
+  const hasChords = songHasChords(ctx.song);
+  const tonoAvailable = isFeatureEnabled('voz_tono') && (ctx.song.voiceRoster || []).length > 0;
+
   songViewEl.classList.add('song-view--stage');
   document.body.classList.add('stage-active');
 
-  const overlay = buildOverlay();
+  const overlay = buildOverlay({ hasChords, tonoAvailable });
   document.body.appendChild(overlay);
 
+  const layers = getLayers();
   const els = {
     overlay,
     sectionLabel: overlay.querySelector('#stage-v2-section'),
@@ -368,10 +484,15 @@ export function enterStage(songViewEl, ctx = {}) {
     controls: overlay.querySelector('#stage-v2-controls'),
     prevBtn: overlay.querySelector('#stage-v2-prev'),
     nextBtn: overlay.querySelector('#stage-v2-next'),
-    exitBtn: overlay.querySelector('#stage-v2-exit'),
-    fontDecreaseBtn: overlay.querySelector('#stage-v2-font-decrease'),
-    fontIncreaseBtn: overlay.querySelector('#stage-v2-font-increase'),
+    exitBtn: overlay.querySelector('#stage-exit'),
+    layerChordsBtn: overlay.querySelector('#stage-layer-chords'),
+    layerTonoBtn: overlay.querySelector('#stage-layer-tono'),
+    openOptionsBtn: overlay.querySelector('#stage-open-options'),
+    autoscrollFab: overlay.querySelector('#stage-autoscroll-fab'),
+    autoscrollFabIcon: overlay.querySelector('#stage-autoscroll-fab-icon'),
   };
+  els.layerChordsBtn?.setAttribute('aria-pressed', String(layers.chords));
+  els.layerTonoBtn?.setAttribute('aria-pressed', String(layers.tono));
 
   const wl = createWakeLock();
   session = {
@@ -505,20 +626,50 @@ export function enterStage(songViewEl, ctx = {}) {
   els.nextBtn.addEventListener('click', onNext);
   els.exitBtn.addEventListener('click', () => exitStage());
 
-  const onFontDecrease = () => {
-    session.fontScale = Math.max(FONT_SCALE_MIN, session.fontScale - FONT_SCALE_STEP);
-    saveFontScale(session.fontScale);
-    renderZone(session);
+  // Capas de lectura (T6): mismo estado global que la vista normal
+  // (layerStore) — togglear acá y salir deja la vista normal en el mismo
+  // estado. Solo re-pinta la línea actual, sin tocar el motor de avance.
+  const onLayerChordsClick = () => toggleStageLayer(session, 'chords');
+  const onLayerTonoClick = () => toggleStageLayer(session, 'tono');
+  els.layerChordsBtn?.addEventListener('click', onLayerChordsClick);
+  els.layerTonoBtn?.addEventListener('click', onLayerTonoClick);
+
+  // Sheet de opciones compartido (T4/T6): mismo componente que la vista
+  // normal. A−/A+ del stage viven en el grupo TAMAÑO; la velocidad de avance,
+  // en AUTO-SCROLL. TONO (transposición) queda fuera — el stage no tiene un
+  // setter de transposeSemitones propio, solo lee ctx.getTranspose().
+  const onOpenOptions = () => {
     showControls(session);
+    openOptionsSheet({
+      song: session.song,
+      visibleVoices: new Set((session.song.voiceRoster || []).map((v) => v.id)),
+      showTono: false,
+      notation: typeof session.ctx.getNotation === 'function' ? session.ctx.getNotation() : 'anglo',
+      fontLabel: session.fontScale.toFixed(2),
+      autoscrollLabel: speedToPercentLabel(session.speed),
+      onNotationChange: (value) => {
+        setChordNotation(value);
+        renderZone(session);
+      },
+      onFont: (dir) => {
+        session.fontScale = Math.max(
+          FONT_SCALE_MIN,
+          Math.min(FONT_SCALE_MAX, session.fontScale + dir * FONT_SCALE_STEP),
+        );
+        saveFontScale(session.fontScale);
+        renderZone(session);
+        const of = document.querySelector('#osheet-font');
+        if (of) of.textContent = session.fontScale.toFixed(2);
+      },
+      onAutoscroll: (dir) => adjustSpeedFromSheet(session, dir),
+    });
   };
-  const onFontIncrease = () => {
-    session.fontScale = Math.min(FONT_SCALE_MAX, session.fontScale + FONT_SCALE_STEP);
-    saveFontScale(session.fontScale);
-    renderZone(session);
-    showControls(session);
-  };
-  els.fontDecreaseBtn.addEventListener('click', onFontDecrease);
-  els.fontIncreaseBtn.addEventListener('click', onFontIncrease);
+  els.openOptionsBtn.addEventListener('click', onOpenOptions);
+
+  // FAB de auto-scroll (siempre presente, fuera del auto-hide de controles):
+  // play/pause del motor de avance, mismo `togglePause` que el tap central.
+  const onAutoscrollFabClick = () => togglePause(session);
+  els.autoscrollFab.addEventListener('click', onAutoscrollFabClick);
 
   const onVoiceChipClick = (e) => {
     const btn = e.target.closest('[data-category]');
@@ -553,8 +704,10 @@ export function enterStage(songViewEl, ctx = {}) {
     onPointerUp,
     onPrev,
     onNext,
-    onFontDecrease,
-    onFontIncrease,
+    onLayerChordsClick,
+    onLayerTonoClick,
+    onOpenOptions,
+    onAutoscrollFabClick,
     onVoiceChipClick,
     onKey,
     onVis,
@@ -581,8 +734,10 @@ export function exitStage() {
     onPointerUp,
     onPrev,
     onNext,
-    onFontDecrease,
-    onFontIncrease,
+    onLayerChordsClick,
+    onLayerTonoClick,
+    onOpenOptions,
+    onAutoscrollFabClick,
     onVoiceChipClick,
     onKey,
     onVis,
@@ -603,8 +758,10 @@ export function exitStage() {
   document.removeEventListener('pointerup', onPointerUp);
   els.prevBtn.removeEventListener('click', onPrev);
   els.nextBtn.removeEventListener('click', onNext);
-  els.fontDecreaseBtn.removeEventListener('click', onFontDecrease);
-  els.fontIncreaseBtn.removeEventListener('click', onFontIncrease);
+  els.layerChordsBtn?.removeEventListener('click', onLayerChordsClick);
+  els.layerTonoBtn?.removeEventListener('click', onLayerTonoClick);
+  els.openOptionsBtn.removeEventListener('click', onOpenOptions);
+  els.autoscrollFab.removeEventListener('click', onAutoscrollFabClick);
   els.voiceChips.removeEventListener('click', onVoiceChipClick);
   document.removeEventListener('keydown', onKey);
   document.removeEventListener('visibilitychange', onVis);

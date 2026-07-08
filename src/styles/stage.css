@@ -238,7 +238,40 @@ body.stage-active { overflow: hidden; }
 .stage-v2__btn:hover { background: rgba(255, 255, 255, 0.16); }
 .stage-v2__btn:disabled { opacity: 0.3; cursor: default; }
 .stage-v2__btn--exit { background: rgba(255, 255, 255, 0.14); }
-.stage-v2__btn--font { font-size: 0.9rem; font-weight: 700; }
+
+/* Capas de lectura (T6): mismo `.layer-toggle` de components.css, adaptado
+   al fondo negro fijo del stage (no hereda el theme claro/oscuro normal). */
+.stage-v2__controls .layer-toggle {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+}
+.stage-v2__controls .layer-toggle[aria-pressed='true'] {
+  border-color: var(--color-brand, #01ccd9);
+  color: var(--color-brand, #01ccd9);
+  background: color-mix(in oklab, var(--color-brand, #01ccd9) 18%, transparent);
+}
+
+/* FAB de auto-scroll (T6): play/pause del motor de avance, siempre visible
+   (fuera del grupo con auto-hide de .stage-v2__controls). */
+.stage-v2__autoscroll-fab {
+  position: absolute;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(5.5rem, calc(5.5rem + env(safe-area-inset-bottom)));
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-brand, #01ccd9);
+  color: #000;
+  cursor: pointer;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .stage-v2__progress-fill,

@@ -1,24 +1,32 @@
 /**
- * voiceChips.js — markup compartido de los chips de selector de voz (S·A·T·B),
- * usado por el hero de SongView y el chrome del stage (StageMode). Cada
- * llamador define su propio prefijo de clase BEM; el resto (inicial,
- * data-category, color, aria) es idéntico.
+ * voiceChips.js — markup del chip de selector de voz (S·A·T·B) del chrome del
+ * stage (StageMode). También exporta `categoryInitial`, la derivación de
+ * inicial compartida con el hero de SongView (renderHeroVoiceChips), que no
+ * usa `buildVoiceChipHTML` porque su markup incluye nota + dot propios.
  */
 
 import { getVoiceLabel } from './voiceSystem.js';
 import { escapeHtml } from './escape.js';
 
 /**
+ * Inicial de categoría para el chip: "A" de Alto (mockup) para contralto;
+ * el label accesible completo va aparte (aria-label).
+ * @param {string} category
+ * @returns {string}
+ */
+export function categoryInitial(category) {
+  return category === 'contralto' ? 'A' : getVoiceLabel(category).charAt(0).toUpperCase();
+}
+
+/**
  * @param {string} category
  * @param {{ active?: boolean, dimmed?: boolean, prefix: string }} opts
- *   `prefix` es la clase base BEM del chip (p.ej. "hero-voice-chip" o
- *   "stage-v2__voice-chip"); los modificadores `--active`/`--dimmed` se
- *   derivan de ella.
+ *   `prefix` es la clase base BEM del chip (p.ej. "stage-v2__voice-chip");
+ *   los modificadores `--active`/`--dimmed` se derivan de ella.
  * @returns {string}
  */
 export function buildVoiceChipHTML(category, { active = false, dimmed = false, prefix }) {
-  // "A" de Alto (mockup) para contralto; label accesible completo aparte.
-  const initial = category === 'contralto' ? 'A' : getVoiceLabel(category).charAt(0).toUpperCase();
+  const initial = categoryInitial(category);
   const cls = [prefix, active ? `${prefix}--active` : '', dimmed ? `${prefix}--dimmed` : '']
     .filter(Boolean)
     .join(' ');

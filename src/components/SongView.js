@@ -45,6 +45,7 @@ import {
   speedToPercentLabel,
 } from '../lib/autoscroll.js';
 import { escapeHtml } from '../lib/escape.js';
+import { categoryInitial } from '../lib/voiceChips.js';
 import { enterStage } from './StageMode.js';
 import { normalizeSectionType } from '../lib/sectionTypes.js';
 
@@ -1083,7 +1084,7 @@ function renderHeroVoiceChips(song, activeCategory, visibleVoices, opts = {}) {
     .map((c) => {
       const active = c === activeCategory;
       const dimmed = categoryIsDimmed(song, c, visibleVoices);
-      const initial = c === 'contralto' ? 'A' : getVoiceLabel(c).charAt(0).toUpperCase();
+      const initial = categoryInitial(c);
       const note = heroChipNote(song, c, opts);
       const cls = ['hero-voice-chip', active ? 'is-active' : '', dimmed ? 'hero-voice-chip--dimmed' : '']
         .filter(Boolean)

@@ -152,6 +152,41 @@ body.stage-active { overflow: hidden; }
   color: rgba(255, 255, 255, 0.85);
 }
 
+/* FIX finding B: mismo patrón "reservar espacio" de components.css (nota/acorde
+   in-flow arriba de su sílaba, no flotante absoluto) pero escopado a
+   `.stage-v2__text` — el stage no envuelve la línea en `.lyrics__line--tono`/
+   `--chords` (eso es de SongView), así que sin este override el `.float-label`
+   quedaba con su `position:absolute` de base y, al envolver, la fila nueva se
+   pintaba encima de la anterior a cualquier fontScale. `stage.css` es unlayered
+   (gana sobre components.css en layer(components) sin depender de especificidad).
+   Aplica a acordes/tono/mixto por igual (el markup de los 3 builders comparte
+   `.line-seg`/`.float-label`; mixto además usa `.mix-seg`/`.mix-rail`). */
+.stage-v2__text {
+  padding-top: 0.35em;
+  white-space: pre-wrap;
+}
+.stage-v2__text .line-seg,
+.stage-v2__text .mix-seg {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  vertical-align: bottom;
+}
+.stage-v2__text .float-label {
+  position: static;
+  top: auto;
+  left: auto;
+  margin-bottom: 0.3em;
+}
+.stage-v2__text .mix-rail {
+  display: block;
+  line-height: 1;
+  white-space: pre;
+}
+.stage-v2__text .mix-rail--lyric {
+  line-height: 1.3;
+}
+
 .stage-v2__hint {
   position: absolute;
   bottom: max(5.5rem, calc(5.5rem + env(safe-area-inset-bottom)));

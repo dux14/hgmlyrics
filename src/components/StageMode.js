@@ -394,10 +394,17 @@ function selectStageVoice(s, category) {
   if (typeof s.ctx.setActiveVoice === 'function') s.ctx.setActiveVoice(category, people[0].id);
 }
 
-/** Muestra los controles flotantes y reprograma su auto-ocultado a los 3s. */
+/**
+ * Muestra los controles flotantes y reprograma su auto-ocultado a los 3s.
+ * FIX finding C (descubribilidad): en pausa (`s.paused`) NO se arma el timer
+ * de auto-ocultado — los controles (afinador, opciones, capas) quedan fijos
+ * mientras el avance está detenido, que es el momento obvio para tocarlos.
+ * Al reanudar (`togglePause`), se re-arma llamando a esta misma función.
+ */
 function showControls(s) {
   clearTimeout(s.hideControlsTimer);
   s.els.controls.classList.remove('stage-v2__controls--hidden');
+  if (s.paused) return;
   s.hideControlsTimer = setTimeout(() => {
     s.els.controls.classList.add('stage-v2__controls--hidden');
   }, CONTROLS_HIDE_MS);
@@ -429,6 +436,10 @@ function togglePause(s) {
   );
   if (s.paused) clearTimeout(s.timer);
   else scheduleAdvance(s);
+  // FIX finding C: pausar (desde tap o FAB) también despierta los controles —
+  // showControls ya sabe no armar el auto-hide mientras s.paused es true, así
+  // que quedan fijos; al reanudar, se re-arma con el mismo llamado.
+  showControls(s);
 }
 
 /**

@@ -218,13 +218,9 @@ describe('enterStage/exitStage', () => {
     vi.advanceTimersByTime(60000);
     expect(document.getElementById('stage-v2-text').textContent).toBe('Primera línea'); // sin avanzar
 
-    // La pausa larga auto-ocultó los controles: el próximo tap solo los
-    // despierta (FIX 4), no reanuda todavía.
-    expect(controls.classList.contains('stage-v2__controls--hidden')).toBe(true);
-    tapArea.click();
+    // FIX finding C: en pausa los controles quedan FIJOS (sin auto-ocultado) —
+    // el próximo tap, con los controles ya visibles, reanuda directo.
     expect(controls.classList.contains('stage-v2__controls--hidden')).toBe(false);
-    expect(overlay.classList.contains('stage-v2--paused')).toBe(true); // sigue pausado
-
     tapArea.click(); // controles ya visibles → reanuda
     expect(overlay.classList.contains('stage-v2--paused')).toBe(false);
     vi.advanceTimersByTime(8000); // > 7.4s (velocidad default 0.5) pero < 2 intervalos
@@ -622,6 +618,25 @@ describe('T6: FAB de auto-scroll (#stage-autoscroll-fab) siempre presente', () =
     expect(overlay.classList.contains('stage-v2--paused')).toBe(false);
     vi.advanceTimersByTime(8000);
     expect(document.getElementById('stage-v2-text').textContent).toBe('Segunda línea');
+    vi.useRealTimers();
+  });
+
+  it('FIX finding C: en pausa los controles quedan visibles (sin auto-ocultado); al reanudar se re-arma', () => {
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong() });
+    const controls = document.getElementById('stage-v2-controls');
+    const fab = document.getElementById('stage-autoscroll-fab');
+
+    fab.click(); // pausa
+    expect(controls.classList.contains('stage-v2__controls--hidden')).toBe(false);
+    vi.advanceTimersByTime(3500); // > CONTROLS_HIDE_MS
+    expect(controls.classList.contains('stage-v2__controls--hidden')).toBe(false); // siguen visibles, pausado
+
+    fab.click(); // reanuda
+    expect(controls.classList.contains('stage-v2__controls--hidden')).toBe(false); // el FAB despierta los controles
+    vi.advanceTimersByTime(3500);
+    expect(controls.classList.contains('stage-v2__controls--hidden')).toBe(true); // se re-arma el auto-hide
     vi.useRealTimers();
   });
 });

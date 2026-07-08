@@ -1,6 +1,8 @@
 /**
  * SEC-03: Tests de escape XSS para SongView
  */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('../lib/store.js', () => ({
@@ -40,6 +42,7 @@ vi.mock('../lib/autoscroll.js', () => ({
 import { renderSections } from './SongView.js';
 import { getSongById, fetchSongDetail } from '../lib/store.js';
 import { renderSongView } from './SongView.js';
+import { icon } from '../lib/icons.js';
 
 describe('renderSections — SEC-03: sección label escapado', () => {
   it('no inyecta HTML ejecutable desde section.label con payload XSS', () => {
@@ -97,5 +100,30 @@ describe('renderSongView — SEC-03: year y genre escapados en metadatos', () =>
     expect(yearEl).toBeTruthy();
     expect(yearEl.textContent).toContain('"><script>');
     expect(yearEl.textContent).toContain('<img');
+  });
+});
+
+describe('renderSections — Task 7: play visible en label con audio, sin barra lateral', () => {
+  it('el label de una sección CON audio incluye el icono play; una sin audio, no', () => {
+    icon.mockReturnValue('<svg data-icon="play"></svg>');
+    const sections = [
+      { type: 'verse', label: 'Verso 1', lines: [] },
+      { type: 'chorus', label: 'Coro', lines: [] },
+    ];
+    const html = renderSections(sections, { sectionsWithAudio: new Set([1]) });
+    const el = document.createElement('div');
+    el.innerHTML = html;
+
+    const [withoutAudio, withAudio] = el.querySelectorAll('.lyrics__section-label');
+    expect(withoutAudio.querySelector('svg[data-icon="play"]')).toBeNull();
+    expect(withAudio.querySelector('svg[data-icon="play"]')).not.toBeNull();
+  });
+
+  it('el bloque de sección ya no lleva border-left (identidad solo en label + divider)', () => {
+    const cssPath = resolve(process.cwd(), 'src/styles/components.css');
+    const css = readFileSync(cssPath, 'utf-8');
+    const ruleMatch = css.match(/\.lyrics__section\s*\{[^}]*\}/);
+    expect(ruleMatch).not.toBeNull();
+    expect(ruleMatch[0]).not.toMatch(/border-left/);
   });
 });

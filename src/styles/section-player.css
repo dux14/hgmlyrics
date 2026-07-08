@@ -107,10 +107,8 @@
   padding: 0;
 }
 
+/* T7: sin barra lateral — la sección en reproducción se marca solo en el
+   color del label (antes también tenía --color-teal-500 en border-left). */
 .lyrics__section--playing .lyrics__section-label {
   color: var(--color-teal-500);
-}
-
-.lyrics__section--playing {
-  border-left-color: var(--color-teal-500);
 }

@@ -367,34 +367,16 @@
 }
 
 .lyrics__section {
-  margin-bottom: var(--space-xl);
-  padding-left: var(--space-md);
-  border-left: 2px solid var(--color-border);
+  margin-bottom: var(--space-lg);
   transition: opacity var(--transition-base);
 }
 
-/* Identidad fija por TIPO de sección (spec F1 D1 §3): la barra lateral y la
-   etiqueta comparten el color del tipo (verso=neutro, coro=teal, puente=violet,
-   pre-coro=amber, intro/outro=neutro). NO son 4+ colores simultáneos sobre la
-   letra: solo acento en el borde + etiqueta, el texto sigue --color-text. */
-.lyrics__section--verse {
-  border-left-color: var(--color-section-verse);
-}
-.lyrics__section--chorus {
-  border-left-color: var(--color-section-chorus);
-}
-.lyrics__section--bridge {
-  border-left-color: var(--color-section-bridge);
-}
-.lyrics__section--prechorus {
-  border-left-color: var(--color-section-prechorus);
-}
-.lyrics__section--intro {
-  border-left-color: var(--color-section-intro);
-}
-.lyrics__section--outro {
-  border-left-color: var(--color-section-outro);
-}
+/* Identidad fija por TIPO de sección (spec F1 D1 §3, revisado T7: sin barra
+   lateral — la identidad vive solo en el color del label + el divider
+   horizontal de .lyrics__section-label::after; verso=neutro, coro=teal,
+   puente=violet, pre-coro=amber, intro/outro=neutro). NO son 4+ colores
+   simultáneos sobre la letra: solo acento en el label, el texto sigue
+   --color-text. */
 
 /* Labeled divider: identidad Ambient Kinetic — Syncopate en chip versalitas
    (VERSO, CORO…), color por tipo de sección. La hairline rule de la derecha

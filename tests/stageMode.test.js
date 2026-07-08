@@ -455,6 +455,20 @@ describe('T6: controles del stage — capas + sliders + salir, sin A−/A+', () 
 describe('T6: sheet de opciones compartido (font+velocidad) desde #stage-open-options', () => {
   afterEach(() => closeOptionsSheet());
 
+  it('BUG Important (review): los controles siguen visibles al cerrar el sheet aunque hayan pasado >=3s con el sheet abierto', () => {
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    const controls = document.getElementById('stage-v2-controls');
+
+    document.getElementById('stage-open-options').click();
+    vi.advanceTimersByTime(3500); // > CONTROLS_HIDE_MS mientras el sheet está abierto
+    closeOptionsSheet();
+
+    expect(controls.classList.contains('stage-v2__controls--hidden')).toBe(false);
+    vi.useRealTimers();
+  });
+
   it('abre el sheet compartido con los grupos TAMAÑO y AUTO-SCROLL, sin TONO', () => {
     const sv = mountSongView();
     enterStage(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });

@@ -662,6 +662,13 @@ export function enterStage(songViewEl, ctx = {}) {
         if (of) of.textContent = session.fontScale.toFixed(2);
       },
       onAutoscroll: (dir) => adjustSpeedFromSheet(session, dir),
+      // BUG Important (code-review T6): el hideControlsTimer de showControls
+      // sigue corriendo mientras el sheet está abierto (>=3s lo oculta). Al
+      // cerrar, sin este onClose los controles (salir/capas/opciones)
+      // quedaban invisibles hasta el próximo tap. openOptionsSheet ya invoca
+      // opts.onClose síncronamente dentro de close(), antes de la animación
+      // de salida, así que re-armar el auto-hide acá es inmediato.
+      onClose: () => showControls(session),
     });
   };
   els.openOptionsBtn.addEventListener('click', onOpenOptions);

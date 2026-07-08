@@ -25,7 +25,7 @@ import { createTunerStrip } from '../lib/tunerWidget.js';
 import { noteToMidi } from '../lib/notes.js';
 import { getLayers, setLayer, deriveViewMode } from '../lib/layerStore.js';
 import { isFeatureEnabled } from '../lib/authStore.js';
-import { openOptionsSheet } from './OptionsSheet.js';
+import { openOptionsSheet, closeOptionsSheet } from './OptionsSheet.js';
 import '../styles/stage.css';
 
 // Duración por línea en los extremos de velocidad: lento = 9s, rápido = 2.5s.
@@ -782,6 +782,11 @@ export function exitStage() {
   clearTimeout(hintTimer);
   clearTimeout(feedbackTimer);
   clearTimeout(hideControlsTimer);
+
+  // El sheet de opciones vive fuera del overlay (montado en document.body):
+  // si el usuario sale del escenario sin cerrarlo, queda huerfano sobre la
+  // vista normal. closeOptionsSheet es no-op si no hay hoja abierta.
+  closeOptionsSheet();
 
   els.tapArea.removeEventListener('click', onTap);
   els.tapArea.removeEventListener('pointerdown', onPointerDown);

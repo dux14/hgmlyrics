@@ -28,7 +28,7 @@ import {
 } from '../src/components/StageMode.js';
 import { getLayers, setLayer } from '../src/lib/layerStore.js';
 import { buildLetraLineHTML, buildChordsLineHTML, buildTonoLineHTML } from '../src/lib/lyricsRender.js';
-import { closeOptionsSheet } from '../src/components/OptionsSheet.js';
+import { closeOptionsSheet, openOptionsSheet } from '../src/components/OptionsSheet.js';
 
 function mountSongView() {
   document.body.innerHTML = `<div class="song-view" id="sv"></div>`;
@@ -501,6 +501,29 @@ describe('T6: sheet de opciones compartido (font+velocidad) desde #stage-open-op
     expect(document.querySelector('#osheet-autoscroll').textContent).toMatch(/%/);
     const stored = Number.parseFloat(localStorage.getItem('hkn-autoscroll-speed:song-1'));
     expect(stored).toBeGreaterThan(0.5); // default
+  });
+
+  it('BUG: salir del escenario con el sheet abierto no deja un sheet huerfano en el DOM', () => {
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.getElementById('stage-open-options').click();
+    expect(document.querySelector('.osheet')).toBeTruthy();
+
+    exitStage();
+    // exitStage dispara el cierre (empieza la animacion de salida del sheet).
+    expect(document.querySelector('.osheet').classList.contains('osheet--closing')).toBe(true);
+    vi.advanceTimersByTime(250); // > CLOSE_FALLBACK_MS: se completa el desmontaje
+
+    expect(document.querySelector('.osheet')).toBeNull();
+    expect(document.querySelector('.osheet-dim')).toBeNull();
+    vi.useRealTimers();
+
+    // El singleton queda libre: una reapertura posterior (vista normal) no
+    // devuelve el controlador de la hoja huerfana.
+    const reopened = openOptionsSheet({ song: buildSong(), showTono: false });
+    expect(reopened.sheet.isConnected).toBe(true);
+    reopened.close();
   });
 });
 

@@ -1,6 +1,12 @@
 /* Orden de capas explícito: utilities ganan a components durante la migración */
 @layer reset, tokens, base, components, utilities;
 
+/* CUIDADO cascade layers: solo los imports de este archivo (components.css y
+   demás con layer(...)) participan en las capas de arriba. Las hojas
+   importadas directo desde JS (favorites.css, albums.css, profile.css, etc.)
+   quedan SIN layer y siempre ganan sobre las layered — nunca repartir los
+   estilos de un mismo componente entre una hoja layered y una sin layer. */
+
 @import 'tailwindcss';
 
 /* tokens.css va sin layer(): contiene @theme, directiva de Tailwind v4 que se

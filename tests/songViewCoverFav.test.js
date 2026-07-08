@@ -125,9 +125,12 @@ describe('SongView — favorito sobre la carátula (hero sin degradado)', () => 
 
     const favBtn = container.querySelector('.song-view__cover-wrap #fav-btn');
     expect(favBtn.classList.contains('is-on')).toBe(false);
+    expect(favBtn.getAttribute('aria-pressed')).toBe('false');
 
     favBtn.click();
     await vi.waitFor(() => expect(toggleFavorite).toHaveBeenCalledWith('song-cover-3'));
     expect(favBtn.classList.contains('is-on')).toBe(true);
+    expect(favBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(favBtn.getAttribute('aria-label')).toBe('Quitar de favoritos');
   });
 });

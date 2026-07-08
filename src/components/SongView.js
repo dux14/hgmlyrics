@@ -381,7 +381,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
           />
           ${
             !isPreview
-              ? `<button class="fav-btn fav-btn--cover${songId && isFavorite(songId) ? ' is-on' : ''}" id="fav-btn" aria-label="Agregar a favoritos">${icon('heart', { size: 16 })}</button>`
+              ? `<button class="fav-btn fav-btn--cover${songId && isFavorite(songId) ? ' is-on' : ''}" id="fav-btn" aria-label="Agregar a favoritos" aria-pressed="${songId && isFavorite(songId)}">${icon('heart', { size: 16 })}</button>`
               : ''
           }
         </div>
@@ -905,6 +905,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
       const wasOn = favBtn.classList.contains('is-on');
       await toggleFavorite(songId);
       favBtn.classList.toggle('is-on', !wasOn);
+      favBtn.setAttribute('aria-pressed', String(!wasOn));
       favBtn.setAttribute('aria-label', wasOn ? 'Agregar a favoritos' : 'Quitar de favoritos');
       showFavToast(!wasOn, songId, favBtn);
     });

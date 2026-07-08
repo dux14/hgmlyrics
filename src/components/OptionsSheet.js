@@ -52,6 +52,7 @@ export function buildVoiceOptionRows(song) {
  * @param {{
  *   song: object,
  *   visibleVoices: Set<string>,
+ *   showVoices?: boolean,
  *   showTono: boolean,
  *   tonoLabel: string,
  *   useFlats: boolean,
@@ -77,6 +78,10 @@ export function openOptionsSheet(opts) {
   const rows = buildVoiceOptionRows(opts.song);
   const visibleVoices = opts.visibleVoices instanceof Set ? opts.visibleVoices : new Set();
   const notation = opts.notation === 'anglo' ? 'anglo' : 'latin';
+  // FIX finding 3: default true (SongView no cambia). El stage pasa
+  // showVoices: false — su sheet no recibe onToggleVoice, así que los
+  // switches quedaban interactivos-pero-muertos.
+  const showVoices = opts.showVoices !== false;
 
   const dim = document.createElement('div');
   dim.className = 'osheet-dim';
@@ -88,7 +93,7 @@ export function openOptionsSheet(opts) {
   sheet.setAttribute('aria-label', 'Opciones');
   sheet.setAttribute('tabindex', '-1');
 
-  const voicesSectionHtml = rows.length
+  const voicesSectionHtml = showVoices && rows.length
     ? `
     <div class="osheet__section">
       <div class="osheet__h syn">VOCES VISIBLES</div>

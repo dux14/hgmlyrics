@@ -58,4 +58,26 @@ describe('OptionsSheet — reorganización de grupos', () => {
     expect(names).toEqual(['Soprano', 'Contralto', 'Tenor', 'Bajo']);
     names.forEach((name) => expect(name).not.toMatch(/^Voz \d+$/));
   });
+
+  it('FIX finding 3: showVoices: false oculta VOCES VISIBLES aunque haya roster', () => {
+    openOptionsSheet({
+      song: baseSong(),
+      visibleVoices: new Set(['s1', 'a1', 't1', 'b1']),
+      showVoices: false,
+      showTono: false,
+    });
+    const headers = Array.from(document.querySelectorAll('.osheet__h')).map((h) => h.textContent);
+    expect(headers).not.toContain('VOCES VISIBLES');
+    expect(document.querySelector('.osheet__voices')).toBeNull();
+  });
+
+  it('showVoices por defecto (sin pasar el flag): sigue mostrando VOCES VISIBLES', () => {
+    openOptionsSheet({
+      song: baseSong(),
+      visibleVoices: new Set(['s1', 'a1', 't1', 'b1']),
+      showTono: false,
+    });
+    const headers = Array.from(document.querySelectorAll('.osheet__h')).map((h) => h.textContent);
+    expect(headers).toContain('VOCES VISIBLES');
+  });
 });

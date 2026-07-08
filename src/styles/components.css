@@ -1033,10 +1033,6 @@
     justify-content: flex-start;
   }
 
-  .transpose-controls {
-    justify-content: flex-start;
-  }
-
   /* Sobra ancho: el wrap ya no es necesario y el scroll queda solo como red
      de seguridad; separa los grupos con dividers discretos. */
   .song-toolbar {
@@ -1405,83 +1401,6 @@
   font-size: 0.85em;
   opacity: 0.75;
   line-height: 1.4;
-}
-
-/* === Transpose Controls (F6) === */
-/* Surface glass — misma familia que .tool-box para coherencia de materiales. */
-.transpose-controls {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  background: color-mix(in oklch, var(--color-surface) 85%, transparent);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  margin-bottom: var(--space-md);
-  flex-wrap: wrap;
-  backdrop-filter: blur(8px);
-}
-
-.transpose-btn {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-sm);
-  font-weight: var(--font-weight-bold);
-  transition: all var(--transition-fast);
-  cursor: pointer;
-  background: transparent;
-  color: var(--color-text);
-}
-
-.transpose-btn:active {
-  background: var(--color-primary);
-  color: #fff;
-}
-
-/* Bubble de tono (T3): centro tappable del control −½/+½, reset a Original. */
-.transpose-bubble {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 96px;
-  padding: 4px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-full);
-  background: transparent;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.transpose-bubble:hover {
-  background: var(--color-surface-hover);
-}
-
-.transpose-bubble:active {
-  background: var(--color-primary);
-  color: #fff;
-}
-
-.transpose-notation-toggle {
-  padding: 4px 10px;
-  font-size: var(--font-size-xs);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-sm);
-  cursor: pointer;
-  background: transparent;
-  color: var(--color-text);
-  transition: all var(--transition-fast);
-}
-
-.transpose-notation-toggle:hover {
-  background: var(--color-surface-hover);
 }
 
 /* === Offline Badge (F8) === */

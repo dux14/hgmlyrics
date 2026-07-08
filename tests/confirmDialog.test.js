@@ -83,6 +83,13 @@ describe('confirmDialog', () => {
     ).not.toThrow();
   });
 
+  it('hashchange (navegación SPA) resuelve false y desmonta el overlay', async () => {
+    const p = confirmDialog({ title: 'T', body: 'B' });
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    await expect(p).resolves.toBe(false);
+    expect(overlayEl()).toBeNull();
+  });
+
   it('devuelve el focus al elemento que lo invocó', async () => {
     const trigger = document.createElement('button');
     document.body.appendChild(trigger);

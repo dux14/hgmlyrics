@@ -4,7 +4,7 @@
 
 /* === Panel principal de administracion (hub) === */
 .admin-dashboard {
-  padding: var(--space-md);
+  /* Sin padding: el gutter lo aporta .main__content */
 }
 
 .admin-dashboard__title {
@@ -54,7 +54,7 @@
 
 /* === Sub-páginas admin: cabecera con botón volver === */
 .admin-section {
-  padding: var(--space-md);
+  /* Sin padding: el gutter lo aporta .main__content */
 }
 
 .admin-section__header {
@@ -73,7 +73,7 @@
 
 /* === Lista de edicion de canciones === */
 .admin-edit-list {
-  padding: var(--space-md);
+  /* Sin padding: el gutter lo aporta .main__content */
 }
 
 .admin-header-row {

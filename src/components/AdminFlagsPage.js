@@ -194,7 +194,32 @@ export function renderAdminFlagsPage(container) {
   let flagsState = [];
   let usersState = [];
 
+  // Captura el texto de búsqueda por flag antes de refetchear, así una
+  // mutación en una card (asignar/quitar/eliminar) no borra la búsqueda que
+  // el admin tenía abierta en otra card.
+  function captureSearchState() {
+    const state = new Map();
+    listEl.querySelectorAll('.ff-item').forEach((item) => {
+      const query = item.querySelector('.ff-search')?.value;
+      if (query) state.set(item.dataset.flag, query);
+    });
+    return state;
+  }
+
+  function restoreSearchState(state) {
+    if (!state.size) return;
+    listEl.querySelectorAll('.ff-item').forEach((item) => {
+      const query = state.get(item.dataset.flag);
+      if (!query) return;
+      const search = item.querySelector('.ff-search');
+      const flag = flagByKey(item.dataset.flag);
+      search.value = query;
+      if (flag) renderResults(item, usersState, flag, query);
+    });
+  }
+
   function load() {
+    const searchState = captureSearchState();
     renderAsyncRegion(listEl, {
       skeleton: () => skelRowList({ rows: 3 }),
       fetcher: async () => {
@@ -206,10 +231,16 @@ export function renderAdminFlagsPage(container) {
         const { flags } = await flagsRes.json();
         return { flags, allUsers };
       },
+      // `isEmpty()` de renderAsyncRegion solo reconoce null/array vacío, y acá
+      // el fetcher devuelve un objeto {flags, allUsers} — nunca dispara
+      // `empty`. Se chequea el caso 0 flags acá mismo, dentro de `render`.
       render: ({ flags, allUsers }) => {
         flagsState = flags;
         usersState = allUsers;
-        listEl.innerHTML = flags.map(flagItemHtml).join('');
+        listEl.innerHTML = flags.length
+          ? flags.map(flagItemHtml).join('')
+          : '<p class="ff-empty">No hay flags creadas todavía.</p>';
+        restoreSearchState(searchState);
       },
       empty: () => '<p class="ff-empty">No hay flags creadas todavía.</p>',
       onError: () =>

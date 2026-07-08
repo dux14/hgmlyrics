@@ -113,6 +113,11 @@ async function assignBatch(req, res) {
     badRequest(res, 'users debe ser un array de 1 a 100 elementos');
     return;
   }
+  const exists = await sql`SELECT 1 FROM feature_flags WHERE key = ${flagKey} LIMIT 1`;
+  if (exists.length === 0) {
+    res.status(404).json({ error: 'La flag no existe' });
+    return;
+  }
   const rows = [];
   for (const u of users) {
     const email = u?.email ?? null;

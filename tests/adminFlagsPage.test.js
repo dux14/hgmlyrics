@@ -111,6 +111,18 @@ describe('renderAdminFlagsPage — carga', () => {
     expect(items.length).toBe(SAMPLE_FLAGS.length);
   });
 
+  it('sin flags muestra el estado vacío', async () => {
+    mockFetch({ flags: [] });
+    const container = makeContainer();
+    renderAdminFlagsPage(container);
+    await flush();
+
+    const empty = container.querySelector('.ff-empty');
+    expect(empty).not.toBeNull();
+    expect(empty.textContent).toBe('No hay flags creadas todavía.');
+    expect(container.querySelectorAll('.ff-item').length).toBe(0);
+  });
+
   it('cada item muestra key, descripción y switch global', async () => {
     mockFetch();
     const container = makeContainer();
@@ -421,6 +433,37 @@ describe('renderAdminFlagsPage — crear flag', () => {
     expect(toast.textContent).toBe('La flag ya existe');
     expect(toast.classList.contains('toast--error')).toBe(true);
     expect(submitBtn.disabled).toBe(false);
+  });
+});
+
+describe('renderAdminFlagsPage — estado de búsqueda entre cards', () => {
+  it('eliminar una flag no borra la búsqueda abierta en otra card', async () => {
+    mockFetch({
+      onAction: (method, body) => {
+        if (body.action === 'flag') return { ok: true, json: async () => ({ success: true }) };
+        return null;
+      },
+    });
+    const container = makeContainer();
+    renderAdminFlagsPage(container);
+    await flush();
+
+    const first = container.querySelectorAll('.ff-item')[0]; // voz_tono
+    const second = container.querySelectorAll('.ff-item')[1]; // afinador_shortcut
+
+    const searchA = first.querySelector('.ff-search');
+    searchA.value = 'mari';
+    searchA.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const deleteBtnB = second.querySelector('.ff-delete-flag');
+    deleteBtnB.click();
+    await flush();
+
+    const firstAfter = container.querySelectorAll('.ff-item')[0];
+    const searchAAfter = firstAfter.querySelector('.ff-search');
+    expect(searchAAfter.value).toBe('mari');
+    const results = [...firstAfter.querySelectorAll('.ff-results li')].map((li) => li.textContent);
+    expect(results.some((t) => t.includes('Mari') || t.includes('mari'))).toBe(true);
   });
 });
 

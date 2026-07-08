@@ -160,6 +160,21 @@ describe('POST feature-flags action:assign', () => {
     expect(res._status).toBe(400);
     expect(callsFor('INSERT INTO feature_flag_users')).toHaveLength(0);
   });
+
+  it('flagKey inexistente: 404, sin insertar', async () => {
+    mockSql.mockResolvedValueOnce([]); // SELECT 1 FROM feature_flags → no existe
+    const req = makeReq('POST', {
+      action: 'assign',
+      flagKey: 'no_existe',
+      users: [{ username: 'a' }],
+    });
+    const res = makeRes();
+    await handler(req, res);
+    expect(res._status).toBe(404);
+    expect(res._body.error).toBe('La flag no existe');
+    expect(callsFor('INSERT INTO feature_flag_users')).toHaveLength(0);
+    expect(invalidateFlags).not.toHaveBeenCalled();
+  });
 });
 
 describe('POST feature-flags sin action (contrato actual)', () => {

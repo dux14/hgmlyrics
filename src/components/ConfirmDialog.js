@@ -44,6 +44,8 @@ export function confirmDialog({
 
     function cleanup(result) {
       document.removeEventListener('keydown', onKeydown);
+      window.removeEventListener('hashchange', onNavigate);
+      window.removeEventListener('popstate', onNavigate);
       overlay.remove();
       if (previousFocus && typeof previousFocus.focus === 'function') previousFocus.focus();
       resolve(result);
@@ -53,12 +55,20 @@ export function confirmDialog({
       if (e.key === 'Escape') cleanup(false);
     }
 
+    // Si el usuario navega (back del navegador, hashchange) con el diálogo
+    // abierto, el overlay no debe sobrevivir montado sobre la pantalla siguiente.
+    function onNavigate() {
+      cleanup(false);
+    }
+
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) cleanup(false);
     });
     cancelBtn.addEventListener('click', () => cleanup(false));
     confirmBtn.addEventListener('click', () => cleanup(true));
     document.addEventListener('keydown', onKeydown);
+    window.addEventListener('hashchange', onNavigate);
+    window.addEventListener('popstate', onNavigate);
 
     cancelBtn.focus();
   });

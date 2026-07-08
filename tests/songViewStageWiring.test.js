@@ -136,9 +136,10 @@ describe('SongView → StageMode: contrato de ctx (FIX 1 y FIX 2)', () => {
     container.querySelector('#enter-stage-btn').click();
 
     expect(() => capturedCtx.setActiveVoice('soprano', 'sop1')).not.toThrow();
-    expect(container.querySelector('#hero-voice-chips [data-category="soprano"]').getAttribute('aria-pressed')).toBe(
-      'true',
-    );
+    // El panel Voz (selector único) se eliminó de este escenario junto con el
+    // grid de tono-filters; se verifica el estado interno vía el mismo getter
+    // que consume StageMode.
+    expect(capturedCtx.getActiveVoice()).toBe('sop1');
   });
 });
 

@@ -62,12 +62,12 @@ describe('createTunerStrip — monta/desmonta', () => {
 });
 
 describe('createTunerStrip — setTargetNote', () => {
-  it('actualiza el label con la notacion global (latin por defecto)', () => {
+  it('actualiza el label con la notacion global (anglo por defecto)', () => {
     const strip = createTunerStrip({});
     strip.start();
     onStateRef.current('running'); // simula permiso concedido
     strip.setTargetNote(noteToMidi('D4'));
-    expect(strip.el.querySelector('#tuner-strip-label').textContent).toBe('Re4');
+    expect(strip.el.querySelector('#tuner-strip-label').textContent).toBe('D4');
   });
 
   it('sin nota objetivo cae en modo libre (hint visible)', () => {

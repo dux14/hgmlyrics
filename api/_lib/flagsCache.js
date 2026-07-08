@@ -1,10 +1,10 @@
-// Cache modulo-scope del catalogo de feature flags (global, igual para todos
+// Cache modulo-scope del catálogo de feature flags (global, igual para todos
 // los usuarios). TTL corto: en serverless hay N instancias y cada una tiene su
-// copia; 60s acota el desfase tras un cambio de flags sin hook de invalidacion
-// cross-instancia. La instancia que muta invalida al instante via invalidateFlags().
+// copia; 10s acota el desfase tras un cambio de flags sin hook de invalidación
+// cross-instancia. La instancia que muta invalida al instante vía invalidateFlags().
 import sql from './db.js';
 
-const TTL_MS = 60_000;
+const TTL_MS = 10_000;
 let cache = null; // { catalog, assignments, ts }
 
 export async function getFlagsCatalog() {

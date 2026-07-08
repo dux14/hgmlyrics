@@ -784,6 +784,11 @@
   opacity: 1;
 }
 
+.toast--error {
+  background: var(--color-danger);
+  color: #fff;
+}
+
 /* === View Toolbar === */
 .song-view-toolbar {
   display: flex;

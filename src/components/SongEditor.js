@@ -32,6 +32,7 @@ import {
 import { readAudioDuration } from '../lib/stemsApi.js';
 import { icon } from '../lib/icons.js';
 import { escapeHtml } from '../lib/escape.js';
+import { showToast } from '../lib/toast.js';
 import { skelLongText } from '../lib/skeleton.js';
 
 const SECTION_AUDIO_MAX_BYTES = 25 * 1024 * 1024;
@@ -712,7 +713,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         label,
         durationSec: durationSec || null,
       });
-      showToast('Audio subido correctamente');
+      showToast('Audio subido correctamente', { duration: 3000 });
     } catch (err) {
       // El POST (createSectionAudio) ya upsertea la fila antes del PUT; si fue
       // el PUT el que falló, la fila quedó apuntando a una key sin archivo (o,
@@ -944,10 +945,10 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       deleteSectionAudio(existingSong.id, audioId)
         .then(() => {
           sectionAudioItems = sectionAudioItems.filter((it) => it.id !== audioId);
-          showToast('Audio eliminado');
+          showToast('Audio eliminado', { duration: 3000 });
           renderBlocks();
         })
-        .catch((err) => showToast('Error: ' + err.message));
+        .catch((err) => showToast('Error: ' + err.message, { type: 'error', duration: 3000 }));
     }
   });
 
@@ -1230,10 +1231,10 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
     await invalidateSongDetailCache(songId);
     await refreshData();
     navigate(postSaveTarget({ from: v2.from || null, isNew: !existingSong }));
-    showToast('Canción guardada correctamente');
+    showToast('Canción guardada correctamente', { duration: 3000 });
   } catch (err) {
     console.error(err);
-    showToast('Error: ' + err.message);
+    showToast('Error: ' + err.message, { type: 'error', duration: 3000 });
   } finally {
     btn.disabled = false;
     btn.innerHTML = `${icon('save', { size: 16 })} Guardar canción`;
@@ -1253,10 +1254,10 @@ async function handleDelete(song) {
     if (!res.ok) throw new Error('Error al eliminar');
     await refreshData();
     navigate('/admin/edit');
-    showToast('Canción eliminada');
+    showToast('Canción eliminada', { duration: 3000 });
   } catch (e) {
     console.error(e);
-    showToast('Error: ' + e.message);
+    showToast('Error: ' + e.message, { type: 'error', duration: 3000 });
   }
 }
 
@@ -1294,14 +1295,3 @@ function clearSaveError(container) {
   el.innerHTML = '';
 }
 
-function showToast(message) {
-  let toast = document.querySelector('.toast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.className = 'toast';
-    document.body.appendChild(toast);
-  }
-  toast.textContent = message;
-  toast.classList.add('visible');
-  setTimeout(() => toast.classList.remove('visible'), 3000);
-}

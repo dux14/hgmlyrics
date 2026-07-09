@@ -614,12 +614,16 @@
   letter-spacing: 1px;
   color: var(--color-text-secondary);
 }
-.tool-box__row {
+/* Variante compacta (caja Guitarra): título y contenido comparten la única
+   fila — la cejilla sale al frente del título en vez de debajo. */
+.tool-box--row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);
-  flex-wrap: wrap;
+}
+.tool-box--row .tool-box__title {
+  margin: 0;
 }
 
 /* Panel Voz */
@@ -631,6 +635,10 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  /* Ocupa todo el ancho libre del header: la fila completa es tappable,
+     no solo el texto "Voz" de la izquierda. */
+  flex: 1;
+  min-width: 0;
   background: none;
   border: none;
   color: inherit;
@@ -640,6 +648,15 @@
   cursor: pointer;
   padding: 0.25rem 0;
   min-height: 38px;
+  text-align: left;
+}
+/* El preflight de Tailwind pone svg{display:block}: sin este inline-flex el
+   mic del label saltaba a su propia línea encima de "VOZ". */
+.voice-panel__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
 }
 .voice-panel__toggle[aria-expanded='true'] .voice-panel__chevron {
   transform: rotate(180deg);

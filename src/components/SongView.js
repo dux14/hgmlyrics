@@ -443,19 +443,18 @@ async function _renderSongBody(container, songId, isPreview, song) {
       ${
         (song.cejilla && song.cejilla > 0) || voicePanelAvailable
           ? `
-      <!-- Cajas temáticas — Guitarra (cejilla, modo Acordes) y Voz (selector
-           único para "mi tono" en Acordes y para la voz activa en Tono). -->
+      <!-- Cajas temáticas — Guitarra (cejilla, SOLO modo Acordes; ver
+           applyModeVisibility) y Voz (selector único para "mi tono" en
+           Acordes y para la voz activa en Tono). -->
       <div class="chords-extras" id="chords-extras" style="display: none;">
         ${
           song.cejilla && song.cejilla > 0
             ? `
-        <div class="tool-box">
+        <div class="tool-box tool-box--row" id="guitar-box">
           <div class="tool-box__title">${icon('audio-lines', { size: 13 })} Guitarra</div>
-          <div class="tool-box__row">
-            <div class="cejilla-badge" title="Colocar cejilla en el traste ${song.cejilla}">
-              <span class="cejilla-badge__icon">${icon('audio-lines', { size: 15 })}</span>
-              <span class="cejilla-badge__text" id="cejilla-badge-text">${escapeHtml(buildCejillaHint(song.key, song.cejilla, useFlats, getChordNotation()))}</span>
-            </div>
+          <div class="cejilla-badge" title="Colocar cejilla en el traste ${song.cejilla}">
+            <span class="cejilla-badge__icon">${icon('audio-lines', { size: 15 })}</span>
+            <span class="cejilla-badge__text" id="cejilla-badge-text">${escapeHtml(buildCejillaHint(song.key, song.cejilla, useFlats, getChordNotation()))}</span>
           </div>
         </div>
         `
@@ -573,11 +572,17 @@ async function _renderSongBody(container, songId, isPreview, song) {
   }
 
   // Show controls relevant to the current mode: cejilla + transposition belong
-  // to chords mode; el panel Voz vive acá también para Tono.
+  // to chords mode; el panel Voz vive acá también para Tono. La caja Guitarra
+  // es exclusiva de Acordes: en Tono se oculta y, si era la única caja, el
+  // contenedor entero también (para no dejar un margen fantasma).
   function applyModeVisibility() {
     const chordsExtrasEl = container.querySelector('#chords-extras');
+    const guitarBoxEl = container.querySelector('#guitar-box');
+    if (guitarBoxEl) guitarBoxEl.style.display = showChords ? '' : 'none';
     if (chordsExtrasEl) {
-      chordsExtrasEl.style.display = showChords || viewMode === 'tono' ? 'flex' : 'none';
+      const hasVisibleBox = (guitarBoxEl && showChords) || voicePanelAvailable;
+      chordsExtrasEl.style.display =
+        (showChords || viewMode === 'tono') && hasVisibleBox ? 'flex' : 'none';
     }
     // Re-asegura el estado del panel Voz al cambiar de modo (defensivo).
     syncVoicePanel();
@@ -631,7 +636,9 @@ async function _renderSongBody(container, songId, isPreview, song) {
   function refreshActiveVoiceNote() {
     if (!floatingTunerApi) return;
     floatingTunerApi.setNote(
-      chordsCategory ? heroChipTargetNote(song, chordsCategory, { transposeSemitones, useFlats }) : null,
+      chordsCategory
+        ? heroChipTargetNote(song, chordsCategory, { transposeSemitones, useFlats })
+        : null,
     );
   }
 
@@ -801,7 +808,9 @@ async function _renderSongBody(container, songId, isPreview, song) {
       voicePanelOpen = !voicePanelOpen;
       syncVoicePanel();
     });
-    container.querySelector('#voice-panel-close')?.addEventListener('click', () => clearVoiceSelection());
+    container
+      .querySelector('#voice-panel-close')
+      ?.addEventListener('click', () => clearVoiceSelection());
     container.querySelectorAll('#voice-panel-categories [data-category]').forEach((btn) => {
       btn.addEventListener('click', () => selectCategory(btn.dataset.category));
     });
@@ -1065,7 +1074,7 @@ export function renderVoicePanel(song) {
     <div class="tool-box voice-panel" id="voice-panel">
       <div class="tool-box__title voice-panel__title">
         <button class="voice-panel__toggle" id="voice-panel-toggle" aria-expanded="false" aria-controls="voice-panel-body">
-          <span id="voice-panel-label">${icon('mic', { size: 13 })} Voz</span>
+          <span class="voice-panel__label" id="voice-panel-label">${icon('mic', { size: 13 })} Voz</span>
           <span class="voice-panel__chevron">${icon('chevron-down', { size: 14 })}</span>
         </button>
         <button class="voice-panel__close" id="voice-panel-close" hidden>

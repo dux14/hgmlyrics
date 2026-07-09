@@ -200,7 +200,9 @@ describe('SongView — toolbar de capas (T3)', () => {
     expect(container.querySelector('#chords-extras').style.display).toBe('flex');
     // BUG: sin voz elegida, el panel debe abrir expandido (es el camino para
     // elegir voz) — no colapsado con los chips de categoria ocultos.
-    expect(container.querySelector('#voice-panel-toggle').getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelector('#voice-panel-toggle').getAttribute('aria-expanded')).toBe(
+      'true',
+    );
     expect(container.querySelector('#voice-panel-body').hidden).toBe(false);
   });
 
@@ -215,13 +217,17 @@ describe('SongView — toolbar de capas (T3)', () => {
     container.querySelector('#voice-panel-toggle').click(); // abre
     container.querySelector('#voice-panel-categories [data-category="tenor"]').click();
     container.querySelector('#voice-panel-toggle').click(); // colapsa de nuevo
-    expect(container.querySelector('#voice-panel-toggle').getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('#voice-panel-toggle').getAttribute('aria-expanded')).toBe(
+      'false',
+    );
 
     // Cambia a Tono: ya hay voz elegida, no debe forzar la expansion.
     container.querySelector('#layer-tono').click();
 
     expect(container.querySelector('#layer-tono').getAttribute('aria-pressed')).toBe('true');
-    expect(container.querySelector('#voice-panel-toggle').getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('#voice-panel-toggle').getAttribute('aria-expanded')).toBe(
+      'false',
+    );
   });
 
   it('solo #layer-tono on + voz elegida en el panel: aparece el render tono (buildTonoLineHTML)', async () => {
@@ -256,6 +262,28 @@ describe('SongView — toolbar de capas (T3)', () => {
     expect(line.classList.contains('lyrics__line--chords')).toBe(false);
     expect(line.classList.contains('lyrics__line--no-chord')).toBe(false);
     expect(line.textContent.trim()).toBe('Santo es el Señor');
+  });
+
+  it('la caja Guitarra (cejilla) solo se ve en Acordes; en Tono queda solo el panel Voz', async () => {
+    const song = buildSong('song-toolbar-cejilla');
+    song.cejilla = 7;
+    song.key = 'D';
+    getSongById.mockReturnValue(song);
+    const container = document.createElement('div');
+    await renderSongView(container, 'song-toolbar-cejilla');
+
+    const guitarBox = container.querySelector('#guitar-box');
+    expect(guitarBox).toBeTruthy();
+
+    container.querySelector('#layer-chords').click();
+    expect(guitarBox.style.display).not.toBe('none');
+    expect(container.querySelector('#chords-extras').style.display).toBe('flex');
+
+    container.querySelector('#layer-tono').click();
+    expect(guitarBox.style.display).toBe('none');
+    // El contenedor sigue visible porque el panel Voz aplica también en Tono.
+    expect(container.querySelector('#chords-extras').style.display).toBe('flex');
+    expect(container.querySelector('#voice-panel')).toBeTruthy();
   });
 
   it('las capas persisten entre renders (layerStore)', async () => {

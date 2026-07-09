@@ -6,8 +6,12 @@
 body.stage-active .header,
 body.stage-active .bottom-nav,
 body.stage-active .sidebar,
-body.stage-active .sidebar-overlay { display: none !important; }
-body.stage-active { overflow: hidden; }
+body.stage-active .sidebar-overlay {
+  display: none !important;
+}
+body.stage-active {
+  overflow: hidden;
+}
 
 /* El Lector real queda cubierto por el overlay; solo se marca por si algún
    estilo del Lector lo necesita (compat con reglas previas). */
@@ -50,12 +54,24 @@ body.stage-active { overflow: hidden; }
   text-transform: uppercase;
   color: var(--color-section-verse-d);
 }
-.stage-v2__section-label--verse { color: var(--color-section-verse-d); }
-.stage-v2__section-label--chorus { color: var(--color-section-chorus-d); }
-.stage-v2__section-label--bridge { color: var(--color-section-bridge-d); }
-.stage-v2__section-label--prechorus { color: var(--color-section-prechorus-d); }
-.stage-v2__section-label--intro { color: var(--color-section-intro-d); }
-.stage-v2__section-label--outro { color: var(--color-section-outro-d); }
+.stage-v2__section-label--verse {
+  color: var(--color-section-verse-d);
+}
+.stage-v2__section-label--chorus {
+  color: var(--color-section-chorus-d);
+}
+.stage-v2__section-label--bridge {
+  color: var(--color-section-bridge-d);
+}
+.stage-v2__section-label--prechorus {
+  color: var(--color-section-prechorus-d);
+}
+.stage-v2__section-label--intro {
+  color: var(--color-section-intro-d);
+}
+.stage-v2__section-label--outro {
+  color: var(--color-section-outro-d);
+}
 
 .stage-v2__wakelock {
   display: inline-flex;
@@ -129,8 +145,12 @@ body.stage-active { overflow: hidden; }
   color: #fff;
   max-width: 100%;
 }
-.stage-v2__line--prev { opacity: 0.35; }
-.stage-v2__line--next { opacity: 0.5; }
+.stage-v2__line--prev {
+  opacity: 0.35;
+}
+.stage-v2__line--next {
+  opacity: 0.5;
+}
 
 .stage-v2__current {
   display: flex;
@@ -199,7 +219,9 @@ body.stage-active { overflow: hidden; }
   transition: opacity 0.3s ease;
   pointer-events: none;
 }
-.stage-v2__hint--hidden { opacity: 0; }
+.stage-v2__hint--hidden {
+  opacity: 0;
+}
 
 /* Feedback flotante de velocidad (swipe vertical), mismo hueco que el hint. */
 .stage-v2__feedback {
@@ -218,9 +240,12 @@ body.stage-active { overflow: hidden; }
 /* ── Controles flotantes inferiores: auto-hide a los 3s, reaparecen con tap ── */
 .stage-v2__controls {
   display: flex;
+  /* Red de seguridad: si los 4 grupos no caben (móvil angosto), el que
+     sobra cae a una segunda fila en vez de salirse de la pantalla. */
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.5rem 1rem;
   padding: 0.75rem 1.25rem max(0.75rem, env(safe-area-inset-bottom));
   opacity: 1;
   transition: opacity 0.3s ease;
@@ -236,7 +261,9 @@ body.stage-active { overflow: hidden; }
   gap: 0.75rem;
 }
 /* Hueco del toggle del afinador embebido (F3): el botón se inyecta en runtime. */
-.stage-v2__controls-group--tuner { min-width: 44px; }
+.stage-v2__controls-group--tuner {
+  min-width: 44px;
+}
 
 .stage-v2__btn {
   display: inline-flex;
@@ -250,9 +277,16 @@ body.stage-active { overflow: hidden; }
   color: #fff;
   cursor: pointer;
 }
-.stage-v2__btn:hover { background: rgba(255, 255, 255, 0.16); }
-.stage-v2__btn:disabled { opacity: 0.3; cursor: default; }
-.stage-v2__btn--exit { background: rgba(255, 255, 255, 0.14); }
+.stage-v2__btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.stage-v2__btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.stage-v2__btn--exit {
+  background: rgba(255, 255, 255, 0.14);
+}
 
 /* Capas de lectura (T6): mismo `.layer-toggle` de components.css, adaptado
    al fondo negro fijo del stage (no hereda el theme claro/oscuro normal). */
@@ -288,16 +322,50 @@ body.stage-active { overflow: hidden; }
   cursor: pointer;
 }
 
+/* Móvil angosto: compacta gaps y pills para que los 4 grupos (capas,
+   navegación, opciones, afinador) quepan en una sola fila sin cortes. */
+@media (max-width: 480px) {
+  .stage-v2__controls {
+    gap: 0.5rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+  .stage-v2__controls-group {
+    gap: 0.4rem;
+  }
+  .stage-v2__controls .layer-toggle {
+    padding: 6px 10px;
+  }
+  .stage-v2__btn {
+    min-width: 40px;
+    min-height: 40px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .stage-v2__progress-fill,
   .stage-v2__hint,
-  .stage-v2__controls { transition: none; }
+  .stage-v2__controls {
+    transition: none;
+  }
 }
 
 /* ── F3: afinador embebido — toggle + franja fija sobre los controles ── */
-.stage-v2__btn--tuner[aria-pressed='true'] { background: var(--color-brand, #01ccd9); color: #000; }
+.stage-v2__btn--tuner[aria-pressed='true'] {
+  background: var(--color-brand, #01ccd9);
+  color: #000;
+}
 
-.stage-v2__tuner-row { padding: 0 1.25rem 0.5rem; }
+.stage-v2__tuner-row {
+  padding: 0 1.25rem 0.5rem;
+}
+
+/* Con la franja del afinador abierta, el FAB de autoscroll (bottom fijo
+   5.5rem) caería justo encima de la cápsula tapando la barra: se sube por
+   encima de ella (alto de la franja ≈ strip 48px + hint + padding). */
+.stage-v2--tuner-open .stage-v2__autoscroll-fab {
+  bottom: max(11rem, calc(11rem + env(safe-area-inset-bottom)));
+}
 
 .tuner-strip {
   display: flex;
@@ -350,9 +418,15 @@ body.stage-active { overflow: hidden; }
     left 120ms ease-out,
     background-color 120ms ease-out;
 }
-.tuner-strip__indicator[data-status='ok'] { background: var(--color-success); }
-.tuner-strip__indicator[data-status='warn'] { background: var(--color-warn); }
-.tuner-strip__indicator[data-status='bad'] { background: var(--color-danger); }
+.tuner-strip__indicator[data-status='ok'] {
+  background: var(--color-success);
+}
+.tuner-strip__indicator[data-status='warn'] {
+  background: var(--color-warn);
+}
+.tuner-strip__indicator[data-status='bad'] {
+  background: var(--color-danger);
+}
 
 .tuner-strip__hint {
   flex: 0 0 100%;
@@ -362,7 +436,11 @@ body.stage-active { overflow: hidden; }
   text-align: center;
 }
 
-.tuner-strip__gate { display: flex; justify-content: center; width: 100%; }
+.tuner-strip__gate {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
 
 .tuner-strip__grant {
   display: inline-flex;
@@ -379,5 +457,7 @@ body.stage-active { overflow: hidden; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tuner-strip__indicator { transition: none; }
+  .tuner-strip__indicator {
+    transition: none;
+  }
 }

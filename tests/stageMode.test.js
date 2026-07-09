@@ -27,7 +27,11 @@ import {
   speedToSecondsPerLine,
 } from '../src/components/StageMode.js';
 import { getLayers, setLayer } from '../src/lib/layerStore.js';
-import { buildLetraLineHTML, buildChordsLineHTML, buildTonoLineHTML } from '../src/lib/lyricsRender.js';
+import {
+  buildLetraLineHTML,
+  buildChordsLineHTML,
+  buildTonoLineHTML,
+} from '../src/lib/lyricsRender.js';
 import { closeOptionsSheet, openOptionsSheet } from '../src/components/OptionsSheet.js';
 
 function mountSongView() {
@@ -549,14 +553,18 @@ describe('T6: paridad de capas en la línea actual (mismos markers que la vista 
   it('ambas capas off: markers de buildLetraLineHTML', () => {
     const sv = mountSongView();
     enterStage(sv, { song: buildLayeredSong(), getActiveVoice: () => 'soprano-1' });
-    expect(document.getElementById('stage-v2-text').innerHTML).toBe(buildLetraLineHTML('Primera línea'));
+    expect(document.getElementById('stage-v2-text').innerHTML).toBe(
+      buildLetraLineHTML('Primera línea'),
+    );
   });
 
   it('capa Acordes on: markers de buildChordsLineHTML', () => {
     setLayer('chords', true);
     const sv = mountSongView();
     enterStage(sv, { song: buildLayeredSong(), getActiveVoice: () => 'soprano-1' });
-    const expected = buildChordsLineHTML('Primera línea', [{ pos: 0, ch: 'C' }], { notation: 'anglo' });
+    const expected = buildChordsLineHTML('Primera línea', [{ pos: 0, ch: 'C' }], {
+      notation: 'anglo',
+    });
     expect(document.getElementById('stage-v2-text').innerHTML).toBe(expected);
   });
 
@@ -564,8 +572,13 @@ describe('T6: paridad de capas en la línea actual (mismos markers que la vista 
     setLayer('tono', true);
     const sv = mountSongView();
     enterStage(sv, { song: buildLayeredSong(), getActiveVoice: () => 'soprano-1' });
-    const line = { text: 'Primera línea', groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' }] };
-    const expected = buildTonoLineHTML(line, 'soprano-1', 'voice-text--soprano', { notation: 'anglo' });
+    const line = {
+      text: 'Primera línea',
+      groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' }],
+    };
+    const expected = buildTonoLineHTML(line, 'soprano-1', 'voice-text--soprano', {
+      notation: 'anglo',
+    });
     expect(document.getElementById('stage-v2-text').innerHTML).toBe(expected);
   });
 
@@ -584,13 +597,21 @@ describe('T6: paridad de capas en la línea actual (mismos markers que la vista 
         {
           type: 'verse',
           label: 'Verso 1',
-          lines: [{ text: 'Primera línea', chords: [], groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' }] }],
+          lines: [
+            {
+              text: 'Primera línea',
+              chords: [],
+              groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' }],
+            },
+          ],
         },
       ],
     });
     const sv = mountSongView();
     enterStage(sv, { song: songSinAcordes, getActiveVoice: () => 'soprano-1' });
-    expect(document.getElementById('stage-v2-text').innerHTML).toBe(buildLetraLineHTML('Primera línea'));
+    expect(document.getElementById('stage-v2-text').innerHTML).toBe(
+      buildLetraLineHTML('Primera línea'),
+    );
   });
 
   it('modos excluyentes: activar Tono con Acordes on apaga Acordes (mixed ya no es alcanzable)', () => {
@@ -598,10 +619,17 @@ describe('T6: paridad de capas en la línea actual (mismos markers que la vista 
     setLayer('tono', true); // el store apaga chords al encender tono (exclusión mutua)
     const sv = mountSongView();
     enterStage(sv, { song: buildLayeredSong(), getActiveVoice: () => 'soprano-1' });
-    const line = { text: 'Primera línea', groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' }] };
-    const expected = buildTonoLineHTML(line, 'soprano-1', 'voice-text--soprano', { notation: 'anglo' });
+    const line = {
+      text: 'Primera línea',
+      groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' }],
+    };
+    const expected = buildTonoLineHTML(line, 'soprano-1', 'voice-text--soprano', {
+      notation: 'anglo',
+    });
     expect(document.getElementById('stage-v2-text').innerHTML).toBe(expected);
-    expect(document.getElementById('stage-layer-chords').getAttribute('aria-pressed')).toBe('false');
+    expect(document.getElementById('stage-layer-chords').getAttribute('aria-pressed')).toBe(
+      'false',
+    );
     expect(document.getElementById('stage-layer-tono').getAttribute('aria-pressed')).toBe('true');
   });
 
@@ -610,7 +638,9 @@ describe('T6: paridad de capas en la línea actual (mismos markers que la vista 
     enterStage(sv, { song: buildLayeredSong(), getActiveVoice: () => 'soprano-1' });
     document.getElementById('stage-layer-chords').click();
     document.getElementById('stage-layer-tono').click();
-    expect(document.getElementById('stage-layer-chords').getAttribute('aria-pressed')).toBe('false');
+    expect(document.getElementById('stage-layer-chords').getAttribute('aria-pressed')).toBe(
+      'false',
+    );
     expect(document.getElementById('stage-layer-tono').getAttribute('aria-pressed')).toBe('true');
     expect(getLayers()).toEqual({ chords: false, tono: true });
   });
@@ -774,6 +804,20 @@ describe('F3: afinador embebido en el toggle del stage', () => {
     expect(toggle.getAttribute('aria-pressed')).toBe('false');
     expect(document.getElementById('stage-v2-tuner-row').hidden).toBe(true);
     expect(detectorStop).toHaveBeenCalledTimes(1);
+  });
+
+  it('la franja abierta marca stage-v2--tuner-open (sube el FAB de autoscroll por CSS)', () => {
+    const sv = mountSongView();
+    enterStage(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    const overlay = document.querySelector('.stage-v2');
+    const toggle = document.querySelector('.stage-v2__btn--tuner');
+    expect(overlay.classList.contains('stage-v2--tuner-open')).toBe(false);
+
+    toggle.click();
+    expect(overlay.classList.contains('stage-v2--tuner-open')).toBe(true);
+
+    toggle.click();
+    expect(overlay.classList.contains('stage-v2--tuner-open')).toBe(false);
   });
 
   it('exitStage para SIEMPRE el detector, incluso con el toggle encendido', () => {

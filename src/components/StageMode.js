@@ -41,7 +41,8 @@ const SECONDS_PER_LINE_FAST = 2.5;
  */
 export function speedToSecondsPerLine(speed) {
   const clamped = Math.max(AUTOSCROLL_SPEED_MIN, Math.min(AUTOSCROLL_SPEED_MAX, speed));
-  const normalized = (clamped - AUTOSCROLL_SPEED_MIN) / (AUTOSCROLL_SPEED_MAX - AUTOSCROLL_SPEED_MIN);
+  const normalized =
+    (clamped - AUTOSCROLL_SPEED_MIN) / (AUTOSCROLL_SPEED_MAX - AUTOSCROLL_SPEED_MIN);
   return SECONDS_PER_LINE_SLOW - normalized * (SECONDS_PER_LINE_SLOW - SECONDS_PER_LINE_FAST);
 }
 
@@ -159,7 +160,18 @@ export function projectLines(song, ctx = {}) {
         }
       }
 
-      lines.push({ sectionType, sectionLabel, text, chords, chordsRaw, groups, note, noteRaw, spoken, seconds });
+      lines.push({
+        sectionType,
+        sectionLabel,
+        text,
+        chords,
+        chordsRaw,
+        groups,
+        note,
+        noteRaw,
+        spoken,
+        seconds,
+      });
     }
   }
   return lines;
@@ -229,7 +241,9 @@ function renderVoiceChips(song, activeCategory) {
   const categories = CANONICAL_VOICE_ORDER.filter((c) => rosterByCategory(song, c).length > 0);
   if (categories.length === 0) return '';
   return categories
-    .map((c) => buildVoiceChipHTML(c, { active: c === activeCategory, prefix: 'stage-v2__voice-chip' }))
+    .map((c) =>
+      buildVoiceChipHTML(c, { active: c === activeCategory, prefix: 'stage-v2__voice-chip' }),
+    )
     .join('');
 }
 
@@ -262,7 +276,8 @@ function buildCurrentLineHTML(s, cur) {
   const { semitones = 0, useFlats = false } =
     (typeof s.ctx.getTranspose === 'function' ? s.ctx.getTranspose() : null) || {};
   const notation = typeof s.ctx.getNotation === 'function' ? s.ctx.getNotation() : 'anglo';
-  const category = (s.song.voiceRoster || []).find((v) => v.id === s.activeVoiceId)?.category ?? null;
+  const category =
+    (s.song.voiceRoster || []).find((v) => v.id === s.activeVoiceId)?.category ?? null;
   const colorClass = category ? `voice-text--${category}` : '';
   const line = { text: cur.text, groups: cur.groups };
 
@@ -283,7 +298,11 @@ function buildCurrentLineHTML(s, cur) {
     return buildTonoLineHTML(line, s.activeVoiceId, colorClass, { notation });
   }
   if (viewMode === 'chords') {
-    return buildChordsLineHTML(cur.text, cur.chordsRaw, { transposeSemitones: semitones, useFlats, notation });
+    return buildChordsLineHTML(cur.text, cur.chordsRaw, {
+      transposeSemitones: semitones,
+      useFlats,
+      notation,
+    });
   }
   return buildLetraLineHTML(cur.text);
 }
@@ -362,7 +381,10 @@ function adjustSpeed(s, delta) {
  * @param {object} s @param {1|-1} dir @returns {string}
  */
 function adjustSpeedFromSheet(s, dir) {
-  const next = Math.max(AUTOSCROLL_SPEED_MIN, Math.min(AUTOSCROLL_SPEED_MAX, s.speed + dir * GESTURE_SPEED_STEP));
+  const next = Math.max(
+    AUTOSCROLL_SPEED_MIN,
+    Math.min(AUTOSCROLL_SPEED_MAX, s.speed + dir * GESTURE_SPEED_STEP),
+  );
   if (next !== s.speed) applySpeed(s, next);
   return speedToPercentLabel(s.speed);
 }
@@ -538,7 +560,8 @@ export function enterStage(songViewEl, ctx = {}) {
     tunerStrip: null,
   };
 
-  const activeCategory = (ctx.song.voiceRoster || []).find((v) => v.id === activeVoiceId)?.category ?? null;
+  const activeCategory =
+    (ctx.song.voiceRoster || []).find((v) => v.id === activeVoiceId)?.category ?? null;
   els.voiceChips.innerHTML = renderVoiceChips(ctx.song, activeCategory);
 
   // F3: afinador embebido. La franja vive oculta en su propia fila hasta que
@@ -566,6 +589,10 @@ export function enterStage(songViewEl, ctx = {}) {
     session.tunerOn = !session.tunerOn;
     tunerToggleBtn.setAttribute('aria-pressed', String(session.tunerOn));
     els.tunerRow.hidden = !session.tunerOn;
+    // El FAB de autoscroll vive en la misma franja vertical que la cápsula
+    // del afinador (bottom fijo): esta clase lo sube por CSS para que no
+    // tape la barra ni el botón de pausa quede montado sobre ella.
+    els.tunerRow.closest('.stage-v2')?.classList.toggle('stage-v2--tuner-open', session.tunerOn);
     if (session.tunerOn) tunerStrip.start();
     else tunerStrip.stop();
     showControls(session);
@@ -577,7 +604,10 @@ export function enterStage(songViewEl, ctx = {}) {
 
   renderZone(session);
   scheduleAdvance(session);
-  session.hintTimer = setTimeout(() => els.hint.classList.add('stage-v2__hint--hidden'), HINT_DURATION_MS);
+  session.hintTimer = setTimeout(
+    () => els.hint.classList.add('stage-v2__hint--hidden'),
+    HINT_DURATION_MS,
+  );
   showControls(session);
 
   // Tap en el área central (no en los controles ni chips): si los controles
@@ -586,7 +616,8 @@ export function enterStage(songViewEl, ctx = {}) {
   // auto-ocultado. Un swipe real (onPointerUp) marca suppressClick para que
   // este click no pause encima.
   const onTap = (e) => {
-    if (e.target.closest('.stage-v2__controls') || e.target.closest('.stage-v2__voice-chips')) return;
+    if (e.target.closest('.stage-v2__controls') || e.target.closest('.stage-v2__voice-chips'))
+      {return;}
     if (session.suppressClick) {
       session.suppressClick = false;
       return;
@@ -603,7 +634,8 @@ export function enterStage(songViewEl, ctx = {}) {
   // (zona muerta): se deja sin suprimir para que el click de arriba actúe
   // como un tap normal.
   const onPointerDown = (e) => {
-    if (e.target.closest('.stage-v2__controls') || e.target.closest('.stage-v2__voice-chips')) return;
+    if (e.target.closest('.stage-v2__controls') || e.target.closest('.stage-v2__voice-chips'))
+      {return;}
     session.gesture = { startX: e.clientX, startY: e.clientY, lastX: e.clientX, lastY: e.clientY };
   };
   const onPointerMove = (e) => {

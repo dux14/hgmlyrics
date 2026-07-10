@@ -36,16 +36,20 @@ function noteToMidiSafe(note) {
   }
 }
 
+// Clases propias (NO `.tuner-gauge*` de tuner.css, ver comentario en
+// components.css junto a `.floating-tuner__gauge`): esa hoja solo carga en
+// la ruta /afinador (chunk lazy), y en SongView el gauge quedaría sin
+// estilos si el usuario no la visitó antes en la sesión.
 const GAUGE_HTML = `
-  <div class="tuner-gauge floating-tuner__gauge" aria-hidden="true">
-    <div class="tuner-gauge__track">
-      <div class="tuner-gauge__zone tuner-gauge__zone--danger tuner-gauge__zone--danger-left"></div>
-      <div class="tuner-gauge__zone tuner-gauge__zone--warn tuner-gauge__zone--warn-left"></div>
-      <div class="tuner-gauge__zone tuner-gauge__zone--ok"></div>
-      <div class="tuner-gauge__zone tuner-gauge__zone--warn tuner-gauge__zone--warn-right"></div>
-      <div class="tuner-gauge__zone tuner-gauge__zone--danger tuner-gauge__zone--danger-right"></div>
-      <div class="tuner-gauge__center-mark"></div>
-      <div id="floating-tuner-indicator" class="tuner-gauge__indicator" data-status="" style="left: 50%"></div>
+  <div class="floating-tuner__gauge" aria-hidden="true">
+    <div class="floating-tuner__gauge-track">
+      <div class="floating-tuner__gauge-zone floating-tuner__gauge-zone--danger floating-tuner__gauge-zone--danger-left"></div>
+      <div class="floating-tuner__gauge-zone floating-tuner__gauge-zone--warn floating-tuner__gauge-zone--warn-left"></div>
+      <div class="floating-tuner__gauge-zone floating-tuner__gauge-zone--ok"></div>
+      <div class="floating-tuner__gauge-zone floating-tuner__gauge-zone--warn floating-tuner__gauge-zone--warn-right"></div>
+      <div class="floating-tuner__gauge-zone floating-tuner__gauge-zone--danger floating-tuner__gauge-zone--danger-right"></div>
+      <div class="floating-tuner__gauge-center"></div>
+      <div id="floating-tuner-indicator" class="floating-tuner__gauge-indicator" data-status="" style="left: 50%"></div>
     </div>
   </div>
 `;

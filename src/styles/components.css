@@ -2125,8 +2125,108 @@ body.section-player-open .autoscroll-fab {
   min-width: 0;
 }
 
+/* Gauge propio del afinador flotante — NO reusa `.tuner-gauge*` de
+   tuner.css: esa hoja solo se importa desde Tuner.js (ruta /afinador,
+   chunk lazy en main.js), así que en SongView el gauge quedaría sin
+   estilos si el usuario no visitó /afinador antes en la sesión. Además
+   tuner.css no usa `@layer` y `components.css` sí, con lo que reusar los
+   mismos nombres de clase sería un hazard de cascada al visitar /afinador
+   (las reglas sin layer ganarían). Valores (porcentajes de zona, colores,
+   opacidad, indicador) espejan `.tuner-gauge*` al detalle — ver tuner.css
+   si cambian ahí, cambian acá igual. */
 .floating-tuner__gauge {
   padding: 0;
+}
+
+.floating-tuner__gauge-track {
+  position: relative;
+  height: 10px;
+  border-radius: var(--border-radius-full);
+  background: var(--color-border);
+  overflow: hidden;
+}
+
+.floating-tuner__gauge-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  opacity: 0.35;
+}
+
+.floating-tuner__gauge-zone--ok {
+  left: 40%;
+  width: 20%;
+  background: var(--color-success);
+}
+
+.floating-tuner__gauge-zone--warn {
+  background: var(--color-warn);
+}
+
+.floating-tuner__gauge-zone--warn-left {
+  left: 20%;
+  width: 20%;
+}
+
+.floating-tuner__gauge-zone--warn-right {
+  left: 60%;
+  width: 20%;
+}
+
+.floating-tuner__gauge-zone--danger {
+  background: var(--color-danger);
+}
+
+.floating-tuner__gauge-zone--danger-left {
+  left: 0;
+  width: 20%;
+}
+
+.floating-tuner__gauge-zone--danger-right {
+  left: 80%;
+  width: 20%;
+}
+
+.floating-tuner__gauge-center {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  left: 50%;
+  width: 2px;
+  background: var(--color-text-secondary);
+  opacity: 0.6;
+  transform: translateX(-50%);
+}
+
+.floating-tuner__gauge-indicator {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  width: 5px;
+  border-radius: 3px;
+  background: var(--color-text-secondary);
+  transform: translateX(-50%);
+  transition:
+    left 120ms ease-out,
+    background-color 120ms ease-out;
+}
+
+.floating-tuner__gauge-indicator[data-status='ok'] {
+  background: var(--color-success);
+}
+
+.floating-tuner__gauge-indicator[data-status='warn'] {
+  background: var(--color-warn);
+}
+
+.floating-tuner__gauge-indicator[data-status='bad'] {
+  background: var(--color-danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-tuner__gauge-indicator {
+    transition: none;
+  }
 }
 
 .floating-tuner__gate {

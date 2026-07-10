@@ -11,7 +11,7 @@
  * Motor de avance de esta fase: SOLO TimerEngine (segundos-por-línea desde
  * autoscroll.js), igual que StageMode hoy. TimingEngine (audio real vía
  * `song_line_timings`) y la barra de player son Fase D — esta task deja los
- * slots montados mas vacios.
+ * slots montados más vacíos.
  */
 import { icon } from '../lib/icons.js';
 import { createWakeLock } from '../lib/wakeLock.js';
@@ -433,6 +433,10 @@ function openOptions(s) {
     onNotationChange: (value) => {
       setChordNotation(value);
       renderRoll(s);
+      // Los labels de acorde/nota cambian de ancho (Do Re Mi vs A B C):
+      // reflow de geometría -> hay que recentrar el ancla del 38%, igual que
+      // los demás mutadores que tocan la altura/tamaño de las líneas.
+      retargetScroll(s);
     },
     onFont: (dir) => {
       s.fontScale = Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, s.fontScale + dir * FONT_SCALE_STEP));
@@ -440,6 +444,8 @@ function openOptions(s) {
       s.els.overlay.style.setProperty('--imm-font-scale', s.fontScale.toFixed(2));
       const of = document.querySelector('#osheet-font');
       if (of) of.textContent = s.fontScale.toFixed(2);
+      // La escala de fuente cambia la altura de cada línea: recentrar.
+      retargetScroll(s);
     },
     onAutoscroll: (dir) => {
       adjustSpeed(s, dir * GESTURE_SPEED_STEP);

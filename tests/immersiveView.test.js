@@ -271,6 +271,17 @@ describe('enterImmersive/exitImmersive', () => {
     exitImmersive();
     expect(onExit).toHaveBeenCalledTimes(1);
   });
+
+  it('llamar enterImmersive dos veces seguidas sin exit intermedio es no-op la segunda vez (guard de reentrada)', () => {
+    const sv = mountSongView();
+    const pauseAutoscroll = vi.fn();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1', pauseAutoscroll });
+    expect(document.querySelectorAll('.imm-v1')).toHaveLength(1);
+
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1', pauseAutoscroll });
+    expect(document.querySelectorAll('.imm-v1')).toHaveLength(1); // no monta un segundo overlay
+    expect(pauseAutoscroll).toHaveBeenCalledTimes(1); // el 2do enter ni siquiera llegó a leer ctx
+  });
 });
 
 describe('afinador: widget híbrido aprobado (FloatingTuner) montado bajo demanda', () => {
@@ -406,13 +417,41 @@ describe('sheet de opciones extendido (MODO/VOZ/AFINADOR)', () => {
     expect(lines[1].innerHTML).toBe(buildLetraLineHTML('Segunda línea'));
   });
 
-  it('A+ del sheet aumenta la escala de fuente y la persiste', () => {
+  it('A+ del sheet aumenta la escala de fuente, la persiste y recentra el scroll (retargetScroll)', () => {
+    // requestAnimationFrame controlado: encolamos los callbacks y los
+    // disparamos a mano con flush(), así el orden queda determinista (con un
+    // mock que ejecuta el callback sincrónicamente DENTRO de la llamada a
+    // rAF, la asignación `s.rafId = requestAnimationFrame(loop)` pisaría el
+    // `s.rafId = null` que el propio callback ya escribió).
+    let queue = [];
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      queue.push(cb);
+      return queue.length;
+    });
+    const flush = () => {
+      const cbs = queue;
+      queue = [];
+      cbs.forEach((cb) => cb(0));
+    };
+
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    flush(); // resuelve el loop del retargetScroll inicial de enterImmersive -> spring en reposo
+    const callsBeforeFont = rafSpy.mock.calls.length;
+
     document.getElementById('imm-open-options').click();
     document.querySelector('[data-act="fup"]').click();
+
     expect(document.querySelector('.imm-v1').style.getPropertyValue('--imm-font-scale')).toBe('1.10');
     expect(Number.parseFloat(localStorage.getItem('hkn-stage-font-scale'))).toBeCloseTo(1.1);
+    // El cambio de escala de fuente reflow-ea la altura de las líneas: debe
+    // haber reprogramado un nuevo frame de scroll (retargetScroll -> spring
+    // reasignado -> startScrollLoop pide un rAF nuevo, ya que el anterior
+    // había llegado a reposo).
+    expect(rafSpy.mock.calls.length).toBeGreaterThan(callsBeforeFont);
+
+    flush();
+    rafSpy.mockRestore();
   });
 
   it('salir con el sheet abierto no deja un sheet huérfano en el DOM', () => {

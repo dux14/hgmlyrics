@@ -19,7 +19,7 @@ vi.mock('../src/lib/authStore.js', () => ({
 }));
 
 import { enterImmersive, exitImmersive } from '../src/components/ImmersiveView.js';
-import { getLayers, setLayer } from '../src/lib/layerStore.js';
+import { setLayer } from '../src/lib/layerStore.js';
 import {
   buildLetraLineHTML,
   buildChordsLineHTML,
@@ -61,6 +61,35 @@ function buildSong(overrides = {}) {
     ],
     ...overrides,
   };
+}
+
+function buildTwoSectionSong() {
+  return buildSong({
+    sections: [
+      {
+        type: 'verse',
+        label: 'Verso 1',
+        lines: [
+          {
+            text: 'Primera línea',
+            chords: [{ pos: 0, ch: 'C' }],
+            groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' }],
+          },
+        ],
+      },
+      {
+        type: 'chorus',
+        label: 'Coro',
+        lines: [
+          {
+            text: 'Línea del coro',
+            chords: [{ pos: 0, ch: 'G' }],
+            groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'D4' }],
+          },
+        ],
+      },
+    ],
+  });
 }
 
 beforeEach(() => {
@@ -178,6 +207,19 @@ describe('enterImmersive/exitImmersive', () => {
     expect(lines[1].classList.contains('imm-line--d1')).toBe(true);
   });
 
+  it('goTo cruzando de sección actualiza el label del chrome (no solo la distancia)', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildTwoSectionSong(), getActiveVoice: () => 'soprano-1' });
+    expect(document.getElementById('imm-section').textContent).toBe('Verso 1');
+
+    document.querySelector('#imm-roll .imm-line[data-i="1"]').click(); // línea del Coro
+
+    expect(document.getElementById('imm-section').textContent).toBe('Coro');
+    expect(
+      document.getElementById('imm-section').classList.contains('imm-v1__section--chorus'),
+    ).toBe(true);
+  });
+
   it('avanza sola tras el intervalo de la sección (TimerEngine)', () => {
     vi.useFakeTimers();
     const sv = mountSongView();
@@ -231,17 +273,18 @@ describe('enterImmersive/exitImmersive', () => {
   });
 });
 
-describe('afinador embebido: toggle + "Seguir nota"', () => {
-  it('el toggle nace apagado (mic nunca auto-arranca al entrar)', () => {
+describe('afinador: widget híbrido aprobado (FloatingTuner) montado bajo demanda', () => {
+  it('el toggle nace apagado (mic nunca auto-arranca al entrar, panel vacío)', () => {
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
     const toggle = document.querySelector('.imm-v1__tuner-toggle');
     expect(toggle.getAttribute('aria-pressed')).toBe('false');
     expect(document.getElementById('imm-tuner-panel').hidden).toBe(true);
+    expect(document.querySelector('.floating-tuner')).toBeNull();
     expect(detectorStart).not.toHaveBeenCalled();
   });
 
-  it('activar el toggle muestra el panel y arranca el detector; desactivarlo lo para', () => {
+  it('activar el toggle monta el widget híbrido dentro del panel y arranca el detector; desactivarlo lo desmonta y lo para', () => {
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
     const toggle = document.querySelector('.imm-v1__tuner-toggle');
@@ -249,18 +292,47 @@ describe('afinador embebido: toggle + "Seguir nota"', () => {
     toggle.click();
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
     expect(document.getElementById('imm-tuner-panel').hidden).toBe(false);
+    // El widget híbrido aprobado (nota grande + gauge 5 zonas + chip "Seguir
+    // nota" propio) es `.floating-tuner` — NO la franja delgada de StageMode.
+    expect(document.querySelector('#imm-tuner-panel .floating-tuner')).toBeTruthy();
     expect(detectorStart).toHaveBeenCalledTimes(1);
 
     toggle.click();
     expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(document.querySelector('.floating-tuner')).toBeNull();
     expect(detectorStop).toHaveBeenCalledTimes(1);
   });
 
-  it('"Seguir nota" nace en modo libre (chip apagado)', () => {
+  it('cerrar el widget desde su propia X resincroniza el toggle y esconde el panel', () => {
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
-    const chip = document.querySelector('.imm-tuner-panel__follow');
-    expect(chip.getAttribute('aria-pressed')).toBe('false');
+    document.querySelector('.imm-v1__tuner-toggle').click();
+
+    document.querySelector('[aria-label="Cerrar afinador"]').click();
+
+    expect(document.querySelector('.imm-v1__tuner-toggle').getAttribute('aria-pressed')).toBe(
+      'false',
+    );
+    expect(document.getElementById('imm-tuner-panel').hidden).toBe(true);
+    expect(detectorStop).toHaveBeenCalledTimes(1);
+  });
+
+  it('exitImmersive para SIEMPRE el detector, incluso con el widget abierto', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.querySelector('.imm-v1__tuner-toggle').click();
+    expect(detectorStart).toHaveBeenCalledTimes(1);
+
+    exitImmersive();
+    expect(detectorStop).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('.floating-tuner')).toBeNull();
+  });
+
+  it('no crashea si se sale sin haber abierto el afinador', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    expect(() => exitImmersive()).not.toThrow();
+    expect(detectorStop).not.toHaveBeenCalled();
   });
 });
 

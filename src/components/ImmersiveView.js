@@ -31,8 +31,7 @@ import {
   speedToPercentLabel,
 } from '../lib/autoscroll.js';
 import { buildVoiceChipHTML } from '../lib/voiceChips.js';
-import { createTunerStrip } from '../lib/tunerWidget.js';
-import { noteToMidi } from '../lib/notes.js';
+import { openFloatingTuner } from './FloatingTuner.js';
 import { getLayers } from '../lib/layerStore.js';
 import { isFeatureEnabled } from '../lib/authStore.js';
 import { openOptionsSheet, closeOptionsSheet } from './OptionsSheet.js';
@@ -244,14 +243,16 @@ function updateSectionLabel(s) {
   s.els.sectionLabel.className = `imm-v1__section imm-v1__section--${cur.sectionType}`;
 }
 
-function updateTunerTarget(s) {
-  if (!s.tunerStrip) return;
-  s.tunerStrip.setTargetNote(s.followNote ? currentLineNoteMidi(s) : null);
-}
-
-function currentLineNoteMidi(s) {
+/**
+ * Actualiza la nota disponible del widget híbrido con la de la línea activa
+ * para la voz elegida (ciencia, "F#3"). El widget decide solo si la usa
+ * (chip "Seguir nota" propio) — acá solo se alimenta el dato; sin panel
+ * abierto es no-op.
+ */
+function updateTunerNote(s) {
+  if (!s.floatingTuner) return;
   const cur = s.lines[s.index];
-  return cur?.noteRaw ? noteToMidi(cur.noteRaw) : null;
+  s.floatingTuner.setNote(cur?.noteRaw ?? null);
 }
 
 // ── SCROLL (spring interrumpible, spring.js) ────────────────────────────
@@ -307,7 +308,7 @@ function goTo(s, index) {
     renderLineContent(s, clamped);
   }
   updateSectionLabel(s);
-  updateTunerTarget(s);
+  updateTunerNote(s);
   retargetScroll(s);
   scheduleAdvance(s);
 }
@@ -346,7 +347,7 @@ function recomputeLines(s) {
   s.index = Math.max(0, Math.min(s.lines.length - 1, s.index));
   renderRoll(s);
   updateSectionLabel(s);
-  updateTunerTarget(s);
+  updateTunerNote(s);
   retargetScroll(s);
 }
 
@@ -394,6 +395,13 @@ function selectVoice(s, category) {
   recomputeLines(s);
   s.els.voiceChips.innerHTML = renderVoiceChips(s.song, category);
   if (typeof s.ctx.setActiveVoice === 'function') s.ctx.setActiveVoice(category, people[0].id);
+  // El widget híbrido no expone un setter de etiqueta de voz — con el panel
+  // abierto, un cambio de voz lo reabre para refrescar `voiceLabel` (el
+  // `note` ya se actualizó vía recomputeLines -> updateTunerNote).
+  if (s.tunerOn) {
+    setTunerOn(s, false);
+    setTunerOn(s, true);
+  }
 }
 
 // ── SHEET DE OPCIONES ─────────────────────────────────────────────────────
@@ -444,13 +452,35 @@ function openOptions(s) {
 
 // ── AFINADOR (franja + "Seguir nota") ─────────────────────────────────────
 
+/**
+ * Toggle del afinador híbrido (widget aprobado, `FloatingTuner.js`): el mic
+ * SOLO arranca por este gesto (abrir el panel llama a `openFloatingTuner`,
+ * que arranca el detector) y se detiene SIEMPRE al cerrarlo (`destroy()`).
+ * El widget abre en modo libre; su propio chip "Seguir nota" es el que ancla
+ * a la nota de la línea activa (alimentada por `updateTunerNote`).
+ * @param {object} s @param {boolean} on
+ */
 function setTunerOn(s, on) {
   s.tunerOn = on;
   s.els.tunerToggle.setAttribute('aria-pressed', String(on));
   s.els.tunerPanel.hidden = !on;
-  if (on) s.tunerStrip.start();
-  else s.tunerStrip.stop();
-  updateTunerTarget(s);
+  if (on) {
+    const category = (s.song.voiceRoster || []).find((v) => v.id === s.activeVoiceId)?.category ?? null;
+    const cur = s.lines[s.index];
+    s.floatingTuner = openFloatingTuner(s.els.tunerPanel, {
+      note: cur?.noteRaw ?? null,
+      voiceLabel: category ? getVoiceLabel(category) : 'Afinador',
+      onClose: () => {
+        s.floatingTuner = null;
+        s.tunerOn = false;
+        s.els.tunerToggle.setAttribute('aria-pressed', 'false');
+        s.els.tunerPanel.hidden = true;
+      },
+    });
+  } else {
+    s.floatingTuner?.destroy();
+    s.floatingTuner = null;
+  }
 }
 
 // ── ENTRAR / SALIR ─────────────────────────────────────────────────────
@@ -530,8 +560,7 @@ export function enterImmersive(songViewEl, ctx = {}) {
     suppressClick: false,
     wl,
     tunerOn: false,
-    tunerStrip: null,
-    followNote: false,
+    floatingTuner: null,
     spring: createSpring(),
     rafId: null,
     lastFrameTs: null,
@@ -550,26 +579,9 @@ export function enterImmersive(songViewEl, ctx = {}) {
   retargetScroll(session);
   scheduleAdvance(session);
 
-  // F3/híbrido: franja del afinador con toggle "Seguir nota" (chip propio,
-  // dentro del panel) — nace en modo libre (sin objetivo) hasta que el
-  // usuario decide anclarla a la nota de la línea activa de su voz.
-  const tunerStrip = createTunerStrip({ getTargetNote: () => null });
-  const followChip = document.createElement('button');
-  followChip.type = 'button';
-  followChip.className = 'imm-tuner-panel__follow';
-  followChip.setAttribute('aria-pressed', 'false');
-  followChip.textContent = 'Seguir nota';
-  const onFollowClick = () => {
-    session.followNote = !session.followNote;
-    followChip.setAttribute('aria-pressed', String(session.followNote));
-    followChip.classList.toggle('is-active', session.followNote);
-    updateTunerTarget(session);
-  };
-  followChip.addEventListener('click', onFollowClick);
-  els.tunerPanel.append(followChip, tunerStrip.el);
-  session.tunerStrip = tunerStrip;
-  session.followChip = followChip;
-  session.onFollowClick = onFollowClick;
+  // El afinador (widget híbrido aprobado, `FloatingTuner.js`) se monta bajo
+  // demanda dentro de `#imm-tuner-panel` recién cuando el usuario togglea
+  // `#imm-tuner-toggle` (setTunerOn) — nunca auto-arranca el mic al entrar.
 
   wl.acquire();
   showControls(session);
@@ -684,9 +696,7 @@ export function exitImmersive() {
     ctx,
     timer,
     hideControlsTimer,
-    tunerStrip,
-    followChip,
-    onFollowClick,
+    floatingTuner,
     onViewportClick,
     onPointerDown,
     onPointerMove,
@@ -718,14 +728,13 @@ export function exitImmersive() {
   els.fab.removeEventListener('click', onFabClick);
   els.tunerToggle.removeEventListener('click', onTunerToggleClick);
   els.voiceChips.removeEventListener('click', onVoiceChipClick);
-  followChip.removeEventListener('click', onFollowClick);
   document.removeEventListener('keydown', onKey);
   document.removeEventListener('visibilitychange', onVis);
   window.removeEventListener('hashchange', onNav);
   window.removeEventListener('popstate', onNav);
 
   // Mic nunca queda abierto al salir, esté el toggle en on o off.
-  tunerStrip.stop();
+  floatingTuner?.destroy();
 
   wl.release();
 

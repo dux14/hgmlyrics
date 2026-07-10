@@ -171,26 +171,11 @@ body.immersive-active {
   padding: 0.5rem var(--imm-gutter) max(0.75rem, env(safe-area-inset-bottom));
 }
 
+/* El afinador es el widget híbrido aprobado (`.floating-tuner`, estilos en
+   components.css) montado dentro de este panel — sin CSS propio acá más que
+   el padding del contenedor. */
 .imm-v1__tuner-panel {
   padding: 0 var(--imm-gutter) 0.5rem;
-}
-
-.imm-tuner-panel__follow {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 999px;
-  padding: 0.25rem 0.75rem;
-  margin-bottom: 0.5rem;
-  background: transparent;
-  color: #fff;
-  font-size: 0.8rem;
-}
-.imm-tuner-panel__follow.is-active,
-.imm-tuner-panel__follow[aria-pressed='true'] {
-  border-color: var(--color-brand, #01ccd9);
-  color: var(--color-brand, #01ccd9);
-  background: color-mix(in oklab, var(--color-brand, #01ccd9) 18%, transparent);
 }
 
 /* Slot del player de pista (Fase D): oculto hasta que exista audio+flag. */

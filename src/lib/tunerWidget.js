@@ -31,7 +31,7 @@ export function colorFromCents(cents) {
  * escenario) como, en un paso posterior, por el widget flotante.
  *
  * @param {{ onPitch?: (stab: object|null) => void,
- *           onState?: (s: 'requesting'|'running'|'stopped'|'denied') => void,
+ *           onState?: (s: 'idle'|'requesting'|'running'|'stopped'|'denied') => void,
  *           onError?: (err: Error) => void }} [opts]
  * @returns {{ start: () => void, stop: () => void, requestMic: () => void,
  *             isRunning: () => boolean }}

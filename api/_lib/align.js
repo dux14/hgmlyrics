@@ -10,8 +10,8 @@ import { fetchWithTimeout } from './http.js';
  * Proyecta las lineas canonicas de una cancion (modo letra sin voz): salta
  * `annotation`, conserva `spoken`. Replica EXACTAMENTE la regla de
  * `projectLines` en src/components/StageMode.js (linea 135-138) — el front
- * tiene su propia copia en src/lib/projectLines.js (Task C3); ambas se
- * validan contra la misma fixture para garantizar paridad.
+ * tendra su propia copia en src/lib/projectLines.js (Task C3); cuando exista,
+ * se validara contra la misma fixture para garantizar paridad front/back.
  * @param {Array<{lines?: Array<{annotation?:boolean, text?:string}>}>} sections
  * @returns {Array<{i:number, text:string}>}
  */
@@ -90,7 +90,7 @@ export async function dispatchAlign(songId) {
   } catch (err) {
     await sql`
       UPDATE song_line_timings
-      SET status = 'failed', error = ${String(err?.message ?? err)}
+      SET status = 'failed', error = ${String(err?.message ?? err).slice(0, 300)}
       WHERE song_id = ${songId}
     `;
     throw err;

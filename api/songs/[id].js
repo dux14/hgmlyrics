@@ -70,6 +70,9 @@ async function update(req, res, id) {
   // separado de links.js). Si vienen, se guardan en la MISMA transacción que
   // la canción — un link inválido revierte también el UPDATE de songs.
   const hasLinks = s.platformLinks !== undefined || s.voiceLinks !== undefined;
+  // Se lee ANTES de la tx para comparar sections tras el UPDATE y decidir si
+  // los timings de alignment (song_line_timings) quedan obsoletos.
+  const [prevRow] = await sql`SELECT sections FROM songs WHERE id = ${id}`;
   await sql.begin(async (tx) => {
     const result = await tx`
       UPDATE songs SET
@@ -103,6 +106,15 @@ async function update(req, res, id) {
       await persistLinksInTx(tx, id, s.platformLinks ?? [], s.voiceLinks ?? []);
     }
   });
+
+  // La letra (sections) cambio -> los timings de alignment ya no corresponden
+  // a las lineas canonicas indexadas. No re-dispara Modal aca: solo marca
+  // stale, el re-alineado lo dispara el admin (api/songs/[id]/align.js).
+  const sectionsChanged =
+    JSON.stringify(prevRow?.sections ?? null) !== JSON.stringify(s.sections ?? []);
+  if (sectionsChanged) {
+    await sql`UPDATE song_line_timings SET status = 'stale' WHERE song_id = ${id}`;
+  }
 
   invalidateListCache();
   res.status(200).json({ success: true });

@@ -215,6 +215,9 @@
      crecen solos bajo el notch. */
   --header-height: calc(52px + var(--safe-top));
   --bottom-nav-height: 56px;
+  /* Alto extra del bottom-nav cuando la máscara del fade superior está activa
+     (layout.css la sube a 8px dentro de @supports mask-image). */
+  --bottom-nav-fade-extra: 0px;
   /* Offsets de lo anclado a header/nav; el motor de auto-hide (scrollChrome.js)
      los baja a 0px cuando el chrome correspondiente se oculta al desplazarse. */
   --bnav-offset: var(--bottom-nav-height);

@@ -18,7 +18,9 @@ body.menu-open .bottom-nav {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(var(--bottom-nav-height, 56px) + env(safe-area-inset-bottom));
+  bottom: calc(
+    var(--bottom-nav-height, 56px) + var(--bottom-nav-fade-extra, 0px) + env(safe-area-inset-bottom)
+  );
   z-index: calc(var(--z-overlay) + 10);
   border-radius: 22px 22px 0 0;
   background: var(--color-surface);

@@ -429,6 +429,36 @@
 .bottom-nav--auto-hide {
   transform: translateY(100%);
 }
+
+/* Base (todos los navegadores): el contenido se disuelve en el tinte del nav. */
+.bottom-nav::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -18px;
+  height: 18px;
+  background: linear-gradient(to top, color-mix(in srgb, var(--color-bg) 80%, transparent), transparent);
+  pointer-events: none;
+}
+
+/* Enhancement: blur progresivo real donde mask-image es confiable. */
+@supports (mask-image: linear-gradient(#000, #000)) or (-webkit-mask-image: linear-gradient(#000, #000)) {
+  :root {
+    /* La máscara suma altura real al nav (el padding-top ya no es solapado
+       por el fade); otros elementos anclados al bottom-nav (ej. go-to-sheet)
+       deben sumar este extra para no quedar tapados. */
+    --bottom-nav-fade-extra: 8px;
+  }
+  .bottom-nav {
+    padding-top: 14px; /* zona de fade; los iconos quedan en la parte opaca */
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 14px);
+    mask-image: linear-gradient(to bottom, transparent, #000 14px);
+  }
+  .bottom-nav::before {
+    display: none;
+  }
+}
 .bottom-nav__item {
   display: flex;
   flex-direction: column;

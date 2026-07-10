@@ -43,18 +43,24 @@ app = modal.App("hkn-align")
 # Modal 1.x no auto-monta modulos locales hermanos: hay que incluir
 # explicitamente `sections` y `align_mapping`.
 #
-# whisperx PINEADO a 3.7.5 (ultima estable en PyPI al momento de escribir
-# esto — `pip index versions whisperx`) Y en el MISMO comando que repite los
-# pins criticos de torch/torchaudio de requirements.txt (2.4.1). Si whisperx
-# se instalara sin version en un paso aparte, pip podria re-resolver el
-# stack completo y mover torch/torchaudio a una version distinta de la que
-# ya viene fijada (rompiendo el resto del pipeline, que depende de esos
-# pins). Repetirlos aqui obliga al resolver a mantenerlos.
+# whisperx PINEADO a 3.3.1 — NO ACTUALIZAR A CIEGAS. Es la ultima version
+# compatible con el resto del stack de la imagen (torch==2.4.1 de
+# requirements.txt + audio-separator==0.28.5, que exige torch<2.5 y
+# numpy<2): whisperx>=3.3.4 ya sube su pin a torch>=2.5.1, y whisperx 3.7.x
+# (la ultima en PyPI) exige torch~=2.8.0 y numpy>=2.0.2 — un `modal deploy`
+# con esa version falla con ResolutionImpossible porque no hay forma de
+# satisfacer ambos stacks a la vez. 3.3.1 declara torch>=2 / torchaudio>=2
+# (sin tope) y pyannote.audio==3.3.2 (identico al pin de requirements.txt),
+# asi que no hay conflicto. Se instala en el MISMO comando que repite los
+# pins de torch/torchaudio para que el resolver no los mueva igual.
+# Verificado (pip download --no-deps whisperx==3.3.1): load_align_model
+# (language_code, device), align(transcript, model, metadata, audio,
+# device) y load_audio(file) tienen la misma firma que se usa mas abajo.
 align_image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("ffmpeg", "git")
     .pip_install_from_requirements("requirements.txt")
-    .pip_install("whisperx==3.7.5", "torch==2.4.1", "torchaudio==2.4.1")
+    .pip_install("whisperx==3.3.1", "torch==2.4.1", "torchaudio==2.4.1")
     .add_local_python_source("sections")
     .add_local_python_source("align_mapping")
 )

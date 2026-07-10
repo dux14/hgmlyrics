@@ -13,7 +13,7 @@ vi.mock('../lib/prefetch.js', () => ({
   warm: vi.fn(),
 }));
 vi.mock('../lib/favorites.js', () => ({ getFavoriteIds: vi.fn() }));
-vi.mock('../lib/recentVisits.js', () => ({ getRecentVisitIds: vi.fn() }));
+vi.mock('../lib/recentVisits.js', () => ({ getRecentVisitIds: vi.fn(), subscribe: vi.fn() }));
 vi.mock('../lib/icons.js', () => ({ icon: vi.fn((name) => `[${name}]`) }));
 vi.mock('../lib/escape.js', () => ({ escapeHtml: (s) => String(s ?? '') }));
 vi.mock('./SongList.js', () => ({
@@ -39,7 +39,7 @@ import { getState, getAlbums } from '../lib/store.js';
 import { isAuthenticated } from '../lib/authStore.js';
 import { listMyLists } from '../lib/lists.js';
 import { getFavoriteIds } from '../lib/favorites.js';
-import { getRecentVisitIds } from '../lib/recentVisits.js';
+import { getRecentVisitIds, subscribe as subscribeRecentVisits } from '../lib/recentVisits.js';
 import { navigate } from '../router.js';
 
 // ── Fixtures ─────────────────────────────────────────────────────────
@@ -75,6 +75,7 @@ beforeEach(() => {
   isAuthenticated.mockReturnValue(false);
   getFavoriteIds.mockReturnValue([]);
   getRecentVisitIds.mockReturnValue([]);
+  subscribeRecentVisits.mockImplementation(() => () => {});
   vi.stubGlobal('fetch', FETCH_FAIL);
 });
 
@@ -232,6 +233,42 @@ describe('renderHome — Reciente', () => {
     await renderHome(c, { today: '2026-06-30' });
 
     expect(c.querySelector('#home-recent-strip')).not.toBeNull();
+  });
+
+  it('repinta solo el rail Reciente cuando recentVisits notifica', async () => {
+    let notifyCb;
+    subscribeRecentVisits.mockImplementation((fn) => {
+      notifyCb = fn;
+      return () => {};
+    });
+    getRecentVisitIds.mockReturnValue(['s2']);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const stripBefore = c.querySelector('#home-recent-strip');
+    getRecentVisitIds.mockReturnValue(['s3', 's1']);
+    notifyCb();
+
+    const strip = c.querySelector('#home-recent-strip');
+    // Mismo nodo (repintado in-place, sin re-render completo de la vista).
+    expect(strip).toBe(stripBefore);
+    const ids = [...strip.querySelectorAll('.song-card')].map((el) => el.dataset.songId);
+    expect(ids).toEqual(['s3', 's1', 's2']);
+  });
+
+  it('cancela la suscripción anterior al re-renderizar el Home', async () => {
+    const unsubs = [];
+    subscribeRecentVisits.mockImplementation(() => {
+      const u = vi.fn();
+      unsubs.push(u);
+      return u;
+    });
+    await renderHome(mkContainer(), { today: '2026-06-30' });
+    await renderHome(mkContainer(), { today: '2026-06-30' });
+
+    expect(unsubs).toHaveLength(2);
+    expect(unsubs[0]).toHaveBeenCalled();
+    expect(unsubs[1]).not.toHaveBeenCalled();
   });
 });
 

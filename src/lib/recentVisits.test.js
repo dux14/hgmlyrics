@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 const h = vi.hoisted(() => ({
   session: null,
   selectResult: { data: [], error: null },
+  selectCalls: 0,
   upsertCalls: [],
   upsertResult: { error: null },
   authListeners: new Set(),
@@ -13,13 +14,16 @@ const h = vi.hoisted(() => ({
 vi.mock('./supabase.js', () => ({
   supabase: {
     from: (table) => ({
-      select: () => ({
-        eq: () => ({
-          order: () => ({
-            limit: () => Promise.resolve(h.selectResult),
+      select: () => {
+        h.selectCalls++;
+        return {
+          eq: () => ({
+            order: () => ({
+              limit: () => Promise.resolve(h.selectResult),
+            }),
           }),
-        }),
-      }),
+        };
+      },
       upsert: (rows, opts) => {
         h.upsertCalls.push({ table, rows, opts });
         return Promise.resolve(h.upsertResult);
@@ -36,7 +40,7 @@ vi.mock('./authStore.js', () => ({
   },
 }));
 
-import { recordVisit, getRecentVisitIds, initRecentVisits } from './recentVisits.js';
+import { recordVisit, getRecentVisitIds, initRecentVisits, subscribe } from './recentVisits.js';
 
 const STORAGE_KEY = 'hkn:recent-visits';
 
@@ -53,6 +57,7 @@ beforeEach(() => {
   localStorage.clear();
   h.session = null;
   h.selectResult = { data: [], error: null };
+  h.selectCalls = 0;
   h.upsertCalls = [];
   h.upsertResult = { error: null };
   h.authListeners.clear();
@@ -261,5 +266,131 @@ describe('initRecentVisits (merge servidor + local)', () => {
     h.selectResult = Promise.reject(new Error('fetch failed'));
     await expect(initRecentVisits()).resolves.toBeUndefined();
     expect(getRecentVisitIds()).toEqual(['s1']);
+  });
+});
+
+describe('subscribe (canal de cambios del historial)', () => {
+  it('notifica cuando el merge del sync cambia el historial', async () => {
+    h.session = { user: { id: 'u1' } };
+    seedLocal([{ id: 'local', at: 1000 }]);
+    h.selectResult = {
+      data: [{ song_id: 'server', visited_at: new Date(2000).toISOString() }],
+      error: null,
+    };
+    const spy = vi.fn();
+    const unsub = subscribe(spy);
+    await initRecentVisits();
+    expect(spy).toHaveBeenCalled();
+    unsub();
+  });
+
+  it('no notifica si el merge no altera el historial', async () => {
+    h.session = { user: { id: 'u1' } };
+    seedLocal([{ id: 's1', at: 1000 }]);
+    h.selectResult = {
+      data: [{ song_id: 's1', visited_at: new Date(1000).toISOString() }],
+      error: null,
+    };
+    const spy = vi.fn();
+    const unsub = subscribe(spy);
+    await initRecentVisits();
+    expect(spy).not.toHaveBeenCalled();
+    unsub();
+  });
+
+  it('notifica al limpiar el historial en sign-out', async () => {
+    h.session = { user: { id: 'u1' } };
+    seedLocal([{ id: 's1', at: 100 }]);
+    await initRecentVisits();
+    const spy = vi.fn();
+    const unsub = subscribe(spy);
+    emitAuth(null);
+    expect(spy).toHaveBeenCalled();
+    expect(getRecentVisitIds()).toEqual([]);
+    unsub();
+  });
+
+  it('el unsubscribe devuelto deja de notificar', async () => {
+    h.session = { user: { id: 'u1' } };
+    seedLocal([{ id: 'local', at: 1000 }]);
+    h.selectResult = {
+      data: [{ song_id: 'server', visited_at: new Date(2000).toISOString() }],
+      error: null,
+    };
+    const spy = vi.fn();
+    subscribe(spy)();
+    await initRecentVisits();
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('re-sync al volver a primer plano', () => {
+  it('al volver la pestaña a visible con sesión vuelve a consultar y fusiona', async () => {
+    await initRecentVisits();
+    h.session = { user: { id: 'u1' } };
+    h.selectCalls = 0;
+    h.selectResult = {
+      data: [{ song_id: 'otro-dispositivo', visited_at: new Date(5000).toISOString() }],
+      error: null,
+    };
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.waitFor(() => {
+      expect(getRecentVisitIds()).toEqual(['otro-dispositivo']);
+    });
+    expect(h.selectCalls).toBe(1);
+  });
+
+  it('sin sesión no consulta al volver a visible', async () => {
+    await initRecentVisits();
+    h.selectCalls = 0;
+    document.dispatchEvent(new Event('visibilitychange'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(h.selectCalls).toBe(0);
+  });
+
+  it('con la pestaña oculta no consulta', async () => {
+    await initRecentVisits();
+    h.session = { user: { id: 'u1' } };
+    h.selectCalls = 0;
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(h.selectCalls).toBe(0);
+    delete document.visibilityState;
+  });
+
+  it('el focus de la ventana también re-sincroniza', async () => {
+    await initRecentVisits();
+    h.session = { user: { id: 'u1' } };
+    h.selectCalls = 0;
+    window.dispatchEvent(new Event('focus'));
+    await vi.waitFor(() => {
+      expect(h.selectCalls).toBe(1);
+    });
+  });
+
+  it('eventos seguidos con un sync en vuelo no duplican la consulta', async () => {
+    await initRecentVisits();
+    h.session = { user: { id: 'u1' } };
+    h.selectCalls = 0;
+    let resolveSelect;
+    h.selectResult = new Promise((resolve) => {
+      resolveSelect = resolve;
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('focus'));
+    expect(h.selectCalls).toBe(1);
+    resolveSelect({ data: [], error: null });
+    await new Promise((r) => setTimeout(r, 0));
+  });
+
+  it('múltiples init no duplican los listeners de visibilidad', async () => {
+    await initRecentVisits();
+    await initRecentVisits();
+    h.session = { user: { id: 'u1' } };
+    h.selectCalls = 0;
+    document.dispatchEvent(new Event('visibilitychange'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(h.selectCalls).toBe(1);
   });
 });

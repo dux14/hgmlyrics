@@ -18,6 +18,30 @@ const MAX_ENTRIES = 24;
 // después de un sign-out/cambio de cuenta (dispositivos compartidos).
 let syncEpoch = 0;
 
+// Un solo sync a la vez: visibilitychange y focus suelen dispararse juntos
+// al volver a la pestaña; el segundo evento no debe duplicar la consulta.
+let syncInFlight = false;
+
+// Canal de cambios (espejo de favorites.js): notifica cuando el merge con el
+// servidor —o la limpieza en sign-out— cambia el historial, para que el Home
+// repinte el rail Reciente sin re-render completo.
+const listeners = new Set();
+
+function notify() {
+  listeners.forEach((fn) => fn());
+}
+
+/**
+ * Se suscribe a los cambios del historial que llegan de fuera de la vista
+ * (merge con el servidor, limpieza en sign-out).
+ * @param {() => void} fn
+ * @returns {() => void} unsubscribe
+ */
+export function subscribe(fn) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
 /**
  * Lee el array crudo de localStorage. Devuelve [] ante cualquier fallo
  * (storage inaccesible, JSON inválido, forma inesperada).
@@ -98,9 +122,11 @@ export function getRecentVisitIds(limit = 24) {
  * Nunca rechaza; ante fallo deja el historial local intacto.
  */
 async function syncFromServer() {
+  if (syncInFlight) return;
   const epoch = syncEpoch;
   const session = getSession();
   if (!session) return;
+  syncInFlight = true;
   try {
     const { data, error } = await supabase
       .from('recent_visits')
@@ -118,8 +144,9 @@ async function syncFromServer() {
     const merged = new Map(
       (data || []).map((row) => [row.song_id, Date.parse(row.visited_at) || 0]),
     );
+    const local = readRaw();
     const toPush = [];
-    for (const entry of readRaw()) {
+    for (const entry of local) {
       const at = typeof entry.at === 'number' ? entry.at : 0;
       if (!merged.has(entry.id) || at > merged.get(entry.id)) {
         merged.set(entry.id, at);
@@ -131,12 +158,16 @@ async function syncFromServer() {
       }
     }
 
-    writeRaw(
-      [...merged.entries()]
-        .map(([id, at]) => ({ id, at }))
-        .sort((a, b) => b.at - a.at)
-        .slice(0, MAX_ENTRIES),
-    );
+    const next = [...merged.entries()]
+      .map(([id, at]) => ({ id, at }))
+      .sort((a, b) => b.at - a.at)
+      .slice(0, MAX_ENTRIES);
+    writeRaw(next);
+    // Solo el orden de ids afecta al rail Reciente; un merge que apenas
+    // actualiza timestamps sin reordenar no amerita repintado.
+    const changed =
+      next.length !== local.length || next.some((entry, i) => entry.id !== local[i].id);
+    if (changed) notify();
 
     if (toPush.length && epoch === syncEpoch) {
       const { error: pushError } = await supabase
@@ -146,8 +177,21 @@ async function syncFromServer() {
     }
   } catch (e) {
     console.warn('syncRecentVisits failed', e);
+  } finally {
+    syncInFlight = false;
   }
 }
+
+// Re-sync al volver la app a primer plano (mismo criterio que el poller por
+// visibilidad de poller.js): así los recientes hechos en otro dispositivo
+// aparecen sin refrescar la página.
+function resyncOnVisible() {
+  if (document.visibilityState !== 'visible') return;
+  if (!getSession()) return;
+  syncFromServer();
+}
+
+let visibilityBound = false;
 
 /**
  * Bootstrap del historial: se suscribe a auth ANTES del sync inicial (para no
@@ -163,8 +207,17 @@ export async function initRecentVisits() {
     const hasSession = !!session;
     if (hasSession !== hadSession) syncEpoch++;
     if (hasSession && !hadSession) syncFromServer();
-    if (!hasSession && hadSession) writeRaw([]);
+    if (!hasSession && hadSession) {
+      const hadEntries = readRaw().length > 0;
+      writeRaw([]);
+      if (hadEntries) notify();
+    }
     hadSession = hasSession;
   });
+  if (!visibilityBound) {
+    visibilityBound = true;
+    document.addEventListener('visibilitychange', resyncOnVisible);
+    window.addEventListener('focus', resyncOnVisible);
+  }
   await syncFromServer();
 }

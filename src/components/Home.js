@@ -15,7 +15,11 @@ import { getWeeklyWords } from '../lib/weeklyWords.js';
 import { getFavoriteIds } from '../lib/favorites.js';
 import { isVigente } from './VoicesAlbumView.js';
 import { voiceoverCoverHtml } from '../lib/voiceoverCover.js';
-import { getRecentVisitIds } from '../lib/recentVisits.js';
+import { getRecentVisitIds, subscribe as subscribeRecentVisits } from '../lib/recentVisits.js';
+
+// Suscripción viva al historial de recientes; se reemplaza en cada render
+// del Home (mismo patrón que favUnsubscribe en SongList.js).
+let recentUnsubscribe = null;
 
 /**
  * Ordena canciones por año desc y acota al límite indicado.
@@ -269,6 +273,17 @@ export async function renderHome(
   // Strip de canciones recientes
   const recentStrip = container.querySelector('#home-recent-strip');
   recent.forEach((song, i) => recentStrip?.appendChild(createSongCard(song, i)));
+
+  // Repintar SOLO el rail Reciente cuando el sync con la cuenta cambie el
+  // historial (p. ej. visitas hechas en otro dispositivo), sin re-render
+  // completo de la vista.
+  recentUnsubscribe?.();
+  recentUnsubscribe = subscribeRecentVisits(() => {
+    const strip = container.querySelector('#home-recent-strip');
+    if (!strip || !strip.isConnected) return;
+    const fresh = selectRecentlyVisited(getState().songs, getRecentVisitIds(), 6);
+    strip.replaceChildren(...fresh.map((song, i) => createSongCard(song, i)));
+  });
 
   // Cards de álbum individuales
   container

@@ -909,7 +909,6 @@ async function _renderSongBody(container, songId, isPreview, song) {
       }
     };
     openOptionsSheet({
-      song,
       showTono: hasChords,
       tonoLabel: buildTransposeBubbleLabel(
         song.key,

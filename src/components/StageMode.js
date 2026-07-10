@@ -693,7 +693,6 @@ export function enterStage(songViewEl, ctx = {}) {
   const onOpenOptions = () => {
     showControls(session);
     openOptionsSheet({
-      song: session.song,
       showTono: false,
       notation: typeof session.ctx.getNotation === 'function' ? session.ctx.getNotation() : 'anglo',
       fontLabel: session.fontScale.toFixed(2),

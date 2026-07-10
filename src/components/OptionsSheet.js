@@ -27,7 +27,6 @@ let openEls = null;
  * Retorna { close, sheet } para control externo.
  *
  * @param {{
- *   song: object,
  *   showTono: boolean,
  *   tonoLabel: string,
  *   useFlats: boolean,

@@ -245,4 +245,56 @@ describe('PUT /api/songs/[id] — song_line_timings stale al editar secciones', 
     );
     expect(stale).toBeUndefined();
   });
+
+  it('mismas lineas pero claves en orden distinto (roundtrip JSONB) → NO emite UPDATE stale', async () => {
+    // prevRow simula lo leido de Postgres: JSONB reordena las claves internas.
+    const prevSections = [
+      {
+        type: 'verse',
+        lines: [{ groups: [], chords: [], text: 'igual', annotation: false, spoken: false }],
+      },
+    ];
+    // Sections del front: mismo contenido, orden literal de claves distinto.
+    const newSections = [
+      {
+        type: 'verse',
+        lines: [{ text: 'igual', groups: [], chords: [], annotation: false, spoken: false }],
+      },
+    ];
+    sqlResponses.push([{ sections: prevSections }]); // SELECT prevRow
+    sqlResponses.push({ count: 1 }); // UPDATE songs
+    const req = makeReq({ title: 'X', sections: newSections });
+    const res = makeRes();
+    await updateHandler(req, res);
+    expect(res.statusCode).toBe(200);
+    const stale = sqlCalls.find(
+      (c) => c.text.startsWith('UPDATE song_line_timings') && c.text.includes('stale'),
+    );
+    expect(stale).toBeUndefined();
+  });
+
+  it('cambian solo los acordes de una linea (mismo text/annotation/spoken) → NO emite UPDATE stale', async () => {
+    const prevSections = [
+      {
+        type: 'verse',
+        lines: [{ text: 'igual', groups: [], chords: ['C', 'G'], annotation: false }],
+      },
+    ];
+    const newSections = [
+      {
+        type: 'verse',
+        lines: [{ text: 'igual', groups: [], chords: ['D', 'Am'], annotation: false }],
+      },
+    ];
+    sqlResponses.push([{ sections: prevSections }]); // SELECT prevRow
+    sqlResponses.push({ count: 1 }); // UPDATE songs
+    const req = makeReq({ title: 'X', sections: newSections });
+    const res = makeRes();
+    await updateHandler(req, res);
+    expect(res.statusCode).toBe(200);
+    const stale = sqlCalls.find(
+      (c) => c.text.startsWith('UPDATE song_line_timings') && c.text.includes('stale'),
+    );
+    expect(stale).toBeUndefined();
+  });
 });

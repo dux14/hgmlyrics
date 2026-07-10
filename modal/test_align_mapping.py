@@ -30,6 +30,14 @@ def test_normalize_minusculas_y_tildes():
     assert normalize("Corazón Único") == ["corazon", "unico"]
 
 
+def test_normalize_preserva_la_ene():
+    assert normalize("ñooor") == ["ñor"]
+
+
+def test_normalize_ano_y_anio_no_colisionan():
+    assert normalize("año") != normalize("ano")
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # map_words_to_lines()
 # ──────────────────────────────────────────────────────────────────────────────

@@ -26,10 +26,16 @@ _NON_LETTER_RE = re.compile(r"[^a-zñ0-9]")
 
 
 def _strip_accents(text: str) -> str:
-    """Quita tildes/diacriticos preservando la letra base (NFKD + descartar
-    caracteres 'combining'). 'á' -> 'a', 'ñ' se preserva (no es 'combining')."""
-    decomposed = unicodedata.normalize("NFKD", text)
-    return "".join(c for c in decomposed if not unicodedata.combining(c))
+    """Quita tildes/diacriticos preservando la letra base ('á' -> 'a'), pero
+    preserva 'ñ'/'Ñ' como letra propia (NO es un caso de tilde: en espanol
+    'ano'/'año' y 'senor'/'señor' son palabras distintas). NFKD descompone
+    'ñ' en 'n' + tilde combinante (U+0303), así que si se filtrara igual que
+    el resto de combinantes se perderia la eñe. Por eso se protege con un
+    placeholder antes de NFKD y se restaura despues."""
+    protected = text.replace("ñ", "\x00").replace("Ñ", "\x01")
+    decomposed = unicodedata.normalize("NFKD", protected)
+    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return stripped.replace("\x00", "ñ").replace("\x01", "Ñ")
 
 
 def _collapse_elongation(token: str) -> str:

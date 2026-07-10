@@ -191,8 +191,59 @@ describe('FINDING 4: el afinador flotante se cierra al entrar al escenario', () 
 
     container.querySelector('#hero-tuner-mic').click();
     expect(document.querySelector('.floating-tuner')).toBeTruthy();
+    expect(document.body.classList.contains('floating-tuner-open')).toBe(true);
 
     container.querySelector('#enter-stage-btn').click();
     expect(document.querySelector('.floating-tuner')).toBeNull();
+    expect(document.body.classList.contains('floating-tuner-open')).toBe(false);
+  });
+});
+
+describe('Task 4: clase body.floating-tuner-open para apilar el FAB de autoscroll', () => {
+  afterEach(() => {
+    document.body.classList.remove('floating-tuner-open', 'section-player-open');
+    document.body.innerHTML = '';
+    capturedCtx = null;
+  });
+
+  it('se agrega al abrir el afinador con el mic y se quita al re-clickear el mic (toggle)', async () => {
+    const song = buildSong('song-6', []);
+    getSongById.mockReturnValue(song);
+    const container = document.createElement('div');
+    await renderSongView(container, 'song-6');
+
+    const mic = container.querySelector('#hero-tuner-mic');
+    mic.click();
+    expect(document.body.classList.contains('floating-tuner-open')).toBe(true);
+
+    mic.click(); // segundo click en el mismo mic: cierra
+    expect(document.body.classList.contains('floating-tuner-open')).toBe(false);
+    expect(document.querySelector('.floating-tuner')).toBeNull();
+  });
+
+  it('se quita al cerrar con la X del widget', async () => {
+    const song = buildSong('song-7', []);
+    getSongById.mockReturnValue(song);
+    const container = document.createElement('div');
+    await renderSongView(container, 'song-7');
+
+    container.querySelector('#hero-tuner-mic').click();
+    expect(document.body.classList.contains('floating-tuner-open')).toBe(true);
+
+    document.querySelector('.floating-tuner__close').click();
+    expect(document.body.classList.contains('floating-tuner-open')).toBe(false);
+  });
+
+  it('se quita al cerrar con Escape', async () => {
+    const song = buildSong('song-8', []);
+    getSongById.mockReturnValue(song);
+    const container = document.createElement('div');
+    await renderSongView(container, 'song-8');
+
+    container.querySelector('#hero-tuner-mic').click();
+    expect(document.body.classList.contains('floating-tuner-open')).toBe(true);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(document.body.classList.contains('floating-tuner-open')).toBe(false);
   });
 });

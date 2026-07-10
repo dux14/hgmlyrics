@@ -696,6 +696,14 @@ async function _renderSongBody(container, songId, isPreview, song) {
   container.querySelector('#layer-chords')?.addEventListener('click', () => toggleLayer('chords'));
   container.querySelector('#layer-tono')?.addEventListener('click', () => toggleLayer('tono'));
 
+  // Task 4: clase en body mientras el afinador flotante está abierto — el
+  // autoscroll FAB (fixed, ancla abajo) la usa para apilarse por encima del
+  // widget en vez de taparlo. Se togglea en TODOS los caminos de cierre (X,
+  // Escape, re-click del mic, route change, entrar al escenario).
+  function setFloatingTunerOpen(open) {
+    document.body.classList.toggle('floating-tuner-open', open);
+  }
+
   // ── Afinador flotante: mic de la toolbar, bajo demanda. Toggle simple — un
   // segundo click en el mismo mic cierra la barra en vez de apilar otra. Se
   // monta en document.body (mismo patrón que autoscroll-fab) para que el
@@ -706,6 +714,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
     if (floatingTunerApi) {
       floatingTunerApi.destroy();
       floatingTunerApi = null;
+      setFloatingTunerOpen(false);
       return;
     }
     floatingTunerApi = openFloatingTuner(document.body, {
@@ -715,8 +724,10 @@ async function _renderSongBody(container, songId, isPreview, song) {
       voiceLabel: chordsCategory ? getVoiceLabel(chordsCategory) : 'Afinador',
       onClose: () => {
         floatingTunerApi = null;
+        setFloatingTunerOpen(false);
       },
     });
+    setFloatingTunerOpen(true);
   });
 
   // El afinador flotante no depende del audio por sección (F5): se destruye
@@ -728,6 +739,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
     const destroyFloatingTuner = () => {
       floatingTunerApi?.destroy();
       floatingTunerApi = null;
+      setFloatingTunerOpen(false);
       unsubscribeFloatingTunerRoute();
     };
     const unsubscribeFloatingTunerRoute = onRouteChange(destroyFloatingTuner);
@@ -852,6 +864,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
       // teardown (destroyFloatingTuner más arriba).
       floatingTunerApi?.destroy();
       floatingTunerApi = null;
+      setFloatingTunerOpen(false);
       enterStage(sv, {
         song,
         getActiveVoice: () => chordsVoiceId,
@@ -978,6 +991,9 @@ async function _renderSongBody(container, songId, isPreview, song) {
       destroyed = true;
       sectionPlayerApi?.destroy();
       sectionPlayerApi = null;
+      // Task 4: retira la clase de apilado del FAB de autoscroll junto con el
+      // widget — inofensivo si nunca llegó a montarse (tracks vacíos).
+      document.body.classList.remove('section-player-open');
       unsubscribeRouteChange();
     };
     const unsubscribeRouteChange = onRouteChange(destroySectionPlayer);
@@ -995,6 +1011,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
         refetch: () => fetchSectionAudio(songId),
       });
       sv.appendChild(sectionPlayerApi.el);
+      document.body.classList.add('section-player-open');
       sectionsWithAudio = new Set(tracks.map((t) => t.sectionIndex));
       reRenderLyrics();
     })();

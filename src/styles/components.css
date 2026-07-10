@@ -1432,7 +1432,7 @@
 /* === Autoscroll FAB === */
 .autoscroll-fab {
   position: fixed;
-  top: calc(140px + env(safe-area-inset-top, 0px));
+  bottom: calc(var(--bottom-nav-height, 56px) + env(safe-area-inset-bottom, 0px) + 12px);
   right: 12px;
   z-index: var(--z-toast);
   display: flex;
@@ -1442,13 +1442,35 @@
   animation: fabIn 400ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
   transition:
     opacity 300ms ease,
-    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    bottom 200ms ease;
 }
 
 @media (min-width: 768px) {
   .autoscroll-fab {
-    top: 84px;
     right: 24px;
+  }
+}
+
+/* Apilado (Task 4): cuando el afinador flotante o el reproductor de sección
+   están montados, ambos anclados abajo, el FAB sube por encima de la barra
+   visible más alta para no taparla ni quedar tapado por ella. Alturas
+   aproximadas medidas de `.floating-tuner` (~100px, ver components.css) y
+   de `.section-player` (~76px con chips, ver section-player.css); el
+   reproductor de sección alcanza más alto (se ancla sobre el bottom-nav),
+   así que su offset ya despeja también al afinador cuando ambos están
+   abiertos a la vez. */
+body.floating-tuner-open .autoscroll-fab {
+  bottom: calc(var(--space-md, 1rem) + 100px + env(safe-area-inset-bottom, 0px) + 12px);
+}
+
+body.section-player-open .autoscroll-fab {
+  bottom: calc(var(--bottom-nav-height, 56px) + 76px + env(safe-area-inset-bottom, 0px) + 12px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .autoscroll-fab {
+    transition: none;
   }
 }
 
@@ -1456,7 +1478,7 @@
 .autoscroll-fab--collapsed {
   opacity: 0.2;
   transform: scale(0.7);
-  transform-origin: top right;
+  transform-origin: bottom right;
 }
 
 .autoscroll-fab--collapsed .autoscroll-fab__controls {
@@ -2010,7 +2032,9 @@
      otro modo retiene opacity:1 y deja el botón siempre visible. */
   opacity: 0 !important;
   pointer-events: none;
-  transform: translateY(-8px) !important;
+  /* Positivo: el FAB está anclado abajo, así que se oculta deslizándose
+     hacia el borde inferior en vez de hacia arriba. */
+  transform: translateY(8px) !important;
 }
 
 /* === Afinador flotante híbrido (T5 + T2 refino) — bajo demanda desde el mic

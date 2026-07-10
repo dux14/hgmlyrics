@@ -56,4 +56,68 @@ describe('createSpring', () => {
     expect(() => s.step(5000)).not.toThrow();
     expect(Number.isFinite(s.getValue())).toBe(true);
   });
+
+  it('step(64) repetido converge acotado (dispositivo lento a ~15fps)', () => {
+    const s = createSpring();
+    s.snap(0);
+    s.setTarget(100);
+    for (let i = 0; i < 500; i++) {
+      s.step(64);
+      expect(Number.isFinite(s.getValue())).toBe(true);
+      expect(Math.abs(s.getValue())).toBeLessThan(1000); // acotado, sin fuga a infinito
+    }
+    expect(s.getValue()).toBeCloseTo(100, 1);
+  });
+
+  it('ignora setTarget con valor no finito (no envenena el estado)', () => {
+    const s = createSpring();
+    s.snap(0);
+    s.setTarget(NaN);
+    s.step(16);
+    expect(Number.isFinite(s.getValue())).toBe(true);
+    s.setTarget(50);
+    let guard = 0;
+    while (s.step(16) && guard++ < 1000) {
+      // avanzar hasta reposo
+    }
+    expect(s.getValue()).toBeCloseTo(50, 1);
+  });
+
+  it('ignora snap con valor no finito (no envenena el estado)', () => {
+    const s = createSpring();
+    s.snap(0);
+    s.snap(Infinity);
+    expect(s.getValue()).toBe(0);
+    s.setTarget(20);
+    let guard = 0;
+    while (s.step(16) && guard++ < 1000) {
+      // avanzar hasta reposo
+    }
+    expect(s.getValue()).toBeCloseTo(20, 1);
+  });
+
+  it('clampa dt negativo a 0 (no retrocede)', () => {
+    const s = createSpring();
+    s.snap(0);
+    s.setTarget(100);
+    s.step(16);
+    const before = s.getValue();
+    s.step(-50);
+    expect(s.getValue()).toBe(before);
+  });
+
+  it('converge con dt jittery (16/17/15/32 alternados)', () => {
+    const s = createSpring();
+    s.snap(0);
+    s.setTarget(100);
+    const jitter = [16, 17, 15, 32];
+    let guard = 0;
+    let animating = true;
+    while (animating && guard < 1000) {
+      animating = s.step(jitter[guard % jitter.length]);
+      guard++;
+    }
+    expect(animating).toBe(false);
+    expect(s.getValue()).toBeCloseTo(100, 1);
+  });
 });

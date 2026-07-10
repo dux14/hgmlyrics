@@ -24,6 +24,8 @@ vi.mock('../src/router.js', () => ({
 }));
 
 vi.mock('../src/lib/authStore.js', () => ({
+  getSession: () => null,
+  subscribe: () => () => {},
   isAdmin: vi.fn().mockReturnValue(false),
   isFeatureEnabled: vi.fn((key) => key === 'voz_tono'),
 }));
@@ -79,7 +81,12 @@ function buildSong(id, voiceRoster) {
         lines: [
           {
             text: 'Santo es el Señor',
-            groups: (voiceRoster || []).map((v) => ({ voiceId: v.id, start: 0, end: 5, note: 'B3' })),
+            groups: (voiceRoster || []).map((v) => ({
+              voiceId: v.id,
+              start: 0,
+              end: 5,
+              note: 'B3',
+            })),
           },
         ],
       },

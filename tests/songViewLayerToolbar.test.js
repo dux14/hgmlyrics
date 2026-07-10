@@ -24,6 +24,8 @@ vi.mock('../src/router.js', () => ({
 }));
 
 vi.mock('../src/lib/authStore.js', () => ({
+  getSession: () => null,
+  subscribe: () => () => {},
   isAdmin: vi.fn().mockReturnValue(false),
   isFeatureEnabled: vi.fn((key) => key === 'voz_tono'),
 }));

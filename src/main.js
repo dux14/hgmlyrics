@@ -15,6 +15,7 @@ import { buildIndex } from './lib/search.js';
 import { route, initRouter, onNotFound, navigate, getCurrentPath } from './router.js';
 import { initAuthStore, isAuthenticated, needsOnboarding, isAdmin } from './lib/authStore.js';
 import { initFavorites } from './lib/favorites.js';
+import { initRecentVisits } from './lib/recentVisits.js';
 import { icon } from './lib/icons.js';
 import { configureAuth, guardedRoute } from './router.js';
 import { renderLoginPage, renderRegisterPage } from './components/LoginPage.js';
@@ -112,8 +113,10 @@ async function boot() {
     updateFilterBar();
   }
 
-  // Favorites cache — loads once, refreshes on sign-in, clears on sign-out.
-  await initFavorites();
+  // Favoritos (cache en memoria) y recientes ligados a la cuenta (merge
+  // local+servidor). Independientes entre sí: en paralelo para no sumar
+  // round-trips al arranque.
+  await Promise.all([initFavorites(), initRecentVisits()]);
 
   // Subscribe to state changes — re-render song list when on home page
   subscribe(async (state) => {

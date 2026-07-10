@@ -41,9 +41,16 @@ async function postAudio(req, res, songId) {
     // La subida directa a Storage ya ocurrió (PUT firmado del paso anterior);
     // esto solo confirma duracion y resetea/dispara el alignment (decision 5
     // del spec: automatico, sin paso manual extra del admin).
-    await sql`
+    const result = await sql`
       UPDATE song_audio SET duration_sec = ${durationSec} WHERE song_id = ${songId}
     `;
+    // Si no hubo fila song_audio (confirm fuera de orden o DELETE concurrente),
+    // cortamos ANTES de tocar song_line_timings/dispatchAlign (mismo patrón que
+    // api/songs/[id].js:97/114 y api/social/friends.js:78/96).
+    if (result.count === 0) {
+      res.status(404).json({ error: 'Audio no encontrado' });
+      return;
+    }
     await sql`
       INSERT INTO song_line_timings (song_id, status, lines, error)
       VALUES (${songId}, 'pending', NULL, NULL)
@@ -51,7 +58,7 @@ async function postAudio(req, res, songId) {
       DO UPDATE SET status = 'pending', lines = NULL, error = NULL
     `;
     await dispatchAlign(songId);
-    res.status(200).json({ ok: true });
+    res.status(200).json({ success: true });
     return;
   }
 
@@ -87,7 +94,7 @@ async function deleteAudio(req, res, songId) {
   await sql`DELETE FROM song_audio WHERE song_id = ${songId}`;
   await sql`DELETE FROM song_line_timings WHERE song_id = ${songId}`;
 
-  res.status(200).json({ ok: true });
+  res.status(200).json({ success: true });
 }
 
 export default withErrors(async (req, res) => {

@@ -128,17 +128,29 @@ describe('POST /api/songs/[id]/audio', () => {
 
   it('{ confirm: true } marca duration_sec, resetea timings a pending y dispara alignment', async () => {
     sqlResponses.push([{ id: 'song-1' }]); // SELECT songs
-    sqlResponses.push([]); // UPDATE song_audio SET duration_sec
+    sqlResponses.push({ count: 1 }); // UPDATE song_audio SET duration_sec
     sqlResponses.push([]); // UPSERT song_line_timings status='pending'
     const res = makeRes();
     await handler(postReq({ confirm: true, durationSec: 210 }), res);
     expect(res._status).toBe(200);
+    expect(res._body).toEqual({ success: true });
     const updateCall = sqlCalls.find((c) => c.text.includes('UPDATE song_audio'));
     expect(updateCall).toBeTruthy();
     const timingsCall = sqlCalls.find((c) => c.text.includes('song_line_timings'));
     expect(timingsCall.text).toContain('pending');
     expect(dispatchAlign).toHaveBeenCalledTimes(1);
     expect(dispatchAlign).toHaveBeenCalledWith('song-1');
+  });
+
+  it('{ confirm: true } sin fila song_audio (confirm fuera de orden o DELETE concurrente) → 404, no toca timings ni dispatchAlign', async () => {
+    sqlResponses.push([{ id: 'song-1' }]); // SELECT songs
+    sqlResponses.push({ count: 0 }); // UPDATE song_audio afecta 0 filas
+    const res = makeRes();
+    await handler(postReq({ confirm: true, durationSec: 210 }), res);
+    expect(res._status).toBe(404);
+    const timingsCall = sqlCalls.find((c) => c.text.includes('song_line_timings'));
+    expect(timingsCall).toBeUndefined();
+    expect(dispatchAlign).not.toHaveBeenCalled();
   });
 });
 
@@ -147,7 +159,7 @@ describe('DELETE /api/songs/[id]/audio', () => {
     return makeReq({ method: 'DELETE', body });
   }
 
-  it('admin → borra objeto + fila + timings; 200 { ok: true }', async () => {
+  it('admin → borra objeto + fila + timings; 200 { success: true }', async () => {
     sqlResponses.push([{ storageKey: 'song-1/full.mp3' }]); // SELECT song_audio
     sqlResponses.push([]); // DELETE song_audio
     sqlResponses.push([]); // DELETE song_line_timings
@@ -156,7 +168,7 @@ describe('DELETE /api/songs/[id]/audio', () => {
     expect(requireAdmin).toHaveBeenCalled();
     expect(deleteSongAudioObject).toHaveBeenCalledWith('song-1/full.mp3');
     expect(res._status).toBe(200);
-    expect(res._body).toEqual({ ok: true });
+    expect(res._body).toEqual({ success: true });
   });
 
   it('canción sin audio → 404', async () => {

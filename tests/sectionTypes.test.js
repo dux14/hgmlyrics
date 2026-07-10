@@ -6,7 +6,7 @@ import {
   SECTION_TYPE_LABELS,
 } from '../src/lib/sectionTypes.js';
 
-describe('sectionTypes (módulo compartido SongView/StageMode)', () => {
+describe('sectionTypes (módulo compartido SongView/ImmersiveView)', () => {
   it('normaliza slugs conocidos tal cual', () => {
     for (const slug of KNOWN_SECTION_TYPES) {
       expect(normalizeSectionType(slug)).toBe(slug);

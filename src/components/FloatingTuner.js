@@ -16,7 +16,7 @@
  * cumple `pitch.js`. Se destruye en cambio de ruta (mismo patrón que
  * `destroySectionPlayer` en SongView.js) o al tocar la X.
  *
- * `createTunerStrip` (misma tunerWidget.js) queda intacta para StageMode.
+ * `createTunerStrip` (misma tunerWidget.js) queda intacta para ImmersiveView.
  */
 
 import { createTunerEngine, colorFromCents } from '../lib/tunerWidget.js';

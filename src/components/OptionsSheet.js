@@ -52,7 +52,7 @@ let openEls = null;
  *   onClose?: () => void,
  * }} opts modes/voiceOptions/showTuner son opcionales (T-inmersiva): sin
  *   ellos las secciones MODO/VOZ/AFINADOR simplemente no se pintan, así que
- *   StageMode/SongView (que no los pasan) quedan sin cambios de comportamiento.
+ *   ImmersiveView/SongView (que no los pasan) quedan sin cambios de comportamiento.
  * @returns {{ close: () => void, sheet: HTMLElement }}
  */
 export function openOptionsSheet(opts) {
@@ -73,7 +73,7 @@ export function openOptionsSheet(opts) {
   sheet.setAttribute('tabindex', '-1');
 
   // MODO/VOZ (T-inmersiva): segmentados opcionales, arriba de TONO — solo la
-  // vista inmersiva los pasa (StageMode/SongView no envían `modes`/
+  // vista inmersiva los pasa (ImmersiveView/SongView no envían `modes`/
   // `voiceOptions`, así que su sheet queda idéntico).
   const modeSectionHtml =
     Array.isArray(opts.modes) && opts.modes.length > 1
@@ -141,7 +141,7 @@ export function openOptionsSheet(opts) {
 
   // AUTO-SCROLL (VELOCIDAD en la vista inmersiva): oculto explícitamente con
   // `showAutoscroll: false` (solo aplica en modo timer allá); default true
-  // preserva el comportamiento existente de StageMode/SongView.
+  // preserva el comportamiento existente de ImmersiveView/SongView.
   const autoscrollSectionHtml =
     opts.showAutoscroll === false
       ? ''

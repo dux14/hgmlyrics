@@ -1,7 +1,8 @@
 /* immersive.css — Vista inmersiva (karaoke estilo Apple Music), Task C4.
-   Overlay negro fijo, independiente del theme (igual convención que
-   stage.css: fondo #000 siempre). `body.immersive-active` cumple el mismo
-   rol que `body.stage-active` hoy; el rename global de esa clase es Task C5. */
+   Overlay negro fijo, independiente del theme (fondo #000 siempre).
+   `body.immersive-active` oculta el chrome de navegación (header/bottom-nav/
+   sidebar) mientras la vista está abierta — reemplazo del extinto modo
+   escenario (Task C5). */
 
 body.immersive-active .header,
 body.immersive-active .bottom-nav,

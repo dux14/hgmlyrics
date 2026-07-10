@@ -41,7 +41,7 @@ describe('stepToward', () => {
   });
 });
 
-// FIX 6: helpers de velocidad compartidos entre SongView y StageMode.
+// FIX 6: helpers de velocidad compartidos entre SongView y ImmersiveView.
 describe('getAutoscrollSpeed / saveAutoscrollSpeed', () => {
   beforeEach(() => {
     localStorage.clear();

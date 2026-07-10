@@ -304,7 +304,7 @@ describe('afinador: widget híbrido aprobado (FloatingTuner) montado bajo demand
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
     expect(document.getElementById('imm-tuner-panel').hidden).toBe(false);
     // El widget híbrido aprobado (nota grande + gauge 5 zonas + chip "Seguir
-    // nota" propio) es `.floating-tuner` — NO la franja delgada de StageMode.
+    // nota" propio) es `.floating-tuner` — NO la franja delgada de ImmersiveView.
     expect(document.querySelector('#imm-tuner-panel .floating-tuner')).toBeTruthy();
     expect(detectorStart).toHaveBeenCalledTimes(1);
 
@@ -392,8 +392,72 @@ describe('gestos (swipe horizontal/vertical, tap vs swipe)', () => {
   });
 });
 
+// Portados de tests/stageMode.test.js (Task C5): el FAB de pausa y el
+// auto-ocultado fijo de controles en pausa son la misma promesa de
+// comportamiento que tenía el extinto modo escenario.
+describe('FAB de pausa (#imm-fab) y controles fijos mientras está pausado', () => {
+  it('togglea pausa/reanuda el motor de avance e invierte el icono del FAB', () => {
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    const overlay = document.querySelector('.imm-v1');
+    const fab = document.getElementById('imm-fab');
+
+    fab.click();
+    expect(overlay.classList.contains('imm-v1--paused')).toBe(true);
+    vi.advanceTimersByTime(60000);
+    expect(
+      document.querySelector('#imm-roll .imm-line[data-i="0"]').classList.contains('imm-line--active'),
+    ).toBe(true); // sin avanzar
+
+    fab.click();
+    expect(overlay.classList.contains('imm-v1--paused')).toBe(false);
+    vi.advanceTimersByTime(8000);
+    expect(
+      document.querySelector('#imm-roll .imm-line[data-i="1"]').classList.contains('imm-line--active'),
+    ).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('en pausa los controles quedan fijos (sin auto-ocultado); al reanudar se re-arma el auto-hide', () => {
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    const chrome = document.getElementById('imm-chrome');
+    const fab = document.getElementById('imm-fab');
+
+    fab.click(); // pausa
+    expect(chrome.classList.contains('imm-v1__chrome--hidden')).toBe(false);
+    vi.advanceTimersByTime(3500); // > CONTROLS_HIDE_MS
+    expect(chrome.classList.contains('imm-v1__chrome--hidden')).toBe(false); // siguen visibles, pausado
+
+    fab.click(); // reanuda
+    expect(chrome.classList.contains('imm-v1__chrome--hidden')).toBe(false); // el FAB despierta el chrome
+    vi.advanceTimersByTime(3500);
+    expect(chrome.classList.contains('imm-v1__chrome--hidden')).toBe(true); // se re-arma el auto-hide
+    vi.useRealTimers();
+  });
+});
+
 describe('sheet de opciones extendido (MODO/VOZ/AFINADOR)', () => {
   afterEach(() => closeOptionsSheet());
+
+  // Portado de tests/stageMode.test.js (BUG Important, review): cerrar el
+  // sheet no debe dejar el chrome oculto aunque hayan pasado >= CONTROLS_HIDE_MS
+  // mientras estuvo abierto.
+  it('los controles siguen visibles al cerrar el sheet aunque hayan pasado >=3s con el sheet abierto', () => {
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    const chrome = document.getElementById('imm-chrome');
+
+    document.getElementById('imm-open-options').click();
+    vi.advanceTimersByTime(3500); // > CONTROLS_HIDE_MS mientras el sheet está abierto
+    closeOptionsSheet();
+
+    expect(chrome.classList.contains('imm-v1__chrome--hidden')).toBe(false);
+    vi.useRealTimers();
+  });
 
   it('abre con el grupo MODO (Letra activo) y sin VOZ (letra no la necesita)', () => {
     const sv = mountSongView();

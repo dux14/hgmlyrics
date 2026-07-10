@@ -1,6 +1,6 @@
 /**
  * voiceChips.js — markup del chip de selector de voz (S·A·T·B) del chrome del
- * stage (StageMode). También exporta `categoryInitial`, la derivación de
+ * stage (ImmersiveView). También exporta `categoryInitial`, la derivación de
  * inicial compartida con el hero de SongView (renderHeroVoiceChips), que no
  * usa `buildVoiceChipHTML` porque su markup incluye nota + dot propios.
  */
@@ -21,7 +21,7 @@ export function categoryInitial(category) {
 /**
  * @param {string} category
  * @param {{ active?: boolean, dimmed?: boolean, prefix: string }} opts
- *   `prefix` es la clase base BEM del chip (p.ej. "stage-v2__voice-chip");
+ *   `prefix` es la clase base BEM del chip (p.ej. "imm-v1__voice-chip");
  *   los modificadores `--active`/`--dimmed` se derivan de ella.
  * @returns {string}
  */

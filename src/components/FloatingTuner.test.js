@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
 // jsdom no tiene Web Audio: mockeamos createTunerEngine (createTunerStrip
-// queda intacta para StageMode, no la usa este componente). Capturamos los
+// queda intacta para ImmersiveView, no la usa este componente). Capturamos los
 // callbacks para simular onState/onPitch a mano, como haría pitch.js real.
 let engineCallbacks;
 vi.mock('../lib/tunerWidget.js', () => ({

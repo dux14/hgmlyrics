@@ -1,8 +1,8 @@
 /**
  * sectionTypes.js — normalización de `section.type` a un slug/etiqueta fijos.
- * Compartido por SongView.js (Lector) y StageMode.js (escenario): antes cada
- * uno tenía su propia copia (StageMode duplicaba a propósito para evitar un
- * ciclo import SongView↔StageMode); vive aquí porque ninguno de los dos
+ * Compartido por SongView.js (Lector) y ImmersiveView.js (escenario): antes cada
+ * uno tenía su propia copia (ImmersiveView duplicaba a propósito para evitar un
+ * ciclo import SongView↔ImmersiveView); vive aquí porque ninguno de los dos
  * necesita importar al otro para usarlo.
  */
 

@@ -4,7 +4,7 @@
  *
  * Independiente del layerStore excluyente de la vista normal (decisión 3
  * del spec de vista inmersiva): cambiar el modo acá NO toca las capas de
- * SongView/StageMode. Persiste una preferencia GLOBAL del dispositivo bajo
+ * SongView/ImmersiveView. Persiste una preferencia GLOBAL del dispositivo bajo
  * `hkn-immersive-mode`. Tolera localStorage roto (Safari privado, cuota) —
  * best-effort, nunca lanza.
  */
@@ -62,7 +62,7 @@ export function inheritFromLayers(layers) {
 /**
  * Modos disponibles según la disponibilidad de acordes y tono de la
  * canción actual. `hasChords`/`tonoAvailable` los calcula el caller (misma
- * señal que usan SongView/StageMode: `songHasChords(song)` local a cada
+ * señal que usan SongView/ImmersiveView: `songHasChords(song)` local a cada
  * componente y `isFeatureEnabled('voz_tono') && song.voiceRoster.length >
  * 0`) — no se duplica esa lógica acá porque no está expuesta como export
  * reusable desde donde vive hoy.

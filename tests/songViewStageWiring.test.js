@@ -30,12 +30,12 @@ vi.mock('../src/lib/authStore.js', () => ({
   isFeatureEnabled: vi.fn((key) => key === 'voz_tono'),
 }));
 
-// StageMode mockeado: capturamos el ctx que SongView le pasa a enterStage
-// para verificar el contrato (FIX 1: pauseAutoscroll, FIX 2: setActiveVoice
-// con personId) sin depender del overlay real del stage.
+// ImmersiveView mockeado: capturamos el ctx que SongView le pasa a
+// enterImmersive para verificar el contrato (FIX 1: pauseAutoscroll, FIX 2:
+// setActiveVoice con personId) sin depender del overlay real de la vista.
 let capturedCtx = null;
-vi.mock('../src/components/StageMode.js', () => ({
-  enterStage: vi.fn((_el, ctx) => {
+vi.mock('../src/components/ImmersiveView.js', () => ({
+  enterImmersive: vi.fn((_el, ctx) => {
     capturedCtx = ctx;
   }),
 }));
@@ -94,7 +94,7 @@ function buildSong(id, voiceRoster) {
   };
 }
 
-describe('SongView → StageMode: contrato de ctx (FIX 1 y FIX 2)', () => {
+describe('SongView → ImmersiveView: contrato de ctx (FIX 1 y FIX 2)', () => {
   // setupAutoscroll monta el FAB en document.body (no dentro del container),
   // así que sin limpieza queda un FAB huérfano por test (IDs duplicados).
   afterEach(() => {
@@ -131,7 +131,7 @@ describe('SongView → StageMode: contrato de ctx (FIX 1 y FIX 2)', () => {
     capturedCtx.setActiveVoice('tenor', 'ten2');
 
     // El grid de tono-filters se eliminó (T2 hero chips); se verifica el
-    // estado interno vía el mismo getter que consume StageMode.
+    // estado interno vía el mismo getter que consume ImmersiveView.
     expect(capturedCtx.getActiveVoice()).toBe('ten2');
   });
 
@@ -145,7 +145,7 @@ describe('SongView → StageMode: contrato de ctx (FIX 1 y FIX 2)', () => {
     expect(() => capturedCtx.setActiveVoice('soprano', 'sop1')).not.toThrow();
     // El panel Voz (selector único) se eliminó de este escenario junto con el
     // grid de tono-filters; se verifica el estado interno vía el mismo getter
-    // que consume StageMode.
+    // que consume ImmersiveView.
     expect(capturedCtx.getActiveVoice()).toBe('sop1');
   });
 });
@@ -167,7 +167,7 @@ describe('FINDING 2: SongView resincroniza capas al salir del escenario (ctx.onE
     container.querySelector('#enter-stage-btn').click();
     expect(capturedCtx.onExit).toBeTypeOf('function');
 
-    // Simula el toggle DENTRO del stage (StageMode llama setLayer directamente).
+    // Simula el toggle DENTRO del stage (ImmersiveView llama setLayer directamente).
     setLayer('chords', true);
     capturedCtx.onExit();
 

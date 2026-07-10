@@ -1,15 +1,15 @@
 /**
  * ImmersiveView.js — Vista inmersiva de canción (karaoke estilo Apple Music).
  *
- * Reemplaza StageMode (C5) con un rollo completo de letra: TODAS las líneas
- * montadas de una vez, línea activa nítida/grande, resto atenuado por
- * distancia (blur+opacity), posición animada con un spring interrumpible
- * (spring.js) en vez de scrollIntoView. Contrato de entrada/salida idéntico a
- * StageMode (`enterStage`/`exitStage`) para que SongView pueda intercambiarlos
- * sin cambios de ctx (Task C5).
+ * Reemplaza al extinto modo escenario (C5) con un rollo completo de letra:
+ * TODAS las líneas montadas de una vez, línea activa nítida/grande, resto
+ * atenuado por distancia (blur+opacity), posición animada con un spring
+ * interrumpible (spring.js) en vez de scrollIntoView. Contrato de
+ * entrada/salida (`enterImmersive`/`exitImmersive`) es el mismo que tenía el
+ * modo escenario, para que SongView lo consuma sin cambios de ctx (Task C5).
  *
  * Motor de avance de esta fase: SOLO TimerEngine (segundos-por-línea desde
- * autoscroll.js), igual que StageMode hoy. TimingEngine (audio real vía
+ * autoscroll.js). TimingEngine (audio real vía
  * `song_line_timings`) y la barra de player son Fase D — esta task deja los
  * slots montados más vacíos.
  */
@@ -55,9 +55,10 @@ const MODE_LABELS = {
   tono: '+Tono',
 };
 
-// ── Escala de fuente del rollo (controles A−/A+) — MISMA clave que StageMode
-// (F3/T6): compartir la preferencia entre las dos vistas es intencional, no
-// un accidente — es la MISMA perilla "tamaño de letra en modo lectura activa".
+// ── Escala de fuente del rollo (controles A−/A+) — MISMA clave que usaba el
+// extinto modo escenario (F3/T6): reusar la preferencia ya persistida en
+// localStorage es intencional, no un accidente — es la MISMA perilla "tamaño
+// de letra en modo lectura activa".
 const FONT_SCALE_KEY = 'hkn-stage-font-scale';
 const FONT_SCALE_MIN = 0.8;
 const FONT_SCALE_MAX = 1.6;
@@ -93,8 +94,8 @@ const SCROLL_CENTER_RATIO = 0.38; // línea activa centrada al 38% del alto del 
 let session = null;
 
 /**
- * Réplica local del helper homónimo de StageMode/SongView (misma convención
- * en las 3 vistas): decide si el toggle de acordes tiene sentido.
+ * Réplica local del helper homónimo de SongView (misma convención en ambas
+ * vistas): decide si el toggle de acordes tiene sentido.
  * @param {object} song @returns {boolean}
  */
 function songHasChords(song) {
@@ -373,8 +374,8 @@ function updateVoiceChipsVisibility(s) {
  * Cambia el modo de contenido (persistido en immersiveStore) y re-renderiza
  * TODAS las líneas — el modo cambia el builder de cada línea, no solo el de
  * la activa. Modo 'tono' sin voz elegida auto-abre el sheet en la voz (paridad
- * con el fix fd8ea72 de StageMode/SongView: sin esto el usuario no ve dónde
- * elegir su voz).
+ * con el fix fd8ea72 del extinto modo escenario/SongView: sin esto el usuario
+ * no ve dónde elegir su voz).
  * @param {object} s @param {string} mode
  */
 function applyMode(s, mode) {
@@ -411,7 +412,7 @@ function openOptions(s) {
   const activeCategory =
     (s.song.voiceRoster || []).find((v) => v.id === s.activeVoiceId)?.category ?? null;
   openOptionsSheet({
-    showTono: false, // sin setter de transposición propio en el ctx (paridad StageMode)
+    showTono: false, // sin setter de transposición propio en el ctx
     notation: typeof s.ctx.getNotation === 'function' ? s.ctx.getNotation() : 'anglo',
     fontLabel: s.fontScale.toFixed(2),
     autoscrollLabel: speedToPercentLabel(s.speed),
@@ -494,7 +495,8 @@ function setTunerOn(s, on) {
 /**
  * Entra a la vista inmersiva: proyecta `ctx.song` y monta el rollo completo.
  * Idempotente; no-op sin canción o sin líneas proyectables. Mismo ctx que
- * `enterStage` (StageMode) — contrato estable para el swap de C5.
+ * tenía la función de entrada del extinto modo escenario — contrato estable
+ * para el swap de C5.
  * @param {HTMLElement} songViewEl
  * @param {{ song: object, getActiveVoice?: () => string|null,
  *           getTranspose?: () => {semitones:number, useFlats:boolean},
@@ -689,7 +691,7 @@ export function enterImmersive(songViewEl, ctx = {}) {
   });
 
   // Modo 'tono' sin voz elegida al entrar (p.ej. heredado de layerStore):
-  // auto-abre el sheet en la voz, misma paridad que StageMode/SongView.
+  // auto-abre el sheet en la voz, misma paridad que SongView.
   if (mode === 'tono' && !activeVoiceId) openOptions(session);
 }
 
@@ -722,7 +724,8 @@ export function exitImmersive() {
   stopScrollLoop(session);
 
   // El sheet vive fuera del overlay (document.body): si se sale sin cerrarlo
-  // queda huérfano sobre la vista normal (mismo bug que StageMode T6).
+  // queda huérfano sobre la vista normal (mismo bug del extinto modo
+  // escenario, T6).
   closeOptionsSheet();
 
   els.viewport.removeEventListener('click', onViewportClick);

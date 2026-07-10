@@ -1438,7 +1438,9 @@
 /* === Autoscroll FAB === */
 .autoscroll-fab {
   position: fixed;
-  bottom: calc(var(--bottom-nav-height, 56px) + env(safe-area-inset-bottom, 0px) + 12px);
+  bottom: calc(
+    var(--bnav-offset, 56px) + var(--bottom-nav-fade-extra, 0px) + var(--safe-bottom, 0px) + 12px
+  );
   right: 12px;
   z-index: var(--z-toast);
   display: flex;
@@ -1471,7 +1473,10 @@ body.floating-tuner-open .autoscroll-fab {
 }
 
 body.section-player-open .autoscroll-fab {
-  bottom: calc(var(--bottom-nav-height, 56px) + 76px + env(safe-area-inset-bottom, 0px) + 12px);
+  bottom: calc(
+    var(--bnav-offset, 56px) + var(--bottom-nav-fade-extra, 0px) + 76px + var(--safe-bottom, 0px) +
+      12px
+  );
 }
 
 @media (prefers-reduced-motion: reduce) {

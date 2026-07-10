@@ -5,7 +5,9 @@
 
 .section-player {
   position: sticky;
-  bottom: calc(var(--bnav-offset, 56px) + env(safe-area-inset-bottom, 0px));
+  bottom: calc(
+    var(--bnav-offset, 56px) + var(--bottom-nav-fade-extra, 0px) + var(--safe-bottom, 0px)
+  );
   z-index: 5;
   margin-top: var(--space-lg);
   padding: var(--space-sm) var(--space-md);

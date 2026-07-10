@@ -27,68 +27,11 @@ export function computeHeaderVisibility({ scrollY, lastScrollY, visible }) {
   return visible;
 }
 
-const AUTO_HIDE_CLASS = 'header--auto-hide';
-
-/**
- * Engancha el header auto-ocultable en `headerEl`: escucha scroll (passive,
- * rAF-throttled — nunca hace trabajo directo en el evento) y aplica
- * `computeHeaderVisibility` en cada frame. Se desmonta solo vía
- * `onRouteChange` (mismo patrón que el afinador flotante y el
- * SectionPlayer en SongView.js: logout/redirects no deben dejar el listener
- * vivo apuntando a un header ya reemplazado).
- *
- * @param {HTMLElement} headerEl
- * @param {(cb: () => void) => () => void} onRouteChange
- * @returns {() => void} teardown manual (además del automático en route change)
- */
-export function attachAutoHideHeader(headerEl, onRouteChange) {
-  let lastScrollY = window.scrollY;
-  let visible = true;
-  let rafId = null;
-  // Flag independiente de rafId: marca "ya hay un frame pendiente" ANTES de
-  // llamar a requestAnimationFrame, así el orden no importa si el callback
-  // corre síncrono (rAF mockeado en tests) — con solo rafId como gate, esa
-  // asignación llegaría tarde y el segundo scroll quedaría bloqueado.
-  let scheduled = false;
-
-  const applyScroll = () => {
-    scheduled = false;
-    rafId = null;
-    const scrollY = window.scrollY;
-    const nextVisible = computeHeaderVisibility({ scrollY, lastScrollY, visible });
-    lastScrollY = scrollY;
-    if (nextVisible !== visible) {
-      visible = nextVisible;
-      headerEl.classList.toggle(AUTO_HIDE_CLASS, !visible);
-    }
-  };
-
-  const onScroll = () => {
-    if (scheduled) return;
-    scheduled = true;
-    rafId = requestAnimationFrame(applyScroll);
-  };
-
-  window.addEventListener('scroll', onScroll, { passive: true });
-
-  const teardown = () => {
-    window.removeEventListener('scroll', onScroll);
-    if (rafId !== null) cancelAnimationFrame(rafId);
-    headerEl.classList.remove(AUTO_HIDE_CLASS);
-    unsubscribeRouteChange();
-  };
-  const unsubscribeRouteChange = onRouteChange(teardown);
-
-  return teardown;
-}
-
 // --- Motor único de auto-hide para header + bottom-nav, por ruta -----------
 //
-// A diferencia de `attachAutoHideHeader` (uso único de SongView, deprecado en
-// favor de este motor a partir del Task 4), este engancha UNA vez desde
-// main.js sobre el shell (header + nav) y cada ruta declara su propia
-// política vía `setChromeAutoHide`. Reusa `computeHeaderVisibility` para la
-// decisión show/hide.
+// Se engancha UNA vez desde main.js sobre el shell (header + nav) y cada ruta
+// declara su propia política vía `setChromeAutoHide`. Reusa
+// `computeHeaderVisibility` para la decisión show/hide.
 
 const NAV_HIDE_CLASS = 'bottom-nav--auto-hide';
 const HEADER_HIDE_CLASS = 'header--auto-hide';

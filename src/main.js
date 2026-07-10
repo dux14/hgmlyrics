@@ -12,7 +12,14 @@ import './styles/cmdk.css';
 import { initTheme } from './components/ThemeToggle.js';
 import { initStore, subscribe, getState } from './lib/store.js';
 import { buildIndex } from './lib/search.js';
-import { route, initRouter, onNotFound, navigate, getCurrentPath } from './router.js';
+import {
+  route,
+  initRouter,
+  onNotFound,
+  navigate,
+  getCurrentPath,
+  onRouteChange,
+} from './router.js';
 import { initAuthStore, isAuthenticated, needsOnboarding, isAdmin } from './lib/authStore.js';
 import { initFavorites } from './lib/favorites.js';
 import { initRecentVisits } from './lib/recentVisits.js';
@@ -45,8 +52,9 @@ import { getWeeklyWords, warmWeeklyWords } from './lib/weeklyWords.js';
 import { initChromeAutoHide, setChromeAutoHide } from './lib/scrollChrome.js';
 
 // Motor único de auto-hide por ruta: Grupo C = header + nav; Grupo B = solo
-// nav (su header es headerless desde el Task 4, o tiene su propio auto-hide
-// como /song/:id hasta entonces).
+// nav, headerless (hero a sangre completa, sin header ni su reserva de
+// espacio). `headerless: true` unifica lo que antes era la tabla HEADERLESS
+// aparte — es exactamente el subconjunto nav-only de esta tabla.
 const CHROME_AUTOHIDE = [
   { re: /^\/$/, header: true, nav: true },
   { re: /^\/favoritos$/, header: true, nav: true },
@@ -55,26 +63,15 @@ const CHROME_AUTOHIDE = [
   { re: /^\/amigos$/, header: true, nav: true },
   { re: /^\/licencias$/, header: true, nav: true },
   { re: /^\/lista\/(?!nueva$)[^/]+$/, header: true, nav: true }, // vista, no editor
-  { re: /^\/song\/[^/]+$/, nav: true }, // B: header tiene su propio auto-hide (Task 4 lo vuelve headerless)
-  { re: /^\/album\/[^/]+$/, nav: true },
-  { re: /^\/u\/[^/]+$/, nav: true },
-  { re: /^\/voz\/[^/]+$/, nav: true },
-  { re: /^\/voces$/, nav: true },
-  { re: /^\/perfil$/, nav: true },
+  { re: /^\/song\/[^/]+$/, nav: true, headerless: true }, // no incluye /song/:id/links
+  { re: /^\/album\/[^/]+$/, nav: true, headerless: true },
+  { re: /^\/u\/[^/]+$/, nav: true, headerless: true },
+  { re: /^\/voz\/[^/]+$/, nav: true, headerless: true },
+  { re: /^\/voces$/, nav: true, headerless: true },
+  { re: /^\/perfil$/, nav: true, headerless: true }, // no incluye /perfil/editar
 ];
 const chromeFor = (path) => CHROME_AUTOHIDE.find((c) => c.re.test(path)) ?? {};
-
-// Grupo B (Task 4): rutas headerless con hero a sangre completa, sin header
-// ni su reserva de espacio.
-const HEADERLESS = [
-  /^\/perfil$/, // no incluye /perfil/editar
-  /^\/song\/[^/]+$/, // no incluye /song/:id/links
-  /^\/album\/[^/]+$/,
-  /^\/u\/[^/]+$/,
-  /^\/voz\/[^/]+$/,
-  /^\/voces$/,
-];
-const isHeaderless = (path) => HEADERLESS.some((re) => re.test(path));
+const isHeaderless = (path) => Boolean(chromeFor(path).headerless);
 
 // Initialize theme immediately to avoid flash
 initTheme();
@@ -443,32 +440,32 @@ async function boot() {
     mainContent.querySelector('#not-found-home')?.addEventListener('click', () => navigate('/'));
   });
 
-  // Estado inicial del header según la ruta de arranque (deep link directo a
-  // una ruta headerless del Grupo B, no solo navegación por hashchange).
-  isHeaderless(getCurrentPath()) ? hideHeader() : showHeader();
-
-  // Start router
-  initRouter();
-
-  // Sincronizar tab activo del bottom-nav en cada cambio de ruta (F1b)
-  updateBottomNavActive(getCurrentPath());
-
   // Motor único de auto-hide de header + bottom-nav (chrome sin fin, Task 2).
+  // Debe engancharse ANTES de la suscripción de abajo: esta llama a
+  // setChromeAutoHide ya en el resolve() inicial de initRouter().
   initChromeAutoHide({
     headerEl: document.getElementById('app-header'),
     navEl: document.querySelector('.bottom-nav'),
   });
-  setChromeAutoHide(chromeFor(getCurrentPath()));
 
-  window.addEventListener('hashchange', () => {
+  // Decide header, tab activo del bottom-nav y política de auto-hide en CADA
+  // resolución de ruta (push, replace o popstate) — no solo 'hashchange', que
+  // replaceState no dispara (dejaba el header desincronizado tras
+  // navigate(path, { replace: true }): SearchPage a /song/:id o /voz/:id,
+  // Profile.js/AuthButton.js a /login al salir de /perfil). Se registra ANTES
+  // de initRouter() para que el resolve() inicial del arranque ya lo cubra
+  // (deep link directo a una ruta headerless del Grupo B), sin necesitar una
+  // llamada de arranque aparte.
+  onRouteChange(() => {
     closeGoToSheet(); // cierra la hoja "Ir a" al navegar (incl. botón atrás)
     const path = getCurrentPath();
     updateBottomNavActive(path);
-    // Oculta el header en las rutas headerless del Grupo B (perfil, canción,
-    // álbum, perfil público, voz, voces); el resto conserva el header fijo.
     isHeaderless(path) ? hideHeader() : showHeader();
     setChromeAutoHide(chromeFor(path));
   });
+
+  // Start router (dispara el resolve() inicial, ya cubierto por la suscripción de arriba).
+  initRouter();
 
   // F1: Initialize update notifier
   initUpdateNotifier();

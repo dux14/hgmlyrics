@@ -27,6 +27,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import time
 
 from fastapi import Header, HTTPException
@@ -41,11 +42,19 @@ app = modal.App("hkn-align")
 # para extract_vocals_stem) + whisperx para el alineado forzado en espanol.
 # Modal 1.x no auto-monta modulos locales hermanos: hay que incluir
 # explicitamente `sections` y `align_mapping`.
+#
+# whisperx PINEADO a 3.7.5 (ultima estable en PyPI al momento de escribir
+# esto — `pip index versions whisperx`) Y en el MISMO comando que repite los
+# pins criticos de torch/torchaudio de requirements.txt (2.4.1). Si whisperx
+# se instalara sin version en un paso aparte, pip podria re-resolver el
+# stack completo y mover torch/torchaudio a una version distinta de la que
+# ya viene fijada (rompiendo el resto del pipeline, que depende de esos
+# pins). Repetirlos aqui obliga al resolver a mantenerlos.
 align_image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("ffmpeg", "git")
     .pip_install_from_requirements("requirements.txt")
-    .pip_install("whisperx")
+    .pip_install("whisperx==3.7.5", "torch==2.4.1", "torchaudio==2.4.1")
     .add_local_python_source("sections")
     .add_local_python_source("align_mapping")
 )
@@ -59,6 +68,24 @@ _webhook_secrets = [modal.Secret.from_name("hkn-webhook")]
 # Webhook de salida
 # ──────────────────────────────────────────────────────────────────────────────
 
+# Igual que sections/extract.py:216 (`error=str(exc)[:400]`): tope de tamano
+# para el mensaje de error que se persiste en DB.
+_ERROR_MSG_MAX_LEN = 400
+
+# Redacta query strings completos (p.ej. el token de un signed URL de
+# Supabase Storage en audioUrl) antes de truncar. Un httpx.HTTPStatusError al
+# descargar audioUrl incluye la URL completa en su mensaje, y esa URL trae un
+# token bearer en el query string — no debe acabar persistido en DB ni en logs.
+_QUERY_STRING_RE = re.compile(r"\?[^\s]*")
+
+
+def _sanitize_error_message(exc: BaseException) -> str:
+    """Mensaje de error seguro para postear/persistir: redacta cualquier query
+    string (credenciales de signed URLs) y trunca a _ERROR_MSG_MAX_LEN."""
+    msg = _QUERY_STRING_RE.sub("?[redacted]", str(exc))
+    return msg[:_ERROR_MSG_MAX_LEN]
+
+
 def _post_align_webhook(webhook_url: str, body: dict) -> None:
     """
     Postea el resultado (o error) del alineado a `webhook_url` con la MISMA
@@ -69,6 +96,11 @@ def _post_align_webhook(webhook_url: str, body: dict) -> None:
     Serializa el body con json.dumps UNA sola vez; firma y envia ese mismo
     string exacto. El secret sale de MODAL_WEBHOOK_SECRET (secret Modal
     hkn-webhook), NO del payload de entrada (align.js no lo manda).
+
+    Reintenta UNA vez (con un backoff corto) si el POST falla: un webhook
+    fallido por un timeout/hipo de red transitorio no debe dejar
+    song_line_timings colgado en 'processing' si el reintento hubiera
+    bastado.
     """
     import httpx  # solo disponible dentro del contenedor Modal
 
@@ -77,17 +109,19 @@ def _post_align_webhook(webhook_url: str, body: dict) -> None:
     secret = os.environ.get("MODAL_WEBHOOK_SECRET", "")
     sig = hmac.new(secret.encode(), f"{ts}.{body_str}".encode(), hashlib.sha256).hexdigest()
 
-    r = httpx.post(
-        webhook_url,
-        content=body_str,
-        headers={
-            "Content-Type": "application/json",
-            "X-Modal-Timestamp": ts,
-            "X-Modal-Signature": sig,
-        },
-        timeout=30,
-    )
-    r.raise_for_status()
+    headers = {
+        "Content-Type": "application/json",
+        "X-Modal-Timestamp": ts,
+        "X-Modal-Signature": sig,
+    }
+
+    try:
+        r = httpx.post(webhook_url, content=body_str, headers=headers, timeout=30)
+        r.raise_for_status()
+    except Exception:
+        time.sleep(2)  # backoff corto antes del unico reintento
+        r = httpx.post(webhook_url, content=body_str, headers=headers, timeout=30)
+        r.raise_for_status()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -105,16 +139,19 @@ def run_align(payload: dict) -> None:
     """
     song_id = payload.get("songId")
     webhook_url = payload.get("webhookUrl")
+    audio_url = payload.get("audioUrl")
     lines: list[dict] = payload.get("lines") or []
 
     try:
         if not song_id or not webhook_url:
             raise ValueError("payload invalido: faltan songId/webhookUrl")
+        if not audio_url:
+            raise ValueError("payload invalido: falta audioUrl")
         if not lines:
             raise ValueError("payload invalido: lines vacio")
 
         # ── 1+2. Descargar audio + extraer stem vocal ───────────────────────
-        vocals_path = extract_vocals_stem(payload["audioUrl"])
+        vocals_path = extract_vocals_stem(audio_url)
 
         # ── 3. WhisperX: alinear el texto CONOCIDO (no transcripcion libre) ─
         # Se importa aqui dentro (patron del repo, ver extract_vocals_stem):
@@ -146,7 +183,10 @@ def run_align(payload: dict) -> None:
     except Exception as e:  # noqa: BLE001 — cualquier excepcion se reporta, nunca se silencia
         if webhook_url:
             try:
-                _post_align_webhook(webhook_url, {"songId": song_id, "error": str(e)})
+                _post_align_webhook(
+                    webhook_url,
+                    {"songId": song_id, "error": _sanitize_error_message(e)},
+                )
             except Exception:
                 pass  # el webhook de error tambien puede fallar (red); no hay mas fallback
         raise
@@ -156,13 +196,35 @@ def run_align(payload: dict) -> None:
 # Web endpoint — recibe la invocacion de Vercel (patron `start` de stems_app)
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _validate_align_payload(payload: dict) -> str | None:
+    """Valida el payload ANTES de lanzar run_align. Devuelve un mensaje de
+    error (string) si falta algo requerido, o None si es valido.
+
+    Un dispatch malformado (bug del caller, payload truncado, etc.) que
+    pasara igual no dejaria rastro hasta que el contenedor GPU arrancara y
+    fallara adentro — mientras tanto song_line_timings queda colgado en
+    'processing'. Validar aqui, antes del .spawn(), evita crear ese job GPU
+    huerfano: el caller (api/_lib/align.js) recibe un 400 inmediato y puede
+    marcar failed sin esperar nada."""
+    if not payload.get("songId"):
+        return "falta songId"
+    if not payload.get("audioUrl"):
+        return "falta audioUrl"
+    if not payload.get("webhookUrl"):
+        return "falta webhookUrl"
+    if not payload.get("lines"):
+        return "lines vacio o ausente"
+    return None
+
+
 @app.function(image=align_image, secrets=_webhook_secrets)
 @modal.fastapi_endpoint(method="POST")
 def start(payload: dict, x_inbound_secret: str = Header(default="")):
     """
     Punto de entrada HTTP. Verifica `x-inbound-secret` contra
-    MODAL_INBOUND_SECRET, lanza run_align de forma asincrona (.spawn) y
-    devuelve el callId de inmediato para no bloquear el request de Vercel.
+    MODAL_INBOUND_SECRET, valida el payload (400 si falta algo requerido) y
+    lanza run_align de forma asincrona (.spawn), devolviendo el callId de
+    inmediato para no bloquear el request de Vercel.
 
     Respuesta: { "callId": "<modal call object_id>" }
     """
@@ -171,6 +233,10 @@ def start(payload: dict, x_inbound_secret: str = Header(default="")):
         os.environ.get("MODAL_INBOUND_SECRET", ""),
     ):
         raise HTTPException(status_code=401, detail="bad inbound secret")
+
+    validation_error = _validate_align_payload(payload)
+    if validation_error:
+        raise HTTPException(status_code=400, detail=validation_error)
 
     call = run_align.spawn(payload)
     return {"callId": call.object_id}

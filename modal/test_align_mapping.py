@@ -178,3 +178,73 @@ def test_nunca_emite_i_fuera_de_las_lineas_de_entrada():
     input_is = {line["i"] for line in lines}
     assert {r["i"] for r in result} <= input_is
     assert len(result) == len(lines)
+
+
+def test_lookahead_maximo_evita_anclar_ocurrencia_lejana_de_token_repetido():
+    """Letra con muchas lineas de relleno seguidas de una unica linea 'santo'
+    bien al final. Una palabra espuria 'santo' que aparece TEMPRANO en el
+    stream de WhisperX (glitch de reconocimiento, ruido, coro de fondo) NO
+    debe poder anclar la ocurrencia real de 'santo' que esta 20 tokens mas
+    adelante — fuera de _MAX_LOOKAHEAD — arrastrando el cursor de un salto y
+    desalineando en silencio el resto de la cancion. Debe descartarse."""
+    lines = [{"i": 0, "text": "hola"}]
+    for i in range(1, 21):
+        lines.append({"i": i, "text": "relleno"})
+    lines.append({"i": 21, "text": "santo"})
+
+    words = [
+        {"word": "hola", "start": 1.0},
+        # Espuria: matchea el token 'santo', pero su unica ocurrencia real
+        # esta 20 posiciones mas adelante del cursor (fuera del lookahead).
+        {"word": "santo", "start": 1.5},
+        {"word": "relleno", "start": 2.0},
+    ]
+
+    result = map_words_to_lines(lines, words)
+    by_i = {r["i"]: r["startMs"] for r in result}
+
+    assert by_i[0] == 1000
+    # La linea 1 ('relleno', la primera ocurrencia tras 'hola') sigue
+    # anclando normalmente: si la espuria hubiera arrastrado el cursor hasta
+    # la linea 21, esta habria quedado sin su ancla real cercana.
+    assert by_i[1] == 2000
+    # La ultima linea ('santo', i=21) NO puede llevar el startMs de la
+    # palabra espuria (1500ms): al no tener ancla real, interpola/extrapola.
+    assert by_i[21] != 1500
+
+
+def test_sin_palabras_whisperx_genera_rampa_fallback_creciente():
+    """words=[] (WhisperX no reconocio nada del audio, o vino vacio): sin
+    ninguna ancla posible, se emite igual una salida completa y
+    estrictamente creciente (contrato de salida, nunca se rompe)."""
+    lines = [{"i": 0, "text": "a"}, {"i": 1, "text": "b"}, {"i": 2, "text": "c"}]
+
+    result = map_words_to_lines(lines, [])
+
+    starts = [r["startMs"] for r in result]
+    assert len(result) == 3
+    assert all(starts[i] < starts[i + 1] for i in range(len(starts) - 1))
+    assert {r["i"] for r in result} == {0, 1, 2}
+
+
+def test_un_solo_anclaje_usa_pendiente_cero_para_extrapolar():
+    """Con exactamente 1 linea anclada en toda la cancion, no hay un segundo
+    punto del que inferir pendiente: tanto la extrapolacion hacia atras como
+    hacia adelante usan slope=0.0 (todas las lineas sin ancla quedan al
+    mismo valor base que la ancla, antes de forzar monotonicidad estricta
+    por redondeo)."""
+    lines = [
+        {"i": 0, "text": "antes uno"},
+        {"i": 1, "text": "antes dos"},
+        {"i": 2, "text": "ancla"},
+        {"i": 3, "text": "despues uno"},
+        {"i": 4, "text": "despues dos"},
+    ]
+    words = [{"word": "ancla", "start": 5.0}]
+
+    result = map_words_to_lines(lines, words)
+    starts = [r["startMs"] for r in result]
+
+    # Las 5 lineas parten del mismo valor base (5000ms, slope=0.0) y solo se
+    # separan por el empuje +1ms de la monotonicidad estricta al redondear.
+    assert starts == [5000, 5001, 5002, 5003, 5004]

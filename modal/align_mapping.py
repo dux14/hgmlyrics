@@ -20,6 +20,15 @@ import unicodedata
 # vez fragmenta una palabra en mas de 6-7 silabas/alargamientos.
 _MAX_WINDOW = 8
 
+# Tope de busqueda hacia adelante (en tokens, desde el cursor actual) para
+# anclar una palabra de WhisperX. Sin este tope, una letra con repeticion
+# ("Santo, Santo, Santo...") deja que una palabra espuria (ruido de
+# alineado, coro de fondo, etc.) matchee contra una ocurrencia MUY posterior
+# del mismo token repetido y arrastre el cursor de golpe, desalineando en
+# silencio el resto de la cancion. Si no hay match dentro de esta ventana, la
+# palabra se descarta (queda sin ancla) y la interpolacion cubre el hueco.
+_MAX_LOOKAHEAD = 16
+
 _VOWELS = "aeiou"
 _ELONGATION_RE = re.compile(f"([{_VOWELS}])\\1+")
 _NON_LETTER_RE = re.compile(r"[^a-zñ0-9]")
@@ -92,9 +101,14 @@ def map_words_to_lines(lines: list[dict], words: list[dict]) -> list[dict]:
     Matching greedy secuencial: se recorren las lineas en el orden recibido,
     tokenizando cada una (`normalize`); se recorren las palabras de WhisperX en
     orden, intentando anclar cada una contra una ventana de 1.._MAX_WINDOW
-    tokens consecutivos a partir del cursor actual (nunca retrocede). Una
-    ventana matchea si su concatenacion, tras volver a colapsar alargamientos
-    en el limite entre tokens, es igual a la palabra normalizada.
+    tokens consecutivos, buscando desde el cursor actual hasta a lo sumo
+    _MAX_LOOKAHEAD tokens mas adelante (nunca retrocede, y nunca salta MAS
+    ALLA de ese tope: evita que una palabra espuria ancle una ocurrencia muy
+    posterior de un token repetido — letras con lineas repetidas tipo "Santo,
+    Santo, Santo" — y arrastre el cursor en silencio). Una ventana matchea si
+    su concatenacion, tras volver a colapsar alargamientos en el limite entre
+    tokens, es igual a la palabra normalizada. Si ninguna ventana dentro del
+    tope matchea, la palabra se descarta (queda sin ancla).
 
     startMs de una linea = start (ms) de la primera palabra que ancla alguno
     de sus tokens. Lineas sin ninguna ancla interpolan linealmente entre sus
@@ -109,6 +123,9 @@ def map_words_to_lines(lines: list[dict], words: list[dict]) -> list[dict]:
     """
     ordered_lines = list(lines)
     n_lines = len(ordered_lines)
+    for line in ordered_lines:
+        if "i" not in line:
+            raise ValueError(f"map_words_to_lines: linea sin campo 'i': {line!r}")
 
     # Tokenizar cada linea y recordar a que linea (indice en ordered_lines)
     # pertenece cada token de la secuencia aplanada.
@@ -138,7 +155,8 @@ def map_words_to_lines(lines: list[dict], words: list[dict]) -> list[dict]:
     for norm_word, start_sec in norm_words:
         matched_end = None
         matched_line_idx = None
-        for pos in range(tok_ptr, n_tokens):
+        lookahead_limit = min(n_tokens, tok_ptr + _MAX_LOOKAHEAD)
+        for pos in range(tok_ptr, lookahead_limit):
             for window in range(1, _MAX_WINDOW + 1):
                 end = pos + window
                 if end > n_tokens:

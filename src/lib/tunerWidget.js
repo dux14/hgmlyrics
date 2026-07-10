@@ -69,7 +69,15 @@ export function createTunerEngine({ onPitch = () => {}, onState = () => {}, onEr
         // fallido en background): liberar la época deja que un reintento
         // (requestMic(), p.ej. el boton "Activar microfono") cree un
         // detector nuevo en vez de quedar no-op contra este ya muerto.
-        if (s === 'denied' || s === 'stopped') detector = null;
+        // Diferido a un microtask: pitch.js llama onState('denied') y LUEGO
+        // onError(e) en el MISMO tick (ver start() en pitch.js) — nulear
+        // aquí synchronamente haría que el guard `detector !== d` de
+        // onError trague ese error (detector ya null !== d).
+        if (s === 'denied' || s === 'stopped') {
+          Promise.resolve().then(() => {
+            if (detector === d) detector = null;
+          });
+        }
         onState(s);
       },
     });

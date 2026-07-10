@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Stub pitch detector (requires AudioContext/getUserMedia) — mismo patrón que tuner.test.js.
 const onPitchRef = { current: null };
 const onStateRef = { current: null };
+const onErrorRef = { current: null };
 // start() por defecto resuelve de inmediato (contrato real de pitch.js: Promise<void>);
 // los tests de carrera lo sobrescriben con mockImplementationOnce para controlarlo a mano.
 const detectorStart = vi.fn(() => Promise.resolve());
@@ -12,6 +13,7 @@ vi.mock('../src/lib/pitch.js', () => ({
   createPitchDetector: vi.fn((opts) => {
     onPitchRef.current = opts.onPitch;
     onStateRef.current = opts.onState;
+    onErrorRef.current = opts.onError;
     return { start: detectorStart, stop: detectorStop, isRunning: () => false };
   }),
 }));
@@ -28,6 +30,7 @@ beforeEach(() => {
   createPitchDetector.mockClear();
   onPitchRef.current = null;
   onStateRef.current = null;
+  onErrorRef.current = null;
 });
 
 describe('createTunerEngine — motor puro (sin DOM)', () => {
@@ -92,20 +95,48 @@ describe('createTunerEngine — motor puro (sin DOM)', () => {
     expect(onState).toHaveBeenCalledWith('idle');
   });
 
-  it('requestMic() tras "denied" crea un detector nuevo (reintento no queda pegado)', () => {
+  it('requestMic() tras "denied" crea un detector nuevo (reintento no queda pegado)', async () => {
     const engine = createTunerEngine({ onPitch: vi.fn(), onState: vi.fn() });
     engine.start();
     expect(createPitchDetector).toHaveBeenCalledTimes(1);
     onStateRef.current('denied'); // getUserMedia rechazado (permiso denegado)
-    // Reintento real: click en el boton "Activar microfono" llama requestMic().
+    // El nuleo de la epoca es diferido a un microtask (ver onState() en
+    // requestMic()): un click de reintento real nunca ocurre en el mismo
+    // tick que el evento del navegador, así que el test tampoco lo hace.
+    await Promise.resolve();
     engine.requestMic();
     expect(createPitchDetector).toHaveBeenCalledTimes(2);
   });
 
-  it('requestMic() tras "stopped" (recover() fallido en background) tambien permite reintentar', () => {
+  it('requestMic() tras "stopped" (recover() fallido en background) tambien permite reintentar', async () => {
     const engine = createTunerEngine({ onPitch: vi.fn(), onState: vi.fn() });
     engine.start();
     onStateRef.current('stopped');
+    await Promise.resolve();
+    engine.requestMic();
+    expect(createPitchDetector).toHaveBeenCalledTimes(2);
+  });
+
+  it('onState("denied") seguido de onError en el mismo tick no traga el error (secuencia real de pitch.js)', () => {
+    const onError = vi.fn();
+    const engine = createTunerEngine({ onPitch: vi.fn(), onState: vi.fn(), onError });
+    engine.start();
+    const err = new Error('Permission denied');
+    // pitch.js llama onState('denied') y LUEGO onError(e) sincrónicamente en
+    // el mismo tick (ver el catch de start() en pitch.js) — el nuleo de
+    // `detector` en el wrapper de onState no debe adelantarse a esto.
+    onStateRef.current('denied');
+    onErrorRef.current(err);
+    expect(onError).toHaveBeenCalledWith(err);
+  });
+
+  it('onState("denied")+onError en el mismo tick no rompe el reintento posterior', async () => {
+    const onError = vi.fn();
+    const engine = createTunerEngine({ onPitch: vi.fn(), onState: vi.fn(), onError });
+    engine.start();
+    onStateRef.current('denied');
+    onErrorRef.current(new Error('Permission denied'));
+    await Promise.resolve();
     engine.requestMic();
     expect(createPitchDetector).toHaveBeenCalledTimes(2);
   });

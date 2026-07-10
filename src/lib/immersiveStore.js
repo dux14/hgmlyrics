@@ -76,3 +76,23 @@ export function availableModes({ hasChords, tonoAvailable } = {}) {
   if (tonoAvailable) modes.push('tono');
   return modes;
 }
+
+/**
+ * Punto de entrada del modo inicial que usara ImmersiveView al montar:
+ * compone la precedencia "eleccion persistida del usuario gana sobre la
+ * herencia de capas". Si hay un modo valido persistido (el usuario ya eligio
+ * antes en la vista inmersiva) lo devuelve tal cual; si no hay nada
+ * persistido, el valor es invalido/corrupto, o localStorage falla, cae a
+ * `inheritFromLayers(layers)`.
+ * @param {{ chords: boolean, tono: boolean }} layers
+ * @returns {'letra'|'chords'|'mixed'|'tono'}
+ */
+export function resolveInitialMode(layers) {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (VALID_MODES.includes(raw)) return raw;
+  } catch {
+    // best-effort — si localStorage falla, seguimos al fallback de herencia.
+  }
+  return inheritFromLayers(layers);
+}

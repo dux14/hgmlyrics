@@ -4,6 +4,7 @@ import {
   setImmersiveMode,
   inheritFromLayers,
   availableModes,
+  resolveInitialMode,
 } from '../src/lib/immersiveStore.js';
 
 describe('immersiveStore', () => {
@@ -71,13 +72,35 @@ describe('immersiveStore', () => {
     });
   });
 
-  it('precedencia: si el usuario ya eligio un modo, inheritFromLayers no lo pisa (el caller debe respetar getImmersiveMode primero)', () => {
+  it('inheritFromLayers es puro: no lee ni modifica lo persistido aunque haya un modo guardado', () => {
     setImmersiveMode('tono');
-    // el patron de uso es: usar getImmersiveMode() si hay valor persistido,
-    // inheritFromLayers solo como fallback de sesion sin eleccion previa.
-    expect(getImmersiveMode()).toBe('tono');
     expect(inheritFromLayers({ chords: true, tono: false })).toBe('chords');
     expect(getImmersiveMode()).toBe('tono');
+  });
+
+  describe('resolveInitialMode', () => {
+    it('sin nada persistido, usa inheritFromLayers', () => {
+      expect(resolveInitialMode({ chords: true, tono: true })).toBe('mixed');
+    });
+
+    it('la eleccion persistida del usuario gana sobre las capas', () => {
+      setImmersiveMode('tono');
+      expect(resolveInitialMode({ chords: true, tono: false })).toBe('tono');
+    });
+
+    it('un valor persistido invalido/corrupto cae a inheritFromLayers', () => {
+      localStorage.setItem('hkn-immersive-mode', 'no-existe');
+      expect(resolveInitialMode({ chords: true, tono: false })).toBe('chords');
+    });
+
+    it('tolera localStorage roto y cae a inheritFromLayers', () => {
+      const original = Storage.prototype.getItem;
+      Storage.prototype.getItem = () => {
+        throw new Error('boom');
+      };
+      expect(resolveInitialMode({ chords: false, tono: true })).toBe('tono');
+      Storage.prototype.getItem = original;
+    });
   });
 
   describe('availableModes', () => {

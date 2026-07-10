@@ -215,6 +215,10 @@
      crecen solos bajo el notch. */
   --header-height: calc(52px + var(--safe-top));
   --bottom-nav-height: 56px;
+  /* Offsets de lo anclado a header/nav; el motor de auto-hide (scrollChrome.js)
+     los baja a 0px cuando el chrome correspondiente se oculta al desplazarse. */
+  --bnav-offset: var(--bottom-nav-height);
+  --header-offset: var(--header-height);
   --max-content-width: 900px;
   --border-radius-sm: 6px;
   --border-radius-md: 10px;

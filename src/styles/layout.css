@@ -38,7 +38,9 @@
   display: none;
 }
 
-/* Auto-ocultable al desplazarse (solo vista de canción, ver SongView.js). */
+/* Auto-ocultable al desplazarse. Motor único en scrollChrome.js: por ruta,
+   ver CHROME_AUTOHIDE en main.js (excepción: /song/:id sigue usando su propio
+   attachAutoHideHeader hasta el Task 4). */
 .header--auto-hide {
   transform: translateY(-100%);
 }
@@ -46,6 +48,11 @@
 @media (prefers-reduced-motion: reduce) {
   .header {
     transition: background-color var(--transition-base);
+  }
+  .bottom-nav,
+  .filter-bar,
+  .section-player {
+    transition: none;
   }
 }
 
@@ -338,7 +345,7 @@
 /* === Filter Bar (F4) === */
 .filter-bar {
   position: fixed;
-  top: var(--header-height);
+  top: var(--header-offset);
   left: 0;
   right: 0;
   z-index: calc(var(--z-header) - 1);
@@ -352,6 +359,7 @@
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  transition: top 200ms ease-out;
 }
 
 .filter-bar::-webkit-scrollbar {
@@ -416,6 +424,10 @@
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   z-index: var(--z-bottom-nav);
+  transition: transform 200ms ease-out;
+}
+.bottom-nav--auto-hide {
+  transform: translateY(100%);
 }
 .bottom-nav__item {
   display: flex;

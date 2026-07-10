@@ -42,6 +42,27 @@ import { renderHome } from './components/Home.js';
 import { renderBottomNav, updateBottomNavActive } from './components/BottomNav.js';
 import { closeGoToSheet } from './components/GoToSheet.js';
 import { getWeeklyWords, warmWeeklyWords } from './lib/weeklyWords.js';
+import { initChromeAutoHide, setChromeAutoHide } from './lib/scrollChrome.js';
+
+// Motor único de auto-hide por ruta: Grupo C = header + nav; Grupo B = solo
+// nav (su header es headerless desde el Task 4, o tiene su propio auto-hide
+// como /song/:id hasta entonces).
+const CHROME_AUTOHIDE = [
+  { re: /^\/$/, header: true, nav: true },
+  { re: /^\/favoritos$/, header: true, nav: true },
+  { re: /^\/listas$/, header: true, nav: true },
+  { re: /^\/albumes$/, header: true, nav: true },
+  { re: /^\/amigos$/, header: true, nav: true },
+  { re: /^\/licencias$/, header: true, nav: true },
+  { re: /^\/lista\/(?!nueva$)[^/]+$/, header: true, nav: true }, // vista, no editor
+  { re: /^\/song\/[^/]+$/, nav: true }, // B: header tiene su propio auto-hide (Task 4 lo vuelve headerless)
+  { re: /^\/album\/[^/]+$/, nav: true },
+  { re: /^\/u\/[^/]+$/, nav: true },
+  { re: /^\/voz\/[^/]+$/, nav: true },
+  { re: /^\/voces$/, nav: true },
+  { re: /^\/perfil$/, nav: true },
+];
+const chromeFor = (path) => CHROME_AUTOHIDE.find((c) => c.re.test(path)) ?? {};
 
 // Initialize theme immediately to avoid flash
 initTheme();
@@ -416,12 +437,21 @@ async function boot() {
 
   // Sincronizar tab activo del bottom-nav en cada cambio de ruta (F1b)
   updateBottomNavActive(getCurrentPath());
+
+  // Motor único de auto-hide de header + bottom-nav (chrome sin fin, Task 2).
+  initChromeAutoHide({
+    headerEl: document.getElementById('app-header'),
+    navEl: document.querySelector('.bottom-nav'),
+  });
+  setChromeAutoHide(chromeFor(getCurrentPath()));
+
   window.addEventListener('hashchange', () => {
     closeGoToSheet(); // cierra la hoja "Ir a" al navegar (incl. botón atrás)
     const path = getCurrentPath();
     updateBottomNavActive(path);
     // Oculta el header solo en la pantalla de perfil propia (no en /perfil/editar ni /u/:username).
     path === '/perfil' ? hideHeader() : showHeader();
+    setChromeAutoHide(chromeFor(path));
   });
 
   // F1: Initialize update notifier

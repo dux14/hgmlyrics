@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { computeHeaderVisibility, attachAutoHideHeader, HIDE_THRESHOLD_PX } from './scrollHeader.js';
+import {
+  computeHeaderVisibility,
+  attachAutoHideHeader,
+  HIDE_THRESHOLD_PX,
+  setChromeAutoHide,
+  initChromeAutoHide,
+} from './scrollChrome.js';
 
 describe('computeHeaderVisibility', () => {
   it('mantiene visible en el tope (scrollY 0)', () => {
@@ -100,5 +106,48 @@ describe('attachAutoHideHeader', () => {
     expect(removeSpy).toHaveBeenCalledWith('scroll', expect.any(Function));
     expect(header.classList.contains('header--auto-hide')).toBe(false);
     removeSpy.mockRestore();
+  });
+});
+
+describe('chrome auto-hide (nav)', () => {
+  let navEl, headerEl, rafCb;
+  beforeEach(() => {
+    document.body.innerHTML = '<header id="h"></header><nav id="n"></nav>';
+    headerEl = document.getElementById('h');
+    navEl = document.getElementById('n');
+    vi.stubGlobal('requestAnimationFrame', (cb) => {
+      rafCb = cb;
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+    initChromeAutoHide({ headerEl, navEl });
+  });
+
+  const scrollTo = (y) => {
+    Object.defineProperty(window, 'scrollY', { value: y, configurable: true });
+    window.dispatchEvent(new Event('scroll'));
+    rafCb();
+  };
+
+  it('oculta nav y header al bajar y publica --bnav-offset 0', () => {
+    setChromeAutoHide({ header: true, nav: true });
+    scrollTo(0);
+    scrollTo(50);
+    expect(navEl.classList.contains('bottom-nav--auto-hide')).toBe(true);
+    expect(headerEl.classList.contains('header--auto-hide')).toBe(true);
+    expect(document.documentElement.style.getPropertyValue('--bnav-offset')).toBe('0px');
+    scrollTo(30); // subir
+    expect(navEl.classList.contains('bottom-nav--auto-hide')).toBe(false);
+    expect(document.documentElement.style.getPropertyValue('--bnav-offset')).toBe('');
+  });
+
+  it('con nav-only no toca el header y resetea al cambiar de ruta', () => {
+    setChromeAutoHide({ header: false, nav: true });
+    scrollTo(0);
+    scrollTo(50);
+    expect(headerEl.classList.contains('header--auto-hide')).toBe(false);
+    expect(navEl.classList.contains('bottom-nav--auto-hide')).toBe(true);
+    setChromeAutoHide({ header: false, nav: false }); // nueva ruta sin auto-hide
+    expect(navEl.classList.contains('bottom-nav--auto-hide')).toBe(false);
   });
 });

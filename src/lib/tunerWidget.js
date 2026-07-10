@@ -65,6 +65,11 @@ export function createTunerEngine({ onPitch = () => {}, onState = () => {}, onEr
       },
       onState: (s) => {
         if (detector !== d) return;
+        // 'denied'/'stopped' son terminales (permiso rechazado o recover()
+        // fallido en background): liberar la época deja que un reintento
+        // (requestMic(), p.ej. el boton "Activar microfono") cree un
+        // detector nuevo en vez de quedar no-op contra este ya muerto.
+        if (s === 'denied' || s === 'stopped') detector = null;
         onState(s);
       },
     });

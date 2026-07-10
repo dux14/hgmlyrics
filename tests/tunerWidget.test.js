@@ -16,9 +16,8 @@ vi.mock('../src/lib/pitch.js', () => ({
   }),
 }));
 
-const { createTunerStrip, createTunerEngine, colorFromCents } = await import(
-  '../src/lib/tunerWidget.js'
-);
+const { createTunerStrip, createTunerEngine, colorFromCents } =
+  await import('../src/lib/tunerWidget.js');
 const { createPitchDetector } = await import('../src/lib/pitch.js');
 const { noteToMidi } = await import('../src/lib/notes.js');
 
@@ -91,6 +90,24 @@ describe('createTunerEngine — motor puro (sin DOM)', () => {
     engine.start();
     engine.stop();
     expect(onState).toHaveBeenCalledWith('idle');
+  });
+
+  it('requestMic() tras "denied" crea un detector nuevo (reintento no queda pegado)', () => {
+    const engine = createTunerEngine({ onPitch: vi.fn(), onState: vi.fn() });
+    engine.start();
+    expect(createPitchDetector).toHaveBeenCalledTimes(1);
+    onStateRef.current('denied'); // getUserMedia rechazado (permiso denegado)
+    // Reintento real: click en el boton "Activar microfono" llama requestMic().
+    engine.requestMic();
+    expect(createPitchDetector).toHaveBeenCalledTimes(2);
+  });
+
+  it('requestMic() tras "stopped" (recover() fallido en background) tambien permite reintentar', () => {
+    const engine = createTunerEngine({ onPitch: vi.fn(), onState: vi.fn() });
+    engine.start();
+    onStateRef.current('stopped');
+    engine.requestMic();
+    expect(createPitchDetector).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -178,7 +195,7 @@ describe('createTunerStrip — carrera stop() durante start() en vuelo', () => {
       () =>
         new Promise((resolve) => {
           resolveStart = resolve;
-        })
+        }),
     );
 
     const strip = createTunerStrip({ getTargetNote: () => null });
@@ -202,7 +219,7 @@ describe('createTunerStrip — carrera stop() durante start() en vuelo', () => {
         () =>
           new Promise((resolve) => {
             resolveFirst = resolve;
-          })
+          }),
       )
       .mockImplementationOnce(() => Promise.resolve());
 

@@ -168,6 +168,12 @@ export function openFloatingTuner(container, { note = null, voiceLabel = '', onC
     },
     onState: (s) => {
       micState = s;
+      // El mic puede morir tras una lectura válida (p.ej. `recover()` de
+      // pitch.js falla al volver de background en iOS y reporta 'stopped').
+      // Sin esto la columna de pitch (independiente de micState) se queda
+      // mostrando la última lectura "afinada" junto al gate de "Activar
+      // micrófono", como si el afinador siguiera escuchando.
+      if (s !== 'running' && s !== 'requesting') lastStab = null;
       renderEngine();
     },
     onError: (err) => console.warn('[floating-tuner] mic error:', err),

@@ -90,7 +90,31 @@ describe('FloatingTuner — barra flotante híbrida', () => {
     // A4 = midi 69; detectamos B4 (midi 71) con 5 cents finos.
     engineCallbacks.onPitch({ hz: 493, note: 'B', octave: 4, cents: 5, midi: 71 });
     expect(document.getElementById('floating-tuner-note').textContent).toContain('A4');
-    expect(document.getElementById('floating-tuner-cents').textContent).toContain('205');
+    expect(document.getElementById('floating-tuner-cents').textContent).toBe('+205 ¢');
+  });
+
+  it('el mic muriendo tras una lectura valida (stopped/denied) resetea nota y cents a libre', () => {
+    const container = makeContainer();
+    openFloatingTuner(container, { note: 'F#3', voiceLabel: 'Contralto' });
+    engineCallbacks.onState('running');
+    engineCallbacks.onPitch({ hz: 440, note: 'A', octave: 4, cents: 3, midi: 69 });
+    expect(document.getElementById('floating-tuner-note').textContent).toContain('A4');
+    expect(document.getElementById('floating-tuner-cents').textContent).not.toBe('');
+
+    // recover() de pitch.js falla tras volver de background: reporta 'stopped'.
+    engineCallbacks.onState('stopped');
+    expect(document.getElementById('floating-tuner-note').textContent).toBe('—');
+    expect(document.getElementById('floating-tuner-cents').textContent).toBe('');
+  });
+
+  it('denied tras una lectura valida tambien resetea nota y cents', () => {
+    const container = makeContainer();
+    openFloatingTuner(container, { note: 'F#3', voiceLabel: 'Contralto' });
+    engineCallbacks.onState('running');
+    engineCallbacks.onPitch({ hz: 440, note: 'A', octave: 4, cents: 3, midi: 69 });
+    engineCallbacks.onState('denied');
+    expect(document.getElementById('floating-tuner-note').textContent).toBe('—');
+    expect(document.getElementById('floating-tuner-cents').textContent).toBe('');
   });
 
   it('desactivar el chip vuelve a modo libre', () => {

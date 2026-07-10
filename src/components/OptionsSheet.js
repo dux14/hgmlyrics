@@ -33,14 +33,26 @@ let openEls = null;
  *   notation: 'anglo'|'latin',
  *   fontLabel: string,
  *   autoscrollLabel: string,
+ *   showAutoscroll?: boolean,
+ *   modes?: Array<{value: string, label: string}>,
+ *   mode?: string,
+ *   voiceOptions?: Array<{value: string, label: string}>,
+ *   activeVoiceCategory?: string|null,
+ *   showTuner?: boolean,
+ *   tunerOn?: boolean,
  *   onTranspose?: (dir: 1|-1) => void,
  *   onResetTranspose?: () => void,
  *   onToggleAccidental?: () => void,
  *   onNotationChange?: (notation: 'anglo'|'latin') => void,
  *   onFont?: (dir: 1|-1) => void,
  *   onAutoscroll?: (dir: 1|-1) => string|void,
+ *   onModeChange?: (mode: string) => void,
+ *   onVoiceChange?: (category: string) => void,
+ *   onTunerToggle?: () => void,
  *   onClose?: () => void,
- * }} opts
+ * }} opts modes/voiceOptions/showTuner son opcionales (T-inmersiva): sin
+ *   ellos las secciones MODO/VOZ/AFINADOR simplemente no se pintan, así que
+ *   StageMode/SongView (que no los pasan) quedan sin cambios de comportamiento.
  * @returns {{ close: () => void, sheet: HTMLElement }}
  */
 export function openOptionsSheet(opts) {
@@ -59,6 +71,41 @@ export function openOptionsSheet(opts) {
   sheet.setAttribute('aria-modal', 'true');
   sheet.setAttribute('aria-label', 'Opciones');
   sheet.setAttribute('tabindex', '-1');
+
+  // MODO/VOZ (T-inmersiva): segmentados opcionales, arriba de TONO — solo la
+  // vista inmersiva los pasa (StageMode/SongView no envían `modes`/
+  // `voiceOptions`, así que su sheet queda idéntico).
+  const modeSectionHtml =
+    Array.isArray(opts.modes) && opts.modes.length > 1
+      ? `
+    <div class="osheet__section">
+      <div class="osheet__h syn">MODO</div>
+      <div class="osheet__seg osheet__seg--mode" role="group" aria-label="Modo de contenido">
+        ${opts.modes
+          .map(
+            (m) =>
+              `<button class="osheet__seg-btn${m.value === opts.mode ? ' is-active' : ''}" data-mode="${escapeHtml(m.value)}" aria-pressed="${m.value === opts.mode}">${escapeHtml(m.label)}</button>`,
+          )
+          .join('')}
+      </div>
+    </div>`
+      : '';
+
+  const voiceSectionHtml =
+    Array.isArray(opts.voiceOptions) && opts.voiceOptions.length > 0
+      ? `
+    <div class="osheet__section">
+      <div class="osheet__h syn">VOZ</div>
+      <div class="osheet__seg osheet__seg--voice" role="group" aria-label="Voz activa">
+        ${opts.voiceOptions
+          .map(
+            (v) =>
+              `<button class="osheet__seg-btn${v.value === opts.activeVoiceCategory ? ' is-active' : ''}" data-voice="${escapeHtml(v.value)}" aria-pressed="${v.value === opts.activeVoiceCategory}">${escapeHtml(v.label)}</button>`,
+          )
+          .join('')}
+      </div>
+    </div>`
+      : '';
 
   const tonoSectionHtml = opts.showTono
     ? `
@@ -92,7 +139,13 @@ export function openOptionsSheet(opts) {
       </div>
     </div>`;
 
-  const autoscrollSectionHtml = `
+  // AUTO-SCROLL (VELOCIDAD en la vista inmersiva): oculto explícitamente con
+  // `showAutoscroll: false` (solo aplica en modo timer allá); default true
+  // preserva el comportamiento existente de StageMode/SongView.
+  const autoscrollSectionHtml =
+    opts.showAutoscroll === false
+      ? ''
+      : `
     <div class="osheet__section">
       <div class="osheet__h syn">AUTO-SCROLL</div>
       <div class="osheet__seg">
@@ -102,11 +155,24 @@ export function openOptionsSheet(opts) {
       </div>
     </div>`;
 
+  const tunerSectionHtml = opts.showTuner
+    ? `
+    <div class="osheet__section">
+      <div class="osheet__h syn">AFINADOR</div>
+      <div class="osheet__seg">
+        <button class="osheet__seg-btn${opts.tunerOn ? ' is-active' : ''}" data-act="tuner-toggle" id="osheet-tuner" aria-pressed="${!!opts.tunerOn}">${opts.tunerOn ? 'Activado' : 'Desactivado'}</button>
+      </div>
+    </div>`
+    : '';
+
   sheet.innerHTML = `
     <div class="osheet__grab"></div>
+    ${modeSectionHtml}
+    ${voiceSectionHtml}
     ${tonoSectionHtml}
     ${notationSectionHtml}
     ${sizeSectionHtml}
+    ${tunerSectionHtml}
     ${autoscrollSectionHtml}
   `;
 
@@ -175,7 +241,37 @@ export function openOptionsSheet(opts) {
         const label = opts.onAutoscroll?.(a === 'asup' ? 1 : -1);
         const el = sheet.querySelector('#osheet-autoscroll');
         if (el && label !== null && label !== undefined) el.textContent = label;
+      } else if (a === 'tuner-toggle') {
+        const nowOn = b.getAttribute('aria-pressed') !== 'true';
+        b.setAttribute('aria-pressed', String(nowOn));
+        b.classList.toggle('is-active', nowOn);
+        b.textContent = nowOn ? 'Activado' : 'Desactivado';
+        opts.onTunerToggle?.(nowOn);
       }
+    }),
+  );
+
+  sheet.querySelectorAll('[data-mode]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const value = b.dataset.mode;
+      sheet.querySelectorAll('[data-mode]').forEach((x) => {
+        const active = x === b;
+        x.classList.toggle('is-active', active);
+        x.setAttribute('aria-pressed', String(active));
+      });
+      opts.onModeChange?.(value);
+    }),
+  );
+
+  sheet.querySelectorAll('[data-voice]').forEach((b) =>
+    b.addEventListener('click', () => {
+      const value = b.dataset.voice;
+      sheet.querySelectorAll('[data-voice]').forEach((x) => {
+        const active = x === b;
+        x.classList.toggle('is-active', active);
+        x.setAttribute('aria-pressed', String(active));
+      });
+      opts.onVoiceChange?.(value);
     }),
   );
 

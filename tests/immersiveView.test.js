@@ -1,0 +1,366 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+// Stub pitch detector (requiere AudioContext/getUserMedia, no disponible en
+// jsdom) — mismo patrón que tests/stageMode.test.js.
+const detectorStart = vi.fn();
+const detectorStop = vi.fn();
+vi.mock('../src/lib/pitch.js', () => ({
+  createPitchDetector: vi.fn(() => ({
+    start: detectorStart,
+    stop: detectorStop,
+    isRunning: () => false,
+  })),
+}));
+
+// 'voz_tono' siempre on para poder probar mixed/tono sin depender del
+// catálogo real de flags (mismo patrón que tests/stageMode.test.js).
+vi.mock('../src/lib/authStore.js', () => ({
+  isFeatureEnabled: vi.fn(() => true),
+}));
+
+import { enterImmersive, exitImmersive } from '../src/components/ImmersiveView.js';
+import { getLayers, setLayer } from '../src/lib/layerStore.js';
+import {
+  buildLetraLineHTML,
+  buildChordsLineHTML,
+  buildMixedLineHTML,
+} from '../src/lib/lyricsRender.js';
+import { closeOptionsSheet } from '../src/components/OptionsSheet.js';
+
+function mountSongView() {
+  document.body.innerHTML = `<div class="song-view" id="sv"></div>`;
+  return document.getElementById('sv');
+}
+
+function buildSong(overrides = {}) {
+  return {
+    id: 'song-1',
+    schemaVersion: 3,
+    voiceRoster: [{ id: 'soprano-1', name: 'Soprano', category: 'soprano' }],
+    sections: [
+      {
+        type: 'verse',
+        label: 'Verso 1',
+        lines: [
+          {
+            text: 'Primera línea',
+            chords: [{ pos: 0, ch: 'C' }],
+            groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' }],
+          },
+          {
+            text: 'Segunda línea',
+            chords: [{ pos: 0, ch: 'G' }],
+            groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'D4' }],
+          },
+          {
+            text: 'Tercera línea',
+            groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'E4' }],
+          },
+        ],
+      },
+    ],
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  exitImmersive(); // limpia estado entre tests
+  document.body.innerHTML = '';
+  document.body.className = '';
+  localStorage.clear();
+  setLayer('chords', false);
+  setLayer('tono', false);
+  detectorStart.mockClear();
+  detectorStop.mockClear();
+});
+
+afterEach(() => {
+  exitImmersive();
+  closeOptionsSheet();
+});
+
+describe('enterImmersive/exitImmersive', () => {
+  it('no hace nada sin ctx.song', () => {
+    const sv = mountSongView();
+    enterImmersive(sv);
+    expect(document.querySelector('.imm-v1')).toBeNull();
+  });
+
+  it('monta el overlay con TODAS las líneas y activa el índice 0', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    expect(sv.classList.contains('song-view--immersive')).toBe(true);
+    expect(document.body.classList.contains('immersive-active')).toBe(true);
+
+    const lines = document.querySelectorAll('#imm-roll .imm-line');
+    expect(lines).toHaveLength(3);
+    expect(lines[0].classList.contains('imm-line--active')).toBe(true);
+    expect(lines[0].dataset.i).toBe('0');
+    expect(document.getElementById('imm-section').textContent).toBe('Verso 1');
+  });
+
+  it('modo letra (default): todas las líneas usan buildLetraLineHTML', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    const lines = document.querySelectorAll('#imm-roll .imm-line');
+    expect(lines[0].innerHTML).toBe(buildLetraLineHTML('Primera línea'));
+    expect(lines[1].innerHTML).toBe(buildLetraLineHTML('Segunda línea'));
+  });
+
+  it("modo 'chords': línea activa contiene acordes; la vecina también (atenuada por CSS)", () => {
+    setLayer('chords', true);
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    const lines = document.querySelectorAll('#imm-roll .imm-line');
+    const expectedActive = buildChordsLineHTML('Primera línea', [{ pos: 0, ch: 'C' }], {
+      notation: 'anglo',
+    });
+    const expectedNeighbor = buildChordsLineHTML('Segunda línea', [{ pos: 0, ch: 'G' }], {
+      notation: 'anglo',
+    });
+    expect(lines[0].innerHTML).toBe(expectedActive);
+    expect(lines[1].innerHTML).toBe(expectedNeighbor);
+    expect(lines[1].classList.contains('imm-line--active')).toBe(false);
+  });
+
+  it("modo 'mixed': la activa usa el riel mix-rail; las vecinas SOLO acordes", () => {
+    // layerStore es excluyente (chords/tono no pueden ir juntos ahí) — el
+    // modo 'mixed' es propio de immersiveStore, así que se fuerza vía su
+    // clave persistida en vez de depender de la herencia de capas.
+    localStorage.setItem('hkn-immersive-mode', 'mixed');
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    const lines = document.querySelectorAll('#imm-roll .imm-line');
+    const line0 = { text: 'Primera línea', groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' }] };
+    const expectedActive = buildMixedLineHTML(
+      line0,
+      [{ pos: 0, ch: 'C' }],
+      'soprano-1',
+      'voice-text--soprano',
+      { notation: 'anglo' },
+    );
+    expect(lines[0].innerHTML).toBe(expectedActive);
+    expect(lines[0].innerHTML).toContain('mix-rail');
+    expect(lines[1].innerHTML).not.toContain('mix-rail');
+    expect(lines[1].innerHTML).toBe(
+      buildChordsLineHTML('Segunda línea', [{ pos: 0, ch: 'G' }], { notation: 'anglo' }),
+    );
+  });
+
+  it("modo 'tono' sin voz elegida auto-abre el selector (sheet)", () => {
+    setLayer('tono', true);
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong() }); // sin getActiveVoice: activeVoiceId null
+    expect(document.querySelector('.osheet')).toBeTruthy();
+    expect(document.querySelector('.osheet [data-voice]')).toBeTruthy();
+  });
+
+  it('chips S·A·T·B solo visibles en modos mixed/tono', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    expect(document.getElementById('imm-voice-chips').hidden).toBe(true); // modo letra default
+
+    exitImmersive();
+    setLayer('tono', true);
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    expect(document.getElementById('imm-voice-chips').hidden).toBe(false);
+  });
+
+  it('tap en una línea (data-i) navega a esa línea y actualiza distancia/sección', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    const target = document.querySelector('#imm-roll .imm-line[data-i="2"]');
+    target.click();
+
+    const lines = document.querySelectorAll('#imm-roll .imm-line');
+    expect(lines[2].classList.contains('imm-line--active')).toBe(true);
+    expect(lines[0].classList.contains('imm-line--d2')).toBe(true);
+    expect(lines[1].classList.contains('imm-line--d1')).toBe(true);
+  });
+
+  it('avanza sola tras el intervalo de la sección (TimerEngine)', () => {
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    vi.advanceTimersByTime(8000); // > 7.4s (velocidad default 0.5) pero < 2 intervalos
+    const lines = document.querySelectorAll('#imm-roll .imm-line');
+    expect(lines[1].classList.contains('imm-line--active')).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('el botón salir cierra la vista', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.getElementById('imm-exit').click();
+    expect(document.querySelector('.imm-v1')).toBeNull();
+  });
+
+  it('Escape sale de la vista', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(document.querySelector('.imm-v1')).toBeNull();
+  });
+
+  it('exitImmersive limpia listeners, body class, mic y wake lock, y es idempotente', () => {
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.querySelector('.imm-v1__tuner-toggle').click(); // arranca el mic
+    expect(detectorStart).toHaveBeenCalledTimes(1);
+
+    exitImmersive();
+    expect(document.querySelector('.imm-v1')).toBeNull();
+    expect(sv.classList.contains('song-view--immersive')).toBe(false);
+    expect(document.body.classList.contains('immersive-active')).toBe(false);
+    expect(detectorStop).toHaveBeenCalledTimes(1);
+
+    expect(() => vi.advanceTimersByTime(60000)).not.toThrow();
+    expect(() => exitImmersive()).not.toThrow(); // segunda vez: no-op
+    vi.useRealTimers();
+  });
+
+  it('llama a ctx.pauseAutoscroll una vez al entrar y ctx.onExit al salir', () => {
+    const sv = mountSongView();
+    const pauseAutoscroll = vi.fn();
+    const onExit = vi.fn();
+    enterImmersive(sv, { song: buildSong(), pauseAutoscroll, onExit });
+    expect(pauseAutoscroll).toHaveBeenCalledTimes(1);
+    exitImmersive();
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('afinador embebido: toggle + "Seguir nota"', () => {
+  it('el toggle nace apagado (mic nunca auto-arranca al entrar)', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    const toggle = document.querySelector('.imm-v1__tuner-toggle');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(document.getElementById('imm-tuner-panel').hidden).toBe(true);
+    expect(detectorStart).not.toHaveBeenCalled();
+  });
+
+  it('activar el toggle muestra el panel y arranca el detector; desactivarlo lo para', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    const toggle = document.querySelector('.imm-v1__tuner-toggle');
+
+    toggle.click();
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(document.getElementById('imm-tuner-panel').hidden).toBe(false);
+    expect(detectorStart).toHaveBeenCalledTimes(1);
+
+    toggle.click();
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(detectorStop).toHaveBeenCalledTimes(1);
+  });
+
+  it('"Seguir nota" nace en modo libre (chip apagado)', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    const chip = document.querySelector('.imm-tuner-panel__follow');
+    expect(chip.getAttribute('aria-pressed')).toBe('false');
+  });
+});
+
+describe('gestos (swipe horizontal/vertical, tap vs swipe)', () => {
+  function dispatchPointer(el, type, x, y) {
+    el.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: x, clientY: y }));
+  }
+
+  it('swipe horizontal hacia la izquierda avanza a la línea siguiente', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    const viewport = document.getElementById('imm-viewport');
+
+    dispatchPointer(viewport, 'pointerdown', 300, 300);
+    dispatchPointer(document, 'pointermove', 200, 300);
+    dispatchPointer(document, 'pointerup', 200, 300); // dx=-100 >= 40px
+
+    expect(
+      document.querySelector('#imm-roll .imm-line[data-i="1"]').classList.contains('imm-line--active'),
+    ).toBe(true);
+  });
+
+  it('swipe vertical hacia arriba aumenta la velocidad y la persiste', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    const viewport = document.getElementById('imm-viewport');
+
+    dispatchPointer(viewport, 'pointerdown', 100, 300);
+    dispatchPointer(document, 'pointermove', 100, 200);
+    dispatchPointer(document, 'pointerup', 100, 200); // dy=-100 >= 40px
+
+    const stored = Number.parseFloat(localStorage.getItem('hkn-autoscroll-speed:song-1'));
+    expect(stored).toBeGreaterThan(0.5);
+  });
+
+  it('un tap corto no dispara swipe: primero despierta el chrome, luego pausa', () => {
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    const viewport = document.getElementById('imm-viewport');
+    const overlay = document.querySelector('.imm-v1');
+
+    viewport.click(); // controles ya visibles al entrar -> pausa
+    expect(overlay.classList.contains('imm-v1--paused')).toBe(true);
+    vi.useRealTimers();
+  });
+});
+
+describe('sheet de opciones extendido (MODO/VOZ/AFINADOR)', () => {
+  afterEach(() => closeOptionsSheet());
+
+  it('abre con el grupo MODO (Letra activo) y sin VOZ (letra no la necesita)', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.getElementById('imm-open-options').click();
+    expect(document.querySelector('.osheet [data-mode="letra"].is-active')).toBeTruthy();
+    expect(document.querySelector('.osheet [data-voice]')).toBeNull();
+  });
+
+  it('cambiar MODO desde el sheet re-renderiza las líneas sin resetear el índice activo', () => {
+    const sv = mountSongView();
+    setLayer('chords', true);
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.querySelector('#imm-roll .imm-line[data-i="1"]').click(); // activa = 1
+
+    document.getElementById('imm-open-options').click();
+    document.querySelector('.osheet [data-mode="letra"]').click();
+
+    const lines = document.querySelectorAll('#imm-roll .imm-line');
+    expect(lines[1].classList.contains('imm-line--active')).toBe(true); // índice preservado
+    expect(lines[1].innerHTML).toBe(buildLetraLineHTML('Segunda línea'));
+  });
+
+  it('A+ del sheet aumenta la escala de fuente y la persiste', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.getElementById('imm-open-options').click();
+    document.querySelector('[data-act="fup"]').click();
+    expect(document.querySelector('.imm-v1').style.getPropertyValue('--imm-font-scale')).toBe('1.10');
+    expect(Number.parseFloat(localStorage.getItem('hkn-stage-font-scale'))).toBeCloseTo(1.1);
+  });
+
+  it('salir con el sheet abierto no deja un sheet huérfano en el DOM', () => {
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.getElementById('imm-open-options').click();
+    expect(document.querySelector('.osheet')).toBeTruthy();
+
+    exitImmersive();
+    vi.advanceTimersByTime(250);
+    expect(document.querySelector('.osheet')).toBeNull();
+    vi.useRealTimers();
+  });
+});
+
+describe('wake lock', () => {
+  it("re-adquiere al volver de background (visibilitychange)", () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    expect(() => document.dispatchEvent(new Event('visibilitychange'))).not.toThrow();
+  });
+});

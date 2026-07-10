@@ -1,0 +1,199 @@
+/* immersive.css — Vista inmersiva (karaoke estilo Apple Music), Task C4.
+   Overlay negro fijo, independiente del theme (igual convención que
+   stage.css: fondo #000 siempre). `body.immersive-active` cumple el mismo
+   rol que `body.stage-active` hoy; el rename global de esa clase es Task C5. */
+
+body.immersive-active .header,
+body.immersive-active .bottom-nav,
+body.immersive-active .sidebar,
+body.immersive-active .sidebar-overlay {
+  display: none !important;
+}
+body.immersive-active {
+  overflow: hidden;
+}
+
+.song-view--immersive {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.imm-v1 {
+  --imm-font-scale: 1;
+  --imm-gutter: 10px;
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  background: #121212;
+  color: #fff;
+  height: 100svh;
+  height: 100dvh;
+  overflow: hidden;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* ── Chrome superior (auto-hide 3s, fijo en pausa) ── */
+
+.imm-v1__chrome {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: max(0.75rem, env(safe-area-inset-top)) var(--imm-gutter) 0.5rem;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.imm-v1__chrome--hidden {
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+}
+
+.imm-v1__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  flex: none;
+}
+
+.imm-v1__section {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-brand, #01ccd9);
+  opacity: 0.85;
+}
+
+.imm-v1__voice-chips {
+  display: flex;
+  gap: 0.25rem;
+  flex: none;
+}
+
+/* ── Viewport + rollo ── */
+
+.imm-v1__viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  padding: 0 var(--imm-gutter);
+}
+
+.imm-roll {
+  will-change: transform;
+}
+
+.imm-line {
+  padding: 0.5rem 0;
+  font-weight: 700;
+  line-height: 1.28;
+  text-align: left;
+  transform-origin: left center;
+  word-wrap: break-word;
+  transition: opacity 0.3s ease, filter 0.3s ease, transform 0.3s ease;
+}
+
+.imm-line--active {
+  font-size: calc(2.1rem * var(--imm-font-scale));
+  opacity: 1;
+  filter: none;
+  transform: scale(1);
+  color: #fff;
+}
+.imm-line--d1 {
+  font-size: calc(1.5rem * var(--imm-font-scale));
+  opacity: 0.42;
+  filter: blur(1.5px);
+}
+.imm-line--d2 {
+  font-size: calc(1.5rem * var(--imm-font-scale));
+  opacity: 0.3;
+  filter: blur(3px);
+}
+.imm-line--d3 {
+  font-size: calc(1.5rem * var(--imm-font-scale));
+  opacity: 0.25;
+  filter: blur(3px);
+}
+/* Costo: sin filter más allá de ±3 líneas (spec §1). */
+.imm-line--far {
+  font-size: calc(1.5rem * var(--imm-font-scale));
+  opacity: 0.15;
+  filter: none;
+}
+
+.imm-line--spoken {
+  font-style: italic;
+  font-weight: 600;
+}
+
+/* ── FAB pausa (modo timer) ── */
+
+.imm-v1__fab {
+  position: absolute;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(6rem, calc(6rem + env(safe-area-inset-bottom)));
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-brand, #01ccd9);
+  color: #000;
+  z-index: 2;
+}
+
+/* ── Barra inferior: toggle afinador + slot player (Fase D) ── */
+
+.imm-v1__bottombar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem var(--imm-gutter) max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.imm-v1__tuner-panel {
+  padding: 0 var(--imm-gutter) 0.5rem;
+}
+
+.imm-tuner-panel__follow {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  margin-bottom: 0.5rem;
+  background: transparent;
+  color: #fff;
+  font-size: 0.8rem;
+}
+.imm-tuner-panel__follow.is-active,
+.imm-tuner-panel__follow[aria-pressed='true'] {
+  border-color: var(--color-brand, #01ccd9);
+  color: var(--color-brand, #01ccd9);
+  background: color-mix(in oklab, var(--color-brand, #01ccd9) 18%, transparent);
+}
+
+/* Slot del player de pista (Fase D): oculto hasta que exista audio+flag. */
+.imm-v1__player-slot[hidden] {
+  display: none;
+}

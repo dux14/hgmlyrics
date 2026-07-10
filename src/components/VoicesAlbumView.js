@@ -68,7 +68,7 @@ function bindVozEvents(region, words) {
 export async function renderVoicesAlbumView(container) {
   // Shell instantáneo: hero estático + región async para meta+tracklist.
   container.innerHTML = `
-    <div class="voz-album fade-in">
+    <div class="voz-album page--headerless fade-in">
       <div class="voz-album__hero">
         <div class="voz-album__hero-icon">${icon('gospel', { size: 48 })}</div>
         <h1 class="voz-album__hero-title">Voces en off</h1>

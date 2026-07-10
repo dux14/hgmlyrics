@@ -26,14 +26,10 @@
   padding-bottom: calc(var(--bottom-nav-height, 60px) + 1rem);
 }
 
-/* Perfil propio: el header global esta oculto en /perfil (ver hideHeader),
-   por lo que la reserva de .main (--header-height) + el gutter superior de
-   .main__content (--space-md) quedaban como banda muerta sobre el degradado.
-   Sangramos la pagina hacia arriba para que el difuminado llegue al borde.
-   Scopeado a --own: el perfil publico (/u/:username) conserva su header. */
-.profile-page--own {
-  margin-top: calc(-1 * (var(--header-height) + var(--space-md)));
-}
+/* Perfil propio y público son headerless desde el Task 4 (ambos usan la
+   clase compartida .page--headerless, ver layout.css): la reserva de .main
+   (--header-height) + el gutter superior de .main__content (--space-md)
+   quedarían como banda muerta sobre el degradado si no se sangra la página. */
 
 /* ── Zona superior: ambient blob + avatar + identidad ── */
 .pf-top {
@@ -42,11 +38,8 @@
      El difuminado (.pf-amb) sangra -space-md para llegar al borde. */
   padding: 22px 0 4px;
   text-align: center;
-}
-
-.profile-page--own .pf-top {
   /* Respeta el notch en PWA standalone; en navegador el inset es 0. */
-  padding-top: max(20px, env(safe-area-inset-top, 0px));
+  padding-top: max(20px, var(--safe-top));
 }
 
 .pf-amb {

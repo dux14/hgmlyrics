@@ -25,21 +25,21 @@ export function colorFromCents(cents) {
 }
 
 /**
- * @param {{ getTargetNote?: () => number|null }} [opts]
- *   `getTargetNote`: midi inicial a usar al llamar `start()` (opcional; el
- *   caller normalmente lo actualiza después vía `setTargetNote`).
- * @returns {{ el: HTMLElement, start: () => void, stop: () => void,
- *             setTargetNote: (midi: number|null) => void, isRunning: () => boolean }}
+ * createTunerEngine — motor compartido del afinador: pipeline de mic
+ * (requestMic con épocas para descartar detectores obsoletos) + estabilizador
+ * de pitch. Sin DOM: consumido tanto por `createTunerStrip` (franja de
+ * escenario) como, en un paso posterior, por el widget flotante.
+ *
+ * @param {{ onPitch?: (stab: object|null) => void,
+ *           onState?: (s: 'idle'|'requesting'|'running'|'stopped'|'denied') => void,
+ *           onError?: (err: Error) => void }} [opts]
+ * @returns {{ start: () => void, stop: () => void, requestMic: () => void,
+ *             isRunning: () => boolean }}
  */
-export function createTunerStrip({ getTargetNote } = {}) {
-  let targetMidi = typeof getTargetNote === 'function' ? getTargetNote() : null;
+export function createTunerEngine({ onPitch = () => {}, onState = () => {}, onError } = {}) {
   let detector = null;
   const stabilizer = createPitchStabilizer();
-  let micState = 'idle'; // 'idle' | 'requesting' | 'running' | 'denied' | 'stopped'
   let running = false;
-
-  const el = document.createElement('div');
-  el.className = 'tuner-strip';
 
   /**
    * Arranca un detector nuevo (o ignora si ya hay uno en vuelo/corriendo).
@@ -56,16 +56,29 @@ export function createTunerStrip({ getTargetNote } = {}) {
     const d = createPitchDetector({
       onPitch: (payload) => {
         if (detector !== d) return; // detector obsoleto: ignorar
-        handlePitch(stabilizer.push(payload));
+        onPitch(stabilizer.push(payload));
       },
       onError: (err) => {
         if (detector !== d) return;
-        console.warn('[tuner-strip] mic error:', err);
+        if (onError) onError(err);
+        else console.warn('[tuner-engine] mic error:', err);
       },
       onState: (s) => {
         if (detector !== d) return;
-        micState = s;
-        render();
+        // 'denied'/'stopped' son terminales (permiso rechazado o recover()
+        // fallido en background): liberar la época deja que un reintento
+        // (requestMic(), p.ej. el boton "Activar microfono") cree un
+        // detector nuevo en vez de quedar no-op contra este ya muerto.
+        // Diferido a un microtask: pitch.js llama onState('denied') y LUEGO
+        // onError(e) en el MISMO tick (ver start() en pitch.js) — nulear
+        // aquí synchronamente haría que el guard `detector !== d` de
+        // onError trague ese error (detector ya null !== d).
+        if (s === 'denied' || s === 'stopped') {
+          Promise.resolve().then(() => {
+            if (detector === d) detector = null;
+          });
+        }
+        onState(s);
       },
     });
     detector = d;
@@ -73,6 +86,49 @@ export function createTunerStrip({ getTargetNote } = {}) {
       if (detector !== d) d.stop();
     });
   }
+
+  function start() {
+    if (running) return;
+    running = true;
+    requestMic();
+  }
+
+  /** Libera SIEMPRE el detector (mic nunca queda abierto). Idempotente. */
+  function stop() {
+    running = false;
+    if (detector) {
+      detector.stop();
+      detector = null;
+    }
+    stabilizer.reset();
+    onState('idle');
+  }
+
+  return { start, stop, requestMic, isRunning: () => running };
+}
+
+/**
+ * @param {{ getTargetNote?: () => number|null }} [opts]
+ *   `getTargetNote`: midi inicial a usar al llamar `start()` (opcional; el
+ *   caller normalmente lo actualiza después vía `setTargetNote`).
+ * @returns {{ el: HTMLElement, start: () => void, stop: () => void,
+ *             setTargetNote: (midi: number|null) => void, isRunning: () => boolean }}
+ */
+export function createTunerStrip({ getTargetNote } = {}) {
+  let targetMidi = typeof getTargetNote === 'function' ? getTargetNote() : null;
+  let micState = 'idle'; // 'idle' | 'requesting' | 'running' | 'denied' | 'stopped'
+
+  const el = document.createElement('div');
+  el.className = 'tuner-strip';
+
+  const engine = createTunerEngine({
+    onPitch: (stab) => handlePitch(stab),
+    onState: (s) => {
+      micState = s;
+      render();
+    },
+    onError: (err) => console.warn('[tuner-strip] mic error:', err),
+  });
 
   function handlePitch(stab) {
     const indicator = el.querySelector('#tuner-strip-indicator');
@@ -92,7 +148,7 @@ export function createTunerStrip({ getTargetNote } = {}) {
   }
 
   function render() {
-    if (!running) {
+    if (!engine.isRunning()) {
       el.innerHTML = '';
       return;
     }
@@ -104,7 +160,7 @@ export function createTunerStrip({ getTargetNote } = {}) {
           </button>
         </div>
       `;
-      el.querySelector('#tuner-strip-grant')?.addEventListener('click', requestMic);
+      el.querySelector('#tuner-strip-grant')?.addEventListener('click', engine.requestMic);
       return;
     }
     const label =
@@ -120,23 +176,15 @@ export function createTunerStrip({ getTargetNote } = {}) {
   }
 
   function start() {
-    if (running) return;
-    running = true;
+    if (engine.isRunning()) return;
     if (typeof getTargetNote === 'function') targetMidi = getTargetNote();
+    engine.start(); // running=true antes del render; requestMic() puede re-renderizar via onState
     render();
-    requestMic();
   }
 
   /** Libera SIEMPRE el detector (mic nunca queda abierto). Idempotente. */
   function stop() {
-    running = false;
-    if (detector) {
-      detector.stop();
-      detector = null;
-    }
-    stabilizer.reset();
-    micState = 'idle';
-    render();
+    engine.stop(); // onState('idle') dispara render() con micState/running ya al día
   }
 
   function setTargetNote(midi) {
@@ -146,5 +194,5 @@ export function createTunerStrip({ getTargetNote } = {}) {
 
   render();
 
-  return { el, start, stop, setTargetNote, isRunning: () => running };
+  return { el, start, stop, setTargetNote, isRunning: () => engine.isRunning() };
 }

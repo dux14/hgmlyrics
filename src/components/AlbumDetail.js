@@ -24,7 +24,7 @@ export function renderAlbumDetail(container, slug) {
   // Estado vacío: slug sin canciones — muestra mensaje claro, sin crash.
   if (tracks.length === 0) {
     container.innerHTML = `
-      <div class="album-detail fade-in">
+      <div class="album-detail page--headerless fade-in">
         <div class="empty-state">
           <p class="empty-state__text">No se encontró el álbum solicitado.</p>
         </div>
@@ -42,7 +42,7 @@ export function renderAlbumDetail(container, slug) {
   const countLabel = count === 1 ? '1 canción' : `${count} canciones`;
 
   container.innerHTML = `
-    <div class="album-detail fade-in">
+    <div class="album-detail page--headerless fade-in">
 
       <header class="album-hero">
         <img

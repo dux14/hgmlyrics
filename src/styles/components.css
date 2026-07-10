@@ -1438,8 +1438,7 @@
 /* === Autoscroll FAB === */
 .autoscroll-fab {
   position: fixed;
-  /* Sin header fijo en /song/:id (Task 4): offset mas bajo que antes. */
-  top: calc(96px + var(--safe-top));
+  bottom: calc(var(--bottom-nav-height, 56px) + env(safe-area-inset-bottom, 0px) + 12px);
   right: 12px;
   z-index: var(--z-toast);
   display: flex;
@@ -1449,13 +1448,35 @@
   animation: fabIn 400ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
   transition:
     opacity 300ms ease,
-    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    bottom 200ms ease;
 }
 
 @media (min-width: 768px) {
   .autoscroll-fab {
-    top: 84px;
     right: 24px;
+  }
+}
+
+/* Apilado (Task 4): cuando el afinador flotante o el reproductor de sección
+   están montados, ambos anclados abajo, el FAB sube por encima de la barra
+   visible más alta para no taparla ni quedar tapado por ella. Alturas
+   aproximadas medidas de `.floating-tuner` (~100px, ver components.css) y
+   de `.section-player` (~76px con chips, ver section-player.css); el
+   reproductor de sección alcanza más alto (se ancla sobre el bottom-nav),
+   así que su offset ya despeja también al afinador cuando ambos están
+   abiertos a la vez. */
+body.floating-tuner-open .autoscroll-fab {
+  bottom: calc(var(--space-md, 1rem) + 100px + env(safe-area-inset-bottom, 0px) + 12px);
+}
+
+body.section-player-open .autoscroll-fab {
+  bottom: calc(var(--bottom-nav-height, 56px) + 76px + env(safe-area-inset-bottom, 0px) + 12px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .autoscroll-fab {
+    transition: none;
   }
 }
 
@@ -1463,7 +1484,7 @@
 .autoscroll-fab--collapsed {
   opacity: 0.2;
   transform: scale(0.7);
-  transform-origin: top right;
+  transform-origin: bottom right;
 }
 
 .autoscroll-fab--collapsed .autoscroll-fab__controls {
@@ -2017,14 +2038,18 @@
      otro modo retiene opacity:1 y deja el botón siempre visible. */
   opacity: 0 !important;
   pointer-events: none;
-  transform: translateY(-8px) !important;
+  /* Positivo: el FAB está anclado abajo, así que se oculta deslizándose
+     hacia el borde inferior en vez de hacia arriba. */
+  transform: translateY(8px) !important;
 }
 
-/* === Afinador flotante (T5) — bajo demanda desde el mic del hero ===
-   Envuelve `.tuner-strip` (tunerWidget.js, ya con sus propios estilos en
-   stage.css) en una barra fija de nivel toast. Entrada: translateY(8px) +
-   opacity 200ms ease-out; reduced-motion cae a solo fade (mismo criterio que
-   `.lyrics--layer-fade` más arriba). */
+/* === Afinador flotante híbrido (T5 + T2 refino) — bajo demanda desde el mic
+   del hero. Modo libre por defecto: nota detectada + cents a la izquierda,
+   gauge lineal de 5 zonas (mismos porcentajes/colores que `.tuner-gauge` de
+   tuner.css, sin escala numérica) a la derecha; debajo, estado + chip
+   "Seguir nota". Entrada: translateY(8px) + opacity 200ms ease-out;
+   reduced-motion cae a solo fade (mismo criterio que `.lyrics--layer-fade`
+   más arriba). */
 .floating-tuner {
   position: fixed;
   left: var(--space-md);
@@ -2041,26 +2066,10 @@
   animation: floatingTunerIn 200ms ease-out;
 }
 
-.floating-tuner__header {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-sm);
-}
-
-.floating-tuner__note {
-  font-size: 1.5rem;
-  font-weight: var(--font-weight-bold);
-  color: var(--color-teal-400);
-  line-height: 1;
-}
-
-.floating-tuner__label {
-  flex: 1;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
-
 .floating-tuner__close {
+  position: absolute;
+  top: var(--space-xs);
+  right: var(--space-xs);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2074,6 +2083,214 @@
 
 .floating-tuner__close:hover {
   color: var(--color-text);
+}
+
+.floating-tuner__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding-right: 44px; /* despeja la X absoluta */
+}
+
+.floating-tuner__pitch {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 4ch;
+}
+
+.floating-tuner__note {
+  font-size: 1.875rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-teal-400);
+  line-height: 1;
+}
+
+.floating-tuner__cents {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  line-height: 1;
+  min-height: 1em;
+}
+
+.floating-tuner__cents[data-status='ok'] {
+  color: var(--color-success);
+}
+
+.floating-tuner__cents[data-status='warn'] {
+  color: var(--color-warn);
+}
+
+.floating-tuner__cents[data-status='bad'] {
+  color: var(--color-danger);
+}
+
+.floating-tuner__engine {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Gauge propio del afinador flotante — NO reusa `.tuner-gauge*` de
+   tuner.css: esa hoja solo se importa desde Tuner.js (ruta /afinador,
+   chunk lazy en main.js), así que en SongView el gauge quedaría sin
+   estilos si el usuario no visitó /afinador antes en la sesión. Además
+   tuner.css no usa `@layer` y `components.css` sí, con lo que reusar los
+   mismos nombres de clase sería un hazard de cascada al visitar /afinador
+   (las reglas sin layer ganarían). Valores (porcentajes de zona, colores,
+   opacidad, indicador) espejan `.tuner-gauge*` al detalle — ver tuner.css
+   si cambian ahí, cambian acá igual. */
+.floating-tuner__gauge {
+  padding: 0;
+}
+
+.floating-tuner__gauge-track {
+  position: relative;
+  height: 10px;
+  border-radius: var(--border-radius-full);
+  background: var(--color-border);
+  overflow: hidden;
+}
+
+.floating-tuner__gauge-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  opacity: 0.35;
+}
+
+.floating-tuner__gauge-zone--ok {
+  left: 40%;
+  width: 20%;
+  background: var(--color-success);
+}
+
+.floating-tuner__gauge-zone--warn {
+  background: var(--color-warn);
+}
+
+.floating-tuner__gauge-zone--warn-left {
+  left: 20%;
+  width: 20%;
+}
+
+.floating-tuner__gauge-zone--warn-right {
+  left: 60%;
+  width: 20%;
+}
+
+.floating-tuner__gauge-zone--danger {
+  background: var(--color-danger);
+}
+
+.floating-tuner__gauge-zone--danger-left {
+  left: 0;
+  width: 20%;
+}
+
+.floating-tuner__gauge-zone--danger-right {
+  left: 80%;
+  width: 20%;
+}
+
+.floating-tuner__gauge-center {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  left: 50%;
+  width: 2px;
+  background: var(--color-text-secondary);
+  opacity: 0.6;
+  transform: translateX(-50%);
+}
+
+.floating-tuner__gauge-indicator {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  width: 5px;
+  border-radius: 3px;
+  background: var(--color-text-secondary);
+  transform: translateX(-50%);
+  transition:
+    left 120ms ease-out,
+    background-color 120ms ease-out;
+}
+
+.floating-tuner__gauge-indicator[data-status='ok'] {
+  background: var(--color-success);
+}
+
+.floating-tuner__gauge-indicator[data-status='warn'] {
+  background: var(--color-warn);
+}
+
+.floating-tuner__gauge-indicator[data-status='bad'] {
+  background: var(--color-danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-tuner__gauge-indicator {
+    transition: none;
+  }
+}
+
+.floating-tuner__gate {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.floating-tuner__grant {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-full);
+  padding: var(--space-xs) var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.floating-tuner__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+  min-height: 1.5em;
+}
+
+.floating-tuner__status {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.floating-tuner__chip {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-full);
+  padding: 4px var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out,
+    border-color 120ms ease-out;
+}
+
+.floating-tuner__chip[aria-pressed='true'] {
+  background: var(--color-teal-400);
+  border-color: var(--color-teal-400);
+  color: var(--color-bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-tuner__chip {
+    transition: none;
+  }
 }
 
 @keyframes floatingTunerIn {

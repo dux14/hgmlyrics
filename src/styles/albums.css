@@ -114,15 +114,39 @@
   margin: 0 auto;
 }
 
+/* Headerless (Task 4): el padding-top de arriba se sumaría al padding-top
+   del hero (max(20px, var(--safe-top))) y dejaría una banda muerta sobre el
+   ambiente a sangre completa. Se cancela solo en la ruta headerless. */
+.album-detail.page--headerless {
+  padding-top: 0;
+}
+
 /* === Hero === */
 
 .album-hero {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-lg);
-  padding: var(--space-md) 0 var(--space-xl);
+  padding: max(20px, var(--safe-top)) 0 var(--space-xl);
   text-align: center;
+}
+
+/* Headerless (Task 4): ambiente detrás del hero, a sangre completa hasta el
+   borde de la pantalla. */
+.album-hero::before {
+  content: '';
+  position: absolute;
+  top: calc(-1 * var(--space-md));
+  left: calc(-1 * var(--space-md));
+  right: calc(-1 * var(--space-md));
+  height: 190px;
+  background:
+    radial-gradient(120% 100% at 50% 0, rgba(29, 111, 126, 0.3), transparent 70%),
+    radial-gradient(90% 80% at 78% 0, rgba(124, 58, 237, 0.22), transparent);
+  pointer-events: none;
+  z-index: -1;
 }
 
 @media (min-width: 600px) {

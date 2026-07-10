@@ -541,3 +541,10 @@
     grid-template-columns: repeat(4, 1fr);
   }
 }
+
+/* Patrón /perfil generalizado (Task 4, chrome sin fin): cancela la reserva
+   del header oculto + gutter para que la página arranque en el píxel 0 del
+   viewport. Usado por las 6 rutas headerless del Grupo B. */
+.page--headerless {
+  margin-top: calc(-1 * (var(--header-height) + var(--space-md)));
+}

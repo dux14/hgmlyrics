@@ -132,7 +132,7 @@ export async function renderPublicProfile(container, username) {
               .join('');
 
       region.innerHTML = `
-        <div class="profile-page fade-in">
+        <div class="profile-page page--headerless fade-in">
           <div class="pf-top">
             <div class="pf-amb"></div>
             <span class="avatar-wrap">
@@ -244,7 +244,7 @@ export async function renderPublicProfile(container, username) {
       }
     },
     empty: () => `
-      <div class="profile-page">
+      <div class="profile-page page--headerless">
         <h2>Perfil no encontrado</h2>
         <p>El perfil no existe o no es visible.</p>
         <a class="auth-link" href="#/">Volver al inicio</a>

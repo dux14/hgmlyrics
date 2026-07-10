@@ -37,7 +37,7 @@ export async function renderWeeklyWordView(container, word) {
   // Hero + cuerpo (cita/reflexión) + evangelio: helper compartido con el
   // preview de VozEditor (F3c), para que ambas vistas nunca diverjan.
   container.innerHTML = `
-    <div class="voz-view fade-in">
+    <div class="voz-view page--headerless fade-in">
       ${vozHeroBodyHtml(word)}
     </div>
   `;

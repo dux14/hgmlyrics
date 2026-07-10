@@ -64,6 +64,18 @@ const CHROME_AUTOHIDE = [
 ];
 const chromeFor = (path) => CHROME_AUTOHIDE.find((c) => c.re.test(path)) ?? {};
 
+// Grupo B (Task 4): rutas headerless con hero a sangre completa, sin header
+// ni su reserva de espacio.
+const HEADERLESS = [
+  /^\/perfil$/, // no incluye /perfil/editar
+  /^\/song\/[^/]+$/, // no incluye /song/:id/links
+  /^\/album\/[^/]+$/,
+  /^\/u\/[^/]+$/,
+  /^\/voz\/[^/]+$/,
+  /^\/voces$/,
+];
+const isHeaderless = (path) => HEADERLESS.some((re) => re.test(path));
+
 // Initialize theme immediately to avoid flash
 initTheme();
 
@@ -314,7 +326,6 @@ async function boot() {
 
   privateRoute('/perfil', () => {
     hideFilterBar();
-    hideHeader();
     renderProfile(mainContent);
   });
 
@@ -432,6 +443,10 @@ async function boot() {
     mainContent.querySelector('#not-found-home')?.addEventListener('click', () => navigate('/'));
   });
 
+  // Estado inicial del header según la ruta de arranque (deep link directo a
+  // una ruta headerless del Grupo B, no solo navegación por hashchange).
+  isHeaderless(getCurrentPath()) ? hideHeader() : showHeader();
+
   // Start router
   initRouter();
 
@@ -449,8 +464,9 @@ async function boot() {
     closeGoToSheet(); // cierra la hoja "Ir a" al navegar (incl. botón atrás)
     const path = getCurrentPath();
     updateBottomNavActive(path);
-    // Oculta el header solo en la pantalla de perfil propia (no en /perfil/editar ni /u/:username).
-    path === '/perfil' ? hideHeader() : showHeader();
+    // Oculta el header en las rutas headerless del Grupo B (perfil, canción,
+    // álbum, perfil público, voz, voces); el resto conserva el header fijo.
+    isHeaderless(path) ? hideHeader() : showHeader();
     setChromeAutoHide(chromeFor(path));
   });
 

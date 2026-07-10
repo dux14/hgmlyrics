@@ -21,7 +21,6 @@ vi.mock('../src/lib/authStore.js', () => ({
 }));
 
 import { enterStage, exitStage } from '../src/components/StageMode.js';
-import { projectLines } from '../src/lib/projectLines.js';
 import { getLayers, setLayer } from '../src/lib/layerStore.js';
 import {
   buildLetraLineHTML,
@@ -84,10 +83,9 @@ afterEach(() => {
   exitStage();
 });
 
-// speedToSecondsPerLine y projectLines (con la fixture buildSong equivalente
-// y el test de paridad canónica front/back) se movieron a
-// tests/projectLines.test.js (Task C3); acá solo queda projectLines como
-// helper para armar fixtures de enterStage/exitStage.
+// speedToSecondsPerLine y projectLines (con su propia fixture y el test de
+// paridad canónica front/back) se movieron a tests/projectLines.test.js
+// (Task C3); buildSong queda acá solo como fixture de enterStage/exitStage.
 
 describe('enterStage/exitStage', () => {
   it('no hace nada sin ctx.song', () => {

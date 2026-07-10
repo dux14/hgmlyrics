@@ -22,10 +22,8 @@ import { noteToMidi } from '../lib/notes.js';
 import { getLayers, setLayer, deriveViewMode } from '../lib/layerStore.js';
 import { isFeatureEnabled } from '../lib/authStore.js';
 import { openOptionsSheet, closeOptionsSheet } from './OptionsSheet.js';
-import { projectLines, speedToSecondsPerLine } from '../lib/projectLines.js';
+import { projectLines } from '../lib/projectLines.js';
 import '../styles/stage.css';
-
-export { projectLines, speedToSecondsPerLine };
 
 // Duración por línea en el extremo lento (fallback de scheduleAdvance cuando
 // aún no hay líneas proyectadas) — mismo valor que projectLines.js.

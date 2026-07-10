@@ -1,23 +1,29 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
-// jsdom no tiene Web Audio: mockeamos tunerWidget.js. El test cubre el
-// contenedor flotante (header, nota, X, onClose, destroy), no el DSP.
+// jsdom no tiene Web Audio: mockeamos createTunerEngine (createTunerStrip
+// queda intacta para StageMode, no la usa este componente). Capturamos los
+// callbacks para simular onState/onPitch a mano, como haría pitch.js real.
+let engineCallbacks;
 vi.mock('../lib/tunerWidget.js', () => ({
-  createTunerStrip: vi.fn(() => {
-    const el = document.createElement('div');
-    el.className = 'tuner-strip';
+  createTunerEngine: vi.fn((opts) => {
+    engineCallbacks = opts;
     return {
-      el,
       start: vi.fn(),
       stop: vi.fn(),
-      setTargetNote: vi.fn(),
-      isRunning: () => false,
+      requestMic: vi.fn(),
+      isRunning: () => true,
     };
   }),
+  colorFromCents: (cents) => {
+    const abs = Math.abs(cents);
+    if (abs < 10) return 'ok';
+    if (abs < 30) return 'warn';
+    return 'bad';
+  },
 }));
 
 import { openFloatingTuner } from './FloatingTuner.js';
-import { createTunerStrip } from '../lib/tunerWidget.js';
+import { createTunerEngine } from '../lib/tunerWidget.js';
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -33,27 +39,89 @@ function makeContainer() {
   return el;
 }
 
-describe('FloatingTuner — barra flotante bajo demanda', () => {
-  it('monta .floating-tuner con la nota objetivo visible', () => {
+describe('FloatingTuner — barra flotante híbrida', () => {
+  it('monta .floating-tuner y arranca el motor al abrir', () => {
     const container = makeContainer();
     openFloatingTuner(container, { note: 'F#3', voiceLabel: 'Contralto' });
-    const el = container.querySelector('.floating-tuner');
-    expect(el).toBeTruthy();
-    expect(el.textContent).toContain('F#3');
-  });
-
-  it('muestra el label de voz + "nota objetivo"', () => {
-    const container = makeContainer();
-    openFloatingTuner(container, { note: 'F#3', voiceLabel: 'Contralto' });
-    expect(container.textContent).toContain('Contralto');
-    expect(container.textContent).toContain('nota objetivo');
+    expect(container.querySelector('.floating-tuner')).toBeTruthy();
+    const instance = createTunerEngine.mock.results[0].value;
+    expect(instance.start).toHaveBeenCalledTimes(1);
   });
 
   it('el botón X tiene aria-label "Cerrar afinador"', () => {
     const container = makeContainer();
     openFloatingTuner(container, { note: 'F#3', voiceLabel: 'Contralto' });
-    const closeBtn = container.querySelector('[aria-label="Cerrar afinador"]');
-    expect(closeBtn).toBeTruthy();
+    expect(container.querySelector('[aria-label="Cerrar afinador"]')).toBeTruthy();
+  });
+
+  it('el gate de micrófono se muestra mientras el motor no está corriendo', () => {
+    const container = makeContainer();
+    openFloatingTuner(container, { note: 'F#3', voiceLabel: 'Contralto' });
+    expect(container.querySelector('.floating-tuner__grant')).toBeTruthy();
+  });
+
+  it('abre en modo libre aunque se pase note: la nota detectada manda, no la objetivo', () => {
+    const container = makeContainer();
+    openFloatingTuner(container, { note: 'F#3', voiceLabel: 'Contralto' });
+    engineCallbacks.onState('running');
+    engineCallbacks.onPitch({ hz: 440, note: 'A', octave: 4, cents: 3, midi: 69 });
+    expect(document.getElementById('floating-tuner-note').textContent).toContain('A4');
+  });
+
+  it('el chip "Seguir nota" es visible solo si hay note disponible', () => {
+    const container = makeContainer();
+    openFloatingTuner(container, { note: 'F#3', voiceLabel: 'Contralto' });
+    engineCallbacks.onState('running');
+    expect(document.getElementById('floating-tuner-chip')).toBeTruthy();
+  });
+
+  it('sin note disponible (sin voz activa), el chip no se muestra', () => {
+    const container = makeContainer();
+    openFloatingTuner(container, { note: null, voiceLabel: 'Afinador' });
+    engineCallbacks.onState('running');
+    expect(document.getElementById('floating-tuner-chip')).toBeNull();
+  });
+
+  it('activar el chip mide cents contra la nota objetivo (100*(midi-target)+cents)', () => {
+    const container = makeContainer();
+    openFloatingTuner(container, { note: 'A4', voiceLabel: 'Contralto' });
+    engineCallbacks.onState('running');
+    document.getElementById('floating-tuner-chip').click();
+    // A4 = midi 69; detectamos B4 (midi 71) con 5 cents finos.
+    engineCallbacks.onPitch({ hz: 493, note: 'B', octave: 4, cents: 5, midi: 71 });
+    expect(document.getElementById('floating-tuner-note').textContent).toContain('A4');
+    expect(document.getElementById('floating-tuner-cents').textContent).toContain('205');
+  });
+
+  it('desactivar el chip vuelve a modo libre', () => {
+    const container = makeContainer();
+    openFloatingTuner(container, { note: 'A4', voiceLabel: 'Contralto' });
+    engineCallbacks.onState('running');
+    const chip = document.getElementById('floating-tuner-chip');
+    chip.click(); // encendido
+    chip.click(); // apagado: vuelve a libre
+    engineCallbacks.onPitch({ hz: 493, note: 'B', octave: 4, cents: 5, midi: 71 });
+    expect(document.getElementById('floating-tuner-note').textContent).toContain('B4');
+  });
+
+  it('setNote(null) con chip activo vuelve a modo libre y oculta el chip', () => {
+    const container = makeContainer();
+    const tuner = openFloatingTuner(container, { note: 'A4', voiceLabel: 'Contralto' });
+    engineCallbacks.onState('running');
+    document.getElementById('floating-tuner-chip').click();
+    tuner.setNote(null);
+    expect(document.getElementById('floating-tuner-chip')).toBeNull();
+    engineCallbacks.onPitch({ hz: 493, note: 'B', octave: 4, cents: 5, midi: 71 });
+    expect(document.getElementById('floating-tuner-note').textContent).toContain('B4');
+  });
+
+  it('el chip nace apagado en cada apertura (no persiste)', () => {
+    const container = makeContainer();
+    openFloatingTuner(container, { note: 'A4', voiceLabel: 'Contralto' });
+    engineCallbacks.onState('running');
+    expect(document.getElementById('floating-tuner-chip').getAttribute('aria-pressed')).toBe(
+      'false',
+    );
   });
 
   it('click en X llama onClose y desmonta', () => {
@@ -66,28 +134,14 @@ describe('FloatingTuner — barra flotante bajo demanda', () => {
     expect(container.querySelector('.floating-tuner')).toBeNull();
   });
 
-  it('destroy() desmonta y es idempotente', () => {
+  it('destroy() desmonta, para el motor y es idempotente', () => {
     const container = makeContainer();
     const tuner = openFloatingTuner(container, { note: 'F#3', voiceLabel: 'Contralto' });
+    const instance = createTunerEngine.mock.results[0].value;
     tuner.destroy();
+    expect(instance.stop).toHaveBeenCalledTimes(1);
     expect(container.querySelector('.floating-tuner')).toBeNull();
     expect(() => tuner.destroy()).not.toThrow();
-  });
-
-  it('arranca el detector al abrir (gesto de usuario ya ocurrido en el mic click)', () => {
-    const container = makeContainer();
-    openFloatingTuner(container, { note: 'F#3', voiceLabel: 'Contralto' });
-    const instance = createTunerStrip.mock.results[0].value;
-    expect(instance.start).toHaveBeenCalledTimes(1);
-  });
-
-  it('setNote actualiza la nota mostrada y el target del strip', () => {
-    const container = makeContainer();
-    const tuner = openFloatingTuner(container, { note: 'F#3', voiceLabel: 'Contralto' });
-    tuner.setNote('A4');
-    const instance = createTunerStrip.mock.results[0].value;
-    expect(container.querySelector('.floating-tuner').textContent).toContain('A4');
-    expect(instance.setTargetNote).toHaveBeenCalled();
   });
 
   it('Escape cierra igual que la X y llama onClose', () => {

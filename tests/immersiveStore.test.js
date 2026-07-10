@@ -21,12 +21,12 @@ describe('immersiveStore', () => {
     expect(getImmersiveMode()).toBe('mixed');
   });
 
-  it('un valor persistido invalido cae a letra', () => {
+  it('un valor persistido inválido cae a letra', () => {
     localStorage.setItem('hkn-immersive-mode', 'no-existe');
     expect(getImmersiveMode()).toBe('letra');
   });
 
-  it('setImmersiveMode con valor invalido no persiste basura (queda letra)', () => {
+  it('setImmersiveMode con valor inválido no persiste basura (queda letra)', () => {
     setImmersiveMode('no-existe');
     expect(getImmersiveMode()).toBe('letra');
   });
@@ -83,12 +83,12 @@ describe('immersiveStore', () => {
       expect(resolveInitialMode({ chords: true, tono: true })).toBe('mixed');
     });
 
-    it('la eleccion persistida del usuario gana sobre las capas', () => {
+    it('la elección persistida del usuario gana sobre las capas', () => {
       setImmersiveMode('tono');
       expect(resolveInitialMode({ chords: true, tono: false })).toBe('tono');
     });
 
-    it('un valor persistido invalido/corrupto cae a inheritFromLayers', () => {
+    it('un valor persistido inválido/corrupto cae a inheritFromLayers', () => {
       localStorage.setItem('hkn-immersive-mode', 'no-existe');
       expect(resolveInitialMode({ chords: true, tono: false })).toBe('chords');
     });

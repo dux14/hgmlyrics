@@ -2,8 +2,8 @@
  * immersiveStore.js — Estado del modo de contenido de la vista inmersiva
  * (karaoke Apple Music style).
  *
- * Independiente del layerStore excluyente de la vista normal (decision 3
- * del spec de vista inmersiva): cambiar el modo aca NO toca las capas de
+ * Independiente del layerStore excluyente de la vista normal (decisión 3
+ * del spec de vista inmersiva): cambiar el modo acá NO toca las capas de
  * SongView/StageMode. Persiste una preferencia GLOBAL del dispositivo bajo
  * `hkn-immersive-mode`. Tolera localStorage roto (Safari privado, cuota) —
  * best-effort, nunca lanza.
@@ -14,7 +14,7 @@ const DEFAULT_MODE = 'letra';
 const VALID_MODES = ['letra', 'chords', 'mixed', 'tono'];
 
 /**
- * Lee el modo persistido. Default `'letra'` sin guardar, valor invalido o
+ * Lee el modo persistido. Default `'letra'` sin guardar, valor inválido o
  * ante cualquier fallo de localStorage.
  * @returns {'letra'|'chords'|'mixed'|'tono'}
  */
@@ -28,7 +28,7 @@ export function getImmersiveMode() {
 }
 
 /**
- * Persiste el modo elegido por el usuario. Valores invalidos se ignoran
+ * Persiste el modo elegido por el usuario. Valores inválidos se ignoran
  * (no se escribe nada). Silencioso si localStorage falla.
  * @param {string} mode
  */
@@ -42,8 +42,8 @@ export function setImmersiveMode(mode) {
 }
 
 /**
- * Deriva el modo inicial de sesion a partir de las capas de la vista
- * normal (letra/acordes/tono), para cuando el usuario todavia no eligio un
+ * Deriva el modo inicial de sesión a partir de las capas de la vista
+ * normal (letra/acordes/tono), para cuando el usuario todavía no eligió un
  * modo propio en la vista inmersiva. Helper puro, no persiste — el caller
  * debe preferir un valor ya persistido (`getImmersiveMode()`) sobre este
  * fallback cuando exista.
@@ -60,11 +60,11 @@ export function inheritFromLayers(layers) {
 }
 
 /**
- * Modos disponibles segun la disponibilidad de acordes y tono de la
- * cancion actual. `hasChords`/`tonoAvailable` los calcula el caller (misma
+ * Modos disponibles según la disponibilidad de acordes y tono de la
+ * canción actual. `hasChords`/`tonoAvailable` los calcula el caller (misma
  * señal que usan SongView/StageMode: `songHasChords(song)` local a cada
  * componente y `isFeatureEnabled('voz_tono') && song.voiceRoster.length >
- * 0`) — no se duplica esa logica aca porque no esta expuesta como export
+ * 0`) — no se duplica esa lógica acá porque no está expuesta como export
  * reusable desde donde vive hoy.
  * @param {{ hasChords: boolean, tonoAvailable: boolean }} availability
  * @returns {Array<'letra'|'chords'|'mixed'|'tono'>}
@@ -78,12 +78,18 @@ export function availableModes({ hasChords, tonoAvailable } = {}) {
 }
 
 /**
- * Punto de entrada del modo inicial que usara ImmersiveView al montar:
- * compone la precedencia "eleccion persistida del usuario gana sobre la
- * herencia de capas". Si hay un modo valido persistido (el usuario ya eligio
+ * Punto de entrada del modo inicial que usará ImmersiveView al montar:
+ * compone la precedencia "elección persistida del usuario gana sobre la
+ * herencia de capas". Si hay un modo válido persistido (el usuario ya eligió
  * antes en la vista inmersiva) lo devuelve tal cual; si no hay nada
- * persistido, el valor es invalido/corrupto, o localStorage falla, cae a
+ * persistido, el valor es inválido/corrupto, o localStorage falla, cae a
  * `inheritFromLayers(layers)`.
+ *
+ * No reutiliza `getImmersiveMode()` a propósito: esa función colapsa "nada
+ * persistido" con "el usuario eligió explícitamente el default 'letra'" —
+ * ambos devuelven `'letra'`. Aca hace falta distinguir los dos casos (solo
+ * el segundo debe ganarle a `inheritFromLayers`), así que se lee el valor
+ * crudo de localStorage directamente.
  * @param {{ chords: boolean, tono: boolean }} layers
  * @returns {'letra'|'chords'|'mixed'|'tono'}
  */

@@ -474,15 +474,6 @@ describe('T6: sheet de opciones compartido (font+velocidad) desde #stage-open-op
     expect(document.querySelector('#osheet-tono')).toBeNull(); // sin setter de transposición en el stage
   });
 
-  it('FIX finding 3: el sheet del stage no trae VOCES VISIBLES (sin onToggleVoice, quedaban switches muertos)', () => {
-    const sv = mountSongView();
-    enterStage(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
-    document.getElementById('stage-open-options').click();
-    const headers = Array.from(document.querySelectorAll('.osheet__h')).map((h) => h.textContent);
-    expect(headers).not.toContain('VOCES VISIBLES');
-    expect(document.querySelector('.osheet__voices')).toBeNull();
-  });
-
   it('A+ del sheet aumenta la escala de fuente del stage y la persiste', () => {
     const sv = mountSongView();
     enterStage(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });

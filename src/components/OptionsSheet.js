@@ -7,8 +7,6 @@
  *  - NOTACIÓN: segmented control Do Re Mi / A B C (chordNotation.js).
  *  - TAMAÑO DE LETRA: A−/valor/A+.
  *  - AUTO-SCROLL: −/valor/+.
- *  - VOCES VISIBLES: una fila por voz del roster (no por categoría) con punto
- *    de color, nombre, registro (referenceKey) y switch de visibilidad.
  *
  * No introduce lógica nueva de dominio; es aditivo sobre los closures de
  * SongView.js (mismos handlers que la toolbar principal — una sola fuente
@@ -17,31 +15,10 @@
 
 import { escapeHtml } from '../lib/escape.js';
 
-const ORDER = ['soprano', 'contralto', 'tenor', 'bass'];
 const CLOSE_FALLBACK_MS = 200;
 
 /** @type {{ dim: HTMLElement, sheet: HTMLElement, close: Function } | null} */
 let openEls = null;
-
-/**
- * Filas de VOCES VISIBLES: una por voz del roster (no colapsada por
- * categoría), ordenadas SATB. Cada fila trae lo necesario para pintar punto
- * de color + nombre + registro.
- * @param {object|null} song
- * @returns {{ id: string, category: string, colorVar: string, name: string, referenceKey: string|null }[]}
- */
-export function buildVoiceOptionRows(song) {
-  const roster = Array.isArray(song?.voiceRoster) ? song.voiceRoster : [];
-  return [...roster]
-    .sort((a, b) => ORDER.indexOf(a.category) - ORDER.indexOf(b.category))
-    .map((v) => ({
-      id: v.id,
-      category: v.category,
-      colorVar: `--color-voice-${v.category}`,
-      name: v.name,
-      referenceKey: v.referenceKey || null,
-    }));
-}
 
 /**
  * Abre el bottom-sheet de opciones sobre el body.
@@ -51,15 +28,12 @@ export function buildVoiceOptionRows(song) {
  *
  * @param {{
  *   song: object,
- *   visibleVoices: Set<string>,
- *   showVoices?: boolean,
  *   showTono: boolean,
  *   tonoLabel: string,
  *   useFlats: boolean,
  *   notation: 'anglo'|'latin',
  *   fontLabel: string,
  *   autoscrollLabel: string,
- *   onToggleVoice?: (voiceId: string) => void,
  *   onTranspose?: (dir: 1|-1) => void,
  *   onResetTranspose?: () => void,
  *   onToggleAccidental?: () => void,
@@ -75,13 +49,7 @@ export function openOptionsSheet(opts) {
   // Reapertura rápida: retira cualquier hoja anterior aún saliendo (animación).
   document.querySelectorAll('.osheet--closing, .osheet-dim--closing').forEach((el) => el.remove());
 
-  const rows = buildVoiceOptionRows(opts.song);
-  const visibleVoices = opts.visibleVoices instanceof Set ? opts.visibleVoices : new Set();
   const notation = opts.notation === 'anglo' ? 'anglo' : 'latin';
-  // FIX finding 3: default true (SongView no cambia). El stage pasa
-  // showVoices: false — su sheet no recibe onToggleVoice, así que los
-  // switches quedaban interactivos-pero-muertos.
-  const showVoices = opts.showVoices !== false;
 
   const dim = document.createElement('div');
   dim.className = 'osheet-dim';
@@ -92,36 +60,6 @@ export function openOptionsSheet(opts) {
   sheet.setAttribute('aria-modal', 'true');
   sheet.setAttribute('aria-label', 'Opciones');
   sheet.setAttribute('tabindex', '-1');
-
-  const voicesSectionHtml = showVoices && rows.length
-    ? `
-    <div class="osheet__section">
-      <div class="osheet__h syn">VOCES VISIBLES</div>
-      <div class="osheet__voices">
-        ${rows
-          .map((r) => {
-            const on = visibleVoices.has(r.id);
-            return `
-            <div class="osheet__voice-row">
-              <span class="osheet__dot" style="background: var(${r.colorVar})"></span>
-              <span class="osheet__voice-info">
-                <span class="osheet__voice-name">${escapeHtml(r.name)}</span>
-                ${r.referenceKey ? `<span class="osheet__voice-ref">${escapeHtml(r.referenceKey)}</span>` : ''}
-              </span>
-              <button
-                class="osheet__switch${on ? ' is-on' : ''}"
-                type="button"
-                role="switch"
-                aria-checked="${on}"
-                data-voice-id="${r.id}"
-                aria-label="Mostrar ${escapeHtml(r.name)}"
-              ><span class="osheet__switch-knob"></span></button>
-            </div>`;
-          })
-          .join('')}
-      </div>
-    </div>`
-    : '';
 
   const tonoSectionHtml = opts.showTono
     ? `
@@ -171,7 +109,6 @@ export function openOptionsSheet(opts) {
     ${notationSectionHtml}
     ${sizeSectionHtml}
     ${autoscrollSectionHtml}
-    ${voicesSectionHtml}
   `;
 
   let closed = false;
@@ -213,15 +150,6 @@ export function openOptionsSheet(opts) {
   document.addEventListener('keydown', onKeydown);
 
   dim.addEventListener('click', close);
-
-  sheet.querySelectorAll('[data-voice-id]').forEach((b) =>
-    b.addEventListener('click', () => {
-      const nowOn = !b.classList.contains('is-on');
-      b.classList.toggle('is-on', nowOn);
-      b.setAttribute('aria-checked', String(nowOn));
-      opts.onToggleVoice?.(b.dataset.voiceId);
-    }),
-  );
 
   sheet.querySelectorAll('[data-notation]').forEach((b) =>
     b.addEventListener('click', () => {

@@ -694,10 +694,6 @@ export function enterStage(songViewEl, ctx = {}) {
     showControls(session);
     openOptionsSheet({
       song: session.song,
-      // FIX finding 3: el stage no tiene onToggleVoice (no hay concepto de
-      // "voz atenuada" acá) — showVoices: false oculta la sección para no
-      // pintar switches que no hacen nada.
-      showVoices: false,
       showTono: false,
       notation: typeof session.ctx.getNotation === 'function' ? session.ctx.getNotation() : 'anglo',
       fontLabel: session.fontScale.toFixed(2),

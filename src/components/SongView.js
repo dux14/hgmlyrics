@@ -314,10 +314,6 @@ async function _renderSongBody(container, songId, isPreview, song) {
   // seleccionada); refreshActiveVoiceNote() lo refresca junto con la voz
   // activa para que la nota objetivo la siga sin lógica aparte.
   let floatingTunerApi = null;
-  // OptionsSheet (T4): visibilidad por voz individual del roster, default
-  // todas visibles. Apagar una voz atenúa sus groups en Tono/Acordes+Voz
-  // (ver renderSections → visibleVoices).
-  const visibleVoices = new Set((song.voiceRoster || []).map((v) => v.id));
 
   // Selector de voz UNIFICADO (pivote modos excluyentes, post-QA visual): un
   // solo concepto de "mi voz" para Acordes (mezcla acordes+voz) y Tono (notas
@@ -491,7 +487,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
 
       <!-- Lyrics -->
       <div class="lyrics" id="lyrics-content">
-        ${renderSections(song.sections || [], { viewMode, transposeSemitones, useFlats, activeVoiceId: chordsVoiceId, activeCategory: chordsCategory, chordsVoiceId, chordsCategory, notation: getChordNotation(), visibleVoices })}
+        ${renderSections(song.sections || [], { viewMode, transposeSemitones, useFlats, activeVoiceId: chordsVoiceId, activeCategory: chordsCategory, chordsVoiceId, chordsCategory, notation: getChordNotation() })}
       </div>
 
       ${
@@ -530,7 +526,6 @@ async function _renderSongBody(container, songId, isPreview, song) {
         chordsVoiceId,
         chordsCategory,
         notation: getChordNotation(),
-        visibleVoices,
         sectionsWithAudio,
       });
       if (!isPreview) applyFontSize(fontSize);
@@ -915,7 +910,6 @@ async function _renderSongBody(container, songId, isPreview, song) {
     };
     openOptionsSheet({
       song,
-      visibleVoices,
       showTono: hasChords,
       tonoLabel: buildTransposeBubbleLabel(
         song.key,
@@ -927,20 +921,6 @@ async function _renderSongBody(container, songId, isPreview, song) {
       notation: getChordNotation(),
       fontLabel: fontSize.toFixed(2),
       autoscrollLabel: document.querySelector('#autoscroll-speed-label')?.textContent || '',
-      onToggleVoice: (voiceId) => {
-        if (visibleVoices.has(voiceId)) visibleVoices.delete(voiceId);
-        else visibleVoices.add(voiceId);
-        refreshActiveVoiceNote();
-        // La letra pintada solo depende de la voz/categoría activa (selector
-        // único: chordsVoiceId/chordsCategory) — ver effectiveVoiceId en
-        // renderSections. Apagar una voz que no interviene en el pintado
-        // actual no necesita reconstruir la letra completa.
-        const voiceCategory = (song.voiceRoster || []).find((v) => v.id === voiceId)?.category;
-        const affectsRender =
-          voiceId === chordsVoiceId || (!!chordsCategory && voiceCategory === chordsCategory);
-        if (!affectsRender) return;
-        reRenderLyrics();
-      },
       onTranspose: (dir) => {
         transposeSemitones = normalizeSemitones(transposeSemitones + dir);
         refreshTransposeUI();
@@ -1102,7 +1082,6 @@ export function renderVoicePanel(song) {
  *           chordsVoiceId?: string|null,
  *           chordsCategory?: string|null,
  *           notation?: 'anglo'|'latin',
- *           visibleVoices?: Set<string>|null,
  *           sectionsWithAudio?: Set<number>|null }} [opts]
  * @returns {string} HTML
  */
@@ -1116,7 +1095,6 @@ export function renderSections(sections, opts = {}) {
     chordsVoiceId = null,
     chordsCategory = null,
     notation = 'anglo',
-    visibleVoices = null,
     sectionsWithAudio = null,
   } = opts;
   // 'mixed' (T3, toolbar de capas): capas Acordes+Tono encendidas a la vez —
@@ -1126,14 +1104,6 @@ export function renderSections(sections, opts = {}) {
   const showMixed = viewMode === 'mixed';
   const colorClass = activeCategory ? `voice-text--${activeCategory}` : '';
   const mixColorClass = chordsCategory ? `voice-text--${chordsCategory}` : '';
-  // OptionsSheet (T4): una voz apagada en VOCES VISIBLES no debe pintar sus
-  // groups resaltados en Tono/Acordes+Voz — se logra pasando null como
-  // voiceId a los builders (groupsForVoice(line, null) → sin groups, texto
-  // base atenuado). Sin `visibleVoices` (back-compat, p.ej. tests/preview
-  // existentes) no se filtra nada.
-  const isVoiceVisible = (id) => !visibleVoices || !id || visibleVoices.has(id);
-  const effectiveVoiceId = isVoiceVisible(activeVoiceId) ? activeVoiceId : null;
-  const effectiveChordsVoiceId = isVoiceVisible(chordsVoiceId) ? chordsVoiceId : null;
 
   return (sections || [])
     .map(
@@ -1172,7 +1142,7 @@ export function renderSections(sections, opts = {}) {
           // ── Tono: voz activa coloreada + nota flotante ──
           if (viewMode === 'tono' && activeVoiceId) {
             if (text.trim() === '') return `<p class="lyrics__line">&nbsp;</p>`;
-            const inner = buildTonoLineHTML(line, effectiveVoiceId, colorClass, { notation });
+            const inner = buildTonoLineHTML(line, activeVoiceId, colorClass, { notation });
             return `<p class="lyrics__line lyrics__line--tono">${inner}</p>`;
           }
 
@@ -1183,7 +1153,7 @@ export function renderSections(sections, opts = {}) {
             const inner = buildMixedLineHTML(
               line,
               line.chords || [],
-              effectiveChordsVoiceId,
+              chordsVoiceId,
               mixColorClass,
               {
                 transposeSemitones,

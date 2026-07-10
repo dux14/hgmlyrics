@@ -776,7 +776,7 @@
 /* === Toast / Notification === */
 .toast {
   position: fixed;
-  bottom: var(--space-lg);
+  bottom: calc(var(--space-lg) + var(--safe-bottom));
   left: 50%;
   transform: translateX(-50%) translateY(100px);
   background: var(--color-text);
@@ -1147,7 +1147,7 @@
 /* === Update Banner (F1) === */
 .update-banner {
   position: fixed;
-  bottom: var(--space-lg);
+  bottom: calc(var(--space-lg) + var(--safe-bottom));
   left: 50%;
   transform: translateX(-50%) translateY(100px);
   display: flex;

@@ -207,7 +207,13 @@
 
   /* === Layout === */
   --sidebar-width: 280px;
-  --header-height: 52px;
+  /* Safe-areas del dispositivo (0 donde el navegador no las expone) */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* El header absorbe el safe-area superior: su contenido sigue midiendo 52px,
+     pero la reserva de layout (y todos los sticky top: var(--header-height))
+     crecen solos bajo el notch. */
+  --header-height: calc(52px + var(--safe-top));
   --bottom-nav-height: 56px;
   --max-content-width: 900px;
   --border-radius-sm: 6px;

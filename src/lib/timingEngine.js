@@ -81,7 +81,13 @@ export function createTimingEngine({ lines, onLineChange, onInterlude } = {}) {
     }
   }
 
+  /**
+   * Auto-detach defensivo: si ya hay un audio attacheado, se detacha primero
+   * para no dejar fugado el listener del anterior (que seguiria disparando
+   * handleTimeUpdate leyendo el audioEl nuevo, mezclando datos de pistas).
+   */
   function attach(el) {
+    if (audioEl) detach();
     audioEl = el;
     audioEl.addEventListener('timeupdate', handleTimeUpdate);
   }

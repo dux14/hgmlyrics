@@ -92,6 +92,21 @@ describe('createTimingEngine — interludios', () => {
     audio.dispatchEvent(new Event('timeupdate'));
     expect(onInterlude).not.toHaveBeenCalled();
   });
+
+  it('gap exactamente igual a 5000ms no emite onInterlude (regla es estrictamente >)', () => {
+    const lines = [
+      { i: 0, startMs: 0 },
+      { i: 1, startMs: 5000 },
+    ];
+    const onInterlude = vi.fn();
+    const e = createTimingEngine({ lines, onInterlude });
+    const audio = createFakeAudio();
+    e.attach(audio);
+
+    audio.currentTime = 2;
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(onInterlude).not.toHaveBeenCalled();
+  });
 });
 
 describe('createTimingEngine — timeupdate y onLineChange', () => {
@@ -139,6 +154,25 @@ describe('createTimingEngine — timeupdate y onLineChange', () => {
     audio.currentTime = 5.2;
     audio.dispatchEvent(new Event('timeupdate'));
     expect(onLineChange).toHaveBeenCalledTimes(1); // no crecio
+  });
+
+  it('attach sin detach previo hace auto-detach del audio anterior (no fuga el listener)', () => {
+    const onLineChange = vi.fn();
+    const e = createTimingEngine({ lines, onLineChange });
+    const audio1 = createFakeAudio();
+    const audio2 = createFakeAudio();
+
+    e.attach(audio1);
+    e.attach(audio2); // sin detach() explicito
+
+    audio1.currentTime = 5.2;
+    audio1.dispatchEvent(new Event('timeupdate'));
+    expect(onLineChange).not.toHaveBeenCalled(); // audio1 ya no esta escuchado
+
+    audio2.currentTime = 5.2;
+    audio2.dispatchEvent(new Event('timeupdate'));
+    expect(onLineChange).toHaveBeenCalledTimes(1);
+    expect(onLineChange).toHaveBeenLastCalledWith(1);
   });
 });
 

@@ -163,4 +163,32 @@ describe('ImmersiveView — clases de modo por línea + paridad de voz', () => {
 
     expect(openOptionsSheet).toHaveBeenCalled();
   });
+
+  it('con el sheet cerrado, cambiar a un modo fuera de tono/mixed NO reabre el sheet', () => {
+    const song = buildSong();
+    enterImmersive(songViewEl, buildCtx(song, { getActiveVoice: () => 'soprano' }));
+
+    document.getElementById('imm-open-options').click();
+    const opts = openOptionsSheet.mock.calls.at(-1)[0];
+    isOptionsSheetOpen.mockReturnValue(false);
+    openOptionsSheet.mockClear();
+
+    opts.onModeChange('chords');
+
+    expect(openOptionsSheet).not.toHaveBeenCalled();
+  });
+
+  it('con el sheet cerrado, cambiar a tono/mixed CON voz activa tampoco reabre el sheet', () => {
+    const song = buildSong();
+    enterImmersive(songViewEl, buildCtx(song, { getActiveVoice: () => 'soprano' }));
+
+    document.getElementById('imm-open-options').click();
+    const opts = openOptionsSheet.mock.calls.at(-1)[0];
+    isOptionsSheetOpen.mockReturnValue(false);
+    openOptionsSheet.mockClear();
+
+    opts.onModeChange('mixed');
+
+    expect(openOptionsSheet).not.toHaveBeenCalled();
+  });
 });

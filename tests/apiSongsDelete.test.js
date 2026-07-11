@@ -44,8 +44,11 @@ vi.mock('../src/lib/voiceSystem.js', () => ({
   validateSongV3: vi.fn(),
 }));
 
-const deleteSongAudioObject = vi.fn(async () => {});
-vi.mock('../api/_lib/storage.js', () => ({ deleteSongAudioObject }));
+// deleteSongAudioObjects (plural): UNA llamada batch con todas las keys, no
+// un loop por-key — evita acercarse al maxDuration de la función cuando hay
+// muchas secciones x scopes (ver api/_lib/storage.js).
+const deleteSongAudioObjects = vi.fn(async () => {});
+vi.mock('../api/_lib/storage.js', () => ({ deleteSongAudioObjects }));
 
 vi.mock('../api/songs/index.js', () => ({ invalidateListCache: vi.fn() }));
 
@@ -74,41 +77,44 @@ describe('DELETE /api/songs/[id].js — limpieza de Storage', () => {
     audioRows = [];
   });
 
-  it('borra los objetos de Storage de ambas tablas ANTES del DELETE FROM songs', async () => {
+  it('borra los objetos de Storage de ambas tablas en UNA sola llamada batch ANTES del DELETE FROM songs', async () => {
     sectionRows = [{ storageKey: 'song-1/section-0.mp3' }, { storageKey: 'song-1/section-1.mp3' }];
     audioRows = [{ storageKey: 'song-1/full.mp3' }];
 
     const res = makeRes();
     await handler(makeReq(), res);
 
-    expect(deleteSongAudioObject).toHaveBeenCalledTimes(3);
-    expect(deleteSongAudioObject).toHaveBeenCalledWith('song-1/section-0.mp3');
-    expect(deleteSongAudioObject).toHaveBeenCalledWith('song-1/section-1.mp3');
-    expect(deleteSongAudioObject).toHaveBeenCalledWith('song-1/full.mp3');
+    expect(deleteSongAudioObjects).toHaveBeenCalledTimes(1);
+    expect(deleteSongAudioObjects).toHaveBeenCalledWith([
+      'song-1/section-0.mp3',
+      'song-1/section-1.mp3',
+      'song-1/full.mp3',
+    ]);
 
-    // El DELETE FROM songs debe quedar registrado en el mock DESPUES de las
-    // llamadas de storage (mismo orden que impone la funcion remove()).
+    // El DELETE FROM songs debe quedar registrado en el mock DESPUES de la
+    // llamada batch de storage (mismo orden que impone la funcion remove()).
     const deleteCallIndex = mockSqlFn.mock.calls.findIndex((args) =>
       args[0].join('').includes('DELETE FROM songs'),
     );
-    const lastStorageCallOrder = deleteSongAudioObject.mock.invocationCallOrder.at(-1);
+    const storageCallOrder = deleteSongAudioObjects.mock.invocationCallOrder[0];
     const deleteCallOrder = mockSqlFn.mock.invocationCallOrder[deleteCallIndex];
-    expect(lastStorageCallOrder).toBeLessThan(deleteCallOrder);
+    expect(storageCallOrder).toBeLessThan(deleteCallOrder);
 
     expect(res._status).toBe(200);
   });
 
-  it('cancion sin audios: cero llamadas al helper de storage', async () => {
+  it('cancion sin audios: la llamada batch se hace con array vacío', async () => {
     const res = makeRes();
     await handler(makeReq(), res);
 
-    expect(deleteSongAudioObject).not.toHaveBeenCalled();
+    expect(deleteSongAudioObjects).toHaveBeenCalledTimes(1);
+    expect(deleteSongAudioObjects).toHaveBeenCalledWith([]);
     expect(res._status).toBe(200);
   });
 
-  it('si el helper de storage falla, no se borra la fila (falla antes)', async () => {
+  it('si el helper batch falla, no se borra la fila (falla antes)', async () => {
     sectionRows = [{ storageKey: 'song-1/section-0.mp3' }];
-    deleteSongAudioObject.mockRejectedValueOnce(new Error('storage down'));
+    deleteSongAudioObjects.mockRejectedValueOnce(new Error('storage down'));
 
     const res = makeRes();
     await handler(makeReq(), res);

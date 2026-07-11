@@ -7,7 +7,7 @@ import { validateSongV2, validateSongV3 } from '../../src/lib/voiceSystem.js';
 import { persistLinksInTx } from '../_lib/songLinks.js';
 import { projectCanonicalLines } from '../_lib/align.js';
 import { validateSectionAudioMoves, applySectionAudioMoves } from '../_lib/sectionAudioMoves.js';
-import { deleteSongAudioObject } from '../_lib/storage.js';
+import { deleteSongAudioObjects } from '../_lib/storage.js';
 
 function normalizeKey(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -148,14 +148,15 @@ async function remove(req, res, id) {
   // Storage primero, mismo criterio que deleteAudio en audio.js: si el
   // remove falla, se corta antes de borrar la fila (withErrors la vuelve
   // 500 y el admin puede reintentar) en vez de dejar objetos huerfanos en
-  // el bucket sin ninguna fila que los referencie.
+  // el bucket sin ninguna fila que los referencie. Una sola llamada batch
+  // (no un loop por-key): una canción con muchas secciones x scopes podía
+  // acercarse al maxDuration de la función con round-trips seriados.
   const sectionKeys =
     await sql`SELECT storage_key AS "storageKey" FROM song_section_audio WHERE song_id = ${id}`;
   const audioKeys =
     await sql`SELECT storage_key AS "storageKey" FROM song_audio WHERE song_id = ${id}`;
-  for (const row of [...sectionKeys, ...audioKeys]) {
-    await deleteSongAudioObject(row.storageKey);
-  }
+  const allKeys = [...sectionKeys, ...audioKeys].map((r) => r.storageKey);
+  await deleteSongAudioObjects(allKeys);
 
   const result = await sql`DELETE FROM songs WHERE id = ${id}`;
   if (result.count === 0) {

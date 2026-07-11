@@ -192,3 +192,17 @@ export async function deleteSongAudioObject(key) {
   const { error } = await supabase.storage.from(SONG_AUDIO_BUCKET).remove([key]);
   if (error && !/not.*found/i.test(error.message || '')) throw error;
 }
+
+/**
+ * Borra varios objetos del bucket song-audio en UNA sola llamada (misma
+ * lógica de deleteSongAudioObject pero en batch, igual patrón que
+ * deleteAvatarObjects). Usado al borrar una canción entera: con muchas
+ * secciones x scopes, un loop de llamadas individuales podía acercarse al
+ * maxDuration de la función (vercel.json).
+ * @param {string[]} keys
+ */
+export async function deleteSongAudioObjects(keys) {
+  if (keys.length === 0) return;
+  const { error } = await supabase.storage.from(SONG_AUDIO_BUCKET).remove(keys);
+  if (error && !/not.*found/i.test(error.message || '')) throw error;
+}

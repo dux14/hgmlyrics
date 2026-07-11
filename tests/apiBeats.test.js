@@ -104,6 +104,19 @@ describe('validatePatchBody', () => {
     expect(validatePatchBody({})).toMatch(/sin campos/);
   });
 
+  it('body con solo claves desconocidas falla — nada que actualizar', () => {
+    expect(validatePatchBody({ foo: 1 })).toMatch(/sin campos/);
+  });
+
+  it('{ bpmManual: undefined } explicito cae en "sin campos" (equivale a ausente)', () => {
+    expect(validatePatchBody({ bpmManual: undefined })).toMatch(/sin campos/);
+  });
+
+  it('body array falla (Array.isArray guard)', () => {
+    expect(validatePatchBody([])).toMatch(/body/);
+    expect(validatePatchBody([{ bpmManual: 100 }])).toMatch(/body/);
+  });
+
   it('body no-objeto falla', () => {
     expect(validatePatchBody(null)).toBeTruthy();
     expect(validatePatchBody(undefined)).toBeTruthy();

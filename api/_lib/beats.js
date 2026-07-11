@@ -44,6 +44,9 @@ export function validatePatchBody(body) {
   }
   const { bpmManual, timeSignature, beatAnchor } = body;
   if (bpmManual !== undefined && bpmManual !== null) {
+    // 20-350 es un rango musical razonable elegido por producto, MAS
+    // ESTRICTO a propósito que el CHECK (0,400) de song_audio.bpm_manual en
+    // DB — ese CHECK es solo la red de seguridad, no el limite de negocio.
     if (!Number.isFinite(bpmManual) || bpmManual < 20 || bpmManual > 350) {
       return `bpmManual invalido: ${bpmManual}`;
     }
@@ -54,6 +57,10 @@ export function validatePatchBody(body) {
     }
   }
   if (beatAnchor !== undefined && beatAnchor !== null) {
+    // beatAnchor (1-12) se valida independiente de timeSignature a proposito
+    // — el ancla referencia el beat detectado por Modal que actua como "1",
+    // no una posicion dentro del compas; el front la normaliza con
+    // Math.min(anchor, perBar) en beatClock (FASE 4).
     if (!Number.isInteger(beatAnchor) || beatAnchor < 1 || beatAnchor > 12) {
       return `beatAnchor invalido: ${beatAnchor}`;
     }

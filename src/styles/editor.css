@@ -660,6 +660,57 @@
   color: var(--color-danger);
 }
 
+/* ── Audio y sincronía (mp3 completo de la canción) ── */
+.song-audio-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.song-audio__hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.song-audio__file {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.song-audio__file-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  width: fit-content;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.song-audio__sync {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.song-audio__sync--ready {
+  color: var(--color-brand);
+}
+
+.song-audio__sync--failed {
+  color: var(--color-danger);
+}
+
+.song-audio__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.song-audio__error {
+  font-size: var(--font-size-sm);
+  color: var(--color-danger);
+}
+
 /* ── Fila de línea ── */
 .line-row {
   display: flex;

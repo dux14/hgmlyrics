@@ -23,6 +23,7 @@ import { getChordNotation } from '../lib/chordNotation.js';
 import { openChordEditorModal } from './editor/ChordEditorModal.js';
 import { openTonoEditorModal } from './editor/TonoEditorModal.js';
 import { openImportModal } from './editor/ImportModal.js';
+import { createSongAudioSection } from './editor/SongAudioSection.js';
 import {
   fetchSectionAudio,
   createSectionAudio,
@@ -273,6 +274,9 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
           <input type="file" id="cover-input" accept="image/*" class="editor__cover-input" />
         </div>
       </div>
+
+      <!-- Song audio (mp3 completo + sincronía) -->
+      <div class="editor__section" id="editor-song-audio"></div>
 
       <!-- Links -->
       <div class="editor__section">
@@ -1036,16 +1040,24 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     });
   }
 
+  // Audio completo + sincronía: componente aparte con su propio polling
+  // (vive fuera de renderBlocks, sobrevive a los re-renders de bloques y
+  // solo se apaga al navegar fuera del editor — ver destroy() abajo).
+  const songAudioSection = createSongAudioSection({ songId: existingSong?.id ?? null });
+  container.querySelector('#editor-song-audio').replaceWith(songAudioSection.el);
+  container.__songAudioSection = songAudioSection;
+
   // ─── Cancel ───
-  container
-    .querySelector('#editor-cancel')
-    .addEventListener('click', () => navigate(from ? '/song/' + from : '/admin'));
+  container.querySelector('#editor-cancel').addEventListener('click', () => {
+    songAudioSection.destroy();
+    navigate(from ? '/song/' + from : '/admin');
+  });
 
   // ─── Delete ───
   if (existingSong) {
     container
       .querySelector('#editor-delete')
-      ?.addEventListener('click', () => handleDelete(existingSong));
+      ?.addEventListener('click', () => handleDelete(container, existingSong));
   }
 
   // ─── Save ───
@@ -1230,6 +1242,7 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
     // mostraría la versión vieja en la primera visita tras editar.
     await invalidateSongDetailCache(songId);
     await refreshData();
+    container.__songAudioSection?.destroy();
     navigate(postSaveTarget({ from: v2.from || null, isNew: !existingSong }));
     showToast('Canción guardada correctamente', { duration: 3000 });
   } catch (err) {
@@ -1243,7 +1256,7 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
 
 /* ─── Delete ─── */
 
-async function handleDelete(song) {
+async function handleDelete(container, song) {
   if (!confirm(`¿Estás seguro de que deseas eliminar la canción "${song.title}"?`)) return;
   const token = getSession()?.access_token;
   try {
@@ -1253,6 +1266,7 @@ async function handleDelete(song) {
     });
     if (!res.ok) throw new Error('Error al eliminar');
     await refreshData();
+    container.__songAudioSection?.destroy();
     navigate('/admin/edit');
     showToast('Canción eliminada', { duration: 3000 });
   } catch (e) {
@@ -1294,4 +1308,3 @@ function clearSaveError(container) {
   el.hidden = true;
   el.innerHTML = '';
 }
-

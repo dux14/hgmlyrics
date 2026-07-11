@@ -170,6 +170,7 @@ export function createSongAudioSection({ songId }) {
       el.innerHTML = `
         <h2 class="editor__section-title">Audio y sincronía</h2>
         <p class="song-audio__hint">Guarda la canción para subir el audio</p>
+        <button class="btn btn--secondary song-audio__file-btn" type="button" disabled>${icon('upload', { size: 16 })} Subir mp3</button>
       `;
       return;
     }

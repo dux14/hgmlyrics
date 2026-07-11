@@ -38,12 +38,17 @@ describe('SongAudioSection', () => {
     vi.useRealTimers();
   });
 
-  it('sin songId: todo deshabilitado con el hint de guardar primero', () => {
+  it('sin songId: el hint de guardar primero y el control visible pero deshabilitado', () => {
     const section = createSongAudioSection({ songId: null });
     container.appendChild(section.el);
 
     expect(section.el.textContent).toContain('Guarda la canción para subir el audio');
-    expect(section.el.querySelector('[data-action="song-audio-file"]')).toBeNull();
+    const btn = section.el.querySelector('.song-audio__file-btn');
+    expect(btn).not.toBeNull();
+    expect(btn.disabled).toBe(true);
+
+    btn.click();
+    expect(songAudioApi.createSongAudioUpload).not.toHaveBeenCalled();
 
     section.destroy();
   });

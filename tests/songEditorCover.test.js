@@ -31,7 +31,21 @@ vi.mock('../src/lib/sectionAudioApi.js', () => ({
 vi.mock('../src/lib/stemsApi.js', () => ({ readAudioDuration: vi.fn() }));
 
 const store = await import('../src/lib/store.js');
-const { renderSongEditor } = await import('../src/components/SongEditor.js');
+const { renderSongEditor, coverImageKey } = await import('../src/components/SongEditor.js');
+
+describe('coverImageKey — clave de portada sin colisiones entre álbumes', () => {
+  it('mismo álbum → misma key (portada compartida)', () => {
+    expect(coverImageKey('Más allá del sol')).toBe(coverImageKey('Más allá del sol'));
+  });
+
+  it('álbumes distintos que colisionan en slug ("Álbum Uno" / "Album, Uno!") → keys distintas', () => {
+    expect(coverImageKey('Álbum Uno')).not.toBe(coverImageKey('Album, Uno!'));
+  });
+
+  it('termina en .webp y empieza con el slug', () => {
+    expect(coverImageKey('Hakuna')).toMatch(/^hakuna-[a-z0-9]+\.webp$/);
+  });
+});
 
 function buildSong(id) {
   return {

@@ -1162,18 +1162,19 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
 
     const songId = existingSong?.id || crypto.randomUUID();
     const albumSlug = generateSlug(album);
+    const coverKey = coverImageKey(album);
     let voiceType;
     if (malePercent >= 70) voiceType = 'male';
     else if (malePercent <= 30) voiceType = 'female';
     else voiceType = 'mixed';
 
-    let coverImage = existingSong?.coverImage || `${albumSlug}.webp`;
+    let coverImage = existingSong?.coverImage || coverKey;
     const token = getSession()?.access_token;
 
     // 1. Upload new image if present
     if (v2.coverState?.blob) {
       const fd = new FormData();
-      fd.append('cover', v2.coverState.blob, `${albumSlug}.webp`);
+      fd.append('cover', v2.coverState.blob, coverKey);
       const imgRes = await fetch(`${API_URL}/upload`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -1293,6 +1294,18 @@ function generateSlug(...parts) {
     .replaceAll(/[\u0300-\u036f]/g, '')
     .replaceAll(/[^a-z0-9]+/g, '-')
     .replaceAll(/^-|-$/g, '');
+}
+
+/**
+ * Key determin\u00edstica de portada: slug legible + hash corto del nombre CRUDO
+ * del \u00e1lbum (djb2 base36) \u2014 mismo \u00e1lbum comparte portada, \u00e1lbumes distintos
+ * que normalizan al mismo slug ya no se pisan en Storage.
+ * @param {string} album
+ */
+export function coverImageKey(album) {
+  let h = 5381;
+  for (let i = 0; i < album.length; i++) h = ((h << 5) + h + album.charCodeAt(i)) >>> 0;
+  return `${generateSlug(album)}-${h.toString(36)}.webp`;
 }
 
 /**

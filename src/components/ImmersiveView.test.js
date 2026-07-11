@@ -76,6 +76,8 @@ describe('ImmersiveView — clases de modo por línea + paridad de voz', () => {
     songViewEl.remove();
     document.body.innerHTML = '';
     vi.clearAllMocks();
+    // clearAllMocks no revierte mockReturnValue: restaurar el default explícitamente
+    isOptionsSheetOpen.mockReturnValue(false);
   });
 
   it('modo chords: las líneas no-spoken llevan lyrics__line--chords', () => {

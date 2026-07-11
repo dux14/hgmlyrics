@@ -1,7 +1,7 @@
 /**
  * store.js — State management & IndexedDB cache
  *
- * Manages song data, filtering, sorting, and persistent offline cache.
+ * Manages song data, album filtering/ordering, and persistent offline cache.
  */
 
 import { get, set } from 'idb-keyval';
@@ -16,13 +16,12 @@ const CACHE_KEY = 'hkn-songs-cache';
 const CACHE_VERSION_KEY = 'hkn-songs-version';
 const API_URL = '/api';
 
-/** @type {{ songs: Array, filtered: Array, activeAlbum: string|null, sortMode: string, voiceFilter: string|null }} */
+/** @type {{ songs: Array, filtered: Array, activeAlbum: string|null, sortMode: string }} */
 const state = {
   songs: [],
   filtered: [],
   activeAlbum: null,
   sortMode: 'a-z',
-  voiceFilter: null,
   listeners: new Set(),
 };
 
@@ -49,7 +48,6 @@ export function getState() {
     filtered: state.filtered,
     activeAlbum: state.activeAlbum,
     sortMode: state.sortMode,
-    voiceFilter: state.voiceFilter,
   };
 }
 
@@ -92,7 +90,6 @@ export async function initStore() {
       state.songs = [];
       state.filtered = [];
       state.activeAlbum = null;
-      state.voiceFilter = null;
       try {
         await set(CACHE_KEY, null);
       } catch (_e) {
@@ -137,8 +134,8 @@ export async function refreshData() {
  */
 export function getAlbums() {
   // Primera pasada: registrar metadatos del álbum y contar artistas.
-  const albumMeta = new Map();    // slug → { slug, name, coverImage, year }
-  const artistCount = new Map();  // slug → Map<artist, count>
+  const albumMeta = new Map(); // slug → { slug, name, coverImage, year }
+  const artistCount = new Map(); // slug → Map<artist, count>
 
   state.songs.forEach((song) => {
     if (!albumMeta.has(song.albumSlug)) {
@@ -265,27 +262,7 @@ export function filterByAlbum(albumSlug) {
 }
 
 /**
- * Set sort mode
- * @param {'a-z'|'z-a'|'recent'|'album'} mode
- */
-export function setSortMode(mode) {
-  state.sortMode = mode;
-  applyFilters();
-  notify();
-}
-
-/**
- * Filter by voice type
- * @param {string|null} voiceType - 'male', 'female', 'mixed', or null
- */
-export function filterByVoice(voiceType) {
-  state.voiceFilter = voiceType;
-  applyFilters();
-  notify();
-}
-
-/**
- * Apply all active filters and sorting
+ * Apply active album filter and sorting
  */
 function applyFilters() {
   let result = [...state.songs];
@@ -295,35 +272,11 @@ function applyFilters() {
     result = result.filter((s) => s.albumSlug === state.activeAlbum);
   }
 
-  // Voice filter
-  if (state.voiceFilter) {
-    result = result.filter((s) => s.voiceType === state.voiceFilter);
-  }
-
   // Sorting
-  switch (state.sortMode) {
-    case 'a-z':
-      result.sort((a, b) => a.title.localeCompare(b.title, 'es'));
-      break;
-    case 'z-a':
-      result.sort((a, b) => b.title.localeCompare(a.title, 'es'));
-      break;
-    case 'recent':
-      result.sort(
-        (a, b) => (b.year || 0) - (a.year || 0) || (b.albumOrder || 0) - (a.albumOrder || 0),
-      );
-      break;
-    case 'album':
-      result.sort(
-        (a, b) =>
-          a.album.localeCompare(b.album, 'es') ||
-          (a.albumOrder || 0) - (b.albumOrder || 0) ||
-          a.title.localeCompare(b.title, 'es'),
-      );
-      break;
-    case 'album-order':
-      result.sort((a, b) => (a.albumOrder || 0) - (b.albumOrder || 0));
-      break;
+  if (state.sortMode === 'album-order') {
+    result.sort((a, b) => (a.albumOrder || 0) - (b.albumOrder || 0));
+  } else {
+    result.sort((a, b) => a.title.localeCompare(b.title, 'es'));
   }
 
   state.filtered = result;

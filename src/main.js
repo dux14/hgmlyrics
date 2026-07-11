@@ -35,7 +35,6 @@ import { renderFavoritesPage } from './components/FavoritesPage.js';
 import { renderRecommenderPage } from './components/RecommenderPage.js';
 import { renderHeader, hideHeader, showHeader } from './components/Header.js';
 import { renderSidebar, updateSidebarContent } from './components/Sidebar.js';
-import { renderFilterBar, updateFilterBar, hideFilterBar } from './components/FilterBar.js';
 import { renderSongListSkeleton } from './components/SongList.js';
 import { skelLongText } from './lib/skeleton.js';
 import { renderSongView } from './components/SongView.js';
@@ -121,9 +120,6 @@ async function boot() {
   // Render sidebar
   renderSidebar(app);
 
-  // Render filter bar (F4)
-  renderFilterBar(app);
-
   // Bottom-nav móvil (F1b)
   renderBottomNav(app);
 
@@ -141,7 +137,6 @@ async function boot() {
     const weeklyWords = await loadWeeklyWordsForIndex();
     buildIndex(songs, weeklyWords);
     updateSidebarContent();
-    updateFilterBar();
   }
 
   // Favoritos (cache en memoria) y recientes ligados a la cuenta (merge
@@ -154,7 +149,6 @@ async function boot() {
     const weeklyWords = await loadWeeklyWordsForIndex();
     buildIndex(state.songs, weeklyWords);
     updateSidebarContent();
-    updateFilterBar();
 
     const currentHash = globalThis.location.hash.slice(1) || '/';
     if (currentHash === '/buscar') {
@@ -185,21 +179,18 @@ async function boot() {
     );
 
   route('/login', () => {
-    hideFilterBar();
     document.querySelector('.main')?.classList.remove('main--bleed');
     document.body.classList.add('auth-route');
     renderLoginPage(mainContent);
   });
 
   route('/register', () => {
-    hideFilterBar();
     document.querySelector('.main')?.classList.remove('main--bleed');
     document.body.classList.add('auth-route');
     renderRegisterPage(mainContent);
   });
 
   route('/auth/callback', () => {
-    hideFilterBar();
     document.querySelector('.main')?.classList.remove('main--bleed');
     document.body.classList.add('auth-route');
     renderAuthCallback(mainContent);
@@ -207,17 +198,14 @@ async function boot() {
 
   // ============ Guarded routes ============
   privateRoute('/onboarding', () => {
-    hideFilterBar();
     renderOnboardingPage(mainContent);
   });
 
   privateRoute('/', () => {
-    hideFilterBar();
     renderHome(mainContent);
   });
 
   privateRoute('/buscar', async () => {
-    hideFilterBar();
     const { renderSearchPage } = await import('./components/SearchPage.js');
     // El bleed se añade justo antes de montar el contenido nuevo para que la ruta
     // anterior no pierda su gutter durante el import dinamico.
@@ -228,17 +216,14 @@ async function boot() {
   });
 
   privateRoute('/herramientas', () => {
-    hideFilterBar();
     renderToolsHub(mainContent);
   });
 
   privateRoute('/song/:id', ({ params }) => {
-    hideFilterBar();
     renderSongView(mainContent, params.id);
   });
 
   route('/song/:id/links', async ({ params }) => {
-    hideFilterBar();
     document.body.classList.remove('auth-route');
     showPageSkeleton();
     const { renderSongLinks } = await import('./components/SongLinks.js');
@@ -248,7 +233,6 @@ async function boot() {
   privateRoute(
     '/admin',
     () => {
-      hideFilterBar();
       renderAdminDashboard(mainContent);
     },
     { adminOnly: true },
@@ -257,7 +241,6 @@ async function boot() {
   privateRoute(
     '/admin/create',
     () => {
-      hideFilterBar();
       renderSongEditor(mainContent);
     },
     { adminOnly: true },
@@ -266,7 +249,6 @@ async function boot() {
   privateRoute(
     '/admin/edit',
     () => {
-      hideFilterBar();
       renderAdminEditList(mainContent);
     },
     { adminOnly: true },
@@ -275,7 +257,6 @@ async function boot() {
   privateRoute(
     '/admin/edit/:id',
     ({ params, query }) => {
-      hideFilterBar();
       const from = new URLSearchParams(query || '').get('from');
       renderSongEditor(mainContent, params.id, { from });
     },
@@ -285,7 +266,6 @@ async function boot() {
   privateRoute(
     '/admin/voz/nueva',
     async () => {
-      hideFilterBar();
       const { renderVozEditor } = await import('./components/VozEditor.js');
       renderVozEditor(mainContent, null);
     },
@@ -295,7 +275,6 @@ async function boot() {
   privateRoute(
     '/admin/voz/:id',
     async ({ params }) => {
-      hideFilterBar();
       const { renderVozEditor } = await import('./components/VozEditor.js');
       renderVozEditor(mainContent, params.id);
     },
@@ -305,7 +284,6 @@ async function boot() {
   privateRoute(
     '/admin/flags',
     async () => {
-      hideFilterBar();
       const { renderAdminFlagsPage } = await import('./components/AdminFlagsPage.js');
       renderAdminFlagsPage(mainContent);
     },
@@ -315,7 +293,6 @@ async function boot() {
   privateRoute(
     '/admin/mundo',
     async () => {
-      hideFilterBar();
       const { renderAdminWorldPage } = await import('./components/AdminWorldPage.js');
       renderAdminWorldPage(mainContent);
     },
@@ -323,112 +300,92 @@ async function boot() {
   );
 
   privateRoute('/perfil', () => {
-    hideFilterBar();
     renderProfile(mainContent);
   });
 
   privateRoute('/perfil/editar', () => {
-    hideFilterBar();
     renderProfileEdit(mainContent);
   });
 
   privateRoute('/u/:username', ({ params }) => {
-    hideFilterBar();
     renderPublicProfile(mainContent, params.username);
   });
 
   privateRoute('/amigos', () => {
-    hideFilterBar();
     renderFriendsPanel(mainContent);
   });
 
   privateRoute('/favoritos', () => {
-    hideFilterBar();
     renderFavoritesPage(mainContent);
   });
 
   privateRoute('/afinador', async ({ query }) => {
-    hideFilterBar();
     const { renderTuner } = await import('./components/Tuner.js');
     renderTuner(mainContent, { query });
   });
 
   privateRoute('/recomendador', () => {
-    hideFilterBar();
     renderRecommenderPage(mainContent);
   });
 
   privateRoute('/oracion', () => {
-    hideFilterBar();
     renderPrayerPage(mainContent);
   });
 
   privateRoute('/voces', async () => {
-    hideFilterBar();
     const { renderVoicesAlbumView } = await import('./components/VoicesAlbumView.js');
     renderVoicesAlbumView(mainContent);
   });
 
   privateRoute('/albumes', async () => {
-    hideFilterBar();
     const { renderAlbumsView } = await import('./components/AlbumsView.js');
     renderAlbumsView(mainContent);
   });
 
   privateRoute('/listas', async () => {
-    hideFilterBar();
     const { renderListsPage } = await import('./components/ListsPage.js');
     await renderListsPage(mainContent);
   });
 
   privateRoute('/album/:id', async ({ params }) => {
-    hideFilterBar();
     const { renderAlbumDetail } = await import('./components/AlbumDetail.js');
     renderAlbumDetail(mainContent, params.id);
   });
 
   privateRoute('/voz/:id', async ({ params }) => {
-    hideFilterBar();
     const { renderWeeklyWordById } = await import('./components/WeeklyWordView.js');
     renderWeeklyWordById(mainContent, params.id);
   });
 
   privateRoute('/lista/nueva', () => {
-    hideFilterBar();
     renderListDetail(mainContent, null, { mode: 'edit' });
   });
 
   privateRoute('/lista/:id', ({ params }) => {
-    hideFilterBar();
     renderListDetail(mainContent, params.id, { mode: 'view' });
   });
 
   privateRoute('/estudio', async () => {
-    hideFilterBar();
     const { renderStudioPage } = await import('./components/StudioPage.js');
     renderStudioPage(mainContent);
   });
 
   privateRoute('/partitura', async () => {
-    hideFilterBar();
     const { renderPartituraPage } = await import('./components/PartituraPage.js');
     renderPartituraPage(mainContent);
   });
 
   privateRoute('/licencias', async () => {
-    hideFilterBar();
     const { renderLicenses } = await import('./components/LicensesPage.js');
     renderLicenses(mainContent);
   });
 
   privateRoute('/mundo', async () => {
-    hideFilterBar();
     const { renderWorldPage } = await import('./components/WorldPage.js');
     renderWorldPage(mainContent);
   });
 
   onNotFound(() => {
-    hideFilterBar();
     document.body.classList.remove('auth-route');
     mainContent.innerHTML = `
       <div class="empty-state fade-in">

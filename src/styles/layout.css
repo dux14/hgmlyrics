@@ -49,7 +49,6 @@
     transition: background-color var(--transition-base);
   }
   .bottom-nav,
-  .filter-bar,
   .section-player {
     transition: none;
   }
@@ -298,16 +297,10 @@
 /* === Main Content === */
 .main {
   flex: 1;
-  /* Reserve space for the fixed header. The filter bar's height is added on
-     demand (see .main--filtered) so pages without it don't leave dead space. */
+  /* Reserve space for the fixed header. */
   padding-top: var(--header-height);
   /* Reserva espacio inferior en móvil para el bottom-nav fijo. */
   padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
-}
-
-/* List views show the sticky filter bar → reserve its 48px. */
-.main--filtered {
-  padding-top: calc(var(--header-height) + 48px);
 }
 
 .main__content {
@@ -339,73 +332,6 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--space-md);
-}
-
-/* === Filter Bar (F4) === */
-.filter-bar {
-  position: fixed;
-  top: var(--header-offset);
-  left: 0;
-  right: 0;
-  z-index: calc(var(--z-header) - 1);
-  background: var(--color-bg);
-  border-bottom: 1px solid var(--color-border);
-  padding: var(--space-sm) var(--space-md);
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  transition: top 200ms ease-out;
-}
-
-.filter-bar::-webkit-scrollbar {
-  display: none;
-}
-
-.filter-chip {
-  flex-shrink: 0;
-  padding: 6px 14px;
-  border-radius: var(--border-radius-full);
-  border: 1px solid var(--color-border);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  white-space: nowrap;
-  transition: all var(--transition-fast);
-  -webkit-tap-highlight-color: transparent;
-  min-height: 32px;
-  cursor: pointer;
-  background: transparent;
-  color: var(--color-text);
-}
-
-.filter-chip:hover {
-  background: var(--color-surface-hover);
-  border-color: var(--color-primary);
-}
-
-.filter-chip--active {
-  background: var(--color-primary);
-  color: #fff;
-  border-color: var(--color-primary);
-}
-
-.filter-chip--clear {
-  color: var(--color-error);
-  border-color: var(--color-error);
-}
-
-.filter-chip--clear:hover {
-  background: rgba(244, 67, 54, 0.1);
-}
-
-.filter-separator {
-  width: 1px;
-  height: 20px;
-  background: var(--color-border);
-  flex-shrink: 0;
 }
 
 /* === Bottom nav (solo móvil) ===
@@ -514,16 +440,6 @@
     padding-bottom: 0; /* sin bottom-nav en desktop */
   }
 
-  .main--filtered {
-    padding-top: calc(var(--header-height) + 48px); /* +48px for the filter bar */
-  }
-
-  .filter-bar {
-    top: var(--header-height);
-    left: var(--sidebar-width); /* Start after sidebar */
-    right: 0;
-  }
-
   .song-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -533,10 +449,6 @@
 @media (min-width: 1024px) {
   .song-grid {
     grid-template-columns: repeat(3, 1fr);
-  }
-
-  .filter-bar {
-    padding-left: var(--space-lg);
   }
 }
 

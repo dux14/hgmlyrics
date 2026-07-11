@@ -1,7 +1,7 @@
 /**
  * Sidebar.js — Sidebar component
  *
- * Album filters only (sort and voice moved to FilterBar).
+ * Album filters only.
  * Overlay on mobile, fixed panel on desktop.
  */
 

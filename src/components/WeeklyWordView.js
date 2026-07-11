@@ -45,17 +45,15 @@ export async function renderWeeklyWordView(container, word) {
   const viewEl = container.querySelector('.voz-view');
   const heroEl = container.querySelector('.voz-view__hero');
 
-  // Barra de acciones (tamaño de letra): chrome propio de esta vista, no vive
-  // en el helper compartido. Se inserta entre el hero y el cuerpo.
+  // Controles de tamaño de letra: chrome propio de esta vista, no vive en el
+  // helper compartido. Se inserta dentro del hero, esquina superior derecha.
   heroEl.insertAdjacentHTML(
-    'afterend',
+    'beforeend',
     `
-    <div class="voz-view__toolbar">
-      <div class="font-controls" role="group" aria-label="Tamaño de letra">
-        <button class="font-controls__btn" id="voz-font-dec" aria-label="Reducir tamaño de letra">A−</button>
-        <span class="font-controls__label" id="voz-font-label" aria-live="polite">${Math.round(fontSize * 100)}%</span>
-        <button class="font-controls__btn" id="voz-font-inc" aria-label="Aumentar tamaño de letra">A+</button>
-      </div>
+    <div class="font-controls voz-view__font-controls" role="group" aria-label="Tamaño de letra">
+      <button class="font-controls__btn" id="voz-font-dec" aria-label="Reducir tamaño de letra">A−</button>
+      <span class="font-controls__label" id="voz-font-label" aria-live="polite">${Math.round(fontSize * 100)}%</span>
+      <button class="font-controls__btn" id="voz-font-inc" aria-label="Aumentar tamaño de letra">A+</button>
     </div>
   `,
   );

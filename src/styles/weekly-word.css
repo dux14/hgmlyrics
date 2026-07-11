@@ -29,7 +29,7 @@
 .voz-view {
   max-width: 680px;
   margin: 0 auto;
-  padding: 1.5rem 0;
+  padding: 0 0 1.5rem;
 }
 
 /* ── Hero litúrgico ── */
@@ -38,7 +38,7 @@
   background: var(--liturgical-gradient, var(--color-surface));
   border-radius: var(--border-radius-lg);
   padding: 2rem 1.5rem;
-  margin: 1rem 0 1.5rem;
+  margin: 0 0 1rem;
   color: var(--liturgical-text, var(--color-text));
 }
 
@@ -54,6 +54,7 @@
   margin-bottom: 0.75rem;
   font-size: 0.75rem;
   font-weight: 600;
+  max-width: calc(100% - 8rem);
 }
 
 .voz-view__pill-dot {
@@ -92,12 +93,24 @@
   font-size: 0.9rem;
 }
 
-/* ── Barra de acciones (solo tamaño de letra, ghost, alineada a la derecha) ── */
-.voz-view__toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  margin-bottom: 1.25rem;
+/* Controles de fuente sobre el hero (esquina sup. derecha, translúcidos) */
+.voz-view__font-controls {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+}
+
+.voz-view__font-controls .font-controls__btn {
+  background: color-mix(in srgb, var(--liturgical-bg, var(--color-bg)) 55%, transparent);
+  border: none;
+  color: inherit;
+  min-width: 32px;
+  min-height: 28px;
+}
+
+.voz-view__font-controls .font-controls__label {
+  color: inherit;
+  opacity: 0.85;
 }
 
 .font-controls {
@@ -244,5 +257,13 @@
 @media (prefers-reduced-motion: reduce) {
   .font-controls__btn {
     transition: none;
+  }
+}
+
+@media (max-width: 420px) {
+  .voz-view__font-controls {
+    position: static;
+    margin-top: 0.75rem;
+    display: inline-flex;
   }
 }

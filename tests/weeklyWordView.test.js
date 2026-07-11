@@ -96,4 +96,11 @@ describe('WeeklyWordView', () => {
     await renderWeeklyWordView(container, SAMPLE_WORD);
     expect(container.querySelector('[data-action="edit-voz"]')).toBeNull();
   });
+
+  it('integra los controles de fuente dentro del hero, sin toolbar aparte', async () => {
+    await renderWeeklyWordView(container, SAMPLE_WORD);
+    expect(container.querySelector('.voz-view__hero #voz-font-inc')).toBeTruthy();
+    expect(container.querySelector('.voz-view__hero #voz-font-dec')).toBeTruthy();
+    expect(container.querySelector('.voz-view__toolbar')).toBeNull();
+  });
 });

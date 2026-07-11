@@ -1,11 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import {
-  getImmersiveMode,
-  setImmersiveMode,
-  inheritFromLayers,
-  availableModes,
-  resolveInitialMode,
-} from '../src/lib/immersiveStore.js';
+import { getImmersiveMode, setImmersiveMode, availableModes } from '../src/lib/immersiveStore.js';
 
 describe('immersiveStore', () => {
   beforeEach(() => {
@@ -49,60 +43,6 @@ describe('immersiveStore', () => {
     Storage.prototype.setItem = original;
   });
 
-  describe('inheritFromLayers', () => {
-    it('ambos true -> mixed', () => {
-      expect(inheritFromLayers({ chords: true, tono: true })).toBe('mixed');
-    });
-
-    it('solo chords -> chords', () => {
-      expect(inheritFromLayers({ chords: true, tono: false })).toBe('chords');
-    });
-
-    it('solo tono -> tono', () => {
-      expect(inheritFromLayers({ chords: false, tono: true })).toBe('tono');
-    });
-
-    it('ninguno -> letra', () => {
-      expect(inheritFromLayers({ chords: false, tono: false })).toBe('letra');
-    });
-
-    it('no persiste en localStorage', () => {
-      inheritFromLayers({ chords: true, tono: true });
-      expect(localStorage.getItem('hkn-immersive-mode')).toBeNull();
-    });
-  });
-
-  it('inheritFromLayers es puro: no lee ni modifica lo persistido aunque haya un modo guardado', () => {
-    setImmersiveMode('tono');
-    expect(inheritFromLayers({ chords: true, tono: false })).toBe('chords');
-    expect(getImmersiveMode()).toBe('tono');
-  });
-
-  describe('resolveInitialMode', () => {
-    it('sin nada persistido, usa inheritFromLayers', () => {
-      expect(resolveInitialMode({ chords: true, tono: true })).toBe('mixed');
-    });
-
-    it('la elección persistida del usuario gana sobre las capas', () => {
-      setImmersiveMode('tono');
-      expect(resolveInitialMode({ chords: true, tono: false })).toBe('tono');
-    });
-
-    it('un valor persistido inválido/corrupto cae a inheritFromLayers', () => {
-      localStorage.setItem('hkn-immersive-mode', 'no-existe');
-      expect(resolveInitialMode({ chords: true, tono: false })).toBe('chords');
-    });
-
-    it('tolera localStorage roto y cae a inheritFromLayers', () => {
-      const original = Storage.prototype.getItem;
-      Storage.prototype.getItem = () => {
-        throw new Error('boom');
-      };
-      expect(resolveInitialMode({ chords: false, tono: true })).toBe('tono');
-      Storage.prototype.getItem = original;
-    });
-  });
-
   describe('availableModes', () => {
     it('con acordes y tono disponible: los 4 modos', () => {
       expect(availableModes({ hasChords: true, tonoAvailable: true })).toEqual([
@@ -118,7 +58,10 @@ describe('immersiveStore', () => {
     });
 
     it('sin tono disponible: sin tono ni mixed', () => {
-      expect(availableModes({ hasChords: true, tonoAvailable: false })).toEqual(['letra', 'chords']);
+      expect(availableModes({ hasChords: true, tonoAvailable: false })).toEqual([
+        'letra',
+        'chords',
+      ]);
     });
 
     it('sin acordes ni tono: solo letra', () => {

@@ -189,7 +189,7 @@ describe('ImmersiveView — clases de modo por línea + paridad de voz', () => {
     isOptionsSheetOpen.mockReturnValue(true);
     openOptionsSheet.mockClear();
 
-    // Modo 'chords' con voz ya activa: antes NO reabria el sheet. Con el
+    // Modo 'chords' con voz ya activa: antes NO reabría el sheet. Con el
     // sheet abierto, ahora SÍ debe refrescarlo para reflejar el modo nuevo.
     opts.onModeChange('chords');
 

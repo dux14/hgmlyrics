@@ -64,3 +64,4 @@ public/covers.backup/
 __pycache__/
 *.pyc
 .venv/
+test-results/

@@ -47,7 +47,7 @@ import {
   speedToPercentLabel,
 } from '../lib/autoscroll.js';
 import { escapeHtml } from '../lib/escape.js';
-import { enterStage } from './StageMode.js';
+import { enterImmersive } from './ImmersiveView.js';
 import { normalizeSectionType } from '../lib/sectionTypes.js';
 
 const FONT_SIZE_KEY = 'hkn-lyrics-font-size';
@@ -586,7 +586,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
   // ("mi tono" → mezcla acordes+voz) como a Tono (notas por sílaba de la voz
   // activa) — un solo estado, chordsCategory/chordsVoiceId, sin importar el
   // modo. selectPerson/selectCategory también los usa el chip S·A·T·B del
-  // escenario (setActiveVoice, StageMode) para mantener paridad.
+  // escenario (setActiveVoice, ImmersiveView) para mantener paridad.
   function selectPerson(rosterId) {
     chordsVoiceId = rosterId;
     renderChordsPersonRow();
@@ -830,7 +830,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
     });
   }
 
-  // Al salir del escenario (FIX finding 2): StageMode togglea capas
+  // Al salir del escenario (FIX finding 2): ImmersiveView togglea capas
   // directamente contra layerStore (mismo storage global), así que el closure
   // de SongView (layers/viewMode/aria-pressed/letra pintada) queda obsoleto si
   // el usuario las cambió adentro. Relee getLayers(), re-deriva viewMode (con
@@ -856,7 +856,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
       floatingTunerApi?.destroy();
       floatingTunerApi = null;
       setFloatingTunerOpen(false);
-      enterStage(sv, {
+      enterImmersive(sv, {
         song,
         getActiveVoice: () => chordsVoiceId,
         getTranspose: () => ({ semitones: transposeSemitones, useFlats }),
@@ -1226,7 +1226,7 @@ const PAUSE_ICON_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden
  * @param {HTMLElement} _container
  * @param {string} songId
  * @returns {{ pauseAutoscroll: () => void }} API mínima para consumidores
- *   externos (StageMode la usa para detener el motor al entrar al escenario).
+ *   externos (ImmersiveView la usa para detener el motor al entrar al escenario).
  */
 function setupAutoscroll(_container, songId) {
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;

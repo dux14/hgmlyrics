@@ -57,11 +57,11 @@ export function setLayer(name, on) {
 }
 
 /**
- * Deriva el `viewMode` interno de SongView/StageMode a partir de las capas.
+ * Deriva el `viewMode` interno de SongView/ImmersiveView a partir de las capas.
  * Con capas excluyentes, 'mixed' ya no es alcanzable desde el store (queda
  * el mapeo por compatibilidad con valores persistidos viejos que aún no
  * pasaron por `getLayers()`). Helper puro, sin acceso a storage, para que
- * SongView (render inicial + toggleLayer) y StageMode (T6) compartan el
+ * SongView (render inicial + toggleLayer) y ImmersiveView (T6) compartan el
  * mismo mapeo.
  * @param {{ chords: boolean, tono: boolean }} layers
  * @returns {'lyrics'|'chords'|'tono'|'mixed'}

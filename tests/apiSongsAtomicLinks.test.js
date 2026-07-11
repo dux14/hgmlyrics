@@ -12,12 +12,20 @@ vi.mock('@supabase/supabase-js', () => ({
 
 // sql mock: tagged-template fn + .begin(). El UPDATE necesita { count } en la
 // respuesta (api/songs/[id].js lee result.count); las demás sentencias no
-// dependen del valor de retorno.
+// dependen del valor de retorno. El PUT hace un SELECT previo a la tx (para
+// detectar cambios de sections) que necesita un array destructurable: se
+// distingue por texto de la query (SELECT ... -> [row], resto -> {count:1}).
 const mockTx = vi.fn(async () => ({ count: 1 }));
-const mockSql = Object.assign(
-  vi.fn(async () => ({ count: 1 })),
-  { begin: vi.fn(async (cb) => cb(mockTx)), json: (v) => v },
-);
+const mockSqlFn = vi.fn(async (strings) => {
+  if (strings?.raw && strings.join('').trim().startsWith('SELECT')) {
+    return [{ sections: null }];
+  }
+  return { count: 1 };
+});
+const mockSql = Object.assign(mockSqlFn, {
+  begin: vi.fn(async (cb) => cb(mockTx)),
+  json: (v) => v,
+});
 vi.mock('../api/_lib/db.js', () => ({ default: mockSql }));
 
 vi.mock('../api/_lib/auth.js', () => ({
@@ -65,7 +73,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockSql.begin.mockImplementation(async (cb) => cb(mockTx));
   mockTx.mockResolvedValue({ count: 1 });
-  mockSql.mockResolvedValue({ count: 1 });
+  mockSqlFn.mockImplementation(async (strings) => {
+    if (strings?.raw && strings.join('').trim().startsWith('SELECT')) {
+      return [{ sections: null }];
+    }
+    return { count: 1 };
+  });
 });
 
 const updateHandler = (await import('../api/songs/[id].js')).default;

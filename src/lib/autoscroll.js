@@ -3,7 +3,7 @@
  */
 
 // ── Velocidad continua (px/frame), compartida por el autoscroll clásico
-// (SongView) y el gesto de velocidad del stage (StageMode).
+// (SongView) y el gesto de velocidad del stage (ImmersiveView).
 export const AUTOSCROLL_SPEED_KEY = 'hkn-autoscroll-speed';
 export const AUTOSCROLL_SPEED_MIN = 0.01;
 export const AUTOSCROLL_SPEED_MAX = 2.0;

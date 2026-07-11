@@ -4,9 +4,9 @@
  * Abre SIEMPRE en modo libre: detecta y muestra la nota más cercana, aunque
  * SongView tenga una voz activa con nota objetivo. El chip "Seguir nota"
  * (visible solo si hay nota de voz disponible) es el toggle explícito que
- * activa el modo objetivo — la fórmula de cents contra la nota objetivo es
- * la misma que usa `createTunerStrip` en `tunerWidget.js`. El chip nace
- * siempre apagado (no se persiste entre aperturas).
+ * activa el modo objetivo — misma fórmula de cents contra la nota objetivo
+ * que usa `tunerWidget.js` (createTunerEngine). El chip nace siempre apagado
+ * (no se persiste entre aperturas).
  *
  * Consume `createTunerEngine` directamente (mic pipeline + estabilizador,
  * sin DOM) y dibuja su propio layout: nota detectada + cents a la izquierda,
@@ -16,7 +16,8 @@
  * cumple `pitch.js`. Se destruye en cambio de ruta (mismo patrón que
  * `destroySectionPlayer` en SongView.js) o al tocar la X.
  *
- * `createTunerStrip` (misma tunerWidget.js) queda intacta para StageMode.
+ * Este es el único widget de afinador embebido en uso: es el que monta
+ * ImmersiveView.js bajo demanda (mismo componente, sin duplicado).
  */
 
 import { createTunerEngine, colorFromCents } from '../lib/tunerWidget.js';

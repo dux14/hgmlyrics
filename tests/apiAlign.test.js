@@ -1,7 +1,6 @@
 /**
  * apiAlign.test.js — TDD para el dispatch de forced alignment a Modal
- * (api/_lib/align.js: projectCanonicalLines + dispatchAlign) y el endpoint de
- * realineado manual admin (api/songs/[id]/align.js).
+ * (api/_lib/align.js: projectCanonicalLines + dispatchAlign).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -20,9 +19,6 @@ function sqlMock(strings, ...values) {
 sqlMock.json = (v) => v;
 vi.mock('../api/_lib/db.js', () => ({ default: sqlMock }));
 
-vi.mock('../api/_lib/auth.js', () => ({
-  requireAdmin: vi.fn(async () => ({ id: 'admin-1' })),
-}));
 vi.mock('../api/_lib/http.js', () => ({
   allowMethods: vi.fn(() => false),
   withErrors: (fn) => fn,
@@ -42,24 +38,6 @@ process.env.PUBLIC_BASE_URL = 'https://hgmlyrics.vercel.app';
 const { dispatchAlign, projectCanonicalLines } = await import('../api/_lib/align.js');
 const { fetchWithTimeout } = await import('../api/_lib/http.js');
 const { signSongAudioDownload } = await import('../api/_lib/storage.js');
-const { requireAdmin } = await import('../api/_lib/auth.js');
-const alignHandler = (await import('../api/songs/[id]/align.js')).default;
-
-function makeReq(over = {}) {
-  return { method: 'POST', query: { id: 'song-1' }, body: {}, ...over };
-}
-function makeRes() {
-  const res = { _status: 200, _body: null };
-  res.status = (s) => {
-    res._status = s;
-    return res;
-  };
-  res.json = (b) => {
-    res._body = b;
-    return res;
-  };
-  return res;
-}
 
 // Fixture "Santo": secciones con lineas de annotation y spoken (misma fixture
 // que reutiliza C3 en src/lib/projectLines.js para garantizar paridad front/back).
@@ -187,42 +165,5 @@ describe('dispatchAlign', () => {
 
     const failedUpdate = sqlCalls[sqlCalls.length - 1];
     expect(failedUpdate.text).toContain('failed');
-  });
-});
-
-describe('POST /api/songs/[id]/align', () => {
-  it('no-admin → 403 (requireAdmin lanza)', async () => {
-    requireAdmin.mockRejectedValueOnce(Object.assign(new Error('Forbidden'), { status: 403 }));
-    const res = makeRes();
-    await expect(alignHandler(makeReq(), res)).rejects.toThrow('Forbidden');
-  });
-
-  it('sin audio → 409', async () => {
-    sqlResponses.push([]); // SELECT song_audio
-    const res = makeRes();
-    await expect(alignHandler(makeReq(), res)).rejects.toMatchObject({ status: 409 });
-    expect(requireAdmin).toHaveBeenCalled();
-  });
-
-  it("re-dispara alineado en estado 'failed' → 200 { success: true }", async () => {
-    sqlResponses.push([{ storageKey: 'song-1/full.mp3' }]); // SELECT song_audio
-    sqlResponses.push([{ status: 'failed' }]); // SELECT song_line_timings
-    sqlResponses.push([{ sections: [] }]); // SELECT songs
-    sqlResponses.push([]); // INSERT ... processing
-    const res = makeRes();
-    await alignHandler(makeReq(), res);
-    expect(res._status).toBe(200);
-    expect(res._body).toEqual({ success: true });
-    expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
-  });
-
-  it("estado 'processing' → idempotente, 200 sin postear de nuevo", async () => {
-    sqlResponses.push([{ storageKey: 'song-1/full.mp3' }]); // SELECT song_audio
-    sqlResponses.push([{ status: 'processing' }]); // SELECT song_line_timings
-    const res = makeRes();
-    await alignHandler(makeReq(), res);
-    expect(res._status).toBe(200);
-    expect(res._body).toEqual({ success: true });
-    expect(fetchWithTimeout).not.toHaveBeenCalled();
   });
 });

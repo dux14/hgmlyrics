@@ -1,6 +1,6 @@
 /**
  * modal.js — Cliente de la app de Modal del Estudio de pistas.
- * Espeja el rol de replicate.js: arrancar el orquestador DAG y verificar el callback firmado.
+ * Arranca el orquestador DAG y verifica el callback firmado.
  */
 import { createHmac } from 'node:crypto';
 import { timingSafeEqualStr } from './crypto.js';

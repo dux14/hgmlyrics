@@ -8,13 +8,26 @@
  * final) y los aplica DENTRO de la misma transacción que el UPDATE de songs.
  */
 
+// Offset de desambiguación para la fase temporal de applySectionAudioMoves.
+// El schema real tiene `CHECK (section_index >= 0)` (ver migración
+// 20260707120000_song_section_audio.sql) — un índice temporal NEGATIVO viola
+// ese CHECK en cuanto el UPDATE toca una fila real (justo el caso central de
+// esta feature: una sección CON audio que se mueve), tirando la transacción
+// entera con un 500. El offset es POSITIVO y muy por encima de cualquier
+// section_index real, así que nunca viola el CHECK ni choca con filas no
+// tocadas por los moves (esas siempre son < MOVE_OFFSET).
+const MOVE_OFFSET = 1_000_000;
+
 /**
  * Valida un array de moves {from,to}. `from` referencia el layout VIEJO de
  * secciones (antes del guardado) y por eso NO se acota contra `sectionCount`
  * (el nuevo layout, que puede ser más chico si se borraron secciones en el
  * medio) — el UPDATE de applySectionAudioMoves ya es seguro si `from` no
  * matchea ninguna fila (WHERE section_index = from). `to` sí referencia el
- * layout NUEVO, así que se acota: to < sectionCount.
+ * layout NUEVO, así que se acota: to < sectionCount. Además `to` se rechaza
+ * si invade la zona reservada para el offset temporal (MOVE_OFFSET/10, muy
+ * por encima de cualquier cantidad real de secciones) — cinturón adicional
+ * para que un body patológico no pueda chocar con la fase temporal.
  * @param {Array<{from:number,to:number}>} moves
  * @param {number} sectionCount tamaño del layout NUEVO (post-guardado)
  * @returns {string|null} mensaje de error, o null si es válido
@@ -31,7 +44,7 @@ export function validateSectionAudioMoves(moves, sectionCount) {
     if (m.from < 0 || m.to < 0) {
       return 'sectionAudioMoves: from/to no pueden ser negativos';
     }
-    if (m.to >= sectionCount) {
+    if (m.to >= sectionCount || m.to >= 100_000) {
       return 'sectionAudioMoves: to fuera de rango';
     }
     if (froms.has(m.from)) return 'sectionAudioMoves: from duplicado';
@@ -46,9 +59,13 @@ export function validateSectionAudioMoves(moves, sectionCount) {
  * Aplica los moves dentro de la transacción del caller (sql.begin ya abierto
  * en api/songs/[id].js). Dos fases para no chocar con el unique constraint
  * (song_id, section_index, voice_scope) mientras los índices se reacomodan:
- * fase 1 lleva cada `from` a un índice temporal negativo único (-1-to, nunca
- * choca con un section_index real que siempre es >= 0); fase 2 des-negativiza
- * todo lo que quedó negativo, dejando el índice `to` final.
+ * fase 1 lleva cada `from` a un índice temporal MOVE_OFFSET+to (los `to`
+ * únicos garantizan temporales únicos entre sí, y el offset los deja muy por
+ * encima de cualquier section_index real no tocado, así que tampoco chocan
+ * con esas filas); fase 2 resta el offset de todo lo que quedó por encima,
+ * dejando el índice `to` final. El offset es positivo (nunca negativo) a
+ * propósito: el schema tiene CHECK (section_index >= 0), así que una fase
+ * temporal negativa viola el CHECK en cuanto toca una fila real.
  * @param {import('postgres').TransactionSql} tx
  * @param {string} songId
  * @param {Array<{from:number,to:number}>} moves
@@ -56,12 +73,12 @@ export function validateSectionAudioMoves(moves, sectionCount) {
 export async function applySectionAudioMoves(tx, songId, moves) {
   for (const m of moves) {
     await tx`
-      UPDATE song_section_audio SET section_index = ${-1 - m.to}
+      UPDATE song_section_audio SET section_index = ${MOVE_OFFSET + m.to}
       WHERE song_id = ${songId} AND section_index = ${m.from}
     `;
   }
   await tx`
-    UPDATE song_section_audio SET section_index = -1 - section_index
-    WHERE song_id = ${songId} AND section_index < 0
+    UPDATE song_section_audio SET section_index = section_index - ${MOVE_OFFSET}
+    WHERE song_id = ${songId} AND section_index >= ${MOVE_OFFSET}
   `;
 }

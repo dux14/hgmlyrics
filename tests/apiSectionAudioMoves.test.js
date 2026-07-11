@@ -49,6 +49,14 @@ describe('validateSectionAudioMoves', () => {
     expect(validateSectionAudioMoves([{ from: 0, to: 2 }], 2)).toMatch(/rango/);
   });
 
+  // Cinturón adicional: `to` no puede invadir la zona reservada para el
+  // offset temporal de applySectionAudioMoves (MOVE_OFFSET, ver ese módulo).
+  // sectionCount gigante simula un body patológico donde solo el chequeo del
+  // offset (no el de sectionCount) rechaza el move.
+  it('rechaza to que invade la zona del offset temporal (>= 100000)', () => {
+    expect(validateSectionAudioMoves([{ from: 0, to: 100_000 }], 200_000)).toMatch(/rango/);
+  });
+
   it('rechaza from duplicado', () => {
     expect(
       validateSectionAudioMoves(
@@ -85,7 +93,12 @@ describe('applySectionAudioMoves', () => {
     return tx;
   }
 
-  it('fase 1: manda cada from a un índice temporal negativo (-1-to)', async () => {
+  // El schema real tiene CHECK (section_index >= 0) (ver
+  // supabase/migrations/20260707120000_song_section_audio.sql): un temporal
+  // negativo violaría ese CHECK en cuanto tocara una fila real. Por eso la
+  // fase temporal usa un offset POSITIVO (MOVE_OFFSET = 1_000_000) en vez de
+  // -1-to.
+  it('fase 1: manda cada from a un índice temporal MOVE_OFFSET+to (positivo)', async () => {
     const tx = makeFakeTx();
     await applySectionAudioMoves(tx, 'song-1', [
       { from: 0, to: 1 },
@@ -95,22 +108,41 @@ describe('applySectionAudioMoves', () => {
     // Fase 1 son las primeras N llamadas (una por move), fase 2 es la última.
     const phase1 = tx.calls.slice(0, 2);
     expect(phase1[0].text).toMatch(/UPDATE song_section_audio SET section_index/);
-    expect(phase1[0].values).toEqual([-2, 'song-1', 0]); // to=1 -> -1-1=-2, songId, from=0
-    expect(phase1[1].values).toEqual([-1, 'song-1', 1]); // to=0 -> -1-0=-1, songId, from=1
+    expect(phase1[0].values).toEqual([1_000_001, 'song-1', 0]); // to=1 -> 1e6+1, songId, from=0
+    expect(phase1[1].values).toEqual([1_000_000, 'song-1', 1]); // to=0 -> 1e6+0, songId, from=1
   });
 
-  it('fase 2: des-negativiza todo lo que quedó negativo para ese song_id', async () => {
+  it('fase 2: resta el offset de todo lo que quedó por encima, para ese song_id', async () => {
     const tx = makeFakeTx();
     await applySectionAudioMoves(tx, 'song-1', [{ from: 0, to: 1 }]);
 
     const phase2 = tx.calls[tx.calls.length - 1];
-    expect(phase2.text).toMatch(/section_index = -1 - section_index/);
-    expect(phase2.values).toEqual(['song-1']);
+    expect(phase2.text).toMatch(/section_index = section_index - .*section_index >= /s);
+    expect(phase2.values).toEqual([1_000_000, 'song-1', 1_000_000]);
   });
 
   it('sin moves: no ejecuta ninguna query', async () => {
     const tx = makeFakeTx();
     await applySectionAudioMoves(tx, 'song-1', []);
-    expect(tx.calls).toHaveLength(1); // solo la fase 2 (des-negativiza, no-op si nada quedó negativo)
+    expect(tx.calls).toHaveLength(1); // solo la fase 2 (resta offset, no-op si nada quedó por encima)
+  });
+
+  // Proxy unitario del CHECK (section_index >= 0) del schema real: ningún
+  // valor asignado a section_index por applySectionAudioMoves puede ser
+  // negativo, sin importar cuántos/cuáles sean los moves. Protege contra una
+  // regresión que reintroduzca el diseño con offset negativo (-1-to).
+  it('ningún valor asignado a section_index es negativo (protege el CHECK >= 0 del schema)', async () => {
+    const tx = makeFakeTx();
+    await applySectionAudioMoves(tx, 'song-1', [
+      { from: 0, to: 2 },
+      { from: 1, to: 0 },
+      { from: 2, to: 1 },
+    ]);
+
+    // El primer valor de cada UPDATE (fase 1 y fase 2) es el que se asigna a
+    // section_index — nunca debe ser negativo.
+    for (const call of tx.calls) {
+      expect(call.values[0]).toBeGreaterThanOrEqual(0);
+    }
   });
 });

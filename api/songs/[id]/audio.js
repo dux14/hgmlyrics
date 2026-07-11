@@ -64,7 +64,7 @@ async function postAudio(req, res, songId) {
       INSERT INTO song_line_timings (song_id, status, lines, error)
       VALUES (${songId}, 'pending', NULL, NULL)
       ON CONFLICT (song_id)
-      DO UPDATE SET status = 'pending', lines = NULL, error = NULL
+      DO UPDATE SET status = 'pending', lines = NULL, error = NULL, bpm_detected = NULL, beats = NULL
       WHERE song_line_timings.status <> 'processing'
          OR song_line_timings.updated_at < now() - interval '20 minutes'
     `;

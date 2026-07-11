@@ -151,15 +151,75 @@ describe('POST /api/align/webhook — payload de lines validas', () => {
       { i: 2, startMs: 3400 },
     ];
     const res = makeRes();
-    await webhookHandler(
-      modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }),
-      res,
-    );
+    await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
     expect(res.statusCode).toBe(200);
     const update = sqlCalls.find((c) => c.text.startsWith('UPDATE song_line_timings'));
     expect(update).toBeTruthy();
     expect(update.text).toContain('ready');
     expect(update.text).not.toContain('failed');
+  });
+});
+
+describe('POST /api/align/webhook — payload de beats (best-effort)', () => {
+  it('beats validos → el UPDATE de exito persiste bpm_detected y beats', async () => {
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    sqlResponses.push([]); // UPDATE ... status='ready'
+    const lines = [
+      { i: 0, startMs: 0 },
+      { i: 1, startMs: 1200 },
+    ];
+    const beats = { bpm: 92.5, beatsMs: [0, 650, 1300] };
+    const res = makeRes();
+    await webhookHandler(
+      modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx', beats }),
+      res,
+    );
+    expect(res.statusCode).toBe(200);
+    const update = sqlCalls.find((c) => c.text.startsWith('UPDATE song_line_timings'));
+    expect(update.text).toContain('bpm_detected');
+    expect(update.text).toContain('beats');
+    expect(update.values).toContain(92.5);
+    expect(update.values.some((v) => v && v.bpm === 92.5)).toBe(true);
+  });
+
+  it('beats malformados → 200 ready, lines persistidas, bpm_detected/beats NULL, console.warn', async () => {
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    sqlResponses.push([]); // UPDATE ... status='ready'
+    const lines = [
+      { i: 0, startMs: 0 },
+      { i: 1, startMs: 1200 },
+    ];
+    const beats = { bpm: 92, beatsMs: [10, 10] }; // no estrictamente creciente
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const res = makeRes();
+    await webhookHandler(
+      modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx', beats }),
+      res,
+    );
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ status: 'ready' });
+    const update = sqlCalls.find((c) => c.text.startsWith('UPDATE song_line_timings'));
+    expect(update.text).toContain('ready');
+    expect(update.values).toContain(null);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('sin campo beats → bpm_detected/beats NULL, sin console.warn', async () => {
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    sqlResponses.push([]); // UPDATE ... status='ready'
+    const lines = [
+      { i: 0, startMs: 0 },
+      { i: 1, startMs: 1200 },
+    ];
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
+    expect(res.statusCode).toBe(200);
+    const update = sqlCalls.find((c) => c.text.startsWith('UPDATE song_line_timings'));
+    expect(update.text).toContain('ready');
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });
 

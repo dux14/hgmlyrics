@@ -43,9 +43,8 @@ process.env.DATABASE_URL = 'postgresql://test';
 
 const handler = (await import('../api/songs/[id]/audio.js')).default;
 const { requireUser, requireAdmin } = await import('../api/_lib/auth.js');
-const { createSongAudioSignedPutUrl, deleteSongAudioObject } = await import(
-  '../api/_lib/storage.js'
-);
+const { createSongAudioSignedPutUrl, deleteSongAudioObject } =
+  await import('../api/_lib/storage.js');
 const { dispatchAlign } = await import('../api/_lib/align.js');
 
 function makeReq(over = {}) {
@@ -138,6 +137,8 @@ describe('POST /api/songs/[id]/audio', () => {
     expect(updateCall).toBeTruthy();
     const timingsCall = sqlCalls.find((c) => c.text.includes('song_line_timings'));
     expect(timingsCall.text).toContain('pending');
+    expect(timingsCall.text).toContain('bpm_detected = NULL');
+    expect(timingsCall.text).toContain('beats = NULL');
     expect(dispatchAlign).toHaveBeenCalledTimes(1);
     expect(dispatchAlign).toHaveBeenCalledWith('song-1');
   });

@@ -1,11 +1,12 @@
 // Webhook de callback para el forced alignment (WhisperX en Modal). Espeja la
 // firma HMAC de api/stems/webhook.js. Contrato:
-//  - exito: { songId, lines: [{i, startMs}, ...], provider }
+//  - exito: { songId, lines: [{i, startMs}, ...], provider, beats: {bpm, beatsMs}|null }
 //  - error: { songId, error }
 import sql from '../_lib/db.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { verifyModalSignature } from '../_lib/modal.js';
 import { projectCanonicalLines } from '../_lib/align.js';
+import { validateBeats } from '../_lib/beats.js';
 
 // Raw body necesario para verificar la firma HMAC.
 export const config = {
@@ -71,7 +72,7 @@ export default withErrors(async (req, res) => {
   }
 
   const payload = JSON.parse(body);
-  const { songId, lines, provider, error } = payload;
+  const { songId, lines, provider, error, beats } = payload;
 
   if (!songId || typeof songId !== 'string') {
     res.status(400).json({ error: 'Parámetro songId requerido' });
@@ -112,9 +113,19 @@ export default withErrors(async (req, res) => {
     return;
   }
 
+  // beats es best-effort: a diferencia de lines, invalido no tumba el webhook
+  // ni marca failed, solo se descarta (el metronomo cae a un fallback sin
+  // rejilla detectada).
+  const beatsError = validateBeats(beats ?? null);
+  if (beatsError) {
+    console.warn(`Beats inválidos (ignorados): ${beatsError}`);
+  }
+  const validBeats = beats && !beatsError ? beats : null;
+
   await sql`
     UPDATE song_line_timings
-    SET status = 'ready', lines = ${sql.json(lines)}, provider = ${provider ?? null}, error = NULL
+    SET status = 'ready', lines = ${sql.json(lines)}, provider = ${provider ?? null}, error = NULL,
+        bpm_detected = ${validBeats ? validBeats.bpm : null}, beats = ${validBeats ? sql.json(validBeats) : null}
     WHERE song_id = ${songId} AND status = 'processing'
   `;
   res.status(200).json({ status: 'ready' });

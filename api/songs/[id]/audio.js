@@ -7,6 +7,7 @@ import {
   deleteSongAudioObject,
 } from '../../_lib/storage.js';
 import { dispatchAlign } from '../../_lib/align.js';
+import { validatePatchBody } from '../../_lib/beats.js';
 
 // GET: audio completo + estado de timings para la vista inmersiva.
 async function getAudio(_req, res, songId) {
@@ -14,11 +15,14 @@ async function getAudio(_req, res, songId) {
   // el camino que decide la promocion al player sincronizado).
   const [[audio], [timings]] = await Promise.all([
     sql`
-      SELECT storage_key AS "storageKey", duration_sec AS "durationSec"
+      SELECT storage_key AS "storageKey", duration_sec AS "durationSec",
+        bpm_manual AS "bpmManual", time_signature AS "timeSignature",
+        beat_anchor AS "beatAnchor"
       FROM song_audio WHERE song_id = ${songId}
     `,
     sql`
-      SELECT status, lines FROM song_line_timings WHERE song_id = ${songId}
+      SELECT status, lines, bpm_detected AS "bpmDetected", beats
+      FROM song_line_timings WHERE song_id = ${songId}
     `,
   ]);
   if (!audio) {
@@ -26,7 +30,13 @@ async function getAudio(_req, res, songId) {
     return;
   }
   res.status(200).json({
-    audio: { url: await signSongAudioDownload(audio.storageKey), durationSec: audio.durationSec },
+    audio: {
+      url: await signSongAudioDownload(audio.storageKey),
+      durationSec: audio.durationSec,
+      bpmManual: audio.bpmManual,
+      timeSignature: audio.timeSignature,
+      beatAnchor: audio.beatAnchor,
+    },
     timings: timings ?? null,
   });
 }
@@ -87,6 +97,35 @@ async function postAudio(req, res, songId) {
   res.status(200).json({ uploadUrl, key });
 }
 
+// PATCH: overrides de admin (bpm manual, compas, ancla del metronomo). Solo
+// toca los campos presentes en el body — undefined = no tocar, null = limpiar
+// el override (ver validatePatchBody). No calcula valores efectivos: eso lo
+// compone el front combinando este override con bpmDetected/beats del GET.
+async function patchAudio(req, res, songId) {
+  await requireAdmin(req, sql);
+
+  const err = validatePatchBody(req.body ?? null);
+  if (err) {
+    res.status(400).json({ error: err });
+    return;
+  }
+
+  const { bpmManual, timeSignature, beatAnchor } = req.body;
+  const updates = {};
+  if (bpmManual !== undefined) updates.bpm_manual = bpmManual;
+  if (timeSignature !== undefined) updates.time_signature = timeSignature;
+  if (beatAnchor !== undefined) updates.beat_anchor = beatAnchor;
+
+  const result = await sql`
+    UPDATE song_audio SET ${sql(updates)} WHERE song_id = ${songId}
+  `;
+  if (result.count === 0) {
+    res.status(404).json({ error: 'Audio no encontrado' });
+    return;
+  }
+  res.status(200).json({ success: true });
+}
+
 async function deleteAudio(req, res, songId) {
   await requireAdmin(req, sql);
 
@@ -109,7 +148,7 @@ async function deleteAudio(req, res, songId) {
 }
 
 export default withErrors(async (req, res) => {
-  if (allowMethods(req, res, ['GET', 'POST', 'DELETE'])) return;
+  if (allowMethods(req, res, ['GET', 'POST', 'DELETE', 'PATCH'])) return;
   const songId = req.query.id;
   if (!songId || typeof songId !== 'string') {
     res.status(400).json({ error: 'id is required' });
@@ -120,5 +159,6 @@ export default withErrors(async (req, res) => {
     return getAudio(req, res, songId);
   }
   if (req.method === 'POST') return postAudio(req, res, songId);
+  if (req.method === 'PATCH') return patchAudio(req, res, songId);
   return deleteAudio(req, res, songId);
 });

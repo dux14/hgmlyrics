@@ -26,3 +26,40 @@ export function validateBeats(beats) {
   }
   return null;
 }
+
+const VALID_TIME_SIGNATURES = ['4/4', '3/4', '6/8', '2/4'];
+
+/**
+ * Valida el body del PATCH de overrides de audio (bpm/compas/ancla manuales
+ * del admin, ver api/songs/[id]/audio.js). Semantica de PATCH parcial:
+ * - campo AUSENTE (undefined) = no tocar ese campo.
+ * - campo `null` explicito = limpiar el override (volver al valor detectado).
+ * - campo presente y no-null = valor nuevo, validado en rango.
+ * @param {{bpmManual?: number|null, timeSignature?: string|null, beatAnchor?: number|null}|null} body
+ * @returns {string|null} error o null.
+ */
+export function validatePatchBody(body) {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    return 'body invalido';
+  }
+  const { bpmManual, timeSignature, beatAnchor } = body;
+  if (bpmManual !== undefined && bpmManual !== null) {
+    if (!Number.isFinite(bpmManual) || bpmManual < 20 || bpmManual > 350) {
+      return `bpmManual invalido: ${bpmManual}`;
+    }
+  }
+  if (timeSignature !== undefined && timeSignature !== null) {
+    if (!VALID_TIME_SIGNATURES.includes(timeSignature)) {
+      return `timeSignature invalido: ${timeSignature}`;
+    }
+  }
+  if (beatAnchor !== undefined && beatAnchor !== null) {
+    if (!Number.isInteger(beatAnchor) || beatAnchor < 1 || beatAnchor > 12) {
+      return `beatAnchor invalido: ${beatAnchor}`;
+    }
+  }
+  if (bpmManual === undefined && timeSignature === undefined && beatAnchor === undefined) {
+    return 'sin campos para actualizar';
+  }
+  return null;
+}

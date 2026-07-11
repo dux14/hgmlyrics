@@ -43,6 +43,7 @@ process.env.DATABASE_URL = 'postgresql://test';
 
 const handler = (await import('../api/songs/[id]/audio.js')).default;
 const { requireUser, requireAdmin } = await import('../api/_lib/auth.js');
+const { allowMethods } = await import('../api/_lib/http.js');
 const { createSongAudioSignedPutUrl, deleteSongAudioObject } =
   await import('../api/_lib/storage.js');
 const { dispatchAlign } = await import('../api/_lib/align.js');
@@ -89,6 +90,44 @@ describe('GET /api/songs/[id]/audio', () => {
     expect(res._body).toEqual({
       audio: { url: 'https://get/song-1/full.mp3', durationSec: 210 },
       timings: { status: 'ready', lines: [{ i: 0, startMs: 100 }] },
+    });
+  });
+
+  it('con fila + overrides/beats → expone bpmManual/timeSignature/beatAnchor y bpmDetected/beats', async () => {
+    sqlResponses.push([
+      {
+        storageKey: 'song-1/full.mp3',
+        durationSec: 210,
+        bpmManual: 128,
+        timeSignature: '3/4',
+        beatAnchor: 2,
+      },
+    ]); // SELECT song_audio
+    sqlResponses.push([
+      {
+        status: 'ready',
+        lines: [{ i: 0, startMs: 100 }],
+        bpmDetected: 126.4,
+        beats: { bpm: 126.4, beatsMs: [0, 476, 952] },
+      },
+    ]); // SELECT song_line_timings
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({
+      audio: {
+        url: 'https://get/song-1/full.mp3',
+        durationSec: 210,
+        bpmManual: 128,
+        timeSignature: '3/4',
+        beatAnchor: 2,
+      },
+      timings: {
+        status: 'ready',
+        lines: [{ i: 0, startMs: 100 }],
+        bpmDetected: 126.4,
+        beats: { bpm: 126.4, beatsMs: [0, 476, 952] },
+      },
     });
   });
 });
@@ -155,6 +194,53 @@ describe('POST /api/songs/[id]/audio', () => {
   });
 });
 
+describe('PATCH /api/songs/[id]/audio', () => {
+  function patchReq(body) {
+    return makeReq({ method: 'PATCH', body });
+  }
+
+  it('no-admin → requireAdmin lanza', async () => {
+    requireAdmin.mockRejectedValueOnce(Object.assign(new Error('Forbidden'), { status: 403 }));
+    const res = makeRes();
+    await expect(handler(patchReq({ bpmManual: 120 }), res)).rejects.toThrow('Forbidden');
+  });
+
+  it('válido parcial (solo bpmManual) → UPDATE de song_audio SOLO con bpm_manual en el SET → 200', async () => {
+    sqlResponses.push({ count: 1 }); // UPDATE song_audio
+    const res = makeRes();
+    await handler(patchReq({ bpmManual: 140 }), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ success: true });
+    const updateCall = sqlCalls.find((c) => c.text.includes('UPDATE song_audio'));
+    expect(updateCall).toBeTruthy();
+    expect(updateCall.values).toEqual([{ bpm_manual: 140 }, 'song-1']);
+  });
+
+  it('con null → limpia el override (SET con null)', async () => {
+    sqlResponses.push({ count: 1 }); // UPDATE song_audio
+    const res = makeRes();
+    await handler(patchReq({ bpmManual: null }), res);
+    expect(res._status).toBe(200);
+    const updateCall = sqlCalls.find((c) => c.text.includes('UPDATE song_audio'));
+    expect(updateCall.values).toEqual([{ bpm_manual: null }, 'song-1']);
+  });
+
+  it('inválido (bpmManual 10) → 400 con error que contenga "bpmManual" y ningún UPDATE emitido', async () => {
+    const res = makeRes();
+    await handler(patchReq({ bpmManual: 10 }), res);
+    expect(res._status).toBe(400);
+    expect(res._body.error).toMatch(/bpmManual/);
+    expect(sqlCalls.length).toBe(0);
+  });
+
+  it('a canción sin audio (UPDATE count 0) → 404', async () => {
+    sqlResponses.push({ count: 0 }); // UPDATE song_audio afecta 0 filas
+    const res = makeRes();
+    await handler(patchReq({ bpmManual: 140 }), res);
+    expect(res._status).toBe(404);
+  });
+});
+
 describe('DELETE /api/songs/[id]/audio', () => {
   function deleteReq(body) {
     return makeReq({ method: 'DELETE', body });
@@ -178,5 +264,19 @@ describe('DELETE /api/songs/[id]/audio', () => {
     await handler(deleteReq({}), res);
     expect(res._status).toBe(404);
     expect(deleteSongAudioObject).not.toHaveBeenCalled();
+  });
+});
+
+describe('router', () => {
+  it('allowMethods incluye PATCH junto a GET/POST/DELETE', async () => {
+    sqlResponses.push([]); // SELECT song_audio (GET pasa de largo, allowMethods mockeado a false)
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(allowMethods).toHaveBeenCalledWith(expect.anything(), expect.anything(), [
+      'GET',
+      'POST',
+      'DELETE',
+      'PATCH',
+    ]);
   });
 });

@@ -17,8 +17,12 @@ Contrato de entrada (payload que postea api/_lib/align.js):
   { songId, audioUrl, lines: [{i, text}], webhookUrl }
 
 Contrato de salida (webhook, ver api/align/webhook.js):
-  exito: { songId, lines: [{i, startMs}, ...], provider: 'whisperx' }
+  exito: { songId, lines: [{i, startMs}, ...], provider: 'whisperx',
+           beats: { bpm, beatsMs: [int, ...] } | null }
   error: { songId, error: str }
+
+`beats` sale de un beat-tracking con librosa sobre la MEZCLA completa
+(best-effort: None si la deteccion no es usable, nunca tumba el pipeline).
 """
 
 from __future__ import annotations
@@ -34,7 +38,7 @@ from fastapi import Header, HTTPException
 import modal
 
 from align_mapping import map_words_to_lines
-from sections._common import extract_vocals_stem
+from sections._common import _extract_vocals_from_path
 
 app = modal.App("hkn-align")
 
@@ -131,6 +135,63 @@ def _post_align_webhook(webhook_url: str, body: dict) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Beat-tracking (librosa, best-effort)
+# ──────────────────────────────────────────────────────────────────────────────
+
+_MIN_BEATS = 8
+
+
+def _beats_payload(raw: dict | None) -> dict | None:
+    """Normaliza el resultado del beat-tracking; None si no es usable
+    (best-effort: pocos beats detectados o bpm invalido)."""
+    if not raw or not raw.get("beatsMs") or len(raw["beatsMs"]) < _MIN_BEATS:
+        return None
+    bpm = float(raw.get("bpm") or 0)
+    if bpm <= 0:
+        return None
+    return {"bpm": round(bpm, 2), "beatsMs": [int(t) for t in raw["beatsMs"]]}
+
+
+def _detect_beats(audio_path: str) -> dict | None:
+    """Beat-tracking con librosa sobre la MEZCLA completa (no el stem
+    vocal). Best-effort: cualquier excepcion devuelve None y el alignment
+    sigue — el metronomo es una feature aparte, nunca debe tumbar el
+    forced alignment."""
+    try:
+        import numpy as np
+        import librosa  # solo disponible dentro del contenedor Modal
+
+        y, sr = librosa.load(audio_path, sr=22050, mono=True)
+        tempo, beat_times = librosa.beat.beat_track(y=y, sr=sr, units="time")
+        bpm = float(np.atleast_1d(tempo)[0])
+        return _beats_payload({"bpm": bpm, "beatsMs": [int(t * 1000) for t in beat_times]})
+    except Exception:
+        return None
+
+
+def _download_audio(get_url: str) -> str:
+    """Descarga el audio original (la mezcla completa) a un archivo local
+    temporal. Mismo patron que extract_vocals_stem (sections/_common.py) —
+    se duplica aqui, en vez de modificar _common.py, para descargar UNA
+    sola vez: el beat-tracking corre sobre este archivo (la mezcla), y
+    despues se pasa a _extract_vocals_from_path para obtener el stem vocal
+    sin volver a descargar."""
+    import os
+    import tempfile
+
+    import httpx  # solo disponible dentro del contenedor Modal
+
+    fd, src_path = tempfile.mkstemp(suffix=".audio")
+    os.close(fd)
+    with httpx.stream("GET", get_url, timeout=120, follow_redirects=True) as r:
+        r.raise_for_status()
+        with open(src_path, "wb") as f:
+            for chunk in r.iter_bytes():
+                f.write(chunk)
+    return src_path
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Pipeline principal (GPU)
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -156,8 +217,12 @@ def run_align(payload: dict) -> None:
         if not lines:
             raise ValueError("payload invalido: lines vacio")
 
-        # ── 1+2. Descargar audio + extraer stem vocal ───────────────────────
-        vocals_path = extract_vocals_stem(audio_url)
+        # ── 1+2. Descargar audio (una sola vez) + extraer stem vocal ────────
+        audio_path = _download_audio(audio_url)
+        # Beat-tracking sobre la MEZCLA completa, no el stem vocal. Best-
+        # effort: nunca lanza, None si la deteccion no es usable.
+        beats = _detect_beats(audio_path)
+        vocals_path = _extract_vocals_from_path(audio_path)
 
         # ── 3. WhisperX: alinear el texto CONOCIDO (no transcripcion libre) ─
         # Se importa aqui dentro (patron del repo, ver extract_vocals_stem):
@@ -184,7 +249,7 @@ def run_align(payload: dict) -> None:
         # ── 5. Webhook de exito ──────────────────────────────────────────────
         _post_align_webhook(
             webhook_url,
-            {"songId": song_id, "lines": mapped_lines, "provider": "whisperx"},
+            {"songId": song_id, "lines": mapped_lines, "provider": "whisperx", "beats": beats},
         )
     except Exception as e:  # noqa: BLE001 — cualquier excepcion se reporta, nunca se silencia
         if webhook_url:

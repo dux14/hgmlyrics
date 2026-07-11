@@ -10,17 +10,21 @@ import { dispatchAlign } from '../../_lib/align.js';
 
 // GET: audio completo + estado de timings para la vista inmersiva.
 async function getAudio(_req, res, songId) {
-  const [audio] = await sql`
-    SELECT storage_key AS "storageKey", duration_sec AS "durationSec"
-    FROM song_audio WHERE song_id = ${songId}
-  `;
+  // Lecturas independientes por songId: en paralelo (una ida a la DB menos en
+  // el camino que decide la promocion al player sincronizado).
+  const [[audio], [timings]] = await Promise.all([
+    sql`
+      SELECT storage_key AS "storageKey", duration_sec AS "durationSec"
+      FROM song_audio WHERE song_id = ${songId}
+    `,
+    sql`
+      SELECT status, lines FROM song_line_timings WHERE song_id = ${songId}
+    `,
+  ]);
   if (!audio) {
     res.status(200).json({ audio: null, timings: null });
     return;
   }
-  const [timings] = await sql`
-    SELECT status, lines FROM song_line_timings WHERE song_id = ${songId}
-  `;
   res.status(200).json({
     audio: { url: await signSongAudioDownload(audio.storageKey), durationSec: audio.durationSec },
     timings: timings ?? null,
@@ -51,11 +55,18 @@ async function postAudio(req, res, songId) {
       res.status(404).json({ error: 'Audio no encontrado' });
       return;
     }
+    // El reset a 'pending' NO pisa un job en vuelo ('processing' fresco): eso
+    // anularia el guard de idempotencia de dispatchAlign y despacharia un
+    // SEGUNDO job a Modal (el webhook correlaciona solo por songId — el ultimo
+    // en llegar ganaria, aunque sea el viejo). El umbral de 20 min deja escape
+    // para un 'processing' colgado (webhook caido persistente).
     await sql`
       INSERT INTO song_line_timings (song_id, status, lines, error)
       VALUES (${songId}, 'pending', NULL, NULL)
       ON CONFLICT (song_id)
       DO UPDATE SET status = 'pending', lines = NULL, error = NULL
+      WHERE song_line_timings.status <> 'processing'
+         OR song_line_timings.updated_at < now() - interval '20 minutes'
     `;
     await dispatchAlign(songId);
     res.status(200).json({ success: true });

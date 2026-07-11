@@ -9,9 +9,8 @@ import { fetchWithTimeout } from './http.js';
 /**
  * Proyecta las lineas canonicas de una cancion (modo letra sin voz): salta
  * `annotation`, conserva `spoken`. Replica EXACTAMENTE la regla de
- * `projectLines` en src/components/StageMode.js (linea 135-138) — el front
- * tendra su propia copia en src/lib/projectLines.js (Task C3); cuando exista,
- * se validara contra la misma fixture para garantizar paridad front/back.
+ * `projectLines` en src/lib/projectLines.js (el front); la paridad de ambas
+ * se verifica con la misma fixture en tests/projectLines.test.js.
  * @param {Array<{lines?: Array<{annotation?:boolean, text?:string}>}>} sections
  * @returns {Array<{i:number, text:string}>}
  */
@@ -33,18 +32,21 @@ export function projectCanonicalLines(sections) {
  * @throws {Error & {status:number}} 409 'Sin audio' si no hay song_audio.
  */
 export async function dispatchAlign(songId) {
-  const [audio] = await sql`
-    SELECT storage_key AS "storageKey" FROM song_audio WHERE song_id = ${songId}
-  `;
+  // Lecturas independientes por songId: en paralelo (menos latencia antes del
+  // POST a Modal, que ya es lento de por si).
+  const [[audio], [timings]] = await Promise.all([
+    sql`
+      SELECT storage_key AS "storageKey" FROM song_audio WHERE song_id = ${songId}
+    `,
+    sql`
+      SELECT status FROM song_line_timings WHERE song_id = ${songId}
+    `,
+  ]);
   if (!audio) {
     const e = new Error('Sin audio');
     e.status = 409;
     throw e;
   }
-
-  const [timings] = await sql`
-    SELECT status FROM song_line_timings WHERE song_id = ${songId}
-  `;
   if (timings?.status === 'processing') return;
 
   const audioUrl = await signSongAudioDownload(audio.storageKey);

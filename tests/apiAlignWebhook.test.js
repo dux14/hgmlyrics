@@ -205,6 +205,38 @@ describe('POST /api/align/webhook — lines estructuralmente invalidas (200 + fa
     const update = sqlCalls.find((c) => c.text.startsWith('UPDATE song_line_timings'));
     expect(update.text).toContain('failed');
   });
+
+  it('i fuera de orden (no ascendente) → failed, 200', async () => {
+    // El front (seekSyncToLine) asume i ascendente en el orden del array; el
+    // webhook es la frontera de confianza que valida ese invariante.
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    sqlResponses.push([]); // UPDATE ... status='failed'
+    const lines = [
+      { i: 2, startMs: 0 },
+      { i: 0, startMs: 1000 },
+    ];
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', lines }), res);
+    expect(res.statusCode).toBe(200);
+    const update = sqlCalls.find((c) => c.text.startsWith('UPDATE song_line_timings'));
+    expect(update.text).toContain('failed');
+  });
+
+  it('los UPDATE de estado del webhook solo pisan filas en processing', async () => {
+    // Guard anti-clobber: un resultado tardio de un job viejo no debe pisar
+    // 'stale' (edicion de secciones con job en vuelo) ni un ciclo nuevo.
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    sqlResponses.push([]); // UPDATE ... status='ready'
+    const lines = [
+      { i: 0, startMs: 0 },
+      { i: 1, startMs: 1000 },
+    ];
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', lines }), res);
+    expect(res.statusCode).toBe(200);
+    const update = sqlCalls.find((c) => c.text.startsWith('UPDATE song_line_timings'));
+    expect(update.text).toContain("status = 'processing'");
+  });
 });
 
 // ── PUT /api/songs/[id] — marca stale al cambiar secciones ─────────────────

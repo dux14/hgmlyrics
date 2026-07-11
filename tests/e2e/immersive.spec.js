@@ -3,10 +3,9 @@ import { test, expect } from '@playwright/test';
 /**
  * E2E de la vista inmersiva (Task D4, karaoke estilo Apple Music).
  *
- * NOTA: Playwright aún no está instalado ni configurado en este repo
- * (intencional). Este archivo es el artefacto que ejecutará un harness futuro o
- * la validación en el preview de Vercel (mismo patrón que reader-tono.spec.js
- * y dynamic-scroll.spec.js). Asume:
+ * NOTA: @playwright/test está instalado y playwright.config.js (raíz) apunta a
+ * e2e/ (offline). Esta suite vive en tests/e2e/ y corre con un config propio
+ * apuntando aquí (validada 10-jul contra el preview: 6/6 verdes). Asume:
  *   - BASE_URL apunta a un deploy/preview.
  *   - USER_STORAGE_STATE: storageState de un usuario autenticado (sesión
  *     Supabase persistida en localStorage; login wall activo).

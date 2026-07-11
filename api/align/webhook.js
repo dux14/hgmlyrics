@@ -23,11 +23,13 @@ function readRawBody(req) {
 }
 
 // Valida la estructura de `lines` contra la proyeccion canonica de la cancion:
-// cada item necesita {i: entero >=0 sin duplicar, i < canonicalCount} y
-// startMs entero >=0 estrictamente creciente en el orden del array.
+// cada item necesita {i: entero >=0 ascendente sin duplicar, i < canonicalCount}
+// y startMs entero >=0 estrictamente creciente en el orden del array. El orden
+// ascendente de `i` es un invariante que el front asume (seekSyncToLine corta
+// el scan al primer i mayor), asi que se valida en esta frontera de confianza.
 // Devuelve un mensaje de error (string) si es invalido, o null si es valido.
 function validateLines(lines, canonicalCount) {
-  const seen = new Set();
+  let prevI = -1;
   let prevStartMs = -1;
   for (const item of lines) {
     const { i, startMs } = item ?? {};
@@ -37,10 +39,10 @@ function validateLines(lines, canonicalCount) {
     if (i >= canonicalCount) {
       return `i fuera de rango (${i} >= ${canonicalCount})`;
     }
-    if (seen.has(i)) {
-      return `i duplicado: ${i}`;
+    if (i <= prevI) {
+      return `i no ascendente: ${i}`;
     }
-    seen.add(i);
+    prevI = i;
     if (!Number.isInteger(startMs) || startMs < 0) {
       return `startMs invalido para i=${i}: ${startMs}`;
     }
@@ -80,11 +82,15 @@ export default withErrors(async (req, res) => {
     return;
   }
 
+  // Guard de transicion en los tres UPDATE: solo se pisa una fila que sigue en
+  // 'processing'. Si el admin edito secciones con el job en vuelo (PUT marca
+  // 'stale') o re-subio el mp3 (nuevo ciclo pending→processing), el resultado
+  // tardio del job viejo NO debe clobberear ese estado mas nuevo.
   if (error !== undefined) {
     await sql`
       UPDATE song_line_timings
       SET status = 'failed', error = ${String(error).slice(0, 300)}
-      WHERE song_id = ${songId}
+      WHERE song_id = ${songId} AND status = 'processing'
     `;
     res.status(200).json({ status: 'failed' });
     return;
@@ -98,7 +104,7 @@ export default withErrors(async (req, res) => {
     await sql`
       UPDATE song_line_timings
       SET status = 'failed', error = ${`Timings inválidos: ${validationError}`.slice(0, 300)}
-      WHERE song_id = ${songId}
+      WHERE song_id = ${songId} AND status = 'processing'
     `;
     // Estructuralmente valido el request, semanticamente invalidos los datos:
     // no es un error del caller, no reintenta Modal con un 4xx.
@@ -109,7 +115,7 @@ export default withErrors(async (req, res) => {
   await sql`
     UPDATE song_line_timings
     SET status = 'ready', lines = ${sql.json(lines)}, provider = ${provider ?? null}, error = NULL
-    WHERE song_id = ${songId}
+    WHERE song_id = ${songId} AND status = 'processing'
   `;
   res.status(200).json({ status: 'ready' });
 });

@@ -195,6 +195,27 @@ function buildLineContent(s, line, isActive) {
   return buildLetraLineHTML(line.text);
 }
 
+/**
+ * Clase de modo aplicada al `.imm-line` — réplica EXACTA de la selección de
+ * builder que hace `buildLineContent`, para que `.float-label`/`.mix-rail`
+ * queden dentro del ancestro correcto (`lyrics__line--chords/--mix/--tono`,
+ * mismas clases de SongView) y reserven su propio espacio en vez de caer al
+ * `position:absolute` por defecto de `.float-label` (bug: acordes pisando la
+ * línea de arriba).
+ * @param {object} s @param {object} line @param {boolean} isActive
+ * @returns {string} clase o `''`
+ */
+function lineModifierClass(s, line, isActive) {
+  if (line.spoken || line.text.trim() === '') return '';
+  if (s.mode === 'letra') return '';
+  if (s.mode === 'chords') return 'lyrics__line--chords';
+  if (s.mode === 'mixed') {
+    return isActive && s.activeVoiceId ? 'lyrics__line--mix' : 'lyrics__line--chords';
+  }
+  // mode === 'tono'
+  return isActive && s.activeVoiceId ? 'lyrics__line--tono' : '';
+}
+
 /** Clase de distancia (spec §1): activa/±1/±2/±3/resto. */
 function distanceClass(dist) {
   if (dist === 0) return 'imm-line--active';
@@ -225,19 +246,34 @@ function renderRoll(s) {
     .map((line, i) => {
       const isActive = i === s.index;
       const spokenCls = line.spoken ? ' imm-line--spoken' : '';
-      return `<div class="imm-line${spokenCls}" data-i="${i}">${buildLineContent(s, line, isActive)}</div>`;
+      const modifierCls = lineModifierClass(s, line, isActive);
+      const modifierClsAttr = modifierCls ? ` ${modifierCls}` : '';
+      return `<div class="imm-line${spokenCls}${modifierClsAttr}" data-i="${i}">${buildLineContent(s, line, isActive)}</div>`;
     })
     .join('');
   s.lineEls = Array.from(s.els.roll.children);
   updateDistanceClasses(s);
 }
 
-/** Re-pinta el contenido de UNA línea (se llama en `goTo` para el índice viejo y el nuevo). */
+/**
+ * Re-pinta el contenido de UNA línea (se llama en `goTo` para el índice viejo
+ * y el nuevo). En `mixed`/`tono` el builder de una línea cambia según sea o
+ * no la activa — reasigna `className` completo (no solo `innerHTML`) para
+ * que la clase de modo (`lineModifierClass`) siga la nueva selección; la
+ * clase de distancia vigente se preserva y se recalcula aparte en
+ * `updateDistanceClasses`.
+ */
 function renderLineContent(s, index) {
   const el = s.lineEls[index];
   const line = s.lines[index];
   if (!el || !line) return;
-  el.innerHTML = buildLineContent(s, line, index === s.index);
+  const isActive = index === s.index;
+  el.innerHTML = buildLineContent(s, line, isActive);
+  const spokenCls = line.spoken ? ' imm-line--spoken' : '';
+  const modifierCls = lineModifierClass(s, line, isActive);
+  const modifierClsAttr = modifierCls ? ` ${modifierCls}` : '';
+  const distanceCls = ` ${distanceClass(Math.abs(index - s.index))}`;
+  el.className = `imm-line${spokenCls}${modifierClsAttr}${distanceCls}`;
 }
 
 function updateSectionLabel(s) {
@@ -689,9 +725,10 @@ function updateVoiceChipsVisibility(s) {
 /**
  * Cambia el modo de contenido (persistido en immersiveStore) y re-renderiza
  * TODAS las líneas — el modo cambia el builder de cada línea, no solo el de
- * la activa. Modo 'tono' sin voz elegida auto-abre el sheet en la voz (paridad
- * con el fix fd8ea72 del extinto modo escenario/SongView: sin esto el usuario
- * no ve dónde elegir su voz).
+ * la activa. Modo 'tono' o 'mixed' sin voz elegida auto-abre el sheet en la
+ * voz (paridad con el fix fd8ea72 del extinto modo escenario/SongView: sin
+ * esto el usuario no ve dónde elegir su voz, y en 'mixed' tampoco vería el
+ * tono nunca — cae en silencio a solo-acordes).
  * @param {object} s @param {string} mode
  */
 function applyMode(s, mode) {
@@ -702,7 +739,7 @@ function applyMode(s, mode) {
   updateSectionLabel(s);
   updateVoiceChipsVisibility(s);
   retargetScroll(s);
-  if (mode === 'tono' && !s.activeVoiceId) openOptions(s);
+  if ((mode === 'tono' || mode === 'mixed') && !s.activeVoiceId) openOptions(s);
 }
 
 function selectVoice(s, category) {
@@ -1046,9 +1083,9 @@ export function enterImmersive(songViewEl, ctx = {}) {
     onNav,
   });
 
-  // Modo 'tono' sin voz elegida al entrar (p.ej. heredado de layerStore):
-  // auto-abre el sheet en la voz, misma paridad que SongView.
-  if (mode === 'tono' && !activeVoiceId) openOptions(session);
+  // Modo 'tono'/'mixed' sin voz elegida al entrar (p.ej. heredado de
+  // layerStore): auto-abre el sheet en la voz, misma paridad que SongView.
+  if ((mode === 'tono' || mode === 'mixed') && !activeVoiceId) openOptions(session);
 }
 
 export function exitImmersive() {

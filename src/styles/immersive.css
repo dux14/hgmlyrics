@@ -165,6 +165,42 @@ body.immersive-active {
   font-weight: 600;
 }
 
+/* ── Anotaciones (acordes/tono) subordinadas a la letra ──────────────────
+   Los tamaños de components.css (chord-label, mix-rail) están calibrados
+   para la vista normal; sobre las fuentes del rollo (2.1rem activa / 1.5rem
+   resto) quedaban ilegiblemente grandes e inflaban la línea activa. Escala
+   fija: la anotación nunca pasa de ~0.55em de su línea (jerarquía por
+   escala, la letra manda). Scoped a `.imm-v1` — el modo lectura normal
+   (SongView/components.css) queda intacto. */
+.imm-v1 .float-label.chord-label {
+  font-size: 0.5em;
+  top: auto;
+}
+.imm-v1 .float-label.tono-note {
+  font-size: 0.52em;
+}
+.imm-v1 .lyrics__line--chords .float-label {
+  margin-bottom: 0.15em;
+}
+.imm-v1 .lyrics__line--tono .float-label {
+  margin-bottom: 0.3em;
+}
+/* Rieles del mix compactos: la línea activa (2.1rem) no debe explotar. */
+.imm-v1 .mix-rail--chord {
+  font-size: 0.5em;
+  height: 1.35em;
+}
+.imm-v1 .mix-rail--note {
+  font-size: 0.52em;
+  height: 1.5em;
+  padding-top: 0.4em;
+}
+/* Sin margen doble: .imm-line ya trae padding vertical propio. */
+.imm-v1 .lyrics__line--tono,
+.imm-v1 .lyrics__line--mix {
+  margin-bottom: 0;
+}
+
 /* ── FAB pausa (modo timer) ── */
 
 .imm-v1__fab {

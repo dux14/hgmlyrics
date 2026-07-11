@@ -200,10 +200,10 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   // When false, EVERYTHING below related to voz_tono is skipped so the v1
   // render output, event wiring and save payload stay byte-for-byte identical.
   const v2Enabled = isFeatureEnabled('voz_tono');
-  const voiceRoster = v2Enabled
-    ? Array.isArray(existingSong?.voiceRoster)
-      ? existingSong.voiceRoster.map((v) => ({ ...v }))
-      : []
+  // El roster de datos siempre round-tripea, apagado o no el flag: este solo
+  // gatea la UI de edición de tono, no el guardado de lo que ya existe.
+  const voiceRoster = Array.isArray(existingSong?.voiceRoster)
+    ? existingSong.voiceRoster.map((v) => ({ ...v }))
     : [];
 
   // Build the editor HTML
@@ -1146,7 +1146,7 @@ export function postSaveTarget({ from, isNew }) {
 
 async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = {}) {
   const btn = container.querySelector('#editor-save');
-  const roster = v2.v2Enabled ? v2.voiceRoster || [] : [];
+  const roster = v2.voiceRoster || [];
   btn.disabled = true;
   btn.textContent = 'Guardando...';
   clearSaveError(container);

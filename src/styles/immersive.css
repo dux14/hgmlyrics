@@ -184,15 +184,28 @@ body.immersive-active {
 .imm-v1 .lyrics__line--tono .float-label {
   margin-bottom: 0.3em;
 }
-/* Rieles del mix compactos: la línea activa (2.1rem) no debe explotar. */
+/* Rieles del mix compactos: la línea activa (2.1rem) no debe explotar.
+   OJO: height/padding se resuelven contra el font-size YA reducido del riel.
+   La altura debe cubrir el contenido real (padding del riel + padding y
+   borde de la nota + 1em de texto); si queda corta, la nota se desborda
+   hacia abajo y se cruza con los acordes de la fila siguiente al hacer
+   wrap la línea. */
 .imm-v1 .mix-rail--chord {
   font-size: 0.5em;
-  height: 1.35em;
+  height: 1.4em;
 }
 .imm-v1 .mix-rail--note {
   font-size: 0.52em;
-  height: 1.5em;
-  padding-top: 0.4em;
+  height: 1.75em;
+  padding-top: 0.3em;
+}
+.imm-v1 .mix-rail--note i {
+  padding-top: 0.2em;
+}
+/* Aire entre filas cuando la línea mixta hace wrap: separa el riel de
+   notas de una fila de las píldoras de acorde de la siguiente. */
+.imm-v1 .mix-seg {
+  margin-bottom: 0.3em;
 }
 /* Sin margen doble: .imm-line ya trae padding vertical propio. */
 .imm-v1 .lyrics__line--tono,

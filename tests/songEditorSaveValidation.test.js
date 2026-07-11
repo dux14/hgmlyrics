@@ -56,6 +56,21 @@ const FAKE_SONG_BAD_CHORD = {
   ],
 };
 
+// Línea con texto vacío pero con una voz asignada (groups): blocksToSectionsV3
+// ya no la descarta en silencio (ver songEditorV3.test.js), así que la
+// validación pre-guardado debe bloquear el PUT con un error legible en vez de
+// dejar pasar una asignación que no coincide con ningún texto.
+const FAKE_SONG_EMPTY_LINE_WITH_GROUP = {
+  ...FAKE_SONG_BAD_CHORD,
+  sections: [
+    {
+      type: 'verse',
+      label: 'Verso 1',
+      lines: [{ text: '', groups: [{ start: 0, end: 2, voiceId: 'sop1' }] }],
+    },
+  ],
+};
+
 const FAKE_SONG_OK = {
   ...FAKE_SONG_BAD_CHORD,
   sections: [
@@ -106,13 +121,40 @@ describe('SongEditor — validación pre-guardado', () => {
     expect(songCalls).toHaveLength(0);
   });
 
-  it('con un payload válido, guarda con un único fetch (canción + links juntos)', async () => {
-    store.fetchSongDetail.mockResolvedValue({ ...FAKE_SONG_OK, sections: [...FAKE_SONG_OK.sections] });
+  it('bloquea el guardado con un mensaje legible cuando una línea vacía tiene una voz asignada', async () => {
+    store.fetchSongDetail.mockResolvedValue({
+      ...FAKE_SONG_EMPTY_LINE_WITH_GROUP,
+      sections: [...FAKE_SONG_EMPTY_LINE_WITH_GROUP.sections],
+    });
     await renderSongEditor(container, 'song-1');
     await vi.waitFor(() => expect(container.querySelector('#editor-save')).not.toBeNull());
 
     container.querySelector('#editor-save').click();
-    await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/songs/song-1', expect.any(Object)));
+    await vi.waitFor(() => {
+      const err = container.querySelector('#editor-save-error');
+      expect(err.hidden).toBe(false);
+    });
+
+    const errorText = container.querySelector('#editor-save-error').textContent;
+    expect(errorText).toMatch(/Verso 1, línea 1/);
+    expect(errorText).toMatch(/asignación de voz/);
+    // No debe haber llamado a /api/songs/song-1 (ni ningún fetch de guardado).
+    const songCalls = global.fetch.mock.calls.filter((c) => c[0] === '/api/songs/song-1');
+    expect(songCalls).toHaveLength(0);
+  });
+
+  it('con un payload válido, guarda con un único fetch (canción + links juntos)', async () => {
+    store.fetchSongDetail.mockResolvedValue({
+      ...FAKE_SONG_OK,
+      sections: [...FAKE_SONG_OK.sections],
+    });
+    await renderSongEditor(container, 'song-1');
+    await vi.waitFor(() => expect(container.querySelector('#editor-save')).not.toBeNull());
+
+    container.querySelector('#editor-save').click();
+    await vi.waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith('/api/songs/song-1', expect.any(Object)),
+    );
 
     const call = global.fetch.mock.calls.find((c) => c[0] === '/api/songs/song-1');
     const body = JSON.parse(call[1].body);

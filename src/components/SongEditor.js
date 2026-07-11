@@ -124,6 +124,8 @@ export function blocksToSectionsV3(blocks) {
           (l) =>
             l.text.trim() !== '' ||
             (l.chords && l.chords.length > 0) ||
+            // groups: conserva la línea aunque el texto quede vacío para no perder la
+            // voz/tono asignado en silencio; validateSongPreSave avisa al guardar.
             (Array.isArray(l.groups) && l.groups.length > 0) ||
             l.annotation ||
             l.spoken,

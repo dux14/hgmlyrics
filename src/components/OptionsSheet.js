@@ -40,6 +40,8 @@ let openEls = null;
  *   activeVoiceCategory?: string|null,
  *   showTuner?: boolean,
  *   tunerOn?: boolean,
+ *   showPlayerToggle?: boolean,
+ *   playerOn?: boolean,
  *   onTranspose?: (dir: 1|-1) => void,
  *   onResetTranspose?: () => void,
  *   onToggleAccidental?: () => void,
@@ -49,10 +51,12 @@ let openEls = null;
  *   onModeChange?: (mode: string) => void,
  *   onVoiceChange?: (category: string) => void,
  *   onTunerToggle?: () => void,
+ *   onPlayerToggle?: (on: boolean) => void,
  *   onClose?: () => void,
- * }} opts modes/voiceOptions/showTuner son opcionales (T-inmersiva): sin
- *   ellos las secciones MODO/VOZ/AFINADOR simplemente no se pintan, así que
- *   ImmersiveView/SongView (que no los pasan) quedan sin cambios de comportamiento.
+ * }} opts modes/voiceOptions/showTuner/showPlayerToggle son opcionales
+ *   (T-inmersiva): sin ellos las secciones MODO/VOZ/AFINADOR/PISTA simplemente
+ *   no se pintan, así que ImmersiveView/SongView (que no los pasan) quedan
+ *   sin cambios de comportamiento.
  * @returns {{ close: () => void, sheet: HTMLElement }}
  */
 export function openOptionsSheet(opts) {
@@ -165,6 +169,19 @@ export function openOptionsSheet(opts) {
     </div>`
     : '';
 
+  // PISTA (D3, flag immersive_player): toggle "Reproducir pista" — solo
+  // ImmersiveView lo pasa (`showPlayerToggle: true`) cuando ya está en modo
+  // sync (audio+timings listos); SongView y el resto queda sin cambios.
+  const playerSectionHtml = opts.showPlayerToggle
+    ? `
+    <div class="osheet__section">
+      <div class="osheet__h syn">PISTA</div>
+      <div class="osheet__seg">
+        <button class="osheet__seg-btn${opts.playerOn ? ' is-active' : ''}" data-act="player-toggle" id="osheet-player" aria-pressed="${!!opts.playerOn}">Reproducir pista</button>
+      </div>
+    </div>`
+    : '';
+
   sheet.innerHTML = `
     <div class="osheet__grab"></div>
     ${modeSectionHtml}
@@ -173,6 +190,7 @@ export function openOptionsSheet(opts) {
     ${notationSectionHtml}
     ${sizeSectionHtml}
     ${tunerSectionHtml}
+    ${playerSectionHtml}
     ${autoscrollSectionHtml}
   `;
 
@@ -247,6 +265,11 @@ export function openOptionsSheet(opts) {
         b.classList.toggle('is-active', nowOn);
         b.textContent = nowOn ? 'Activado' : 'Desactivado';
         opts.onTunerToggle?.(nowOn);
+      } else if (a === 'player-toggle') {
+        const nowOn = b.getAttribute('aria-pressed') !== 'true';
+        b.setAttribute('aria-pressed', String(nowOn));
+        b.classList.toggle('is-active', nowOn);
+        opts.onPlayerToggle?.(nowOn);
       }
     }),
   );

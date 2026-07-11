@@ -8,12 +8,17 @@
  * entrada/salida (`enterImmersive`/`exitImmersive`) es el mismo que tenía el
  * modo escenario, para que SongView lo consuma sin cambios de ctx (Task C5).
  *
- * Motor de avance de esta fase: SOLO TimerEngine (segundos-por-línea desde
- * autoscroll.js). TimingEngine (audio real vía
- * `song_line_timings`) y la barra de player son Fase D — esta task deja los
- * slots montados más vacíos.
+ * Motor de avance: arranca SIEMPRE en TimerEngine (segundos-por-línea desde
+ * autoscroll.js, sin bloquear la entrada) y se promueve en caliente a
+ * TimingEngine (audio real vía `song_line_timings`, Task D3) si al resolver
+ * `getSongAudio` hay flag `immersive_player` + timings `ready` + audio. Si el
+ * <audio> falla en runtime, degrada de vuelta a TimerEngine sin salir de la
+ * vista (D3, spec §3).
  */
 import { icon } from '../lib/icons.js';
+import { getSongAudio } from '../lib/songAudioApi.js';
+import { createTimingEngine } from '../lib/timingEngine.js';
+import { showToast } from '../lib/toast.js';
 import { createWakeLock } from '../lib/wakeLock.js';
 import { rosterByCategory, CANONICAL_VOICE_ORDER, getVoiceLabel } from '../lib/voiceSystem.js';
 import {
@@ -288,9 +293,10 @@ function stopScrollLoop(s) {
   s.rafId = null;
 }
 
-// ── MOTOR DE AVANCE (TimerEngine embebido — TimingEngine es Fase D) ──────
+// ── MOTOR DE AVANCE (TimerEngine embebido, o TimingEngine en modo sync) ──
 
 function scheduleAdvance(s) {
+  if (s.engineMode === 'sync') return; // el audio manda el avance, no el timer
   clearTimeout(s.timer);
   if (s.paused) return;
   const cur = s.lines[s.index];
@@ -298,8 +304,8 @@ function scheduleAdvance(s) {
   s.timer = setTimeout(() => goTo(s, s.index + 1), ms);
 }
 
-/** Navega a `index` (clampado): re-pinta contenido/distancia/scroll y reprograma el timer. */
-function goTo(s, index) {
+/** Re-pinta contenido/distancia/sección/nota/scroll para `index` (clampado). Compartido por goTo/goToSync. */
+function setActiveIndex(s, index) {
   const clamped = Math.max(0, Math.min(s.lines.length - 1, index));
   const prevIndex = s.index;
   s.index = clamped;
@@ -311,10 +317,23 @@ function goTo(s, index) {
   updateSectionLabel(s);
   updateTunerNote(s);
   retargetScroll(s);
+  return clamped;
+}
+
+/** Navega a `index` (TimerEngine): re-pinta y reprograma el timer. */
+function goTo(s, index) {
+  setActiveIndex(s, index);
   scheduleAdvance(s);
 }
 
+/** Navega a `index` por un evento del TimingEngine (audio real): sin timer propio. */
+function goToSync(s, index) {
+  removeInterlude(s);
+  setActiveIndex(s, index);
+}
+
 function togglePause(s) {
+  if (s.engineMode === 'sync') return; // sin FAB propio en modo sync (pausa = la del player)
   s.paused = !s.paused;
   s.els.overlay.classList.toggle('imm-v1--paused', s.paused);
   s.els.fabIcon.innerHTML = icon(s.paused ? 'play' : 'pause', { size: 22 });
@@ -332,6 +351,7 @@ function applySpeed(s, next) {
 }
 
 function adjustSpeed(s, delta) {
+  if (s.engineMode === 'sync') return; // la velocidad de avance la da el audio, no hay perilla
   const next = Math.max(AUTOSCROLL_SPEED_MIN, Math.min(AUTOSCROLL_SPEED_MAX, s.speed + delta));
   if (next === s.speed) return;
   applySpeed(s, next);
@@ -350,6 +370,240 @@ function recomputeLines(s) {
   updateSectionLabel(s);
   updateTunerNote(s);
   retargetScroll(s);
+}
+
+// ── PLAYER SINCRONIZADO POR TIMINGS (D3, flag `immersive_player`) ────────
+
+function formatTime(sec) {
+  if (!Number.isFinite(sec) || sec < 0) return '0:00';
+  const m = Math.floor(sec / 60);
+  const r = Math.floor(sec % 60)
+    .toString()
+    .padStart(2, '0');
+  return `${m}:${r}`;
+}
+
+/**
+ * Dispara la carga async de audio+timings al entrar (no bloquea el montaje:
+ * la vista arranca siempre en TimerEngine — spec §3) y promueve en caliente a
+ * TimingEngine si al resolver hay flag + timings `ready` + audio. Cualquier
+ * fallo (flag off, sin audio, timings no listos, red caída) deja la vista tal
+ * cual estaba: es degradación pura, nunca lanza.
+ */
+function maybeLoadSyncAudio(s) {
+  if (!isFeatureEnabled('immersive_player')) return;
+  getSongAudio(s.songId).then((data) => {
+    if (session !== s || s.engineMode === 'sync') return; // salió, re-entró o ya se promovió
+    const audio = data?.audio;
+    const timings = data?.timings;
+    if (
+      !audio?.url ||
+      !timings ||
+      timings.status !== 'ready' ||
+      !Array.isArray(timings.lines) ||
+      timings.lines.length === 0
+    ) {
+      return;
+    }
+    promoteToSync(s, audio, timings.lines);
+  });
+}
+
+/** Promueve la sesión de TimerEngine a TimingEngine: monta `<audio>` + player bar, oculta el FAB. */
+function promoteToSync(s, audio, timingLines) {
+  if (s.engineMode === 'sync') return;
+  clearTimeout(s.timer);
+  s.timer = null;
+
+  const audioEl = document.createElement('audio');
+  audioEl.id = 'imm-audio';
+  audioEl.src = audio.url;
+  audioEl.preload = 'auto';
+  s.audioEl = audioEl;
+  s.durationSecHint = Number.isFinite(audio.durationSec) ? audio.durationSec : null;
+
+  s.timingLines = timingLines;
+  s.timingByLineIndex = new Map(timingLines.map((l, pos) => [l.i, pos]));
+  s.timingEngine = createTimingEngine({
+    lines: timingLines,
+    onLineChange: (pos) => goToSync(s, timingLines[pos].i),
+    onInterlude: (payload) => showInterlude(s, payload),
+  });
+  s.timingEngine.attach(audioEl);
+
+  const onAudioError = () => {
+    showToast('No se pudo reproducir la pista de audio', { type: 'error' });
+    fallbackToTimer(s);
+  };
+  audioEl.addEventListener('error', onAudioError);
+  s.onAudioError = onAudioError;
+
+  s.engineMode = 'sync';
+  s.els.fab.hidden = true;
+  mountPlayerBar(s);
+}
+
+/** Cae en caliente de TimingEngine a TimerEngine (p.ej. error del `<audio>`), sin salir de la vista. */
+function fallbackToTimer(s) {
+  if (s.engineMode !== 'sync') return;
+  s.timingEngine?.detach();
+  s.timingEngine = null;
+  unmountPlayerBar(s);
+  cleanupAudioEl(s);
+  removeInterlude(s);
+  s.els.fab.hidden = false;
+  s.engineMode = 'timer';
+  scheduleAdvance(s);
+}
+
+/** Pausa + vacía + desengancha el `<audio>` (todos los caminos de salida/degradación pasan por acá). */
+function cleanupAudioEl(s) {
+  if (!s.audioEl) return;
+  s.audioEl.pause();
+  if (s.onAudioError) s.audioEl.removeEventListener('error', s.onAudioError);
+  s.audioEl.src = '';
+  s.audioEl.remove();
+  s.audioEl = null;
+  s.onAudioError = null;
+}
+
+/**
+ * Seek en modo sync: tap en línea busca su `startMs` y mueve `audio.currentTime`
+ * (NO hay `goTo` directo — el highlight llega vía el próximo `timeupdate`,
+ * mismo contrato que `timingEngine.seekToLine`). Líneas sin timing propio
+ * (mapeo sparse del back, p.ej. instrumentales) caen al último timing conocido
+ * en o antes de esa línea.
+ */
+function seekSyncToLine(s, idx) {
+  if (!s.audioEl || !s.timingEngine) return;
+  const pos = s.timingByLineIndex.get(idx);
+  if (pos !== undefined) {
+    s.timingEngine.seekToLine(pos);
+    return;
+  }
+  let best = null;
+  for (const l of s.timingLines) {
+    if (l.i <= idx) best = l;
+    else break;
+  }
+  if (best) s.audioEl.currentTime = best.startMs / 1000;
+}
+
+/** Monta la barra de player en `#imm-player-slot`: scrubber + play/pausa + tiempos. */
+function mountPlayerBar(s) {
+  const slot = s.els.playerSlot;
+  slot.hidden = false;
+  slot.innerHTML = `
+    <div class="imm-player" id="imm-player">
+      <button class="imm-player__play" id="imm-player-play" type="button" aria-label="Reproducir pista">${icon('play', { size: 18 })}</button>
+      <span class="imm-player__time" id="imm-player-time">0:00</span>
+      <input class="imm-player__scrubber" id="imm-player-scrubber" type="range" min="0" max="0" step="0.1" value="0" aria-label="Progreso de la pista" />
+      <span class="imm-player__time" id="imm-player-duration">0:00</span>
+    </div>`;
+  slot.appendChild(s.audioEl);
+
+  const playBtn = slot.querySelector('#imm-player-play');
+  const scrubber = slot.querySelector('#imm-player-scrubber');
+  const timeEl = slot.querySelector('#imm-player-time');
+  const durEl = slot.querySelector('#imm-player-duration');
+
+  const onPlay = () => {
+    playBtn.innerHTML = icon('pause', { size: 18 });
+    playBtn.setAttribute('aria-label', 'Pausar pista');
+  };
+  const onPause = () => {
+    playBtn.innerHTML = icon('play', { size: 18 });
+    playBtn.setAttribute('aria-label', 'Reproducir pista');
+  };
+  const onTimeUpdate = () => {
+    scrubber.value = String(s.audioEl.currentTime);
+    timeEl.textContent = formatTime(s.audioEl.currentTime);
+  };
+  const onLoadedMeta = () => {
+    scrubber.max = String(s.audioEl.duration || 0);
+    durEl.textContent = formatTime(s.audioEl.duration);
+  };
+  const onPlayBtnClick = () => {
+    if (s.audioEl.paused) s.audioEl.play().catch(() => {});
+    else s.audioEl.pause();
+  };
+  const onScrubberInput = () => {
+    s.audioEl.currentTime = Number(scrubber.value);
+  };
+
+  s.audioEl.addEventListener('play', onPlay);
+  s.audioEl.addEventListener('pause', onPause);
+  s.audioEl.addEventListener('timeupdate', onTimeUpdate);
+  s.audioEl.addEventListener('loadedmetadata', onLoadedMeta);
+  playBtn.addEventListener('click', onPlayBtnClick);
+  scrubber.addEventListener('input', onScrubberInput);
+
+  // jsdom no dispara `loadedmetadata` (no decodifica audio real): usa la
+  // duración conocida por el backend como fallback inmediato.
+  if (Number.isFinite(s.audioEl.duration) && s.audioEl.duration > 0) onLoadedMeta();
+  else if (Number.isFinite(s.durationSecHint)) {
+    scrubber.max = String(s.durationSecHint);
+    durEl.textContent = formatTime(s.durationSecHint);
+  }
+
+  s.playerListeners = {
+    onPlay,
+    onPause,
+    onTimeUpdate,
+    onLoadedMeta,
+    onPlayBtnClick,
+    onScrubberInput,
+    playBtn,
+    scrubber,
+  };
+}
+
+/** Desmonta la barra de player y sus listeners (sin tocar el `<audio>`, eso es `cleanupAudioEl`). */
+function unmountPlayerBar(s) {
+  const l = s.playerListeners;
+  if (l && s.audioEl) {
+    s.audioEl.removeEventListener('play', l.onPlay);
+    s.audioEl.removeEventListener('pause', l.onPause);
+    s.audioEl.removeEventListener('timeupdate', l.onTimeUpdate);
+    s.audioEl.removeEventListener('loadedmetadata', l.onLoadedMeta);
+    l.playBtn.removeEventListener('click', l.onPlayBtnClick);
+    l.scrubber.removeEventListener('input', l.onScrubberInput);
+  }
+  s.playerListeners = null;
+  s.els.playerSlot.innerHTML = '';
+  s.els.playerSlot.hidden = true;
+}
+
+/**
+ * Nodo `.imm-interlude` (3 puntos) entre la línea `index` y la siguiente,
+ * mientras dura el hueco (spec §3, solo modo sync). Reusa el mismo nodo
+ * mientras siga siendo el mismo hueco (varios `timeupdate` dentro de él);
+ * se retira al entrar la siguiente línea (`goToSync` -> `removeInterlude`).
+ */
+function showInterlude(s, { index, progress }) {
+  if (s.engineMode !== 'sync') return;
+  let el = s.els.roll.querySelector('.imm-interlude');
+  if (!el || el.dataset.after !== String(index)) {
+    removeInterlude(s);
+    el = document.createElement('div');
+    el.className = 'imm-interlude';
+    el.dataset.after = String(index);
+    el.innerHTML =
+      '<span class="imm-interlude__dot"></span><span class="imm-interlude__dot"></span><span class="imm-interlude__dot"></span>';
+    const afterEl = s.lineEls[index];
+    if (afterEl) afterEl.insertAdjacentElement('afterend', el);
+    else s.els.roll.appendChild(el);
+  }
+  const dots = el.querySelectorAll('.imm-interlude__dot');
+  dots.forEach((dot, i) => {
+    const threshold = i / dots.length;
+    const local = Math.max(0, Math.min(1, (progress - threshold) * dots.length));
+    dot.style.setProperty('--imm-dot-scale', local.toFixed(2));
+  });
+}
+
+function removeInterlude(s) {
+  s.els.roll.querySelector('.imm-interlude')?.remove();
 }
 
 // ── CONTROLES / CHROME AUTO-HIDE ──────────────────────────────────────────
@@ -411,12 +665,13 @@ function openOptions(s) {
   showControls(s);
   const activeCategory =
     (s.song.voiceRoster || []).find((v) => v.id === s.activeVoiceId)?.category ?? null;
+  const isSync = s.engineMode === 'sync';
   openOptionsSheet({
     showTono: false, // sin setter de transposición propio en el ctx
     notation: typeof s.ctx.getNotation === 'function' ? s.ctx.getNotation() : 'anglo',
     fontLabel: s.fontScale.toFixed(2),
     autoscrollLabel: speedToPercentLabel(s.speed),
-    showAutoscroll: true, // solo hay TimerEngine en esta fase
+    showAutoscroll: !isSync, // VELOCIDAD solo aplica al TimerEngine — en sync manda el audio
     modes: s.modes.map((m) => ({ value: m, label: MODE_LABELS[m] })),
     mode: s.mode,
     voiceOptions:
@@ -429,6 +684,13 @@ function openOptions(s) {
     activeVoiceCategory: activeCategory,
     showTuner: true,
     tunerOn: s.tunerOn,
+    showPlayerToggle: isSync,
+    playerOn: isSync && !!s.audioEl && !s.audioEl.paused,
+    onPlayerToggle: (on) => {
+      if (!s.audioEl) return;
+      if (on) s.audioEl.play().catch(() => {});
+      else s.audioEl.pause();
+    },
     onModeChange: (mode) => applyMode(s, mode),
     onVoiceChange: (category) => selectVoice(s, category),
     onNotationChange: (value) => {
@@ -573,6 +835,17 @@ export function enterImmersive(songViewEl, ctx = {}) {
     rafId: null,
     lastFrameTs: null,
     els,
+    // Player sincronizado por timings (D3, flag immersive_player): arranca
+    // SIEMPRE en 'timer' — la promoción a 'sync' es en caliente tras el
+    // await de getSongAudio (maybeLoadSyncAudio), nunca bloquea la entrada.
+    engineMode: 'timer',
+    audioEl: null,
+    durationSecHint: null,
+    onAudioError: null,
+    timingEngine: null,
+    timingLines: [],
+    timingByLineIndex: new Map(),
+    playerListeners: null,
   };
 
   const activeCategory =
@@ -586,6 +859,7 @@ export function enterImmersive(songViewEl, ctx = {}) {
   els.roll.style.transform = 'translateY(0px)';
   retargetScroll(session);
   scheduleAdvance(session);
+  maybeLoadSyncAudio(session);
 
   // El afinador (widget híbrido aprobado, `FloatingTuner.js`) se monta bajo
   // demanda dentro de `#imm-tuner-panel` recién cuando el usuario togglea
@@ -604,7 +878,9 @@ export function enterImmersive(songViewEl, ctx = {}) {
     const lineEl = e.target.closest('[data-i]');
     if (lineEl) {
       showControls(session);
-      goTo(session, Number(lineEl.dataset.i));
+      const idx = Number(lineEl.dataset.i);
+      if (session.engineMode === 'sync') seekSyncToLine(session, idx);
+      else goTo(session, idx);
       return;
     }
     const chromeHidden = els.chrome.classList.contains('imm-v1__chrome--hidden');
@@ -635,8 +911,13 @@ export function enterImmersive(songViewEl, ctx = {}) {
     if (!isVerticalSwipe && !isHorizontalSwipe) return; // bajo el umbral: lo maneja el click
     session.suppressClick = true;
     showControls(session);
-    if (isVerticalSwipe) adjustSpeed(session, dy < 0 ? GESTURE_SPEED_STEP : -GESTURE_SPEED_STEP);
-    else goTo(session, session.index + (dx < 0 ? 1 : -1));
+    if (isVerticalSwipe) {
+      adjustSpeed(session, dy < 0 ? GESTURE_SPEED_STEP : -GESTURE_SPEED_STEP);
+    } else {
+      const idx = session.index + (dx < 0 ? 1 : -1);
+      if (session.engineMode === 'sync') seekSyncToLine(session, idx);
+      else goTo(session, idx);
+    }
   };
   els.viewport.addEventListener('pointerdown', onPointerDown);
   document.addEventListener('pointermove', onPointerMove);
@@ -722,6 +1003,13 @@ export function exitImmersive() {
   clearTimeout(timer);
   clearTimeout(hideControlsTimer);
   stopScrollLoop(session);
+
+  // Player sincronizado (D3): el audio.pause()+src='' pasa por TODOS los
+  // caminos de salida, esté o no promovido a sync (cleanupAudioEl es no-op
+  // sin audioEl) — sin esto una pista quedaría sonando tras salir.
+  session.timingEngine?.detach();
+  cleanupAudioEl(session);
+  removeInterlude(session);
 
   // El sheet vive fuera del overlay (document.body): si se sale sin cerrarlo
   // queda huérfano sobre la vista normal (mismo bug del extinto modo

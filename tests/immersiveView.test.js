@@ -14,8 +14,18 @@ vi.mock('../src/lib/pitch.js', () => ({
 
 // 'voz_tono' siempre on para poder probar mixed/tono sin depender del
 // catálogo real de flags (mismo patrón que tests/stageMode.test.js).
+// 'immersive_player' (D3) default OFF — cada test del player lo enciende
+// explícitamente, así el resto de la suite (30+ tests preexistentes) no se
+// ve afectada por el nuevo flag.
 vi.mock('../src/lib/authStore.js', () => ({
-  isFeatureEnabled: vi.fn(() => true),
+  isFeatureEnabled: vi.fn((key) => key === 'voz_tono'),
+}));
+
+// getSongAudio (D3): default null (sin audio/timings) para que ningún test
+// preexistente dispare una promoción a sync por accidente; cada test del
+// player lo sobreescribe con mockResolvedValueOnce.
+vi.mock('../src/lib/songAudioApi.js', () => ({
+  getSongAudio: vi.fn(() => Promise.resolve(null)),
 }));
 
 import { enterImmersive, exitImmersive } from '../src/components/ImmersiveView.js';
@@ -26,6 +36,14 @@ import {
   buildMixedLineHTML,
 } from '../src/lib/lyricsRender.js';
 import { closeOptionsSheet } from '../src/components/OptionsSheet.js';
+import { isFeatureEnabled } from '../src/lib/authStore.js';
+import { getSongAudio } from '../src/lib/songAudioApi.js';
+
+/** Deja correr la cadena de microtasks del `getSongAudio(...).then(...)` de maybeLoadSyncAudio. */
+async function flushAsync() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 function mountSongView() {
   document.body.innerHTML = `<div class="song-view" id="sv"></div>`;
@@ -133,6 +151,9 @@ beforeEach(() => {
   setLayer('tono', false);
   detectorStart.mockClear();
   detectorStop.mockClear();
+  isFeatureEnabled.mockImplementation((key) => key === 'voz_tono');
+  getSongAudio.mockReset();
+  getSongAudio.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -620,5 +641,169 @@ describe('wake lock', () => {
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
     expect(() => document.dispatchEvent(new Event('visibilitychange'))).not.toThrow();
+  });
+});
+
+// D3: player sincronizado por timings (flag `immersive_player`). buildSong()
+// tiene 3 líneas (i 0,1,2); el hueco entre la línea 1 (2000ms) y la línea 2
+// (12000ms) es de 10s > 5s -> interludio (mismo umbral de timingEngine.js).
+describe('player sincronizado por timings (flag immersive_player)', () => {
+  const readyTimings = () => ({
+    audio: { url: 'https://storage.example/full.mp3', durationSec: 20 },
+    timings: {
+      status: 'ready',
+      lines: [
+        { i: 0, startMs: 0 },
+        { i: 1, startMs: 2000 },
+        { i: 2, startMs: 12000 },
+      ],
+    },
+  });
+
+  beforeEach(() => {
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+  });
+
+  it('flag off: nunca hay player bar, sigue en TimerEngine aunque haya timings ready', async () => {
+    getSongAudio.mockResolvedValue(readyTimings());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    expect(document.getElementById('imm-player-slot').hidden).toBe(true);
+    expect(document.getElementById('imm-fab').hidden).toBe(false);
+    expect(document.querySelector('#imm-player-slot audio')).toBeNull();
+  });
+
+  it('flag on + timings ready + audio: la barra de player queda visible y oculta el FAB', async () => {
+    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
+    getSongAudio.mockResolvedValue(readyTimings());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    expect(document.getElementById('imm-player-slot').hidden).toBe(false);
+    expect(document.querySelector('#imm-player-slot audio')).toBeTruthy();
+    expect(document.getElementById('imm-fab').hidden).toBe(true);
+  });
+
+  it("toggle 'Reproducir pista' en el sheet reproduce/pausa el audio", async () => {
+    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
+    getSongAudio.mockResolvedValue(readyTimings());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    document.getElementById('imm-open-options').click();
+    const toggle = document.querySelector('.osheet [data-act="player-toggle"]');
+    expect(toggle.textContent).toBe('Reproducir pista');
+    toggle.click();
+
+    expect(window.HTMLMediaElement.prototype.play).toHaveBeenCalled();
+  });
+
+  it('sin flag/audio/timings el sheet NO muestra el toggle de pista', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.getElementById('imm-open-options').click();
+    expect(document.querySelector('.osheet [data-act="player-toggle"]')).toBeNull();
+  });
+
+  it('tap en línea en modo sync busca (audio.currentTime), NO usa goTo directo', async () => {
+    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
+    getSongAudio.mockResolvedValue(readyTimings());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    document.querySelector('#imm-roll .imm-line[data-i="2"]').click();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    expect(audio.currentTime).toBe(12); // startMs 12000 -> 12s
+
+    // El highlight de la línea activa NO cambia de forma síncrona con el tap
+    // (mismo contrato que timingEngine.seekToLine): sigue en la línea 0 hasta
+    // el próximo timeupdate real del audio.
+    expect(document.querySelector('#imm-roll .imm-line[data-i="0"]').classList.contains('imm-line--active')).toBe(
+      true,
+    );
+  });
+
+  it("error del <audio> en runtime: toast + cae en caliente a TimerEngine sin salir de la vista", async () => {
+    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
+    getSongAudio.mockResolvedValue(readyTimings());
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    expect(audio).toBeTruthy();
+
+    audio.dispatchEvent(new Event('error'));
+
+    // sigue en la vista, con toast y de vuelta al FAB/TimerEngine
+    expect(document.querySelector('.imm-v1')).toBeTruthy();
+    expect(document.querySelector('.toast.visible')?.textContent).toBe('No se pudo reproducir la pista de audio');
+    expect(document.getElementById('imm-fab').hidden).toBe(false);
+    expect(document.getElementById('imm-player-slot').hidden).toBe(true);
+
+    // El TimerEngine quedó operativo: avanza solo tras el timeout normal.
+    vi.advanceTimersByTime(9000);
+    expect(document.querySelector('#imm-roll .imm-line[data-i="1"]').classList.contains('imm-line--active')).toBe(
+      true,
+    );
+    vi.useRealTimers();
+  });
+
+  it('interludio (gap>5s) muestra un nodo .imm-interlude entre líneas, que desaparece al entrar la siguiente', async () => {
+    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
+    getSongAudio.mockResolvedValue(readyTimings());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    audio.currentTime = 2; // entra a la línea 1 (startMs 2000)
+    audio.dispatchEvent(new Event('timeupdate'));
+    audio.currentTime = 6; // dentro del hueco 2000->12000 (10s), progreso 0.4
+    audio.dispatchEvent(new Event('timeupdate'));
+
+    expect(document.querySelector('#imm-roll .imm-interlude')).toBeTruthy();
+
+    audio.currentTime = 12.1; // entra a la línea 2: el interludio se retira
+    audio.dispatchEvent(new Event('timeupdate'));
+
+    expect(document.querySelector('#imm-roll .imm-interlude')).toBeNull();
+  });
+
+  it('salir en modo sync pausa el audio y vacía el src', async () => {
+    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
+    getSongAudio.mockResolvedValue(readyTimings());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    exitImmersive();
+
+    expect(window.HTMLMediaElement.prototype.pause).toHaveBeenCalled();
+    // `audio.src` (IDL) resuelve '' contra la URL del documento -> se
+    // comprueba el atributo crudo, que sí queda vacío.
+    expect(audio.getAttribute('src')).toBe('');
+  });
+
+  it('FAB de pausa (#imm-fab) NO existe/actúa en modo sync: pausa es la del player', async () => {
+    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
+    getSongAudio.mockResolvedValue(readyTimings());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const fab = document.getElementById('imm-fab');
+    expect(fab.hidden).toBe(true);
+    fab.click(); // togglePause debe ser no-op en modo sync
+    expect(document.querySelector('.imm-v1').classList.contains('imm-v1--paused')).toBe(false);
   });
 });

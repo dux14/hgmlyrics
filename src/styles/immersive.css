@@ -183,3 +183,61 @@ body.immersive-active {
 .imm-v1__player-slot[hidden] {
   display: none;
 }
+
+/* ── Player de pista sincronizada (D3, flag immersive_player) ── */
+
+.imm-player {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.imm-player__play {
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-brand, #01ccd9);
+  color: #000;
+}
+
+.imm-player__time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  opacity: 0.7;
+  min-width: 2.2em;
+  text-align: center;
+}
+
+.imm-player__scrubber {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--color-brand, #01ccd9);
+}
+
+/* ── Interludio (hueco > 5s entre líneas, solo modo sync) ── */
+
+.imm-interlude {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+}
+
+.imm-interlude__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--color-brand, #01ccd9);
+  opacity: calc(0.25 + 0.65 * var(--imm-dot-scale, 0));
+  transform: scale(calc(0.6 + 0.4 * var(--imm-dot-scale, 0)));
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}

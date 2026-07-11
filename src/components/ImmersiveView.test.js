@@ -12,10 +12,11 @@ vi.mock('../lib/authStore.js', () => ({
 vi.mock('./OptionsSheet.js', () => ({
   openOptionsSheet: vi.fn(),
   closeOptionsSheet: vi.fn(),
+  isOptionsSheetOpen: vi.fn(() => false),
 }));
 
 import { enterImmersive, exitImmersive } from './ImmersiveView.js';
-import { openOptionsSheet } from './OptionsSheet.js';
+import { openOptionsSheet, isOptionsSheetOpen } from './OptionsSheet.js';
 
 /**
  * Canción fixture: 2 líneas cantables con acordes + grupos de nota para una
@@ -143,5 +144,23 @@ describe('ImmersiveView — clases de modo por línea + paridad de voz', () => {
     expect(lines[0].classList.contains('lyrics__line--mix')).toBe(false);
     expect(lines[0].classList.contains('lyrics__line--chords')).toBe(true);
     expect(lines[1].classList.contains('lyrics__line--mix')).toBe(true);
+  });
+
+  it('con el sheet abierto, cambiar de modo lo refresca al instante (no solo tono/mixed sin voz)', () => {
+    const song = buildSong();
+    enterImmersive(songViewEl, buildCtx(song, { getActiveVoice: () => 'soprano' }));
+
+    // Abre el sheet (simula openEls != null en el módulo real) y captura el
+    // callback onModeChange que usaría un click dentro del sheet real.
+    document.getElementById('imm-open-options').click();
+    const opts = openOptionsSheet.mock.calls.at(-1)[0];
+    isOptionsSheetOpen.mockReturnValue(true);
+    openOptionsSheet.mockClear();
+
+    // Modo 'chords' con voz ya activa: antes NO reabria el sheet. Con el
+    // sheet abierto, ahora SÍ debe refrescarlo para reflejar el modo nuevo.
+    opts.onModeChange('chords');
+
+    expect(openOptionsSheet).toHaveBeenCalled();
   });
 });

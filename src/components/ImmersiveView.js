@@ -39,7 +39,7 @@ import { buildVoiceChipHTML } from '../lib/voiceChips.js';
 import { openFloatingTuner } from './FloatingTuner.js';
 import { getLayers } from '../lib/layerStore.js';
 import { isFeatureEnabled } from '../lib/authStore.js';
-import { openOptionsSheet, closeOptionsSheet } from './OptionsSheet.js';
+import { openOptionsSheet, closeOptionsSheet, isOptionsSheetOpen } from './OptionsSheet.js';
 import { projectLines } from '../lib/projectLines.js';
 import { resolveInitialMode, setImmersiveMode, availableModes } from '../lib/immersiveStore.js';
 import { createSpring } from '../lib/spring.js';
@@ -733,10 +733,11 @@ function updateVoiceChipsVisibility(s) {
 /**
  * Cambia el modo de contenido (persistido en immersiveStore) y re-renderiza
  * TODAS las líneas — el modo cambia el builder de cada línea, no solo el de
- * la activa. Modo 'tono' o 'mixed' sin voz elegida auto-abre el sheet en la
- * voz (paridad con el fix fd8ea72 del extinto modo escenario/SongView: sin
- * esto el usuario no ve dónde elegir su voz, y en 'mixed' tampoco vería el
- * tono nunca — cae en silencio a solo-acordes).
+ * la activa. Con el sheet ya abierto, todo cambio de modo lo refresca in
+ * place. Modo 'tono' o 'mixed' sin voz elegida además auto-abre el sheet en
+ * la voz (paridad con el fix fd8ea72 del extinto modo escenario/SongView:
+ * sin esto el usuario no ve dónde elegir su voz, y en 'mixed' tampoco vería
+ * el tono nunca — cae en silencio a solo-acordes).
  * @param {object} s @param {string} mode
  */
 function applyMode(s, mode) {
@@ -747,7 +748,12 @@ function applyMode(s, mode) {
   updateSectionLabel(s);
   updateVoiceChipsVisibility(s);
   retargetScroll(s);
-  if ((mode === 'tono' || mode === 'mixed') && !s.activeVoiceId) openOptions(s);
+  // Con el sheet abierto, TODO cambio de modo lo refresca (la sección VOZ
+  // aparece/desaparece al instante — fix del bug "cerrar y reabrir");
+  // cerrado, se conserva el auto-open solo para tono/mixed sin voz elegida.
+  if (isOptionsSheetOpen() || ((mode === 'tono' || mode === 'mixed') && !s.activeVoiceId)) {
+    openOptions(s);
+  }
 }
 
 function selectVoice(s, category) {

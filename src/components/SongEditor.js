@@ -440,11 +440,17 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
           const input = container.querySelector(`#link-${p.platform}`);
           if (input) input.value = p.url;
         }
-        voiceLinkItems = voices.map((v) => ({
-          voiceType: v.voiceType,
-          url: v.url,
-          label: v.label || '',
-        }));
+        // El usuario puede haber agregado un link mientras este GET estaba en
+        // vuelo (o mientras editaba uno recién agregado): antepone los del
+        // servidor en vez de reemplazar, así ninguna adición se pierde.
+        voiceLinkItems = [
+          ...voices.map((v) => ({
+            voiceType: v.voiceType,
+            url: v.url,
+            label: v.label || '',
+          })),
+          ...voiceLinkItems,
+        ];
         renderVoiceLinks();
       })
       .catch(() => {});
@@ -631,7 +637,11 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   }
 
   function renderSectionAudioControl(block, index) {
-    const items = sectionAudioItems.filter((it) => it.sectionIndex === index);
+    // sectionAudioItems está keyed por índice PERSISTIDO (block.origIndex), no
+    // por la posición visual `index` (ver el mismo criterio en
+    // handleDeleteSection más abajo). Una sección nueva sin guardar
+    // (origIndex null) nunca tiene audio propio todavía.
+    const items = sectionAudioItems.filter((it) => it.sectionIndex === block.origIndex);
     const ui = getAudioUi(block.id);
     const badge =
       items.length > 0 ? `<span class="section-audio__badge">${items.length}</span>` : '';
@@ -688,12 +698,29 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       return;
     }
 
+    // Sección recién agregada (aún no pasó por "Guardar canción"): no tiene
+    // índice persistido todavía, así que el back no puede ubicarla en
+    // song_section_audio. Sin este guard el POST revienta con un
+    // "sectionIndex fuera de rango" opaco.
+    if (block.origIndex === null || block.origIndex === undefined) {
+      ui.error = 'Guarda la canción para subir audio a esta sección';
+      ui.expanded = true;
+      renderBlocks();
+      return;
+    }
+
     if (file.size > SECTION_AUDIO_MAX_BYTES) {
       ui.error = 'El archivo supera el límite de 25 MB';
       ui.expanded = true;
       renderBlocks();
       return;
     }
+
+    // sectionIndex persistido, no el índice visual `index`: una sección
+    // movida (y aún sin guardar esa reordenación) debe seguir subiendo audio
+    // al slot que ya existe en el back (mismo criterio que
+    // renderSectionAudioControl/handleDeleteSection).
+    const sectionIndex = block.origIndex;
 
     const panel = fileInput.closest('.section-audio__upload');
     const voiceScope = panel?.querySelector('[data-action="audio-scope"]')?.value || null;
@@ -709,14 +736,14 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     // — el archivo viejo no se toca hasta que el PUT lo sobrescribe. Lo
     // guardamos antes para decidir la compensación si el PUT falla.
     const hadExistingAudio = sectionAudioItems.some(
-      (it) => it.sectionIndex === index && it.voiceScope === voiceScope,
+      (it) => it.sectionIndex === sectionIndex && it.voiceScope === voiceScope,
     );
     let createdId = null;
 
     try {
       const durationSec = await readAudioDuration(file);
       const { uploadUrl, id } = await createSectionAudio(existingSong.id, {
-        sectionIndex: index,
+        sectionIndex,
         voiceScope,
         label,
         durationSec: durationSec || null,
@@ -724,11 +751,11 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       createdId = id;
       await uploadSectionAudioFile(uploadUrl, file);
       sectionAudioItems = sectionAudioItems.filter(
-        (it) => !(it.sectionIndex === index && it.voiceScope === voiceScope),
+        (it) => !(it.sectionIndex === sectionIndex && it.voiceScope === voiceScope),
       );
       sectionAudioItems.push({
         id,
-        sectionIndex: index,
+        sectionIndex,
         voiceScope,
         label,
         durationSec: durationSec || null,
@@ -1224,8 +1251,13 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
     const artist = container.querySelector('#song-artist').value.trim() || 'Hakuna Group Music';
     const album = container.querySelector('#song-album').value.trim() || 'Sin álbum';
     const albumOrder = Number.parseInt(container.querySelector('#song-order').value) || 0;
+    // Vacío no inventa el año actual: conserva el que ya tenía la canción (o
+    // null en una canción nueva). La columna `year` es nullable (ver
+    // supabase/migrations/0001_initial.sql) y el back ya persiste null con
+    // `?? null` (api/songs/index.js y api/songs/[id].js).
+    const yearRaw = container.querySelector('#song-year').value.trim();
     const year =
-      Number.parseInt(container.querySelector('#song-year').value) || new Date().getFullYear();
+      yearRaw === '' ? (existingSong?.year ?? null) : Number.parseInt(yearRaw, 10) || null;
     const genre = container.querySelector('#song-genre').value.trim() || '';
     const malePercent = Number.parseInt(container.querySelector('#voice-range').value);
 

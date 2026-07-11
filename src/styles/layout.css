@@ -302,13 +302,6 @@
   padding-right: var(--space-md);
 }
 
-/* === Song Grid === */
-.song-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-md);
-}
-
 /* === Bottom nav (solo móvil) ===
    Translúcido con blur (único elemento del chrome que lo conserva), tintado
    con --color-bg para fundirse con el contenido. Sin borde superior. */
@@ -409,23 +402,6 @@
     margin-left: var(--sidebar-width);
     padding-top: var(--header-height); /* search is inline in the header here */
     padding-bottom: 0; /* sin bottom-nav en desktop */
-  }
-
-  .song-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-/* Desktop */
-@media (min-width: 1024px) {
-  .song-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (min-width: 1280px) {
-  .song-grid {
-    grid-template-columns: repeat(4, 1fr);
   }
 }
 

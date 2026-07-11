@@ -383,7 +383,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
   const showToggle = hasChords || tonoAvailable;
 
   container.innerHTML = `
-    <div class="song-view${!isPreview ? ' page--headerless' : ''} fade-in">
+    <div class="song-view fade-in">
       <!-- Song Header -->
       <div class="song-view__header">
         <div class="song-view__cover-wrap">

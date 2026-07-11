@@ -59,10 +59,13 @@
 .voz-view.page--headerless .voz-view__hero::before {
   content: '';
   position: absolute;
-  top: calc(-1 * var(--space-md));
+  /* Sube exactamente el margin-top del hero: el ambiente pinta desde el
+     píxel 0 del viewport, sin banda muerta entre el vidrio y el hero. La
+     altura compensa el mismo delta para no encoger la cobertura inferior. */
+  top: calc(-1 * max(20px, var(--safe-top)));
   left: calc(-1 * var(--space-md));
   right: calc(-1 * var(--space-md));
-  height: 190px;
+  height: calc(174px + max(20px, var(--safe-top)));
   background:
     radial-gradient(
       120% 100% at 50% 0,

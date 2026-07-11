@@ -63,7 +63,7 @@ const CHROME_AUTOHIDE = [
   { re: /^\/amigos$/, header: true, nav: true },
   { re: /^\/licencias$/, header: true, nav: true },
   { re: /^\/lista\/(?!nueva$)[^/]+$/, header: true, nav: true }, // vista, no editor
-  { re: /^\/song\/[^/]+$/, nav: true, headerless: true }, // no incluye /song/:id/links
+  { re: /^\/song\/[^/]+$/, header: true, nav: true }, // no incluye /song/:id/links
   { re: /^\/album\/[^/]+$/, nav: true, headerless: true },
   { re: /^\/u\/[^/]+$/, nav: true, headerless: true },
   { re: /^\/voz\/[^/]+$/, nav: true, headerless: true },

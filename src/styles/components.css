@@ -186,12 +186,6 @@
   isolation: isolate;
 }
 
-/* Headerless (Task 4): sin header fijo arriba, la zona de carátula/título
-   respeta el notch en vez del gutter estándar. */
-.song-view.page--headerless .song-view__header {
-  padding-top: max(20px, var(--safe-top));
-}
-
 /* Hero compacto (T6): 80px fijo en todas las resoluciones — ver spec D1. */
 .song-view__cover-wrap {
   position: relative;

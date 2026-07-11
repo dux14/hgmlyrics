@@ -4,8 +4,8 @@
  * Patrón estándar: scroll hacia abajo con intent (más de un par de px, no el
  * primer pixel) oculta el header; cualquier scroll hacia arriba lo muestra;
  * en el tope (scrollY 0) siempre visible. Extraída como función pura para
- * poder testear la lógica sin DOM/rAF real — el caller (SongView.js) solo
- * aporta el scrollY leído en cada frame.
+ * poder testear la lógica sin DOM/rAF real — el motor de abajo solo aporta
+ * el scrollY leído en cada frame.
  */
 
 /** Umbral mínimo de scroll hacia abajo antes de ocultar (px). */

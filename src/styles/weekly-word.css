@@ -32,14 +32,6 @@
   padding: 1.5rem 0;
 }
 
-/* Headerless (Task 4): este padding-top es compartido con el preview de
-   VozEditor (sin page--headerless, conserva su padding), pero en la ruta
-   headerless se sumaría al margin-top del hero y dejaría banda muerta.
-   Reset scoped, no toca el preview del editor. */
-.voz-view.page--headerless {
-  padding-top: 0;
-}
-
 /* ── Hero litúrgico ── */
 .voz-view__hero {
   position: relative;
@@ -48,33 +40,6 @@
   padding: 2rem 1.5rem;
   margin: 1rem 0 1.5rem;
   color: var(--liturgical-text, var(--color-text));
-}
-
-/* Headerless (Task 4): sin header fijo, la zona superior respeta el notch +
-   un ambiente sutil con el color litúrgico vigente detrás del hero. */
-.voz-view.page--headerless .voz-view__hero {
-  margin-top: max(20px, var(--safe-top));
-}
-
-.voz-view.page--headerless .voz-view__hero::before {
-  content: '';
-  position: absolute;
-  /* Sube exactamente el margin-top del hero: el ambiente pinta desde el
-     píxel 0 del viewport, sin banda muerta entre el vidrio y el hero. La
-     altura compensa el mismo delta para no encoger la cobertura inferior. */
-  top: calc(-1 * max(20px, var(--safe-top)));
-  left: calc(-1 * var(--space-md));
-  right: calc(-1 * var(--space-md));
-  height: calc(174px + max(20px, var(--safe-top)));
-  background:
-    radial-gradient(
-      120% 100% at 50% 0,
-      color-mix(in srgb, var(--liturgical-accent, var(--color-primary)) 25%, transparent),
-      transparent 70%
-    ),
-    radial-gradient(90% 80% at 78% 0, rgba(124, 58, 237, 0.22), transparent);
-  pointer-events: none;
-  z-index: -1;
 }
 
 /* Píldora de tiempo litúrgico — punto de color + label, sobre el hero */

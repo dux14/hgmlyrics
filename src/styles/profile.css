@@ -26,11 +26,6 @@
   padding-bottom: calc(var(--bottom-nav-height, 60px) + 1rem);
 }
 
-/* Perfil propio y público son headerless desde el Task 4 (ambos usan la
-   clase compartida .page--headerless, ver layout.css): la reserva de .main
-   (--header-height) + el gutter superior de .main__content (--space-md)
-   quedarían como banda muerta sobre el degradado si no se sangra la página. */
-
 /* ── Zona superior: ambient blob + avatar + identidad ── */
 .pf-top {
   position: relative;
@@ -38,8 +33,6 @@
      El difuminado (.pf-amb) sangra -space-md para llegar al borde. */
   padding: 22px 0 4px;
   text-align: center;
-  /* Respeta el notch en PWA standalone; en navegador el inset es 0. */
-  padding-top: max(20px, var(--safe-top));
 }
 
 .pf-amb {

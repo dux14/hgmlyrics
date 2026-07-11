@@ -74,9 +74,7 @@ export async function renderPublicProfile(container, username) {
         : '';
 
       // Bio y chips dentro del bloque de identidad (coincide con mockup "Público")
-      const bioHtml = profile.bio
-        ? `<p class="pf-bio">${escapeHtml(profile.bio)}</p>`
-        : '';
+      const bioHtml = profile.bio ? `<p class="pf-bio">${escapeHtml(profile.bio)}</p>` : '';
       const chipsHtml = profile.instrumentRoles?.length
         ? `<div class="pf-chips pf-chips--pub">
              ${profile.instrumentRoles.map((r) => `<span class="pf-chip">${escapeHtml(r)}</span>`).join('')}
@@ -132,7 +130,7 @@ export async function renderPublicProfile(container, username) {
               .join('');
 
       region.innerHTML = `
-        <div class="profile-page page--headerless fade-in">
+        <div class="profile-page fade-in">
           <div class="pf-top">
             <div class="pf-amb"></div>
             <span class="avatar-wrap">
@@ -158,7 +156,9 @@ export async function renderPublicProfile(container, username) {
 
       // Fallback de carátulas via JS (evita inline onerror en atributo HTML)
       region.querySelectorAll('img.pf-cv').forEach((img) => {
-        img.onerror = () => { img.src = COVER_PLACEHOLDER; };
+        img.onerror = () => {
+          img.src = COVER_PLACEHOLDER;
+        };
       });
 
       // Montar onda de rango tras setear innerHTML
@@ -244,7 +244,7 @@ export async function renderPublicProfile(container, username) {
       }
     },
     empty: () => `
-      <div class="profile-page page--headerless">
+      <div class="profile-page">
         <h2>Perfil no encontrado</h2>
         <p>El perfil no existe o no es visible.</p>
         <a class="auth-link" href="#/">Volver al inicio</a>

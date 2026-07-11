@@ -448,7 +448,7 @@ export async function renderProfile(container) {
       // de /perfil, la region quedo desprendida del DOM y este render tardio es
       // invisible en vez de clobberear la pantalla nueva (bug de navegacion #3).
       profileRegion.innerHTML = `
-        <div class="profile-page page--headerless fade-in">
+        <div class="profile-page fade-in">
           ${buildProfileHeader(profile)}
         </div>
       `;
@@ -469,7 +469,7 @@ export async function renderProfile(container) {
       });
     },
     empty: () =>
-      `<div class="profile-page page--headerless"><p>Sin sesión. <a href="#/login">Iniciar sesión</a></p></div>`,
+      `<div class="profile-page"><p>Sin sesión. <a href="#/login">Iniciar sesión</a></p></div>`,
     onError: () => `
       <div class="empty-state">
         <h2 class="empty-state__title">No se pudo cargar el perfil</h2>

@@ -16,6 +16,7 @@ import { getFavoriteIds } from '../lib/favorites.js';
 import { isVigente } from './VoicesAlbumView.js';
 import { voiceoverCoverHtml } from '../lib/voiceoverCover.js';
 import { getRecentVisitIds, subscribe as subscribeRecentVisits } from '../lib/recentVisits.js';
+import { freshShuffle } from '../lib/shuffle.js';
 
 // Suscripción viva al historial de recientes; se reemplaza en cada render
 // del Home (mismo patrón que favUnsubscribe en SongList.js).
@@ -172,7 +173,7 @@ export async function renderHome(
   { today = new Date().toISOString().slice(0, 10) } = {},
 ) {
   const { songs } = getState();
-  const albums = getAlbums().slice(0, 5);
+  const albums = freshShuffle(getAlbums()).slice(0, 5);
   const recent = selectRecentlyVisited(songs, getRecentVisitIds(), 6);
   const favIds = getFavoriteIds();
   const favSongs = favIds

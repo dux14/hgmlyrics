@@ -976,7 +976,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
     let destroyed = false;
     // onRouteChange (no 'hashchange'): navigate(path, {replace:true}) usa
     // history.replaceState y NO dispara 'hashchange' (ver router.js), pero sí
-    // pasa por resolve() — logout (AuthButton) y redirects de guardedRoute
+    // pasa por resolve() — logout (Profile.js) y redirects de guardedRoute
     // dejaban el SectionPlayer vivo (audio sonando) tras salir de la canción.
     const destroySectionPlayer = () => {
       destroyed = true;

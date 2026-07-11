@@ -308,7 +308,7 @@ export async function initAuthStore() {
   // llamada reintenta adquirir el mismo lock y queda esperando a que la
   // operación en curso termine, que a su vez espera a que el callback
   // resuelva: dependencia circular, cuelga para siempre (visto con
-  // signOut() real: Profile.js y AuthButton.js hacen `await signOut()`).
+  // signOut() real: Profile.js hace `await signOut()`).
   // Regla dura de este callback: NUNCA llamar (ni siquiera sin await, la
   // sola invocación ya intenta el lock) un método de supabase.auth antes de
   // que el callback retorne. Todo lo que necesite volver a hablar con

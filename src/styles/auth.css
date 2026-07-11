@@ -38,12 +38,16 @@
    .auth-page ocupe el viewport completo y el card quede centrado en ambos ejes. */
 body.auth-route .header,
 body.auth-route .bottom-nav,
-body.auth-route .sidebar { display: none; }
+body.auth-route .sidebar {
+  display: none;
+}
 body.auth-route .main {
   margin-left: 0;
   padding: 0;
 }
-body.auth-route .main__content { padding: 0; }
+body.auth-route .main__content {
+  padding: 0;
+}
 
 .auth-page {
   display: flex;
@@ -232,7 +236,7 @@ body.auth-route .main__content { padding: 0; }
   margin-bottom: var(--space-xs);
 }
 
-/* AuthButton in header */
+/* Botón de cuenta en el header */
 .auth-button {
   display: flex;
   align-items: center;

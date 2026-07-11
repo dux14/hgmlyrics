@@ -7,8 +7,8 @@
  * solo reacciona a hashchange y nunca re-evalúa los guards al cambiar el estado
  * de auth; además el guard y el logout empujaban la ruta protegida al history
  * (back-trap). Este archivo cubre el endurecimiento de la navegación con
- * navigate(path, { replace }), el guard con replace, el logout robusto del
- * AuthButton y la re-evaluación de guards en SIGNED_OUT.
+ * navigate(path, { replace }), el guard con replace, el logout robusto de
+ * Profile.js y la re-evaluación de guards en SIGNED_OUT.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
@@ -34,7 +34,7 @@ const { route, navigate, guardedRoute, configureAuth, refresh, getCurrentPath, i
   await import('../src/router.js');
 const { initAuthStore, isAuthenticated, needsOnboarding, isAdmin } =
   await import('../src/lib/authStore.js');
-const { renderAuthButton } = await import('../src/components/AuthButton.js');
+const { renderProfile } = await import('../src/components/Profile.js');
 
 /** Bootstrap del authStore real (supabase mockeado) con sesión + perfil. */
 async function initAuthStoreWithSession() {
@@ -121,7 +121,7 @@ describe('guard de no autenticado redirige con replace (sin back-trap)', () => {
   });
 });
 
-describe('AuthButton: la navegación de logout ocurre aunque signOut falle', () => {
+describe('Profile.js: la navegación de logout ocurre aunque signOut falle', () => {
   /** @type {HTMLElement} */
   let mount;
 
@@ -129,21 +129,15 @@ describe('AuthButton: la navegación de logout ocurre aunque signOut falle', () 
     window.location.hash = '';
     document.body.innerHTML = '';
     mockSignOut.mockReset();
-    vi.spyOn(console, 'error').mockImplementation(() => {});
     await initAuthStoreWithSession();
     route('/login', vi.fn());
     mount = document.createElement('div');
     document.body.appendChild(mount);
   });
 
-  afterEach(() => {
-    console.error.mockRestore();
-  });
-
   async function clickLogout() {
-    renderAuthButton(mount);
-    mount.querySelector('#auth-button').click();
-    document.querySelector('#logout-btn').click();
+    await renderProfile(mount);
+    mount.querySelector('#pf-logout').click();
     // El handler es async: drena las microtareas del try/catch/finally.
     await vi.waitFor(() => expect(getCurrentPath()).toBe('/login'));
   }
@@ -151,21 +145,17 @@ describe('AuthButton: la navegación de logout ocurre aunque signOut falle', () 
   it('signOut lanza (lock/red) → igualmente se navega a /login', async () => {
     mockSignOut.mockRejectedValueOnce(new Error('navigator-lock timeout'));
     await clickLogout();
-    expect(console.error).toHaveBeenCalledWith('signOut falló', expect.any(Error));
-    expect(document.querySelector('#auth-menu')).toBeNull();
   });
 
-  it('signOut devuelve { error } sin lanzar → se registra y se navega a /login', async () => {
+  it('signOut devuelve { error } sin lanzar → igualmente se navega a /login', async () => {
     const error = new Error('network');
     mockSignOut.mockResolvedValueOnce({ error });
     await clickLogout();
-    expect(console.error).toHaveBeenCalledWith('signOut falló', error);
   });
 
-  it('signOut OK → se navega a /login sin registrar errores', async () => {
+  it('signOut OK → se navega a /login', async () => {
     mockSignOut.mockResolvedValueOnce({ error: null });
     await clickLogout();
-    expect(console.error).not.toHaveBeenCalled();
   });
 });
 
@@ -207,7 +197,7 @@ describe('SIGNED_OUT estando ya en /login no duplica el render del login', () =>
     const loginHandler = vi.fn();
     route('/login', loginHandler);
 
-    // Logout same-tab: el AuthButton ya navegó a /login (puede llevar ?next=...).
+    // Logout same-tab: Profile.js ya navegó a /login (puede llevar ?next=...).
     window.location.hash = `/login?next=${encodeURIComponent('/favoritos')}`;
     refresh();
     expect(loginHandler).toHaveBeenCalledTimes(1);

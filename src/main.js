@@ -6,7 +6,6 @@
 
 // Styles (orden de capas centralizado en app.css)
 import './styles/app.css';
-import './styles/cmdk.css';
 
 // Modules
 import { initTheme } from './components/ThemeToggle.js';
@@ -409,7 +408,7 @@ async function boot() {
   // resolución de ruta (push, replace o popstate) — no solo 'hashchange', que
   // replaceState no dispara (dejaba el header desincronizado tras
   // navigate(path, { replace: true }): SearchPage a /song/:id o /voz/:id,
-  // Profile.js/AuthButton.js a /login al salir de /perfil). Se registra ANTES
+  // Profile.js a /login al salir de /perfil). Se registra ANTES
   // de initRouter() para que el resolve() inicial del arranque ya lo cubra
   // (deep link directo a una ruta headerless del Grupo B), sin necesitar una
   // llamada de arranque aparte.

@@ -123,7 +123,7 @@ describe('router — onRouteChange()', () => {
 
   it('se dispara con navigate(path, {replace:true}) aunque replaceState no emita hashchange', async () => {
     // Bug confirmado: destroySectionPlayer solo escuchaba 'hashchange', que
-    // replaceState() no dispara — logout (AuthButton) y redirects de
+    // replaceState() no dispara — logout (Profile.js) y redirects de
     // guardedRoute dejaban estado de la ruta anterior sin limpiar.
     initRouter();
     navigate('/song/abc');

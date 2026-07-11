@@ -17,13 +17,15 @@ import { escapeHtml } from '../lib/escape.js';
 
 const CLOSE_FALLBACK_MS = 200;
 
-/** @type {{ dim: HTMLElement, sheet: HTMLElement, close: Function } | null} */
+/** @type {{ dim: HTMLElement, sheet: HTMLElement, close: Function, update: Function } | null} */
 let openEls = null;
 
 /**
  * Abre el bottom-sheet de opciones sobre el body.
- * Idempotente: si ya hay una hoja abierta, devuelve el controlador vivo (no
- * abre una segunda) — mismo patrón que GoToSheet.
+ * Idempotente: si ya hay una hoja abierta, refresca su contenido con los
+ * opts nuevos (mismo nodo `.osheet`, sin animación de reapertura, listeners
+ * nuevos sobre DOM nuevo = sin duplicados) y devuelve el controlador vivo —
+ * mismo patrón que GoToSheet en cuanto a "una sola instancia".
  * Retorna { close, sheet } para control externo.
  *
  * @param {{
@@ -60,11 +62,12 @@ let openEls = null;
  * @returns {{ close: () => void, sheet: HTMLElement }}
  */
 export function openOptionsSheet(opts) {
-  if (openEls) return { close: openEls.close, sheet: openEls.sheet };
+  if (openEls) {
+    openEls.update(opts);
+    return { close: openEls.close, sheet: openEls.sheet };
+  }
   // Reapertura rápida: retira cualquier hoja anterior aún saliendo (animación).
   document.querySelectorAll('.osheet--closing, .osheet-dim--closing').forEach((el) => el.remove());
-
-  const notation = opts.notation === 'anglo' ? 'anglo' : 'latin';
 
   const dim = document.createElement('div');
   dim.className = 'osheet-dim';
@@ -75,6 +78,68 @@ export function openOptionsSheet(opts) {
   sheet.setAttribute('aria-modal', 'true');
   sheet.setAttribute('aria-label', 'Opciones');
   sheet.setAttribute('tabindex', '-1');
+
+  let current = opts;
+  function renderContent(o) {
+    current = o;
+    sheet.innerHTML = buildSheetHtml(o);
+    bindSheetHandlers(sheet, o);
+  }
+  renderContent(opts);
+
+  let closed = false;
+  function unmount() {
+    dim.remove();
+    sheet.remove();
+    document.removeEventListener('keydown', onKeydown);
+  }
+
+  function close() {
+    if (closed) return;
+    closed = true;
+    // Se libera de inmediato para permitir reapertura durante la animación de salida.
+    openEls = null;
+    document.removeEventListener('keydown', onKeydown);
+    current.onClose?.();
+
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) {
+      unmount();
+      return;
+    }
+
+    dim.classList.add('osheet-dim--closing');
+    sheet.classList.add('osheet--closing');
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      unmount();
+    };
+    sheet.addEventListener('animationend', finish, { once: true });
+    setTimeout(finish, CLOSE_FALLBACK_MS);
+  }
+
+  function onKeydown(e) {
+    if (e.key === 'Escape') close();
+  }
+  document.addEventListener('keydown', onKeydown);
+
+  dim.addEventListener('click', close);
+
+  document.body.append(dim, sheet);
+  sheet.focus();
+
+  openEls = { dim, sheet, close, update: renderContent };
+  return { close, sheet };
+}
+
+/**
+ * Arma el HTML interno del sheet (grab handle + secciones) a partir de opts.
+ * Función pura: no toca el DOM, solo devuelve el string del template.
+ */
+function buildSheetHtml(opts) {
+  const notation = opts.notation === 'anglo' ? 'anglo' : 'latin';
 
   // MODO/VOZ (T-inmersiva): segmentados opcionales, arriba de TONO — solo la
   // vista inmersiva los pasa (ImmersiveView/SongView no envían `modes`/
@@ -182,7 +247,7 @@ export function openOptionsSheet(opts) {
     </div>`
     : '';
 
-  sheet.innerHTML = `
+  return `
     <div class="osheet__grab"></div>
     ${modeSectionHtml}
     ${voiceSectionHtml}
@@ -193,47 +258,14 @@ export function openOptionsSheet(opts) {
     ${playerSectionHtml}
     ${autoscrollSectionHtml}
   `;
+}
 
-  let closed = false;
-  function unmount() {
-    dim.remove();
-    sheet.remove();
-    document.removeEventListener('keydown', onKeydown);
-  }
-
-  function close() {
-    if (closed) return;
-    closed = true;
-    // Se libera de inmediato para permitir reapertura durante la animación de salida.
-    openEls = null;
-    document.removeEventListener('keydown', onKeydown);
-    opts.onClose?.();
-
-    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    if (reduceMotion) {
-      unmount();
-      return;
-    }
-
-    dim.classList.add('osheet-dim--closing');
-    sheet.classList.add('osheet--closing');
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      unmount();
-    };
-    sheet.addEventListener('animationend', finish, { once: true });
-    setTimeout(finish, CLOSE_FALLBACK_MS);
-  }
-
-  function onKeydown(e) {
-    if (e.key === 'Escape') close();
-  }
-  document.addEventListener('keydown', onKeydown);
-
-  dim.addEventListener('click', close);
-
+/**
+ * Ata los listeners de los controles del sheet a los handlers de opts.
+ * Se llama tras cada `sheet.innerHTML = buildSheetHtml(opts)`, así que
+ * siempre ata sobre DOM nuevo (sin listeners duplicados de renders previos).
+ */
+function bindSheetHandlers(sheet, opts) {
   sheet.querySelectorAll('[data-notation]').forEach((b) =>
     b.addEventListener('click', () => {
       const value = b.dataset.notation;
@@ -297,12 +329,6 @@ export function openOptionsSheet(opts) {
       opts.onVoiceChange?.(value);
     }),
   );
-
-  document.body.append(dim, sheet);
-  sheet.focus();
-
-  openEls = { dim, sheet, close };
-  return { close, sheet };
 }
 
 /**

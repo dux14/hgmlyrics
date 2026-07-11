@@ -1168,7 +1168,7 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
     else if (malePercent <= 30) voiceType = 'female';
     else voiceType = 'mixed';
 
-    let coverImage = existingSong?.coverImage || coverKey;
+    let coverImage = existingSong?.coverImage || `${albumSlug}.webp`;
     const token = getSession()?.access_token;
 
     // 1. Upload new image if present
@@ -1297,9 +1297,13 @@ function generateSlug(...parts) {
 }
 
 /**
- * Key determin\u00edstica de portada: slug legible + hash corto del nombre CRUDO
- * del \u00e1lbum (djb2 base36) \u2014 mismo \u00e1lbum comparte portada, \u00e1lbumes distintos
- * que normalizan al mismo slug ya no se pisan en Storage.
+ * Filename de portada legible y distinguible por álbum (slug + hash corto djb2
+ * en base36 del nombre CRUDO del álbum), usado como nombre del archivo subido
+ * a Storage. Dos álbumes con el mismo slug ya no comparten filename dentro de
+ * la URL pública resultante (el backend antepone su propio prefijo único por
+ * subida en `uploadCover`, así que esto no evita colisiones de objetos en
+ * Storage — solo hace el nombre legible y distinguible por álbum).
+ * Asume `album` no nulo/indefinido (invariante del llamador en handleSave).
  * @param {string} album
  */
 export function coverImageKey(album) {

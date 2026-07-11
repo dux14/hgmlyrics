@@ -144,6 +144,27 @@ describe('SongEditor — la portada elegida no se filtra entre sesiones del edit
     expect(uploadCalls).toHaveLength(0);
   });
 
+  it('canción nueva guardada sin elegir imagen usa `{albumSlug}.webp` (convención de covers estáticas), no la key con hash', async () => {
+    await renderSongEditor(container, undefined);
+    await vi.waitFor(() => expect(container.querySelector('#editor-save')).not.toBeNull());
+
+    container.querySelector('#song-title').value = 'Canción nueva';
+    container.querySelector('#song-album').value = 'Hakuna';
+
+    container.querySelector('#editor-save').click();
+    await vi.waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith('/api/songs', expect.any(Object)),
+    );
+
+    const call = global.fetch.mock.calls.find((c) => c[0] === '/api/songs');
+    const body = JSON.parse(call[1].body);
+    expect(body.coverImage).toBe('hakuna.webp');
+
+    // No debe haberse llamado a /api/upload: no se eligió imagen.
+    const uploadCalls = global.fetch.mock.calls.filter((c) => c[0] === '/api/upload');
+    expect(uploadCalls).toHaveLength(0);
+  });
+
   it('si la subida de portada falla, no guarda la canción y muestra el error', async () => {
     global.fetch = vi.fn((url) => {
       if (url === '/api/upload') {

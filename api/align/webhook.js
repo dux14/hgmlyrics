@@ -121,11 +121,14 @@ export default withErrors(async (req, res) => {
     console.warn(`Beats inválidos (ignorados): ${beatsError}`);
   }
   const validBeats = beats && !beatsError ? beats : null;
+  // Shape explicito: solo bpm/beatsMs viajan al JSONB, aunque Modal mande
+  // claves extra en el payload.
+  const beatsRow = validBeats ? { bpm: validBeats.bpm, beatsMs: validBeats.beatsMs } : null;
 
   await sql`
     UPDATE song_line_timings
     SET status = 'ready', lines = ${sql.json(lines)}, provider = ${provider ?? null}, error = NULL,
-        bpm_detected = ${validBeats ? validBeats.bpm : null}, beats = ${validBeats ? sql.json(validBeats) : null}
+        bpm_detected = ${beatsRow ? beatsRow.bpm : null}, beats = ${beatsRow ? sql.json(beatsRow) : null}
     WHERE song_id = ${songId} AND status = 'processing'
   `;
   res.status(200).json({ status: 'ready' });

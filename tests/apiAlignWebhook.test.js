@@ -200,7 +200,9 @@ describe('POST /api/align/webhook — payload de beats (best-effort)', () => {
     expect(res.body).toEqual({ status: 'ready' });
     const update = sqlCalls.find((c) => c.text.startsWith('UPDATE song_line_timings'));
     expect(update.text).toContain('ready');
-    expect(update.values).toContain(null);
+    // values: [lines, provider, bpm_detected, beats, songId] — ambos NULL.
+    expect(update.values[2]).toBeNull();
+    expect(update.values[3]).toBeNull();
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });
@@ -218,6 +220,9 @@ describe('POST /api/align/webhook — payload de beats (best-effort)', () => {
     expect(res.statusCode).toBe(200);
     const update = sqlCalls.find((c) => c.text.startsWith('UPDATE song_line_timings'));
     expect(update.text).toContain('ready');
+    // values: [lines, provider, bpm_detected, beats, songId] — ambos NULL.
+    expect(update.values[2]).toBeNull();
+    expect(update.values[3]).toBeNull();
     expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
   });

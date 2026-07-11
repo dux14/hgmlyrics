@@ -80,13 +80,29 @@ export function createSongAudioSection({ songId }) {
     }
   }
 
+  /**
+   * GET del estado del audio. getSongAudio() documenta que nunca lanza (null
+   * silencioso ante cualquier fallo), pero el polling igual se defiende con
+   * try/catch: así, si algún día deja de cumplir ese contrato (o en tests que
+   * la mockean para rechazar), nunca queda un unhandled rejection ni un
+   * intervalo "zombie" reintentando en silencio sin nunca re-renderizar.
+   * Política elegida: el polling SIGUE vivo tras un error (no se detiene) —
+   * el error se muestra inline y el siguiente tick vuelve a intentar solo.
+   */
   async function refresh() {
     if (destroyed || !songId) return;
-    const result = await getSongAudio(songId);
-    if (destroyed) return;
-    state.audio = result?.audio ?? null;
-    state.timings = result?.timings ?? null;
-    render();
+    try {
+      const result = await getSongAudio(songId);
+      if (destroyed) return;
+      state.audio = result?.audio ?? null;
+      state.timings = result?.timings ?? null;
+      state.error = null;
+      render();
+    } catch {
+      if (destroyed) return;
+      state.error = 'No se pudo consultar el estado del audio';
+      render();
+    }
   }
 
   async function uploadFlow(file) {

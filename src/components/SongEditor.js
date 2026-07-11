@@ -1045,7 +1045,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   // solo se apaga al navegar fuera del editor — ver destroy() abajo).
   const songAudioSection = createSongAudioSection({ songId: existingSong?.id ?? null });
   container.querySelector('#editor-song-audio').replaceWith(songAudioSection.el);
-  container.__songAudioSection = songAudioSection;
 
   // ─── Cancel ───
   container.querySelector('#editor-cancel').addEventListener('click', () => {
@@ -1057,15 +1056,18 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   if (existingSong) {
     container
       .querySelector('#editor-delete')
-      ?.addEventListener('click', () => handleDelete(container, existingSong));
+      ?.addEventListener('click', () => handleDelete(songAudioSection.destroy, existingSong));
   }
 
   // ─── Save ───
-  container
-    .querySelector('#editor-save')
-    .addEventListener('click', () =>
-      handleSave(container, existingSong, blocks, voiceLinkItems, { v2Enabled, voiceRoster, from }),
-    );
+  container.querySelector('#editor-save').addEventListener('click', () =>
+    handleSave(container, existingSong, blocks, voiceLinkItems, {
+      v2Enabled,
+      voiceRoster,
+      from,
+      destroySongAudio: songAudioSection.destroy,
+    }),
+  );
 }
 
 /* ─── Image handling ─── */
@@ -1242,7 +1244,7 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
     // mostraría la versión vieja en la primera visita tras editar.
     await invalidateSongDetailCache(songId);
     await refreshData();
-    container.__songAudioSection?.destroy();
+    v2.destroySongAudio?.();
     navigate(postSaveTarget({ from: v2.from || null, isNew: !existingSong }));
     showToast('Canción guardada correctamente', { duration: 3000 });
   } catch (err) {
@@ -1256,7 +1258,7 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
 
 /* ─── Delete ─── */
 
-async function handleDelete(container, song) {
+async function handleDelete(destroySongAudio, song) {
   if (!confirm(`¿Estás seguro de que deseas eliminar la canción "${song.title}"?`)) return;
   const token = getSession()?.access_token;
   try {
@@ -1266,7 +1268,7 @@ async function handleDelete(container, song) {
     });
     if (!res.ok) throw new Error('Error al eliminar');
     await refreshData();
-    container.__songAudioSection?.destroy();
+    destroySongAudio?.();
     navigate('/admin/edit');
     showToast('Canción eliminada', { duration: 3000 });
   } catch (e) {

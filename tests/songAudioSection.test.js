@@ -259,6 +259,46 @@ describe('SongAudioSection', () => {
     section.destroy();
   });
 
+  it('polling: un GET que rechaza no deja unhandled rejection, muestra error visible y sigue reintentando', async () => {
+    vi.useFakeTimers();
+    let call = 0;
+    songAudioApi.getSongAudio.mockImplementation(() => {
+      call += 1;
+      if (call === 1) {
+        return Promise.resolve({
+          audio: { url: 'https://x/full.mp3', durationSec: 100 },
+          timings: { status: 'processing' },
+        });
+      }
+      if (call === 2) {
+        return Promise.reject(new Error('red caída'));
+      }
+      return Promise.resolve({
+        audio: { url: 'https://x/full.mp3', durationSec: 100 },
+        timings: { status: 'processing' },
+      });
+    });
+
+    const section = createSongAudioSection({ songId: 'song-1' });
+    container.appendChild(section.el);
+
+    await vi.waitFor(() => expect(songAudioApi.getSongAudio).toHaveBeenCalledTimes(1));
+
+    // Tick 2: el GET rechaza — el catch debe absorberlo (sin unhandled
+    // rejection) y mostrar un error inline, sin matar el intervalo.
+    await vi.advanceTimersByTimeAsync(5001);
+    expect(songAudioApi.getSongAudio).toHaveBeenCalledTimes(2);
+    expect(section.el.querySelector('.song-audio__error')?.textContent).toContain(
+      'No se pudo consultar el estado del audio',
+    );
+
+    // Tick 3: el polling sigue vivo y vuelve a intentar solo.
+    await vi.advanceTimersByTimeAsync(5001);
+    expect(songAudioApi.getSongAudio).toHaveBeenCalledTimes(3);
+
+    section.destroy();
+  });
+
   it('destroy() corta el polling aunque siga en processing', async () => {
     vi.useFakeTimers();
     songAudioApi.getSongAudio.mockResolvedValue({

@@ -215,7 +215,10 @@ describe('enterImmersive/exitImmersive', () => {
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
     const lines = document.querySelectorAll('#imm-roll .imm-line');
-    const line0 = { text: 'Primera línea', groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' }] };
+    const line0 = {
+      text: 'Primera línea',
+      groups: [{ start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' }],
+    };
     const expectedActive = buildMixedLineHTML(
       line0,
       [{ pos: 0, ch: 'C' }],
@@ -394,6 +397,14 @@ describe('afinador: widget híbrido aprobado (FloatingTuner) montado bajo demand
     expect(document.querySelector('.floating-tuner')).toBeNull();
   });
 
+  it('el panel del afinador va ANTES de la barra inferior en el DOM (queda encima del player, no lo tapa)', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong() });
+    const panel = document.getElementById('imm-tuner-panel');
+    const bottombar = document.getElementById('imm-bottombar');
+    expect(panel.nextElementSibling).toBe(bottombar);
+  });
+
   it('no crashea si se sale sin haber abierto el afinador', () => {
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -417,7 +428,9 @@ describe('gestos (swipe horizontal/vertical, tap vs swipe)', () => {
     dispatchPointer(document, 'pointerup', 200, 300); // dx=-100 >= 40px
 
     expect(
-      document.querySelector('#imm-roll .imm-line[data-i="1"]').classList.contains('imm-line--active'),
+      document
+        .querySelector('#imm-roll .imm-line[data-i="1"]')
+        .classList.contains('imm-line--active'),
     ).toBe(true);
   });
 
@@ -462,14 +475,18 @@ describe('FAB de pausa (#imm-fab) y controles fijos mientras está pausado', () 
     expect(overlay.classList.contains('imm-v1--paused')).toBe(true);
     vi.advanceTimersByTime(60000);
     expect(
-      document.querySelector('#imm-roll .imm-line[data-i="0"]').classList.contains('imm-line--active'),
+      document
+        .querySelector('#imm-roll .imm-line[data-i="0"]')
+        .classList.contains('imm-line--active'),
     ).toBe(true); // sin avanzar
 
     fab.click();
     expect(overlay.classList.contains('imm-v1--paused')).toBe(false);
     vi.advanceTimersByTime(8000);
     expect(
-      document.querySelector('#imm-roll .imm-line[data-i="1"]').classList.contains('imm-line--active'),
+      document
+        .querySelector('#imm-roll .imm-line[data-i="1"]')
+        .classList.contains('imm-line--active'),
     ).toBe(true);
     vi.useRealTimers();
   });
@@ -522,10 +539,14 @@ describe('chips de voz S·A·T·B en la vista inmersiva', () => {
     expect(document.querySelector('.imm-v1')).toBeTruthy(); // sigue en la vista
     expect(activeLine().textContent).toContain('G3');
     expect(
-      document.querySelector('[data-category="tenor"]').classList.contains('imm-v1__voice-chip--active'),
+      document
+        .querySelector('[data-category="tenor"]')
+        .classList.contains('imm-v1__voice-chip--active'),
     ).toBe(true);
     expect(
-      document.querySelector('[data-category="soprano"]').classList.contains('imm-v1__voice-chip--active'),
+      document
+        .querySelector('[data-category="soprano"]')
+        .classList.contains('imm-v1__voice-chip--active'),
     ).toBe(false);
   });
 
@@ -560,14 +581,8 @@ describe('sheet de opciones extendido (MODO/VOZ/AFINADOR)', () => {
   // en <body> (no anidado dentro del overlay, donde heredaría su stacking
   // context aunque el z-index fuera correcto).
   it('invariante: el overlay inmersivo tiene menor z-index que el sheet de opciones (options-sheet.css)', () => {
-    const immersiveCss = readFileSync(
-      resolve(process.cwd(), 'src/styles/immersive.css'),
-      'utf-8',
-    );
-    const sheetCss = readFileSync(
-      resolve(process.cwd(), 'src/styles/options-sheet.css'),
-      'utf-8',
-    );
+    const immersiveCss = readFileSync(resolve(process.cwd(), 'src/styles/immersive.css'), 'utf-8');
+    const sheetCss = readFileSync(resolve(process.cwd(), 'src/styles/options-sheet.css'), 'utf-8');
 
     const immRuleMatch = immersiveCss.match(/\.imm-v1\s*\{[^}]*\}/);
     const osheetRuleMatch = sheetCss.match(/\.osheet\s*\{[^}]*\}/);
@@ -654,7 +669,9 @@ describe('sheet de opciones extendido (MODO/VOZ/AFINADOR)', () => {
     document.getElementById('imm-open-options').click();
     document.querySelector('[data-act="fup"]').click();
 
-    expect(document.querySelector('.imm-v1').style.getPropertyValue('--imm-font-scale')).toBe('1.10');
+    expect(document.querySelector('.imm-v1').style.getPropertyValue('--imm-font-scale')).toBe(
+      '1.10',
+    );
     expect(Number.parseFloat(localStorage.getItem('hkn-stage-font-scale'))).toBeCloseTo(1.1);
     // El cambio de escala de fuente reflow-ea la altura de las líneas: debe
     // haber reprogramado un nuevo frame de scroll (retargetScroll -> spring
@@ -681,7 +698,7 @@ describe('sheet de opciones extendido (MODO/VOZ/AFINADOR)', () => {
 });
 
 describe('wake lock', () => {
-  it("re-adquiere al volver de background (visibilitychange)", () => {
+  it('re-adquiere al volver de background (visibilitychange)', () => {
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
     expect(() => document.dispatchEvent(new Event('visibilitychange'))).not.toThrow();
@@ -723,7 +740,7 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     expect(document.querySelector('#imm-player-slot audio')).toBeNull();
   });
 
-  it('flag on + timings ready + audio: la barra de player queda visible y oculta el FAB', async () => {
+  it('flag on + timings ready + audio: la barra de player queda visible y el FAB sigue activo (la pista arranca pausada)', async () => {
     isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
@@ -732,7 +749,8 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
 
     expect(document.getElementById('imm-player-slot').hidden).toBe(false);
     expect(document.querySelector('#imm-player-slot audio')).toBeTruthy();
-    expect(document.getElementById('imm-fab').hidden).toBe(true);
+    // La pista aún no suena: el TimerEngine sigue conduciendo y el FAB se queda.
+    expect(document.getElementById('imm-fab').hidden).toBe(false);
   });
 
   it("toggle 'Reproducir pista' en el sheet reproduce/pausa el audio", async () => {
@@ -772,12 +790,14 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     // El highlight de la línea activa NO cambia de forma síncrona con el tap
     // (mismo contrato que timingEngine.seekToLine): sigue en la línea 0 hasta
     // el próximo timeupdate real del audio.
-    expect(document.querySelector('#imm-roll .imm-line[data-i="0"]').classList.contains('imm-line--active')).toBe(
-      true,
-    );
+    expect(
+      document
+        .querySelector('#imm-roll .imm-line[data-i="0"]')
+        .classList.contains('imm-line--active'),
+    ).toBe(true);
   });
 
-  it("error del <audio> en runtime: toast + cae en caliente a TimerEngine sin salir de la vista", async () => {
+  it('error del <audio> en runtime: toast + cae en caliente a TimerEngine sin salir de la vista', async () => {
     isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
     getSongAudio.mockResolvedValue(readyTimings());
     vi.useFakeTimers();
@@ -792,15 +812,19 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
 
     // sigue en la vista, con toast y de vuelta al FAB/TimerEngine
     expect(document.querySelector('.imm-v1')).toBeTruthy();
-    expect(document.querySelector('.toast.visible')?.textContent).toBe('No se pudo reproducir la pista de audio');
+    expect(document.querySelector('.toast.visible')?.textContent).toBe(
+      'No se pudo reproducir la pista de audio',
+    );
     expect(document.getElementById('imm-fab').hidden).toBe(false);
     expect(document.getElementById('imm-player-slot').hidden).toBe(true);
 
     // El TimerEngine quedó operativo: avanza solo tras el timeout normal.
     vi.advanceTimersByTime(9000);
-    expect(document.querySelector('#imm-roll .imm-line[data-i="1"]').classList.contains('imm-line--active')).toBe(
-      true,
-    );
+    expect(
+      document
+        .querySelector('#imm-roll .imm-line[data-i="1"]')
+        .classList.contains('imm-line--active'),
+    ).toBe(true);
     vi.useRealTimers();
   });
 
@@ -841,7 +865,7 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     expect(audio.getAttribute('src')).toBe('');
   });
 
-  it('FAB de pausa (#imm-fab) NO existe/actúa en modo sync: pausa es la del player', async () => {
+  it('FAB de pausa: activo en sync mientras la pista está pausada; oculto y no-op cuando suena', async () => {
     isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
@@ -849,12 +873,23 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     await flushAsync();
 
     const fab = document.getElementById('imm-fab');
+    const audio = document.querySelector('#imm-player-slot audio');
+
+    // Pista pausada (estado inicial): el FAB sigue conduciendo el timer.
+    expect(fab.hidden).toBe(false);
+    fab.click();
+    expect(document.querySelector('.imm-v1').classList.contains('imm-v1--paused')).toBe(true);
+    fab.click();
+    expect(document.querySelector('.imm-v1').classList.contains('imm-v1--paused')).toBe(false);
+
+    // Pista sonando: el audio manda; FAB oculto y togglePause no-op.
+    audio.dispatchEvent(new Event('play'));
     expect(fab.hidden).toBe(true);
-    fab.click(); // togglePause debe ser no-op en modo sync
+    fab.click();
     expect(document.querySelector('.imm-v1').classList.contains('imm-v1--paused')).toBe(false);
   });
 
-  it('sheet: VELOCIDAD (AUTO-SCROLL) visible en timer, oculta en modo sync', async () => {
+  it('sheet: VELOCIDAD (AUTO-SCROLL) visible mientras conduce el timer, oculta cuando la pista suena', async () => {
     enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
@@ -864,15 +899,29 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     document.getElementById('imm-open-options').click();
     expect(document.querySelector('.osheet .osheet__h')?.textContent).not.toBe(undefined);
     expect(
-      [...document.querySelectorAll('.osheet .osheet__h')].some((h) => h.textContent === 'AUTO-SCROLL'),
+      [...document.querySelectorAll('.osheet .osheet__h')].some(
+        (h) => h.textContent === 'AUTO-SCROLL',
+      ),
     ).toBe(true);
     closeOptionsSheet();
 
-    await flushAsync(); // promueve a sync
+    await flushAsync(); // promueve a sync (pista pausada: el timer sigue conduciendo)
 
     document.getElementById('imm-open-options').click();
     expect(
-      [...document.querySelectorAll('.osheet .osheet__h')].some((h) => h.textContent === 'AUTO-SCROLL'),
+      [...document.querySelectorAll('.osheet .osheet__h')].some(
+        (h) => h.textContent === 'AUTO-SCROLL',
+      ),
+    ).toBe(true);
+    closeOptionsSheet();
+
+    // Con la pista sonando la velocidad la da el audio: la perilla se oculta.
+    document.querySelector('#imm-player-slot audio').dispatchEvent(new Event('play'));
+    document.getElementById('imm-open-options').click();
+    expect(
+      [...document.querySelectorAll('.osheet .osheet__h')].some(
+        (h) => h.textContent === 'AUTO-SCROLL',
+      ),
     ).toBe(false);
   });
 
@@ -902,12 +951,16 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     audio.currentTime = 2.1; // startMs 2000 -> línea 1
     audio.dispatchEvent(new Event('timeupdate'));
 
-    expect(document.querySelector('#imm-roll .imm-line[data-i="1"]').classList.contains('imm-line--active')).toBe(
-      true,
-    );
-    expect(document.querySelector('#imm-roll .imm-line[data-i="0"]').classList.contains('imm-line--active')).toBe(
-      false,
-    );
+    expect(
+      document
+        .querySelector('#imm-roll .imm-line[data-i="1"]')
+        .classList.contains('imm-line--active'),
+    ).toBe(true);
+    expect(
+      document
+        .querySelector('#imm-roll .imm-line[data-i="0"]')
+        .classList.contains('imm-line--active'),
+    ).toBe(false);
   });
 
   it('seekSyncToLine: línea sin timing propio (mapeo sparse) cae al último timing conocido <= idx', async () => {
@@ -935,7 +988,10 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
 
   it('matriz de degradación: flag on sin audio -> sigue en timer (FAB visible, sin player bar)', async () => {
     enablePlayerFlag();
-    getSongAudio.mockResolvedValue({ audio: null, timings: { status: 'ready', lines: [{ i: 0, startMs: 0 }] } });
+    getSongAudio.mockResolvedValue({
+      audio: null,
+      timings: { status: 'ready', lines: [{ i: 0, startMs: 0 }] },
+    });
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
     await flushAsync();
@@ -995,7 +1051,9 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
 
     document.getElementById('imm-open-options').click();
     expect(
-      [...document.querySelectorAll('.osheet .osheet__h')].some((h) => h.textContent === 'AUTO-SCROLL'),
+      [...document.querySelectorAll('.osheet .osheet__h')].some(
+        (h) => h.textContent === 'AUTO-SCROLL',
+      ),
     ).toBe(true);
     expect(document.querySelector('.osheet [data-act="player-toggle"]')).toBeNull();
   });
@@ -1047,5 +1105,113 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
 
     expect(document.getElementById('imm-player-slot').hidden).toBe(true);
     expect(document.getElementById('imm-fab').hidden).toBe(false);
+  });
+
+  it('promovido a sync sin dar play: el TimerEngine sigue avanzando la letra', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimings());
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    expect(document.getElementById('imm-player-slot').hidden).toBe(false);
+    vi.advanceTimersByTime(9000);
+    expect(
+      document
+        .querySelector('#imm-roll .imm-line[data-i="1"]')
+        .classList.contains('imm-line--active'),
+    ).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it("'play' de la pista apaga el timer; 'pause' deja el FAB en pausa y permite reanudar sin música", async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimings());
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    const fab = document.getElementById('imm-fab');
+
+    audio.dispatchEvent(new Event('play'));
+    vi.advanceTimersByTime(20000); // el timer NO avanza: manda el audio
+    expect(
+      document
+        .querySelector('#imm-roll .imm-line[data-i="0"]')
+        .classList.contains('imm-line--active'),
+    ).toBe(true);
+
+    audio.dispatchEvent(new Event('pause'));
+    expect(fab.hidden).toBe(false);
+    expect(document.querySelector('.imm-v1').classList.contains('imm-v1--paused')).toBe(true);
+    vi.advanceTimersByTime(20000); // pausado: sigue sin avanzar
+    expect(
+      document
+        .querySelector('#imm-roll .imm-line[data-i="0"]')
+        .classList.contains('imm-line--active'),
+    ).toBe(true);
+
+    fab.click(); // reanuda el avance por timer, sin música
+    vi.advanceTimersByTime(9000);
+    expect(
+      document
+        .querySelector('#imm-roll .imm-line[data-i="1"]')
+        .classList.contains('imm-line--active'),
+    ).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('el botón de altavoz silencia/activa la pista (muted) sin pausarla', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimings());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    const muteBtn = document.getElementById('imm-player-mute');
+    expect(muteBtn).toBeTruthy();
+    expect(audio.muted).toBe(false);
+
+    muteBtn.click();
+    expect(audio.muted).toBe(true);
+    expect(muteBtn.getAttribute('aria-pressed')).toBe('true');
+
+    muteBtn.click();
+    expect(audio.muted).toBe(false);
+    expect(muteBtn.getAttribute('aria-pressed')).toBe('false');
+    // Silenciar no pausa: el estado interno del <audio> sigue "paused" solo
+    // porque nunca se dio play en este test — el mute no disparó 'pause'.
+    expect(document.querySelector('.imm-v1').classList.contains('imm-v1--paused')).toBe(false);
+  });
+
+  it('seek con la pista pausada: el highlight llega vía timeupdate y el timer continúa desde ahí', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimings());
+    vi.useFakeTimers();
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    audio.currentTime = 2.1; // startMs 2000 -> línea 1
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(
+      document
+        .querySelector('#imm-roll .imm-line[data-i="1"]')
+        .classList.contains('imm-line--active'),
+    ).toBe(true);
+
+    // La pista sigue pausada: el TimerEngine retoma desde la línea 1.
+    vi.advanceTimersByTime(20000);
+    expect(
+      document
+        .querySelector('#imm-roll .imm-line[data-i="2"]')
+        .classList.contains('imm-line--active'),
+    ).toBe(true);
+    vi.useRealTimers();
   });
 });

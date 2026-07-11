@@ -41,11 +41,7 @@ import { getLayers } from '../lib/layerStore.js';
 import { isFeatureEnabled } from '../lib/authStore.js';
 import { openOptionsSheet, closeOptionsSheet } from './OptionsSheet.js';
 import { projectLines } from '../lib/projectLines.js';
-import {
-  resolveInitialMode,
-  setImmersiveMode,
-  availableModes,
-} from '../lib/immersiveStore.js';
+import { resolveInitialMode, setImmersiveMode, availableModes } from '../lib/immersiveStore.js';
 import { createSpring } from '../lib/spring.js';
 import '../styles/immersive.css';
 
@@ -125,11 +121,11 @@ function buildOverlay() {
     <button class="imm-v1__fab" id="imm-fab" type="button" aria-label="Pausar avance automático">
       <span id="imm-fab-icon">${icon('pause', { size: 22 })}</span>
     </button>
+    <div class="imm-v1__tuner-panel" id="imm-tuner-panel" hidden></div>
     <div class="imm-v1__bottombar" id="imm-bottombar">
       <button class="imm-v1__btn imm-v1__tuner-toggle" id="imm-tuner-toggle" type="button" aria-pressed="false" aria-label="Activar afinador">${icon('mic', { size: 20 })}</button>
       <div class="imm-v1__player-slot" id="imm-player-slot" hidden></div>
-    </div>
-    <div class="imm-v1__tuner-panel" id="imm-tuner-panel" hidden></div>`;
+    </div>`;
   return overlay;
 }
 
@@ -172,7 +168,8 @@ function buildLineContent(s, line, isActive) {
     });
   }
 
-  const category = (s.song.voiceRoster || []).find((v) => v.id === s.activeVoiceId)?.category ?? null;
+  const category =
+    (s.song.voiceRoster || []).find((v) => v.id === s.activeVoiceId)?.category ?? null;
   const colorClass = category ? `voice-text--${category}` : '';
   const lineObj = { text: line.text, groups: line.groups };
 
@@ -295,8 +292,18 @@ function stopScrollLoop(s) {
 
 // ── MOTOR DE AVANCE (TimerEngine embebido, o TimingEngine en modo sync) ──
 
+/**
+ * ¿Conduce el audio el avance AHORA? Solo cuando está promovido a sync Y la
+ * pista suena. Con la pista pausada (incluido el estado inicial recién
+ * promovido: nadie dio play todavía) el TimerEngine sigue conduciendo — el
+ * modo inmersivo también se usa sin reproducir la canción.
+ */
+function audioDriving(s) {
+  return s.engineMode === 'sync' && s.audioPlaying;
+}
+
 function scheduleAdvance(s) {
-  if (s.engineMode === 'sync') return; // el audio manda el avance, no el timer
+  if (audioDriving(s)) return; // la pista suena: el audio manda el avance, no el timer
   clearTimeout(s.timer);
   if (s.paused) return;
   const cur = s.lines[s.index];
@@ -326,18 +333,26 @@ function goTo(s, index) {
   scheduleAdvance(s);
 }
 
-/** Navega a `index` por un evento del TimingEngine (audio real): sin timer propio. */
+/**
+ * Navega a `index` por un evento del TimingEngine (audio real). Si la pista
+ * está pausada (seek manual con el timer conduciendo) reprograma el timer
+ * desde la nueva línea; con la pista sonando scheduleAdvance es no-op.
+ */
 function goToSync(s, index) {
   removeInterlude(s);
   setActiveIndex(s, index);
+  scheduleAdvance(s);
 }
 
 function togglePause(s) {
-  if (s.engineMode === 'sync') return; // sin FAB propio en modo sync (pausa = la del player)
+  if (audioDriving(s)) return; // sin FAB propio mientras la pista suena (pausa = la del player)
   s.paused = !s.paused;
   s.els.overlay.classList.toggle('imm-v1--paused', s.paused);
   s.els.fabIcon.innerHTML = icon(s.paused ? 'play' : 'pause', { size: 22 });
-  s.els.fab.setAttribute('aria-label', s.paused ? 'Reanudar avance automático' : 'Pausar avance automático');
+  s.els.fab.setAttribute(
+    'aria-label',
+    s.paused ? 'Reanudar avance automático' : 'Pausar avance automático',
+  );
   if (s.paused) clearTimeout(s.timer);
   else scheduleAdvance(s);
   showControls(s);
@@ -351,7 +366,7 @@ function applySpeed(s, next) {
 }
 
 function adjustSpeed(s, delta) {
-  if (s.engineMode === 'sync') return; // la velocidad de avance la da el audio, no hay perilla
+  if (audioDriving(s)) return; // con la pista sonando la velocidad la da el audio, no hay perilla
   const next = Math.max(AUTOSCROLL_SPEED_MIN, Math.min(AUTOSCROLL_SPEED_MAX, s.speed + delta));
   if (next === s.speed) return;
   applySpeed(s, next);
@@ -411,7 +426,10 @@ function maybeLoadSyncAudio(s) {
 
 /**
  * Promueve la sesión de TimerEngine a TimingEngine: monta `<audio>` + player
- * bar, oculta el FAB. No reconcilia la posición del rollo con el
+ * bar. El timer NO se detiene acá: la pista arranca pausada y el TimerEngine
+ * sigue conduciendo (y el FAB visible) hasta que el usuario dé play — el
+ * traspaso de mando vive en los handlers play/pause de mountPlayerBar.
+ * No reconcilia la posición del rollo con el
  * `currentTime` del audio al promover (el audio arranca en 0 y el rollo
  * sigue en `s.index`, que en la práctica también es 0 salvo que el usuario
  * ya haya navegado durante la ventana timer-antes-de-promover): el primer
@@ -422,8 +440,6 @@ function maybeLoadSyncAudio(s) {
  */
 function promoteToSync(s, audio, timingLines) {
   if (s.engineMode === 'sync') return;
-  clearTimeout(s.timer);
-  s.timer = null;
 
   const audioEl = document.createElement('audio');
   audioEl.id = 'imm-audio';
@@ -449,7 +465,6 @@ function promoteToSync(s, audio, timingLines) {
   s.onAudioError = onAudioError;
 
   s.engineMode = 'sync';
-  s.els.fab.hidden = true;
   mountPlayerBar(s);
 }
 
@@ -463,6 +478,7 @@ function fallbackToTimer(s) {
   unmountPlayerBar(s);
   cleanupAudioEl(s);
   removeInterlude(s);
+  s.audioPlaying = false;
   s.els.fab.hidden = false;
   s.engineMode = 'timer';
   scheduleAdvance(s);
@@ -501,7 +517,7 @@ function seekSyncToLine(s, idx) {
   if (best) s.audioEl.currentTime = best.startMs / 1000;
 }
 
-/** Monta la barra de player en `#imm-player-slot`: scrubber + play/pausa + tiempos. */
+/** Monta la barra de player en `#imm-player-slot`: scrubber + play/pausa + tiempos + altavoz. */
 function mountPlayerBar(s) {
   const slot = s.els.playerSlot;
   slot.hidden = false;
@@ -511,6 +527,7 @@ function mountPlayerBar(s) {
       <span class="imm-player__time" id="imm-player-time">0:00</span>
       <input class="imm-player__scrubber" id="imm-player-scrubber" type="range" min="0" max="0" step="0.1" value="0" aria-label="Progreso de la pista" />
       <span class="imm-player__time" id="imm-player-duration">0:00</span>
+      <button class="imm-player__mute" id="imm-player-mute" type="button" aria-pressed="false" aria-label="Silenciar pista">${icon('volume-2', { size: 18 })}</button>
     </div>`;
   slot.appendChild(s.audioEl);
 
@@ -518,14 +535,32 @@ function mountPlayerBar(s) {
   const scrubber = slot.querySelector('#imm-player-scrubber');
   const timeEl = slot.querySelector('#imm-player-time');
   const durEl = slot.querySelector('#imm-player-duration');
+  const muteBtn = slot.querySelector('#imm-player-mute');
 
+  // Traspaso de mando timer<->audio: mientras la pista suena manda el audio
+  // (FAB oculto); al pausarla TODO queda en pausa con el FAB visible, que
+  // permite reanudar el avance por timer sin música (dos caminos de uso:
+  // cantar con pista o solo teleprompter).
   const onPlay = () => {
+    s.audioPlaying = true;
+    clearTimeout(s.timer);
+    s.timer = null;
+    s.paused = false;
+    s.els.overlay.classList.remove('imm-v1--paused');
+    s.els.fab.hidden = true;
     playBtn.innerHTML = icon('pause', { size: 18 });
     playBtn.setAttribute('aria-label', 'Pausar pista');
   };
   const onPause = () => {
+    s.audioPlaying = false;
+    s.paused = true;
+    s.els.overlay.classList.add('imm-v1--paused');
+    s.els.fab.hidden = false;
+    s.els.fabIcon.innerHTML = icon('play', { size: 22 });
+    s.els.fab.setAttribute('aria-label', 'Reanudar avance automático');
     playBtn.innerHTML = icon('play', { size: 18 });
     playBtn.setAttribute('aria-label', 'Reproducir pista');
+    showControls(s);
   };
   const onTimeUpdate = () => {
     scrubber.value = String(s.audioEl.currentTime);
@@ -542,6 +577,17 @@ function mountPlayerBar(s) {
   const onScrubberInput = () => {
     s.audioEl.currentTime = Number(scrubber.value);
   };
+  // Altavoz: silencia la pista sin pausarla (el avance sigue sincronizado al
+  // audio, solo deja de sonar).
+  const onMuteBtnClick = () => {
+    s.audioEl.muted = !s.audioEl.muted;
+    muteBtn.innerHTML = icon(s.audioEl.muted ? 'volume-x' : 'volume-2', { size: 18 });
+    muteBtn.setAttribute('aria-pressed', String(s.audioEl.muted));
+    muteBtn.setAttribute(
+      'aria-label',
+      s.audioEl.muted ? 'Activar sonido de la pista' : 'Silenciar pista',
+    );
+  };
 
   s.audioEl.addEventListener('play', onPlay);
   s.audioEl.addEventListener('pause', onPause);
@@ -549,6 +595,7 @@ function mountPlayerBar(s) {
   s.audioEl.addEventListener('loadedmetadata', onLoadedMeta);
   playBtn.addEventListener('click', onPlayBtnClick);
   scrubber.addEventListener('input', onScrubberInput);
+  muteBtn.addEventListener('click', onMuteBtnClick);
 
   // jsdom no dispara `loadedmetadata` (no decodifica audio real): usa la
   // duración conocida por el backend como fallback inmediato.
@@ -565,8 +612,10 @@ function mountPlayerBar(s) {
     onLoadedMeta,
     onPlayBtnClick,
     onScrubberInput,
+    onMuteBtnClick,
     playBtn,
     scrubber,
+    muteBtn,
   };
 }
 
@@ -580,6 +629,7 @@ function unmountPlayerBar(s) {
     s.audioEl.removeEventListener('loadedmetadata', l.onLoadedMeta);
     l.playBtn.removeEventListener('click', l.onPlayBtnClick);
     l.scrubber.removeEventListener('input', l.onScrubberInput);
+    l.muteBtn.removeEventListener('click', l.onMuteBtnClick);
   }
   s.playerListeners = null;
   s.els.playerSlot.innerHTML = '';
@@ -683,7 +733,9 @@ function openOptions(s) {
     notation: typeof s.ctx.getNotation === 'function' ? s.ctx.getNotation() : 'anglo',
     fontLabel: s.fontScale.toFixed(2),
     autoscrollLabel: speedToPercentLabel(s.speed),
-    showAutoscroll: !isSync, // VELOCIDAD solo aplica al TimerEngine — en sync manda el audio
+    // VELOCIDAD solo aplica cuando conduce el TimerEngine — con la pista
+    // sonando manda el audio (en sync con pista pausada el timer sigue vivo).
+    showAutoscroll: !audioDriving(s),
     modes: s.modes.map((m) => ({ value: m, label: MODE_LABELS[m] })),
     mode: s.mode,
     voiceOptions:
@@ -697,7 +749,7 @@ function openOptions(s) {
     showTuner: true,
     tunerOn: s.tunerOn,
     showPlayerToggle: isSync,
-    playerOn: isSync && !!s.audioEl && !s.audioEl.paused,
+    playerOn: audioDriving(s),
     onPlayerToggle: (on) => {
       // OFF = pausa del audio (`audio.pause()`), NO una vuelta al TimerEngine
       // — el toggle solo controla reproducción; la degradación a timer es
@@ -717,7 +769,10 @@ function openOptions(s) {
       retargetScroll(s);
     },
     onFont: (dir) => {
-      s.fontScale = Math.max(FONT_SCALE_MIN, Math.min(FONT_SCALE_MAX, s.fontScale + dir * FONT_SCALE_STEP));
+      s.fontScale = Math.max(
+        FONT_SCALE_MIN,
+        Math.min(FONT_SCALE_MAX, s.fontScale + dir * FONT_SCALE_STEP),
+      );
       saveFontScale(s.fontScale);
       s.els.overlay.style.setProperty('--imm-font-scale', s.fontScale.toFixed(2));
       const of = document.querySelector('#osheet-font');
@@ -749,7 +804,8 @@ function setTunerOn(s, on) {
   s.els.tunerToggle.setAttribute('aria-pressed', String(on));
   s.els.tunerPanel.hidden = !on;
   if (on) {
-    const category = (s.song.voiceRoster || []).find((v) => v.id === s.activeVoiceId)?.category ?? null;
+    const category =
+      (s.song.voiceRoster || []).find((v) => v.id === s.activeVoiceId)?.category ?? null;
     const cur = s.lines[s.index];
     s.floatingTuner = openFloatingTuner(s.els.tunerPanel, {
       note: cur?.noteRaw ?? null,
@@ -854,6 +910,10 @@ export function enterImmersive(songViewEl, ctx = {}) {
     // SIEMPRE en 'timer' — la promoción a 'sync' es en caliente tras el
     // await de getSongAudio (maybeLoadSyncAudio), nunca bloquea la entrada.
     engineMode: 'timer',
+    // true solo mientras la pista suena (eventos play/pause del <audio>):
+    // decide quién conduce el avance (audioDriving) — en sync con pista
+    // pausada el TimerEngine sigue al mando.
+    audioPlaying: false,
     audioEl: null,
     durationSecHint: null,
     onAudioError: null,

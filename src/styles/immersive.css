@@ -61,7 +61,9 @@ body.immersive-active {
   align-items: center;
   gap: 0.5rem;
   padding: max(0.75rem, env(safe-area-inset-top)) var(--imm-gutter) 0.5rem;
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
 }
 .imm-v1__chrome--hidden {
   opacity: 0;
@@ -123,7 +125,10 @@ body.immersive-active {
   text-align: left;
   transform-origin: left center;
   word-wrap: break-word;
-  transition: opacity 0.3s ease, filter 0.3s ease, transform 0.3s ease;
+  transition:
+    opacity 0.3s ease,
+    filter 0.3s ease,
+    transform 0.3s ease;
 }
 
 .imm-line--active {
@@ -188,10 +193,20 @@ body.immersive-active {
 }
 
 /* El afinador es el widget híbrido aprobado (`.floating-tuner`, estilos en
-   components.css) montado dentro de este panel — sin CSS propio acá más que
-   el padding del contenedor. */
+   components.css) montado dentro de este panel, que va ANTES del bottombar
+   en el DOM: queda encima de la barra del player, no la tapa. */
 .imm-v1__tuner-panel {
   padding: 0 var(--imm-gutter) 0.5rem;
+}
+
+/* El widget llega con position:fixed (components.css, pensado para flotar
+   sobre SongView): acá debe FLUIR dentro de la columna del overlay — sin
+   este override se ancla al borde inferior de la pantalla y oculta el
+   bottombar completo (player + toggle del mic). */
+.imm-v1__tuner-panel .floating-tuner {
+  position: static;
+  max-width: none;
+  margin: 0;
 }
 
 /* Slot del player de pista (Fase D): oculto hasta que exista audio+flag. */
@@ -237,6 +252,23 @@ body.immersive-active {
   accent-color: var(--color-brand, #01ccd9);
 }
 
+/* Altavoz: silencia la pista sin pausarla (muted). */
+.imm-player__mute {
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.imm-player__mute[aria-pressed='true'] {
+  color: var(--color-brand, #01ccd9);
+}
+
 /* ── Interludio (hueco > 5s entre líneas, solo modo sync) ── */
 
 .imm-interlude {
@@ -254,5 +286,7 @@ body.immersive-active {
   background: var(--color-brand, #01ccd9);
   opacity: calc(0.25 + 0.65 * var(--imm-dot-scale, 0));
   transform: scale(calc(0.6 + 0.4 * var(--imm-dot-scale, 0)));
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }

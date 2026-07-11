@@ -35,7 +35,6 @@ import { renderFavoritesPage } from './components/FavoritesPage.js';
 import { renderRecommenderPage } from './components/RecommenderPage.js';
 import { renderHeader, hideHeader, showHeader } from './components/Header.js';
 import { renderSidebar, updateSidebarContent } from './components/Sidebar.js';
-import { renderSongListSkeleton } from './components/SongList.js';
 import { skelLongText } from './lib/skeleton.js';
 import { renderSongView } from './components/SongView.js';
 import { renderSongEditor } from './components/SongEditor.js';
@@ -124,7 +123,7 @@ async function boot() {
   renderBottomNav(app);
 
   // Show skeleton while loading
-  renderSongListSkeleton(mainContent);
+  showPageSkeleton();
 
   // Initialize auth FIRST (before any guarded routes resolve).
   await initAuthStore();

@@ -37,11 +37,10 @@ import {
 } from '../lib/autoscroll.js';
 import { buildVoiceChipHTML } from '../lib/voiceChips.js';
 import { openFloatingTuner } from './FloatingTuner.js';
-import { getLayers } from '../lib/layerStore.js';
 import { isFeatureEnabled } from '../lib/authStore.js';
 import { openOptionsSheet, closeOptionsSheet, isOptionsSheetOpen } from './OptionsSheet.js';
 import { projectLines } from '../lib/projectLines.js';
-import { resolveInitialMode, setImmersiveMode, availableModes } from '../lib/immersiveStore.js';
+import { getImmersiveMode, setImmersiveMode, availableModes } from '../lib/immersiveStore.js';
 import { createSpring } from '../lib/spring.js';
 import '../styles/immersive.css';
 
@@ -902,7 +901,7 @@ export function enterImmersive(songViewEl, ctx = {}) {
   const hasChords = songHasChords(ctx.song);
   const tonoAvailable = isFeatureEnabled('voz_tono') && (ctx.song.voiceRoster || []).length > 0;
   const modes = availableModes({ hasChords, tonoAvailable });
-  let mode = resolveInitialMode(getLayers());
+  let mode = getImmersiveMode();
   if (!modes.includes(mode)) mode = 'letra';
 
   songViewEl.classList.add('song-view--immersive');

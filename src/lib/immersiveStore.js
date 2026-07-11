@@ -42,24 +42,6 @@ export function setImmersiveMode(mode) {
 }
 
 /**
- * Deriva el modo inicial de sesión a partir de las capas de la vista
- * normal (letra/acordes/tono), para cuando el usuario todavía no eligió un
- * modo propio en la vista inmersiva. Helper puro, no persiste — el caller
- * debe preferir un valor ya persistido (`getImmersiveMode()`) sobre este
- * fallback cuando exista.
- * @param {{ chords: boolean, tono: boolean }} layers
- * @returns {'letra'|'chords'|'mixed'|'tono'}
- */
-export function inheritFromLayers(layers) {
-  const chords = layers?.chords === true;
-  const tono = layers?.tono === true;
-  if (chords && tono) return 'mixed';
-  if (chords) return 'chords';
-  if (tono) return 'tono';
-  return 'letra';
-}
-
-/**
  * Modos disponibles según la disponibilidad de acordes y tono de la
  * canción actual. `hasChords`/`tonoAvailable` los calcula el caller (misma
  * señal que usan SongView/ImmersiveView: `songHasChords(song)` local a cada
@@ -75,30 +57,4 @@ export function availableModes({ hasChords, tonoAvailable } = {}) {
   if (hasChords && tonoAvailable) modes.push('mixed');
   if (tonoAvailable) modes.push('tono');
   return modes;
-}
-
-/**
- * Punto de entrada del modo inicial que usará ImmersiveView al montar:
- * compone la precedencia "elección persistida del usuario gana sobre la
- * herencia de capas". Si hay un modo válido persistido (el usuario ya eligió
- * antes en la vista inmersiva) lo devuelve tal cual; si no hay nada
- * persistido, el valor es inválido/corrupto, o localStorage falla, cae a
- * `inheritFromLayers(layers)`.
- *
- * No reutiliza `getImmersiveMode()` a propósito: esa función colapsa "nada
- * persistido" con "el usuario eligió explícitamente el default 'letra'" —
- * ambos devuelven `'letra'`. Aca hace falta distinguir los dos casos (solo
- * el segundo debe ganarle a `inheritFromLayers`), así que se lee el valor
- * crudo de localStorage directamente.
- * @param {{ chords: boolean, tono: boolean }} layers
- * @returns {'letra'|'chords'|'mixed'|'tono'}
- */
-export function resolveInitialMode(layers) {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (VALID_MODES.includes(raw)) return raw;
-  } catch {
-    // best-effort — si localStorage falla, seguimos al fallback de herencia.
-  }
-  return inheritFromLayers(layers);
 }

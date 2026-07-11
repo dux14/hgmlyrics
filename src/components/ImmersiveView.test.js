@@ -80,6 +80,36 @@ describe('ImmersiveView — clases de modo por línea + paridad de voz', () => {
     isOptionsSheetOpen.mockReturnValue(false);
   });
 
+  it('modo inicial es letra sin persistencia, aunque las capas de SongView tengan chords activo', () => {
+    // Simula que SongView dejó la capa "acordes" activa antes de entrar al
+    // full view. La vista inmersiva NO debe heredarla: sin nada persistido
+    // bajo hkn-immersive-mode, el modo inicial siempre es 'letra'.
+    localStorage.setItem('hkn-lyrics-layers', JSON.stringify({ chords: true, tono: false }));
+    const song = buildSong();
+    enterImmersive(songViewEl, buildCtx(song));
+
+    document.getElementById('imm-open-options').click();
+    const opts = openOptionsSheet.mock.calls.at(-1)[0];
+    expect(opts.mode).toBe('letra');
+
+    const roll = document.getElementById('imm-roll');
+    const lines = Array.from(roll.querySelectorAll('.imm-line'));
+    lines.forEach((el) => {
+      expect(el.classList.contains('lyrics__line--chords')).toBe(false);
+    });
+  });
+
+  it('modo inicial respeta la elección persistida en hkn-immersive-mode sobre las capas', () => {
+    localStorage.setItem('hkn-lyrics-layers', JSON.stringify({ chords: false, tono: false }));
+    localStorage.setItem('hkn-immersive-mode', 'chords');
+    const song = buildSong();
+    enterImmersive(songViewEl, buildCtx(song));
+
+    document.getElementById('imm-open-options').click();
+    const opts = openOptionsSheet.mock.calls.at(-1)[0];
+    expect(opts.mode).toBe('chords');
+  });
+
   it('modo chords: las líneas no-spoken llevan lyrics__line--chords', () => {
     const song = buildSong();
     enterImmersive(songViewEl, buildCtx(song));

@@ -104,8 +104,8 @@
   background: color-mix(in srgb, var(--liturgical-bg, var(--color-bg)) 55%, transparent);
   border: none;
   color: inherit;
-  min-width: 32px;
-  min-height: 28px;
+  min-width: 36px;
+  min-height: 36px;
 }
 
 .voz-view__font-controls .font-controls__label {
@@ -265,5 +265,9 @@
     position: static;
     margin-top: 0.75rem;
     display: inline-flex;
+  }
+
+  .voz-view__pill {
+    max-width: none;
   }
 }

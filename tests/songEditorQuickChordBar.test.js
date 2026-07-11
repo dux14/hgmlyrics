@@ -8,7 +8,7 @@ vi.mock('../src/lib/store.js', () => ({
   refreshData: vi.fn(),
   invalidateSongDetailCache: vi.fn(),
 }));
-vi.mock('../src/router.js', () => ({ navigate: vi.fn() }));
+vi.mock('../src/router.js', () => ({ navigate: vi.fn(), onRouteChange: vi.fn(() => vi.fn()) }));
 vi.mock('../src/lib/authStore.js', () => ({
   getSession: vi.fn(() => ({ access_token: 'tok-1' })),
   isFeatureEnabled: vi.fn(() => false),
@@ -41,7 +41,13 @@ const FAKE_SONG = {
       type: 'verse',
       label: 'Verso 1',
       lines: [
-        { text: 'Uno', chords: [{ pos: 0, ch: 'C' }, { pos: 2, ch: 'G' }] },
+        {
+          text: 'Uno',
+          chords: [
+            { pos: 0, ch: 'C' },
+            { pos: 2, ch: 'G' },
+          ],
+        },
         { text: 'Dos', chords: [{ pos: 0, ch: 'C' }] },
         { text: 'Tres', chords: [] },
       ],

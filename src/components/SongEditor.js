@@ -9,7 +9,7 @@
 import { fetchSongDetail, refreshData, invalidateSongDetailCache } from '../lib/store.js';
 import { songToChordPro } from '../lib/importParse.js';
 import { MUSICAL_KEYS, chordProKeyToCanonical } from '../lib/musicKeys.js';
-import { navigate } from '../router.js';
+import { navigate, onRouteChange } from '../router.js';
 import { getSession, isFeatureEnabled } from '../lib/authStore.js';
 import { renderSections } from './SongView.js';
 import {
@@ -655,6 +655,9 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   //   mismo tras el splice real; delete-section-audio no lo necesita en
   //   absoluto porque persiste contra el back de inmediato (igual que
   //   toggle-audio), sin dejar estado sin guardar en el editor.
+  // - song-audio-retry / song-audio-delete (SongAudioSection.js): igual que
+  //   delete-section-audio, persisten solas contra el back (reintentar
+  //   sincronía o borrar el mp3 completo) sin dejar estado sin guardar.
   const DIRTY_CLICK_SKIP_ACTIONS = new Set([
     'toggle-preview',
     'toggle-audio',
@@ -662,6 +665,8 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     'open-tono',
     'delete-section',
     'delete-section-audio',
+    'song-audio-retry',
+    'song-audio-delete',
   ]);
   container.addEventListener('input', () => {
     dirty = true;
@@ -1239,6 +1244,19 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   // solo se apaga al navegar fuera del editor — ver destroy() abajo).
   const songAudioSection = createSongAudioSection({ songId: existingSong?.id ?? null });
   container.querySelector('#editor-song-audio').replaceWith(songAudioSection.el);
+
+  // Cancelar/Guardar-éxito/Borrar-éxito ya llaman a songAudioSection.destroy()
+  // explícitamente más abajo, pero salir por cualquier otra ruta (bottom-nav,
+  // header, atrás del navegador, menú "Ir a") no pasa por ninguno de esos
+  // handlers y dejaba el setInterval de polling vivo contra un DOM
+  // desmontado. Mismo patrón que destroySectionPlayer/destroyFloatingTuner en
+  // SongView.js: se suscribe a onRouteChange y se autodesuscribe al disparar.
+  // destroy() es idempotente (stopPolling reinicia pollTimer a null), así que
+  // la doble llamada con Cancelar/Guardar/Borrar es inofensiva.
+  const unsubscribeSongAudioRoute = onRouteChange(() => {
+    songAudioSection.destroy();
+    unsubscribeSongAudioRoute();
+  });
 
   // ─── Cancel ───
   container.querySelector('#editor-cancel').addEventListener('click', async () => {

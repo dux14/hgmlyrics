@@ -19,7 +19,31 @@ vi.mock('../src/lib/store.js', () => ({
   getSongById: vi.fn(),
   getAdjacentSongs: vi.fn(),
 }));
-vi.mock('../src/router.js', () => ({ navigate: vi.fn(), onRouteChange: vi.fn() }));
+// onRouteChange real: guarda callbacks para poder simular un route change
+// (bottom-nav/header/atrás del navegador) invocándolos manualmente en tests.
+const { routeChangeCallbacks } = vi.hoisted(() => ({ routeChangeCallbacks: [] }));
+vi.mock('../src/router.js', () => ({
+  navigate: vi.fn(),
+  onRouteChange: vi.fn((cb) => {
+    routeChangeCallbacks.push(cb);
+    return () => {
+      const i = routeChangeCallbacks.indexOf(cb);
+      if (i !== -1) routeChangeCallbacks.splice(i, 1);
+    };
+  }),
+}));
+function simulateRouteChange() {
+  // Copia defensiva: los callbacks pueden auto-desuscribirse (mutar el array)
+  // durante la iteración.
+  [...routeChangeCallbacks].forEach((cb) => cb());
+}
+vi.mock('../src/lib/songAudioApi.js', () => ({
+  getSongAudio: vi.fn(),
+  createSongAudioUpload: vi.fn(),
+  confirmSongAudio: vi.fn(),
+  deleteSongAudio: vi.fn(),
+  uploadSongAudioFile: vi.fn(),
+}));
 vi.mock('../src/lib/authStore.js', () => ({
   getSession: vi.fn(() => ({ access_token: 'tok-1' })),
   isFeatureEnabled: vi.fn(() => false),
@@ -43,7 +67,14 @@ const store = await import('../src/lib/store.js');
 const { navigate } = await import('../src/router.js');
 const { confirmDialog } = await import('../src/components/ConfirmDialog.js');
 const { openChordEditorModal } = await import('../src/components/editor/ChordEditorModal.js');
+const songAudioApi = await import('../src/lib/songAudioApi.js');
 const { renderSongEditor } = await import('../src/components/SongEditor.js');
+
+// Cada renderSongEditor suscribe un callback nuevo a onRouteChange; sin esto
+// se acumularían entre tests (el mock de router.js vive a nivel de módulo).
+afterEach(() => {
+  routeChangeCallbacks.length = 0;
+});
 
 const FAKE_SONG = {
   id: 'song-1',
@@ -334,5 +365,90 @@ describe('SongEditor — modal de acordes marca dirty solo si hubo cambio real',
       ),
     );
     expect(navigate).not.toHaveBeenCalled();
+  });
+});
+
+describe('SongEditor — el polling de audio muere en cualquier salida de ruta', () => {
+  let container;
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) });
+    store.fetchSongDetail.mockResolvedValue({
+      ...FAKE_SONG,
+      sections: FAKE_SONG.sections.map((s) => ({ ...s })),
+    });
+  });
+
+  afterEach(() => {
+    container.remove();
+    vi.clearAllMocks();
+    vi.useRealTimers();
+    global.fetch = originalFetch;
+  });
+
+  it('un route change (bottom-nav/header/atrás) corta el polling del audio completo', async () => {
+    vi.useFakeTimers();
+    songAudioApi.getSongAudio.mockResolvedValue({
+      audio: { url: 'https://x/full.mp3', durationSec: 100 },
+      timings: { status: 'processing' },
+    });
+
+    await renderSongEditor(container, 'song-1');
+    await vi.waitFor(() => expect(songAudioApi.getSongAudio).toHaveBeenCalledTimes(1));
+
+    // El polling sigue vivo mientras no salga de la ruta.
+    await vi.advanceTimersByTimeAsync(5001);
+    expect(songAudioApi.getSongAudio).toHaveBeenCalledTimes(2);
+
+    // Simula salir por cualquier vía que no sea Cancelar/Guardar/Borrar
+    // (bottom-nav, header, atrás del navegador, menú "Ir a").
+    simulateRouteChange();
+
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(songAudioApi.getSongAudio).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('SongEditor — acciones de SongAudioSection no ensucian el guard', () => {
+  let container;
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) });
+    store.fetchSongDetail.mockResolvedValue({
+      ...FAKE_SONG,
+      sections: FAKE_SONG.sections.map((s) => ({ ...s })),
+    });
+  });
+
+  afterEach(() => {
+    container.remove();
+    vi.clearAllMocks();
+    global.fetch = originalFetch;
+  });
+
+  it('click en "Reintentar sincronía" + Cancelar: navega directo sin diálogo de descarte', async () => {
+    songAudioApi.getSongAudio.mockResolvedValue({
+      audio: { url: 'https://x/full.mp3', durationSec: 100 },
+      timings: { status: 'failed', error: 'timeout' },
+    });
+    songAudioApi.confirmSongAudio.mockResolvedValue(undefined);
+
+    await renderSongEditor(container, 'song-1');
+    await vi.waitFor(() =>
+      expect(container.querySelector('[data-action="song-audio-retry"]')).not.toBeNull(),
+    );
+
+    container.querySelector('[data-action="song-audio-retry"]').click();
+    await vi.waitFor(() => expect(songAudioApi.confirmSongAudio).toHaveBeenCalled());
+
+    container.querySelector('#editor-cancel').click();
+    await vi.waitFor(() => expect(navigate).toHaveBeenCalled());
+    expect(confirmDialog).not.toHaveBeenCalled();
   });
 });

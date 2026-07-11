@@ -201,7 +201,9 @@ describe('enterImmersive/exitImmersive', () => {
   });
 
   it("modo 'chords': línea activa contiene acordes; la vecina también (atenuada por CSS)", () => {
-    setLayer('chords', true);
+    // El modo ya no se hereda de las capas de SongView: se persiste la
+    // elección hecha en el propio full view (hkn-immersive-mode).
+    localStorage.setItem('hkn-immersive-mode', 'chords');
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
     const lines = document.querySelectorAll('#imm-roll .imm-line');
@@ -244,7 +246,7 @@ describe('enterImmersive/exitImmersive', () => {
   });
 
   it("modo 'tono' sin voz elegida auto-abre el selector (sheet)", () => {
-    setLayer('tono', true);
+    localStorage.setItem('hkn-immersive-mode', 'tono');
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong() }); // sin getActiveVoice: activeVoiceId null
     expect(document.querySelector('.osheet')).toBeTruthy();
@@ -257,7 +259,7 @@ describe('enterImmersive/exitImmersive', () => {
     expect(document.getElementById('imm-voice-chips').hidden).toBe(true); // modo letra default
 
     exitImmersive();
-    setLayer('tono', true);
+    localStorage.setItem('hkn-immersive-mode', 'tono');
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
     expect(document.getElementById('imm-voice-chips').hidden).toBe(false);
   });
@@ -535,9 +537,9 @@ describe('chips de voz S·A·T·B en la vista inmersiva', () => {
   });
 
   it('tap en un chip cambia la voz activa y la nota mostrada sin salir de la vista', () => {
-    // La nota solo se pinta vía el render por capas (modo tono), así que esta
-    // aserción necesita la capa Tono encendida para que la nota sea observable.
-    setLayer('tono', true);
+    // La nota solo se pinta en modo tono, así que esta aserción necesita el
+    // modo persistido en hkn-immersive-mode para que la nota sea observable.
+    localStorage.setItem('hkn-immersive-mode', 'tono');
     const sv = mountSongView();
     enterImmersive(sv, { song: buildMultiVoiceSong(), getActiveVoice: () => 'soprano-1' });
     const activeLine = () => document.querySelector('#imm-roll .imm-line[data-i="0"]');

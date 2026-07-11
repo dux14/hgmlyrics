@@ -35,7 +35,7 @@ export function songTile(song, colorMap = {}, coverBySlug = {}) {
     <div class="song-tile__plate" aria-hidden="true"></div>
     <div class="song-tile__txt">
       <span class="song-tile__title">${escapeHtml(song.title)}</span>
-      <span class="song-tile__group">Hakuna Group Music</span>
+      <span class="song-tile__group">${escapeHtml(song.artist || 'Hakuna Group Music')}</span>
     </div>
   `;
 

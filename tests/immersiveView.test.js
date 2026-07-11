@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 // Stub pitch detector (requiere AudioContext/getUserMedia, no disponible en
 // jsdom) — mismo patrón que tests/stageMode.test.js.
@@ -545,6 +547,48 @@ describe('chips de voz S·A·T·B en la vista inmersiva', () => {
 
 describe('sheet de opciones extendido (MODO/VOZ/AFINADOR)', () => {
   afterEach(() => closeOptionsSheet());
+
+  // Bug real cazado por el e2e Playwright contra el preview (tests/e2e/immersive.spec.js):
+  // el sheet montaba con un z-index (300/301) por DEBAJO de `.imm-v1`
+  // (llegó a 1000/1001), así que cualquier `.imm-line` con transform/filter
+  // (stacking context propio) podía interceptar el click de un botón del
+  // sheet en el navegador real — invisible para jsdom, que no calcula
+  // layout/stacking. jsdom no puede medir el stacking real, pero SÍ puede
+  // afirmar la invariante que lo garantiza: el número de z-index de
+  // `.imm-v1` en la hoja de estilos debe ser MENOR que el de `.osheet`
+  // (options-sheet.css), y el sheet debe montar como hermano de `.imm-v1`
+  // en <body> (no anidado dentro del overlay, donde heredaría su stacking
+  // context aunque el z-index fuera correcto).
+  it('invariante: el overlay inmersivo tiene menor z-index que el sheet de opciones (options-sheet.css)', () => {
+    const immersiveCss = readFileSync(
+      resolve(process.cwd(), 'src/styles/immersive.css'),
+      'utf-8',
+    );
+    const sheetCss = readFileSync(
+      resolve(process.cwd(), 'src/styles/options-sheet.css'),
+      'utf-8',
+    );
+
+    const immRuleMatch = immersiveCss.match(/\.imm-v1\s*\{[^}]*\}/);
+    const osheetRuleMatch = sheetCss.match(/\.osheet\s*\{[^}]*\}/);
+    expect(immRuleMatch).not.toBeNull();
+    expect(osheetRuleMatch).not.toBeNull();
+
+    const immZIndex = Number(immRuleMatch[0].match(/z-index:\s*(\d+)/)[1]);
+    const osheetZIndex = Number(osheetRuleMatch[0].match(/z-index:\s*(\d+)/)[1]);
+    expect(osheetZIndex).toBeGreaterThan(immZIndex);
+  });
+
+  it('el sheet monta como hermano de .imm-v1 en <body>, no anidado dentro del overlay', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.getElementById('imm-open-options').click();
+
+    const sheet = document.querySelector('.osheet');
+    expect(sheet).toBeTruthy();
+    expect(sheet.parentElement).toBe(document.body);
+    expect(document.querySelector('.imm-v1 .osheet')).toBeNull(); // NO anidado bajo el overlay
+  });
 
   // Portado de tests/stageMode.test.js (BUG Important, review): cerrar el
   // sheet no debe dejar el chrome oculto aunque hayan pasado >= CONTROLS_HIDE_MS

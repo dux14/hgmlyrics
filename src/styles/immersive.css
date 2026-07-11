@@ -14,10 +14,25 @@ body.immersive-active {
   overflow: hidden;
 }
 
+/* Z-index: el rollo/overlay debe quedar SIEMPRE por debajo del bottom-sheet
+   compartido (`.osheet-dim`/`.osheet` en options-sheet.css, z-index 300/301)
+   — openOptionsSheet monta su DOM directo en <body>, hermano de `.imm-v1`
+   (no anidado dentro), así que el orden depende 100% de z-index explícito,
+   no del DOM. 260/261 deja margen debajo de 300 sin tocar la escala
+   compartida (var(--z-overlay)=300 en variables.css) y sigue por encima de
+   header/sidebar/bottom-nav (max 200, que además `body.immersive-active`
+   oculta arriba). Bug real cazado por el e2e Playwright: con 1000/1001 (por
+   encima del sheet) cualquier `.imm-line` con transform/filter — que crea su
+   propio stacking context — podía interceptar el click de un botón del sheet
+   si su caja pisaba ese pixel; el primer click de MODO "funcionaba" solo por
+   suerte geométrica (ningún <div data-i> cubría ese punto todavía), y
+   `applyMode` reventaba el segundo porque el reflow (línea activa más
+   grande/otro wrap) sí lo cubría. La causa raíz nunca fue el reflow en sí —
+   era el z-index invertido desde el día uno. */
 .song-view--immersive {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 260;
 }
 
 .imm-v1 {
@@ -25,7 +40,7 @@ body.immersive-active {
   --imm-gutter: 10px;
   position: fixed;
   inset: 0;
-  z-index: 1001;
+  z-index: 261;
   display: flex;
   flex-direction: column;
   background: #121212;

@@ -344,6 +344,9 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   const uploadArea = container.querySelector('#image-upload-area');
   const coverInput = container.querySelector('#cover-input');
   const imagePreview = container.querySelector('#image-preview');
+  // Estado de la portada elegida en ESTA sesión del editor (closure, no global de
+  // módulo): evita que la portada de una canción se filtre al guardado de otra.
+  const coverState = { blob: null };
   uploadArea.addEventListener('click', () => coverInput.click());
   uploadArea.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -355,10 +358,12 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   uploadArea.addEventListener('drop', (e) => {
     e.preventDefault();
     uploadArea.style.borderColor = '';
-    if (e.dataTransfer.files.length > 0) handleImageFile(e.dataTransfer.files[0], imagePreview);
+    if (e.dataTransfer.files.length > 0) {
+      handleImageFile(e.dataTransfer.files[0], imagePreview, coverState);
+    }
   });
   coverInput.addEventListener('change', () => {
-    if (coverInput.files.length > 0) handleImageFile(coverInput.files[0], imagePreview);
+    if (coverInput.files.length > 0) handleImageFile(coverInput.files[0], imagePreview, coverState);
   });
 
   // ─── Links Editor ───
@@ -1066,15 +1071,14 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       voiceRoster,
       from,
       destroySongAudio: songAudioSection.destroy,
+      coverState,
     }),
   );
 }
 
 /* ─── Image handling ─── */
 
-let compressedCoverBlob = null;
-
-function handleImageFile(file, previewEl) {
+function handleImageFile(file, previewEl, coverState) {
   if (!file.type.startsWith('image/')) return;
   const img = new Image();
   const url = URL.createObjectURL(file);
@@ -1094,7 +1098,7 @@ function handleImageFile(file, previewEl) {
     ctx.drawImage(img, 0, 0, width, height);
     canvas.toBlob(
       (blob) => {
-        compressedCoverBlob = blob;
+        coverState.blob = blob;
         const previewUrl = URL.createObjectURL(blob);
         previewEl.innerHTML = `
           <img class="image-upload__preview" src="${previewUrl}" alt="Preview" />
@@ -1167,9 +1171,9 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
     const token = getSession()?.access_token;
 
     // 1. Upload new image if present
-    if (compressedCoverBlob) {
+    if (v2.coverState?.blob) {
       const fd = new FormData();
-      fd.append('cover', compressedCoverBlob, `${albumSlug}.webp`);
+      fd.append('cover', v2.coverState.blob, `${albumSlug}.webp`);
       const imgRes = await fetch(`${API_URL}/upload`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },

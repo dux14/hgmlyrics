@@ -3,14 +3,18 @@
 Orquestador de forced alignment (WhisperX es) — Vista inmersiva karaoke.
 
 Pipeline de una sola funcion GPU:
-  1. Descargar el audio completo de la cancion (audioUrl firmada por Vercel).
-  2. Extraer el stem vocal con BS-RoFormer ep_317 (extract_vocals_stem, mismo
-     helper que usan S3/S4 del Estudio de pistas — ver sections/_common.py).
-  3. WhisperX: alinear (NO transcribir) el texto CONOCIDO de las lineas contra
+  1. Descargar el audio completo de la cancion (audioUrl firmada por Vercel),
+     una sola vez (_download_audio).
+  2. Beat-tracking con librosa sobre esa mezcla completa (_detect_beats),
+     best-effort: nunca tumba el pipeline, None si no detecta nada usable.
+  3. Extraer el stem vocal con BS-RoFormer ep_317 desde el mismo archivo ya
+     descargado (_extract_vocals_from_path, mismo helper que usan S3/S4 del
+     Estudio de pistas — ver sections/_common.py).
+  4. WhisperX: alinear (NO transcribir) el texto CONOCIDO de las lineas contra
      el audio vocal, con el modelo de alineado en espanol.
-  4. align_mapping.map_words_to_lines: mapear las palabras alineadas (con su
+  5. align_mapping.map_words_to_lines: mapear las palabras alineadas (con su
      timestamp) a las lineas de entrada -> [{i, startMs}, ...].
-  5. POST firmado al webhookUrl con el resultado (o el error, en cualquier
+  6. POST firmado al webhookUrl con el resultado (o el error, en cualquier
      excepcion — nunca silencio).
 
 Contrato de entrada (payload que postea api/_lib/align.js):
@@ -165,7 +169,8 @@ def _detect_beats(audio_path: str) -> dict | None:
         tempo, beat_times = librosa.beat.beat_track(y=y, sr=sr, units="time")
         bpm = float(np.atleast_1d(tempo)[0])
         return _beats_payload({"bpm": bpm, "beatsMs": [int(t * 1000) for t in beat_times]})
-    except Exception:
+    except Exception as exc:
+        print(f"beat-tracking fallo (no fatal): {exc}")
         return None
 
 

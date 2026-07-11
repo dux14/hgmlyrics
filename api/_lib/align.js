@@ -1,5 +1,5 @@
 // Forced alignment (WhisperX en Modal) — disparado al confirmar la subida del
-// mp3 completo de una cancion (y por realineado manual admin, api/songs/[id]/align.js).
+// mp3 completo de una cancion.
 // Espeja el patron de api/stems/jobs/[id]/start.js: marca processing ANTES de
 // postear a Modal y, si el POST falla, marca failed y relanza.
 import sql from './db.js';

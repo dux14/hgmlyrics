@@ -110,7 +110,7 @@ async function update(req, res, id) {
 
   // La letra (sections) cambio -> los timings de alignment ya no corresponden
   // a las lineas canonicas indexadas. No re-dispara Modal aca: solo marca
-  // stale, el re-alineado lo dispara el admin (api/songs/[id]/align.js).
+  // stale; el re-alineado ocurre en la proxima subida de audio (dispatchAlign).
   // Se compara la proyeccion canonica (unico dato que importa a los timings),
   // no el JSON crudo: sections leido de Postgres (JSONB) reordena las claves
   // de los objetos internamente, asi que comparar strings crudos da falsos

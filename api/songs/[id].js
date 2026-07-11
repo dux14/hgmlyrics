@@ -6,6 +6,7 @@ import { isValidKey } from '../../src/lib/musicKeys.js';
 import { validateSongV2, validateSongV3 } from '../../src/lib/voiceSystem.js';
 import { persistLinksInTx } from '../_lib/songLinks.js';
 import { projectCanonicalLines } from '../_lib/align.js';
+import { validateSectionAudioMoves, applySectionAudioMoves } from '../_lib/sectionAudioMoves.js';
 
 function normalizeKey(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -71,6 +72,17 @@ async function update(req, res, id) {
   // separado de links.js). Si vienen, se guardan en la MISMA transacción que
   // la canción — un link inválido revierte también el UPDATE de songs.
   const hasLinks = s.platformLinks !== undefined || s.voiceLinks !== undefined;
+  // sectionAudioMoves: mapping viejo->nuevo índice de secciones que trae el
+  // editor cuando el usuario movió/borró bloques con audio (Task 11). Se
+  // valida ANTES de la tx para responder 400 sin tocar nada si viene corrupto.
+  const hasMoves = s.sectionAudioMoves !== undefined;
+  if (hasMoves) {
+    const moveError = validateSectionAudioMoves(s.sectionAudioMoves, (s.sections ?? []).length);
+    if (moveError) {
+      res.status(400).json({ error: moveError });
+      return;
+    }
+  }
   // Se lee ANTES de la tx para comparar sections tras el UPDATE y decidir si
   // los timings de alignment (song_line_timings) quedan obsoletos.
   const [prevRow] = await sql`SELECT sections FROM songs WHERE id = ${id}`;
@@ -105,6 +117,9 @@ async function update(req, res, id) {
     }
     if (hasLinks) {
       await persistLinksInTx(tx, id, s.platformLinks ?? [], s.voiceLinks ?? []);
+    }
+    if (hasMoves && s.sectionAudioMoves.length > 0) {
+      await applySectionAudioMoves(tx, id, s.sectionAudioMoves);
     }
   });
 

@@ -69,6 +69,17 @@ function insertCallsFor(table) {
   );
 }
 
+// sectionAudioMoves aplica dos UPDATE por-move: matchea por el fragmento
+// característico de cada fase (ver api/_lib/sectionAudioMoves.js).
+function moveCallsFor(fragment) {
+  return mockTx.mock.calls.filter(
+    (args) =>
+      Array.isArray(args[0]) &&
+      args[0].raw &&
+      args[0].some((s) => typeof s === 'string' && s.includes(fragment)),
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockSql.begin.mockImplementation(async (cb) => cb(mockTx));
@@ -142,6 +153,51 @@ describe('PUT /api/songs/[id].js — guardado atómico con links', () => {
     // El count:0 se comprueba ANTES de persistLinksInTx: nunca llega a insertar.
     expect(insertCallsFor('song_platform_links')).toHaveLength(0);
     expect(insertCallsFor('song_voice_links')).toHaveLength(0);
+  });
+
+  it('sin sectionAudioMoves: no toca song_section_audio', async () => {
+    const req = makeReq({ title: 'X', sections: [{ lines: [] }, { lines: [] }] });
+    const res = makeRes();
+    await handler(req, res);
+    expect(res._status).toBe(200);
+    expect(moveCallsFor('song_section_audio')).toHaveLength(0);
+  });
+
+  it('con sectionAudioMoves válidos: aplica las dos fases dentro de la tx', async () => {
+    const req = makeReq({
+      title: 'X',
+      sections: [{ lines: [] }, { lines: [] }],
+      sectionAudioMoves: [
+        { from: 0, to: 1 },
+        { from: 1, to: 0 },
+      ],
+    });
+    const res = makeRes();
+    await handler(req, res);
+    expect(res._status).toBe(200);
+    // 2 UPDATE de fase 1 (uno por move) + 1 UPDATE de fase 2 (des-negativiza).
+    expect(moveCallsFor('song_section_audio')).toHaveLength(3);
+  });
+
+  it('con sectionAudioMoves inválidos (fuera de rango): 400 y no llama begin', async () => {
+    const req = makeReq({
+      title: 'X',
+      sections: [{ lines: [] }],
+      sectionAudioMoves: [{ from: 0, to: 5 }],
+    });
+    const res = makeRes();
+    await handler(req, res);
+    expect(res._status).toBe(400);
+    expect(res._body.error).toMatch(/rango/);
+    expect(mockSql.begin).not.toHaveBeenCalled();
+  });
+
+  it('sectionAudioMoves vacío: no ejecuta ninguna query de moves', async () => {
+    const req = makeReq({ title: 'X', sections: [{ lines: [] }], sectionAudioMoves: [] });
+    const res = makeRes();
+    await handler(req, res);
+    expect(res._status).toBe(200);
+    expect(moveCallsFor('song_section_audio')).toHaveLength(0);
   });
 });
 

@@ -24,6 +24,7 @@ import { openChordEditorModal } from './editor/ChordEditorModal.js';
 import { openTonoEditorModal } from './editor/TonoEditorModal.js';
 import { openImportModal } from './editor/ImportModal.js';
 import { createSongAudioSection } from './editor/SongAudioSection.js';
+import { confirmDialog } from './ConfirmDialog.js';
 import {
   fetchSectionAudio,
   createSectionAudio,
@@ -86,6 +87,10 @@ function sectionsToBlocks(sections) {
   if (!sections || !Array.isArray(sections)) return [];
   return sections.map((section, si) => ({
     id: `section-${si}-${Date.now()}`,
+    // origIndex: índice persistido en song_section_audio (ver Task 11). Viaja
+    // con el bloque al mover/borrar secciones, así handleSave puede calcular
+    // el mapping viejo->nuevo (sectionAudioMoves) sin volver a consultar el back.
+    origIndex: si,
     type: section.type || 'verse',
     label: section.label || 'Verso',
     speedPreset: typeof section.speedPreset === 'number' ? section.speedPreset : null,
@@ -759,6 +764,45 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     }
   }
 
+  // Borra una sección del editor. sectionAudioItems está keyed por índice
+  // PERSISTIDO (block.origIndex), no por la posición actual en `blocks`: si la
+  // sección tiene audio, se pide confirmación con confirmDialog (Task 11) y se
+  // borran esos audios ANTES de quitar el bloque — si no, quedarían
+  // huérfanos en song_section_audio apuntando a un índice que ya no existe.
+  // Secciones SIN audio conservan el confirm() nativo (la Task 14 lo migra).
+  async function handleDeleteSection(btn) {
+    const si = parseInt(btn.dataset.section);
+    const block = blocks[si];
+    if (!block) return;
+
+    const items =
+      block.origIndex !== null && block.origIndex !== undefined
+        ? sectionAudioItems.filter((it) => it.sectionIndex === block.origIndex)
+        : [];
+
+    if (items.length === 0) {
+      if (!confirm(`¿Eliminar la sección "${block.label}"?`)) return;
+      blocks.splice(si, 1);
+      renderBlocks();
+      return;
+    }
+
+    const ok = await confirmDialog({
+      title: 'Eliminar sección',
+      body: `La sección "${block.label}" tiene ${items.length} audio(s) que también se eliminarán.`,
+      confirmLabel: 'Eliminar todo',
+      danger: true,
+    });
+    if (!ok) return;
+
+    for (const it of items) {
+      await deleteSectionAudio(existingSong.id, it.id);
+    }
+    sectionAudioItems = sectionAudioItems.filter((it) => it.sectionIndex !== block.origIndex);
+    blocks.splice(si, 1);
+    renderBlocks();
+  }
+
   function renderSectionBlock(block, index, total) {
     const typeOptions = SECTION_TYPES.map(
       (s) =>
@@ -878,6 +922,11 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     if (!btn) return;
     const action = btn.dataset.action;
 
+    if (action === 'delete-section') {
+      handleDeleteSection(btn);
+      return;
+    }
+
     if (action === 'add-line') {
       const si = parseInt(btn.dataset.section);
       blocks[si].lines.push({
@@ -931,12 +980,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         [blocks[si], blocks[si + 1]] = [blocks[si + 1], blocks[si]];
         renderBlocks();
       }
-    } else if (action === 'delete-section') {
-      const si = parseInt(btn.dataset.section);
-      if (confirm(`¿Eliminar la sección "${blocks[si].label}"?`)) {
-        blocks.splice(si, 1);
-        renderBlocks();
-      }
     } else if (action === 'toggle-preview') {
       const si = parseInt(btn.dataset.section);
       const block = blocks[si];
@@ -972,6 +1015,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     const verseCount = blocks.filter((b) => b.type === 'verse').length;
     blocks.push({
       id: uid(),
+      origIndex: null,
       type: 'verse',
       label: `Verso ${verseCount + 1}`,
       lines: [{ id: uid(), text: '', groups: [], chords: [], annotation: false }],
@@ -1225,6 +1269,14 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
     const links = collectLinks(container, voiceLinkItems);
     newSong.platformLinks = links.platforms;
     newSong.voiceLinks = links.voices;
+
+    // sectionAudioMoves: mapping viejo->nuevo índice de song_section_audio
+    // (Task 11) para las secciones que existían antes (origIndex no nulo) y
+    // cambiaron de posición. Secciones nuevas (origIndex null) no generan move.
+    const moves = blocks
+      .map((b, to) => ({ from: b.origIndex, to }))
+      .filter((m) => m.from !== null && m.from !== undefined && m.from !== m.to);
+    if (moves.length > 0) newSong.sectionAudioMoves = moves;
 
     // Validación pre-guardado: bloquea el envío con un mensaje legible por
     // sección/línea (acorde fuera de texto, nota inválida, etc.) en vez de

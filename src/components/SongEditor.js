@@ -197,8 +197,8 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   const blocks = existingSong ? sectionsToBlocks(existingSong.sections) : [];
 
   // ─── v2 (Tono) gating ───
-  // When false, EVERYTHING below related to voz_tono is skipped so the v1
-  // render output, event wiring and save payload stay byte-for-byte identical.
+  // When false, the voz_tono render output and event wiring are skipped; the
+  // saved DATA (roster/groups) round-trips regardless of the flag.
   const v2Enabled = isFeatureEnabled('voz_tono');
   // El roster de datos siempre round-tripea, apagado o no el flag: este solo
   // gatea la UI de edición de tono, no el guardado de lo que ya existe.
@@ -1073,7 +1073,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   // ─── Save ───
   container.querySelector('#editor-save').addEventListener('click', () =>
     handleSave(container, existingSong, blocks, voiceLinkItems, {
-      v2Enabled,
       voiceRoster,
       from,
       destroySongAudio: songAudioSection.destroy,

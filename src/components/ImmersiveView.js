@@ -409,7 +409,17 @@ function maybeLoadSyncAudio(s) {
   });
 }
 
-/** Promueve la sesión de TimerEngine a TimingEngine: monta `<audio>` + player bar, oculta el FAB. */
+/**
+ * Promueve la sesión de TimerEngine a TimingEngine: monta `<audio>` + player
+ * bar, oculta el FAB. No reconcilia la posición del rollo con el
+ * `currentTime` del audio al promover (el audio arranca en 0 y el rollo
+ * sigue en `s.index`, que en la práctica también es 0 salvo que el usuario
+ * ya haya navegado durante la ventana timer-antes-de-promover): el primer
+ * `timeupdate` real, al arrancar la reproducción, resincroniza el highlight
+ * vía `onLineChange` — decisión deliberada, no un olvido (YAGNI: esperar
+ * varios segundos a que resuelva `getSongAudio` para luego forzar un seek
+ * inicial es más complejidad de la que vale la pena para ese instante).
+ */
 function promoteToSync(s, audio, timingLines) {
   if (s.engineMode === 'sync') return;
   clearTimeout(s.timer);
@@ -687,6 +697,9 @@ function openOptions(s) {
     showPlayerToggle: isSync,
     playerOn: isSync && !!s.audioEl && !s.audioEl.paused,
     onPlayerToggle: (on) => {
+      // OFF = pausa del audio (`audio.pause()`), NO una vuelta al TimerEngine
+      // — el toggle solo controla reproducción; la degradación a timer es
+      // exclusiva de `fallbackToTimer` (error del audio en runtime).
       if (!s.audioEl) return;
       if (on) s.audioEl.play().catch(() => {});
       else s.audioEl.pause();

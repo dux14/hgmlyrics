@@ -660,6 +660,9 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     },
   });
 
+  const enablePlayerFlag = () =>
+    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
+
   beforeEach(() => {
     vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
     vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
@@ -805,5 +808,134 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     expect(fab.hidden).toBe(true);
     fab.click(); // togglePause debe ser no-op en modo sync
     expect(document.querySelector('.imm-v1').classList.contains('imm-v1--paused')).toBe(false);
+  });
+
+  it('sheet: VELOCIDAD (AUTO-SCROLL) visible en timer, oculta en modo sync', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimings());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+
+    // Aún en timer: el await de getSongAudio no resolvió todavía.
+    document.getElementById('imm-open-options').click();
+    expect(document.querySelector('.osheet .osheet__h')?.textContent).not.toBe(undefined);
+    expect(
+      [...document.querySelectorAll('.osheet .osheet__h')].some((h) => h.textContent === 'AUTO-SCROLL'),
+    ).toBe(true);
+    closeOptionsSheet();
+
+    await flushAsync(); // promueve a sync
+
+    document.getElementById('imm-open-options').click();
+    expect(
+      [...document.querySelectorAll('.osheet .osheet__h')].some((h) => h.textContent === 'AUTO-SCROLL'),
+    ).toBe(false);
+  });
+
+  it('scrubber: dispatch de "input" en #imm-player-scrubber asigna audio.currentTime', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimings());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    const scrubber = document.getElementById('imm-player-scrubber');
+    scrubber.value = '7.5';
+    scrubber.dispatchEvent(new Event('input'));
+
+    expect(audio.currentTime).toBe(7.5);
+  });
+
+  it('timeupdate normal (sin interludio) mueve el highlight a la línea de lineAt', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimings());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    audio.currentTime = 2.1; // startMs 2000 -> línea 1
+    audio.dispatchEvent(new Event('timeupdate'));
+
+    expect(document.querySelector('#imm-roll .imm-line[data-i="1"]').classList.contains('imm-line--active')).toBe(
+      true,
+    );
+    expect(document.querySelector('#imm-roll .imm-line[data-i="0"]').classList.contains('imm-line--active')).toBe(
+      false,
+    );
+  });
+
+  it('seekSyncToLine: línea sin timing propio (mapeo sparse) cae al último timing conocido <= idx', async () => {
+    enablePlayerFlag();
+    // i=1 no tiene timing propio (p.ej. línea instrumental sin palabras alineadas).
+    getSongAudio.mockResolvedValue({
+      audio: { url: 'https://storage.example/full.mp3', durationSec: 20 },
+      timings: {
+        status: 'ready',
+        lines: [
+          { i: 0, startMs: 500 },
+          { i: 2, startMs: 9000 },
+        ],
+      },
+    });
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    document.querySelector('#imm-roll .imm-line[data-i="1"]').click();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    expect(audio.currentTime).toBe(0.5); // cae al timing de i=0 (500ms), el último <= 1
+  });
+
+  it('matriz de degradación: flag on sin audio -> sigue en timer (FAB visible, sin player bar)', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue({ audio: null, timings: { status: 'ready', lines: [{ i: 0, startMs: 0 }] } });
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    expect(document.getElementById('imm-fab').hidden).toBe(false);
+    expect(document.getElementById('imm-player-slot').hidden).toBe(true);
+  });
+
+  it("matriz de degradación: timings status 'pending' -> sigue en timer", async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue({
+      audio: { url: 'https://storage.example/full.mp3', durationSec: 20 },
+      timings: { status: 'pending', lines: null },
+    });
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    expect(document.getElementById('imm-fab').hidden).toBe(false);
+    expect(document.getElementById('imm-player-slot').hidden).toBe(true);
+  });
+
+  it("matriz de degradación: timings status 'failed' -> sigue en timer", async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue({
+      audio: { url: 'https://storage.example/full.mp3', durationSec: 20 },
+      timings: { status: 'failed', lines: null },
+    });
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    expect(document.getElementById('imm-fab').hidden).toBe(false);
+    expect(document.getElementById('imm-player-slot').hidden).toBe(true);
+  });
+
+  it('matriz de degradación: getSongAudio resuelve null -> sigue en timer', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(null);
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    expect(document.getElementById('imm-fab').hidden).toBe(false);
+    expect(document.getElementById('imm-player-slot').hidden).toBe(true);
   });
 });

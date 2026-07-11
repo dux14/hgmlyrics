@@ -137,6 +137,12 @@ body.immersive-active {
   transform: scale(1);
   color: #fff;
 }
+/* Siguiente línea: legible sin blur para anticipar la letra. */
+.imm-line--next {
+  font-size: calc(1.5rem * var(--imm-font-scale));
+  opacity: 0.6;
+  filter: none;
+}
 .imm-line--d1 {
   font-size: calc(1.5rem * var(--imm-font-scale));
   opacity: 0.42;

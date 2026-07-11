@@ -217,17 +217,20 @@ function buildLine(s, line, isActive) {
   return { html: buildLetraLineHTML(line.text), modifierClass: '' };
 }
 
-/** Clase de distancia (spec §1): activa/±1/±2/±3/resto. */
+/** dist FIRMADA (i - index): la siguiente línea queda legible, el resto se atenúa. */
 function distanceClass(dist) {
   if (dist === 0) return 'imm-line--active';
-  if (dist === 1) return 'imm-line--d1';
-  if (dist === 2) return 'imm-line--d2';
-  if (dist === 3) return 'imm-line--d3';
+  if (dist === 1) return 'imm-line--next';
+  const d = Math.abs(dist);
+  if (d === 1) return 'imm-line--d1';
+  if (d === 2) return 'imm-line--d2';
+  if (d === 3) return 'imm-line--d3';
   return 'imm-line--far';
 }
 
 const DISTANCE_CLASSES = [
   'imm-line--active',
+  'imm-line--next',
   'imm-line--d1',
   'imm-line--d2',
   'imm-line--d3',
@@ -237,7 +240,7 @@ const DISTANCE_CLASSES = [
 function updateDistanceClasses(s) {
   s.lineEls.forEach((el, i) => {
     el.classList.remove(...DISTANCE_CLASSES);
-    el.classList.add(distanceClass(Math.abs(i - s.index)));
+    el.classList.add(distanceClass(i - s.index));
   });
 }
 
@@ -273,7 +276,7 @@ function renderLineContent(s, index) {
   el.innerHTML = html;
   const spokenCls = line.spoken ? ' imm-line--spoken' : '';
   const modifierClsAttr = modifierClass ? ` ${modifierClass}` : '';
-  const distanceCls = ` ${distanceClass(Math.abs(index - s.index))}`;
+  const distanceCls = ` ${distanceClass(index - s.index)}`;
   el.className = `imm-line${spokenCls}${modifierClsAttr}${distanceCls}`;
 }
 

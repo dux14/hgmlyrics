@@ -1179,10 +1179,12 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
         headers: { Authorization: `Bearer ${token}` },
         body: fd,
       });
-      if (imgRes.ok) {
-        const imgData = await imgRes.json();
-        coverImage = imgData.url;
+      if (!imgRes.ok) {
+        showSaveError(container, 'No se pudo subir la portada. Reintenta o quita la imagen.');
+        return;
       }
+      const imgData = await imgRes.json();
+      coverImage = imgData.url;
     }
 
     // 2. Save song data

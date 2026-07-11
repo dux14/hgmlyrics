@@ -129,4 +129,44 @@ describe('SongEditor — la portada elegida no se filtra entre sesiones del edit
     const uploadCalls = global.fetch.mock.calls.filter((c) => c[0] === '/api/upload');
     expect(uploadCalls).toHaveLength(0);
   });
+
+  it('si la subida de portada falla, no guarda la canción y muestra el error', async () => {
+    global.fetch = vi.fn((url) => {
+      if (url === '/api/upload') {
+        return Promise.resolve({ ok: false, status: 500, json: async () => ({ error: 'boom' }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ success: true }) });
+    });
+
+    store.fetchSongDetail.mockResolvedValueOnce(buildSong('song-c'));
+    await renderSongEditor(container, 'song-c');
+    await vi.waitFor(() => expect(container.querySelector('#cover-input')).not.toBeNull());
+
+    const coverInput = container.querySelector('#cover-input');
+    const file = new File(['abc'], 'cover.png', { type: 'image/png' });
+    Object.defineProperty(coverInput, 'files', { value: [file], configurable: true });
+    coverInput.dispatchEvent(new Event('change'));
+
+    await vi.waitFor(() =>
+      expect(container.querySelector('#image-preview').innerHTML).toMatch(/image-upload__preview/),
+    );
+
+    container.querySelector('#editor-save').click();
+
+    await vi.waitFor(() =>
+      expect(container.querySelector('#editor-save-error').hidden).toBe(false),
+    );
+    expect(container.querySelector('#editor-save-error').textContent).toMatch(
+      /No se pudo subir la portada\. Reintenta o quita la imagen\./,
+    );
+
+    // Ninguna escritura de canción (PUT/POST a /api/songs/...) debe ocurrir.
+    const songWriteCalls = global.fetch.mock.calls.filter(
+      (c) =>
+        typeof c[0] === 'string' &&
+        c[0].startsWith('/api/songs') &&
+        ['PUT', 'POST'].includes(c[1]?.method),
+    );
+    expect(songWriteCalls).toHaveLength(0);
+  });
 });

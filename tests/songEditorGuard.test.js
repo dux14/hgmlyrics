@@ -33,10 +33,16 @@ vi.mock('../src/lib/sectionAudioApi.js', () => ({
 }));
 vi.mock('../src/lib/stemsApi.js', () => ({ readAudioDuration: vi.fn() }));
 vi.mock('../src/components/ConfirmDialog.js', () => ({ confirmDialog: vi.fn() }));
+// El modal real monta en document.body; para probar el guard de dirty solo
+// necesitamos simular su contrato (muta `line.chords` y llama `onClose`).
+vi.mock('../src/components/editor/ChordEditorModal.js', () => ({
+  openChordEditorModal: vi.fn(),
+}));
 
 const store = await import('../src/lib/store.js');
 const { navigate } = await import('../src/router.js');
 const { confirmDialog } = await import('../src/components/ConfirmDialog.js');
+const { openChordEditorModal } = await import('../src/components/editor/ChordEditorModal.js');
 const { renderSongEditor } = await import('../src/components/SongEditor.js');
 
 const FAKE_SONG = {
@@ -230,5 +236,103 @@ describe('SongEditor — eliminar canción usa confirmDialog', () => {
       '/api/songs/song-1',
       expect.objectContaining({ method: 'DELETE' }),
     );
+  });
+});
+
+describe('SongEditor — el guard de dirty ignora acciones canceladas', () => {
+  let container;
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) });
+    store.fetchSongDetail.mockResolvedValue({
+      ...FAKE_SONG,
+      sections: FAKE_SONG.sections.map((s) => ({ ...s })),
+    });
+  });
+
+  afterEach(() => {
+    container.remove();
+    vi.clearAllMocks();
+    global.fetch = originalFetch;
+  });
+
+  it('delete-section cancelado + Cancelar del editor: navega directo sin diálogo de descarte', async () => {
+    // Primera llamada a confirmDialog es la de "Eliminar sección" (cancelada);
+    // si sobreviniera una segunda por "Descartar cambios" sería el bug.
+    confirmDialog.mockResolvedValue(false);
+    await renderSongEditor(container, 'song-1');
+    await vi.waitFor(() => expect(container.querySelector('#editor-save')).not.toBeNull());
+
+    container.querySelector('[data-action="delete-section"][data-section="0"]').click();
+    await vi.waitFor(() =>
+      expect(confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Eliminar sección' }),
+      ),
+    );
+
+    container.querySelector('#editor-cancel').click();
+    await vi.waitFor(() => expect(navigate).toHaveBeenCalled());
+
+    // Solo se llamó confirmDialog una vez (la de eliminar sección); no hubo
+    // un segundo diálogo de "Descartar cambios".
+    expect(confirmDialog).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SongEditor — modal de acordes marca dirty solo si hubo cambio real', () => {
+  let container;
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) });
+    store.fetchSongDetail.mockResolvedValue({
+      ...FAKE_SONG,
+      sections: FAKE_SONG.sections.map((s) => ({ ...s })),
+    });
+  });
+
+  afterEach(() => {
+    container.remove();
+    vi.clearAllMocks();
+    global.fetch = originalFetch;
+  });
+
+  it('abrir y cerrar el modal SIN mutar chords: Cancelar navega directo', async () => {
+    openChordEditorModal.mockImplementation((line, { onClose }) => onClose());
+    await renderSongEditor(container, 'song-1');
+    await vi.waitFor(() => expect(container.querySelector('#editor-cancel')).not.toBeNull());
+
+    container.querySelector('[data-action="open-chords"]').click();
+    expect(openChordEditorModal).toHaveBeenCalled();
+
+    container.querySelector('#editor-cancel').click();
+    await vi.waitFor(() => expect(navigate).toHaveBeenCalled());
+    expect(confirmDialog).not.toHaveBeenCalled();
+  });
+
+  it('abrir el modal, mutar chords y cerrar: Cancelar pide confirmación', async () => {
+    openChordEditorModal.mockImplementation((line, { onClose }) => {
+      line.chords = [...(line.chords || []), { pos: 0, ch: 'C' }];
+      onClose();
+    });
+    confirmDialog.mockResolvedValue(false);
+    await renderSongEditor(container, 'song-1');
+    await vi.waitFor(() => expect(container.querySelector('#editor-cancel')).not.toBeNull());
+
+    container.querySelector('[data-action="open-chords"]').click();
+    expect(openChordEditorModal).toHaveBeenCalled();
+
+    container.querySelector('#editor-cancel').click();
+    await vi.waitFor(() =>
+      expect(confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Descartar cambios' }),
+      ),
+    );
+    expect(navigate).not.toHaveBeenCalled();
   });
 });

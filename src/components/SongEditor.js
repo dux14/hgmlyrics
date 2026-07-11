@@ -643,11 +643,25 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   // ─── Guard de cambios sin guardar: listeners delegados de alto nivel ───
   // Cubre inputs de meta (título/álbum/año/tono/cejilla), roster y links
   // (bubbling hasta container), y el editor de bloques/líneas.
+  // Acciones excluidas del guard genérico por click:
+  // - toggle-preview / toggle-audio: solo expanden/colapsan UI, no mutan datos.
+  // - open-chords / open-tono: abren un modal; el propio handler decide si
+  //   hubo cambio real (snapshot antes/después) al cerrarlo.
+  // - delete-section / delete-section-audio: piden confirmDialog ANTES de
+  //   mutar nada, y el click delegado se dispara de inmediato al abrir el
+  //   click (antes de que la promesa del diálogo resuelva). Si el usuario
+  //   cancela el diálogo no hubo cambio real, así que marcar dirty aquí
+  //   daría un falso positivo. handleDeleteSection marca dirty = true él
+  //   mismo tras el splice real; delete-section-audio no lo necesita en
+  //   absoluto porque persiste contra el back de inmediato (igual que
+  //   toggle-audio), sin dejar estado sin guardar en el editor.
   const DIRTY_CLICK_SKIP_ACTIONS = new Set([
     'toggle-preview',
     'toggle-audio',
     'open-chords',
     'open-tono',
+    'delete-section',
+    'delete-section-audio',
   ]);
   container.addEventListener('input', () => {
     dirty = true;
@@ -852,6 +866,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         danger: true,
       });
       if (!ok) return;
+      dirty = true;
       blocks.splice(si, 1);
       renderBlocks();
       return;
@@ -889,7 +904,10 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     // mientras tanto (otro handler corrió durante la espera). Se recalcula
     // por identidad justo antes del splice en vez de confiar en el índice viejo.
     const idx = blocks.indexOf(block);
-    if (idx !== -1) blocks.splice(idx, 1);
+    if (idx !== -1) {
+      dirty = true;
+      blocks.splice(idx, 1);
+    }
     renderBlocks();
   }
 
@@ -1041,7 +1059,19 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       }
     } else if (action === 'open-chords') {
       const found = findLine(btn.dataset.lineId);
-      if (found) openChordEditorModal(found.line, { blocks, onClose: renderBlocks });
+      if (found) {
+        // El modal vive en document.body (no burbujea al guard delegado de
+        // container) y muta found.line.chords por referencia. Snapshot
+        // barato antes/después para marcar dirty solo si de verdad cambió.
+        const before = JSON.stringify(found.line.chords);
+        openChordEditorModal(found.line, {
+          blocks,
+          onClose: () => {
+            if (JSON.stringify(found.line.chords) !== before) dirty = true;
+            renderBlocks();
+          },
+        });
+      }
     } else if (action === 'toggle-annotation') {
       const found = findLine(btn.dataset.lineId);
       if (found) {
@@ -1057,7 +1087,18 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     } else if (action === 'open-tono') {
       if (!v2Enabled) return;
       const found = findLine(btn.dataset.lineId);
-      if (found) openTonoEditorModal(found.line, { voiceRoster, onClose: renderBlocks });
+      if (found) {
+        // Mismo motivo que open-chords: el modal muta found.line.groups por
+        // referencia fuera del árbol delegado, así que se snapshotea aquí.
+        const before = JSON.stringify(found.line.groups);
+        openTonoEditorModal(found.line, {
+          voiceRoster,
+          onClose: () => {
+            if (JSON.stringify(found.line.groups) !== before) dirty = true;
+            renderBlocks();
+          },
+        });
+      }
     } else if (action === 'move-section-up') {
       const si = parseInt(btn.dataset.section);
       if (si > 0) {

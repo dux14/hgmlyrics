@@ -54,6 +54,15 @@ const FAKE_SONG_2_SECTIONS = {
   ],
 };
 
+const FAKE_SONG_3_SECTIONS = {
+  ...FAKE_SONG_2_SECTIONS,
+  sections: [
+    { type: 'verse', label: 'Verso 1', lines: [{ text: 'Primera línea' }] },
+    { type: 'chorus', label: 'Coro', lines: [{ text: 'Segunda línea' }] },
+    { type: 'verse', label: 'Verso 2', lines: [{ text: 'Tercera línea' }] },
+  ],
+};
+
 describe('SongEditor — audio por sección sigue a su sección al mover/borrar', () => {
   let container;
   const originalFetch = global.fetch;
@@ -135,6 +144,34 @@ describe('SongEditor — audio por sección sigue a su sección al mover/borrar'
     const call = global.fetch.mock.calls.find((c) => c[0] === '/api/songs/song-1');
     const body = JSON.parse(call[1].body);
     expect(body.sectionAudioMoves).toBeUndefined();
+  });
+
+  // Bug crítico reproducido: 3 secciones, se borra la del medio (sin audio,
+  // confirm nativo) -> bloques finales quedan con origIndex [0, 2] -> el move
+  // resultante es {from:2,to:1}. `from` referencia el layout VIEJO (3
+  // secciones) y NO debe acotarse contra el layout nuevo (2): el back debe
+  // aceptarlo y el guardado debe completar sin 400.
+  it('borrar la sección del medio (sin audio): el payload lleva {from:2,to:1} y el guardado completa', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    store.fetchSongDetail.mockResolvedValue({
+      ...FAKE_SONG_3_SECTIONS,
+      sections: FAKE_SONG_3_SECTIONS.sections.map((s) => ({ ...s })),
+    });
+    await renderSongEditor(container, 'song-1');
+    await vi.waitFor(() => expect(container.querySelector('#editor-save')).not.toBeNull());
+
+    container.querySelector('[data-action="delete-section"][data-section="1"]').click();
+
+    container.querySelector('#editor-save').click();
+    await vi.waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith('/api/songs/song-1', expect.any(Object)),
+    );
+
+    const call = global.fetch.mock.calls.find((c) => c[0] === '/api/songs/song-1');
+    const body = JSON.parse(call[1].body);
+    expect(body.sectionAudioMoves).toEqual([{ from: 2, to: 1 }]);
+    // El mock del fetch resuelve { ok: true } -> el guardado completa sin error.
+    expect(container.querySelector('#editor-save-error')?.hidden).not.toBe(false);
   });
 
   describe('delete-section con audio', () => {

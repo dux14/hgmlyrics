@@ -9,9 +9,14 @@
  */
 
 /**
- * Valida un array de moves {from,to} contra la cantidad de secciones nueva.
+ * Valida un array de moves {from,to}. `from` referencia el layout VIEJO de
+ * secciones (antes del guardado) y por eso NO se acota contra `sectionCount`
+ * (el nuevo layout, que puede ser más chico si se borraron secciones en el
+ * medio) — el UPDATE de applySectionAudioMoves ya es seguro si `from` no
+ * matchea ninguna fila (WHERE section_index = from). `to` sí referencia el
+ * layout NUEVO, así que se acota: to < sectionCount.
  * @param {Array<{from:number,to:number}>} moves
- * @param {number} sectionCount
+ * @param {number} sectionCount tamaño del layout NUEVO (post-guardado)
  * @returns {string|null} mensaje de error, o null si es válido
  */
 export function validateSectionAudioMoves(moves, sectionCount) {
@@ -26,8 +31,8 @@ export function validateSectionAudioMoves(moves, sectionCount) {
     if (m.from < 0 || m.to < 0) {
       return 'sectionAudioMoves: from/to no pueden ser negativos';
     }
-    if (m.from >= sectionCount || m.to >= sectionCount) {
-      return 'sectionAudioMoves: from/to fuera de rango';
+    if (m.to >= sectionCount) {
+      return 'sectionAudioMoves: to fuera de rango';
     }
     if (froms.has(m.from)) return 'sectionAudioMoves: from duplicado';
     if (tos.has(m.to)) return 'sectionAudioMoves: to duplicado';

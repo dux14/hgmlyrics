@@ -199,6 +199,22 @@ describe('PUT /api/songs/[id].js — guardado atómico con links', () => {
     expect(res._status).toBe(200);
     expect(moveCallsFor('song_section_audio')).toHaveLength(0);
   });
+
+  // Bug crítico: borrar una sección no-final produce un move con `from` del
+  // layout VIEJO (mayor que el sectionCount nuevo) — from NO debe acotarse
+  // contra sectionCount. 3 secciones -> se borra la del medio -> body trae 2
+  // sections y sectionAudioMoves [{from:2,to:1}].
+  it('con from del layout viejo (borrar sección no-final): 200, aplica el move', async () => {
+    const req = makeReq({
+      title: 'X',
+      sections: [{ lines: [] }, { lines: [] }],
+      sectionAudioMoves: [{ from: 2, to: 1 }],
+    });
+    const res = makeRes();
+    await handler(req, res);
+    expect(res._status).toBe(200);
+    expect(moveCallsFor('song_section_audio')).toHaveLength(2); // 1 fase1 + 1 fase2
+  });
 });
 
 describe('POST /api/songs/index.js — creación atómica con links', () => {

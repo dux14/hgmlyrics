@@ -37,12 +37,16 @@ describe('validateSectionAudioMoves', () => {
     expect(validateSectionAudioMoves([{ from: 0, to: -1 }], 3)).toMatch(/negativos/);
   });
 
-  it('rechaza from fuera de rango', () => {
-    expect(validateSectionAudioMoves([{ from: 5, to: 0 }], 3)).toMatch(/rango/);
+  // `from` referencia el layout VIEJO: no se acota contra sectionCount (el
+  // nuevo layout). Borrar una sección no-final produce moves con `from` >=
+  // sectionCount y deben seguir siendo válidos (ver bug crítico reproducido:
+  // 3 secciones, se borra la del medio -> {from:2,to:1} con sectionCount=2).
+  it('acepta from fuera del rango del layout nuevo (borrar sección no-final)', () => {
+    expect(validateSectionAudioMoves([{ from: 2, to: 1 }], 2)).toBeNull();
   });
 
   it('rechaza to fuera de rango', () => {
-    expect(validateSectionAudioMoves([{ from: 0, to: 5 }], 3)).toMatch(/rango/);
+    expect(validateSectionAudioMoves([{ from: 0, to: 2 }], 2)).toMatch(/rango/);
   });
 
   it('rechaza from duplicado', () => {

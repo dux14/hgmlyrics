@@ -147,12 +147,12 @@ describe('SongEditor — audio por sección sigue a su sección al mover/borrar'
   });
 
   // Bug crítico reproducido: 3 secciones, se borra la del medio (sin audio,
-  // confirm nativo) -> bloques finales quedan con origIndex [0, 2] -> el move
-  // resultante es {from:2,to:1}. `from` referencia el layout VIEJO (3
+  // confirmDialog propio) -> bloques finales quedan con origIndex [0, 2] -> el
+  // move resultante es {from:2,to:1}. `from` referencia el layout VIEJO (3
   // secciones) y NO debe acotarse contra el layout nuevo (2): el back debe
   // aceptarlo y el guardado debe completar sin 400.
   it('borrar la sección del medio (sin audio): el payload lleva {from:2,to:1} y el guardado completa', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    confirmDialog.mockResolvedValue(true);
     store.fetchSongDetail.mockResolvedValue({
       ...FAKE_SONG_3_SECTIONS,
       sections: FAKE_SONG_3_SECTIONS.sections.map((s) => ({ ...s })),
@@ -161,6 +161,12 @@ describe('SongEditor — audio por sección sigue a su sección al mover/borrar'
     await vi.waitFor(() => expect(container.querySelector('#editor-save')).not.toBeNull());
 
     container.querySelector('[data-action="delete-section"][data-section="1"]').click();
+    await vi.waitFor(() => {
+      const labels = Array.from(container.querySelectorAll('.section-block__label-input')).map(
+        (el) => el.value,
+      );
+      expect(labels).not.toContain('Coro');
+    });
 
     container.querySelector('#editor-save').click();
     await vi.waitFor(() =>

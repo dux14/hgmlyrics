@@ -23,9 +23,11 @@ vi.mock('../src/lib/sectionAudioApi.js', () => ({
   uploadSectionAudioFile: vi.fn(),
   deleteSectionAudio: vi.fn(),
 }));
+vi.mock('../src/components/ConfirmDialog.js', () => ({ confirmDialog: vi.fn() }));
 
 const store = await import('../src/lib/store.js');
 const sectionAudioApi = await import('../src/lib/sectionAudioApi.js');
+const { confirmDialog } = await import('../src/components/ConfirmDialog.js');
 const { renderSongEditor } = await import('../src/components/SongEditor.js');
 
 const FAKE_SONG = {
@@ -176,13 +178,18 @@ describe('SongEditor — control de audio por sección', () => {
       { id: 'a1', sectionIndex: 0, voiceScope: null, label: null, durationSec: 30 },
     ]);
     sectionAudioApi.deleteSectionAudio.mockResolvedValue(undefined);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    confirmDialog.mockResolvedValue(true);
 
     await renderAndOpenAudioPanel();
     await vi.waitFor(() => expect(container.querySelector('.section-audio__row')).not.toBeNull());
 
     container.querySelector('[data-action="delete-section-audio"]').click();
 
+    await vi.waitFor(() =>
+      expect(confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Eliminar audio', danger: true }),
+      ),
+    );
     await vi.waitFor(() =>
       expect(sectionAudioApi.deleteSectionAudio).toHaveBeenCalledWith('song-1', 'a1'),
     );
@@ -194,13 +201,14 @@ describe('SongEditor — control de audio por sección', () => {
     sectionAudioApi.fetchSectionAudio.mockResolvedValue([
       { id: 'a1', sectionIndex: 0, voiceScope: null, label: null, durationSec: 30 },
     ]);
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    confirmDialog.mockResolvedValue(false);
 
     await renderAndOpenAudioPanel();
     await vi.waitFor(() => expect(container.querySelector('.section-audio__row')).not.toBeNull());
 
     container.querySelector('[data-action="delete-section-audio"]').click();
 
+    await vi.waitFor(() => expect(confirmDialog).toHaveBeenCalled());
     expect(sectionAudioApi.deleteSectionAudio).not.toHaveBeenCalled();
     expect(container.querySelector('.section-audio__row')).not.toBeNull();
   });

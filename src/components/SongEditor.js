@@ -201,6 +201,14 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   // Editable state
   const blocks = existingSong ? sectionsToBlocks(existingSong.sections) : [];
 
+  // ─── Guard de cambios sin guardar (Task 14 / C4) ───
+  // Bandera simple, no un snapshot profundo: se activa con cualquier input,
+  // change o click estructural dentro del editor. La subida de audio (mp3 de
+  // sección o de canción) se persiste sola y no debería requerir el guard,
+  // pero como esos controles viven dentro de los mismos contenedores
+  // delegados, es aceptable que el rebote también active dirty.
+  let dirty = false;
+
   // ─── v2 (Tono) gating ───
   // When false, the voz_tono render output and event wiring are skipped; the
   // saved DATA (roster/groups) round-trips regardless of the flag.
@@ -428,6 +436,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   });
 
   container.querySelector('#add-voice-link-btn').addEventListener('click', () => {
+    dirty = true;
     voiceLinkItems.push({ voiceType: 'soprano', url: '', label: '' });
     renderVoiceLinks();
   });
@@ -547,6 +556,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     });
 
     container.querySelector('#add-roster-voice').addEventListener('click', () => {
+      dirty = true;
       voiceRoster.push({
         id: uid(),
         name: `Voz ${voiceRoster.length + 1}`,
@@ -629,6 +639,27 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
 
   // ─── Block Editor Core ───
   const editorRoot = container.querySelector('#block-editor');
+
+  // ─── Guard de cambios sin guardar: listeners delegados de alto nivel ───
+  // Cubre inputs de meta (título/álbum/año/tono/cejilla), roster y links
+  // (bubbling hasta container), y el editor de bloques/líneas.
+  const DIRTY_CLICK_SKIP_ACTIONS = new Set([
+    'toggle-preview',
+    'toggle-audio',
+    'open-chords',
+    'open-tono',
+  ]);
+  container.addEventListener('input', () => {
+    dirty = true;
+  });
+  container.addEventListener('change', () => {
+    dirty = true;
+  });
+  container.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    if (!DIRTY_CLICK_SKIP_ACTIONS.has(btn.dataset.action)) dirty = true;
+  });
 
   function renderBlocks() {
     editorRoot.innerHTML = blocks
@@ -803,7 +834,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   // sección tiene audio, se pide confirmación con confirmDialog (Task 11) y se
   // borran esos audios ANTES de quitar el bloque — si no, quedarían
   // huérfanos en song_section_audio apuntando a un índice que ya no existe.
-  // Secciones SIN audio conservan el confirm() nativo (la Task 14 lo migra).
   async function handleDeleteSection(btn) {
     const si = parseInt(btn.dataset.section);
     const block = blocks[si];
@@ -815,7 +845,13 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         : [];
 
     if (items.length === 0) {
-      if (!confirm(`¿Eliminar la sección "${block.label}"?`)) return;
+      const ok = await confirmDialog({
+        title: 'Eliminar sección',
+        body: `¿Eliminar la sección "${block.label}"?`,
+        confirmLabel: 'Eliminar',
+        danger: true,
+      });
+      if (!ok) return;
       blocks.splice(si, 1);
       renderBlocks();
       return;
@@ -971,7 +1007,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     }
   });
 
-  editorRoot.addEventListener('click', (e) => {
+  editorRoot.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const action = btn.dataset.action;
@@ -1052,7 +1088,13 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       }
     } else if (action === 'delete-section-audio') {
       if (!existingSong) return;
-      if (!confirm('¿Eliminar el audio de esta sección?')) return;
+      const ok = await confirmDialog({
+        title: 'Eliminar audio',
+        body: '¿Eliminar el audio de esta sección?',
+        confirmLabel: 'Eliminar',
+        danger: true,
+      });
+      if (!ok) return;
       const audioId = btn.dataset.audioId;
       deleteSectionAudio(existingSong.id, audioId)
         .then(() => {
@@ -1066,6 +1108,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
 
   // Add section button
   container.querySelector('#add-section-btn').addEventListener('click', () => {
+    dirty = true;
     const verseCount = blocks.filter((b) => b.type === 'verse').length;
     blocks.push({
       id: uid(),
@@ -1085,6 +1128,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     openImportModal({
       onImport: (parsed) => {
         if (parsed.length > 0) {
+          dirty = true;
           blocks.push(...parsed);
           renderBlocks();
         }
@@ -1156,7 +1200,16 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   container.querySelector('#editor-song-audio').replaceWith(songAudioSection.el);
 
   // ─── Cancel ───
-  container.querySelector('#editor-cancel').addEventListener('click', () => {
+  container.querySelector('#editor-cancel').addEventListener('click', async () => {
+    if (dirty) {
+      const ok = await confirmDialog({
+        title: 'Descartar cambios',
+        body: 'Hay cambios sin guardar. ¿Salir de todos modos?',
+        confirmLabel: 'Descartar',
+        danger: true,
+      });
+      if (!ok) return;
+    }
     songAudioSection.destroy();
     navigate(from ? '/song/' + from : '/admin');
   });
@@ -1382,7 +1435,13 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
 /* ─── Delete ─── */
 
 async function handleDelete(destroySongAudio, song) {
-  if (!confirm(`¿Estás seguro de que deseas eliminar la canción "${song.title}"?`)) return;
+  const ok = await confirmDialog({
+    title: 'Eliminar canción',
+    body: `¿Eliminar "${song.title}"? Esta acción no se puede deshacer.`,
+    confirmLabel: 'Eliminar',
+    danger: true,
+  });
+  if (!ok) return;
   const token = getSession()?.access_token;
   try {
     const res = await fetch(`${API_URL}/songs/${song.id}`, {

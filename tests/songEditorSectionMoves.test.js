@@ -171,7 +171,9 @@ describe('SongEditor — audio por sección sigue a su sección al mover/borrar'
     const body = JSON.parse(call[1].body);
     expect(body.sectionAudioMoves).toEqual([{ from: 2, to: 1 }]);
     // El mock del fetch resuelve { ok: true } -> el guardado completa sin error.
-    expect(container.querySelector('#editor-save-error')?.hidden).not.toBe(false);
+    const errorEl = container.querySelector('#editor-save-error');
+    expect(errorEl).not.toBeNull();
+    expect(errorEl.hidden).toBe(true);
   });
 
   describe('delete-section con audio', () => {
@@ -226,6 +228,43 @@ describe('SongEditor — audio por sección sigue a su sección al mover/borrar'
 
       await vi.waitFor(() => expect(confirmDialog).toHaveBeenCalled());
       expect(sectionAudioApi.deleteSectionAudio).not.toHaveBeenCalled();
+      const labels = Array.from(container.querySelectorAll('.section-block__label-input')).map(
+        (el) => el.value,
+      );
+      expect(labels).toContain('Verso 1');
+    });
+
+    it('con 2 audios, si el 2do delete falla: toast de error, el bloque NO se quita, se llama 2 veces', async () => {
+      sectionAudioApi.fetchSectionAudio.mockResolvedValue([
+        { id: 'a1', sectionIndex: 0, voiceScope: null, label: 'Mezcla', durationSec: 30 },
+        { id: 'a2', sectionIndex: 0, voiceScope: 'soprano', label: 'Soprano', durationSec: 25 },
+      ]);
+      confirmDialog.mockResolvedValue(true);
+      sectionAudioApi.deleteSectionAudio.mockImplementation(async (_songId, id) => {
+        if (id === 'a2') throw new Error('red caída');
+      });
+      store.fetchSongDetail.mockResolvedValue({
+        ...FAKE_SONG_2_SECTIONS,
+        sections: FAKE_SONG_2_SECTIONS.sections.map((s) => ({ ...s })),
+      });
+      await renderSongEditor(container, 'song-1');
+      await vi.waitFor(() => expect(sectionAudioApi.fetchSectionAudio).toHaveBeenCalled());
+      await sectionAudioApi.fetchSectionAudio.mock.results[0].value;
+      await Promise.resolve();
+
+      container.querySelector('[data-action="delete-section"][data-section="0"]').click();
+
+      await vi.waitFor(() => expect(sectionAudioApi.deleteSectionAudio).toHaveBeenCalledTimes(2));
+      expect(sectionAudioApi.deleteSectionAudio).toHaveBeenNthCalledWith(1, 'song-1', 'a1');
+      expect(sectionAudioApi.deleteSectionAudio).toHaveBeenNthCalledWith(2, 'song-1', 'a2');
+
+      await vi.waitFor(() => {
+        const toast = document.querySelector('.toast');
+        expect(toast?.textContent).toMatch(/red caída/);
+        expect(toast?.classList.contains('toast--error')).toBe(true);
+      });
+
+      // El bloque se conserva: el fallo parcial no debe quitar la sección.
       const labels = Array.from(container.querySelectorAll('.section-block__label-input')).map(
         (el) => el.value,
       );

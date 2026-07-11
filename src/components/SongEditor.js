@@ -795,11 +795,31 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     });
     if (!ok) return;
 
-    for (const it of items) {
-      await deleteSectionAudio(existingSong.id, it.id);
+    // Fallo parcial: si un delete revienta a mitad del loop, los ítems
+    // anteriores ya se borraron en el back. No hay rollback posible (son
+    // requests independientes), así que solo se descuentan de
+    // sectionAudioItems los que SÍ se confirmaron borrados; el bloque NO se
+    // quita (si se quitara, esos audios quedarían huérfanos e invisibles
+    // para el admin, sin forma de reintentar el borrado desde la UI).
+    const deletedIds = [];
+    try {
+      for (const it of items) {
+        await deleteSectionAudio(existingSong.id, it.id);
+        deletedIds.push(it.id);
+      }
+    } catch (err) {
+      sectionAudioItems = sectionAudioItems.filter((it) => !deletedIds.includes(it.id));
+      showToast('Error: ' + err.message, { type: 'error', duration: 3000 });
+      renderBlocks();
+      return;
     }
+
     sectionAudioItems = sectionAudioItems.filter((it) => it.sectionIndex !== block.origIndex);
-    blocks.splice(si, 1);
+    // `si` se capturó antes de los await de arriba: blocks pudo cambiar
+    // mientras tanto (otro handler corrió durante la espera). Se recalcula
+    // por identidad justo antes del splice en vez de confiar en el índice viejo.
+    const idx = blocks.indexOf(block);
+    if (idx !== -1) blocks.splice(idx, 1);
     renderBlocks();
   }
 

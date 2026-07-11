@@ -29,3 +29,65 @@ export async function getSongAudio(songId) {
     return null;
   }
 }
+
+/**
+ * Paso 1: upsert de la fila song_audio + URL firmada de subida a Storage.
+ * Admin-only en el backend (requireAdmin) — a diferencia de getSongAudio, SÍ
+ * lanza en error: el editor debe poder mostrar el fallo al admin.
+ * @param {string} songId
+ * @returns {Promise<{uploadUrl:string, key:string}>}
+ */
+export async function createSongAudioUpload(songId) {
+  const res = await fetch(`/api/songs/${songId}/audio`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({}),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || 'No se pudo iniciar la subida');
+  return body;
+}
+
+/**
+ * Paso 2: confirma la duración (subida directa a Storage ya ocurrida) y
+ * dispara el alignment automático. Admin-only.
+ * @param {string} songId
+ * @param {number} durationSec
+ */
+export async function confirmSongAudio(songId, durationSec) {
+  const res = await fetch(`/api/songs/${songId}/audio`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ confirm: true, durationSec }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || 'No se pudo confirmar el audio');
+}
+
+/**
+ * Elimina el mp3 completo (fila + objeto en storage + timings). Admin-only.
+ * @param {string} songId
+ */
+export async function deleteSongAudio(songId) {
+  const res = await fetch(`/api/songs/${songId}/audio`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || 'No se pudo eliminar el audio');
+}
+
+/**
+ * Sube el archivo directo a la signed URL devuelta por createSongAudioUpload
+ * (sin auth propia — la firma de Storage ya autoriza la subida).
+ * @param {string} uploadUrl
+ * @param {File} file
+ */
+export async function uploadSongAudioFile(uploadUrl, file) {
+  const res = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'audio/mpeg' },
+    body: file,
+  });
+  if (!res.ok) throw new Error('No se pudo subir el archivo de audio');
+}

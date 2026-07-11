@@ -9,7 +9,13 @@ vi.mock('../src/lib/authStore.js', () => ({
   getSession: vi.fn(() => ({ access_token: 'tok-1' })),
 }));
 
-import { getSongAudio } from '../src/lib/songAudioApi.js';
+import {
+  getSongAudio,
+  createSongAudioUpload,
+  confirmSongAudio,
+  deleteSongAudio,
+  uploadSongAudioFile,
+} from '../src/lib/songAudioApi.js';
 
 describe('getSongAudio', () => {
   beforeEach(() => {
@@ -55,5 +61,113 @@ describe('getSongAudio', () => {
       .fn()
       .mockResolvedValue({ ok: true, json: () => Promise.reject(new Error('bad json')) });
     expect(await getSongAudio('song-1')).toBeNull();
+  });
+});
+
+describe('createSongAudioUpload', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('postea sin confirm y devuelve {uploadUrl,key}', async () => {
+    const body = { uploadUrl: 'https://x/put', key: 'song-1/full.mp3' };
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(body) });
+    global.fetch = fetchMock;
+
+    const result = await createSongAudioUpload('song-1');
+
+    expect(result).toEqual(body);
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/songs/song-1/audio');
+    expect(opts.method).toBe('POST');
+    expect(opts.headers.Authorization).toBe('Bearer tok-1');
+  });
+
+  it('respuesta no-ok lanza con el mensaje del backend', async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: false, json: () => Promise.resolve({ error: 'x' }) });
+
+    await expect(createSongAudioUpload('song-1')).rejects.toThrow('x');
+  });
+});
+
+describe('confirmSongAudio', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('postea body {confirm:true, durationSec}', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({ success: true }) });
+    global.fetch = fetchMock;
+
+    await confirmSongAudio('song-1', 222);
+
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/songs/song-1/audio');
+    expect(opts.method).toBe('POST');
+    expect(JSON.parse(opts.body)).toEqual({ confirm: true, durationSec: 222 });
+  });
+
+  it('respuesta no-ok lanza con el mensaje del backend', async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: false, json: () => Promise.resolve({ error: 'x' }) });
+
+    await expect(confirmSongAudio('song-1', 222)).rejects.toThrow('x');
+  });
+});
+
+describe('deleteSongAudio', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('hace DELETE', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({ success: true }) });
+    global.fetch = fetchMock;
+
+    await deleteSongAudio('song-1');
+
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/songs/song-1/audio');
+    expect(opts.method).toBe('DELETE');
+  });
+
+  it('respuesta no-ok lanza con el mensaje del backend', async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: false, json: () => Promise.resolve({ error: 'x' }) });
+
+    await expect(deleteSongAudio('song-1')).rejects.toThrow('x');
+  });
+});
+
+describe('uploadSongAudioFile', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('hace PUT del file al uploadUrl con Content-Type audio/mpeg', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    global.fetch = fetchMock;
+    const file = new Blob(['x']);
+
+    await uploadSongAudioFile('https://x/put', file);
+
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://x/put');
+    expect(opts.method).toBe('PUT');
+    expect(opts.headers['Content-Type']).toBe('audio/mpeg');
+    expect(opts.body).toBe(file);
+  });
+
+  it('respuesta no-ok lanza', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false });
+    await expect(uploadSongAudioFile('https://x/put', new Blob(['x']))).rejects.toThrow();
   });
 });

@@ -143,29 +143,42 @@ function renderVoiceChips(song, activeCategory) {
 // ── RENDER POR MODO ──────────────────────────────────────────────────────
 
 /**
- * Contenido de UNA línea según el modo activo (immersiveStore). Regla del
+ * HTML + clase de modo de UNA línea según el modo activo (immersiveStore),
+ * en una sola pasada: antes eran dos funciones (`buildLineContent` +
+ * `lineModifierClass`) con el mismo switch duplicado y sincronizadas solo
+ * por comentario — una sola fuente de verdad evita que diverjan. Regla del
  * spec §1: `chords` usa el mismo builder en TODAS las líneas (la atenuación
  * es puramente visual, vía las clases de distancia); `mixed`/`tono` solo la
  * línea ACTIVA usa el builder rico (3 rieles / nota flotante) — el resto cae
- * a acordes (mixed) o letra limpia (tono), sin importar la distancia.
+ * a acordes (mixed) o letra limpia (tono), sin importar la distancia. La
+ * clase de modo (`modifierClass`) es la que ubica `.float-label`/`.mix-rail`
+ * dentro del ancestro correcto (`lyrics__line--chords/--mix/--tono`, mismas
+ * clases de SongView) para que reserven su propio espacio en vez de caer al
+ * `position:absolute` por defecto de `.float-label` (bug: acordes pisando la
+ * línea de arriba).
  * @param {object} s sesión @param {object} line línea proyectada @param {boolean} isActive
- * @returns {string} HTML
+ * @returns {{ html: string, modifierClass: string }}
  */
-function buildLineContent(s, line, isActive) {
-  if (line.spoken || line.text.trim() === '') return buildLetraLineHTML(line.text);
+function buildLine(s, line, isActive) {
+  if (line.spoken || line.text.trim() === '') {
+    return { html: buildLetraLineHTML(line.text), modifierClass: '' };
+  }
 
-  if (s.mode === 'letra') return buildLetraLineHTML(line.text);
+  if (s.mode === 'letra') return { html: buildLetraLineHTML(line.text), modifierClass: '' };
 
   const { semitones = 0, useFlats = false } =
     (typeof s.ctx.getTranspose === 'function' ? s.ctx.getTranspose() : null) || {};
   const notation = typeof s.ctx.getNotation === 'function' ? s.ctx.getNotation() : 'anglo';
 
   if (s.mode === 'chords') {
-    return buildChordsLineHTML(line.text, line.chordsRaw, {
-      transposeSemitones: semitones,
-      useFlats,
-      notation,
-    });
+    return {
+      html: buildChordsLineHTML(line.text, line.chordsRaw, {
+        transposeSemitones: semitones,
+        useFlats,
+        notation,
+      }),
+      modifierClass: 'lyrics__line--chords',
+    };
   }
 
   const category =
@@ -175,45 +188,33 @@ function buildLineContent(s, line, isActive) {
 
   if (s.mode === 'mixed') {
     if (isActive && s.activeVoiceId) {
-      return buildMixedLineHTML(lineObj, line.chordsRaw, s.activeVoiceId, colorClass, {
+      return {
+        html: buildMixedLineHTML(lineObj, line.chordsRaw, s.activeVoiceId, colorClass, {
+          transposeSemitones: semitones,
+          useFlats,
+          notation,
+        }),
+        modifierClass: 'lyrics__line--mix',
+      };
+    }
+    return {
+      html: buildChordsLineHTML(line.text, line.chordsRaw, {
         transposeSemitones: semitones,
         useFlats,
         notation,
-      });
-    }
-    return buildChordsLineHTML(line.text, line.chordsRaw, {
-      transposeSemitones: semitones,
-      useFlats,
-      notation,
-    });
+      }),
+      modifierClass: 'lyrics__line--chords',
+    };
   }
 
   // mode === 'tono'
   if (isActive && s.activeVoiceId) {
-    return buildTonoLineHTML(lineObj, s.activeVoiceId, colorClass, { notation });
+    return {
+      html: buildTonoLineHTML(lineObj, s.activeVoiceId, colorClass, { notation }),
+      modifierClass: 'lyrics__line--tono',
+    };
   }
-  return buildLetraLineHTML(line.text);
-}
-
-/**
- * Clase de modo aplicada al `.imm-line` — réplica EXACTA de la selección de
- * builder que hace `buildLineContent`, para que `.float-label`/`.mix-rail`
- * queden dentro del ancestro correcto (`lyrics__line--chords/--mix/--tono`,
- * mismas clases de SongView) y reserven su propio espacio en vez de caer al
- * `position:absolute` por defecto de `.float-label` (bug: acordes pisando la
- * línea de arriba).
- * @param {object} s @param {object} line @param {boolean} isActive
- * @returns {string} clase o `''`
- */
-function lineModifierClass(s, line, isActive) {
-  if (line.spoken || line.text.trim() === '') return '';
-  if (s.mode === 'letra') return '';
-  if (s.mode === 'chords') return 'lyrics__line--chords';
-  if (s.mode === 'mixed') {
-    return isActive && s.activeVoiceId ? 'lyrics__line--mix' : 'lyrics__line--chords';
-  }
-  // mode === 'tono'
-  return isActive && s.activeVoiceId ? 'lyrics__line--tono' : '';
+  return { html: buildLetraLineHTML(line.text), modifierClass: '' };
 }
 
 /** Clase de distancia (spec §1): activa/±1/±2/±3/resto. */
@@ -246,9 +247,9 @@ function renderRoll(s) {
     .map((line, i) => {
       const isActive = i === s.index;
       const spokenCls = line.spoken ? ' imm-line--spoken' : '';
-      const modifierCls = lineModifierClass(s, line, isActive);
-      const modifierClsAttr = modifierCls ? ` ${modifierCls}` : '';
-      return `<div class="imm-line${spokenCls}${modifierClsAttr}" data-i="${i}">${buildLineContent(s, line, isActive)}</div>`;
+      const { html, modifierClass } = buildLine(s, line, isActive);
+      const modifierClsAttr = modifierClass ? ` ${modifierClass}` : '';
+      return `<div class="imm-line${spokenCls}${modifierClsAttr}" data-i="${i}">${html}</div>`;
     })
     .join('');
   s.lineEls = Array.from(s.els.roll.children);
@@ -259,19 +260,19 @@ function renderRoll(s) {
  * Re-pinta el contenido de UNA línea (se llama en `goTo` para el índice viejo
  * y el nuevo). En `mixed`/`tono` el builder de una línea cambia según sea o
  * no la activa — reasigna `className` completo (no solo `innerHTML`) para
- * que la clase de modo (`lineModifierClass`) siga la nueva selección; la
- * clase de distancia vigente se preserva y se recalcula aparte en
- * `updateDistanceClasses`.
+ * que la clase de modo (`modifierClass` de `buildLine`) siga la nueva
+ * selección; la clase de distancia vigente se preserva y se recalcula aparte
+ * en `updateDistanceClasses`.
  */
 function renderLineContent(s, index) {
   const el = s.lineEls[index];
   const line = s.lines[index];
   if (!el || !line) return;
   const isActive = index === s.index;
-  el.innerHTML = buildLineContent(s, line, isActive);
+  const { html, modifierClass } = buildLine(s, line, isActive);
+  el.innerHTML = html;
   const spokenCls = line.spoken ? ' imm-line--spoken' : '';
-  const modifierCls = lineModifierClass(s, line, isActive);
-  const modifierClsAttr = modifierCls ? ` ${modifierCls}` : '';
+  const modifierClsAttr = modifierClass ? ` ${modifierClass}` : '';
   const distanceCls = ` ${distanceClass(Math.abs(index - s.index))}`;
   el.className = `imm-line${spokenCls}${modifierClsAttr}${distanceCls}`;
 }
@@ -353,6 +354,12 @@ function setActiveIndex(s, index) {
   const prevIndex = s.index;
   s.index = clamped;
   updateDistanceClasses(s);
+  // `updateDistanceClasses` ya puso la clase de distancia de `prevIndex`/
+  // `clamped` en el className; `renderLineContent` la vuelve a calcular al
+  // reasignar `className` completo (necesita reasignarlo entero porque
+  // también cambia `modifierClass`). Es sincronía intencional entre ambas
+  // funciones, no un cálculo redundante que se pueda quitar — invertir el
+  // orden dejaría la línea sin su clase de distancia hasta el próximo tick.
   if (clamped !== prevIndex) {
     renderLineContent(s, prevIndex);
     renderLineContent(s, clamped);

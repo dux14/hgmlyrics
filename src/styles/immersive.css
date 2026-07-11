@@ -174,7 +174,6 @@ body.immersive-active {
    (SongView/components.css) queda intacto. */
 .imm-v1 .float-label.chord-label {
   font-size: 0.5em;
-  top: auto;
 }
 .imm-v1 .float-label.tono-note {
   font-size: 0.52em;

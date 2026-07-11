@@ -63,6 +63,9 @@ describe('ImmersiveView — clases de modo por línea + paridad de voz', () => {
   let songViewEl;
 
   beforeEach(() => {
+    // El modo persistido por immersiveStore (clave hkn-immersive-mode) no
+    // debe filtrarse entre tests.
+    localStorage.clear();
     songViewEl = document.createElement('div');
     document.body.appendChild(songViewEl);
   });

@@ -588,8 +588,9 @@ function mountPlayerBar(s) {
   // no de un segundo play.
   const onPlay = () => {
     s.audioPlaying = true;
-    // Defensa: si un timeout del timer ya estaba encolado desde la ventana
-    // promover-antes-de-play, esto lo limpia (el timer nunca corre en sync).
+    // promoteToSync ya detuvo el timer y scheduleAdvance es no-op en sync;
+    // este clearTimeout es solo un cinturón redundante, no cubre ninguna
+    // carrera real.
     clearTimeout(s.timer);
     s.timer = null;
     s.paused = false;

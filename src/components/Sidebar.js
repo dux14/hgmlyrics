@@ -1,8 +1,8 @@
 /**
  * Sidebar.js — Sidebar component
  *
- * Album filters only.
- * Overlay on mobile, fixed panel on desktop.
+ * Album filters only. Panel fijo de desktop (en móvil permanece oculta,
+ * sin mecanismo de apertura — el drawer/overlay móvil se retiró).
  */
 
 import { getAlbums, filterByAlbum, getState } from '../lib/store.js';
@@ -14,27 +14,18 @@ import { expiryBand } from '../lib/listDraft.js';
 import { skelRow } from '../lib/skeleton.js';
 
 let sidebarEl = null;
-let overlayEl = null;
 
 /**
  * Render the sidebar
  * @param {HTMLElement} container
  */
 export function renderSidebar(container) {
-  // Overlay for mobile
-  overlayEl = document.createElement('div');
-  overlayEl.className = 'sidebar-overlay';
-  overlayEl.id = 'sidebar-overlay';
-  overlayEl.addEventListener('click', closeSidebar);
-
-  // Sidebar panel
   sidebarEl = document.createElement('aside');
   sidebarEl.className = 'sidebar';
   sidebarEl.id = 'sidebar';
 
   updateSidebarContent();
 
-  container.appendChild(overlayEl);
   container.appendChild(sidebarEl);
 }
 
@@ -142,7 +133,6 @@ function bindSidebarEvents() {
   sidebarEl.querySelector('#lists-add')?.addEventListener('click', (e) => {
     e.stopPropagation();
     navigate('/lista/nueva');
-    if (window.innerWidth < 768) closeSidebar();
   });
 
   // Cargar listas de forma asíncrona
@@ -160,7 +150,6 @@ function bindSidebarEvents() {
         listsContentEl.querySelectorAll('[data-lista-id]').forEach((item) => {
           item.addEventListener('click', () => {
             navigate('/lista/' + item.dataset.listaId);
-            if (window.innerWidth < 768) closeSidebar();
           });
         });
       })
@@ -182,9 +171,6 @@ function bindSidebarEvents() {
       if (dest === 'voces') {
         navigate('/voces');
       }
-      if (window.innerWidth < 768) {
-        closeSidebar();
-      }
     });
   });
 
@@ -195,57 +181,10 @@ function bindSidebarEvents() {
       filterByAlbum(album);
       updateSidebarContent();
       navigate('/');
-
-      // Close sidebar on mobile after selecting
-      if (window.innerWidth < 768) {
-        closeSidebar();
-      }
     });
   });
 }
 
-/**
- * Toggle sidebar visibility
- */
-export function toggleSidebar() {
-  if (!sidebarEl) {
-    return;
-  }
-  const isOpen = sidebarEl.classList.contains('open');
-  if (isOpen) {
-    closeSidebar();
-  } else {
-    openSidebar();
-  }
-}
-
-/**
- * Open sidebar
- */
-export function openSidebar() {
-  if (sidebarEl) {
-    sidebarEl.classList.add('open');
-  }
-  if (overlayEl) {
-    overlayEl.classList.add('active');
-  }
-}
-
-/**
- * Close sidebar
- */
-export function closeSidebar() {
-  if (sidebarEl) {
-    sidebarEl.classList.remove('open');
-  }
-  if (overlayEl) {
-    overlayEl.classList.remove('active');
-  }
-}
-
-/**
- * Escape HTML
- */
 /** Ordena listas: por expires_at ascendente; sin fecha o fecha inválida al final. No muta. */
 export function sortListsByExpiry(lists) {
   return [...lists].sort((a, b) => {

@@ -1,19 +1,18 @@
 /**
- * SongList.js — Song grid/list component
+ * SongList.js — Song card component
  *
- * Displays filtered songs as cards with album covers, titles, and voice badges.
+ * Crea la card de canción (carátula, título, badge de voz, favorito) usada
+ * por Home.js. El grid/lista con toggle de vista, la fila de lista y el
+ * skeleton viejos se eliminaron: sin usuarios tras el rediseño de Home.
  */
 
 import { navigate } from '../router.js';
 import { isPWA, isSongCached } from '../lib/offlineCache.js';
 import { isAuthenticated } from '../lib/authStore.js';
-import { isFavorite, toggleFavorite, subscribe as subscribeFavorites } from '../lib/favorites.js';
+import { isFavorite, toggleFavorite } from '../lib/favorites.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { resolveCoverUrl, voiceBadge } from './songRow.js';
 import { escapeHtml } from '../lib/escape.js';
-
-let currentViewMode = localStorage.getItem('hkn-view-mode') || 'list';
-let favUnsubscribe = null;
 
 function paintFavBtn(btn, on) {
   btn.classList.toggle('is-on', on);
@@ -21,97 +20,6 @@ function paintFavBtn(btn, on) {
   btn.setAttribute('aria-label', on ? 'Quitar de favoritos' : 'Agregar a favoritos');
   const path = btn.querySelector('path');
   if (path) path.setAttribute('fill', on ? 'currentColor' : 'none');
-}
-
-/**
- * Render the song list
- * @param {HTMLElement} container - Mount point
- * @param {Array} songs - Songs to display
- */
-export function renderSongList(container, songs) {
-  container.innerHTML = '';
-  if (favUnsubscribe) {
-    favUnsubscribe();
-    favUnsubscribe = null;
-  }
-
-  if (songs.length === 0) {
-    container.innerHTML = `
-      <div class="empty-state fade-in">
-        <div class="empty-state__icon">${icon('music', { size: 48 })}</div>
-        <h2 class="empty-state__title">No se encontraron canciones</h2>
-        <p class="empty-state__text">Intenta ajustar los filtros o busca por otro término.</p>
-      </div>
-    `;
-    return;
-  }
-
-  const toolbar = document.createElement('div');
-  toolbar.className = 'song-view-toolbar';
-  toolbar.innerHTML = `
-    <span style="color: var(--color-text-secondary); font-size: 0.875rem;">${songs.length} resultados</span>
-    <div class="song-view-toggle">
-      <button class="view-btn ${currentViewMode === 'grid' ? 'active' : ''}" data-view="grid" title="Cuadrícula" aria-label="Vista en cuadrícula">${icon('grid', { size: 18 })}</button>
-      <button class="view-btn ${currentViewMode === 'list' ? 'active' : ''}" data-view="list" title="Lista" aria-label="Vista en lista">${icon('list', { size: 18 })}</button>
-    </div>
-  `;
-  container.appendChild(toolbar);
-
-  toolbar.querySelectorAll('.view-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      currentViewMode = btn.dataset.view;
-      localStorage.setItem('hkn-view-mode', currentViewMode);
-      renderSongList(container, songs);
-    });
-  });
-
-  const listContainer = document.createElement('div');
-  listContainer.className = currentViewMode === 'grid' ? 'song-grid' : 'song-list';
-
-  if (currentViewMode === 'grid') {
-    songs.forEach((song, index) => {
-      listContainer.appendChild(createSongCard(song, index));
-    });
-  } else {
-    songs.forEach((song, i) => listContainer.appendChild(createSongListRow(song, i)));
-  }
-
-  container.appendChild(listContainer);
-
-  if (isAuthenticated()) {
-    favUnsubscribe = subscribeFavorites((toggledId) => {
-      container.querySelectorAll('.song-card__fav[data-song-id]').forEach((btn) => {
-        if (toggledId && btn.dataset.songId !== toggledId) return;
-        paintFavBtn(btn, isFavorite(btn.dataset.songId));
-      });
-    });
-  }
-}
-
-/**
- * Render skeleton loading cards
- * @param {HTMLElement} container
- * @param {number} count
- */
-export function renderSongListSkeleton(container, count = 6) {
-  const grid = document.createElement('div');
-  grid.className = 'song-grid';
-
-  for (let i = 0; i < count; i++) {
-    const card = document.createElement('div');
-    card.className = 'song-card song-card--skeleton';
-    card.innerHTML = `
-      <div class="song-card__cover skeleton"></div>
-      <div class="song-card__info">
-        <div class="song-card__title skeleton">&nbsp;</div>
-        <div class="song-card__album skeleton">&nbsp;</div>
-      </div>
-    `;
-    grid.appendChild(card);
-  }
-
-  container.innerHTML = '';
-  container.appendChild(grid);
 }
 
 /**
@@ -186,8 +94,7 @@ export function createSongCard(song, index) {
     }
   });
 
-  // Favorite toggle (intercept before card click). Cross-card sync handled by
-  // a single list-level subscription registered in renderSongList.
+  // Favorite toggle (intercept before card click).
   const favBtn = card.querySelector('.song-card__fav');
   if (favBtn) {
     favBtn.dataset.songId = song.id;
@@ -213,41 +120,4 @@ export function createSongCard(song, index) {
   }
 
   return card;
-}
-
-/**
- * Crea una fila limpia de lista: carátula + título + álbum + badge de voz.
- * @param {object} song
- * @param {number} [index] - para animación escalonada
- * @returns {HTMLElement}
- */
-export function createSongListRow(song, index = 0) {
-  const row = document.createElement('div');
-  row.className = 'song-list-row fade-in';
-  row.style.animationDelay = `${index * 30}ms`;
-  row.setAttribute('role', 'button');
-  row.setAttribute('tabindex', '0');
-  row.setAttribute('aria-label', `${song.title} — ${song.album}`);
-
-  const coverUrl = resolveCoverUrl(song);
-  const { class: voiceBadgeClass, label: voiceLabel } = voiceBadge(song);
-
-  row.innerHTML = `
-    <img class="song-list-row__thumb" src="${coverUrl}" alt="" width="40" height="40" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'" />
-    <div class="song-list-row__text">
-      <span class="song-list-row__title">${escapeHtml(song.title)}</span>
-      <span class="song-list-row__album">${escapeHtml(song.album)}</span>
-    </div>
-    <span class="voice-badge ${voiceBadgeClass}">${voiceLabel}</span>
-  `;
-
-  row.addEventListener('click', () => navigate(`/song/${song.id}`));
-  row.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      navigate(`/song/${song.id}`);
-    }
-  });
-
-  return row;
 }

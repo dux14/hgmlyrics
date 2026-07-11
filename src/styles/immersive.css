@@ -6,8 +6,7 @@
 
 body.immersive-active .header,
 body.immersive-active .bottom-nav,
-body.immersive-active .sidebar,
-body.immersive-active .sidebar-overlay {
+body.immersive-active .sidebar {
   display: none !important;
 }
 body.immersive-active {

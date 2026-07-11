@@ -82,13 +82,19 @@ export default defineConfig({
           },
           {
             // Imágenes en Supabase Storage (URLs absolutas de otro origen).
+            // fetchOptions mode:'cors' fuerza siempre modo cors (Storage público
+            // manda access-control-allow-origin: *) para que la misma URL nunca
+            // produzca una respuesta opaca: una respuesta cors sí satisface tanto
+            // peticiones no-cors como cors, evitando la mezcla de modos que
+            // rompía el tile con color extraído (crossOrigin='anonymous').
             urlPattern: ({ url, request }) =>
               request.destination === 'image' && url.hostname.endsWith('.supabase.co'),
             handler: 'CacheFirst',
             options: {
-              cacheName: 'img-storage',
+              cacheName: 'img-storage-v2',
               expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 30, purgeOnQuotaError: true },
-              cacheableResponse: { statuses: [0, 200] },
+              cacheableResponse: { statuses: [200] },
+              fetchOptions: { mode: 'cors' },
             },
           },
           // Google Fonts eliminado: fuentes self-hosted en public/fonts/ (precache via globPatterns woff2)

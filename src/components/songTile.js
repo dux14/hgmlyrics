@@ -39,8 +39,8 @@ export function songTile(song, colorMap = {}, coverBySlug = {}) {
     </div>
   `;
 
-  // Portada como elemento (no innerHTML) para fijar crossOrigin antes de src y
-  // poder extraer el color al cargar cuando no hay uno precomputado en el JSON.
+  // Portada como elemento (no innerHTML) para poder colgar listeners de error
+  // y de extracción de color antes de fijar src.
   const art = document.createElement('img');
   art.className = 'song-tile__art';
   art.alt = '';
@@ -48,23 +48,24 @@ export function songTile(song, colorMap = {}, coverBySlug = {}) {
   art.height = 120;
   art.loading = 'lazy';
   art.decoding = 'async';
-  let settled = false; // evita extraer color del placeholder tras un error
   art.addEventListener('error', () => {
-    settled = true;
     art.src = COVER_PLACEHOLDER;
   });
-  // Sin color precomputado (p. ej. portada remota de Storage): extraerlo al vuelo.
+  // Sin color precomputado (p. ej. portada remota de Storage): extraerlo al
+  // vuelo con una Image auxiliar CORS. El <img> visible se queda en no-cors,
+  // como el resto de la app: mezclar modos para la misma URL hacía que el SW
+  // cacheara la respuesta opaca y la petición CORS del tile quedara rota.
   if (!preColor) {
-    art.crossOrigin = 'anonymous';
-    art.addEventListener('load', () => {
-      if (settled) return;
-      settled = true;
-      const c = extractCoverColor(art);
+    const probe = new Image();
+    probe.crossOrigin = 'anonymous';
+    probe.addEventListener('load', () => {
+      const c = extractCoverColor(probe);
       if (c) {
         a.style.setProperty('--tile-c1', c.base);
         a.style.setProperty('--tile-c2', c.light);
       }
     });
+    probe.src = cover;
   }
   art.src = cover;
   a.appendChild(art);

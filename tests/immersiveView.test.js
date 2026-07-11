@@ -938,4 +938,70 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     expect(document.getElementById('imm-fab').hidden).toBe(false);
     expect(document.getElementById('imm-player-slot').hidden).toBe(true);
   });
+
+  it('sheet reabierto tras un fallback a timer vuelve a mostrar VELOCIDAD y esconde PISTA', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimings());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    audio.dispatchEvent(new Event('error')); // fuerza el fallback a timer
+
+    document.getElementById('imm-open-options').click();
+    expect(
+      [...document.querySelectorAll('.osheet .osheet__h')].some((h) => h.textContent === 'AUTO-SCROLL'),
+    ).toBe(true);
+    expect(document.querySelector('.osheet [data-act="player-toggle"]')).toBeNull();
+  });
+
+  // Race exit/re-enter con el fetch de getSongAudio en vuelo (guard `session
+  // !== s` de maybeLoadSyncAudio): la promesa se controla a mano vía una
+  // referencia al `resolve` capturada en el mock, sin await previo.
+  it('race: salir ANTES de que resuelva getSongAudio no crashea ni promueve', async () => {
+    enablePlayerFlag();
+    let resolveFetch;
+    getSongAudio.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+
+    exitImmersive(); // sale ANTES de que el fetch resuelva
+
+    expect(() => resolveFetch(readyTimings())).not.toThrow();
+    await flushAsync();
+
+    expect(document.querySelector('.imm-v1')).toBeNull(); // sigue afuera, sin overlay huérfano
+  });
+
+  it('race: salir y re-entrar -> el fetch VIEJO no promueve la sesión NUEVA (guard session !== s)', async () => {
+    enablePlayerFlag();
+    let resolveFirst;
+    getSongAudio.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        }),
+    );
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    exitImmersive();
+
+    // Segunda sesión: su propio fetch queda deliberadamente pendiente (no se
+    // resuelve en este test) — lo único que se resuelve es el de la primera.
+    getSongAudio.mockImplementation(() => new Promise(() => {}));
+    const sv2 = mountSongView();
+    enterImmersive(sv2, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+
+    resolveFirst(readyTimings());
+    await flushAsync();
+
+    expect(document.getElementById('imm-player-slot').hidden).toBe(true);
+    expect(document.getElementById('imm-fab').hidden).toBe(false);
+  });
 });

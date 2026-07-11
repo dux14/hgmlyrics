@@ -458,6 +458,8 @@ function fallbackToTimer(s) {
   if (s.engineMode !== 'sync') return;
   s.timingEngine?.detach();
   s.timingEngine = null;
+  s.timingLines = [];
+  s.timingByLineIndex = new Map();
   unmountPlayerBar(s);
   cleanupAudioEl(s);
   removeInterlude(s);
@@ -1020,7 +1022,11 @@ export function exitImmersive() {
   // Player sincronizado (D3): el audio.pause()+src='' pasa por TODOS los
   // caminos de salida, esté o no promovido a sync (cleanupAudioEl es no-op
   // sin audioEl) — sin esto una pista quedaría sonando tras salir.
+  // unmountPlayerBar explícito (simetría con fallbackToTimer) en vez de
+  // dejarlo implícito en el `overlay.remove()` de más abajo: sus listeners
+  // quedan desenganchados del <audio> ANTES de que cleanupAudioEl lo nulee.
   session.timingEngine?.detach();
+  if (session.engineMode === 'sync') unmountPlayerBar(session);
   cleanupAudioEl(session);
   removeInterlude(session);
 

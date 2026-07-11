@@ -92,6 +92,38 @@ function buildTwoSectionSong() {
   });
 }
 
+function buildMultiVoiceSong() {
+  return buildSong({
+    voiceRoster: [
+      { id: 'soprano-1', name: 'Soprano', category: 'soprano' },
+      { id: 'tenor-1', name: 'Tenor', category: 'tenor' },
+    ],
+    sections: [
+      {
+        type: 'verse',
+        label: 'Verso 1',
+        lines: [
+          {
+            text: 'Primera línea',
+            chords: [{ pos: 0, ch: 'C' }],
+            groups: [
+              { start: 0, end: 7, voiceId: 'soprano-1', note: 'C4' },
+              { start: 0, end: 7, voiceId: 'tenor-1', note: 'G3' },
+            ],
+          },
+          {
+            text: 'Segunda línea',
+            groups: [
+              { start: 0, end: 7, voiceId: 'soprano-1', note: 'D4' },
+              { start: 0, end: 7, voiceId: 'tenor-1', note: 'A3' },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+}
+
 beforeEach(() => {
   exitImmersive(); // limpia estado entre tests
   document.body.innerHTML = '';
@@ -436,6 +468,57 @@ describe('FAB de pausa (#imm-fab) y controles fijos mientras está pausado', () 
     vi.advanceTimersByTime(3500);
     expect(chrome.classList.contains('imm-v1__chrome--hidden')).toBe(true); // se re-arma el auto-hide
     vi.useRealTimers();
+  });
+});
+
+// Portados de tests/stageMode.test.js (Task C5, gap de cobertura post-review):
+// chips S·A·T·B — mismo comportamiento que tenía el extinto modo escenario.
+// Requieren modo mixed/tono para que #imm-voice-chips quede visible.
+describe('chips de voz S·A·T·B en la vista inmersiva', () => {
+  it('pinta un chip por categoría presente en el roster, con la voz activa marcada', () => {
+    setLayer('tono', true);
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildMultiVoiceSong(), getActiveVoice: () => 'soprano-1' });
+    const chips = document.querySelectorAll('#imm-voice-chips [data-category]');
+    expect(chips).toHaveLength(2); // soprano + tenor (no contralto/bajo en el roster)
+    const sopranoChip = document.querySelector('[data-category="soprano"]');
+    expect(sopranoChip.classList.contains('imm-v1__voice-chip--active')).toBe(true);
+  });
+
+  it('tap en un chip cambia la voz activa y la nota mostrada sin salir de la vista', () => {
+    // La nota solo se pinta vía el render por capas (modo tono), así que esta
+    // aserción necesita la capa Tono encendida para que la nota sea observable.
+    setLayer('tono', true);
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildMultiVoiceSong(), getActiveVoice: () => 'soprano-1' });
+    const activeLine = () => document.querySelector('#imm-roll .imm-line[data-i="0"]');
+    expect(activeLine().textContent).toContain('C4');
+
+    document.querySelector('[data-category="tenor"]').click();
+
+    expect(document.querySelector('.imm-v1')).toBeTruthy(); // sigue en la vista
+    expect(activeLine().textContent).toContain('G3');
+    expect(
+      document.querySelector('[data-category="tenor"]').classList.contains('imm-v1__voice-chip--active'),
+    ).toBe(true);
+    expect(
+      document.querySelector('[data-category="soprano"]').classList.contains('imm-v1__voice-chip--active'),
+    ).toBe(false);
+  });
+
+  it('sincroniza la voz elegida con SongView vía ctx.setActiveVoice', () => {
+    setLayer('tono', true);
+    const sv = mountSongView();
+    const setActiveVoice = vi.fn();
+    enterImmersive(sv, {
+      song: buildMultiVoiceSong(),
+      getActiveVoice: () => 'soprano-1',
+      setActiveVoice,
+    });
+
+    document.querySelector('[data-category="tenor"]').click();
+
+    expect(setActiveVoice).toHaveBeenCalledWith('tenor', 'tenor-1');
   });
 });
 

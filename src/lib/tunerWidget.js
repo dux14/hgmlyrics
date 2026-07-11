@@ -1,5 +1,6 @@
 /**
- * tunerWidget.js — Franja delgada del afinador embebida en el modo escenario (F3).
+ * tunerWidget.js — Motor compartido del afinador embebido (F3), consumido por
+ * FloatingTuner.js (widget híbrido de la vista inmersiva/SongView).
  *
  * Reusa el mismo detector/estabilizador que Tuner.js pero afina contra una nota
  * OBJETIVO externa (la nota de la línea actual del teleprompter) en vez de la
@@ -11,10 +12,6 @@
 
 import { createPitchDetector } from './pitch.js';
 import { createPitchStabilizer } from './pitchStabilizer.js';
-import { centsToBarPercent } from './tunerGauge.js';
-import { midiToName } from './notes.js';
-import { displayNote, getChordNotation } from './chordNotation.js';
-import { icon } from './icons.js';
 
 /** Umbral de color: <10¢ ok, <30¢ warn, resto bad (mismo criterio que Tuner.js). */
 export function colorFromCents(cents) {
@@ -27,8 +24,8 @@ export function colorFromCents(cents) {
 /**
  * createTunerEngine — motor compartido del afinador: pipeline de mic
  * (requestMic con épocas para descartar detectores obsoletos) + estabilizador
- * de pitch. Sin DOM: consumido tanto por `createTunerStrip` (franja de
- * escenario) como, en un paso posterior, por el widget flotante.
+ * de pitch. Sin DOM: consumido por FloatingTuner.js (widget híbrido montado
+ * bajo demanda en la vista inmersiva).
  *
  * @param {{ onPitch?: (stab: object|null) => void,
  *           onState?: (s: 'idle'|'requesting'|'running'|'stopped'|'denied') => void,
@@ -105,94 +102,4 @@ export function createTunerEngine({ onPitch = () => {}, onState = () => {}, onEr
   }
 
   return { start, stop, requestMic, isRunning: () => running };
-}
-
-/**
- * @param {{ getTargetNote?: () => number|null }} [opts]
- *   `getTargetNote`: midi inicial a usar al llamar `start()` (opcional; el
- *   caller normalmente lo actualiza después vía `setTargetNote`).
- * @returns {{ el: HTMLElement, start: () => void, stop: () => void,
- *             setTargetNote: (midi: number|null) => void, isRunning: () => boolean }}
- */
-export function createTunerStrip({ getTargetNote } = {}) {
-  let targetMidi = typeof getTargetNote === 'function' ? getTargetNote() : null;
-  let micState = 'idle'; // 'idle' | 'requesting' | 'running' | 'denied' | 'stopped'
-
-  const el = document.createElement('div');
-  el.className = 'tuner-strip';
-
-  const engine = createTunerEngine({
-    onPitch: (stab) => handlePitch(stab),
-    onState: (s) => {
-      micState = s;
-      render();
-    },
-    onError: (err) => console.warn('[tuner-strip] mic error:', err),
-  });
-
-  function handlePitch(stab) {
-    const indicator = el.querySelector('#tuner-strip-indicator');
-    if (!indicator) return; // gate visible: aún sin permiso
-    if (stab === null) {
-      indicator.style.left = '50%';
-      indicator.dataset.status = '';
-      return;
-    }
-    const cents = targetMidi !== null ? 100 * (stab.midi - targetMidi) + stab.cents : stab.cents;
-    indicator.style.left = `${centsToBarPercent(cents)}%`;
-    indicator.dataset.status = colorFromCents(cents);
-    if (targetMidi === null) {
-      const label = el.querySelector('#tuner-strip-label');
-      if (label) label.textContent = displayNote(`${stab.note}${stab.octave}`, getChordNotation());
-    }
-  }
-
-  function render() {
-    if (!engine.isRunning()) {
-      el.innerHTML = '';
-      return;
-    }
-    if (micState !== 'running' && micState !== 'requesting') {
-      el.innerHTML = `
-        <div class="tuner-strip__gate">
-          <button type="button" class="tuner-strip__grant" id="tuner-strip-grant">
-            ${icon('mic', { size: 14 })} Activar micrófono
-          </button>
-        </div>
-      `;
-      el.querySelector('#tuner-strip-grant')?.addEventListener('click', engine.requestMic);
-      return;
-    }
-    const label =
-      targetMidi !== null ? displayNote(midiToName(targetMidi), getChordNotation()) : null;
-    el.innerHTML = `
-      <div class="tuner-strip__label" id="tuner-strip-label">${label ?? '—'}</div>
-      <div class="tuner-strip__track" aria-hidden="true">
-        <div class="tuner-strip__center"></div>
-        <div class="tuner-strip__indicator" id="tuner-strip-indicator" data-status="" style="left: 50%"></div>
-      </div>
-      ${label ? '' : '<p class="tuner-strip__hint">Elige tu voz para afinar contra la nota</p>'}
-    `;
-  }
-
-  function start() {
-    if (engine.isRunning()) return;
-    if (typeof getTargetNote === 'function') targetMidi = getTargetNote();
-    engine.start(); // running=true antes del render; requestMic() puede re-renderizar via onState
-    render();
-  }
-
-  /** Libera SIEMPRE el detector (mic nunca queda abierto). Idempotente. */
-  function stop() {
-    engine.stop(); // onState('idle') dispara render() con micState/running ya al día
-  }
-
-  function setTargetNote(midi) {
-    targetMidi = midi ?? null;
-    render();
-  }
-
-  render();
-
-  return { el, start, stop, setTargetNote, isRunning: () => engine.isRunning() };
 }

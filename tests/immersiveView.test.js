@@ -749,7 +749,7 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     expect(document.querySelector('#imm-player-slot audio')).toBeNull();
   });
 
-  it('flag on + timings ready + audio: la barra de player queda visible y el FAB sigue activo (la pista arranca pausada)', async () => {
+  it('flag on + timings ready + audio: la barra de player queda visible y el FAB se oculta para siempre (un solo play)', async () => {
     isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
@@ -758,8 +758,9 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
 
     expect(document.getElementById('imm-player-slot').hidden).toBe(false);
     expect(document.querySelector('#imm-player-slot audio')).toBeTruthy();
-    // La pista aún no suena: el TimerEngine sigue conduciendo y el FAB se queda.
-    expect(document.getElementById('imm-fab').hidden).toBe(false);
+    // Con pista disponible hay un solo play: el de la barra. El FAB se oculta
+    // al promover, aunque la pista todavía no suene.
+    expect(document.getElementById('imm-fab').hidden).toBe(true);
   });
 
   it("toggle 'Reproducir pista' en el sheet reproduce/pausa el audio", async () => {
@@ -874,7 +875,7 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     expect(audio.getAttribute('src')).toBe('');
   });
 
-  it('FAB de pausa: activo en sync mientras la pista está pausada; oculto y no-op cuando suena', async () => {
+  it('FAB de pausa: oculto y no-op en sync, esté la pista sonando o pausada', async () => {
     isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
@@ -884,21 +885,20 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     const fab = document.getElementById('imm-fab');
     const audio = document.querySelector('#imm-player-slot audio');
 
-    // Pista pausada (estado inicial): el FAB sigue conduciendo el timer.
-    expect(fab.hidden).toBe(false);
-    fab.click();
+    // Recién promovido, pista pausada: el FAB ya está oculto y no hace nada.
+    expect(fab.hidden).toBe(true);
     expect(document.querySelector('.imm-v1').classList.contains('imm-v1--paused')).toBe(true);
     fab.click();
-    expect(document.querySelector('.imm-v1').classList.contains('imm-v1--paused')).toBe(false);
+    expect(document.querySelector('.imm-v1').classList.contains('imm-v1--paused')).toBe(true);
 
-    // Pista sonando: el audio manda; FAB oculto y togglePause no-op.
+    // Pista sonando: el audio manda; FAB sigue oculto y togglePause no-op.
     audio.dispatchEvent(new Event('play'));
     expect(fab.hidden).toBe(true);
     fab.click();
     expect(document.querySelector('.imm-v1').classList.contains('imm-v1--paused')).toBe(false);
   });
 
-  it('sheet: VELOCIDAD (AUTO-SCROLL) visible mientras conduce el timer, oculta cuando la pista suena', async () => {
+  it('sheet: VELOCIDAD (AUTO-SCROLL) visible mientras conduce el timer, oculta apenas se promueve a sync', async () => {
     enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
@@ -914,17 +914,18 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     ).toBe(true);
     closeOptionsSheet();
 
-    await flushAsync(); // promueve a sync (pista pausada: el timer sigue conduciendo)
+    await flushAsync(); // promueve a sync (timer detenido, pista pausada esperando el play de la barra)
 
+    // El timer ya no conduce en sync (esté sonando o no la pista): la
+    // perilla se oculta apenas se promueve, no cuando la pista arranca.
     document.getElementById('imm-open-options').click();
     expect(
       [...document.querySelectorAll('.osheet .osheet__h')].some(
         (h) => h.textContent === 'AUTO-SCROLL',
       ),
-    ).toBe(true);
+    ).toBe(false);
     closeOptionsSheet();
 
-    // Con la pista sonando la velocidad la da el audio: la perilla se oculta.
     document.querySelector('#imm-player-slot audio').dispatchEvent(new Event('play'));
     document.getElementById('imm-open-options').click();
     expect(
@@ -1116,7 +1117,7 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     expect(document.getElementById('imm-fab').hidden).toBe(false);
   });
 
-  it('promovido a sync sin dar play: el TimerEngine sigue avanzando la letra', async () => {
+  it('promovido a sync sin dar play: el timer queda detenido, la letra no avanza sola', async () => {
     enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimings());
     vi.useFakeTimers();
@@ -1125,16 +1126,16 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     await flushAsync();
 
     expect(document.getElementById('imm-player-slot').hidden).toBe(false);
-    vi.advanceTimersByTime(9000);
+    vi.advanceTimersByTime(20000);
     expect(
       document
-        .querySelector('#imm-roll .imm-line[data-i="1"]')
+        .querySelector('#imm-roll .imm-line[data-i="0"]')
         .classList.contains('imm-line--active'),
     ).toBe(true);
     vi.useRealTimers();
   });
 
-  it("'play' de la pista apaga el timer; 'pause' deja el FAB en pausa y permite reanudar sin música", async () => {
+  it("'play'/'pause' de la pista pausan y reanudan TODO; el FAB nunca reaparece (un solo play)", async () => {
     enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimings());
     vi.useFakeTimers();
@@ -1144,6 +1145,7 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
 
     const audio = document.querySelector('#imm-player-slot audio');
     const fab = document.getElementById('imm-fab');
+    expect(fab.hidden).toBe(true);
 
     audio.dispatchEvent(new Event('play'));
     vi.advanceTimersByTime(20000); // el timer NO avanza: manda el audio
@@ -1154,20 +1156,12 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     ).toBe(true);
 
     audio.dispatchEvent(new Event('pause'));
-    expect(fab.hidden).toBe(false);
+    expect(fab.hidden).toBe(true); // sigue oculto: no hay segundo play
     expect(document.querySelector('.imm-v1').classList.contains('imm-v1--paused')).toBe(true);
-    vi.advanceTimersByTime(20000); // pausado: sigue sin avanzar
+    vi.advanceTimersByTime(20000); // pausado: sigue sin avanzar, el timer nunca retoma
     expect(
       document
         .querySelector('#imm-roll .imm-line[data-i="0"]')
-        .classList.contains('imm-line--active'),
-    ).toBe(true);
-
-    fab.click(); // reanuda el avance por timer, sin música
-    vi.advanceTimersByTime(9000);
-    expect(
-      document
-        .querySelector('#imm-roll .imm-line[data-i="1"]')
         .classList.contains('imm-line--active'),
     ).toBe(true);
     vi.useRealTimers();
@@ -1192,12 +1186,12 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     muteBtn.click();
     expect(audio.muted).toBe(false);
     expect(muteBtn.getAttribute('aria-pressed')).toBe('false');
-    // Silenciar no pausa: el estado interno del <audio> sigue "paused" solo
-    // porque nunca se dio play en este test — el mute no disparó 'pause'.
-    expect(document.querySelector('.imm-v1').classList.contains('imm-v1--paused')).toBe(false);
+    // Silenciar no pausa: la vista arranca en pausa (nadie dio play todavía
+    // en este test) igual que antes de tocar el mute — el mute no la altera.
+    expect(document.querySelector('.imm-v1').classList.contains('imm-v1--paused')).toBe(true);
   });
 
-  it('seek con la pista pausada: el highlight llega vía timeupdate y el timer continúa desde ahí', async () => {
+  it('seek con la pista pausada: el highlight llega vía timeupdate, el timer NUNCA retoma en sync', async () => {
     enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimings());
     vi.useFakeTimers();
@@ -1214,11 +1208,12 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
         .classList.contains('imm-line--active'),
     ).toBe(true);
 
-    // La pista sigue pausada: el TimerEngine retoma desde la línea 1.
+    // La pista sigue pausada: en sync el timer nunca conduce, así que no hay
+    // avance por más que pase el tiempo (a diferencia del modo timer puro).
     vi.advanceTimersByTime(20000);
     expect(
       document
-        .querySelector('#imm-roll .imm-line[data-i="2"]')
+        .querySelector('#imm-roll .imm-line[data-i="1"]')
         .classList.contains('imm-line--active'),
     ).toBe(true);
     vi.useRealTimers();

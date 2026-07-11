@@ -332,18 +332,8 @@ function stopScrollLoop(s) {
 
 // ── MOTOR DE AVANCE (TimerEngine embebido, o TimingEngine en modo sync) ──
 
-/**
- * ¿Conduce el audio el avance AHORA? Solo cuando está promovido a sync Y la
- * pista suena. Con la pista pausada (incluido el estado inicial recién
- * promovido: nadie dio play todavía) el TimerEngine sigue conduciendo — el
- * modo inmersivo también se usa sin reproducir la canción.
- */
-function audioDriving(s) {
-  return s.engineMode === 'sync' && s.audioPlaying;
-}
-
 function scheduleAdvance(s) {
-  if (audioDriving(s)) return; // la pista suena: el audio manda el avance, no el timer
+  if (s.engineMode === 'sync') return; // en sync manda el audio; pausado = todo pausado
   clearTimeout(s.timer);
   if (s.paused) return;
   const cur = s.lines[s.index];
@@ -380,9 +370,9 @@ function goTo(s, index) {
 }
 
 /**
- * Navega a `index` por un evento del TimingEngine (audio real). Si la pista
- * está pausada (seek manual con el timer conduciendo) reprograma el timer
- * desde la nueva línea; con la pista sonando scheduleAdvance es no-op.
+ * Navega a `index` por un evento del TimingEngine (audio real). `scheduleAdvance`
+ * es siempre no-op en sync (el timer nunca conduce ahí); se llama igual por
+ * simetría con `goTo` y porque en modo timer sí hace falta.
  */
 function goToSync(s, index) {
   removeInterlude(s);
@@ -391,7 +381,7 @@ function goToSync(s, index) {
 }
 
 function togglePause(s) {
-  if (audioDriving(s)) return; // sin FAB propio mientras la pista suena (pausa = la del player)
+  if (s.engineMode === 'sync') return; // en sync el FAB no existe: pausa = la del player
   s.paused = !s.paused;
   s.els.overlay.classList.toggle('imm-v1--paused', s.paused);
   s.els.fabIcon.innerHTML = icon(s.paused ? 'play' : 'pause', { size: 22 });
@@ -412,7 +402,7 @@ function applySpeed(s, next) {
 }
 
 function adjustSpeed(s, delta) {
-  if (audioDriving(s)) return; // con la pista sonando la velocidad la da el audio, no hay perilla
+  if (s.engineMode === 'sync') return; // la velocidad es del timer; en sync no aplica nunca
   const next = Math.max(AUTOSCROLL_SPEED_MIN, Math.min(AUTOSCROLL_SPEED_MAX, s.speed + delta));
   if (next === s.speed) return;
   applySpeed(s, next);
@@ -471,10 +461,10 @@ function maybeLoadSyncAudio(s) {
 }
 
 /**
- * Promueve la sesión de TimerEngine a TimingEngine: monta `<audio>` + player
- * bar. El timer NO se detiene acá: la pista arranca pausada y el TimerEngine
- * sigue conduciendo (y el FAB visible) hasta que el usuario dé play — el
- * traspaso de mando vive en los handlers play/pause de mountPlayerBar.
+ * Promueve la sesión de TimerEngine a TimingEngine: detiene el timer, oculta
+ * el FAB para siempre (solo vuelve vía `fallbackToTimer`) y monta `<audio>` +
+ * player bar, que queda como el único play disponible. La vista arranca en
+ * pausa esperando el play de la barra — con pista, un solo botón de play.
  * No reconcilia la posición del rollo con el
  * `currentTime` del audio al promover (el audio arranca en 0 y el rollo
  * sigue en `s.index`, que en la práctica también es 0 salvo que el usuario
@@ -511,6 +501,11 @@ function promoteToSync(s, audio, timingLines) {
   s.onAudioError = onAudioError;
 
   s.engineMode = 'sync';
+  clearTimeout(s.timer);
+  s.timer = null;
+  s.paused = true;
+  s.els.overlay.classList.add('imm-v1--paused');
+  s.els.fab.hidden = true;
   mountPlayerBar(s);
 }
 
@@ -526,6 +521,10 @@ function fallbackToTimer(s) {
   removeInterlude(s);
   s.audioPlaying = false;
   s.els.fab.hidden = false;
+  s.paused = false;
+  s.els.overlay.classList.remove('imm-v1--paused');
+  s.els.fabIcon.innerHTML = icon('pause', { size: 22 });
+  s.els.fab.setAttribute('aria-label', 'Pausar avance automático');
   s.engineMode = 'timer';
   scheduleAdvance(s);
 }
@@ -583,17 +582,18 @@ function mountPlayerBar(s) {
   const durEl = slot.querySelector('#imm-player-duration');
   const muteBtn = slot.querySelector('#imm-player-mute');
 
-  // Traspaso de mando timer<->audio: mientras la pista suena manda el audio
-  // (FAB oculto); al pausarla TODO queda en pausa con el FAB visible, que
-  // permite reanudar el avance por timer sin música (dos caminos de uso:
-  // cantar con pista o solo teleprompter).
+  // En sync manda siempre el audio: pausar la pista pausa TODO (nunca vuelve
+  // el TimerEngine a conducir). El FAB queda oculto para siempre en sync — un
+  // solo play, el de esta barra. Avanzar sin oír música es tarea del mute,
+  // no de un segundo play.
   const onPlay = () => {
     s.audioPlaying = true;
+    // Defensa: si un timeout del timer ya estaba encolado desde la ventana
+    // promover-antes-de-play, esto lo limpia (el timer nunca corre en sync).
     clearTimeout(s.timer);
     s.timer = null;
     s.paused = false;
     s.els.overlay.classList.remove('imm-v1--paused');
-    s.els.fab.hidden = true;
     playBtn.innerHTML = icon('pause', { size: 18 });
     playBtn.setAttribute('aria-label', 'Pausar pista');
   };
@@ -601,9 +601,6 @@ function mountPlayerBar(s) {
     s.audioPlaying = false;
     s.paused = true;
     s.els.overlay.classList.add('imm-v1--paused');
-    s.els.fab.hidden = false;
-    s.els.fabIcon.innerHTML = icon('play', { size: 22 });
-    s.els.fab.setAttribute('aria-label', 'Reanudar avance automático');
     playBtn.innerHTML = icon('play', { size: 18 });
     playBtn.setAttribute('aria-label', 'Reproducir pista');
     showControls(s);
@@ -780,9 +777,10 @@ function openOptions(s) {
     notation: typeof s.ctx.getNotation === 'function' ? s.ctx.getNotation() : 'anglo',
     fontLabel: s.fontScale.toFixed(2),
     autoscrollLabel: speedToPercentLabel(s.speed),
-    // VELOCIDAD solo aplica cuando conduce el TimerEngine — con la pista
-    // sonando manda el audio (en sync con pista pausada el timer sigue vivo).
-    showAutoscroll: !audioDriving(s),
+    // VELOCIDAD solo aplica cuando conduce el TimerEngine — en sync el timer
+    // nunca conduce (ni siquiera con la pista pausada), así que se oculta
+    // apenas se promueve, sin esperar a que la pista suene.
+    showAutoscroll: !isSync,
     modes: s.modes.map((m) => ({ value: m, label: MODE_LABELS[m] })),
     mode: s.mode,
     voiceOptions:
@@ -796,7 +794,7 @@ function openOptions(s) {
     showTuner: true,
     tunerOn: s.tunerOn,
     showPlayerToggle: isSync,
-    playerOn: audioDriving(s),
+    playerOn: isSync && s.audioPlaying,
     onPlayerToggle: (on) => {
       // OFF = pausa del audio (`audio.pause()`), NO una vuelta al TimerEngine
       // — el toggle solo controla reproducción; la degradación a timer es
@@ -957,9 +955,9 @@ export function enterImmersive(songViewEl, ctx = {}) {
     // SIEMPRE en 'timer' — la promoción a 'sync' es en caliente tras el
     // await de getSongAudio (maybeLoadSyncAudio), nunca bloquea la entrada.
     engineMode: 'timer',
-    // true solo mientras la pista suena (eventos play/pause del <audio>):
-    // decide quién conduce el avance (audioDriving) — en sync con pista
-    // pausada el TimerEngine sigue al mando.
+    // true solo mientras la pista suena (eventos play/pause del <audio>).
+    // En sync el timer nunca conduce (esté sonando o pausada la pista) —
+    // solo se usa para reflejar el estado de `playerOn` en el sheet.
     audioPlaying: false,
     audioEl: null,
     durationSecHint: null,

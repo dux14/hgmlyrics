@@ -122,7 +122,11 @@ export function blocksToSectionsV3(blocks) {
       lines: block.lines
         .filter(
           (l) =>
-            l.text.trim() !== '' || (l.chords && l.chords.length > 0) || l.annotation || l.spoken,
+            l.text.trim() !== '' ||
+            (l.chords && l.chords.length > 0) ||
+            (Array.isArray(l.groups) && l.groups.length > 0) ||
+            l.annotation ||
+            l.spoken,
         )
         .map((l) => {
           const line = { text: l.text };

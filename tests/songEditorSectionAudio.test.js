@@ -70,7 +70,9 @@ describe('SongEditor — control de audio por sección', () => {
 
   it('renderiza el toggle sin badge cuando la sección no tiene audio', async () => {
     await renderSongEditor(container, 'song-1');
-    await vi.waitFor(() => expect(sectionAudioApi.fetchSectionAudio).toHaveBeenCalledWith('song-1'));
+    await vi.waitFor(() =>
+      expect(sectionAudioApi.fetchSectionAudio).toHaveBeenCalledWith('song-1'),
+    );
     await vi.waitFor(() => {
       expect(container.querySelector('.section-audio__toggle')).not.toBeNull();
       expect(container.querySelector('.section-audio__badge')).toBeNull();
@@ -146,6 +148,29 @@ describe('SongEditor — control de audio por sección', () => {
     expect(sectionAudioApi.uploadSectionAudioFile).not.toHaveBeenCalled();
   });
 
+  it('el input de audio solo acepta mp3', async () => {
+    await renderAndOpenAudioPanel();
+    const fileInput = container.querySelector('[data-action="upload-audio-file"]');
+    expect(fileInput.getAttribute('accept')).toBe('audio/mpeg,.mp3');
+  });
+
+  it('rechaza archivos que no son mp3 sin llamar al API', async () => {
+    await renderAndOpenAudioPanel();
+
+    const fileInput = container.querySelector('[data-action="upload-audio-file"]');
+    const wavFile = new File(['x'], 'audio.wav', { type: 'audio/wav' });
+    Object.defineProperty(fileInput, 'files', { value: [wavFile] });
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+    await vi.waitFor(() =>
+      expect(container.querySelector('.section-audio__error')?.textContent).toContain(
+        'Solo se admite mp3',
+      ),
+    );
+    expect(sectionAudioApi.createSectionAudio).not.toHaveBeenCalled();
+    expect(sectionAudioApi.uploadSectionAudioFile).not.toHaveBeenCalled();
+  });
+
   it('DELETE tras confirmar, quita la fila y actualiza el badge', async () => {
     sectionAudioApi.fetchSectionAudio.mockResolvedValue([
       { id: 'a1', sectionIndex: 0, voiceScope: null, label: null, durationSec: 30 },
@@ -158,7 +183,9 @@ describe('SongEditor — control de audio por sección', () => {
 
     container.querySelector('[data-action="delete-section-audio"]').click();
 
-    await vi.waitFor(() => expect(sectionAudioApi.deleteSectionAudio).toHaveBeenCalledWith('song-1', 'a1'));
+    await vi.waitFor(() =>
+      expect(sectionAudioApi.deleteSectionAudio).toHaveBeenCalledWith('song-1', 'a1'),
+    );
     await vi.waitFor(() => expect(container.querySelector('.section-audio__row')).toBeNull());
     expect(container.querySelector('.section-audio__badge')).toBeNull();
   });
@@ -210,7 +237,13 @@ describe('SongEditor — control de audio por sección', () => {
     });
 
     it('re-subida a slot existente: NO borra y re-sincroniza el estado con el servidor', async () => {
-      const existing = { id: 'a1', sectionIndex: 0, voiceScope: null, label: null, durationSec: 30 };
+      const existing = {
+        id: 'a1',
+        sectionIndex: 0,
+        voiceScope: null,
+        label: null,
+        durationSec: 30,
+      };
       sectionAudioApi.fetchSectionAudio.mockResolvedValue([existing]);
       sectionAudioApi.createSectionAudio.mockResolvedValue({
         uploadUrl: 'https://put/x',

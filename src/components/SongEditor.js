@@ -673,7 +673,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
                   <input class="form-group__input section-audio__label" type="text" placeholder="Etiqueta (opcional)" data-action="audio-label" data-section="${index}" />
                   <label class="btn btn--secondary section-audio__file-btn">
                     ${icon('upload', { size: 14 })} Subir audio
-                    <input type="file" accept="audio/*" data-action="upload-audio-file" data-section="${index}" ${ui.uploading ? 'disabled' : ''} hidden />
+                    <input type="file" accept="audio/mpeg,.mp3" data-action="upload-audio-file" data-section="${index}" ${ui.uploading ? 'disabled' : ''} hidden />
                   </label>
                 </div>
                 ${ui.uploading ? '<p class="section-audio__status">Subiendo...</p>' : ''}
@@ -704,6 +704,13 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     // "sectionIndex fuera de rango" opaco.
     if (block.origIndex === null || block.origIndex === undefined) {
       ui.error = 'Guarda la canción para subir audio a esta sección';
+      ui.expanded = true;
+      renderBlocks();
+      return;
+    }
+
+    if (file.type !== 'audio/mpeg') {
+      ui.error = 'Solo se admite mp3';
       ui.expanded = true;
       renderBlocks();
       return;

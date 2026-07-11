@@ -174,6 +174,27 @@ describe('createTimingEngine — timeupdate y onLineChange', () => {
     expect(onLineChange).toHaveBeenCalledTimes(1);
     expect(onLineChange).toHaveBeenLastCalledWith(1);
   });
+
+  it('re-attach con el audio nuevo en la misma linea SI dispara onLineChange de resincronizacion', () => {
+    const onLineChange = vi.fn();
+    const e = createTimingEngine({ lines, onLineChange });
+    const audio1 = createFakeAudio();
+    e.attach(audio1);
+
+    audio1.currentTime = 9.1; // linea 2
+    audio1.dispatchEvent(new Event('timeupdate'));
+    expect(onLineChange).toHaveBeenLastCalledWith(2);
+
+    e.detach();
+
+    const audio2 = createFakeAudio();
+    audio2.currentTime = 9.1; // misma linea 2 que el audio anterior
+    e.attach(audio2);
+
+    audio2.dispatchEvent(new Event('timeupdate'));
+    expect(onLineChange).toHaveBeenLastCalledWith(2);
+    expect(onLineChange).toHaveBeenCalledTimes(2); // sin el fix se quedaria en 1
+  });
 });
 
 describe('createTimingEngine — seekToLine', () => {

@@ -219,6 +219,15 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     ? existingSong.voiceRoster.map((v) => ({ ...v }))
     : [];
 
+  // Portada existente (si la canción ya tiene una) para previsualizar al abrir
+  // el editor. Misma resolución que SongView.js:344-348: relativa -> /covers/,
+  // absoluta (empieza con / o http) -> tal cual.
+  const existingCoverUrl = existingSong?.coverImage
+    ? existingSong.coverImage.startsWith('/') || existingSong.coverImage.startsWith('http')
+      ? existingSong.coverImage
+      : `/covers/${existingSong.coverImage}`
+    : '';
+
   // Build the editor HTML
   container.innerHTML = `
     <div class="editor fade-in">
@@ -242,7 +251,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
           </div>
           <div class="form-group">
             <label class="form-group__label" for="song-order">Orden</label>
-            <input class="form-group__input" id="song-order" type="number" placeholder="Ej: 1" value="${existingSong?.albumOrder || ''}" />
+            <input class="form-group__input" id="song-order" type="number" placeholder="Ej: 1" value="${existingSong?.albumOrder ?? ''}" />
           </div>
           <div class="form-group">
             <label class="form-group__label" for="song-year">Año</label>
@@ -256,7 +265,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
           </div>
           <div class="form-group">
             <label class="form-group__label" for="song-cejilla">Cejilla</label>
-            <input class="form-group__input" id="song-cejilla" type="number" min="0" max="12" placeholder="0" value="${existingSong?.cejilla || ''}" />
+            <input class="form-group__input" id="song-cejilla" type="number" min="0" max="12" placeholder="0" value="${existingSong?.cejilla ?? ''}" />
           </div>
           <div class="form-group">
             <label class="form-group__label" for="song-key">Tono</label>
@@ -288,7 +297,11 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
       <div class="editor__section">
         <h2 class="editor__section-title">Portada del álbum</h2>
         <div class="image-upload" id="image-upload-area">
-          <div id="image-preview"></div>
+          <div id="image-preview">${
+            existingCoverUrl
+              ? `<img class="image-upload__preview" src="${escapeHtml(existingCoverUrl)}" alt="Preview" />`
+              : ''
+          }</div>
           <p class="image-upload__text">${icon('camera', { size: 18 })} Haz clic o arrastra una imagen aquí</p>
           <input type="file" id="cover-input" accept="image/*" class="editor__cover-input" />
         </div>

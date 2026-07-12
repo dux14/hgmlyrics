@@ -153,7 +153,7 @@ describe('createMetronomeClick', () => {
     m.setMuted(true);
     nowMs = 1600;
     m.setMuted(false);
-    expect(createContext).toHaveBeenCalledTimes(1); // contexto ya existia, no se recrea
+    expect(createContext).toHaveBeenCalledTimes(1); // contexto ya existía, no se recrea
     vi.advanceTimersByTime(25);
     expect(oscillators.length).toBe(2); // solo el beat en 1650, no el de 1000 de nuevo
   });

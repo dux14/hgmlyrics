@@ -29,8 +29,13 @@ test.describe('full view: sin leak de controles del normal view (Task 1.3)', () 
 
     // Precondición dura: la fixture debe tener al menos un panel de audio de
     // sección montado, si no el test no está probando lo que dice probar.
+    // Timeout 30s como el caso in-stage de abajo: el shell `.song-view` no
+    // monta hasta que resuelve el catálogo completo (`/api/songs`), que en
+    // `vercel dev` local tarda ~18s; el botón de sección aparece recién a ~22s
+    // (ya sirve el audio de sección con 200). En preview/prod el catálogo va
+    // por CDN y esto es instantáneo — el margen sobra sin volver el test lento.
     const playBtn = page.locator('.lyrics__section-play').first();
-    await playBtn.waitFor({ state: 'visible', timeout: 15000 });
+    await playBtn.waitFor({ state: 'visible', timeout: 30000 });
     await playBtn.click();
 
     const panel = page.locator('.section-audio').first();
@@ -77,6 +82,33 @@ test.describe('full view: sin leak de controles del normal view (Task 1.3)', () 
       );
       expect(belongsToImmersive).toBe(true);
     }
+
+    await context.close();
+  });
+
+  test('afinador in-stage: el toggle del escenario sigue visible dentro de .imm-v1 (no lo tapa el blindaje CSS)', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ storageState: ADMIN_STORAGE_STATE });
+    const page = await context.newPage();
+
+    await page.goto(`${BASE_URL}/#/song/${SONG_ACCORDION}`);
+    await page.locator('#enter-stage-btn').waitFor({ state: 'visible', timeout: 30000 });
+    await page.locator('#enter-stage-btn').click();
+    await expect(page.locator('.imm-v1')).toBeVisible();
+
+    // Abre el afinador híbrido DEL ESCENARIO (no el flotante del normal
+    // view) vía su propio toggle in-stage.
+    await page.locator('#imm-tuner-toggle').click();
+    const inStageTuner = page.locator('.imm-v1 .floating-tuner');
+    await expect(inStageTuner).toBeVisible();
+
+    // El blindaje CSS (body.immersive-active > .floating-tuner) es un
+    // selector de hijo DIRECTO de <body> — la instancia in-stage cuelga
+    // adentro de .imm-v1__tuner-panel/.imm-v1, nunca hijo directo de body,
+    // así que la regla no debe alcanzarla.
+    const display = await inStageTuner.evaluate((el) => getComputedStyle(el).display);
+    expect(display).not.toBe('none');
 
     await context.close();
   });

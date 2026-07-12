@@ -17,10 +17,25 @@ body.immersive-active {
    normal view puede pintarse ni clickearse bajo el overlay inmersivo. El
    acordeón de sección ya se colapsa/pausa en JS al entrar (SongView →
    collapseSectionAudioPanels), pero esta regla cubre la hipótesis de leak
-   por z-index/orden del DOM aunque el JS falle o quede desincronizado. */
+   por z-index/orden del DOM aunque el JS falle o quede desincronizado.
+   `.section-audio` y `.autoscroll-fab` son exclusivos del normal view (nunca
+   se montan dentro de `.imm-v1`), así que el selector amplio es seguro para
+   ellos. */
 body.immersive-active .section-audio,
-body.immersive-active .autoscroll-fab,
-body.immersive-active .floating-tuner {
+body.immersive-active .autoscroll-fab {
+  display: none !important;
+}
+
+/* `.floating-tuner` SÍ se reutiliza dentro del escenario (afinador híbrido
+   in-stage, `.imm-v1__tuner-panel .floating-tuner` más abajo — toggle
+   legítimo del propio overlay). El selector amplio de arriba lo ocultaría
+   también ahí porque `body.immersive-active` está presente durante TODA la
+   sesión de full view, no solo mientras hay un leak detrás. Se acota al
+   HIJO DIRECTO de `<body>` — SongView monta el suyo con
+   `openFloatingTuner(document.body, …)` (ver `SongView.js`), mientras que la
+   instancia in-stage cuelga varios niveles adentro de `.imm-v1` (nunca hijo
+   directo de body), así que este selector nunca puede alcanzarla. */
+body.immersive-active > .floating-tuner {
   display: none !important;
 }
 

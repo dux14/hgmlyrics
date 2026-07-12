@@ -220,21 +220,26 @@ function buildLine(s, line, isActive) {
   return { html: buildLetraLineHTML(line.text), modifierClass: '' };
 }
 
-/** dist FIRMADA (i - index): la siguiente línea queda legible, el resto se atenúa. */
+/**
+ * dist FIRMADA (i - index): la siguiente línea queda legible, la anterior
+ * queda casi nítida (imm-line--prev) y el resto se atenúa progresivamente
+ * hacia afuera (patrón roll estilo Apple Music).
+ */
 function distanceClass(dist) {
   if (dist === 0) return 'imm-line--active';
   if (dist === 1) return 'imm-line--next';
+  if (dist === -1) return 'imm-line--prev';
   const d = Math.abs(dist);
-  if (d === 1) return 'imm-line--d1';
   if (d === 2) return 'imm-line--d2';
   if (d === 3) return 'imm-line--d3';
   return 'imm-line--far';
 }
 
+// Todas las clases posibles de distanceClass, para limpiarlas antes de re-aplicar.
 const DISTANCE_CLASSES = [
   'imm-line--active',
   'imm-line--next',
-  'imm-line--d1',
+  'imm-line--prev',
   'imm-line--d2',
   'imm-line--d3',
   'imm-line--far',

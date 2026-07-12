@@ -172,29 +172,30 @@ body.immersive-active > .floating-tuner {
 /* Siguiente línea: legible sin blur para anticipar la letra. */
 .imm-line--next {
   font-size: calc(1.5rem * var(--imm-font-scale));
-  opacity: 0.6;
+  opacity: 0.68;
   filter: none;
 }
-.imm-line--d1 {
+/* Línea anterior: casi nítida, escala progresiva estilo Apple Music. */
+.imm-line--prev {
   font-size: calc(1.5rem * var(--imm-font-scale));
-  opacity: 0.42;
-  filter: blur(1.5px);
+  opacity: 0.5;
+  filter: blur(0.5px);
 }
 .imm-line--d2 {
   font-size: calc(1.5rem * var(--imm-font-scale));
-  opacity: 0.3;
-  filter: blur(3px);
+  opacity: 0.32;
+  filter: blur(1.5px);
 }
 .imm-line--d3 {
   font-size: calc(1.5rem * var(--imm-font-scale));
-  opacity: 0.25;
-  filter: blur(3px);
+  opacity: 0.24;
+  filter: blur(2.5px);
 }
-/* Costo: sin filter más allá de ±3 líneas (spec §1). */
+/* Blur leve más allá de ±3 líneas (spec §1: costo acotado, sin filter fuerte). */
 .imm-line--far {
   font-size: calc(1.5rem * var(--imm-font-scale));
   opacity: 0.15;
-  filter: none;
+  filter: blur(3px);
 }
 
 .imm-line--spoken {

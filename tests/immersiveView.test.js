@@ -206,6 +206,16 @@ describe('enterImmersive/exitImmersive', () => {
     expect(lines[2].classList.contains('imm-line--d2')).toBe(true); // futuras ≥2: igual que hoy
   });
 
+  it('la línea ANTERIOR a la activa queda casi nítida (imm-line--prev), no imm-line--d1', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.querySelector('#imm-roll .imm-line[data-i="2"]').click();
+    const lines = document.querySelectorAll('#imm-roll .imm-line');
+    expect(lines[1].classList.contains('imm-line--prev')).toBe(true);
+    expect(lines[1].classList.contains('imm-line--d1')).toBe(false);
+    expect(document.querySelectorAll('#imm-roll .imm-line--d1')).toHaveLength(0);
+  });
+
   it('modo letra (default): todas las líneas usan buildLetraLineHTML', () => {
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -287,7 +297,7 @@ describe('enterImmersive/exitImmersive', () => {
     const lines = document.querySelectorAll('#imm-roll .imm-line');
     expect(lines[2].classList.contains('imm-line--active')).toBe(true);
     expect(lines[0].classList.contains('imm-line--d2')).toBe(true);
-    expect(lines[1].classList.contains('imm-line--d1')).toBe(true); // anterior a la activa: igual que hoy
+    expect(lines[1].classList.contains('imm-line--prev')).toBe(true); // anterior a la activa: casi nítida
   });
 
   it('goTo cruzando de sección actualiza el label del chrome (no solo la distancia)', () => {

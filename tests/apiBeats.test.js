@@ -128,8 +128,15 @@ describe('validateLineTimingShape', () => {
   it('acepta {i, startMs} enteros >= 0', () => {
     expect(validateLineTimingShape({ i: 3, startMs: 51200 })).toBeNull();
   });
+  it('acepta el limite inferior i:0 / startMs:0', () => {
+    expect(validateLineTimingShape({ i: 0, startMs: 0 })).toBeNull();
+  });
   it.each([
     [null, 'body'],
+    [undefined, 'body'],
+    ['nope', 'body'],
+    [[], 'body'],
+    [[{ i: 0, startMs: 0 }], 'body'],
     [{ i: -1, startMs: 0 }, 'i'],
     [{ i: 1.5, startMs: 0 }, 'i'],
     [{ i: 0, startMs: -10 }, 'startMs'],

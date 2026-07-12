@@ -89,11 +89,11 @@ describe('GET /api/songs/[id]/audio', () => {
     expect(res._status).toBe(200);
     expect(res._body).toEqual({
       audio: { url: 'https://get/song-1/full.mp3', durationSec: 210 },
-      timings: { status: 'ready', lines: [{ i: 0, startMs: 100 }] },
+      timings: { status: 'ready', lines: [{ i: 0, startMs: 100 }], beats: null },
     });
   });
 
-  it('con fila + overrides/beats → expone bpmManual/timeSignature/beatAnchor y bpmDetected/beats', async () => {
+  it('con fila + overrides/beats → expone bpmManual/timeSignature/beatAnchor y bpmDetected + beats APLANADO a beatsMs', async () => {
     sqlResponses.push([
       {
         storageKey: 'song-1/full.mp3',
@@ -126,9 +126,22 @@ describe('GET /api/songs/[id]/audio', () => {
         status: 'ready',
         lines: [{ i: 0, startMs: 100 }],
         bpmDetected: 126.4,
-        beats: { bpm: 126.4, beatsMs: [0, 476, 952] },
+        // El JSONB guarda { bpm, beatsMs }; el contrato del GET es la rejilla
+        // plana en ms (lo que consume setupMetronome en ImmersiveView).
+        beats: [0, 476, 952],
       },
     });
+  });
+
+  it('beats JSONB con shape inesperado (sin beatsMs array) → beats: null, no lanza', async () => {
+    sqlResponses.push([{ storageKey: 'song-1/full.mp3', durationSec: 210 }]); // SELECT song_audio
+    sqlResponses.push([
+      { status: 'ready', lines: [], bpmDetected: 90, beats: { bpm: 90, beatsMs: 'corrupto' } },
+    ]); // SELECT song_line_timings
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body.timings.beats).toBeNull();
   });
 });
 

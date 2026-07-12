@@ -37,7 +37,12 @@ async function getAudio(_req, res, songId) {
       timeSignature: audio.timeSignature,
       beatAnchor: audio.beatAnchor,
     },
-    timings: timings ?? null,
+    // beats se guarda como JSONB { bpm, beatsMs } (shape explícito del webhook);
+    // el contrato del GET es la rejilla plana en ms — lo que consume el front
+    // (setupMetronome exige Array). bpm ya viaja aparte como bpmDetected.
+    timings: timings
+      ? { ...timings, beats: Array.isArray(timings.beats?.beatsMs) ? timings.beats.beatsMs : null }
+      : null,
   });
 }
 

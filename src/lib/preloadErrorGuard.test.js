@@ -31,7 +31,7 @@ describe('preloadErrorGuard', () => {
     expect(sessionStorage.getItem(PRELOAD_RELOAD_KEY)).toBe('1');
   });
 
-  it('no recarga de nuevo si el guard ya esta seteado (evita loop)', () => {
+  it('no recarga de nuevo si el guard ya está seteado (evita loop)', () => {
     sessionStorage.setItem(PRELOAD_RELOAD_KEY, '1');
     initPreloadErrorGuard();
     const event = new Event('vite:preloadError', { cancelable: true });

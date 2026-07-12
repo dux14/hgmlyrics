@@ -1,6 +1,6 @@
 import sql from '../_lib/db.js';
 import { requireAdmin } from '../_lib/auth.js';
-import { allowMethods, withErrors } from '../_lib/http.js';
+import { allowMethods, withErrors, cachePublic } from '../_lib/http.js';
 import { invalidateListCache } from './index.js';
 import { isValidKey } from '../../src/lib/musicKeys.js';
 import { validateSongV2, validateSongV3 } from '../../src/lib/voiceSystem.js';
@@ -42,7 +42,7 @@ async function getOne(req, res, id) {
   }
   const r = rows[0];
   const { voicePercentMale, voicePercentFemale, ...rest } = r;
-  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=86400');
+  cachePublic(res, { sMaxage: 60 });
   res
     .status(200)
     .json({ ...rest, voicePercent: { male: voicePercentMale, female: voicePercentFemale } });

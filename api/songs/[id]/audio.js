@@ -47,6 +47,16 @@ async function getAudio(_req, res, songId) {
           ...timings,
           bpmDetected: timings.bpmDetected == null ? null : Number(timings.bpmDetected),
           beats: Array.isArray(timings.beats?.beatsMs) ? timings.beats.beatsMs : null,
+          // score/interpolated: filas persistidas antes de la Task 5.2 no los
+          // traen en el JSONB — se rellenan con defaults (patrón defensivo
+          // igual a bpmDetected arriba).
+          lines: Array.isArray(timings.lines)
+            ? timings.lines.map((l) => ({
+                ...l,
+                score: typeof l.score === 'number' ? l.score : null,
+                interpolated: l.interpolated === true,
+              }))
+            : timings.lines,
         }
       : null,
   });

@@ -228,6 +228,54 @@ describe('SongAudioSection', () => {
     section.destroy();
   });
 
+  it('confianza por línea: pinta resumen + filas ok/warn según score/interpolated', async () => {
+    songAudioApi.getSongAudio.mockResolvedValue({
+      audio: { url: 'https://x/full.mp3', durationSec: 100 },
+      timings: {
+        status: 'ready',
+        lines: [
+          { i: 0, startMs: 0, score: 0.9, interpolated: false },
+          { i: 1, startMs: 1500, score: 0.5, interpolated: false },
+          { i: 2, startMs: 3000, score: 0.95, interpolated: true },
+          { i: 3, startMs: 4500, score: null, interpolated: false },
+        ],
+      },
+    });
+    const section = createSongAudioSection({ songId: 'song-1' });
+    container.appendChild(section.el);
+
+    await vi.waitFor(() =>
+      expect(section.el.querySelector('.song-audio__confidence')).not.toBeNull(),
+    );
+
+    expect(section.el.textContent).toContain('3 de 4 líneas ancladas directamente');
+
+    const rows = section.el.querySelectorAll('.audio-line');
+    expect(rows.length).toBe(4);
+    expect(rows[0].classList.contains('audio-line--ok')).toBe(true);
+    expect(rows[1].classList.contains('audio-line--warn')).toBe(true);
+    expect(rows[2].classList.contains('audio-line--warn')).toBe(true);
+    expect(rows[3].classList.contains('audio-line--warn')).toBe(true);
+
+    expect(rows[2].textContent).toContain('interpolada');
+
+    section.destroy();
+  });
+
+  it('confianza por línea: no aparece si status no es ready o no hay líneas', async () => {
+    songAudioApi.getSongAudio.mockResolvedValue({
+      audio: { url: 'https://x/full.mp3', durationSec: 100 },
+      timings: { status: 'ready', lines: [] },
+    });
+    const section = createSongAudioSection({ songId: 'song-1' });
+    container.appendChild(section.el);
+
+    await vi.waitFor(() => expect(songAudioApi.getSongAudio).toHaveBeenCalled());
+    expect(section.el.querySelector('.song-audio__confidence')).toBeNull();
+
+    section.destroy();
+  });
+
   it('metrónomo: no aparece si la sincronía no está ready', async () => {
     songAudioApi.getSongAudio.mockResolvedValue({
       audio: { url: 'https://x/full.mp3', durationSec: 100 },

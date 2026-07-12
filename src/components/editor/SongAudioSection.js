@@ -84,6 +84,42 @@ function metronomeMarkup(audio, timings) {
 }
 
 /**
+ * Sub-bloque "Confianza por línea": solo con sincronía lista y al menos una
+ * línea. Resumen de cuántas líneas ancló WhisperX directamente (no
+ * interpoladas) + una fila por línea con su score. Score < 0.75, ausente o
+ * línea interpolada → warn (conviene revisar); el resto → ok.
+ */
+function confidenceMarkup(timings) {
+  if (timings?.status !== 'ready') return '';
+  const lines = timings.lines;
+  if (!Array.isArray(lines) || lines.length === 0) return '';
+  const anchored = lines.filter((l) => l.interpolated !== true).length;
+  const rows = lines
+    .map((l) => {
+      const isOk = typeof l.score === 'number' && l.score >= 0.75 && l.interpolated !== true;
+      const statusClass = isOk ? 'audio-line--ok' : 'audio-line--warn';
+      const time = formatDuration((l.startMs ?? 0) / 1000);
+      const warnText =
+        l.interpolated === true ? 'Línea interpolada — revisar' : 'Confianza baja — revisar';
+      return `
+        <li class="audio-line ${statusClass}">
+          <span class="audio-line__dot" aria-hidden="true"></span>
+          <span class="audio-line__label">Línea ${(l.i ?? 0) + 1} · ${escapeHtml(time)}</span>
+          ${!isOk ? `<span class="sr-only">${escapeHtml(warnText)}</span>` : ''}
+        </li>
+      `;
+    })
+    .join('');
+  return `
+    <div class="song-audio__confidence">
+      <h3 class="song-audio__confidence-title">Confianza por línea</h3>
+      <p class="song-audio__confidence-summary">${anchored} de ${lines.length} líneas ancladas directamente</p>
+      <ul class="song-audio__confidence-list">${rows}</ul>
+    </div>
+  `;
+}
+
+/**
  * @param {{ songId: string|null }} opts
  * @returns {{ el: HTMLElement, destroy: () => void }}
  */
@@ -353,6 +389,7 @@ export function createSongAudioSection({ songId }) {
         <button class="btn btn--secondary btn--danger" data-action="song-audio-delete" type="button">Eliminar</button>
       </div>
       ${metronomeMarkup(state.audio, state.timings)}
+      ${confidenceMarkup(state.timings)}
       ${state.error ? `<p class="song-audio__error" role="alert">${escapeHtml(state.error)}</p>` : ''}
     `;
     wireUploadInput();

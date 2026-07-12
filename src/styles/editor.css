@@ -768,6 +768,67 @@
   border-color: var(--color-brand);
 }
 
+/* ── Sub-bloque "Confianza por línea" (dentro de song-audio-section, solo con sincronía lista) ── */
+.song-audio__confidence {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.song-audio__confidence-title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.song-audio__confidence-summary {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.song-audio__confidence-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.audio-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-size-sm);
+}
+
+.audio-line__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.audio-line--ok .audio-line__dot {
+  background: var(--color-success);
+}
+
+.audio-line--warn .audio-line__dot {
+  background: var(--color-warning);
+}
+
+.audio-line--ok .audio-line__label {
+  color: var(--color-text-secondary);
+}
+
+.audio-line--warn .audio-line__label {
+  color: var(--color-warning);
+}
+
 /* ── Fila de línea ── */
 .line-row {
   display: flex;

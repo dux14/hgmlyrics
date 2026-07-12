@@ -295,9 +295,9 @@ export function createSongAudioSection({ songId, getSong = null }) {
   }
 
   /**
-   * Si hay correcciones manuales vivas, pide confirmacion antes de un flujo
+   * Si hay correcciones manuales vivas, pide confirmación antes de un flujo
    * que relanza el alignment (re-subida o retry): el webhook pisa lines
-   * completo y las correcciones se pierden (semantica elegida en el spec).
+   * completo y las correcciones se pierden (semántica elegida en el spec).
    * @returns {Promise<boolean>} true si se puede continuar.
    */
   async function confirmLosingManualLines() {

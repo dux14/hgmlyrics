@@ -3,6 +3,8 @@
  * 120ms) anclado a getTimeMs() (audio.currentTime*1000 del caller). El
  * AudioContext se crea LAZY en el primer unmute (gesto de usuario, iOS).
  * Acento (beatInBar 1): 1320 Hz; resto: 880 Hz; blips de 0.03s con envelope.
+ * Nota: por el lookahead, hasta ~120ms de click ya agendado puede sonar
+ * después de pause/mute — es inherente a la ventana y visible para el caller.
  * @param {{ clock: ReturnType<typeof import('./beatClock.js').createBeatClock>, getTimeMs: () => number, createContext?: () => AudioContext }} opts
  * @returns {{ setMuted(m: boolean): void, isMuted(): boolean, stop(): void }}
  */
@@ -22,7 +24,12 @@ export function createMetronomeClick({ clock, getTimeMs, createContext }) {
 
   function makeContext() {
     if (ctx) return ctx;
-    ctx = createContext ? createContext() : new AudioContext();
+    if (createContext) {
+      ctx = createContext();
+    } else {
+      const Ctor = globalThis.AudioContext || globalThis.webkitAudioContext;
+      ctx = new Ctor();
+    }
     return ctx;
   }
 
@@ -45,6 +52,12 @@ export function createMetronomeClick({ clock, getTimeMs, createContext }) {
   /** Recorre la rejilla desde `now` hasta `now + LOOKAHEAD_MS` agendando beats nuevos. */
   function tick() {
     const nowMs = getTimeMs();
+    // Seek hacia atrás (scrubber): lastScheduled quedó en el futuro respecto
+    // a nowMs y ningún beat nuevo entraría en la ventana. Se resetea para
+    // volver a agendar desde la posición actual.
+    if (nowMs < lastScheduled - LOOKAHEAD_MS) {
+      lastScheduled = -Infinity;
+    }
     let t = Math.max(nowMs, lastScheduled);
     for (;;) {
       const { msToNextBeat } = clock.at(t);
@@ -75,7 +88,8 @@ export function createMetronomeClick({ clock, getTimeMs, createContext }) {
     if (muted) {
       stopInterval();
     } else {
-      makeContext();
+      const c = makeContext();
+      if (c.state === 'suspended' && c.resume) c.resume();
       startInterval();
     }
   }
@@ -87,7 +101,11 @@ export function createMetronomeClick({ clock, getTimeMs, createContext }) {
   function stop() {
     stopInterval();
     if (ctx) {
-      ctx.close();
+      try {
+        ctx.close();
+      } catch (_e) {
+        /* noop: close() puede rechazar/lanzar si el contexto ya está cerrado */
+      }
       ctx = null;
     }
   }

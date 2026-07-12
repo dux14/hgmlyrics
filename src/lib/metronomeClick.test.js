@@ -181,4 +181,75 @@ describe('createMetronomeClick', () => {
     expect(() => m.stop()).not.toThrow();
     expect(createContext).not.toHaveBeenCalled();
   });
+
+  it('stop() no explota si ctx.close() lanza (contexto ya cerrado)', () => {
+    const { ctx } = makeFakeAudioContext();
+    ctx.close = vi.fn(() => {
+      throw new Error('already closed');
+    });
+    const createContext = vi.fn(() => ctx);
+    nowMs = 900;
+    const m = createMetronomeClick({ clock, getTimeMs, createContext });
+    m.setMuted(false);
+    vi.advanceTimersByTime(25);
+
+    expect(() => m.stop()).not.toThrow();
+    expect(ctx.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('des-mutear resume el contexto si quedó suspendido (autoplay policy)', () => {
+    const { ctx } = makeFakeAudioContext();
+    ctx.state = 'suspended';
+    ctx.resume = vi.fn();
+    const createContext = vi.fn(() => ctx);
+    nowMs = 900;
+    const m = createMetronomeClick({ clock, getTimeMs, createContext });
+
+    m.setMuted(false);
+    expect(ctx.resume).toHaveBeenCalledTimes(1);
+  });
+
+  it('seek hacia atrás resetea lastScheduled y vuelve a agendar beats en la posición anterior', () => {
+    const { ctx, oscillators } = makeFakeAudioContext();
+    const createContext = vi.fn(() => ctx);
+    nowMs = 900;
+    const m = createMetronomeClick({ clock, getTimeMs, createContext });
+    m.setMuted(false);
+
+    vi.advanceTimersByTime(25); // agenda beat en 1000
+    nowMs = 2900; // avanza lejos: próximo beat 2950 entra en la ventana
+    vi.advanceTimersByTime(25);
+    const scheduledBeforeSeek = oscillators.length;
+    expect(scheduledBeforeSeek).toBeGreaterThan(1);
+
+    // El usuario mueve el scrubber hacia atrás, mucho antes del último beat agendado.
+    nowMs = 900;
+    vi.advanceTimersByTime(25);
+
+    // Vuelve a agendarse el beat en 1000 (ya no está bloqueado por un
+    // lastScheduled que quedó en el futuro).
+    expect(oscillators.length).toBeGreaterThan(scheduledBeforeSeek);
+  });
+
+  it('agenda un beat exactamente en el borde now+120ms', () => {
+    const { ctx, oscillators } = makeFakeAudioContext();
+    const createContext = vi.fn(() => ctx);
+    nowMs = 1530; // 1650 - 1530 = 120ms exactos: dentro de la ventana
+    const m = createMetronomeClick({ clock, getTimeMs, createContext });
+
+    m.setMuted(false);
+    vi.advanceTimersByTime(25);
+    expect(oscillators.length).toBe(1);
+  });
+
+  it('no agenda un beat en now+121ms hasta que el siguiente tick lo alcance', () => {
+    const { ctx, oscillators } = makeFakeAudioContext();
+    const createContext = vi.fn(() => ctx);
+    nowMs = 1529; // 1650 - 1529 = 121ms: justo fuera de la ventana
+    const m = createMetronomeClick({ clock, getTimeMs, createContext });
+
+    m.setMuted(false);
+    vi.advanceTimersByTime(25);
+    expect(oscillators.length).toBe(0);
+  });
 });

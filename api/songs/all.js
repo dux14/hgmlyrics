@@ -13,6 +13,8 @@ export default withErrors(async (req, res) => {
            sections,
            album_order AS "albumOrder",
            cejilla,
+           voice_roster AS "voiceRoster",
+           schema_version AS "schemaVersion",
            key,
            created_at AS "createdAt",
            updated_at AS "updatedAt"

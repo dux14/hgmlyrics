@@ -143,7 +143,6 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          flexsearch: ['flexsearch'],
           phaser: ['phaser'],
         },
       },

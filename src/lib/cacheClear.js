@@ -19,7 +19,12 @@ export async function clearAppCache() {
     }
     // Sin esto, el fallback offline seguía sirviendo letras viejas justo
     // después de "limpiar caché" (H7 auditoría).
-    await invalidateOfflineCache();
+    try {
+      await invalidateOfflineCache();
+    } catch (_idbError) {
+      // IndexedDB no disponible (ej. Safari private mode): el borrado de
+      // Cache Storage ya ocurrió, seguir con el reload.
+    }
     showToast('Caché limpiado. Recargando...');
     setTimeout(() => location.reload(), 800);
   } catch (_e) {

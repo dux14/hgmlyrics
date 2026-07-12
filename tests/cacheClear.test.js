@@ -37,14 +37,35 @@ describe('clearAppCache', () => {
   });
 
   it('muestra un toast de error si falla el borrado', async () => {
+    const reloadMock = vi.fn();
     vi.stubGlobal('caches', {
       keys: vi.fn().mockRejectedValue(new Error('boom')),
       delete: vi.fn(),
     });
-    vi.stubGlobal('location', { reload: vi.fn() });
+    vi.stubGlobal('location', { reload: reloadMock });
 
     await clearAppCache();
 
     expect(showToastMock).toHaveBeenCalledWith('Error al limpiar caché', { type: 'error' });
+    expect(reloadMock).not.toHaveBeenCalled();
+  });
+
+  it('si invalidateOfflineCache falla (ej. Safari private mode), igual muestra el toast de éxito y recarga', async () => {
+    vi.useFakeTimers();
+    const reloadMock = vi.fn();
+    invalidateOfflineCacheMock.mockRejectedValue(new Error('idb no disponible'));
+    vi.stubGlobal('caches', {
+      keys: vi.fn().mockResolvedValue(['cache-a']),
+      delete: vi.fn().mockResolvedValue(true),
+    });
+    vi.stubGlobal('location', { reload: reloadMock });
+
+    await clearAppCache();
+    await vi.runAllTimersAsync();
+
+    expect(showToastMock).toHaveBeenCalledWith('Caché limpiado. Recargando...');
+    expect(reloadMock).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
   });
 });

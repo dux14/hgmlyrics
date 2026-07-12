@@ -13,6 +13,17 @@ body.immersive-active {
   overflow: hidden;
 }
 
+/* Defensa en profundidad (Task 1.3, Fix 2): ningún control flotante del
+   normal view puede pintarse ni clickearse bajo el overlay inmersivo. El
+   acordeón de sección ya se colapsa/pausa en JS al entrar (SongView →
+   collapseSectionAudioPanels), pero esta regla cubre la hipótesis de leak
+   por z-index/orden del DOM aunque el JS falle o quede desincronizado. */
+body.immersive-active .section-audio,
+body.immersive-active .autoscroll-fab,
+body.immersive-active .floating-tuner {
+  display: none !important;
+}
+
 /* Z-index: el rollo/overlay debe quedar SIEMPRE por debajo del bottom-sheet
    compartido (`.osheet-dim`/`.osheet` en options-sheet.css, z-index 300/301)
    — openOptionsSheet monta su DOM directo en <body>, hermano de `.imm-v1`
@@ -32,6 +43,12 @@ body.immersive-active {
   position: fixed;
   inset: 0;
   z-index: 260;
+  /* Mismo patrón que .imm-v1 (unifica sizing, Task 1.3): sin esto el
+     contenedor sigue el 100vh clásico mientras el overlay usa small/dynamic
+     viewport, dejando un gap de viewport dinámico entre ambos en iOS Safari
+     cuando la UI del navegador se colapsa/expande. */
+  height: 100svh;
+  height: 100dvh;
 }
 
 .imm-v1 {

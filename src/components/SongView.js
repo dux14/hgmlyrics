@@ -606,6 +606,22 @@ async function _renderSongBody(container, songId, isPreview, song) {
     if (opening) accordion.load();
   }
 
+  // Blindaje full view (Task 1.3): colapsa cualquier acordeón de sección
+  // abierto, sin depender de toggleSectionAudioPanel (que solo sabe cerrar
+  // el que YA está abierto vía su botón). Se engancha al mismo hook de
+  // pauseAutoscroll que entra al escenario, para que ningún `.section-audio`
+  // quede visible/pintado detrás del overlay inmersivo.
+  function collapseSectionAudioPanels() {
+    if (openSectionAudioIndex === null) return;
+    sectionAccordions.forEach((acc) => {
+      acc.el.hidden = true;
+    });
+    container.querySelectorAll('[data-section-audio]').forEach((btn) => {
+      updateSectionPlayButtonLabel(btn, false);
+    });
+    openSectionAudioIndex = null;
+  }
+
   // Resalta la sección que suena ahora (.lyrics__section--playing); null
   // apaga el resaltado (pausa, fin de canción, cambio de scope).
   function highlightPlayingSection(sectionIndex) {
@@ -933,6 +949,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
         pauseAutoscroll: () => {
           stageAutoscrollApi?.pauseAutoscroll();
           sectionAudioManager?.pause();
+          collapseSectionAudioPanels();
         },
         onExit: resyncLayersFromStore,
       });

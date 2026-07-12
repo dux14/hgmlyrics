@@ -1,3 +1,4 @@
+@layer components {
 /* voz-editor.css — VozEditor · Ambient Kinetic (F3c)
  *
  * Layout y componentes del editor de voz en off (Palabra Semanal).
@@ -265,4 +266,5 @@
   .voz-editor__load-ordo-btn {
     color: var(--color-brand);
   }
+}
 }

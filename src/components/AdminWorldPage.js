@@ -1,5 +1,6 @@
 import { renderAdminSection } from './AdminSection.js';
 import { mountAdminWorldPanel } from './AdminWorldPanel.js';
+import '../styles/admin-world.css';
 
 /** Sub-página admin: administración de mapas/tilesets del mundo virtual. */
 export function renderAdminWorldPage(container) {

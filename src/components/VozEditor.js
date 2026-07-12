@@ -5,6 +5,7 @@
 // público de weekly-word.css), para que ambas vistas nunca diverjan.
 
 import '../styles/weekly-word.css';
+import '../styles/voz-editor.css';
 import { navigate } from '../router.js';
 import { liturgicalPalette, coverGradient } from '../lib/liturgicalColor.js';
 import { vozHeroBodyHtml } from '../lib/vozHeroBody.js';

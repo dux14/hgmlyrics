@@ -21,10 +21,7 @@
 @import './components.css' layer(components);
 @import './home.css' layer(components);
 @import './admin.css' layer(components);
-@import './admin-dashboard.css' layer(components);
-@import './admin-world.css' layer(components);
 @import './editor.css' layer(components);
-@import './voz-editor.css' layer(components);
 @import './auth.css' layer(components);
 @import './offline-chip.css' layer(components);
 @import './options-sheet.css' layer(components);

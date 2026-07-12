@@ -2,6 +2,7 @@ import { navigate } from '../router.js';
 import { getState } from '../lib/store.js';
 import { icon } from '../lib/icons.js';
 import { escapeHtml as escapeHtmlLocal } from '../lib/escape.js';
+import '../styles/admin-dashboard.css';
 
 const HUB_CARDS = [
   {

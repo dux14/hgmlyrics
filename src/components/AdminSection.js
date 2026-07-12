@@ -1,5 +1,10 @@
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
+// admin-dashboard.css trae .admin-section* (usadas aquí) — se importa en este
+// componente compartido y no solo en AdminDashboard.js porque AdminSection
+// también lo consumen AdminFlagsPage.js y AdminWorldPage.js, que viven en
+// chunks lazy distintos y no arrastran el CSS de AdminDashboard.js.
+import '../styles/admin-dashboard.css';
 
 /**
  * Cabecera estándar para sub-páginas de admin: botón volver (a /admin por

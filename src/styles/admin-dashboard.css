@@ -1,3 +1,4 @@
+@layer components {
 /* ============================================
    HKN Lyrics — Admin Dashboard
    ============================================ */
@@ -172,4 +173,5 @@
 
 [data-theme='light'] .admin-badge--user {
   background: color-mix(in oklch, var(--color-text-secondary) 10%, white);
+}
 }

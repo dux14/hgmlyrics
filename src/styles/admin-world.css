@@ -1,3 +1,4 @@
+@layer components {
 /* ============================================
    HKN Lyrics — Admin World Panel
    ============================================ */
@@ -184,4 +185,5 @@
 
 [data-theme='light'] .wm-validation-errors {
   background: color-mix(in oklch, var(--color-danger) 8%, white);
+}
 }

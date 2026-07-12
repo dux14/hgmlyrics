@@ -6,7 +6,7 @@
  */
 import { get as idbGet, set as idbSet } from 'idb-keyval';
 import { supabase } from './supabase.js';
-import { getSession, subscribe as subscribeAuth } from './authStore.js';
+import { getSession, isPendingSession, subscribe as subscribeAuth } from './authStore.js';
 import { showToast } from './toast.js';
 
 const FAVORITES_CACHE_KEY = 'hkn-favorites';
@@ -16,6 +16,12 @@ const state = {
   loaded: false,
   listeners: new Set(),
 };
+
+// Generación de sync (espejo de recentVisits.js): se incrementa en cada
+// transición de sesión para que un loadAll en vuelo no pise el estado de una
+// cuenta distinta después de un logout/cambio de cuenta (dispositivos
+// compartidos).
+let syncEpoch = 0;
 
 function notify(songId) {
   state.listeners.forEach((fn) => fn(songId));
@@ -75,8 +81,26 @@ export async function toggleFavorite(songId) {
 }
 
 async function loadAll() {
+  const epoch = syncEpoch;
   const session = getSession();
   if (!session) {
+    if (isPendingSession()) {
+      // Boot offline con refresh token persistido pero sin access_token
+      // todavía (T1 de authStore): es el caso primario de H5, no un logout.
+      // Restaurar el último snapshot local en vez de mostrar "sin
+      // favoritos" falso.
+      try {
+        const cached = await idbGet(FAVORITES_CACHE_KEY);
+        if (epoch !== syncEpoch) return;
+        if (Array.isArray(cached)) {
+          state.ids = new Set(cached);
+          state.loaded = true;
+        }
+      } catch (_e) {
+        /* idb no disponible */
+      }
+      return;
+    }
     state.ids = new Set();
     state.loaded = false;
     return;
@@ -85,12 +109,14 @@ async function loadAll() {
     .from('favorites')
     .select('song_id')
     .eq('user_id', session.user.id);
+  if (epoch !== syncEpoch) return;
   if (error) {
     console.warn('loadFavorites failed', error);
-    // Red caída: restaurar el último snapshot local en vez de mostrar
-    // "sin favoritos" falso (H5 auditoría).
+    // Cubre cualquier error de la query (offline, RLS, etc.): restaurar el
+    // último snapshot local en vez de mostrar "sin favoritos" falso (H5).
     try {
       const cached = await idbGet(FAVORITES_CACHE_KEY);
+      if (epoch !== syncEpoch) return;
       if (Array.isArray(cached) && state.ids.size === 0) {
         state.ids = new Set(cached);
         state.loaded = true;
@@ -128,10 +154,17 @@ export function _setFavoriteIds(ids) {
 
 /**
  * Bootstrap favorites cache and re-load on sign-in / clear on sign-out.
+ * Se suscribe a auth ANTES del load inicial (espejo de recentVisits.js: para
+ * no perder una transición durante el await, p. ej. pendingSession
+ * resolviendo en boot offline) y sube la época de sync en cada transición
+ * para que un loadAll en vuelo no pise el estado de una cuenta distinta.
  */
 export async function initFavorites() {
-  await loadAll();
+  let hadSession = !!getSession();
   subscribeAuth(async ({ session }) => {
+    const hasSession = !!session;
+    if (hasSession !== hadSession) syncEpoch++;
+    hadSession = hasSession;
     if (!session) {
       state.ids = new Set();
       state.loaded = false;
@@ -146,4 +179,5 @@ export async function initFavorites() {
     await loadAll();
     notify(null);
   });
+  await loadAll();
 }

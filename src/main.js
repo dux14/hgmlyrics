@@ -47,6 +47,7 @@ import { renderBottomNav, updateBottomNavActive } from './components/BottomNav.j
 import { closeGoToSheet } from './components/GoToSheet.js';
 import { getWeeklyWords, warmWeeklyWords } from './lib/weeklyWords.js';
 import { initChromeAutoHide, setChromeAutoHide } from './lib/scrollChrome.js';
+import { initPreloadErrorGuard, clearPreloadErrorGuard } from './lib/preloadErrorGuard.js';
 
 // Motor único de auto-hide por ruta: Grupo C = header + nav; Grupo B = solo
 // nav, headerless (hero a sangre completa, sin header ni su reserva de
@@ -74,22 +75,8 @@ const isHeaderless = (path) => Boolean(chromeFor(path).headerless);
 // Initialize theme immediately to avoid flash
 initTheme();
 
-// Tras un deploy, el SW nuevo (skipWaiting+clientsClaim) controla pestañas
-// cuyo JS en memoria aún referencia chunks lazy con hash viejo que ya no
-// existen en Vercel. Vite emite 'vite:preloadError' al fallar un import()
-// dinámico: recargar una vez entrega el index.html nuevo. El guard de
-// sessionStorage evita un loop si el reload tampoco resuelve (H6 auditoría).
-const PRELOAD_RELOAD_KEY = 'hkn-preload-reload';
-globalThis.addEventListener('vite:preloadError', (event) => {
-  if (sessionStorage.getItem(PRELOAD_RELOAD_KEY)) return;
-  event.preventDefault();
-  try {
-    sessionStorage.setItem(PRELOAD_RELOAD_KEY, '1');
-  } catch (_) {
-    /* storage bloqueado */
-  }
-  globalThis.location.reload();
-});
+// Recuperación de chunks lazy con hash viejo tras un deploy (H6 auditoría).
+initPreloadErrorGuard();
 
 /** @type {HTMLElement} */
 let mainContent;
@@ -121,6 +108,21 @@ async function loadWeeklyWordsForIndex() {
  * Boot the app
  */
 async function boot() {
+  // finally (no el inicio de la función) porque un chunk lazy puede fallar
+  // A MITAD de boot: si el guard se limpiara al inicio, el listener de
+  // vite:preloadError vería el guard ya limpio en cada intento y recargaría
+  // sin límite. Con finally, mientras boot está en curso el guard sigue
+  // seteado (si se seteó al fallar un import previo) y solo se rearma
+  // cuando boot termina, exitoso o no, dejando la protección lista para el
+  // próximo error real (H6 auditoría).
+  try {
+    await bootBody();
+  } finally {
+    clearPreloadErrorGuard();
+  }
+}
+
+async function bootBody() {
   const app = document.querySelector('#app');
   app.innerHTML = '';
 
@@ -480,15 +482,6 @@ async function boot() {
     initVitals();
   } catch (_) {
     // no critico
-  }
-
-  // Boot exitoso = los chunks actuales cargan bien: rearma el guard de
-  // vite:preloadError para que un futuro deploy pueda volver a disparar
-  // un reload (H6 auditoría).
-  try {
-    sessionStorage.removeItem(PRELOAD_RELOAD_KEY);
-  } catch (_) {
-    /* storage bloqueado */
   }
 }
 

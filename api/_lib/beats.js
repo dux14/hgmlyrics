@@ -70,3 +70,23 @@ export function validatePatchBody(body) {
   }
   return null;
 }
+
+/**
+ * Valida el shape del campo lineTiming del PATCH de audio (correccion manual
+ * del startMs de UNA linea, ver api/songs/[id]/audio.js). Solo shape: la
+ * existencia de la linea y la monotonicidad contra vecinas se validan en el
+ * endpoint (necesitan la fila de song_line_timings).
+ * @param {{i?: number, startMs?: number}|null|undefined} lineTiming
+ * @returns {string|null} error o null.
+ */
+export function validateLineTimingShape(lineTiming) {
+  if (lineTiming === null || typeof lineTiming !== 'object' || Array.isArray(lineTiming)) {
+    return 'lineTiming: body invalido';
+  }
+  const { i, startMs } = lineTiming;
+  if (!Number.isInteger(i) || i < 0) return `lineTiming: i invalido: ${i}`;
+  if (!Number.isInteger(startMs) || startMs < 0) {
+    return `lineTiming: startMs invalido: ${startMs}`;
+  }
+  return null;
+}

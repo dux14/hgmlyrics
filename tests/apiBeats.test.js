@@ -4,7 +4,7 @@
  * un bloque `beats` invalido.
  */
 import { describe, it, expect } from 'vitest';
-import { validateBeats, validatePatchBody } from '../api/_lib/beats.js';
+import { validateBeats, validatePatchBody, validateLineTimingShape } from '../api/_lib/beats.js';
 
 describe('validateBeats', () => {
   it('null pasa (best-effort)', () => {
@@ -121,5 +121,22 @@ describe('validatePatchBody', () => {
     expect(validatePatchBody(null)).toBeTruthy();
     expect(validatePatchBody(undefined)).toBeTruthy();
     expect(validatePatchBody('nope')).toBeTruthy();
+  });
+});
+
+describe('validateLineTimingShape', () => {
+  it('acepta {i, startMs} enteros >= 0', () => {
+    expect(validateLineTimingShape({ i: 3, startMs: 51200 })).toBeNull();
+  });
+  it.each([
+    [null, 'body'],
+    [{ i: -1, startMs: 0 }, 'i'],
+    [{ i: 1.5, startMs: 0 }, 'i'],
+    [{ i: 0, startMs: -10 }, 'startMs'],
+    [{ i: 0, startMs: 10.5 }, 'startMs'],
+    [{ i: 0 }, 'startMs'],
+    [{ startMs: 10 }, 'i'],
+  ])('rechaza %j', (input, fragment) => {
+    expect(validateLineTimingShape(input)).toContain(fragment);
   });
 });

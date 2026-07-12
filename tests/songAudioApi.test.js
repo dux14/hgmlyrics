@@ -16,6 +16,7 @@ import {
   deleteSongAudio,
   uploadSongAudioFile,
   patchSongAudio,
+  patchLineTiming,
 } from '../src/lib/songAudioApi.js';
 
 describe('getSongAudio', () => {
@@ -187,6 +188,26 @@ describe('patchSongAudio', () => {
       .mockResolvedValue({ ok: false, json: () => Promise.resolve({ error: 'bpm invalido' }) });
 
     await expect(patchSongAudio('song-1', { bpmManual: -1 })).rejects.toThrow('bpm invalido');
+  });
+});
+
+describe('patchLineTiming', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('hace PATCH con body {lineTiming:{i,startMs}}', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({ success: true }) });
+    global.fetch = fetchMock;
+
+    await patchLineTiming('song-1', 3, 51200);
+
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/songs/song-1/audio');
+    expect(opts.method).toBe('PATCH');
+    expect(JSON.parse(opts.body)).toEqual({ lineTiming: { i: 3, startMs: 51200 } });
   });
 });
 

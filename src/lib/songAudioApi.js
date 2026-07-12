@@ -78,17 +78,18 @@ export async function deleteSongAudio(songId) {
 }
 
 /**
- * Actualiza los overrides de metrónomo (bpmManual/timeSignature/beatAnchor).
- * Admin-only. Solo manda las claves definidas en `fields` — undefined no se
- * incluye en el body (no toca ese campo en el backend), null sí se manda
- * (limpia el override y vuelve al valor detectado). Mismo patrón que
- * confirmSongAudio: lanza en error.
+ * Actualiza los overrides de metrónomo (bpmManual/timeSignature/beatAnchor) o
+ * corrige a mano el timing de una línea (lineTiming). Admin-only. Solo manda
+ * las claves definidas en `fields` — undefined no se incluye en el body (no
+ * toca ese campo en el backend), null sí se manda (limpia el override y
+ * vuelve al valor detectado). Mismo patrón que confirmSongAudio: lanza en
+ * error.
  * @param {string} songId
- * @param {{bpmManual?: number|null, timeSignature?: string|null, beatAnchor?: number|null}} fields
+ * @param {{bpmManual?: number|null, timeSignature?: string|null, beatAnchor?: number|null, lineTiming?: {i:number,startMs:number}}} fields
  */
 export async function patchSongAudio(songId, fields) {
   const body = {};
-  for (const key of ['bpmManual', 'timeSignature', 'beatAnchor']) {
+  for (const key of ['bpmManual', 'timeSignature', 'beatAnchor', 'lineTiming']) {
     if (key in fields && fields[key] !== undefined) body[key] = fields[key];
   }
   const res = await fetch(`/api/songs/${songId}/audio`, {
@@ -98,6 +99,16 @@ export async function patchSongAudio(songId, fields) {
   });
   const responseBody = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(responseBody.error || 'No se pudo guardar el ajuste');
+}
+
+/**
+ * Corrige a mano el startMs de una línea del alignment (admin).
+ * @param {string} songId
+ * @param {number} i índice canónico de la línea
+ * @param {number} startMs nuevo inicio en ms
+ */
+export function patchLineTiming(songId, i, startMs) {
+  return patchSongAudio(songId, { lineTiming: { i, startMs } });
 }
 
 /**

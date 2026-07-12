@@ -6,7 +6,7 @@ vi.mock('./authStore.js', () => ({
 }));
 
 import { _clearCache } from './prefetch.js';
-import { getWeeklyWords, invalidateWeeklyWords } from './weeklyWords.js';
+import { getWeeklyWord, getWeeklyWords, invalidateWeeklyWords } from './weeklyWords.js';
 
 beforeEach(() => {
   _clearCache();
@@ -43,5 +43,42 @@ describe('getWeeklyWords', () => {
     const second = await getWeeklyWords();
     expect(second).toEqual([{ id: 'w1' }]);
     expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('getWeeklyWord (H8: detalle con SWR por id)', () => {
+  it('cachea el detalle bajo la key weekly-word-<id> y devuelve el body completo', async () => {
+    const body = { id: 'ww1', voiceover_body: 'texto', gospel_body: 'evangelio' };
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => body });
+
+    const result = await getWeeklyWord('ww1');
+    expect(result).toEqual(body);
+    expect(global.fetch).toHaveBeenCalledWith('/api/weekly-words/ww1', {
+      headers: { Authorization: 'Bearer token123' },
+    });
+
+    // Segunda llamada dentro del TTL: sirve de memoria, sin refetch.
+    await getWeeklyWord('ww1');
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('propaga el error si no hay stale en cache (a diferencia de getWeeklyWords)', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500 });
+    await expect(getWeeklyWord('ww2')).rejects.toThrow('getWeeklyWord failed: 500');
+  });
+
+  it('invalidateWeeklyWords() limpia tambien las keys por id (fuga de contenido entre viewers, Critical)', async () => {
+    const draft = { id: 'ww3', voiceover_body: 'draft del admin' };
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => draft });
+
+    await getWeeklyWord('ww3'); // el admin visita el draft: queda en memoria+idb
+    invalidateWeeklyWords(); // logout / guardar / publicar / borrar
+
+    const published = { id: 'ww3', voiceover_body: 'version publicada' };
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => published });
+
+    const result = await getWeeklyWord('ww3');
+    expect(result).toEqual(published); // sin la invalidacion por prefijo, seguiria sirviendo el draft
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 });

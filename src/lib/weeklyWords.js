@@ -1,7 +1,7 @@
 // src/lib/weeklyWords.js
 // Fuente única de weekly-words con SWR (memoria + idb). El endpoint exige
 // sesión, así que el fetcher replica el fetch autenticado de los call sites.
-import { cached, invalidate, warm } from './prefetch.js';
+import { cached, invalidate, invalidatePrefix, warm } from './prefetch.js';
 import { getSession } from './authStore.js';
 
 const KEY = 'weekly-words';
@@ -32,6 +32,12 @@ export async function getWeeklyWords() {
  * queda disponible offline igual que el listado (H8 auditoría). A diferencia
  * de getWeeklyWords, propaga el error si no hay stale: la vista decide el
  * estado de error.
+ * OJO: la respuesta varía por viewer (un admin puede ver un draft que un
+ * usuario normal no vería), por eso invalidateWeeklyWords() SIEMPRE debe
+ * limpiar también estas keys por id en logout y al guardar/publicar/borrar
+ * — de lo contrario un draft cacheado por el admin queda visible para el
+ * siguiente usuario del mismo dispositivo, sin pasar por la autorización
+ * del servidor.
  * @param {string} id
  */
 export async function getWeeklyWord(id) {
@@ -52,4 +58,8 @@ export function warmWeeklyWords() {
 
 export function invalidateWeeklyWords() {
   invalidate(KEY);
+  // Las keys por id (weekly-word-<id>) también deben caer: su contenido
+  // depende del viewer (draft vs publicado) y sobreviven en idb entre
+  // sesiones si no se limpian por prefijo. Ver JSDoc de getWeeklyWord.
+  invalidatePrefix('weekly-word-');
 }

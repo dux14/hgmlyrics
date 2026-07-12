@@ -875,6 +875,42 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     expect(document.querySelector('#imm-roll .imm-interlude')).toBeNull();
   });
 
+  it('pre-roll (intro >= 3s): sin línea activa, la línea 0 en --next, el interludio se pinta antes de la primera línea; al entrar a la línea 0 se retira y anima a activa', async () => {
+    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
+    getSongAudio.mockResolvedValue({
+      audio: { url: 'https://storage.example/full.mp3', durationSec: 20 },
+      timings: {
+        status: 'ready',
+        lines: [
+          { i: 0, startMs: 4000 },
+          { i: 1, startMs: 6000 },
+          { i: 2, startMs: 16000 },
+        ],
+      },
+    });
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    audio.currentTime = 1; // ms=1000+LEAD_MS(120)=1120 < 4000 -> pre-roll (index -1)
+    audio.dispatchEvent(new Event('timeupdate'));
+
+    const line0 = document.querySelector('#imm-roll .imm-line[data-i="0"]');
+    expect(document.querySelector('#imm-roll .imm-line--active')).toBeNull();
+    expect(line0.classList.contains('imm-line--next')).toBe(true);
+
+    const interlude = document.querySelector('#imm-roll .imm-interlude');
+    expect(interlude).toBeTruthy();
+    expect(interlude.nextElementSibling).toBe(line0);
+
+    audio.currentTime = 4; // ms=4000+120=4120 >= 4000 -> entra a la línea 0
+    audio.dispatchEvent(new Event('timeupdate'));
+
+    expect(document.querySelector('#imm-roll .imm-interlude')).toBeNull();
+    expect(line0.classList.contains('imm-line--active')).toBe(true);
+  });
+
   it('salir en modo sync pausa el audio y vacía el src', async () => {
     isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
     getSongAudio.mockResolvedValue(readyTimings());
@@ -1344,7 +1380,21 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     expect(document.getElementById('imm-pulse').hidden).toBe(false);
   });
 
-  it('count-in: gap >= 2 beats muestra .imm-interlude__count con un número', async () => {
+  // D6: el count-in se acota al último compás (`1 <= remainingBeats <= perBar`).
+  // El viejo test "gap < 2 beats muestra puntos" (removido) usaba el mismo
+  // target `nextLine.startMs=12000` que estos casos, que cae EXACTO sobre
+  // `beatsMs[24]=12000` (rejilla alineada a la línea); con esos números,
+  // `remainingBeats` resolvía a 1 justo antes de la línea 2 — y bajo el
+  // nuevo spec `remainingBeats=1` DEBE mostrar el contador "1" (caso cubierto
+  // abajo), no puntos. El test viejo quedó en conflicto directo con el
+  // comportamiento pedido, no con un supuesto invariante de que
+  // `remainingBeats` nunca baja de 1: esa cota solo se cumple cuando
+  // `nextLine.startMs` coincide con un punto de la rejilla, como en este
+  // fixture. En producción los beats se detectan independientes del timing
+  // de las líneas, así que un `startMs` no alineado a la rejilla SÍ puede
+  // dar `remainingBeats=0` dentro de un hueco (ver el test de blindaje más
+  // abajo) — por eso el test viejo se reemplazó, no se eliminó una cobertura.
+  it('count-in acotado: faltando 12 beats (> perBar=4) se muestran puntos, no el contador', async () => {
     enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats());
     const sv = mountSongView();
@@ -1354,17 +1404,14 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     const audio = document.querySelector('#imm-player-slot audio');
     audio.currentTime = 2;
     audio.dispatchEvent(new Event('timeupdate'));
-    audio.currentTime = 6; // faltan 6s = 12 beats para la línea 2 (12000ms)
+    audio.currentTime = 6; // faltan ~6s = 12 beats para la línea 2 (12000ms), > perBar
     audio.dispatchEvent(new Event('timeupdate'));
 
-    // remainingBeats = beatsUntil(6000, 12000): beatsMs[12]=6000, beatsMs[24]=12000 -> 24-12 = 12 beats exactos.
-    const count = document.querySelector('#imm-roll .imm-interlude__count');
-    expect(count).toBeTruthy();
-    expect(count.textContent).toBe('12');
-    expect(document.querySelector('#imm-roll .imm-interlude__dot')).toBeNull();
+    expect(document.querySelector('#imm-roll .imm-interlude__count')).toBeNull();
+    expect(document.querySelectorAll('#imm-roll .imm-interlude__dot').length).toBe(3);
   });
 
-  it('count-in: gap < 2 beats muestra puntos en vez del número', async () => {
+  it('count-in acotado: faltando exactamente perBar (4) beats aparece .imm-interlude__count "4"', async () => {
     enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats());
     const sv = mountSongView();
@@ -1374,10 +1421,67 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     const audio = document.querySelector('#imm-player-slot audio');
     audio.currentTime = 2;
     audio.dispatchEvent(new Event('timeupdate'));
-    // timingEngine aplica LEAD_MS=120 a currentTime antes de resolver la
-    // línea: para mantener el mismo gap de 100ms hasta la línea 2 (12000ms)
-    // hay que retrasar el currentTime nominal esos 120ms de anticipación.
-    audio.currentTime = 11.78; // 11780+120=11900ms -> faltan 100ms = 0.2 beats
+    // remainingBeats se calcula sin LEAD_MS (solo `showInterlude`, no `lineAt`):
+    // ms=10000 -> indexAt=20 (beatsMs[20]=10000). beatsUntil(10000,12000) = 24-20 = 4, == perBar.
+    audio.currentTime = 10;
+    audio.dispatchEvent(new Event('timeupdate'));
+
+    const count = document.querySelector('#imm-roll .imm-interlude__count');
+    expect(count).toBeTruthy();
+    expect(count.textContent).toBe('4');
+  });
+
+  it('count-in acotado: faltando 1 beat muestra .imm-interlude__count "1"', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimingsWithBeats());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    audio.currentTime = 2;
+    audio.dispatchEvent(new Event('timeupdate'));
+    // ms=11500 -> indexAt=23 (beatsMs[23]=11500). beatsUntil(11500,12000) = 24-23 = 1.
+    audio.currentTime = 11.5;
+    audio.dispatchEvent(new Event('timeupdate'));
+
+    const count = document.querySelector('#imm-roll .imm-interlude__count');
+    expect(count).toBeTruthy();
+    expect(count.textContent).toBe('1');
+  });
+
+  it('count-in acotado: remainingBeats=0 (línea NO alineada a la rejilla de beats) muestra puntos, no el contador', async () => {
+    enablePlayerFlag();
+    // La línea 2 arranca en 12200ms, fuera de la rejilla de beats (que
+    // termina en beatsMs[24]=12000): tanto `indexAt(12000)` como
+    // `indexAt(12200)` resuelven al mismo índice 24, así que
+    // `beatsUntil(12000, 12200)` da 0 de forma genuina (derivado del
+    // fixture, no mockeado a mano) — el caso real de producción donde el
+    // beat-tracking no cae justo sobre el `startMs` de la línea.
+    getSongAudio.mockResolvedValue({
+      audio: { url: 'https://storage.example/full.mp3', durationSec: 20 },
+      timings: {
+        status: 'ready',
+        lines: [
+          { i: 0, startMs: 0 },
+          { i: 1, startMs: 2000 },
+          { i: 2, startMs: 12200 },
+        ],
+        beats: BEATS_MS,
+        bpmDetected: 112.35,
+      },
+    });
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    audio.currentTime = 2;
+    audio.dispatchEvent(new Event('timeupdate'));
+    // ms=12000 (sin LEAD_MS, showInterlude usa currentTime crudo) -> remainingBeats=0.
+    // Con LEAD_MS (120, solo dentro de timingEngine) el motor sigue viendo
+    // 12120 < next.startMs(12200): la línea 2 todavía no arrancó.
+    audio.currentTime = 12;
     audio.dispatchEvent(new Event('timeupdate'));
 
     expect(document.querySelector('#imm-roll .imm-interlude__count')).toBeNull();

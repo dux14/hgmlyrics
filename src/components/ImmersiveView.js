@@ -305,12 +305,34 @@ function updateTunerNote(s) {
 
 /** Reasigna el target del spring a la línea activa y (re)arranca el loop rAF. */
 function retargetScroll(s) {
-  const activeEl = s.lineEls[s.index];
-  if (!activeEl) return;
+  retargetScrollToEl(s, s.lineEls[s.index]);
+}
+
+/**
+ * Centra el spring sobre `el` (compartido por `retargetScroll` y el estado de
+ * pre-roll, que no tiene una línea activa a la que apuntar: `s.lineEls[-1]`
+ * no existe, así que apunta al nodo `.imm-interlude`).
+ */
+function retargetScrollToEl(s, el) {
+  if (!el) return;
   const viewportH = s.els.viewport.clientHeight;
-  const centerY = activeEl.offsetTop + activeEl.offsetHeight / 2;
+  const centerY = el.offsetTop + el.offsetHeight / 2;
   s.spring.setTarget(viewportH * SCROLL_CENTER_RATIO - centerY);
   startScrollLoop(s);
+}
+
+/**
+ * Estado de pre-roll (índice -1, D6): aún no arrancó la línea 0. Ninguna
+ * línea queda activa (línea 0 pasa a `--next` por aritmética de
+ * `distanceClass`); el scroll centra el nodo de interludio, no una línea.
+ * NO reusa `setActiveIndex` porque esa función clampa a `Math.max(0, ...)`
+ * y sus vecinas (`updateSectionLabel`, `renderLineContent`, `retargetScroll`)
+ * indexan `s.lines`/`s.lineEls` en `s.index`, que explotaría con -1.
+ */
+function setPreRoll(s, interludeEl) {
+  s.index = -1;
+  updateDistanceClasses(s);
+  retargetScrollToEl(s, interludeEl);
 }
 
 function startScrollLoop(s) {
@@ -493,7 +515,12 @@ function promoteToSync(s, audio, timings) {
   s.timingByLineIndex = new Map(timingLines.map((l, pos) => [l.i, pos]));
   s.timingEngine = createTimingEngine({
     lines: timingLines,
-    onLineChange: (pos) => goToSync(s, timingLines[pos].i),
+    // Defensivo (D6): un seek hacia atrás desde una línea intermedia a la
+    // zona de pre-roll emitiría onLineChange(-1); timingLines[-1] no existe.
+    onLineChange: (pos) => {
+      if (pos < 0) return;
+      goToSync(s, timingLines[pos].i);
+    },
     onInterlude: (payload) => showInterlude(s, payload),
   });
   s.timingEngine.attach(audioEl);
@@ -781,20 +808,29 @@ function unmountPlayerBar(s) {
  * mientras dura el hueco (spec §3, solo modo sync). Reusa el mismo nodo
  * mientras siga siendo el mismo hueco (varios `timeupdate` dentro de él);
  * se retira al entrar la siguiente línea (`goToSync` -> `removeInterlude`).
+ *
+ * `index === -1` es el caso de pre-roll (D6, contrato de `timingEngine`):
+ * aún no arrancó la línea 0, así que el nodo va ANTES de `lineEls[0]` (no
+ * hay `lineEls[-1]` tras el cual insertarlo) y el roll pasa a estado
+ * pre-roll (`setPreRoll`) en vez de repintar una línea activa.
  */
 function showInterlude(s, { index, progress }) {
   if (s.engineMode !== 'sync') return;
 
-  // Count-in por beats (F4): con rejilla de beats, mientras falten >=2 beats
-  // para la siguiente línea se cuenta hacia atrás en vez de puntitos —
-  // referencia más útil justo antes de que entre la voz. Sin beatClock (sin
-  // beat-tracking en esta canción) se conserva el comportamiento original.
+  // Count-in por beats (F4/D6): con rejilla de beats, en el último compás
+  // antes de la línea (1 <= beats restantes <= perBar) se cuenta hacia atrás
+  // en vez de puntitos — referencia más útil justo antes de que entre la
+  // voz; fuera de ese último compás (intro larga o hueco grande) puntitos de
+  // progreso alcanzan y evitan un número engañosamente alto. Sin beatClock
+  // (sin beat-tracking en esta canción) se conserva el comportamiento de
+  // puntitos original.
   let remainingBeats = null;
   const nextLine = s.timingLines[index + 1];
   if (s.beatClock && nextLine) {
     remainingBeats = s.beatClock.beatsUntil(s.audioEl.currentTime * 1000, nextLine.startMs);
   }
-  const showCount = remainingBeats !== null && remainingBeats >= 2;
+  const perBar = s.beatClock?.perBar ?? 4;
+  const showCount = remainingBeats !== null && remainingBeats >= 1 && remainingBeats <= perBar;
 
   let el = s.els.roll.querySelector('.imm-interlude');
   if (!el || el.dataset.after !== String(index)) {
@@ -802,9 +838,16 @@ function showInterlude(s, { index, progress }) {
     el = document.createElement('div');
     el.className = 'imm-interlude';
     el.dataset.after = String(index);
-    const afterEl = s.lineEls[index];
-    if (afterEl) afterEl.insertAdjacentElement('afterend', el);
-    else s.els.roll.appendChild(el);
+    if (index === -1) {
+      const firstEl = s.lineEls[0];
+      if (firstEl) firstEl.insertAdjacentElement('beforebegin', el);
+      else s.els.roll.appendChild(el);
+      setPreRoll(s, el);
+    } else {
+      const afterEl = s.lineEls[index];
+      if (afterEl) afterEl.insertAdjacentElement('afterend', el);
+      else s.els.roll.appendChild(el);
+    }
   }
 
   if (showCount) {

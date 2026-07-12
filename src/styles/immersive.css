@@ -499,3 +499,12 @@ body.immersive-active > .floating-tuner {
 .imm-v1__metronome-toggle[aria-pressed='true'] {
   color: var(--color-brand, #01ccd9);
 }
+
+/* Capa desktop/tablet: columna de lectura centrada (auditoria 12-jul) */
+@media (min-width: 768px) {
+  .imm-v1 { --imm-gutter: 32px; }
+  .imm-v1__viewport { max-width: 920px; margin-inline: auto; width: 100%; }
+}
+@media (min-width: 1280px) {
+  .imm-v1 { --imm-gutter: 48px; }
+}

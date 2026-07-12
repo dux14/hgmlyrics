@@ -254,6 +254,16 @@ export async function refreshProfile() {
     // profile/flags en memoria (p. ej. el restaurado del caché en modo
     // pendingSession) en vez de nulearlo encima.
     console.warn('refreshProfile failed', e);
+    // Con red caída y sin perfil en memoria (boot en frío con token vigente),
+    // restaurar el último snapshot local: mismo fallback que la rama
+    // pendingSession, que hasta ahora era el único camino cubierto (H4).
+    if (!state.profile) {
+      const cached = readCachedProfileSnapshot();
+      if (cached) {
+        state.profile = cached.profile ?? null;
+        state.flags = Array.isArray(cached.flags) ? cached.flags : [];
+      }
+    }
     return false;
   }
 }

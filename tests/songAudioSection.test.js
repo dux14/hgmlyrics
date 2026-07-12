@@ -229,6 +229,125 @@ describe('SongAudioSection', () => {
     section.destroy();
   });
 
+  it('re-subida con correcciones manuales: pide confirmación antes de subir', async () => {
+    songAudioApi.getSongAudio.mockResolvedValue({
+      audio: { url: 'https://x/full.mp3', durationSec: 100 },
+      timings: {
+        status: 'ready',
+        lines: [
+          { i: 0, startMs: 0, score: 0.9, manual: true },
+          { i: 1, startMs: 1500, score: 0.5, manual: true },
+          { i: 2, startMs: 3000, score: 0.95, manual: false },
+        ],
+      },
+    });
+    confirmDialog.mockResolvedValueOnce(false);
+    const section = createSongAudioSection({ songId: 'song-1' });
+    container.appendChild(section.el);
+    await vi.waitFor(() =>
+      expect(section.el.querySelector('[data-action="song-audio-file"]')).not.toBeNull(),
+    );
+
+    const input = section.el.querySelector('[data-action="song-audio-file"]');
+    const file = mkFile('audio.mp3', 'audio/mpeg');
+    Object.defineProperty(input, 'files', { value: [file] });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+
+    await vi.waitFor(() =>
+      expect(confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('2 correcciones manuales'),
+        }),
+      ),
+    );
+    expect(songAudioApi.createSongAudioUpload).not.toHaveBeenCalled();
+
+    section.destroy();
+  });
+
+  it('re-subida sin correcciones manuales: no pide confirmación y sube directo', async () => {
+    songAudioApi.getSongAudio.mockResolvedValue({
+      audio: { url: 'https://x/full.mp3', durationSec: 100 },
+      timings: { status: 'ready', lines: [{ i: 0, startMs: 0, score: 0.9, manual: false }] },
+    });
+    songAudioApi.createSongAudioUpload.mockResolvedValue({
+      uploadUrl: 'https://put/x',
+      key: 'song-1/full.mp3',
+    });
+    songAudioApi.uploadSongAudioFile.mockResolvedValue(undefined);
+    songAudioApi.confirmSongAudio.mockResolvedValue(undefined);
+    const section = createSongAudioSection({ songId: 'song-1' });
+    container.appendChild(section.el);
+    await vi.waitFor(() =>
+      expect(section.el.querySelector('[data-action="song-audio-file"]')).not.toBeNull(),
+    );
+
+    const input = section.el.querySelector('[data-action="song-audio-file"]');
+    const file = mkFile('audio.mp3', 'audio/mpeg');
+    Object.defineProperty(input, 'files', { value: [file] });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+
+    await vi.waitFor(() => expect(songAudioApi.createSongAudioUpload).toHaveBeenCalled());
+    expect(confirmDialog).not.toHaveBeenCalled();
+
+    section.destroy();
+  });
+
+  it('reintentar sincronía con correcciones manuales: pide confirmación antes de llamar confirmSongAudio', async () => {
+    songAudioApi.getSongAudio.mockResolvedValue({
+      audio: { url: 'https://x/full.mp3', durationSec: 100 },
+      timings: {
+        status: 'failed',
+        error: 'timeout del proveedor',
+        lines: [
+          { i: 0, startMs: 0, score: 0.9, manual: true },
+          { i: 1, startMs: 1500, score: 0.5, manual: false },
+        ],
+      },
+    });
+    confirmDialog.mockResolvedValueOnce(false);
+    const section = createSongAudioSection({ songId: 'song-1' });
+    container.appendChild(section.el);
+
+    await vi.waitFor(() =>
+      expect(section.el.querySelector('[data-action="song-audio-retry"]')).not.toBeNull(),
+    );
+    section.el.querySelector('[data-action="song-audio-retry"]').click();
+
+    await vi.waitFor(() =>
+      expect(confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('1 corrección manual'),
+        }),
+      ),
+    );
+    expect(songAudioApi.confirmSongAudio).not.toHaveBeenCalled();
+
+    section.destroy();
+  });
+
+  it('reintentar sincronía sin correcciones manuales: no pide confirmación', async () => {
+    songAudioApi.getSongAudio.mockResolvedValue({
+      audio: { url: 'https://x/full.mp3', durationSec: 100 },
+      timings: { status: 'failed', error: 'timeout del proveedor', lines: [] },
+    });
+    songAudioApi.confirmSongAudio.mockResolvedValue(undefined);
+    const section = createSongAudioSection({ songId: 'song-1' });
+    container.appendChild(section.el);
+
+    await vi.waitFor(() =>
+      expect(section.el.querySelector('[data-action="song-audio-retry"]')).not.toBeNull(),
+    );
+    section.el.querySelector('[data-action="song-audio-retry"]').click();
+
+    await vi.waitFor(() =>
+      expect(songAudioApi.confirmSongAudio).toHaveBeenCalledWith('song-1', 100),
+    );
+    expect(confirmDialog).not.toHaveBeenCalled();
+
+    section.destroy();
+  });
+
   it('confianza por línea: pinta resumen + filas ok/warn según score/interpolated', async () => {
     songAudioApi.getSongAudio.mockResolvedValue({
       audio: { url: 'https://x/full.mp3', durationSec: 100 },

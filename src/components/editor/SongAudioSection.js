@@ -294,6 +294,25 @@ export function createSongAudioSection({ songId, getSong = null }) {
     }
   }
 
+  /**
+   * Si hay correcciones manuales vivas, pide confirmacion antes de un flujo
+   * que relanza el alignment (re-subida o retry): el webhook pisa lines
+   * completo y las correcciones se pierden (semantica elegida en el spec).
+   * @returns {Promise<boolean>} true si se puede continuar.
+   */
+  async function confirmLosingManualLines() {
+    const manualCount = Array.isArray(state.timings?.lines)
+      ? state.timings.lines.filter((l) => l.manual === true).length
+      : 0;
+    if (manualCount === 0) return true;
+    return confirmDialog({
+      title: 'Se perderán correcciones manuales',
+      body: `La nueva sincronía descarta ${manualCount} ${manualCount === 1 ? 'corrección manual' : 'correcciones manuales'} de línea.`,
+      confirmLabel: 'Continuar',
+      danger: true,
+    });
+  }
+
   async function uploadFlow(file) {
     if (!songId) return;
     if (file.type !== 'audio/mpeg') {
@@ -306,6 +325,7 @@ export function createSongAudioSection({ songId, getSong = null }) {
       render();
       return;
     }
+    if (!(await confirmLosingManualLines())) return;
     state.error = null;
     state.uploading = true;
     render();
@@ -325,6 +345,7 @@ export function createSongAudioSection({ songId, getSong = null }) {
 
   async function retrySync() {
     if (!songId) return;
+    if (!(await confirmLosingManualLines())) return;
     state.error = null;
     try {
       await confirmSongAudio(songId, state.audio?.durationSec ?? null);

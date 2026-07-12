@@ -35,7 +35,26 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//],
         cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,json,webp,png,svg,woff2}'],
+        // Phaser (~1.35MB, solo /mundo) y chunks admin no deben inflar la
+        // instalación del SW de cada visitante: se cachean bajo demanda con
+        // la regla lazy-chunks de runtimeCaching (H10 auditoría).
+        globIgnores: ['**/assets/phaser-*.js', '**/assets/Admin*.js'],
         runtimeCaching: [
+          {
+            // Chunks lazy excluidos del precache: URL con hash de build, así
+            // que CacheFirst es seguro (nunca cambia el contenido de una URL).
+            urlPattern: /\/assets\/(?:phaser|Admin)[^/]*\.js$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'lazy-chunks',
+              expiration: {
+                maxEntries: 24,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+                purgeOnQuotaError: true,
+              },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
           {
             // Cache song list API — serve cached instantly, update in background
             urlPattern: /\/api\/songs(\?.*)?$/i,
@@ -76,7 +95,11 @@ export default defineConfig({
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'img-uploads',
-              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 30, purgeOnQuotaError: true },
+              expiration: {
+                maxEntries: 300,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+                purgeOnQuotaError: true,
+              },
               cacheableResponse: { statuses: [0, 200] },
             },
           },
@@ -92,7 +115,11 @@ export default defineConfig({
             handler: 'CacheFirst',
             options: {
               cacheName: 'img-storage-v2',
-              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 30, purgeOnQuotaError: true },
+              expiration: {
+                maxEntries: 300,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+                purgeOnQuotaError: true,
+              },
               cacheableResponse: { statuses: [200] },
               fetchOptions: { mode: 'cors' },
             },

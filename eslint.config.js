@@ -91,6 +91,15 @@ export default [
     },
   },
   {
+    // Archivos de configuración de build (Node, ESM): usan `process.env`.
+    files: ['vite.config.js', 'vitest.config.js'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+      },
+    },
+  },
+  {
     // Vitest test files use globals (`describe`, `it`, `expect`, `beforeEach`, …)
     // because `globals: true` is set in vitest.config.js. e2e/**/*.js son specs
     // Playwright (Node, sin globals de vitest) pero comparten process/Buffer/etc.

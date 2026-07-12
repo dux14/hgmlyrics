@@ -271,6 +271,18 @@
   --ease-entrance: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* El bottom-nav se oculta por completo en >=768px (layout.css), pero el
+   offset seguia fijo en 56px: hueco muerto bajo .section-player y el FAB
+   (auditoria 12-jul). scrollChrome.js solo escribe/borra el inline override
+   en 0px/(sin valor) al scrollear, nunca lo fija de vuelta al alto del nav,
+   asi que este override de cascada gana siempre que el motor no tenga la
+   var en 0px puesto inline. */
+@media (min-width: 768px) {
+  :root {
+    --bnav-offset: 0px;
+  }
+}
+
 /* ============================================
    Overrides CLAROS: forzado [data-theme=light] o auto (sistema claro sin override)
    ============================================ */

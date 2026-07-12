@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createTimingEngine, LEAD_MS } from '../src/lib/timingEngine.js';
+import { createTimingEngine, LEAD_MS, PREROLL_MIN_MS } from '../src/lib/timingEngine.js';
 
 /**
  * Fake <audio> minimo: EventTarget real (jsdom) + currentTime seteable.
@@ -29,10 +29,21 @@ describe('createTimingEngine — lineAt', () => {
     expect(e.lineAt(20000)).toBe(2);
   });
 
-  it('antes de la primera linea (startMs > 0) devuelve 0', () => {
+  it('antes de la primera linea con intro >= PREROLL_MIN_MS devuelve -1 (pre-roll)', () => {
     const e = createTimingEngine({
       lines: [
         { i: 0, startMs: 3000 },
+        { i: 1, startMs: 8000 },
+      ],
+    });
+    expect(e.lineAt(0)).toBe(-1);
+    expect(e.lineAt(1500)).toBe(-1);
+  });
+
+  it('antes de la primera linea con intro < PREROLL_MIN_MS devuelve 0 (sin pre-roll)', () => {
+    const e = createTimingEngine({
+      lines: [
+        { i: 0, startMs: 2500 },
         { i: 1, startMs: 8000 },
       ],
     });
@@ -195,6 +206,73 @@ describe('createTimingEngine — timeupdate y onLineChange', () => {
     audio2.dispatchEvent(new Event('timeupdate'));
     expect(onLineChange).toHaveBeenLastCalledWith(2);
     expect(onLineChange).toHaveBeenCalledTimes(2); // sin el fix se quedaria en 1
+  });
+});
+
+describe('createTimingEngine — pre-roll (indice -1)', () => {
+  it('intro larga (startMs=8000): emite onInterlude con index -1 antes de la linea 0', () => {
+    const lines = [
+      { i: 0, startMs: 8000 },
+      { i: 1, startMs: 12000 },
+    ];
+    const onInterlude = vi.fn();
+    const onLineChange = vi.fn();
+    const e = createTimingEngine({ lines, onLineChange, onInterlude });
+    const audio = createFakeAudio();
+    e.attach(audio);
+
+    // 1000ms + LEAD_MS(120) = 1120ms, progress = 1120/8000 = 0.14
+    audio.currentTime = 1;
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(onInterlude).toHaveBeenCalledWith({ index: -1, progress: 0.14 });
+    expect(onLineChange).not.toHaveBeenCalled();
+  });
+
+  it('al cruzar startMs - LEAD_MS pasa a la linea 0 con onLineChange', () => {
+    const lines = [
+      { i: 0, startMs: 8000 },
+      { i: 1, startMs: 12000 },
+    ];
+    const onLineChange = vi.fn();
+    const e = createTimingEngine({ lines, onLineChange });
+    const audio = createFakeAudio();
+    e.attach(audio);
+
+    // 7880ms + LEAD_MS(120) = 8000ms >= startMs de la linea 0
+    audio.currentTime = 7.88;
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(onLineChange).toHaveBeenCalledWith(0);
+  });
+
+  it('intro corta (startMs=2500 < PREROLL_MIN_MS): sin pre-roll, arranca directo en linea 0', () => {
+    const lines = [
+      { i: 0, startMs: 2500 },
+      { i: 1, startMs: 6000 },
+    ];
+    expect(2500).toBeLessThan(PREROLL_MIN_MS);
+    const onInterlude = vi.fn();
+    const onLineChange = vi.fn();
+    const e = createTimingEngine({ lines, onLineChange, onInterlude });
+    const audio = createFakeAudio();
+    e.attach(audio);
+
+    audio.currentTime = 1;
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(onInterlude).not.toHaveBeenCalled();
+    expect(onLineChange).toHaveBeenCalledWith(0);
+  });
+
+  it('seekToLine(0) sigue funcionando durante el pre-roll', () => {
+    const lines = [
+      { i: 0, startMs: 8000 },
+      { i: 1, startMs: 12000 },
+    ];
+    const e = createTimingEngine({ lines });
+    const audio = createFakeAudio();
+    e.attach(audio);
+
+    e.seekToLine(0);
+    expect(audio.currentTime).toBe(8);
   });
 });
 

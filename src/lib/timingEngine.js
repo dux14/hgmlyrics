@@ -30,6 +30,21 @@ const GAP_INTERLUDIO_MS = 5000;
 export const LEAD_MS = 120;
 
 /**
+ * Intro minima (ms) para activar el pre-roll: si la primera linea arranca
+ * antes de este umbral, no vale la pena mostrar un estado de espera y el
+ * roll arranca directo en la linea 0 (comportamiento previo).
+ *
+ * Contrato de indice -1 (pre-roll): mientras `ms < first.startMs` y la
+ * intro es >= PREROLL_MIN_MS, `lineAt` devuelve -1 en vez de 0. `syncNow`
+ * reutiliza el mecanismo de interludios existente para ese caso, emitiendo
+ * `onInterlude({ index: -1, progress })` con `progress` relativo al total
+ * de la intro (0..1). Es una rama separada de la de interludios entre
+ * lineas: `list[-1]` no existe, por lo que no se puede resolver `current`/
+ * `next` de la forma habitual.
+ */
+export const PREROLL_MIN_MS = 3000;
+
+/**
  * @typedef {{ i: number, startMs: number }} TimingLine
  */
 
@@ -48,12 +63,15 @@ export function createTimingEngine({ lines, onLineChange, onInterlude } = {}) {
 
   /**
    * Búsqueda binaria: índice de la última línea con startMs <= ms.
-   * Antes de la primera línea (incluye el caso en que la primera línea
-   * tiene startMs > 0) devuelve 0 — el consumidor D3 arranca siempre
-   * resaltando la línea 0, no un estado "sin línea".
+   * Antes de la primera línea: si su intro es >= PREROLL_MIN_MS devuelve -1
+   * (pre-roll, ver contrato arriba); si es más corta, devuelve 0 directo —
+   * el consumidor D3 arranca resaltando la línea 0, no vale la pena un
+   * estado de espera para una intro tan breve.
    */
   function lineAt(ms) {
     if (list.length === 0) return 0;
+    const first = list[0];
+    if (ms < first.startMs && first.startMs >= PREROLL_MIN_MS) return -1;
     let lo = 0;
     let hi = list.length - 1;
     let result = 0;
@@ -73,17 +91,26 @@ export function createTimingEngine({ lines, onLineChange, onInterlude } = {}) {
     if (!audioEl) return;
     const ms = audioEl.currentTime * 1000 + LEAD_MS;
     const index = lineAt(ms);
-    const current = list[index];
-    const next = list[index + 1];
 
-    // Interludio: hueco largo entre esta línea y la siguiente, y aún no
-    // llegamos al inicio de la siguiente. Se emite en cada tick (rAF o
-    // timeupdate) dentro del hueco, con progreso 0..1 relativo al gap.
-    if (current && next) {
-      const gap = next.startMs - current.startMs;
-      if (gap > GAP_INTERLUDIO_MS && ms < next.startMs) {
-        const progress = Math.min(1, Math.max(0, (ms - current.startMs) / gap));
-        onInterlude?.({ index, progress });
+    if (index === -1) {
+      // Pre-roll: aún no arrancó la línea 0. Rama separada de la de
+      // interludios entre líneas porque `list[-1]` no existe.
+      const first = list[0];
+      const progress = Math.min(1, Math.max(0, ms / first.startMs));
+      onInterlude?.({ index: -1, progress });
+    } else {
+      const current = list[index];
+      const next = list[index + 1];
+
+      // Interludio: hueco largo entre esta línea y la siguiente, y aún no
+      // llegamos al inicio de la siguiente. Se emite en cada tick (rAF o
+      // timeupdate) dentro del hueco, con progreso 0..1 relativo al gap.
+      if (current && next) {
+        const gap = next.startMs - current.startMs;
+        if (gap > GAP_INTERLUDIO_MS && ms < next.startMs) {
+          const progress = Math.min(1, Math.max(0, (ms - current.startMs) / gap));
+          onInterlude?.({ index, progress });
+        }
       }
     }
 

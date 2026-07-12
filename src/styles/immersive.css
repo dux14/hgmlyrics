@@ -401,6 +401,12 @@ body.immersive-active {
   box-shadow: 0 0 0.5rem var(--color-brand, #01ccd9);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .imm-v1__pulse-dot {
+    transition: none;
+  }
+}
+
 .imm-v1__metronome-toggle[aria-pressed='true'] {
   color: var(--color-brand, #01ccd9);
 }

@@ -1318,6 +1318,32 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     expect(document.getElementById('imm-bpm-badge').textContent).toBe('90 BPM · 4/4');
   });
 
+  it('con beats pero bpm nulo (sin bpmDetected ni bpmManual): badge sigue hidden, pulso visible', async () => {
+    enablePlayerFlag();
+    // No se usa el helper readyTimingsWithBeats: su `overrides.bpmDetected ?? 112.35`
+    // trata `null` como nullish y cae al default, precisamente el caso que
+    // este test necesita evitar.
+    getSongAudio.mockResolvedValue({
+      audio: { url: 'https://storage.example/full.mp3', durationSec: 20 },
+      timings: {
+        status: 'ready',
+        lines: [
+          { i: 0, startMs: 0 },
+          { i: 1, startMs: 2000 },
+          { i: 2, startMs: 12000 },
+        ],
+        beats: BEATS_MS,
+        bpmDetected: null,
+      },
+    });
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    expect(document.getElementById('imm-bpm-badge').hidden).toBe(true);
+    expect(document.getElementById('imm-pulse').hidden).toBe(false);
+  });
+
   it('count-in: gap >= 2 beats muestra .imm-interlude__count con un número', async () => {
     enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats());
@@ -1331,9 +1357,10 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     audio.currentTime = 6; // faltan 6s = 12 beats para la línea 2 (12000ms)
     audio.dispatchEvent(new Event('timeupdate'));
 
+    // remainingBeats = beatsUntil(6000, 12000): beatsMs[12]=6000, beatsMs[24]=12000 -> 24-12 = 12 beats exactos.
     const count = document.querySelector('#imm-roll .imm-interlude__count');
     expect(count).toBeTruthy();
-    expect(Number(count.textContent)).toBeGreaterThanOrEqual(2);
+    expect(count.textContent).toBe('12');
     expect(document.querySelector('#imm-roll .imm-interlude__dot')).toBeNull();
   });
 
@@ -1370,6 +1397,26 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     expect(metronomeSetMuted).toHaveBeenCalledWith(false);
   });
 
+  it('sheet: el toggle de METRÓNOMO también refleja el estado en el toggle rápido de la barra (mismo setMetronomeOn)', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimingsWithBeats());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const quickToggle = document.getElementById('imm-metronome-toggle');
+    expect(quickToggle.getAttribute('aria-pressed')).toBe('false');
+
+    document.getElementById('imm-open-options').click();
+    const sheetToggle = document.querySelector('.osheet [data-act="metronome-toggle"]');
+    sheetToggle.click();
+    expect(quickToggle.getAttribute('aria-pressed')).toBe('true');
+
+    document.getElementById('imm-open-options').click();
+    document.querySelector('.osheet [data-act="metronome-toggle"]').click();
+    expect(quickToggle.getAttribute('aria-pressed')).toBe('false');
+  });
+
   it('sheet: sin beat grid, METRÓNOMO no aparece', async () => {
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1403,5 +1450,87 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
 
     exitImmersive();
     expect(metronomeStop).toHaveBeenCalled();
+  });
+
+  describe('pulso rAF (startPulseLoop/stopPulseLoop)', () => {
+    // rAF controlado: encolamos el callback y lo disparamos a mano (mismo
+    // patrón que "A+ del sheet..." arriba) — startPulseLoop se reprograma a
+    // sí mismo cada frame, así que un mock síncrono looparía infinito. El
+    // spy se instala DESPUÉS de enterImmersive+flushAsync (no en un
+    // beforeEach del describe): el rollo también tiene su propio rAF
+    // (retargetScroll) que si no, contaminaría la cola antes de que el
+    // audio dispare `play`.
+    async function enterWithBeats() {
+      enablePlayerFlag();
+      getSongAudio.mockResolvedValue(readyTimingsWithBeats());
+      const sv = mountSongView();
+      enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+      await flushAsync();
+      let queue = [];
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+        queue.push(cb);
+        return queue.length;
+      });
+      const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+      return { audio: document.querySelector('#imm-player-slot audio'), queue, rafSpy, cafSpy };
+    }
+
+    it('play + un frame en beat 1 (ms=0): el dot 1 queda is-active e is-accent', async () => {
+      const { audio, queue, rafSpy, cafSpy } = await enterWithBeats();
+
+      audio.currentTime = 0; // beatIndex 0 -> beatInBar 1 (acento)
+      audio.dispatchEvent(new Event('play'));
+      expect(queue.length).toBe(1); // solo el frame de startPulseLoop, la cola arranca limpia
+      queue.shift()(0); // ejecuta un frame del loop
+
+      const dots = document.querySelectorAll('#imm-pulse .imm-v1__pulse-dot');
+      expect(dots[0].classList.contains('is-active')).toBe(true);
+      expect(dots[0].classList.contains('is-accent')).toBe(true);
+      expect(dots[1].classList.contains('is-active')).toBe(false);
+      expect(dots[2].classList.contains('is-active')).toBe(false);
+      expect(dots[3].classList.contains('is-active')).toBe(false);
+
+      rafSpy.mockRestore();
+      cafSpy.mockRestore();
+    });
+
+    it('play + un frame en beat 3 (ms=1000): el dot 3 queda is-active sin is-accent', async () => {
+      const { audio, queue, rafSpy, cafSpy } = await enterWithBeats();
+
+      audio.currentTime = 1; // beatIndex 2 (beatsMs[2]=1000) -> beatInBar 3
+      audio.dispatchEvent(new Event('play'));
+      queue.shift()(0);
+
+      const dots = document.querySelectorAll('#imm-pulse .imm-v1__pulse-dot');
+      expect(dots[2].classList.contains('is-active')).toBe(true);
+      expect(dots[2].classList.contains('is-accent')).toBe(false);
+      expect(dots[0].classList.contains('is-active')).toBe(false);
+
+      rafSpy.mockRestore();
+      cafSpy.mockRestore();
+    });
+
+    it('pause cancela el loop (cancelAnimationFrame) y no deja el siguiente frame pintando', async () => {
+      const { audio, queue, rafSpy, cafSpy } = await enterWithBeats();
+
+      audio.dispatchEvent(new Event('play'));
+      expect(queue.length).toBe(1);
+      queue.shift()(0); // el loop pide su siguiente frame
+      expect(queue.length).toBe(1);
+
+      audio.dispatchEvent(new Event('pause'));
+      expect(cafSpy).toHaveBeenCalled();
+
+      // El frame que había quedado pendiente antes del pause ya no debe
+      // seguir pintando dots: stopPulseLoop no vacía la cola del rAF real
+      // (el navegador cancela por id), acá lo simulamos vaciándola a mano y
+      // confirmando que un nuevo play arranca un loop limpio (un solo frame).
+      queue.length = 0;
+      audio.dispatchEvent(new Event('play'));
+      expect(queue.length).toBe(1);
+
+      rafSpy.mockRestore();
+      cafSpy.mockRestore();
+    });
   });
 });

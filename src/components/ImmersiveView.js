@@ -1272,7 +1272,7 @@ export function exitImmersive() {
   // quedan desenganchados del <audio> ANTES de que cleanupAudioEl lo nulee.
   session.timingEngine?.detach();
   session.metronome?.stop();
-  cancelAnimationFrame(session.beatRafId);
+  stopPulseLoop(session);
   if (session.engineMode === 'sync') unmountPlayerBar(session);
   cleanupAudioEl(session);
   removeInterlude(session);

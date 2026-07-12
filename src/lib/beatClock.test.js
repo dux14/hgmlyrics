@@ -47,4 +47,29 @@ describe('createBeatClock', () => {
     expect(c.beatsUntil(1000, 3600)).toBe(4); // 1650,2300,2950,3600
     expect(c.beatsUntil(5550, 9000)).toBe(0);
   });
+
+  it('rejilla vacía: at() sin NaN y beatsUntil en 0', () => {
+    const c = createBeatClock({ beatsMs: [], timeSignature: '4/4', beatAnchor: 1 });
+    expect(c.at(0)).toEqual({ beatIndex: -1, beatInBar: 0, bar: 0, msToNextBeat: null });
+    expect(c.at(5000)).toEqual({ beatIndex: -1, beatInBar: 0, bar: 0, msToNextBeat: null });
+    expect(c.beatsUntil(0, 5000)).toBe(0);
+  });
+
+  it('beatAnchor fuera de rango se clampea a [1, perBar]', () => {
+    const cLow = createBeatClock({ ...grid, beatAnchor: 0 });
+    const cAnchor1 = createBeatClock({ ...grid, beatAnchor: 1 });
+    expect(cLow.at(1000)).toEqual(cAnchor1.at(1000));
+    expect(cLow.at(1650)).toEqual(cAnchor1.at(1650));
+
+    const cHigh = createBeatClock({ ...grid, beatAnchor: 99 });
+    const cAnchorMax = createBeatClock({ ...grid, beatAnchor: 4 }); // perBar de grid es 4
+    expect(cHigh.at(1000)).toEqual(cAnchorMax.at(1000));
+    expect(cHigh.at(1650)).toEqual(cAnchorMax.at(1650));
+  });
+
+  it('msToNextBeat en beats exactos, incluido el ultimo', () => {
+    const c = createBeatClock(grid);
+    expect(c.at(1000).msToNextBeat).toBe(650);
+    expect(c.at(5550).msToNextBeat).toBeNull(); // último beat de la rejilla
+  });
 });

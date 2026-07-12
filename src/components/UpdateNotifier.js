@@ -13,7 +13,6 @@ const DATA_POLL_INTERVAL = 10 * 60_000; // Check every 10 min while tab is visib
 const FORCE_UPDATE_MS = 24 * 60 * 60 * 1000; // 24 hours
 let lastDataVersion = null;
 let updateAvailableSince = null;
-let swRegistration = null;
 const dataPoller = createPoller(pollDataVersion, DATA_POLL_INTERVAL);
 
 export function initUpdateNotifier() {
@@ -35,7 +34,6 @@ function listenForSWUpdate() {
 
   navigator.serviceWorker.ready
     .then((reg) => {
-      swRegistration = reg;
       if (reg.waiting) {
         showUpdateBanner();
         return;
@@ -99,9 +97,9 @@ function showUpdateBanner() {
 }
 
 function applyUpdate() {
-  if (swRegistration?.waiting) {
-    swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
-  }
+  // El SW generado por Workbox corre skipWaiting+clientsClaim incondicionales
+  // y NO escucha mensajes (el antiguo postMessage SKIP_WAITING era dead code):
+  // recargar basta para tomar el código nuevo.
   globalThis.location.reload();
 }
 

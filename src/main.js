@@ -74,6 +74,23 @@ const isHeaderless = (path) => Boolean(chromeFor(path).headerless);
 // Initialize theme immediately to avoid flash
 initTheme();
 
+// Tras un deploy, el SW nuevo (skipWaiting+clientsClaim) controla pestañas
+// cuyo JS en memoria aún referencia chunks lazy con hash viejo que ya no
+// existen en Vercel. Vite emite 'vite:preloadError' al fallar un import()
+// dinámico: recargar una vez entrega el index.html nuevo. El guard de
+// sessionStorage evita un loop si el reload tampoco resuelve (H6 auditoría).
+const PRELOAD_RELOAD_KEY = 'hkn-preload-reload';
+globalThis.addEventListener('vite:preloadError', (event) => {
+  if (sessionStorage.getItem(PRELOAD_RELOAD_KEY)) return;
+  event.preventDefault();
+  try {
+    sessionStorage.setItem(PRELOAD_RELOAD_KEY, '1');
+  } catch (_) {
+    /* storage bloqueado */
+  }
+  globalThis.location.reload();
+});
+
 /** @type {HTMLElement} */
 let mainContent;
 
@@ -463,6 +480,15 @@ async function boot() {
     initVitals();
   } catch (_) {
     // no critico
+  }
+
+  // Boot exitoso = los chunks actuales cargan bien: rearma el guard de
+  // vite:preloadError para que un futuro deploy pueda volver a disparar
+  // un reload (H6 auditoría).
+  try {
+    sessionStorage.removeItem(PRELOAD_RELOAD_KEY);
+  } catch (_) {
+    /* storage bloqueado */
   }
 }
 

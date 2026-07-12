@@ -18,6 +18,8 @@
 import { icon } from '../lib/icons.js';
 import { getSongAudio } from '../lib/songAudioApi.js';
 import { createTimingEngine } from '../lib/timingEngine.js';
+import { createBeatClock } from '../lib/beatClock.js';
+import { createMetronomeClick } from '../lib/metronomeClick.js';
 import { showToast } from '../lib/toast.js';
 import { createWakeLock } from '../lib/wakeLock.js';
 import { rosterByCategory, CANONICAL_VOICE_ORDER, getVoiceLabel } from '../lib/voiceSystem.js';
@@ -111,9 +113,11 @@ function buildOverlay() {
     <div class="imm-v1__chrome" id="imm-chrome">
       <button class="imm-v1__btn imm-v1__exit" id="imm-exit" type="button" aria-label="Salir de la vista inmersiva">${icon('close', { size: 22 })}</button>
       <span class="imm-v1__section" id="imm-section"></span>
+      <span class="imm-v1__bpm" id="imm-bpm-badge" hidden></span>
       <div class="imm-v1__voice-chips" id="imm-voice-chips" hidden></div>
       <button class="imm-v1__btn imm-v1__options" id="imm-open-options" type="button" aria-label="Opciones">${icon('sliders', { size: 18 })}</button>
     </div>
+    <div class="imm-v1__pulse" id="imm-pulse" hidden aria-hidden="true"></div>
     <div class="imm-v1__viewport" id="imm-viewport">
       <div class="imm-roll" id="imm-roll"></div>
     </div>
@@ -455,7 +459,7 @@ function maybeLoadSyncAudio(s) {
     ) {
       return;
     }
-    promoteToSync(s, audio, timings.lines);
+    promoteToSync(s, audio, timings);
   });
 }
 
@@ -473,8 +477,10 @@ function maybeLoadSyncAudio(s) {
  * varios segundos a que resuelva `getSongAudio` para luego forzar un seek
  * inicial es más complejidad de la que vale la pena para ese instante).
  */
-function promoteToSync(s, audio, timingLines) {
+function promoteToSync(s, audio, timings) {
   if (s.engineMode === 'sync') return;
+
+  const timingLines = timings.lines;
 
   const audioEl = document.createElement('audio');
   audioEl.id = 'imm-audio';
@@ -505,7 +511,75 @@ function promoteToSync(s, audio, timingLines) {
   s.paused = true;
   s.els.overlay.classList.add('imm-v1--paused');
   s.els.fab.hidden = true;
+
+  setupMetronome(s, audio, timings);
   mountPlayerBar(s);
+}
+
+/**
+ * Deriva rejilla+reloj de beats de `timings.beats` (D3, endpoint expone
+ * beats + overrides de bpm/compas/ancla) y monta badge BPM + pulso visual.
+ * Sin beats (canción sin beat-tracking o audio de reproceso) es un no-op: el
+ * badge y el pulso quedan `hidden`, como al entrar. Se llama ANTES de
+ * `mountPlayerBar` para que su plantilla pueda decidir si pinta el toggle
+ * rápido del click según `s.beatClock`.
+ */
+function setupMetronome(s, audio, timings) {
+  if (!Array.isArray(timings.beats) || timings.beats.length === 0) return;
+
+  const bpm = audio.bpmManual ?? timings.bpmDetected;
+  const timeSignature = audio.timeSignature ?? '4/4';
+  const beatAnchor = audio.beatAnchor ?? 1;
+
+  s.beatGrid = { beatsMs: timings.beats, bpm, timeSignature, beatAnchor };
+  s.beatClock = createBeatClock({ beatsMs: timings.beats, timeSignature, beatAnchor });
+  s.metronome = createMetronomeClick({
+    clock: s.beatClock,
+    getTimeMs: () => s.audioEl.currentTime * 1000,
+  });
+
+  if (bpm !== null && bpm !== undefined) {
+    s.els.bpmBadge.textContent = `${Math.round(bpm)} BPM · ${timeSignature}`;
+    s.els.bpmBadge.hidden = false;
+  }
+
+  s.els.pulse.innerHTML = Array.from(
+    { length: s.beatClock.perBar },
+    () => '<span class="imm-v1__pulse-dot"></span>',
+  ).join('');
+  s.els.pulse.hidden = false;
+}
+
+/** rAF que resalta el dot del beat actual mientras suena la pista (solo con beatClock). */
+function startPulseLoop(s) {
+  if (!s.beatClock || s.beatRafId !== null) return;
+  const dots = s.els.pulse.querySelectorAll('.imm-v1__pulse-dot');
+  const loop = () => {
+    const { beatInBar } = s.beatClock.at(s.audioEl.currentTime * 1000);
+    dots.forEach((dot, i) => {
+      const active = beatInBar === i + 1;
+      dot.classList.toggle('is-active', active);
+      dot.classList.toggle('is-accent', active && beatInBar === 1);
+    });
+    s.beatRafId = requestAnimationFrame(loop);
+  };
+  s.beatRafId = requestAnimationFrame(loop);
+}
+
+function stopPulseLoop(s) {
+  if (s.beatRafId !== null) cancelAnimationFrame(s.beatRafId);
+  s.beatRafId = null;
+}
+
+/** Refleja `on` en el estado + el mute del click + los toggles (rápido y del sheet). */
+function setMetronomeOn(s, on) {
+  s.metronomeOn = on;
+  s.metronome?.setMuted(!on);
+  const quickBtn = s.els.overlay.querySelector('#imm-metronome-toggle');
+  if (quickBtn) {
+    quickBtn.setAttribute('aria-pressed', String(on));
+    quickBtn.innerHTML = icon(on ? 'timer' : 'timer-off', { size: 18 });
+  }
 }
 
 /** Cae en caliente de TimingEngine a TimerEngine (p.ej. error del `<audio>`), sin salir de la vista. */
@@ -515,6 +589,14 @@ function fallbackToTimer(s) {
   s.timingEngine = null;
   s.timingLines = [];
   s.timingByLineIndex = new Map();
+  s.metronome?.stop();
+  stopPulseLoop(s);
+  s.beatGrid = null;
+  s.beatClock = null;
+  s.metronome = null;
+  s.metronomeOn = false;
+  s.els.pulse.hidden = true;
+  s.els.bpmBadge.hidden = true;
   unmountPlayerBar(s);
   cleanupAudioEl(s);
   removeInterlude(s);
@@ -572,6 +654,11 @@ function mountPlayerBar(s) {
       <input class="imm-player__scrubber" id="imm-player-scrubber" type="range" min="0" max="0" step="0.1" value="0" aria-label="Progreso de la pista" />
       <span class="imm-player__time" id="imm-player-duration">0:00</span>
       <button class="imm-player__mute" id="imm-player-mute" type="button" aria-pressed="false" aria-label="Silenciar pista">${icon('volume-2', { size: 18 })}</button>
+      ${
+        s.beatClock
+          ? `<button class="imm-v1__btn imm-v1__metronome-toggle" id="imm-metronome-toggle" type="button" aria-pressed="false" aria-label="Click del metrónomo">${icon('timer-off', { size: 18 })}</button>`
+          : ''
+      }
     </div>`;
   slot.appendChild(s.audioEl);
 
@@ -580,6 +667,7 @@ function mountPlayerBar(s) {
   const timeEl = slot.querySelector('#imm-player-time');
   const durEl = slot.querySelector('#imm-player-duration');
   const muteBtn = slot.querySelector('#imm-player-mute');
+  const metronomeBtn = slot.querySelector('#imm-metronome-toggle');
 
   // En sync manda siempre el audio: pausar la pista pausa TODO (nunca vuelve
   // el TimerEngine a conducir). El FAB queda oculto para siempre en sync — un
@@ -596,6 +684,7 @@ function mountPlayerBar(s) {
     s.els.overlay.classList.remove('imm-v1--paused');
     playBtn.innerHTML = icon('pause', { size: 18 });
     playBtn.setAttribute('aria-label', 'Pausar pista');
+    startPulseLoop(s);
   };
   const onPause = () => {
     s.audioPlaying = false;
@@ -604,6 +693,7 @@ function mountPlayerBar(s) {
     playBtn.innerHTML = icon('play', { size: 18 });
     playBtn.setAttribute('aria-label', 'Reproducir pista');
     showControls(s);
+    stopPulseLoop(s);
   };
   const onTimeUpdate = () => {
     scrubber.value = String(s.audioEl.currentTime);
@@ -632,6 +722,12 @@ function mountPlayerBar(s) {
     );
   };
 
+  // Toggle rápido del click del metrónomo (F4): arranca SIEMPRE muteado
+  // (createMetronomeClick), un solo clic lo activa/desactiva sin pasar por
+  // el sheet — mismo estado que refleja METRÓNOMO en Opciones.
+  const onMetronomeBtnClick = () => setMetronomeOn(s, !s.metronomeOn);
+  metronomeBtn?.addEventListener('click', onMetronomeBtnClick);
+
   s.audioEl.addEventListener('play', onPlay);
   s.audioEl.addEventListener('pause', onPause);
   s.audioEl.addEventListener('timeupdate', onTimeUpdate);
@@ -656,9 +752,11 @@ function mountPlayerBar(s) {
     onPlayBtnClick,
     onScrubberInput,
     onMuteBtnClick,
+    onMetronomeBtnClick,
     playBtn,
     scrubber,
     muteBtn,
+    metronomeBtn,
   };
 }
 
@@ -673,6 +771,7 @@ function unmountPlayerBar(s) {
     l.playBtn.removeEventListener('click', l.onPlayBtnClick);
     l.scrubber.removeEventListener('input', l.onScrubberInput);
     l.muteBtn.removeEventListener('click', l.onMuteBtnClick);
+    l.metronomeBtn?.removeEventListener('click', l.onMetronomeBtnClick);
   }
   s.playerListeners = null;
   s.els.playerSlot.innerHTML = '';
@@ -687,17 +786,40 @@ function unmountPlayerBar(s) {
  */
 function showInterlude(s, { index, progress }) {
   if (s.engineMode !== 'sync') return;
+
+  // Count-in por beats (F4): con rejilla de beats, mientras falten >=2 beats
+  // para la siguiente línea se cuenta hacia atrás en vez de puntitos —
+  // referencia más útil justo antes de que entre la voz. Sin beatClock (sin
+  // beat-tracking en esta canción) se conserva el comportamiento original.
+  let remainingBeats = null;
+  const nextLine = s.timingLines[index + 1];
+  if (s.beatClock && nextLine) {
+    remainingBeats = s.beatClock.beatsUntil(s.audioEl.currentTime * 1000, nextLine.startMs);
+  }
+  const showCount = remainingBeats !== null && remainingBeats >= 2;
+
   let el = s.els.roll.querySelector('.imm-interlude');
   if (!el || el.dataset.after !== String(index)) {
     removeInterlude(s);
     el = document.createElement('div');
     el.className = 'imm-interlude';
     el.dataset.after = String(index);
-    el.innerHTML =
-      '<span class="imm-interlude__dot"></span><span class="imm-interlude__dot"></span><span class="imm-interlude__dot"></span>';
     const afterEl = s.lineEls[index];
     if (afterEl) afterEl.insertAdjacentElement('afterend', el);
     else s.els.roll.appendChild(el);
+  }
+
+  if (showCount) {
+    if (!el.querySelector('.imm-interlude__count')) {
+      el.innerHTML = '<span class="imm-interlude__count"></span>';
+    }
+    el.querySelector('.imm-interlude__count').textContent = String(Math.ceil(remainingBeats));
+    return;
+  }
+
+  if (!el.querySelector('.imm-interlude__dot')) {
+    el.innerHTML =
+      '<span class="imm-interlude__dot"></span><span class="imm-interlude__dot"></span><span class="imm-interlude__dot"></span>';
   }
   const dots = el.querySelectorAll('.imm-interlude__dot');
   dots.forEach((dot, i) => {
@@ -836,6 +958,9 @@ function openOptions(s) {
       return speedToPercentLabel(s.speed);
     },
     onTunerToggle: (on) => setTunerOn(s, on),
+    showMetronome: !!s.beatClock,
+    metronomeOn: s.metronomeOn,
+    onMetronomeToggle: (on) => setMetronomeOn(s, on),
     onClose: () => showControls(s),
   });
 }
@@ -915,6 +1040,8 @@ export function enterImmersive(songViewEl, ctx = {}) {
     chrome: overlay.querySelector('#imm-chrome'),
     exitBtn: overlay.querySelector('#imm-exit'),
     sectionLabel: overlay.querySelector('#imm-section'),
+    bpmBadge: overlay.querySelector('#imm-bpm-badge'),
+    pulse: overlay.querySelector('#imm-pulse'),
     voiceChips: overlay.querySelector('#imm-voice-chips'),
     openOptionsBtn: overlay.querySelector('#imm-open-options'),
     viewport: overlay.querySelector('#imm-viewport'),
@@ -972,6 +1099,13 @@ export function enterImmersive(songViewEl, ctx = {}) {
     timingLines: [],
     timingByLineIndex: new Map(),
     playerListeners: null,
+    // Metrónomo (F4): rejilla + reloj de beats derivados de timings.beats
+    // (D3), solo existen tras promoteToSync con beats disponibles.
+    beatGrid: null,
+    beatClock: null,
+    beatRafId: null,
+    metronome: null,
+    metronomeOn: false,
   };
 
   const activeCategory =
@@ -1137,6 +1271,8 @@ export function exitImmersive() {
   // dejarlo implícito en el `overlay.remove()` de más abajo: sus listeners
   // quedan desenganchados del <audio> ANTES de que cleanupAudioEl lo nulee.
   session.timingEngine?.detach();
+  session.metronome?.stop();
+  cancelAnimationFrame(session.beatRafId);
   if (session.engineMode === 'sync') unmountPlayerBar(session);
   cleanupAudioEl(session);
   removeInterlude(session);

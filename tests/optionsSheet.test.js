@@ -77,6 +77,35 @@ describe('openOptionsSheet — interacción', () => {
     expect(onFont).toHaveBeenNthCalledWith(2, -1);
   });
 
+  it('showMetronome=false oculta la sección METRÓNOMO', () => {
+    openOptionsSheet({ showTono: false, showMetronome: false });
+    expect(document.querySelector('#osheet-metronome')).toBeNull();
+  });
+
+  it('showMetronome=true pinta la sección METRÓNOMO reflejando metronomeOn', () => {
+    openOptionsSheet({ showTono: false, showMetronome: true, metronomeOn: true });
+    const btn = document.querySelector('#osheet-metronome');
+    expect(btn).toBeTruthy();
+    expect(btn.classList.contains('is-active')).toBe(true);
+    expect(btn.getAttribute('aria-pressed')).toBe('true');
+    expect(btn.textContent).toBe('Activado');
+  });
+
+  it('toggle METRÓNOMO dispara onMetronomeToggle con el nuevo estado', () => {
+    const onMetronomeToggle = vi.fn();
+    openOptionsSheet({
+      showTono: false,
+      showMetronome: true,
+      metronomeOn: false,
+      onMetronomeToggle,
+    });
+    const btn = document.querySelector('[data-act="metronome-toggle"]');
+    btn.click();
+    expect(onMetronomeToggle).toHaveBeenCalledWith(true);
+    expect(btn.textContent).toBe('Activado');
+    expect(btn.getAttribute('aria-pressed')).toBe('true');
+  });
+
   it('velocidad autoscroll dispara onAutoscroll y actualiza el valor mostrado', () => {
     const onAutoscroll = vi.fn().mockReturnValue('75%');
     openOptionsSheet({

@@ -6,6 +6,7 @@
  *  - TONO: stepper ±½ + bubble (tap = reset) + toggle ♯/♭.
  *  - NOTACIÓN: segmented control Do Re Mi / A B C (chordNotation.js).
  *  - TAMAÑO DE LETRA: A−/valor/A+.
+ *  - METRÓNOMO (F4, vista inmersiva sync): toggle Activado/Desactivado.
  *  - AUTO-SCROLL: −/valor/+.
  *
  * No introduce lógica nueva de dominio; es aditivo sobre los closures de
@@ -44,6 +45,8 @@ let openEls = null;
  *   tunerOn?: boolean,
  *   showPlayerToggle?: boolean,
  *   playerOn?: boolean,
+ *   showMetronome?: boolean,
+ *   metronomeOn?: boolean,
  *   onTranspose?: (dir: 1|-1) => void,
  *   onResetTranspose?: () => void,
  *   onToggleAccidental?: () => void,
@@ -54,6 +57,7 @@ let openEls = null;
  *   onVoiceChange?: (category: string) => void,
  *   onTunerToggle?: () => void,
  *   onPlayerToggle?: (on: boolean) => void,
+ *   onMetronomeToggle?: (on: boolean) => void,
  *   onClose?: () => void,
  * }} opts modes/voiceOptions/showTuner/showPlayerToggle son opcionales
  *   (T-inmersiva): sin ellos las secciones MODO/VOZ/AFINADOR/PISTA simplemente
@@ -247,6 +251,19 @@ function buildSheetHtml(opts) {
     </div>`
     : '';
 
+  // METRÓNOMO (F4): toggle del click, solo visible cuando la sesión sync
+  // trae rejilla de beats (`showMetronome: !!s.beatClock`) — mismo patrón
+  // que PISTA/AFINADOR.
+  const metronomeSectionHtml = opts.showMetronome
+    ? `
+    <div class="osheet__section">
+      <div class="osheet__h syn">METRÓNOMO</div>
+      <div class="osheet__seg">
+        <button class="osheet__seg-btn${opts.metronomeOn ? ' is-active' : ''}" data-act="metronome-toggle" id="osheet-metronome" aria-pressed="${!!opts.metronomeOn}">${opts.metronomeOn ? 'Activado' : 'Desactivado'}</button>
+      </div>
+    </div>`
+    : '';
+
   return `
     <div class="osheet__grab"></div>
     ${modeSectionHtml}
@@ -256,6 +273,7 @@ function buildSheetHtml(opts) {
     ${sizeSectionHtml}
     ${tunerSectionHtml}
     ${playerSectionHtml}
+    ${metronomeSectionHtml}
     ${autoscrollSectionHtml}
   `;
 }
@@ -302,6 +320,12 @@ function bindSheetHandlers(sheet, opts) {
         b.setAttribute('aria-pressed', String(nowOn));
         b.classList.toggle('is-active', nowOn);
         opts.onPlayerToggle?.(nowOn);
+      } else if (a === 'metronome-toggle') {
+        const nowOn = b.getAttribute('aria-pressed') !== 'true';
+        b.setAttribute('aria-pressed', String(nowOn));
+        b.classList.toggle('is-active', nowOn);
+        b.textContent = nowOn ? 'Activado' : 'Desactivado';
+        opts.onMetronomeToggle?.(nowOn);
       }
     }),
   );

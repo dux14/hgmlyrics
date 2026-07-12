@@ -343,3 +343,64 @@ body.immersive-active {
     opacity 0.2s ease,
     transform 0.2s ease;
 }
+
+/* Count-in por beats: reemplaza los puntos cuando quedan >=2 beats para la
+   siguiente línea (más legible que puntitos difusos a esa distancia). */
+.imm-interlude__count {
+  font-size: 1.3rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-brand, #01ccd9);
+  text-align: center;
+  min-width: 1.6em;
+}
+
+/* ── BPM badge (chrome) + pulso de metrónomo (F4) ── */
+
+.imm-v1__bpm {
+  flex: none;
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-brand, #01ccd9);
+}
+
+/* Sibling del chrome (NO hijo): debe seguir visible aunque el chrome se
+   auto-oculte a los 3s — decisión de producto, el pulso es referencia
+   constante mientras haya rejilla de beats. */
+.imm-v1__pulse {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0;
+}
+
+.imm-v1__pulse-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+  transition:
+    transform 0.08s ease,
+    background 0.08s ease;
+}
+
+.imm-v1__pulse-dot.is-active {
+  width: 0.75rem;
+  height: 0.75rem;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.imm-v1__pulse-dot.is-accent {
+  background: var(--color-brand, #01ccd9);
+  box-shadow: 0 0 0.5rem var(--color-brand, #01ccd9);
+}
+
+.imm-v1__metronome-toggle[aria-pressed='true'] {
+  color: var(--color-brand, #01ccd9);
+}

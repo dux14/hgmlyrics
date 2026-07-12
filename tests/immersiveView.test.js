@@ -30,6 +30,20 @@ vi.mock('../src/lib/songAudioApi.js', () => ({
   getSongAudio: vi.fn(() => Promise.resolve(null)),
 }));
 
+// createMetronomeClick (F4) usa AudioContext, no disponible en jsdom: mismo
+// patrón de stub que el detector de pitch. Cada spy se resetea en el
+// beforeEach del describe del metrónomo.
+const metronomeSetMuted = vi.fn();
+const metronomeIsMuted = vi.fn(() => true);
+const metronomeStop = vi.fn();
+vi.mock('../src/lib/metronomeClick.js', () => ({
+  createMetronomeClick: vi.fn(() => ({
+    setMuted: metronomeSetMuted,
+    isMuted: metronomeIsMuted,
+    stop: metronomeStop,
+  })),
+}));
+
 import { enterImmersive, exitImmersive } from '../src/components/ImmersiveView.js';
 import { setLayer } from '../src/lib/layerStore.js';
 import {
@@ -1219,5 +1233,175 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
         .classList.contains('imm-line--active'),
     ).toBe(true);
     vi.useRealTimers();
+  });
+});
+
+// F4: metrónomo en la vista inmersiva (badge BPM, pulso, count-in por beats,
+// click con mute propio). Reusa el mismo fixture de 3 líneas (D3) + agrega
+// `timings.beats` (endpoint expone beats + overrides de bpm/compas/ancla).
+describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
+  // 120 BPM (500ms/beat), 0..12000ms — cubre el hueco 2000->12000 del fixture.
+  const BEATS_MS = Array.from({ length: 25 }, (_, i) => i * 500);
+
+  const readyTimingsWithBeats = (overrides = {}) => ({
+    audio: {
+      url: 'https://storage.example/full.mp3',
+      durationSec: 20,
+      ...(overrides.audio || {}),
+    },
+    timings: {
+      status: 'ready',
+      lines: [
+        { i: 0, startMs: 0 },
+        { i: 1, startMs: 2000 },
+        { i: 2, startMs: 12000 },
+      ],
+      beats: overrides.beats ?? BEATS_MS,
+      bpmDetected: overrides.bpmDetected ?? 112.35,
+    },
+  });
+
+  const enablePlayerFlag = () =>
+    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
+
+  beforeEach(() => {
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    metronomeSetMuted.mockClear();
+    metronomeIsMuted.mockClear();
+    metronomeStop.mockClear();
+  });
+
+  it('sin beat grid (timings.lines sin beats): badge y pulso siguen hidden', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue({
+      audio: { url: 'https://storage.example/full.mp3', durationSec: 20 },
+      timings: {
+        status: 'ready',
+        lines: [
+          { i: 0, startMs: 0 },
+          { i: 1, startMs: 2000 },
+          { i: 2, startMs: 12000 },
+        ],
+      },
+    });
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    expect(document.getElementById('imm-bpm-badge').hidden).toBe(true);
+    expect(document.getElementById('imm-pulse').hidden).toBe(true);
+  });
+
+  it('con beats + ready: badge "112 BPM · 4/4" y pulso con perBar puntos visibles', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimingsWithBeats());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const badge = document.getElementById('imm-bpm-badge');
+    expect(badge.hidden).toBe(false);
+    expect(badge.textContent).toBe('112 BPM · 4/4');
+    const pulse = document.getElementById('imm-pulse');
+    expect(pulse.hidden).toBe(false);
+    expect(pulse.querySelectorAll('.imm-v1__pulse-dot').length).toBe(4);
+  });
+
+  it('con audio.bpmManual: el badge usa el bpm manual, no el detectado', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimingsWithBeats({ audio: { bpmManual: 90 } }));
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    expect(document.getElementById('imm-bpm-badge').textContent).toBe('90 BPM · 4/4');
+  });
+
+  it('count-in: gap >= 2 beats muestra .imm-interlude__count con un número', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimingsWithBeats());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    audio.currentTime = 2;
+    audio.dispatchEvent(new Event('timeupdate'));
+    audio.currentTime = 6; // faltan 6s = 12 beats para la línea 2 (12000ms)
+    audio.dispatchEvent(new Event('timeupdate'));
+
+    const count = document.querySelector('#imm-roll .imm-interlude__count');
+    expect(count).toBeTruthy();
+    expect(Number(count.textContent)).toBeGreaterThanOrEqual(2);
+    expect(document.querySelector('#imm-roll .imm-interlude__dot')).toBeNull();
+  });
+
+  it('count-in: gap < 2 beats muestra puntos en vez del número', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimingsWithBeats());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    audio.currentTime = 2;
+    audio.dispatchEvent(new Event('timeupdate'));
+    audio.currentTime = 11.9; // faltan 100ms = 0.2 beats para la línea 2
+    audio.dispatchEvent(new Event('timeupdate'));
+
+    expect(document.querySelector('#imm-roll .imm-interlude__count')).toBeNull();
+    expect(document.querySelectorAll('#imm-roll .imm-interlude__dot').length).toBe(3);
+  });
+
+  it('sheet: showMetronome pinta la sección y el toggle dispara onMetronomeToggle (setMuted)', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimingsWithBeats());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    document.getElementById('imm-open-options').click();
+    const toggle = document.querySelector('.osheet [data-act="metronome-toggle"]');
+    expect(toggle).toBeTruthy();
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    toggle.click();
+
+    expect(metronomeSetMuted).toHaveBeenCalledWith(false);
+  });
+
+  it('sheet: sin beat grid, METRÓNOMO no aparece', async () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    document.getElementById('imm-open-options').click();
+    expect(document.querySelector('.osheet [data-act="metronome-toggle"]')).toBeNull();
+  });
+
+  it('toggle rápido en la barra de player: existe con beat grid, arranca apagado, un clic activa el click (setMuted(false))', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimingsWithBeats());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const quickToggle = document.getElementById('imm-metronome-toggle');
+    expect(quickToggle).toBeTruthy();
+    expect(quickToggle.getAttribute('aria-label')).toBe('Click del metrónomo');
+    expect(quickToggle.getAttribute('aria-pressed')).toBe('false');
+
+    quickToggle.click();
+    expect(metronomeSetMuted).toHaveBeenCalledWith(false);
+    expect(quickToggle.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('salir de la vista inmersiva detiene el click del metrónomo (stop)', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimingsWithBeats());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    exitImmersive();
+    expect(metronomeStop).toHaveBeenCalled();
   });
 });

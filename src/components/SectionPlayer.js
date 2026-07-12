@@ -34,8 +34,9 @@ function scopeRank(scope) {
 /**
  * Gestor de audio compartido, sin DOM: un solo <audio> interno que las
  * distintas UIs de sección (acordeón, full view) consumen por API en vez de
- * cada una crear/mutar su propio elemento. Reusa VOICE_SCOPE_LABELS/scopeLabel
- * y la lógica de retry de handleAudioError de createSectionPlayer.
+ * cada una crear/mutar su propio elemento. La lógica de retry es una copia
+ * adaptada de handleAudioError de createSectionPlayer (sin activeTracks/
+ * currentIndex, trabaja sobre currentTrack), no un helper compartido.
  * @param {{
  *   tracks: Array<{id:string, sectionIndex:number, voiceScope:string|null, label:string|null, durationSec:number|null, url:string}>,
  *   refetch?: () => Promise<Array>,
@@ -44,12 +45,17 @@ function scopeRank(scope) {
 export function createSectionAudioManager({ tracks: initialTracks, refetch }) {
   let tracks = initialTracks;
   let currentTrack = null;
+  let destroyed = false;
   const retriedIds = new Set();
   const timeCallbacks = new Set();
   const endedCallbacks = new Set();
 
   const audio = document.createElement('audio');
   audio.preload = 'none';
+
+  function warnPlayRejected(e) {
+    console.warn('No se pudo iniciar la reproducción de la sección', e);
+  }
 
   function emitTime() {
     timeCallbacks.forEach((cb) => cb(audio.currentTime));
@@ -60,10 +66,12 @@ export function createSectionAudioManager({ tracks: initialTracks, refetch }) {
   }
 
   async function handleAudioError() {
+    if (destroyed) return;
     const track = currentTrack;
     if (!track) return;
     const notifyFail = async () => {
       const { showToast } = await import('../lib/toast.js');
+      if (destroyed) return;
       showToast('No se pudo reproducir el audio de esta sección', { type: 'error' });
     };
     if (!refetch || retriedIds.has(track.id)) {
@@ -74,6 +82,7 @@ export function createSectionAudioManager({ tracks: initialTracks, refetch }) {
     retriedIds.add(track.id);
     try {
       const fresh = await refetch();
+      if (destroyed) return;
       if (!Array.isArray(fresh) || fresh.length === 0) {
         await notifyFail();
         return;
@@ -84,11 +93,17 @@ export function createSectionAudioManager({ tracks: initialTracks, refetch }) {
         await notifyFail();
         return;
       }
+      const sanitized = safeUrl(refreshed.url);
+      if (!sanitized) {
+        await notifyFail();
+        return;
+      }
       currentTrack = refreshed;
-      audio.src = safeUrl(refreshed.url);
-      void audio.play();
+      audio.src = sanitized;
+      audio.play().catch(warnPlayRejected);
     } catch {
       // Re-fetch también falló (sin red o backend caído).
+      if (destroyed) return;
       await notifyFail();
     }
   }
@@ -100,8 +115,10 @@ export function createSectionAudioManager({ tracks: initialTracks, refetch }) {
 
   function load(track, { preload = 'metadata' } = {}) {
     if (currentTrack && currentTrack.id === track.id) return;
+    const sanitized = safeUrl(track.url);
+    if (!sanitized) return;
     audio.preload = preload;
-    audio.src = safeUrl(track.url);
+    audio.src = sanitized;
     currentTrack = track;
   }
 
@@ -116,7 +133,7 @@ export function createSectionAudioManager({ tracks: initialTracks, refetch }) {
     load,
     play(track) {
       load(track);
-      void audio.play();
+      audio.play().catch(warnPlayRejected);
     },
     pause() {
       audio.pause();
@@ -133,6 +150,7 @@ export function createSectionAudioManager({ tracks: initialTracks, refetch }) {
       return () => endedCallbacks.delete(cb);
     },
     destroy() {
+      destroyed = true;
       audio.pause();
       audio.removeEventListener('timeupdate', emitTime);
       audio.removeEventListener('loadedmetadata', emitTime);

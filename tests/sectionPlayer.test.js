@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createSectionAudioManager } from '../src/components/SectionPlayer.js';
 
 function track(overrides = {}) {
@@ -17,6 +17,12 @@ beforeEach(() => {
   vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
   vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
   vi.spyOn(window.HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
+});
+
+afterEach(() => {
+  // El toast es un singleton en document.body con un setTimeout propio: sin
+  // esto, un toast "visible" de un test se filtra a las aserciones de otro.
+  document.querySelector('.toast')?.remove();
 });
 
 describe('createSectionAudioManager — tracksFor', () => {
@@ -216,6 +222,77 @@ describe('createSectionAudioManager — reintento de audio con error (re-firma)'
     });
     const toast = document.querySelector('.toast');
     expect(toast.textContent).toBe('No se pudo reproducir el audio de esta sección');
+  });
+
+  it('no reasigna src ni reproduce ni muestra toast si destroy() se llamó mientras el refetch estaba pendiente', async () => {
+    const staleTrack = track({ id: 'a', url: 'https://x/stale.mp3' });
+    const freshTrack = { ...staleTrack, url: 'https://x/fresh.mp3' };
+    let resolveRefetch;
+    const refetch = vi.fn(() => new Promise((resolve) => (resolveRefetch = resolve)));
+    const manager = createSectionAudioManager({ tracks: [staleTrack], refetch });
+    manager.play(staleTrack);
+    manager.audio.play.mockClear();
+
+    manager.audio.dispatchEvent(new Event('error'));
+    await vi.waitFor(() => expect(refetch).toHaveBeenCalledTimes(1));
+
+    manager.destroy();
+    resolveRefetch([freshTrack]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(manager.audio.src).not.toBe('https://x/fresh.mp3');
+    expect(manager.audio.play).not.toHaveBeenCalled();
+    const toast = document.querySelector('.toast');
+    expect(toast?.classList.contains('visible')).not.toBe(true);
+  });
+});
+
+describe('createSectionAudioManager — url invalida', () => {
+  it('load() no asigna src ni dispara toast si safeUrl saneó la url a vacio', async () => {
+    const t = track({ id: 'a', url: 'javascript:alert(1)' });
+    const manager = createSectionAudioManager({ tracks: [t] });
+    manager.load(t);
+    expect(manager.audio.src).toBe('');
+
+    // El <audio> con src vacio no debe disparar el flujo de error/toast.
+    manager.audio.dispatchEvent(new Event('error'));
+    await Promise.resolve();
+    const toast = document.querySelector('.toast');
+    expect(toast?.classList.contains('visible')).not.toBe(true);
+  });
+
+  it('el retry no reasigna src ni reproduce si la url refrescada tambien es invalida', async () => {
+    const staleTrack = track({ id: 'a', url: 'https://x/stale.mp3' });
+    const freshTrack = { ...staleTrack, url: 'javascript:alert(1)' };
+    const refetch = vi.fn().mockResolvedValue([freshTrack]);
+    const manager = createSectionAudioManager({ tracks: [staleTrack], refetch });
+    manager.play(staleTrack);
+    manager.audio.play.mockClear();
+
+    manager.audio.dispatchEvent(new Event('error'));
+    await vi.waitFor(() => expect(refetch).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => {
+      const toast = document.querySelector('.toast');
+      expect(toast?.classList.contains('visible')).toBe(true);
+    });
+    expect(manager.audio.src).not.toBe('https://x/stale.mp3'.replace('stale', 'fresh'));
+    expect(manager.audio.play).not.toHaveBeenCalled();
+  });
+});
+
+describe('createSectionAudioManager — rechazo de play()', () => {
+  it('play() deja rastro con console.warn si audio.play() rechaza, sin lanzar', async () => {
+    window.HTMLMediaElement.prototype.play.mockImplementation(() =>
+      Promise.reject(new Error('AbortError'))
+    );
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const t = track({ id: 'a', url: 'https://x/0.mp3' });
+    const manager = createSectionAudioManager({ tracks: [t] });
+
+    expect(() => manager.play(t)).not.toThrow();
+    await vi.waitFor(() => expect(warnSpy).toHaveBeenCalled());
+    warnSpy.mockRestore();
   });
 });
 

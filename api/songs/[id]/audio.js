@@ -7,7 +7,7 @@ import {
   deleteSongAudioObject,
 } from '../../_lib/storage.js';
 import { dispatchAlign } from '../../_lib/align.js';
-import { validatePatchBody } from '../../_lib/beats.js';
+import { validatePatchBody, validateLineTimingShape } from '../../_lib/beats.js';
 
 // GET: audio completo + estado de timings para la vista inmersiva.
 async function getAudio(_req, res, songId) {
@@ -55,6 +55,7 @@ async function getAudio(_req, res, songId) {
                 ...l,
                 score: typeof l.score === 'number' ? l.score : null,
                 interpolated: l.interpolated === true,
+                manual: l.manual === true,
               }))
             : timings.lines,
         }
@@ -125,6 +126,12 @@ async function postAudio(req, res, songId) {
 async function patchAudio(req, res, songId) {
   await requireAdmin(req, sql);
 
+  // Rama excluyente: el front nunca mezcla ajuste de metronomo y de linea en
+  // el mismo request (ver patchLineTiming). requireAdmin ya corrio arriba.
+  if (req.body && req.body.lineTiming !== undefined) {
+    return patchLineTiming(res, songId, req.body.lineTiming);
+  }
+
   const err = validatePatchBody(req.body ?? null);
   if (err) {
     res.status(400).json({ error: err });
@@ -142,6 +149,72 @@ async function patchAudio(req, res, songId) {
   `;
   if (result.count === 0) {
     res.status(404).json({ error: 'Audio no encontrado' });
+    return;
+  }
+  res.status(200).json({ success: true });
+}
+
+// Correccion manual del startMs de UNA linea del alignment (spec
+// 2026-07-12-offset-manual-linea-design). Edicion in-place del JSONB lines
+// con flag manual:true; un re-align posterior la pisa (el webhook no emite
+// manual — semantica elegida: el ajuste manual es la ultima milla DESPUES
+// del align definitivo).
+async function patchLineTiming(res, songId, lineTiming) {
+  const shapeErr = validateLineTimingShape(lineTiming);
+  if (shapeErr) {
+    res.status(400).json({ error: shapeErr });
+    return;
+  }
+  const [row] = await sql`
+    SELECT status, lines FROM song_line_timings WHERE song_id = ${songId}
+  `;
+  if (!row) {
+    res.status(404).json({ error: 'Sincronía no encontrada' });
+    return;
+  }
+  // 'ready' como precondicion cierra tambien la carrera con un job en vuelo:
+  // el ciclo de alignment vive en pending/processing, asi que el PATCH queda
+  // bloqueado hasta que el webhook resuelva.
+  if (row.status !== 'ready' || !Array.isArray(row.lines)) {
+    res.status(409).json({ error: 'La sincronía no está lista' });
+    return;
+  }
+  const idx = row.lines.findIndex((l) => l?.i === lineTiming.i);
+  if (idx === -1) {
+    res.status(400).json({ error: `Línea ${lineTiming.i} inexistente` });
+    return;
+  }
+  // Mismo invariante estrictamente creciente que validateLines del webhook
+  // (seekSyncToLine lo asume): el nuevo startMs debe caber entre vecinas.
+  const prev = row.lines[idx - 1];
+  const next = row.lines[idx + 1];
+  if (prev && lineTiming.startMs <= prev.startMs) {
+    res.status(400).json({ error: 'startMs rompe la monotonía con la línea anterior' });
+    return;
+  }
+  if (next && lineTiming.startMs >= next.startMs) {
+    res.status(400).json({ error: 'startMs rompe la monotonía con la línea siguiente' });
+    return;
+  }
+  // Shape explicito linea a linea (mismo patron que linesRow del webhook):
+  // claves extra del JSONB viejo no se propagan.
+  const newLines = row.lines.map((l, k) => {
+    const base = {
+      i: l.i,
+      startMs: l.startMs,
+      score: typeof l.score === 'number' ? l.score : null,
+      interpolated: l.interpolated === true,
+    };
+    if (l.manual === true) base.manual = true;
+    if (k !== idx) return base;
+    return { ...base, startMs: lineTiming.startMs, manual: true };
+  });
+  const result = await sql`
+    UPDATE song_line_timings SET lines = ${sql.json(newLines)}
+    WHERE song_id = ${songId} AND status = 'ready'
+  `;
+  if (result.count === 0) {
+    res.status(409).json({ error: 'La sincronía cambió, recarga el editor' });
     return;
   }
   res.status(200).json({ success: true });

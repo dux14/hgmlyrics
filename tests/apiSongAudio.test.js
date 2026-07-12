@@ -109,9 +109,9 @@ describe('GET /api/songs/[id]/audio', () => {
       },
       timings: {
         status: 'ready',
-        // Línea vieja (persistida antes de la Task 5.2) sin score/interpolated
+        // Línea vieja (persistida antes de la Task 5.2/2) sin score/interpolated/manual
         // en el JSONB → el GET los rellena con los defaults.
-        lines: [{ i: 0, startMs: 100, score: null, interpolated: false }],
+        lines: [{ i: 0, startMs: 100, score: null, interpolated: false, manual: false }],
         bpmDetected: null,
         beats: null,
       },
@@ -135,8 +135,8 @@ describe('GET /api/songs/[id]/audio', () => {
     await handler(makeReq(), res);
     expect(res._status).toBe(200);
     expect(res._body.timings.lines).toEqual([
-      { i: 0, startMs: 100, score: 0.92, interpolated: false },
-      { i: 1, startMs: 2400, score: null, interpolated: true },
+      { i: 0, startMs: 100, score: 0.92, interpolated: false, manual: false },
+      { i: 1, startMs: 2400, score: null, interpolated: true, manual: false },
     ]);
   });
 
@@ -157,8 +157,8 @@ describe('GET /api/songs/[id]/audio', () => {
     await handler(makeReq(), res);
     expect(res._status).toBe(200);
     expect(res._body.timings.lines).toEqual([
-      { i: 0, startMs: 0, score: null, interpolated: false },
-      { i: 1, startMs: 500, score: null, interpolated: false },
+      { i: 0, startMs: 0, score: null, interpolated: false, manual: false },
+      { i: 1, startMs: 500, score: null, interpolated: false, manual: false },
     ]);
   });
 
@@ -193,7 +193,7 @@ describe('GET /api/songs/[id]/audio', () => {
       },
       timings: {
         status: 'ready',
-        lines: [{ i: 0, startMs: 100, score: null, interpolated: false }],
+        lines: [{ i: 0, startMs: 100, score: null, interpolated: false, manual: false }],
         bpmDetected: 126.4,
         // El JSONB guarda { bpm, beatsMs }; el contrato del GET es la rejilla
         // plana en ms (lo que consume setupMetronome en ImmersiveView).
@@ -256,6 +256,28 @@ describe('GET /api/songs/[id]/audio', () => {
     await handler(makeReq(), res);
     expect(res._status).toBe(200);
     expect(res._body.timings.beats).toBeNull();
+  });
+
+  it('lines con manual (Task 2) → expone manual:true; lineas viejas sin manual → default false', async () => {
+    sqlResponses.push([{ storageKey: 'song-1/full.mp3', durationSec: 210 }]); // SELECT song_audio
+    sqlResponses.push([
+      {
+        status: 'ready',
+        lines: [
+          { i: 0, startMs: 5, manual: true },
+          { i: 1, startMs: 9 },
+        ],
+        bpmDetected: null,
+        beats: null,
+      },
+    ]); // SELECT song_line_timings
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body.timings.lines).toEqual([
+      { i: 0, startMs: 5, score: null, interpolated: false, manual: true },
+      { i: 1, startMs: 9, score: null, interpolated: false, manual: false },
+    ]);
   });
 });
 
@@ -365,6 +387,110 @@ describe('PATCH /api/songs/[id]/audio', () => {
     const res = makeRes();
     await handler(patchReq({ bpmManual: 140 }), res);
     expect(res._status).toBe(404);
+  });
+
+  describe('lineTiming (Task 2 — offset manual por linea)', () => {
+    const baseLines = [
+      { i: 0, startMs: 1000, score: 0.9, interpolated: false },
+      { i: 1, startMs: 4000, score: null, interpolated: true },
+      { i: 2, startMs: 9000, score: 0.8, interpolated: false },
+    ];
+
+    it('valido → 200; el UPDATE recibe lines con la linea editada shape explicito + manual:true, resto sin manual', async () => {
+      sqlResponses.push([{ status: 'ready', lines: baseLines }]); // SELECT song_line_timings
+      sqlResponses.push({ count: 1 }); // UPDATE song_line_timings
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 1, startMs: 5000 } }), res);
+      expect(res._status).toBe(200);
+      expect(res._body).toEqual({ success: true });
+      const updateCall = sqlCalls.find((c) => c.text.includes('UPDATE song_line_timings'));
+      expect(updateCall).toBeTruthy();
+      expect(updateCall.values[0]).toEqual([
+        { i: 0, startMs: 1000, score: 0.9, interpolated: false },
+        { i: 1, startMs: 5000, score: null, interpolated: true, manual: true },
+        { i: 2, startMs: 9000, score: 0.8, interpolated: false },
+      ]);
+    });
+
+    it('startMs igual al de la linea anterior → 400 "monotonia" con la anterior', async () => {
+      sqlResponses.push([{ status: 'ready', lines: baseLines }]); // SELECT song_line_timings
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 1, startMs: 1000 } }), res);
+      expect(res._status).toBe(400);
+      expect(res._body.error).toMatch(/monoton/i);
+    });
+
+    it('startMs igual al de la linea siguiente → 400 "monotonia" con la siguiente', async () => {
+      sqlResponses.push([{ status: 'ready', lines: baseLines }]); // SELECT song_line_timings
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 1, startMs: 9000 } }), res);
+      expect(res._status).toBe(400);
+      expect(res._body.error).toMatch(/monoton/i);
+    });
+
+    it('primera linea (sin anterior) acepta startMs 0', async () => {
+      sqlResponses.push([{ status: 'ready', lines: baseLines }]); // SELECT song_line_timings
+      sqlResponses.push({ count: 1 }); // UPDATE song_line_timings
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 0, startMs: 0 } }), res);
+      expect(res._status).toBe(200);
+    });
+
+    it('ultima linea (sin siguiente) acepta un startMs mayor que la anterior sin techo', async () => {
+      sqlResponses.push([{ status: 'ready', lines: baseLines }]); // SELECT song_line_timings
+      sqlResponses.push({ count: 1 }); // UPDATE song_line_timings
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 2, startMs: 999999 } }), res);
+      expect(res._status).toBe(200);
+    });
+
+    it('i inexistente en lines → 400', async () => {
+      sqlResponses.push([{ status: 'ready', lines: baseLines }]); // SELECT song_line_timings
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 99, startMs: 5000 } }), res);
+      expect(res._status).toBe(400);
+    });
+
+    it('shape invalido ({i:"x"}) → 400 con el mensaje de validateLineTimingShape, sin llegar a SELECT', async () => {
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 'x' } }), res);
+      expect(res._status).toBe(400);
+      expect(res._body.error).toMatch(/lineTiming/);
+      expect(sqlCalls.length).toBe(0);
+    });
+
+    it('fila ausente en song_line_timings → 404', async () => {
+      sqlResponses.push([]); // SELECT song_line_timings sin filas
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 0, startMs: 500 } }), res);
+      expect(res._status).toBe(404);
+    });
+
+    it('status distinto de ready (job en vuelo) → 409', async () => {
+      sqlResponses.push([{ status: 'processing', lines: baseLines }]); // SELECT song_line_timings
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 0, startMs: 500 } }), res);
+      expect(res._status).toBe(409);
+    });
+
+    it('UPDATE afecta 0 filas (carrera: status cambio entre SELECT y UPDATE) → 409', async () => {
+      sqlResponses.push([{ status: 'ready', lines: baseLines }]); // SELECT song_line_timings
+      sqlResponses.push({ count: 0 }); // UPDATE song_line_timings
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 0, startMs: 500 } }), res);
+      expect(res._status).toBe(409);
+    });
+
+    it('lineTiming junto a bpmManual en el mismo body → rama excluyente: se procesa SOLO lineTiming', async () => {
+      sqlResponses.push([{ status: 'ready', lines: baseLines }]); // SELECT song_line_timings
+      sqlResponses.push({ count: 1 }); // UPDATE song_line_timings
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 0, startMs: 500 }, bpmManual: 140 }), res);
+      expect(res._status).toBe(200);
+      // Ningun UPDATE de song_audio se emitio: solo el de song_line_timings.
+      expect(sqlCalls.some((c) => c.text.includes('UPDATE song_audio'))).toBe(false);
+      expect(sqlCalls.some((c) => c.text.includes('UPDATE song_line_timings'))).toBe(true);
+    });
   });
 });
 

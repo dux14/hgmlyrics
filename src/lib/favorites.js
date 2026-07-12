@@ -4,8 +4,12 @@
  * Loads once after login so the song grid can render the heart state without
  * a query per card. Toggle hits Supabase directly via RLS-bound INSERT/DELETE.
  */
+import { get as idbGet, set as idbSet } from 'idb-keyval';
 import { supabase } from './supabase.js';
 import { getSession, subscribe as subscribeAuth } from './authStore.js';
+import { showToast } from './toast.js';
+
+const FAVORITES_CACHE_KEY = 'hkn-favorites';
 
 const state = {
   ids: new Set(),
@@ -59,7 +63,13 @@ export async function toggleFavorite(songId) {
     else state.ids.delete(songId);
     notify(songId);
     console.warn('toggleFavorite failed', error);
+    showToast('No se pudo guardar el favorito. Revisa tu conexión.', { type: 'error' });
     return wasFav;
+  }
+  try {
+    await idbSet(FAVORITES_CACHE_KEY, [...state.ids]);
+  } catch (_e) {
+    /* idb no disponible */
   }
   return !wasFav;
 }
@@ -77,10 +87,26 @@ async function loadAll() {
     .eq('user_id', session.user.id);
   if (error) {
     console.warn('loadFavorites failed', error);
+    // Red caída: restaurar el último snapshot local en vez de mostrar
+    // "sin favoritos" falso (H5 auditoría).
+    try {
+      const cached = await idbGet(FAVORITES_CACHE_KEY);
+      if (Array.isArray(cached) && state.ids.size === 0) {
+        state.ids = new Set(cached);
+        state.loaded = true;
+      }
+    } catch (_e) {
+      /* idb no disponible */
+    }
     return;
   }
   state.ids = new Set((data || []).map((r) => r.song_id));
   state.loaded = true;
+  try {
+    await idbSet(FAVORITES_CACHE_KEY, [...state.ids]);
+  } catch (_e) {
+    /* idb no disponible */
+  }
 }
 
 /**
@@ -109,6 +135,11 @@ export async function initFavorites() {
     if (!session) {
       state.ids = new Set();
       state.loaded = false;
+      try {
+        await idbSet(FAVORITES_CACHE_KEY, null);
+      } catch (_e) {
+        /* idb no disponible */
+      }
       notify(null);
       return;
     }

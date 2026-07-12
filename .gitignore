@@ -65,3 +65,6 @@ __pycache__/
 *.pyc
 .venv/
 test-results/
+
+# Capturas de e2e (artefactos de corrida, no se versionan)
+e2e/screenshots/

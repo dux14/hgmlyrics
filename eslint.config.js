@@ -92,9 +92,10 @@ export default [
   },
   {
     // Vitest test files use globals (`describe`, `it`, `expect`, `beforeEach`, …)
-    // because `globals: true` is set in vitest.config.js.
-    // Pattern covers both tests/ (integration) and src/**/*.test.js (unit).
-    files: ['tests/**/*.js', 'src/**/*.test.js'],
+    // because `globals: true` is set in vitest.config.js. e2e/**/*.js son specs
+    // Playwright (Node, sin globals de vitest) pero comparten process/Buffer/etc.
+    // Pattern covers tests/ (integration), src/**/*.test.js (unit) y e2e/ (Playwright).
+    files: ['tests/**/*.js', 'src/**/*.test.js', 'e2e/**/*.js'],
     languageOptions: {
       globals: {
         describe: 'readonly',
@@ -114,6 +115,7 @@ export default [
         Headers: 'readonly',
         KeyboardEvent: 'readonly',
         queueMicrotask: 'readonly',
+        getComputedStyle: 'readonly',
       },
     },
   },

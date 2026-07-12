@@ -63,7 +63,7 @@ async function revealChrome(page) {
     .locator('#imm-chrome')
     .evaluate((el) => el.classList.contains('imm-v1__chrome--hidden'));
   if (hidden) {
-    await page.locator('#imm-viewport').click({ position: { x: 2, y: 2 }, force: true });
+    await page.locator('#imm-viewport').click({ position: { x: 2, y: 2 } });
   }
 }
 
@@ -104,7 +104,10 @@ test.describe('sheet de opciones — matriz completa (Santo, modo sync)', () => 
 
       const modeBtn = page.locator(`.osheet [data-mode="${mode}"]`);
       const available = (await modeBtn.count()) > 0;
-      test.skip(!available, `modo ${mode} no disponible para SONG_SYNC en este entorno`);
+      if (!available) {
+        await context.close();
+        test.skip(true, `modo ${mode} no disponible para SONG_SYNC en este entorno`);
+      }
 
       await modeBtn.click();
 
@@ -214,7 +217,10 @@ test.describe('notación de acordes', () => {
     await openOptions(page);
 
     const chordsBtn = page.locator('.osheet [data-mode="chords"]');
-    test.skip((await chordsBtn.count()) === 0, 'SONG_SYNC sin modo chords en este entorno');
+    if ((await chordsBtn.count()) === 0) {
+      await context.close();
+      test.skip(true, 'SONG_SYNC sin modo chords en este entorno');
+    }
     await chordsBtn.click();
 
     await page.locator('.osheet [data-notation="latin"]').click();
@@ -304,7 +310,10 @@ test.describe('voz en el sheet', () => {
     await openOptions(page);
 
     const mixedBtn = page.locator('.osheet [data-mode="mixed"]');
-    test.skip((await mixedBtn.count()) === 0, 'SONG_SYNC sin modo mixed en este entorno');
+    if ((await mixedBtn.count()) === 0) {
+      await context.close();
+      test.skip(true, 'SONG_SYNC sin modo mixed en este entorno');
+    }
     await mixedBtn.click();
 
     const voiceBtn = page.locator('.osheet [data-voice="tenor"]');

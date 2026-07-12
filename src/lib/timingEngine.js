@@ -6,19 +6,28 @@
  * última línea cantada.
  *
  * Puro respecto al DOM: no crea ni posee el elemento <audio>, solo escucha
- * los eventos del que se le pasa vía `attach`. Sin rAF interno: el ritmo de
- * actualización lo da el propio `timeupdate` nativo del navegador
- * (~4 veces por segundo), que es más que suficiente para sincronizar por
- * línea (a diferencia de un afinador o una barra de progreso fina, aquí no
- * se necesita precisión de frame) — misma razón por la que `seekToLine` no
- * fuerza un highlight síncrono: el índice activo se resincroniza en el
- * próximo `timeupdate` nativo, no en el momento del seek.
+ * los eventos del que se le pasa vía `attach`. Mientras la pista reproduce,
+ * un loop de `requestAnimationFrame` recalcula la línea activa en cada
+ * frame (resalte fluido, sin el retardo de hasta ~250ms del `timeupdate`
+ * nativo); `timeupdate` sigue conectado como respaldo — cubre el estado
+ * pausado y los seeks, donde no hay rAF corriendo — misma razón por la que
+ * `seekToLine` no fuerza un highlight síncrono: el índice activo se
+ * resincroniza en el próximo tick (rAF o `timeupdate`), no en el momento
+ * del seek.
  *
  * Precondición (no revalidada, YAGNI): `lines` viene ya ordenado por
  * `startMs` ascendente — el webhook del back garantiza la monotonicidad.
  */
 
 const GAP_INTERLUDIO_MS = 5000;
+
+/**
+ * Anticipación aplicada a `currentTime` antes de resolver la línea activa.
+ * Compensa la latencia perceptiva entre el resalte visual y el audio: un
+ * cambio de línea 120ms "temprano" se percibe sincronizado, no adelantado.
+ * Único punto de aplicación: la lectura de `ms` en `syncNow`.
+ */
+export const LEAD_MS = 120;
 
 /**
  * @typedef {{ i: number, startMs: number }} TimingLine
@@ -35,6 +44,7 @@ export function createTimingEngine({ lines, onLineChange, onInterlude } = {}) {
   const list = lines || [];
   let audioEl = null;
   let lastIndex = -1;
+  let rafId = null;
 
   /**
    * Búsqueda binaria: índice de la última línea con startMs <= ms.
@@ -59,16 +69,16 @@ export function createTimingEngine({ lines, onLineChange, onInterlude } = {}) {
     return result;
   }
 
-  function handleTimeUpdate() {
+  function syncNow() {
     if (!audioEl) return;
-    const ms = audioEl.currentTime * 1000;
+    const ms = audioEl.currentTime * 1000 + LEAD_MS;
     const index = lineAt(ms);
     const current = list[index];
     const next = list[index + 1];
 
     // Interludio: hueco largo entre esta línea y la siguiente, y aún no
-    // llegamos al inicio de la siguiente. Se emite en cada timeupdate
-    // dentro del hueco, con progreso 0..1 relativo al propio gap.
+    // llegamos al inicio de la siguiente. Se emite en cada tick (rAF o
+    // timeupdate) dentro del hueco, con progreso 0..1 relativo al gap.
     if (current && next) {
       const gap = next.startMs - current.startMs;
       if (gap > GAP_INTERLUDIO_MS && ms < next.startMs) {
@@ -80,6 +90,32 @@ export function createTimingEngine({ lines, onLineChange, onInterlude } = {}) {
     if (index !== lastIndex) {
       lastIndex = index;
       onLineChange?.(index);
+    }
+  }
+
+  function handleTimeUpdate() {
+    syncNow();
+  }
+
+  /**
+   * Loop de rAF activo solo mientras la pista reproduce. Guard `rafId` para
+   * no arrancar dos loops si `play` se dispara dos veces seguidas (algunos
+   * navegadores lo hacen tras un `load`/`canplay` cercano).
+   */
+  function rafTick() {
+    syncNow();
+    rafId = requestAnimationFrame(rafTick);
+  }
+
+  function handlePlay() {
+    if (rafId !== null) return;
+    rafId = requestAnimationFrame(rafTick);
+  }
+
+  function handlePause() {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
     }
   }
 
@@ -97,12 +133,17 @@ export function createTimingEngine({ lines, onLineChange, onInterlude } = {}) {
     lastIndex = -1;
     audioEl = el;
     audioEl.addEventListener('timeupdate', handleTimeUpdate);
+    audioEl.addEventListener('play', handlePlay);
+    audioEl.addEventListener('pause', handlePause);
   }
 
   function detach() {
     if (audioEl) {
       audioEl.removeEventListener('timeupdate', handleTimeUpdate);
+      audioEl.removeEventListener('play', handlePlay);
+      audioEl.removeEventListener('pause', handlePause);
     }
+    handlePause(); // cancela el rAF si estaba corriendo
     audioEl = null;
   }
 

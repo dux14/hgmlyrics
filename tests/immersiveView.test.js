@@ -1374,7 +1374,10 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     const audio = document.querySelector('#imm-player-slot audio');
     audio.currentTime = 2;
     audio.dispatchEvent(new Event('timeupdate'));
-    audio.currentTime = 11.9; // faltan 100ms = 0.2 beats para la línea 2
+    // timingEngine aplica LEAD_MS=120 a currentTime antes de resolver la
+    // línea: para mantener el mismo gap de 100ms hasta la línea 2 (12000ms)
+    // hay que retrasar el currentTime nominal esos 120ms de anticipación.
+    audio.currentTime = 11.78; // 11780+120=11900ms -> faltan 100ms = 0.2 beats
     audio.dispatchEvent(new Event('timeupdate'));
 
     expect(document.querySelector('#imm-roll .imm-interlude__count')).toBeNull();
@@ -1480,8 +1483,12 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
 
       audio.currentTime = 0; // beatIndex 0 -> beatInBar 1 (acento)
       audio.dispatchEvent(new Event('play'));
-      expect(queue.length).toBe(1); // solo el frame de startPulseLoop, la cola arranca limpia
-      queue.shift()(0); // ejecuta un frame del loop
+      // 2 frames en cola: timingEngine.attach() registra su listener 'play'
+      // antes que el toggle del pulso (mountPlayerBar corre después de
+      // promoteToSync), así que su rAF de sync de letra encola primero.
+      expect(queue.length).toBe(2);
+      queue.shift(); // descarta el frame de timingEngine, ajeno a este test
+      queue.shift()(0); // ejecuta el frame del pulso
 
       const dots = document.querySelectorAll('#imm-pulse .imm-v1__pulse-dot');
       expect(dots[0].classList.contains('is-active')).toBe(true);
@@ -1499,6 +1506,7 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
 
       audio.currentTime = 1; // beatIndex 2 (beatsMs[2]=1000) -> beatInBar 3
       audio.dispatchEvent(new Event('play'));
+      queue.shift(); // descarta el frame de timingEngine
       queue.shift()(0);
 
       const dots = document.querySelectorAll('#imm-pulse .imm-v1__pulse-dot');
@@ -1514,8 +1522,9 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
       const { audio, queue, rafSpy, cafSpy } = await enterWithBeats();
 
       audio.dispatchEvent(new Event('play'));
-      expect(queue.length).toBe(1);
-      queue.shift()(0); // el loop pide su siguiente frame
+      expect(queue.length).toBe(2); // frame de timingEngine + frame del pulso
+      queue.shift(); // descarta el frame de timingEngine
+      queue.shift()(0); // el loop del pulso pide su siguiente frame
       expect(queue.length).toBe(1);
 
       audio.dispatchEvent(new Event('pause'));
@@ -1524,10 +1533,11 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
       // El frame que había quedado pendiente antes del pause ya no debe
       // seguir pintando dots: stopPulseLoop no vacía la cola del rAF real
       // (el navegador cancela por id), acá lo simulamos vaciándola a mano y
-      // confirmando que un nuevo play arranca un loop limpio (un solo frame).
+      // confirmando que un nuevo play arranca un loop limpio (timingEngine +
+      // pulso, un frame cada uno).
       queue.length = 0;
       audio.dispatchEvent(new Event('play'));
-      expect(queue.length).toBe(1);
+      expect(queue.length).toBe(2);
 
       rafSpy.mockRestore();
       cafSpy.mockRestore();

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createTimingEngine } from '../src/lib/timingEngine.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { createTimingEngine, LEAD_MS } from '../src/lib/timingEngine.js';
 
 /**
  * Fake <audio> minimo: EventTarget real (jsdom) + currentTime seteable.
@@ -64,13 +64,14 @@ describe('createTimingEngine — interludios', () => {
     const audio = createFakeAudio();
     e.attach(audio);
 
-    audio.currentTime = 2; // 2000ms, progress = 2000/10000 = 0.2
+    // ms efectivo incluye LEAD_MS (anticipacion de 120ms sobre currentTime)
+    audio.currentTime = 2; // 2000ms + 120 = 2120ms, progress = 2120/10000 = 0.212
     audio.dispatchEvent(new Event('timeupdate'));
-    expect(onInterlude).toHaveBeenCalledWith({ index: 0, progress: 0.2 });
+    expect(onInterlude).toHaveBeenCalledWith({ index: 0, progress: 0.212 });
 
-    audio.currentTime = 7; // 7000ms, progress = 0.7
+    audio.currentTime = 7; // 7000ms + 120 = 7120ms, progress = 0.712
     audio.dispatchEvent(new Event('timeupdate'));
-    expect(onInterlude).toHaveBeenLastCalledWith({ index: 0, progress: 0.7 });
+    expect(onInterlude).toHaveBeenLastCalledWith({ index: 0, progress: 0.712 });
 
     // al entrar la siguiente linea, onLineChange normal (no interludio)
     audio.currentTime = 10.5;
@@ -224,5 +225,131 @@ describe('createTimingEngine — seekToLine', () => {
     e.attach(audio);
     expect(() => e.seekToLine(5)).not.toThrow();
     expect(audio.currentTime).toBe(0);
+  });
+});
+
+describe('createTimingEngine — LEAD_MS y rAF', () => {
+  let lines;
+  let rafQueue;
+  let rafId;
+  let originalRaf;
+  let originalCaf;
+
+  beforeEach(() => {
+    lines = [
+      { i: 0, startMs: 0 },
+      { i: 1, startMs: 5000 },
+      { i: 2, startMs: 9000 },
+    ];
+    rafQueue = [];
+    rafId = 0;
+    originalRaf = globalThis.requestAnimationFrame;
+    originalCaf = globalThis.cancelAnimationFrame;
+    globalThis.requestAnimationFrame = vi.fn((cb) => {
+      const id = ++rafId;
+      rafQueue.push({ id, cb });
+      return id;
+    });
+    globalThis.cancelAnimationFrame = vi.fn((id) => {
+      rafQueue = rafQueue.filter((entry) => entry.id !== id);
+    });
+  });
+
+  afterEach(() => {
+    globalThis.requestAnimationFrame = originalRaf;
+    globalThis.cancelAnimationFrame = originalCaf;
+  });
+
+  /** Ejecuta un frame pendiente de la cola (simula un tick de rAF). */
+  function flushOneFrame() {
+    const entry = rafQueue.shift();
+    if (entry) entry.cb();
+  }
+
+  it('LEAD_MS exportado vale 120', () => {
+    expect(LEAD_MS).toBe(120);
+  });
+
+  it('la linea activa se decide con currentTime + LEAD_MS (anticipacion)', () => {
+    const onLineChange = vi.fn();
+    const e = createTimingEngine({ lines, onLineChange });
+    const audio = createFakeAudio();
+    e.attach(audio);
+
+    // 4900ms + 120 = 5020ms >= 5000 (startMs de la linea 1)
+    audio.currentTime = 4.9;
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(onLineChange).toHaveBeenLastCalledWith(1);
+  });
+
+  it('con la pista reproduciendo, el rAF loop actualiza el indice sin timeupdate', () => {
+    const onLineChange = vi.fn();
+    const e = createTimingEngine({ lines, onLineChange });
+    const audio = createFakeAudio();
+    e.attach(audio);
+    onLineChange.mockClear();
+
+    audio.dispatchEvent(new Event('play'));
+    expect(rafQueue.length).toBe(1);
+
+    audio.currentTime = 5.2; // sin dispatch de timeupdate
+    flushOneFrame();
+
+    expect(onLineChange).toHaveBeenCalledWith(1);
+  });
+
+  it('pause detiene el rAF loop: no corren mas frames', () => {
+    const onLineChange = vi.fn();
+    const e = createTimingEngine({ lines, onLineChange });
+    const audio = createFakeAudio();
+    e.attach(audio);
+
+    audio.dispatchEvent(new Event('play'));
+    expect(rafQueue.length).toBe(1);
+
+    audio.dispatchEvent(new Event('pause'));
+    expect(globalThis.cancelAnimationFrame).toHaveBeenCalled();
+    expect(rafQueue.length).toBe(0);
+
+    onLineChange.mockClear();
+    audio.currentTime = 5.2;
+    flushOneFrame(); // cola vacia: no-op
+    expect(onLineChange).not.toHaveBeenCalled();
+  });
+
+  it('timeupdate sigue funcionando como respaldo mientras no hay rAF activo', () => {
+    const onLineChange = vi.fn();
+    const e = createTimingEngine({ lines, onLineChange });
+    const audio = createFakeAudio();
+    e.attach(audio);
+    onLineChange.mockClear();
+
+    audio.currentTime = 5.2;
+    audio.dispatchEvent(new Event('timeupdate'));
+    expect(onLineChange).toHaveBeenLastCalledWith(1);
+  });
+
+  it('detach cancela el rAF si estaba corriendo y remueve listeners play/pause', () => {
+    const onLineChange = vi.fn();
+    const e = createTimingEngine({ lines, onLineChange });
+    const audio = createFakeAudio();
+    e.attach(audio);
+
+    audio.dispatchEvent(new Event('play'));
+    expect(rafQueue.length).toBe(1);
+
+    e.detach();
+    expect(globalThis.cancelAnimationFrame).toHaveBeenCalled();
+    expect(rafQueue.length).toBe(0);
+  });
+
+  it('no arranca dos loops de rAF si play se dispara dos veces seguidas', () => {
+    const e = createTimingEngine({ lines });
+    const audio = createFakeAudio();
+    e.attach(audio);
+
+    audio.dispatchEvent(new Event('play'));
+    audio.dispatchEvent(new Event('play'));
+    expect(rafQueue.length).toBe(1);
   });
 });

@@ -109,6 +109,10 @@ describe('createSectionPlayer — re-firma en 403', () => {
     expect(audio.src).toBe('https://x/fresh.mp3');
     expect(audio.play).toHaveBeenCalled();
 
+    // Retry exitoso: no debe quedar un toast de error visible (guard de no-spam).
+    const toast = document.querySelector('.toast');
+    expect(toast?.classList.contains('visible')).not.toBe(true);
+
     // Un segundo error en la misma sección ya reintentada no vuelve a re-fetch.
     audio.dispatchEvent(new Event('error'));
     await Promise.resolve();

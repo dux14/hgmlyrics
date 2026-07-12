@@ -110,6 +110,15 @@ describe('createStudioPlayer — SEC-X1: safeUrl bloquea javascript: en href y s
     const audio = el.querySelector('audio');
     expect(audio.getAttribute('src')).toBe(url);
   });
+
+  it('src invalido saneado: el evento error al montar NO dispara toast', async () => {
+    const { audio } = createStudioPlayer({ label: 'Voz', url: 'javascript:alert(1)' });
+    audio.dispatchEvent(new Event('error'));
+    await Promise.resolve();
+    await Promise.resolve();
+    const toast = document.querySelector('.toast');
+    expect(toast?.classList.contains('visible')).not.toBe(true);
+  });
 });
 
 describe('createStudioPlayer — evento error', () => {

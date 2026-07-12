@@ -73,6 +73,7 @@ export function commitPreview({ previewTime }) {
  * @returns {{ el: HTMLElement, audio: HTMLAudioElement }}
  */
 export function createStudioPlayer({ label, url }) {
+  const sanitizedUrl = safeUrl(url);
   const root = document.createElement('div');
   root.className = 'studio-player';
   root.innerHTML = `
@@ -80,7 +81,7 @@ export function createStudioPlayer({ label, url }) {
       <button class="studio-player__play" type="button" aria-label="Reproducir ${label}">${icon('play', { size: 16 })}</button>
       <span class="studio-player__label">${label}</span>
       <span class="studio-player__time" aria-hidden="true">0:00 / 0:00</span>
-      <a class="btn studio-player__dl" href="${safeUrl(url)}" download aria-label="Descargar ${label}">${icon('download', { size: 16 })}</a>
+      <a class="btn studio-player__dl" href="${sanitizedUrl}" download aria-label="Descargar ${label}">${icon('download', { size: 16 })}</a>
     </div>
     <div class="studio-player__row2">
       <div class="studio-player__bar" role="slider" tabindex="0"
@@ -95,7 +96,7 @@ export function createStudioPlayer({ label, url }) {
         </div>
       </div>
     </div>
-    <audio preload="none" src="${safeUrl(url)}"></audio>
+    <audio preload="none" src="${sanitizedUrl}"></audio>
   `;
 
   const audio = root.querySelector('audio');
@@ -147,13 +148,20 @@ export function createStudioPlayer({ label, url }) {
   audio.addEventListener('pause', setPlayIcon);
   audio.addEventListener('ended', setPlayIcon);
   audio.addEventListener('error', async () => {
+    // src invalido saneado por safeUrl (ej. javascript:) no es un fallo de
+    // reproduccion en runtime: dispara 'error' al montar sin que el usuario
+    // haya hecho nada, y ya se ve en el <a> de descarga vacio.
+    if (!sanitizedUrl) return;
     // Sin esto, offline el botón play parecía roto: ni icono ni aviso.
     setPlayIcon();
     const { showToast } = await import('../lib/toast.js');
     showToast(`No se pudo reproducir ${label}`, { type: 'error' });
   });
   playBtn.addEventListener('click', () => {
-    if (audio.paused) audio.play().catch(() => {});
+    // El listener 'error' del audio ya avisa al usuario si play() no arranca;
+    // aqui solo dejamos rastro para debugging (autoplay policy es casi
+    // imposible porque siempre parte de un gesto del usuario; AbortError es benigno).
+    if (audio.paused) audio.play().catch((e) => console.warn('StudioPlayer play() rechazado', e));
     else audio.pause();
   });
 
@@ -161,8 +169,9 @@ export function createStudioPlayer({ label, url }) {
     const d = dur();
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
-      if (audio.paused) audio.play().catch(() => {});
-      else audio.pause();
+      if (audio.paused) {
+        audio.play().catch((e2) => console.warn('StudioPlayer play() rechazado', e2));
+      } else audio.pause();
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
       // Teclas: seek inmediato (no es arrastre)

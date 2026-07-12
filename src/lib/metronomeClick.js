@@ -22,6 +22,13 @@ export function createMetronomeClick({ clock, getTimeMs, createContext }) {
   // Último ms de beat ya agendado; -Infinity hasta el primer unmute.
   let lastScheduled = -Infinity;
 
+  // Resiliencia ante audio-session (WebKit/iOS suspende el contexto al
+  // interrumpirlo otra fuente de audio, p.ej. mutear la pista): reintenta
+  // resume() best-effort, sin propagar rechazos.
+  function onStateChange() {
+    if (!muted && ctx && ctx.state !== 'running') ctx.resume?.().catch(() => {});
+  }
+
   function makeContext() {
     if (ctx) return ctx;
     if (createContext) {
@@ -30,6 +37,7 @@ export function createMetronomeClick({ clock, getTimeMs, createContext }) {
       const Ctor = globalThis.AudioContext || globalThis.webkitAudioContext;
       ctx = new Ctor();
     }
+    ctx.addEventListener?.('statechange', onStateChange);
     return ctx;
   }
 
@@ -51,6 +59,7 @@ export function createMetronomeClick({ clock, getTimeMs, createContext }) {
 
   /** Recorre la rejilla desde `now` hasta `now + LOOKAHEAD_MS` agendando beats nuevos. */
   function tick() {
+    if (!muted && ctx && ctx.state !== 'running') ctx.resume?.().catch(() => {});
     const nowMs = getTimeMs();
     // Seek hacia atrás (scrubber): lastScheduled quedó en el futuro respecto
     // a nowMs y ningún beat nuevo entraría en la ventana. Se resetea para
@@ -101,6 +110,7 @@ export function createMetronomeClick({ clock, getTimeMs, createContext }) {
   function stop() {
     stopInterval();
     if (ctx) {
+      ctx.removeEventListener?.('statechange', onStateChange);
       try {
         ctx.close();
       } catch (_e) {

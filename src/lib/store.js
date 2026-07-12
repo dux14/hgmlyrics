@@ -212,12 +212,18 @@ export async function fetchSongDetail(id) {
       }
       return song;
     }
+    // 4xx es autoritativo (no existe / sin permiso): no usar el cache,
+    // que puede estar stale y resucitar una canción borrada. Precedente:
+    // fetchWithRetry.js trata 4xx como definitivo, 5xx/red como transitorio.
+    if (res.status < 500) {
+      return null;
+    }
   } catch (e) {
     console.warn('Could not fetch song detail:', e);
   }
-  // F8: Fallback offline — cubre fetch lanzado (red caída) Y respuesta no-ok
-  // (backend caído, portal cautivo, 5xx): en ambos casos la copia de
-  // IndexedDB es mejor que "no encontrada" (H3 auditoría).
+  // F8: Fallback offline — cubre fetch lanzado (red caída) Y respuesta 5xx
+  // (backend caído, portal cautivo): en ambos casos la copia de IndexedDB
+  // es mejor que "no encontrada" (H3 auditoría).
   try {
     const { getOfflineSong } = await import('./offlineCache.js');
     const cached = await getOfflineSong(id);

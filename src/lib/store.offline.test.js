@@ -25,4 +25,18 @@ describe('fetchSongDetail fallback offline', () => {
     const song = await fetchSongDetail('s1');
     expect(song).toEqual({ id: 's1', title: 'Offline' });
   });
+
+  it('un 404 es autoritativo: retorna null sin usar el cache aunque exista', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+    const { fetchSongDetail } = await import('./store.js');
+    const song = await fetchSongDetail('s1');
+    expect(song).toBeNull();
+  });
+
+  it('cache-miss: fetch lanza y no hay copia offline, retorna null', async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+    const { fetchSongDetail } = await import('./store.js');
+    const song = await fetchSongDetail('desconocida');
+    expect(song).toBeNull();
+  });
 });

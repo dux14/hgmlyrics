@@ -385,9 +385,7 @@ body.immersive-active {
   height: 0.5rem;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.25);
-  transition:
-    transform 0.08s ease,
-    background 0.08s ease;
+  transition: background 0.08s ease;
 }
 
 .imm-v1__pulse-dot.is-active {

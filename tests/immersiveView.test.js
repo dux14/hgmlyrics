@@ -1466,7 +1466,7 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
       const sv = mountSongView();
       enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
       await flushAsync();
-      let queue = [];
+      const queue = [];
       const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
         queue.push(cb);
         return queue.length;

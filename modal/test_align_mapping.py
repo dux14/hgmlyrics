@@ -49,7 +49,29 @@ def test_tokens_silabicos_anclan_palabra_completa_de_whisperx():
 
     result = map_words_to_lines(lines, words)
 
-    assert result == [{"i": 0, "startMs": 1200}]
+    assert result == [
+        {"i": 0, "startMs": 1200, "score": None, "interpolated": False}
+    ]
+
+
+def test_ancla_directa_con_score_propaga_el_score_de_whisperx():
+    lines = [{"i": 0, "text": "Sa - a - an - to"}]
+    words = [{"word": "Santo", "start": 1.2, "score": 0.9}]
+
+    result = map_words_to_lines(lines, words)
+
+    assert result[0]["score"] == 0.9
+    assert result[0]["interpolated"] is False
+
+
+def test_ancla_directa_sin_score_emite_score_none():
+    lines = [{"i": 0, "text": "Sa - a - an - to"}]
+    words = [{"word": "Santo", "start": 1.2}]
+
+    result = map_words_to_lines(lines, words)
+
+    assert result[0]["score"] is None
+    assert result[0]["interpolated"] is False
 
 
 def test_linea_sin_ancla_interpola_entre_vecinas():
@@ -65,10 +87,16 @@ def test_linea_sin_ancla_interpola_entre_vecinas():
 
     result = map_words_to_lines(lines, words)
 
-    assert result[0] == {"i": 0, "startMs": 1000}
-    assert result[2] == {"i": 2, "startMs": 3000}
+    assert result[0] == {
+        "i": 0, "startMs": 1000, "score": None, "interpolated": False
+    }
+    assert result[2] == {
+        "i": 2, "startMs": 3000, "score": None, "interpolated": False
+    }
     # interpolacion lineal a mitad de camino entre 1000 y 3000
-    assert result[1] == {"i": 1, "startMs": 2000}
+    assert result[1]["startMs"] == 2000
+    assert result[1]["interpolated"] is True
+    assert result[1]["score"] is None
     # monotono estrictamente creciente
     starts = [r["startMs"] for r in result]
     assert starts == sorted(set(starts))
@@ -96,6 +124,11 @@ def test_monotonicidad_forzada_descarta_ancla_fuera_de_orden():
     assert len(set(starts)) == len(starts)  # estrictamente creciente, sin duplicados
     assert starts[0] == 5000
     assert starts[1] > starts[0]
+    # la ancla de 'mundo' (start=1.0, fuera de orden) se descarta: la linea
+    # queda sin ancla propia y por lo tanto interpolada.
+    assert result[0]["interpolated"] is False
+    assert result[1]["interpolated"] is True
+    assert result[1]["score"] is None
 
 
 def test_lineas_spoken_participan_igual_alineadas():
@@ -118,9 +151,9 @@ def test_lineas_spoken_participan_igual_alineadas():
     result = map_words_to_lines(lines, words)
 
     assert result == [
-        {"i": 0, "startMs": 500},
-        {"i": 1, "startMs": 1000},
-        {"i": 2, "startMs": 2000},
+        {"i": 0, "startMs": 500, "score": None, "interpolated": False},
+        {"i": 1, "startMs": 1000, "score": None, "interpolated": False},
+        {"i": 2, "startMs": 2000, "score": None, "interpolated": False},
     ]
 
 
@@ -225,6 +258,8 @@ def test_sin_palabras_whisperx_genera_rampa_fallback_creciente():
     assert len(result) == 3
     assert all(starts[i] < starts[i + 1] for i in range(len(starts) - 1))
     assert {r["i"] for r in result} == {0, 1, 2}
+    assert all(r["interpolated"] is True for r in result)
+    assert all(r["score"] is None for r in result)
 
 
 def test_un_solo_anclaje_usa_pendiente_cero_para_extrapolar():

@@ -51,21 +51,6 @@ describe('authStore', () => {
     expect(getProfile()).toBe(null);
   });
 
-  it('boot offline con sesion valida restaura perfil/flags del snapshot local', async () => {
-    localStorage.setItem(
-      'hkn-profile-cache',
-      JSON.stringify({ profile: { id: 'u1', isAdmin: true }, flags: ['voz_tono'] }),
-    );
-    mockGetSession.mockResolvedValueOnce({
-      data: { session: { access_token: 'tok', user: { id: 'u1' } } },
-    });
-    globalThis.fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-    await initAuthStore();
-    expect(isAdmin()).toBe(true);
-    expect(isFeatureEnabled('voz_tono')).toBe(true);
-    localStorage.removeItem('hkn-profile-cache');
-  });
-
   it('initAuthStore with session fetches profile via /api/auth/me', async () => {
     mockGetSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } });
     globalThis.fetch.mockResolvedValueOnce({

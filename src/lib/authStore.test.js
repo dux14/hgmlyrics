@@ -169,6 +169,25 @@ describe('refreshProfile — fallo transitorio vs. definitivo', () => {
     expect(store.getProfile()).toBeNull();
     expect(store.isFeatureEnabled('f1')).toBe(false);
   });
+
+  it('fetch que lanza sin profile en memoria restaura el snapshot cacheado (H4)', async () => {
+    localStorage.setItem(
+      PROFILE_CACHE_KEY,
+      JSON.stringify({ profile: { username: 'cached' }, flags: ['f1'] }),
+    );
+    const { store, supabase } = await loadStore();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: makeSession() } });
+    supabase.auth.onAuthStateChange.mockImplementation(() => {});
+    // Boot en frío: el server nunca habló (red caída), sin profile "bueno"
+    // en memoria previo — a diferencia del test de arriba, acá no hay un
+    // primer refreshProfile() exitoso que deje un profile del que conservar.
+    globalThis.fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    await store.initAuthStore();
+
+    expect(store.getProfile()).toEqual({ username: 'cached' });
+    expect(store.isFeatureEnabled('f1')).toBe(true);
+  });
 });
 
 describe('initAuthStore — restauracion optimista (T1)', () => {

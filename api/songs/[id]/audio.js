@@ -32,9 +32,10 @@ async function getAudio(_req, res, songId) {
   res.status(200).json({
     audio: {
       url: await signSongAudioDownload(audio.storageKey),
-      durationSec: audio.durationSec,
       // NUMERIC llega como string del driver pg; el contrato del GET es number
-      // (Number.isFinite en el editor no coacciona strings).
+      // (Number.isFinite en el editor no coacciona strings, p. ej. el clamp de
+      // la ultima linea en la correccion manual usa durationSec * 1000).
+      durationSec: audio.durationSec == null ? null : Number(audio.durationSec),
       bpmManual: audio.bpmManual == null ? null : Number(audio.bpmManual),
       timeSignature: audio.timeSignature,
       beatAnchor: audio.beatAnchor,

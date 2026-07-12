@@ -181,6 +181,10 @@
   padding: var(--space-sm) var(--space-md);
 }
 
+.sidebar__footer {
+  margin-top: auto;
+}
+
 .sidebar__section-title {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);

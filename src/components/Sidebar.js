@@ -114,6 +114,14 @@ export function updateSidebarContent() {
           .join('')}
       </div>
     </div>
+
+    <div class="sidebar__divider" role="separator"></div>
+    <div class="sidebar__section sidebar__footer">
+      <div class="sidebar__album-item" data-action="clear-cache">
+        <span style="display: inline-flex; align-items: center;">${icon('rotate-ccw', { size: 16 })}</span>
+        <span>Limpiar caché</span>
+      </div>
+    </div>
   `;
 
   // Attach event listeners
@@ -185,6 +193,14 @@ function bindSidebarEvents() {
       if (dest === 'voces') {
         navigate('/voces');
       }
+    });
+  });
+
+  // Acción "Limpiar caché" (footer)
+  sidebarEl.querySelectorAll('[data-action="clear-cache"]').forEach((item) => {
+    item.addEventListener('click', async () => {
+      const { clearAppCache } = await import('../lib/cacheClear.js');
+      clearAppCache();
     });
   });
 

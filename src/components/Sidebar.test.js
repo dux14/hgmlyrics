@@ -8,6 +8,7 @@ vi.mock('../lib/store.js', () => ({
   getState: vi.fn(() => ({ activeAlbum: null })),
 }));
 vi.mock('../lib/lists.js', () => ({ listMyLists: vi.fn(async () => []) }));
+vi.mock('../lib/cacheClear.js', () => ({ clearAppCache: vi.fn() }));
 
 import { renderSidebar } from './Sidebar.js';
 import { navigate } from '../router.js';
@@ -43,5 +44,21 @@ describe('renderSidebar', () => {
     const app = document.querySelector('#app');
     renderSidebar(app);
     expect(app.querySelector('[data-nav="oracion"]')).not.toBeNull();
+  });
+
+  it('renderiza la accion Limpiar cache', () => {
+    const app = document.querySelector('#app');
+    renderSidebar(app);
+    expect(app.querySelector('[data-action="clear-cache"]')).not.toBeNull();
+  });
+
+  it('click en Limpiar cache ejecuta clearAppCache', async () => {
+    const { clearAppCache } = await import('../lib/cacheClear.js');
+    const app = document.querySelector('#app');
+    renderSidebar(app);
+    app.querySelector('[data-action="clear-cache"]').click();
+    await vi.waitFor(() => {
+      expect(clearAppCache).toHaveBeenCalled();
+    });
   });
 });

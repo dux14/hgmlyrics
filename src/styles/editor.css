@@ -711,6 +711,63 @@
   color: var(--color-danger);
 }
 
+/* ── Sub-bloque "Metrónomo" (dentro de song-audio-section, solo con sincronía lista) ── */
+.song-audio__metronome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.song-audio__metronome-title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.song-audio__bpm-detected {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.song-audio__field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.song-audio__bpm-manual,
+.song-audio__time-signature,
+.song-audio__beat-anchor {
+  padding: 0 var(--space-sm);
+  height: 36px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text);
+  font-size: var(--font-size-base);
+  font-family: inherit;
+  transition: border-color var(--transition-fast);
+  color-scheme: dark;
+}
+
+.song-audio__bpm-manual,
+.song-audio__beat-anchor {
+  width: 6ch;
+}
+
+.song-audio__bpm-manual:focus,
+.song-audio__time-signature:focus,
+.song-audio__beat-anchor:focus {
+  outline: none;
+  border-color: var(--color-brand);
+}
+
 /* ── Fila de línea ── */
 .line-row {
   display: flex;

@@ -531,7 +531,6 @@ function setupMetronome(s, audio, timings) {
   const timeSignature = audio.timeSignature ?? '4/4';
   const beatAnchor = audio.beatAnchor ?? 1;
 
-  s.beatGrid = { beatsMs: timings.beats, bpm, timeSignature, beatAnchor };
   s.beatClock = createBeatClock({ beatsMs: timings.beats, timeSignature, beatAnchor });
   s.metronome = createMetronomeClick({
     clock: s.beatClock,
@@ -591,7 +590,6 @@ function fallbackToTimer(s) {
   s.timingByLineIndex = new Map();
   s.metronome?.stop();
   stopPulseLoop(s);
-  s.beatGrid = null;
   s.beatClock = null;
   s.metronome = null;
   s.metronomeOn = false;
@@ -1099,9 +1097,8 @@ export function enterImmersive(songViewEl, ctx = {}) {
     timingLines: [],
     timingByLineIndex: new Map(),
     playerListeners: null,
-    // Metrónomo (F4): rejilla + reloj de beats derivados de timings.beats
-    // (D3), solo existen tras promoteToSync con beats disponibles.
-    beatGrid: null,
+    // Metrónomo (F4): reloj de beats derivado de timings.beats (D3), solo
+    // existe tras promoteToSync con beats disponibles.
     beatClock: null,
     beatRafId: null,
     metronome: null,

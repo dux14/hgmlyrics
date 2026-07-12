@@ -7,6 +7,7 @@ vi.mock('../src/lib/songAudioApi.js', () => ({
   deleteSongAudio: vi.fn(),
   uploadSongAudioFile: vi.fn(),
   patchSongAudio: vi.fn(),
+  patchLineTiming: vi.fn(),
 }));
 vi.mock('../src/lib/stemsApi.js', () => ({
   readAudioDuration: vi.fn().mockResolvedValue(125),
@@ -523,5 +524,225 @@ describe('SongAudioSection', () => {
 
     await vi.advanceTimersByTimeAsync(20000);
     expect(songAudioApi.getSongAudio).toHaveBeenCalledTimes(1);
+  });
+
+  describe('corrección manual por línea', () => {
+    function mkSong() {
+      return {
+        id: 'song-1',
+        sections: [
+          {
+            type: 'verse',
+            lines: [
+              { text: 'Primera línea de la canción que dura bastante mas de cuarenta caracteres' },
+              { text: 'Segunda línea' },
+              { text: 'Tercera línea' },
+            ],
+          },
+        ],
+      };
+    }
+
+    function mockReady(lines, durationSec = 100) {
+      songAudioApi.getSongAudio.mockResolvedValue({
+        audio: { url: 'https://x/full.mp3', durationSec },
+        timings: { status: 'ready', lines },
+      });
+    }
+
+    beforeEach(() => {
+      HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
+      HTMLMediaElement.prototype.pause = vi.fn();
+    });
+
+    it('muestra el texto real de la línea truncado; sin getSong cae a "Línea N"', async () => {
+      mockReady([
+        { i: 0, startMs: 0 },
+        { i: 1, startMs: 1000 },
+        { i: 2, startMs: 2000 },
+      ]);
+      const section = createSongAudioSection({ songId: 'song-1', getSong: () => mkSong() });
+      container.appendChild(section.el);
+
+      await vi.waitFor(() =>
+        expect(section.el.querySelector('.song-audio__confidence')).not.toBeNull(),
+      );
+
+      const labels = section.el.querySelectorAll('.audio-line__label');
+      expect(labels[0].textContent).toContain('…');
+      expect(labels[0].textContent).not.toContain('Línea 1');
+      expect(labels[1].textContent).toContain('Segunda línea');
+
+      section.destroy();
+
+      mockReady([{ i: 0, startMs: 0 }]);
+      const section2 = createSongAudioSection({ songId: 'song-1' });
+      container.appendChild(section2.el);
+      await vi.waitFor(() =>
+        expect(section2.el.querySelector('.audio-line__label')?.textContent).toContain('Línea 1'),
+      );
+      section2.destroy();
+    });
+
+    it('click en una fila expande el panel; click en otra fila colapsa la primera', async () => {
+      mockReady([
+        { i: 0, startMs: 0 },
+        { i: 1, startMs: 1000 },
+      ]);
+      const section = createSongAudioSection({ songId: 'song-1' });
+      container.appendChild(section.el);
+      await vi.waitFor(() =>
+        expect(section.el.querySelectorAll('.audio-line__header').length).toBe(2),
+      );
+
+      const headers = () => section.el.querySelectorAll('.audio-line__header');
+      headers()[0].click();
+      expect(section.el.querySelectorAll('[data-action="line-nudge"]').length).toBe(4);
+      expect(section.el.querySelector('[data-action="line-listen"]')).not.toBeNull();
+      expect(section.el.querySelector('[data-action="line-save"]')).not.toBeNull();
+      expect(section.el.querySelector('[data-action="line-cancel"]')).not.toBeNull();
+
+      headers()[1].click();
+      expect(section.el.querySelectorAll('.audio-line__editor').length).toBe(1);
+      expect(headers()[1].nextElementSibling?.classList.contains('audio-line__editor')).toBe(true);
+
+      section.destroy();
+    });
+
+    it('nudge: clampa contra la vecina previa y deshabilita el botón al llegar al límite', async () => {
+      mockReady([
+        { i: 0, startMs: 1000 },
+        { i: 1, startMs: 4000 },
+        { i: 2, startMs: 9000 },
+      ]);
+      const section = createSongAudioSection({ songId: 'song-1' });
+      container.appendChild(section.el);
+      await vi.waitFor(() =>
+        expect(section.el.querySelectorAll('.audio-line__header').length).toBe(3),
+      );
+
+      section.el.querySelectorAll('.audio-line__header')[1].click();
+      const minus500 = () => section.el.querySelector('[data-action="line-nudge"][data-delta="-500"]');
+      const msDisplay = () => section.el.querySelector('.audio-line__ms');
+
+      expect(msDisplay().textContent).toBe('0:04.00');
+
+      // min = prev.startMs + 1 = 1001. 4000 -> 3500 -> 3000 -> 2500 -> 2000 -> 1500 -> clamp a 1001
+      for (let n = 0; n < 6; n += 1) minus500().click();
+      expect(msDisplay().textContent).toBe('0:01.00'); // 1001ms redondeado a centésimas
+      expect(minus500().disabled).toBe(true);
+
+      // un click más no debe bajar del límite (el botón está deshabilitado)
+      minus500().click();
+      expect(msDisplay().textContent).toBe('0:01.00');
+
+      section.destroy();
+    });
+
+    it('nudge: clampa contra la vecina siguiente; última línea usa duración como techo', async () => {
+      mockReady(
+        [
+          { i: 0, startMs: 1000 },
+          { i: 1, startMs: 4000 },
+        ],
+        4.6,
+      );
+      const section = createSongAudioSection({ songId: 'song-1' });
+      container.appendChild(section.el);
+      await vi.waitFor(() =>
+        expect(section.el.querySelectorAll('.audio-line__header').length).toBe(2),
+      );
+
+      // última línea: sin next, techo = durationSec*1000 = 4600
+      section.el.querySelectorAll('.audio-line__header')[1].click();
+      const plus500 = () => section.el.querySelector('[data-action="line-nudge"][data-delta="500"]');
+      plus500().click(); // 4500
+      expect(section.el.querySelector('.audio-line__ms').textContent).toBe('0:04.50');
+      plus500().click(); // clamp a 4600
+      expect(section.el.querySelector('.audio-line__ms').textContent).toBe('0:04.60');
+      expect(plus500().disabled).toBe(true);
+
+      // primera línea: sin prev, piso = 0
+      section.el.querySelectorAll('.audio-line__header')[1].click(); // colapsa
+      section.el.querySelectorAll('.audio-line__header')[0].click(); // expande la primera
+      const minus500First = () =>
+        section.el.querySelector('[data-action="line-nudge"][data-delta="-500"]');
+      minus500First().click();
+      minus500First().click();
+      expect(section.el.querySelector('.audio-line__ms').textContent).toBe('0:00.00');
+      expect(minus500First().disabled).toBe(true);
+
+      section.destroy();
+    });
+
+    it('line-save llama a patchLineTiming y refresca; line-cancel colapsa sin PATCH', async () => {
+      mockReady([
+        { i: 0, startMs: 1000 },
+        { i: 1, startMs: 4000 },
+      ]);
+      songAudioApi.patchLineTiming.mockResolvedValue(undefined);
+      const section = createSongAudioSection({ songId: 'song-1' });
+      container.appendChild(section.el);
+      await vi.waitFor(() =>
+        expect(section.el.querySelectorAll('.audio-line__header').length).toBe(2),
+      );
+
+      section.el.querySelectorAll('.audio-line__header')[1].click();
+      section.el.querySelector('[data-action="line-nudge"][data-delta="100"]').click();
+      section.el.querySelector('[data-action="line-save"]').click();
+
+      await vi.waitFor(() =>
+        expect(songAudioApi.patchLineTiming).toHaveBeenCalledWith('song-1', 1, 4100),
+      );
+      await vi.waitFor(() => expect(songAudioApi.getSongAudio).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() =>
+        expect(section.el.querySelector('.audio-line__editor')).toBeNull(),
+      );
+
+      section.el.querySelectorAll('.audio-line__header')[0].click();
+      section.el.querySelector('[data-action="line-nudge"][data-delta="100"]').click();
+      section.el.querySelector('[data-action="line-cancel"]').click();
+      expect(section.el.querySelector('.audio-line__editor')).toBeNull();
+      expect(songAudioApi.patchLineTiming).toHaveBeenCalledTimes(1);
+
+      section.destroy();
+    });
+
+    it('línea manual: dot --manual, sr-only "Corregida a mano", contador en el resumen', async () => {
+      mockReady([
+        { i: 0, startMs: 0, score: 0.9, interpolated: false },
+        { i: 1, startMs: 1000, score: 0.9, interpolated: false, manual: true },
+        { i: 2, startMs: 2000, score: 0.9, interpolated: false, manual: true },
+        { i: 3, startMs: 3000, score: 0.9, interpolated: false },
+      ]);
+      const section = createSongAudioSection({ songId: 'song-1' });
+      container.appendChild(section.el);
+
+      await vi.waitFor(() =>
+        expect(section.el.querySelector('.song-audio__confidence')).not.toBeNull(),
+      );
+
+      const rows = section.el.querySelectorAll('.audio-line');
+      expect(rows[1].classList.contains('audio-line--manual')).toBe(true);
+      expect(rows[1].textContent).toContain('Corregida a mano');
+      expect(section.el.textContent).toContain('2 corregidas a mano');
+
+      section.destroy();
+    });
+
+    it('destroy() pausa el preview si estaba sonando', async () => {
+      mockReady([{ i: 0, startMs: 0 }]);
+      const section = createSongAudioSection({ songId: 'song-1' });
+      container.appendChild(section.el);
+      await vi.waitFor(() =>
+        expect(section.el.querySelectorAll('.audio-line__header').length).toBe(1),
+      );
+
+      section.el.querySelector('.audio-line__header').click();
+      section.el.querySelector('[data-action="line-listen"]').click();
+
+      section.destroy();
+      expect(HTMLMediaElement.prototype.pause).toHaveBeenCalled();
+    });
   });
 });

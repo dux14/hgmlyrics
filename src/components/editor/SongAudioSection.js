@@ -12,11 +12,13 @@ import {
   deleteSongAudio,
   uploadSongAudioFile,
   patchSongAudio,
+  patchLineTiming,
 } from '../../lib/songAudioApi.js';
 import { readAudioDuration } from '../../lib/stemsApi.js';
 import { confirmDialog } from '../ConfirmDialog.js';
 import { icon } from '../../lib/icons.js';
 import { escapeHtml } from '../../lib/escape.js';
+import { projectLines } from '../../lib/projectLines.js';
 
 const SONG_AUDIO_MAX_BYTES = 25 * 1024 * 1024;
 const POLL_INTERVAL_MS = 5000;
@@ -27,6 +29,22 @@ function formatDuration(sec) {
   const m = Math.floor(sec / 60);
   const s = Math.round(sec % 60);
   return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+// Formato fino m:ss.cc (centésimas) para el editor de corrección por línea.
+function formatMsFine(ms) {
+  if (!Number.isFinite(ms) || ms < 0) return '0:00.00';
+  const totalCentiseconds = Math.round(ms / 10);
+  const totalSeconds = Math.floor(totalCentiseconds / 100);
+  const cs = totalCentiseconds % 100;
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
+}
+
+function truncateLineText(text, max = 40) {
+  if (!text) return null;
+  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 function syncStatusMarkup(timings) {
@@ -84,46 +102,10 @@ function metronomeMarkup(audio, timings) {
 }
 
 /**
- * Sub-bloque "Confianza por línea": solo con sincronía lista y al menos una
- * línea. Resumen de cuántas líneas ancló WhisperX directamente (no
- * interpoladas) + una fila por línea con su score. Score < 0.75, ausente o
- * línea interpolada → warn (conviene revisar); el resto → ok.
- */
-function confidenceMarkup(timings) {
-  if (timings?.status !== 'ready') return '';
-  const lines = timings.lines;
-  if (!Array.isArray(lines) || lines.length === 0) return '';
-  const anchored = lines.filter((l) => l.interpolated !== true).length;
-  const rows = lines
-    .map((l) => {
-      const isOk = typeof l.score === 'number' && l.score >= 0.75 && l.interpolated !== true;
-      const statusClass = isOk ? 'audio-line--ok' : 'audio-line--warn';
-      const time = formatDuration((l.startMs ?? 0) / 1000);
-      const warnText =
-        l.interpolated === true ? 'Línea interpolada — revisar' : 'Confianza baja — revisar';
-      return `
-        <li class="audio-line ${statusClass}">
-          <span class="audio-line__dot" aria-hidden="true"></span>
-          <span class="audio-line__label">Línea ${(l.i ?? 0) + 1} · ${escapeHtml(time)}</span>
-          ${!isOk ? `<span class="sr-only">${escapeHtml(warnText)}</span>` : ''}
-        </li>
-      `;
-    })
-    .join('');
-  return `
-    <div class="song-audio__confidence">
-      <h3 class="song-audio__confidence-title">Confianza por línea</h3>
-      <p class="song-audio__confidence-summary">${anchored} de ${lines.length} líneas ancladas directamente</p>
-      <ul class="song-audio__confidence-list">${rows}</ul>
-    </div>
-  `;
-}
-
-/**
- * @param {{ songId: string|null }} opts
+ * @param {{ songId: string|null, getSong?: (() => object|null)|null }} opts
  * @returns {{ el: HTMLElement, destroy: () => void }}
  */
-export function createSongAudioSection({ songId }) {
+export function createSongAudioSection({ songId, getSong = null }) {
   const el = document.createElement('div');
   el.className = 'editor__section song-audio-section';
 
@@ -140,6 +122,133 @@ export function createSongAudioSection({ songId }) {
   // recalcula en cada render() del sub-bloque (que solo ocurre en ready, sin
   // polling espontáneo) para saber qué tocó el usuario.
   let metronomeBaseline = null;
+
+  // Corrección manual (spec offset-manual-linea): indice canonico de la fila
+  // expandida (null = ninguna), startMs propuesto de esa fila y el <audio> de
+  // preview UNICO del componente (lazy, src = state.audio.url firmada).
+  let expandedI = null;
+  let proposedMs = null;
+  let previewAudio = null;
+
+  // Líneas de state.timings ordenadas por índice canónico (para hallar
+  // vecinas al clampear el startMs propuesto).
+  function sortedTimingLines() {
+    return [...(state.timings?.lines || [])].sort((a, b) => (a.i ?? 0) - (b.i ?? 0));
+  }
+
+  // Límites [min, max] en ms para la línea `i`: pisa contra la vecina previa
+  // (+1ms) y la siguiente (-1ms); en los extremos, 0 y la duración del audio
+  // (sin techo si la duración no se conoce aún).
+  function lineBounds(i) {
+    const sorted = sortedTimingLines();
+    const idx = sorted.findIndex((l) => l.i === i);
+    const prev = idx > 0 ? sorted[idx - 1] : null;
+    const next = idx >= 0 && idx < sorted.length - 1 ? sorted[idx + 1] : null;
+    const durationSec = state.audio?.durationSec;
+    const min = prev ? prev.startMs + 1 : 0;
+    const max = next
+      ? next.startMs - 1
+      : Number.isFinite(durationSec)
+        ? durationSec * 1000
+        : Infinity;
+    return { min, max };
+  }
+
+  function clampProposedMs(i, ms) {
+    const { min, max } = lineBounds(i);
+    return Math.min(max, Math.max(min, ms));
+  }
+
+  // Proyecta la canción actual (si hay getSong) a un mapa índice→texto para
+  // mostrar la línea real en vez de "Línea N" en el bloque de confianza.
+  function projectedTextMap() {
+    if (typeof getSong !== 'function') return new Map();
+    const song = getSong();
+    if (!song) return new Map();
+    try {
+      return new Map(projectLines(song, {}).map((l) => [l.i, l.text]));
+    } catch {
+      return new Map();
+    }
+  }
+
+  function lineEditorMarkup(l, i) {
+    const originalMs = l.startMs ?? 0;
+    const { min, max } = lineBounds(i);
+    const current = proposedMs ?? originalMs;
+    const minusDisabled = current <= min;
+    const plusDisabled = Number.isFinite(max) && current >= max;
+    return `
+      <div class="audio-line__editor">
+        <button class="btn btn--secondary" data-action="line-listen" type="button">${icon('play', { size: 14 })} Escuchar desde aquí</button>
+        <div class="audio-line__nudge" role="group" aria-label="Ajustar inicio de la línea">
+          <button data-action="line-nudge" data-delta="-500" type="button" ${minusDisabled ? 'disabled' : ''}>−500</button>
+          <button data-action="line-nudge" data-delta="-100" type="button" ${minusDisabled ? 'disabled' : ''}>−100</button>
+          <span class="audio-line__ms">${escapeHtml(formatMsFine(current))}</span>
+          <button data-action="line-nudge" data-delta="100" type="button" ${plusDisabled ? 'disabled' : ''}>+100</button>
+          <button data-action="line-nudge" data-delta="500" type="button" ${plusDisabled ? 'disabled' : ''}>+500</button>
+        </div>
+        <div class="audio-line__editor-actions">
+          <button class="btn btn--primary" data-action="line-save" type="button" ${current === originalMs ? 'disabled' : ''}>Guardar</button>
+          <button class="btn btn--secondary" data-action="line-cancel" type="button">Descartar</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Sub-bloque "Confianza por línea": solo con sincronía lista y al menos
+   * una línea. Resumen de cuántas líneas ancló WhisperX directamente (no
+   * interpoladas) + cuántas fueron corregidas a mano + una fila por línea
+   * con su score, texto real (si hay getSong) y un panel de corrección
+   * expandible.
+   */
+  function confidenceMarkup(timings) {
+    if (timings?.status !== 'ready') return '';
+    const lines = timings.lines;
+    if (!Array.isArray(lines) || lines.length === 0) return '';
+    const anchored = lines.filter((l) => l.interpolated !== true).length;
+    const manualCount = lines.filter((l) => l.manual === true).length;
+    const textByI = projectedTextMap();
+    const rows = lines
+      .map((l) => {
+        const i = l.i ?? 0;
+        const isManual = l.manual === true;
+        const isOk = typeof l.score === 'number' && l.score >= 0.75 && l.interpolated !== true;
+        const statusClass = isManual
+          ? 'audio-line--manual'
+          : isOk
+            ? 'audio-line--ok'
+            : 'audio-line--warn';
+        const time = formatDuration((l.startMs ?? 0) / 1000);
+        const labelText = truncateLineText(textByI.get(i) ?? null) ?? `Línea ${i + 1}`;
+        const warnText = isManual
+          ? 'Corregida a mano'
+          : l.interpolated === true
+            ? 'Línea interpolada — revisar'
+            : 'Confianza baja — revisar';
+        const showSr = isManual || !isOk;
+        const editorHtml = expandedI === i ? lineEditorMarkup(l, i) : '';
+        return `
+          <li class="audio-line ${statusClass}">
+            <div class="audio-line__header" data-action="line-expand" data-i="${i}">
+              <span class="audio-line__dot" aria-hidden="true"></span>
+              <span class="audio-line__label">${escapeHtml(labelText)} · ${escapeHtml(time)}</span>
+              ${showSr ? `<span class="sr-only">${escapeHtml(warnText)}</span>` : ''}
+            </div>
+            ${editorHtml}
+          </li>
+        `;
+      })
+      .join('');
+    return `
+      <div class="song-audio__confidence">
+        <h3 class="song-audio__confidence-title">Confianza por línea</h3>
+        <p class="song-audio__confidence-summary">${anchored} de ${lines.length} líneas ancladas directamente${manualCount > 0 ? ` · ${manualCount} corregidas a mano` : ''}</p>
+        <ul class="song-audio__confidence-list">${rows}</ul>
+      </div>
+    `;
+  }
 
   function stopPolling() {
     if (pollTimer) {
@@ -345,6 +454,54 @@ export function createSongAudioSection({ songId }) {
     render();
   }
 
+  function collapseLine() {
+    expandedI = null;
+    proposedMs = null;
+    previewAudio?.pause();
+  }
+
+  function expandLine(i) {
+    if (expandedI === i) {
+      collapseLine();
+      return;
+    }
+    const line = sortedTimingLines().find((l) => l.i === i);
+    previewAudio?.pause();
+    expandedI = i;
+    proposedMs = line ? (line.startMs ?? 0) : 0;
+  }
+
+  function nudgeLine(deltaStr) {
+    if (expandedI === null || proposedMs === null) return;
+    proposedMs = clampProposedMs(expandedI, proposedMs + Number(deltaStr));
+  }
+
+  function listenFromLine() {
+    if (expandedI === null || proposedMs === null || !state.audio?.url) return;
+    if (!previewAudio) previewAudio = new Audio(state.audio.url);
+    if (!previewAudio.paused) {
+      previewAudio.pause();
+      return;
+    }
+    previewAudio.currentTime = proposedMs / 1000;
+    previewAudio.play();
+  }
+
+  async function saveLineTiming() {
+    if (expandedI === null || proposedMs === null) return;
+    state.error = null;
+    previewAudio?.pause();
+    try {
+      await patchLineTiming(songId, expandedI, proposedMs);
+      expandedI = null;
+      proposedMs = null;
+      await refresh();
+    } catch (err) {
+      state.error = err.message || 'No se pudo guardar la corrección';
+      render();
+    }
+  }
+
   function uploadControlMarkup(label) {
     if (state.uploading) {
       return `<span class="btn btn--secondary song-audio__file-btn" aria-disabled="true">Subiendo...</span>`;
@@ -411,6 +568,20 @@ export function createSongAudioSection({ songId }) {
     if (!target) return;
     if (target.dataset.action === 'song-audio-retry') retrySync();
     else if (target.dataset.action === 'song-audio-delete') deleteFlow();
+    else if (target.dataset.action === 'line-expand') {
+      expandLine(Number(target.dataset.i));
+      render();
+    } else if (target.dataset.action === 'line-nudge') {
+      nudgeLine(target.dataset.delta);
+      render();
+    } else if (target.dataset.action === 'line-listen') {
+      listenFromLine();
+    } else if (target.dataset.action === 'line-cancel') {
+      collapseLine();
+      render();
+    } else if (target.dataset.action === 'line-save') {
+      saveLineTiming();
+    }
   });
 
   render();
@@ -421,6 +592,8 @@ export function createSongAudioSection({ songId }) {
     destroy() {
       destroyed = true;
       stopPolling();
+      previewAudio?.pause();
+      previewAudio = null;
     },
   };
 }

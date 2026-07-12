@@ -801,9 +801,16 @@
 
 .audio-line {
   display: flex;
+  flex-direction: column;
+  font-size: var(--font-size-sm);
+}
+
+.audio-line__header {
+  display: flex;
   align-items: center;
   gap: var(--space-sm);
-  font-size: var(--font-size-sm);
+  cursor: pointer;
+  padding: var(--space-xs) 0;
 }
 
 .audio-line__dot {
@@ -821,12 +828,61 @@
   background: var(--color-warning);
 }
 
+.audio-line--manual .audio-line__dot {
+  background: var(--color-accent);
+}
+
 .audio-line--ok .audio-line__label {
   color: var(--color-text-secondary);
 }
 
 .audio-line--warn .audio-line__label {
   color: var(--color-warning);
+}
+
+.audio-line--manual .audio-line__label {
+  color: var(--color-accent);
+}
+
+/* ── Panel de corrección manual de una línea (expandido bajo su cabecera) ── */
+.audio-line__editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0 var(--space-sm) 20px;
+}
+
+.audio-line__nudge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.audio-line__nudge button {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.audio-line__nudge button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.audio-line__ms {
+  min-width: 5.5em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.audio-line__editor-actions {
+  display: flex;
+  gap: var(--space-sm);
 }
 
 /* ── Fila de línea ── */

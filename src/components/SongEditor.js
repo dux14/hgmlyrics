@@ -1242,7 +1242,10 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   // Audio completo + sincronía: componente aparte con su propio polling
   // (vive fuera de renderBlocks, sobrevive a los re-renders de bloques y
   // solo se apaga al navegar fuera del editor — ver destroy() abajo).
-  const songAudioSection = createSongAudioSection({ songId: existingSong?.id ?? null });
+  const songAudioSection = createSongAudioSection({
+    songId: existingSong?.id ?? null,
+    getSong: () => existingSong,
+  });
   container.querySelector('#editor-song-audio').replaceWith(songAudioSection.el);
 
   // Cancelar/Guardar-éxito/Borrar-éxito ya llaman a songAudioSection.destroy()

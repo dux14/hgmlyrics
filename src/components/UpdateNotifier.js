@@ -63,6 +63,10 @@ async function pollDataVersion() {
       if (lastDataVersion && dataVersion !== lastDataVersion) {
         const { refreshData } = await import('../lib/store.js');
         await refreshData();
+        // El catálogo offline (IndexedDB) también debe enterarse del cambio,
+        // no solo el store en memoria (H2 auditoría).
+        const { ensureSongsCached } = await import('../lib/offlineCache.js');
+        ensureSongsCached(true);
       }
       lastDataVersion = dataVersion;
     }

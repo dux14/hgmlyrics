@@ -24,6 +24,129 @@ function scopeLabel(scope) {
   return scope ? VOICE_SCOPE_LABELS[scope] || scope : 'Mezcla';
 }
 
+const SCOPE_ORDER = [null, ...Object.keys(VOICE_SCOPE_LABELS)];
+
+function scopeRank(scope) {
+  const idx = SCOPE_ORDER.indexOf(scope);
+  return idx === -1 ? SCOPE_ORDER.length : idx;
+}
+
+/**
+ * Gestor de audio compartido, sin DOM: un solo <audio> interno que las
+ * distintas UIs de sección (acordeón, full view) consumen por API en vez de
+ * cada una crear/mutar su propio elemento. Reusa VOICE_SCOPE_LABELS/scopeLabel
+ * y la lógica de retry de handleAudioError de createSectionPlayer.
+ * @param {{
+ *   tracks: Array<{id:string, sectionIndex:number, voiceScope:string|null, label:string|null, durationSec:number|null, url:string}>,
+ *   refetch?: () => Promise<Array>,
+ * }} opts
+ */
+export function createSectionAudioManager({ tracks: initialTracks, refetch }) {
+  let tracks = initialTracks;
+  let currentTrack = null;
+  const retriedIds = new Set();
+  const timeCallbacks = new Set();
+  const endedCallbacks = new Set();
+
+  const audio = document.createElement('audio');
+  audio.preload = 'none';
+
+  function emitTime() {
+    timeCallbacks.forEach((cb) => cb(audio.currentTime));
+  }
+
+  function emitEnded() {
+    endedCallbacks.forEach((cb) => cb());
+  }
+
+  async function handleAudioError() {
+    const track = currentTrack;
+    if (!track) return;
+    const notifyFail = async () => {
+      const { showToast } = await import('../lib/toast.js');
+      showToast('No se pudo reproducir el audio de esta sección', { type: 'error' });
+    };
+    if (!refetch || retriedIds.has(track.id)) {
+      // Sin refetch disponible o ya se reintentó: avisar en vez de fallar mudo.
+      await notifyFail();
+      return;
+    }
+    retriedIds.add(track.id);
+    try {
+      const fresh = await refetch();
+      if (!Array.isArray(fresh) || fresh.length === 0) {
+        await notifyFail();
+        return;
+      }
+      tracks = fresh;
+      const refreshed = tracks.find((t) => t.id === track.id);
+      if (!refreshed) {
+        await notifyFail();
+        return;
+      }
+      currentTrack = refreshed;
+      audio.src = safeUrl(refreshed.url);
+      void audio.play();
+    } catch {
+      // Re-fetch también falló (sin red o backend caído).
+      await notifyFail();
+    }
+  }
+
+  audio.addEventListener('timeupdate', emitTime);
+  audio.addEventListener('loadedmetadata', emitTime);
+  audio.addEventListener('ended', emitEnded);
+  audio.addEventListener('error', handleAudioError);
+
+  function load(track, { preload = 'metadata' } = {}) {
+    if (currentTrack && currentTrack.id === track.id) return;
+    audio.preload = preload;
+    audio.src = safeUrl(track.url);
+    currentTrack = track;
+  }
+
+  return {
+    audio,
+    tracksFor(sectionIndex) {
+      return tracks
+        .filter((t) => t.sectionIndex === sectionIndex)
+        .slice()
+        .sort((a, b) => scopeRank(a.voiceScope) - scopeRank(b.voiceScope));
+    },
+    load,
+    play(track) {
+      load(track);
+      void audio.play();
+    },
+    pause() {
+      audio.pause();
+    },
+    seek(seconds) {
+      audio.currentTime = seconds;
+    },
+    onTime(cb) {
+      timeCallbacks.add(cb);
+      return () => timeCallbacks.delete(cb);
+    },
+    onEnded(cb) {
+      endedCallbacks.add(cb);
+      return () => endedCallbacks.delete(cb);
+    },
+    destroy() {
+      audio.pause();
+      audio.removeEventListener('timeupdate', emitTime);
+      audio.removeEventListener('loadedmetadata', emitTime);
+      audio.removeEventListener('ended', emitEnded);
+      audio.removeEventListener('error', handleAudioError);
+      audio.removeAttribute('src');
+      audio.load?.();
+      timeCallbacks.clear();
+      endedCallbacks.clear();
+      currentTrack = null;
+    },
+  };
+}
+
 /**
  * @param {{
  *   song: object,

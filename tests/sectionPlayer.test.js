@@ -425,3 +425,83 @@ describe('createSectionAccordion — controles', () => {
     expect(parent.contains(el)).toBe(false);
   });
 });
+
+describe('createSectionAudioManager — getCurrentTrack (fuente de verdad para consumidores)', () => {
+  it('null antes de cargar nada; el track cargado/reproducido después', () => {
+    const t = track({ id: 'a' });
+    const manager = createSectionAudioManager({ tracks: [t] });
+    expect(manager.getCurrentTrack()).toBeNull();
+    manager.play(t);
+    expect(manager.getCurrentTrack()).toEqual(t);
+  });
+});
+
+// Regresión (code review Task 1.2): activeTrack era un estado LOCAL del
+// closure del acordeón, desincronizable del <audio> real compartido por dos
+// caminos — cambiar de chip mientras algo suena, y el rebuild de
+// wireSectionPlayButtons en cada reRenderLyrics. Ambos dejaban el panel
+// "mintiendo" sobre qué sonaba.
+describe('createSectionAccordion — regresión: no debe desincronizarse del manager', () => {
+  it('cambiar de chip con la pista sonando la pausa (no queda sonando sin control visible)', () => {
+    const tracks = [
+      track({ id: 'mix', voiceScope: null, url: 'https://x/mix.mp3' }),
+      track({ id: 'tenor', voiceScope: 'tenor', url: 'https://x/tenor.mp3' }),
+    ];
+    const manager = createSectionAudioManager({ tracks });
+    manager.audio.pause.mockClear();
+    const { el } = createSectionAccordion({ manager, sectionIndex: 0, tracks });
+
+    el.querySelector('.section-audio__play').click(); // reproduce mezcla
+    expect(manager.audio.pause).not.toHaveBeenCalled();
+    // jsdom no simula el estado real de reproducción tras un play() mockeado
+    // (paused sigue en true); se fuerza para simular "está sonando" al tocar
+    // el chip — paused es un getter sin setter en el prototipo real.
+    Object.defineProperty(manager.audio, 'paused', { value: false, configurable: true });
+
+    el.querySelectorAll('.section-audio__chip')[1].click(); // cambia a tenor mientras suena
+    expect(manager.audio.pause).toHaveBeenCalled();
+  });
+
+  it('un rebuild (nueva instancia para la misma sección) detecta el track que REALMENTE suena en el manager, no el default', () => {
+    const tracks = [
+      track({ id: 'mix', voiceScope: null, url: 'https://x/mix.mp3' }),
+      track({ id: 'tenor', voiceScope: 'tenor', url: 'https://x/tenor.mp3' }),
+    ];
+    const manager = createSectionAudioManager({ tracks });
+    manager.play(tracks[1]); // suena tenor (no el default "mezcla")
+    Object.defineProperty(manager.audio, 'paused', { value: false, configurable: true });
+
+    // Simula wireSectionPlayButtons: destruye el panel viejo (si lo hubiera)
+    // y crea uno nuevo para la misma sección, SIN pasar initialTrackId — el
+    // manager ya sabe qué suena, no debería hacer falta.
+    const { el } = createSectionAccordion({ manager, sectionIndex: 0, tracks });
+
+    const chips = el.querySelectorAll('.section-audio__chip');
+    expect(chips[1].getAttribute('aria-pressed')).toBe('true'); // tenor, no mezcla
+    expect(chips[0].getAttribute('aria-pressed')).toBe('false');
+    // El botón play refleja "sonando" para el track real, no "Reproducir".
+    expect(el.querySelector('.section-audio__play').getAttribute('aria-label')).toBe('Pausar');
+  });
+
+  it('initialTrackId preserva el scope elegido (sin sonar) a través de un rebuild', () => {
+    const tracks = [
+      track({ id: 'mix', voiceScope: null, url: 'https://x/mix.mp3' }),
+      track({ id: 'tenor', voiceScope: 'tenor', url: 'https://x/tenor.mp3' }),
+    ];
+    const manager = createSectionAudioManager({ tracks });
+    const first = createSectionAccordion({ manager, sectionIndex: 0, tracks });
+    first.el.querySelectorAll('.section-audio__chip')[1].click(); // elige tenor, sin reproducir
+    const preservedId = first.getActiveTrackId();
+    expect(preservedId).toBe('tenor');
+    first.destroy();
+
+    const rebuilt = createSectionAccordion({
+      manager,
+      sectionIndex: 0,
+      tracks,
+      initialTrackId: preservedId,
+    });
+    const chips = rebuilt.el.querySelectorAll('.section-audio__chip');
+    expect(chips[1].getAttribute('aria-pressed')).toBe('true');
+  });
+});

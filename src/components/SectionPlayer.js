@@ -1,11 +1,12 @@
 /**
- * SectionPlayer.js — Mini-reproductor de audio por sección en SongView.
+ * SectionPlayer.js — Audio por sección en SongView: un manager compartido
+ * (createSectionAudioManager) + un acordeón colapsado por sección
+ * (createSectionAccordion), estilo del player inmersivo.
  *
  * Cada fila de song_section_audio es un mp3 POR SECCIÓN (no un archivo
  * continuo): un solo <audio preload="none"> cambia de src al cruzar de
- * sección; el "tiempo total" mostrado es la suma de duraciones. Reusa
- * fmtTime de StudioPlayer.js (no monta StudioPlayer entero — su UI es de
- * pistas del Estudio, no de secciones).
+ * sección. Reusa fmtTime de StudioPlayer.js (no monta StudioPlayer entero —
+ * su UI es de pistas del Estudio, no de secciones).
  */
 import { icon } from '../lib/icons.js';
 import { safeUrl, escapeHtml } from '../lib/escape.js';
@@ -34,9 +35,7 @@ function scopeRank(scope) {
 /**
  * Gestor de audio compartido, sin DOM: un solo <audio> interno que las
  * distintas UIs de sección (acordeón, full view) consumen por API en vez de
- * cada una crear/mutar su propio elemento. La lógica de retry es una copia
- * adaptada de handleAudioError de createSectionPlayer (sin activeTracks/
- * currentIndex, trabaja sobre currentTrack), no un helper compartido.
+ * cada una crear/mutar su propio elemento.
  * @param {{
  *   tracks: Array<{id:string, sectionIndex:number, voiceScope:string|null, label:string|null, durationSec:number|null, url:string}>,
  *   refetch?: () => Promise<Array>,
@@ -130,6 +129,12 @@ export function createSectionAudioManager({ tracks: initialTracks, refetch }) {
         .slice()
         .sort((a, b) => scopeRank(a.voiceScope) - scopeRank(b.voiceScope));
     },
+    /** Track realmente cargado en el <audio> compartido ahora mismo (o null). Fuente
+     * de verdad para que los consumidores (acordeón) sepan qué suena de verdad, en
+     * vez de fiarse de su propio estado local que puede desincronizarse. */
+    getCurrentTrack() {
+      return currentTrack;
+    },
     load,
     play(track) {
       load(track);
@@ -175,12 +180,25 @@ export function createSectionAudioManager({ tracks: initialTracks, refetch }) {
  *   manager: ReturnType<typeof createSectionAudioManager>,
  *   sectionIndex: number,
  *   tracks: Array<{id:string, sectionIndex:number, voiceScope:string|null, label:string|null, durationSec:number|null, url:string}>,
+ *   initialTrackId?: string|null,
  * }} opts
- * @returns {{ el: HTMLElement, sectionIndex: number, load: () => void, destroy: () => void }}
+ * @returns {{ el: HTMLElement, sectionIndex: number, getActiveTrackId: () => string|null, load: () => void, destroy: () => void }}
  */
-export function createSectionAccordion({ manager, sectionIndex, tracks: sectionTracks }) {
+export function createSectionAccordion({ manager, sectionIndex, tracks: sectionTracks, initialTrackId = null }) {
   const scopes = [...new Set(sectionTracks.map((t) => t.voiceScope))];
-  let activeTrack = sectionTracks[0] || null;
+  // El track activo al crear el panel se elige en este orden: (1) lo que
+  // REALMENTE suena/está cargado en el manager si pertenece a esta sección
+  // (fuente de verdad — un rebuild de wireSectionPlayButtons no debe
+  // "perder" lo que está sonando), (2) el que el llamador pide preservar
+  // (scope elegido antes de un rebuild sin estar sonando), (3) el default
+  // (mezcla u orden de scope).
+  const currentManagerTrack = manager.getCurrentTrack();
+  const playingHere =
+    currentManagerTrack && sectionTracks.some((t) => t.id === currentManagerTrack.id)
+      ? sectionTracks.find((t) => t.id === currentManagerTrack.id)
+      : null;
+  const preservedTrack = initialTrackId ? sectionTracks.find((t) => t.id === initialTrackId) : null;
+  let activeTrack = playingHere || preservedTrack || sectionTracks[0] || null;
   let loaded = false;
 
   const root = document.createElement('div');
@@ -203,7 +221,7 @@ export function createSectionAccordion({ manager, sectionIndex, tracks: sectionT
     <div class="section-audio__player">
       <button class="section-audio__play" type="button" aria-label="Reproducir">${icon('play', { size: 16 })}</button>
       <span class="section-audio__time">0:00</span>
-      <input class="section-audio__scrubber" type="range" min="0" max="100" value="0" step="0.1" />
+      <input class="section-audio__scrubber" type="range" min="0" max="100" value="0" step="0.1" aria-label="Progreso de la pista" />
       <span class="section-audio__time">0:00</span>
     </div>
   `;
@@ -212,8 +230,12 @@ export function createSectionAccordion({ manager, sectionIndex, tracks: sectionT
   const scrubberEl = root.querySelector('.section-audio__scrubber');
   const [elapsedEl, totalEl] = root.querySelectorAll('.section-audio__time');
 
+  // Deriva del manager (fuente de verdad), no de un flag local — evita que el
+  // panel "mienta" sobre qué suena si activeTrack se desincroniza del audio
+  // real (cambio de chip, rebuild tras reRenderLyrics).
   function isCurrent() {
-    return !!activeTrack && manager.audio.src === safeUrl(activeTrack.url);
+    const current = manager.getCurrentTrack();
+    return !!current && !!activeTrack && current.id === activeTrack.id;
   }
 
   function paint() {
@@ -232,6 +254,9 @@ export function createSectionAccordion({ manager, sectionIndex, tracks: sectionT
   function selectScope(scope) {
     const track = sectionTracks.find((t) => t.voiceScope === scope);
     if (!track || track === activeTrack) return;
+    // El track saliente puede estar sonando de fondo: pausarlo evita dejarlo
+    // audible sin ningún control visible una vez el panel muestra otro chip.
+    if (isCurrent() && !manager.audio.paused) manager.pause();
     activeTrack = track;
     loaded = false;
     root.querySelectorAll('[data-scope]').forEach((btn) => {
@@ -271,6 +296,10 @@ export function createSectionAccordion({ manager, sectionIndex, tracks: sectionT
   return {
     el: root,
     sectionIndex,
+    /** id del track activo del panel — para preservarlo a través de un rebuild. */
+    getActiveTrackId() {
+      return activeTrack?.id ?? null;
+    },
     /** Carga metadata (duración) sin reproducir — llamar al expandir el panel. */
     load() {
       if (loaded || !activeTrack) return;
@@ -282,229 +311,6 @@ export function createSectionAccordion({ manager, sectionIndex, tracks: sectionT
       offEnded();
       manager.audio.removeEventListener('play', paint);
       manager.audio.removeEventListener('pause', paint);
-      root.remove();
-    },
-  };
-}
-
-/**
- * @param {{
- *   song: object,
- *   tracks: Array<{id:string, sectionIndex:number, voiceScope:string|null, label:string|null, durationSec:number|null, url:string}>,
- *   onSectionFocus?: (sectionIndex: number|null) => void,
- *   refetch?: () => Promise<Array>,
- * }} opts
- * @returns {{ el: HTMLElement, destroy: () => void, pause: () => void }}
- */
-export function createSectionPlayer({ song, tracks: initialTracks, onSectionFocus, refetch }) {
-  let tracks = initialTracks;
-  const scopes = [...new Set(tracks.map((t) => t.voiceScope))];
-  // Mezcla (voiceScope null) es el default; si no hay mezcla, el primer scope presente.
-  let activeScope = scopes.includes(null) ? null : scopes[0];
-  let activeTracks = [];
-  let currentIndex = -1;
-  let looping = false;
-  const retriedIds = new Set();
-
-  const root = document.createElement('div');
-  root.className = 'section-player';
-  root.innerHTML = `
-    <div class="section-player__scopes"></div>
-    <div class="section-player__row">
-      <button class="section-player__play" type="button" aria-label="Reproducir sección">${icon('play', { size: 18 })}</button>
-      <div class="section-player__scrubber" role="group" aria-label="Secciones de ${escapeHtml(song?.title || 'la canción')}"></div>
-      <span class="section-player__time" aria-hidden="true">0:00 / 0:00</span>
-      <button class="section-player__loop" type="button" aria-pressed="false" aria-label="Repetir sección">${icon('rotate-ccw', { size: 16 })}</button>
-    </div>
-  `;
-
-  const audio = document.createElement('audio');
-  audio.preload = 'none';
-  root.appendChild(audio);
-
-  const scopesEl = root.querySelector('.section-player__scopes');
-  const playBtn = root.querySelector('.section-player__play');
-  const scrubberEl = root.querySelector('.section-player__scrubber');
-  const timeEl = root.querySelector('.section-player__time');
-  const loopBtn = root.querySelector('.section-player__loop');
-
-  const totalDuration = () => activeTracks.reduce((sum, t) => sum + (t.durationSec || 0), 0);
-  const elapsedBefore = (idx) =>
-    activeTracks.slice(0, idx).reduce((sum, t) => sum + (t.durationSec || 0), 0);
-
-  function computeActiveTracks() {
-    return tracks
-      .filter((t) => t.voiceScope === activeScope)
-      .slice()
-      .sort((a, b) => a.sectionIndex - b.sectionIndex);
-  }
-
-  function renderScopeChips() {
-    if (scopes.length <= 1) {
-      scopesEl.innerHTML = '';
-      scopesEl.hidden = true;
-      return;
-    }
-    scopesEl.hidden = false;
-    scopesEl.innerHTML = scopes
-      .map((s) => {
-        const value = s === null ? '' : escapeHtml(s);
-        const active = s === activeScope;
-        return `<button class="section-player__chip${active ? ' section-player__chip--active' : ''}" data-scope="${value}" aria-pressed="${active}">${escapeHtml(scopeLabel(s))}</button>`;
-      })
-      .join('');
-    scopesEl.querySelectorAll('[data-scope]').forEach((btn) => {
-      btn.addEventListener('click', () => selectScope(btn.dataset.scope || null));
-    });
-  }
-
-  function renderSegments() {
-    const total = totalDuration();
-    const n = activeTracks.length;
-    scrubberEl.innerHTML = activeTracks
-      .map((t, i) => {
-        const pct = total > 0 ? (t.durationSec / total) * 100 : 100 / n;
-        const label = t.label || `Sección ${t.sectionIndex + 1}`;
-        return `<button class="section-player__segment${i === currentIndex ? ' section-player__segment--playing' : ''}" data-index="${i}" style="width:${pct}%" aria-label="${escapeHtml(label)}"></button>`;
-      })
-      .join('');
-    scrubberEl.querySelectorAll('[data-index]').forEach((btn) => {
-      btn.addEventListener('click', () => jumpTo(Number(btn.dataset.index)));
-    });
-  }
-
-  function setPlayIcon() {
-    playBtn.innerHTML = icon(audio.paused ? 'play' : 'pause', { size: 18 });
-    playBtn.setAttribute('aria-label', audio.paused ? 'Reproducir sección' : 'Pausar sección');
-  }
-
-  function paintTime() {
-    const total = totalDuration();
-    const elapsed = currentIndex >= 0 ? elapsedBefore(currentIndex) + (audio.currentTime || 0) : 0;
-    timeEl.textContent = `${fmtTime(elapsed)} / ${fmtTime(total)}`;
-  }
-
-  function loadTrack(idx, { autoplay = false } = {}) {
-    const track = activeTracks[idx];
-    if (!track) return;
-    currentIndex = idx;
-    audio.src = safeUrl(track.url);
-    renderSegments();
-    paintTime();
-    onSectionFocus?.(track.sectionIndex);
-    if (autoplay) void audio.play();
-  }
-
-  async function handleAudioError() {
-    const track = activeTracks[currentIndex];
-    if (!track) return;
-    const notifyFail = async () => {
-      const { showToast } = await import('../lib/toast.js');
-      showToast('No se pudo reproducir el audio de esta sección', { type: 'error' });
-    };
-    if (!refetch || retriedIds.has(track.id)) {
-      // Sin refetch disponible o ya se reintentó: avisar en vez de fallar mudo.
-      await notifyFail();
-      return;
-    }
-    retriedIds.add(track.id);
-    try {
-      const fresh = await refetch();
-      if (!Array.isArray(fresh) || fresh.length === 0) {
-        await notifyFail();
-        return;
-      }
-      tracks = fresh;
-      activeTracks = computeActiveTracks();
-      const refreshed = activeTracks.find((t) => t.id === track.id);
-      if (!refreshed) {
-        await notifyFail();
-        return;
-      }
-      currentIndex = activeTracks.indexOf(refreshed);
-      audio.src = safeUrl(refreshed.url);
-      renderSegments();
-      void audio.play();
-    } catch {
-      // Re-fetch también falló (sin red o backend caído).
-      await notifyFail();
-    }
-  }
-
-  function jumpTo(idx) {
-    loadTrack(idx, { autoplay: true });
-  }
-
-  function selectScope(scope) {
-    if (scope === activeScope) return;
-    audio.pause();
-    audio.removeAttribute('src');
-    activeScope = scope;
-    currentIndex = -1;
-    activeTracks = computeActiveTracks();
-    renderScopeChips();
-    renderSegments();
-    paintTime();
-    onSectionFocus?.(null);
-  }
-
-  audio.addEventListener('timeupdate', paintTime);
-  audio.addEventListener('loadedmetadata', paintTime);
-  audio.addEventListener('play', setPlayIcon);
-  audio.addEventListener('pause', setPlayIcon);
-  audio.addEventListener('error', handleAudioError);
-  audio.addEventListener('ended', () => {
-    if (looping) {
-      audio.currentTime = 0;
-      void audio.play();
-      return;
-    }
-    if (currentIndex + 1 < activeTracks.length) {
-      loadTrack(currentIndex + 1, { autoplay: true });
-    } else {
-      onSectionFocus?.(null);
-      setPlayIcon();
-    }
-  });
-
-  playBtn.addEventListener('click', () => {
-    if (!audio.paused) {
-      audio.pause();
-      return;
-    }
-    if (currentIndex === -1) {
-      loadTrack(0, { autoplay: true });
-    } else {
-      void audio.play();
-    }
-  });
-
-  loopBtn.addEventListener('click', () => {
-    looping = !looping;
-    loopBtn.classList.toggle('section-player__loop--active', looping);
-    loopBtn.setAttribute('aria-pressed', String(looping));
-    loopBtn.setAttribute('aria-label', looping ? 'Repetir sección (activo)' : 'Repetir sección');
-  });
-
-  activeTracks = computeActiveTracks();
-  renderScopeChips();
-  renderSegments();
-  paintTime();
-
-  return {
-    el: root,
-    pause() {
-      audio.pause();
-    },
-    /** Reproduce la sección `sectionIndex` (tap en su etiqueta en la letra). No-op si no tiene audio en el scope activo. */
-    playSection(sectionIndex) {
-      const idx = activeTracks.findIndex((t) => t.sectionIndex === sectionIndex);
-      if (idx !== -1) jumpTo(idx);
-    },
-    destroy() {
-      audio.pause();
-      audio.removeAttribute('src');
-      audio.load?.();
       root.remove();
     },
   };

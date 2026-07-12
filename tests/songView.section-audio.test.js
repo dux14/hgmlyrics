@@ -190,6 +190,44 @@ describe('SongView + acordeón de audio por sección (Task 1.2)', () => {
     expect(document.body.classList.contains('section-player-open')).toBe(false);
   });
 
+  // Regresión (code review Task 1.2): wireSectionPlayButtons destruye y
+  // recrea TODOS los acordeones en cada reRenderLyrics (transponer, cambiar
+  // notación, elegir voz…), y cada acordeón nuevo reiniciaba su chip a
+  // "Mezcla" perdiendo el scope realmente sonando. reRenderLyrics se dispara
+  // aquí vía el toggle de notación del sheet de opciones (ajeno al audio).
+  it('un reRenderLyrics ajeno (cambio de notación) no resetea el scope de voz que suena en el acordeón', async () => {
+    const song = buildSong('song-acc-6');
+    getSongById.mockReturnValue(song);
+    fetchSectionAudio.mockResolvedValue([
+      track({ id: 'mix', sectionIndex: 0, voiceScope: null, url: 'https://x/mix.mp3' }),
+      track({ id: 'tenor', sectionIndex: 0, voiceScope: 'tenor', url: 'https://x/tenor.mp3' }),
+    ]);
+    const container = document.createElement('div');
+    await renderSongView(container, 'song-acc-6');
+    await vi.waitFor(() => {
+      expect(container.querySelector('.section-audio')).toBeTruthy();
+    });
+
+    // Abre el panel, cambia a la voz tenor y reproduce.
+    container.querySelector('.lyrics__section-play').click();
+    container.querySelectorAll('.section-audio__chip')[1].click();
+    container.querySelector('.section-audio__play').click();
+
+    const audioEl = container.querySelector('audio');
+    expect(audioEl.src).toBe('https://x/tenor.mp3');
+
+    // Dispara un reRenderLyrics ajeno al audio (cambio de notación desde el
+    // sheet de opciones) — antes del fix, esto reconstruía el acordeón con
+    // el chip por defecto (mezcla) mientras tenor seguía sonando de fondo.
+    container.querySelector('#open-options-sheet').click();
+    document.querySelector('[data-notation="latin"]').click();
+
+    const chipsAfter = container.querySelectorAll('.section-audio__chip');
+    expect(chipsAfter[1].getAttribute('aria-pressed')).toBe('true'); // sigue en tenor
+    expect(chipsAfter[0].getAttribute('aria-pressed')).toBe('false'); // no mezcla
+    expect(container.querySelector('audio').src).toBe('https://x/tenor.mp3');
+  });
+
   it('canción sin tracks no monta ningún .section-audio', async () => {
     const song = buildSong('song-acc-5');
     getSongById.mockReturnValue(song);

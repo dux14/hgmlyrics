@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   fmtTimeCs,
   fmtTime,
@@ -109,5 +109,20 @@ describe('createStudioPlayer — SEC-X1: safeUrl bloquea javascript: en href y s
 
     const audio = el.querySelector('audio');
     expect(audio.getAttribute('src')).toBe(url);
+  });
+});
+
+describe('createStudioPlayer — evento error', () => {
+  it('avisa con un toast y restaura el ícono de play cuando el audio falla', async () => {
+    const { el, audio } = createStudioPlayer({ label: 'Voz', url: 'https://x/voz.mp3' });
+    const playBtn = el.querySelector('.studio-player__play');
+    audio.dispatchEvent(new Event('error'));
+    await vi.waitFor(() => {
+      const toast = document.querySelector('.toast');
+      expect(toast?.classList.contains('visible')).toBe(true);
+    });
+    const toast = document.querySelector('.toast');
+    expect(toast.textContent).toBe('No se pudo reproducir Voz');
+    expect(playBtn.getAttribute('aria-label')).toBe('Reproducir Voz');
   });
 });

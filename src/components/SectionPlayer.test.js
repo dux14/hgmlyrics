@@ -114,6 +114,39 @@ describe('createSectionPlayer — re-firma en 403', () => {
     await Promise.resolve();
     expect(refetch).toHaveBeenCalledTimes(1);
   });
+
+  it('avisa con un toast cuando el re-fetch también falla', async () => {
+    const staleTrack = track({ id: 'a', sectionIndex: 0, url: 'https://x/stale.mp3' });
+    const refetch = vi.fn().mockRejectedValue(new Error('offline'));
+    const { el } = createSectionPlayer({ song: {}, tracks: [staleTrack], refetch });
+    const audio = el.querySelector('audio');
+    el.querySelector('.section-player__segment').click();
+
+    audio.dispatchEvent(new Event('error'));
+    await vi.waitFor(() => {
+      const toast = document.querySelector('.toast');
+      expect(toast?.classList.contains('visible')).toBe(true);
+    });
+    const toast = document.querySelector('.toast');
+    expect(toast.textContent).toBe('No se pudo reproducir el audio de esta sección');
+  });
+});
+
+describe('createSectionPlayer — sin refetch', () => {
+  it('avisa con un toast en vez de fallar mudo si no hay refetch disponible', async () => {
+    const tracks = [track({ id: 'a', sectionIndex: 0, url: 'https://x/0.mp3' })];
+    const { el } = createSectionPlayer({ song: {}, tracks });
+    const audio = el.querySelector('audio');
+    el.querySelector('.section-player__segment').click();
+
+    audio.dispatchEvent(new Event('error'));
+    await vi.waitFor(() => {
+      const toast = document.querySelector('.toast');
+      expect(toast?.classList.contains('visible')).toBe(true);
+    });
+    const toast = document.querySelector('.toast');
+    expect(toast.textContent).toBe('No se pudo reproducir el audio de esta sección');
+  });
 });
 
 describe('createSectionPlayer — destroy', () => {

@@ -66,7 +66,8 @@ export function createSectionPlayer({ song, tracks: initialTracks, onSectionFocu
   const loopBtn = root.querySelector('.section-player__loop');
 
   const totalDuration = () => activeTracks.reduce((sum, t) => sum + (t.durationSec || 0), 0);
-  const elapsedBefore = (idx) => activeTracks.slice(0, idx).reduce((sum, t) => sum + (t.durationSec || 0), 0);
+  const elapsedBefore = (idx) =>
+    activeTracks.slice(0, idx).reduce((sum, t) => sum + (t.durationSec || 0), 0);
 
   function computeActiveTracks() {
     return tracks
@@ -133,21 +134,37 @@ export function createSectionPlayer({ song, tracks: initialTracks, onSectionFocu
 
   async function handleAudioError() {
     const track = activeTracks[currentIndex];
-    if (!track || !refetch || retriedIds.has(track.id)) return;
+    if (!track) return;
+    const notifyFail = async () => {
+      const { showToast } = await import('../lib/toast.js');
+      showToast('No se pudo reproducir el audio de esta sección', { type: 'error' });
+    };
+    if (!refetch || retriedIds.has(track.id)) {
+      // Sin refetch disponible o ya se reintentó: avisar en vez de fallar mudo.
+      await notifyFail();
+      return;
+    }
     retriedIds.add(track.id);
     try {
       const fresh = await refetch();
-      if (!Array.isArray(fresh) || fresh.length === 0) return;
+      if (!Array.isArray(fresh) || fresh.length === 0) {
+        await notifyFail();
+        return;
+      }
       tracks = fresh;
       activeTracks = computeActiveTracks();
       const refreshed = activeTracks.find((t) => t.id === track.id);
-      if (!refreshed) return;
+      if (!refreshed) {
+        await notifyFail();
+        return;
+      }
       currentIndex = activeTracks.indexOf(refreshed);
       audio.src = safeUrl(refreshed.url);
       renderSegments();
       void audio.play();
     } catch {
-      // Re-fetch también falló: se queda sin reproducir esa sección.
+      // Re-fetch también falló (sin red o backend caído).
+      await notifyFail();
     }
   }
 

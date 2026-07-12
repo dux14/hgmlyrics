@@ -146,8 +146,14 @@ export function createStudioPlayer({ label, url }) {
   audio.addEventListener('play', setPlayIcon);
   audio.addEventListener('pause', setPlayIcon);
   audio.addEventListener('ended', setPlayIcon);
+  audio.addEventListener('error', async () => {
+    // Sin esto, offline el botón play parecía roto: ni icono ni aviso.
+    setPlayIcon();
+    const { showToast } = await import('../lib/toast.js');
+    showToast(`No se pudo reproducir ${label}`, { type: 'error' });
+  });
   playBtn.addEventListener('click', () => {
-    if (audio.paused) void audio.play();
+    if (audio.paused) audio.play().catch(() => {});
     else audio.pause();
   });
 
@@ -155,7 +161,7 @@ export function createStudioPlayer({ label, url }) {
     const d = dur();
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
-      if (audio.paused) void audio.play();
+      if (audio.paused) audio.play().catch(() => {});
       else audio.pause();
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();

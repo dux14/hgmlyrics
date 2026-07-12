@@ -82,14 +82,37 @@ describe('GET /api/songs/[id]/audio', () => {
   });
 
   it('con fila → 200 { audio: { url, durationSec }, timings: { status, lines } }', async () => {
-    sqlResponses.push([{ storageKey: 'song-1/full.mp3', durationSec: 210 }]); // SELECT song_audio
-    sqlResponses.push([{ status: 'ready', lines: [{ i: 0, startMs: 100 }] }]); // SELECT song_line_timings
+    // Filas fieles al SELECT real: las columnas bpm/beats SIEMPRE vienen (null
+    // si no hay valor) y el GET las normaliza a null explícito.
+    sqlResponses.push([
+      {
+        storageKey: 'song-1/full.mp3',
+        durationSec: 210,
+        bpmManual: null,
+        timeSignature: null,
+        beatAnchor: null,
+      },
+    ]); // SELECT song_audio
+    sqlResponses.push([
+      { status: 'ready', lines: [{ i: 0, startMs: 100 }], bpmDetected: null, beats: null },
+    ]); // SELECT song_line_timings
     const res = makeRes();
     await handler(makeReq(), res);
     expect(res._status).toBe(200);
     expect(res._body).toEqual({
-      audio: { url: 'https://get/song-1/full.mp3', durationSec: 210 },
-      timings: { status: 'ready', lines: [{ i: 0, startMs: 100 }], beats: null },
+      audio: {
+        url: 'https://get/song-1/full.mp3',
+        durationSec: 210,
+        bpmManual: null,
+        timeSignature: null,
+        beatAnchor: null,
+      },
+      timings: {
+        status: 'ready',
+        lines: [{ i: 0, startMs: 100 }],
+        bpmDetected: null,
+        beats: null,
+      },
     });
   });
 
@@ -131,6 +154,51 @@ describe('GET /api/songs/[id]/audio', () => {
         beats: [0, 476, 952],
       },
     });
+  });
+
+  it('bpmDetected/bpmManual llegan como string del driver pg (NUMERIC) → el GET los devuelve como number', async () => {
+    sqlResponses.push([
+      {
+        storageKey: 'song-1/full.mp3',
+        durationSec: 210,
+        bpmManual: '128.5',
+        timeSignature: '4/4',
+        beatAnchor: 1,
+      },
+    ]); // SELECT song_audio
+    sqlResponses.push([
+      {
+        status: 'ready',
+        lines: [{ i: 0, startMs: 100 }],
+        bpmDetected: '112.35',
+        beats: { bpm: 112.35, beatsMs: [92, 626, 1160] },
+      },
+    ]); // SELECT song_line_timings
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    // Number.isFinite (SongAudioSection.js) NO coacciona strings: "112.35"
+    // se rendería como "sin detección". El contrato del GET es number.
+    expect(res._body.audio.bpmManual).toBe(128.5);
+    expect(res._body.timings.bpmDetected).toBe(112.35);
+  });
+
+  it('bpmDetected/bpmManual null en DB → siguen null (no NaN ni 0)', async () => {
+    sqlResponses.push([
+      {
+        storageKey: 'song-1/full.mp3',
+        durationSec: 210,
+        bpmManual: null,
+        timeSignature: null,
+        beatAnchor: null,
+      },
+    ]); // SELECT song_audio
+    sqlResponses.push([{ status: 'ready', lines: [], bpmDetected: null, beats: null }]); // SELECT song_line_timings
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body.audio.bpmManual).toBeNull();
+    expect(res._body.timings.bpmDetected).toBeNull();
   });
 
   it('beats JSONB con shape inesperado (sin beatsMs array) → beats: null, no lanza', async () => {

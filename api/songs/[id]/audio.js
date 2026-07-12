@@ -33,7 +33,9 @@ async function getAudio(_req, res, songId) {
     audio: {
       url: await signSongAudioDownload(audio.storageKey),
       durationSec: audio.durationSec,
-      bpmManual: audio.bpmManual,
+      // NUMERIC llega como string del driver pg; el contrato del GET es number
+      // (Number.isFinite en el editor no coacciona strings).
+      bpmManual: audio.bpmManual == null ? null : Number(audio.bpmManual),
       timeSignature: audio.timeSignature,
       beatAnchor: audio.beatAnchor,
     },
@@ -41,7 +43,11 @@ async function getAudio(_req, res, songId) {
     // el contrato del GET es la rejilla plana en ms — lo que consume el front
     // (setupMetronome exige Array). bpm ya viaja aparte como bpmDetected.
     timings: timings
-      ? { ...timings, beats: Array.isArray(timings.beats?.beatsMs) ? timings.beats.beatsMs : null }
+      ? {
+          ...timings,
+          bpmDetected: timings.bpmDetected == null ? null : Number(timings.bpmDetected),
+          beats: Array.isArray(timings.beats?.beatsMs) ? timings.beats.beatsMs : null,
+        }
       : null,
   });
 }

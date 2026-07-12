@@ -214,14 +214,16 @@ export async function fetchSongDetail(id) {
     }
   } catch (e) {
     console.warn('Could not fetch song detail:', e);
-    // F8: Fallback — try offline cache
-    try {
-      const { getOfflineSong } = await import('./offlineCache.js');
-      const cached = await getOfflineSong(id);
-      if (cached) return cached;
-    } catch (_) {
-      // offlineCache not available
-    }
+  }
+  // F8: Fallback offline — cubre fetch lanzado (red caída) Y respuesta no-ok
+  // (backend caído, portal cautivo, 5xx): en ambos casos la copia de
+  // IndexedDB es mejor que "no encontrada" (H3 auditoría).
+  try {
+    const { getOfflineSong } = await import('./offlineCache.js');
+    const cached = await getOfflineSong(id);
+    if (cached) return cached;
+  } catch (_) {
+    // offlineCache not available
   }
   return null;
 }

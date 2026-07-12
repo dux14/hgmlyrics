@@ -69,13 +69,29 @@ body.immersive-active > .floating-tuner {
 .imm-v1 {
   --imm-font-scale: 1;
   --imm-gutter: 10px;
+  /* Overlay autocontenido: paleta propia, inmune a data-theme (D9). El full
+     view es SIEMPRE oscuro por decisión de producto (como Apple Music). */
+  --imm-bg: #121212;
+  --imm-text: #fff;
+  --imm-dim: rgba(255, 255, 255, 0.55);
+  --imm-accent: var(--color-brand, #01ccd9);
+  --imm-chord: #a5d6a7;
+  /* Re-pin de los tokens del tema que components.css usa dentro del overlay:
+     en data-theme=light se volverían oscuros sobre el fondo negro fijo. */
+  --color-text: #f0f0f0;
+  --color-chord: #a5d6a7;
+  --color-chord-bg: rgba(165, 214, 167, 0.12);
+  --color-voice-soprano: #f48fb1;
+  --color-voice-contralto: #ce93d8;
+  --color-voice-tenor: #ffe082;
+  --color-voice-bass: #90caf9;
   position: fixed;
   inset: 0;
   z-index: 261;
   display: flex;
   flex-direction: column;
-  background: #121212;
-  color: #fff;
+  background: var(--imm-bg);
+  color: var(--imm-text);
   height: 100svh;
   height: 100dvh;
   overflow: hidden;
@@ -168,7 +184,7 @@ body.immersive-active > .floating-tuner {
   opacity: 1;
   filter: none;
   transform: scale(1);
-  color: #fff;
+  color: var(--imm-text, #fff);
 }
 /* Siguiente línea: legible sin blur para anticipar la letra. */
 .imm-line--next {
@@ -250,6 +266,47 @@ body.immersive-active > .floating-tuner {
 .imm-v1 .lyrics__line--tono,
 .imm-v1 .lyrics__line--mix {
   margin-bottom: 0;
+}
+
+/* Legibilidad del acorde en la línea ACTIVA (hallazgo "acordes casi
+   invisibles" en modo mixed): la garantiza el color propio --imm-chord sobre
+   el fondo oscuro del overlay (independiente del token compartido). El
+   opacity: 0.9 es un ajuste fino de la pill, no un aumento — estos
+   elementos no tenían opacity explícito antes (default 1). */
+.imm-v1 .float-label.chord-label {
+  color: var(--imm-chord);
+  opacity: 0.9;
+}
+.imm-v1 .mix-rail--chord i {
+  color: var(--imm-chord);
+  opacity: 0.9;
+}
+
+/* Vencer la trampa de especificidad (D9, parte B): components.css fuerza
+   #8a6800 (marrón oscuro, fix de contraste correcto SOLO sobre fondo blanco)
+   en tenor cuando data-theme='light' o el sistema está en claro sin
+   override. Dentro del overlay negro eso es ilegible — el full view es
+   SIEMPRE oscuro, así que restauramos el color dark del token (ya
+   re-pinneado arriba a #ffe082). Especificidad: la regla original es
+   `[data-theme='light'] .lyrics__line--tono.voice-text--tenor .syll__note`
+   = (0,4,0) (atributo + 3 clases); sumarle `.imm-v1` da (0,5,0) → gana sobre
+   la original sin depender del orden de aparición en la hoja. */
+[data-theme='light'] .imm-v1 .lyrics__line--tono.voice-text--tenor .syll__note,
+[data-theme='light'] .imm-v1 .float-label.tono-note.voice-text--tenor,
+[data-theme='light'] .imm-v1 .mix-rail--note.voice-text--tenor {
+  color: var(--color-voice-tenor);
+}
+@media (prefers-color-scheme: light) {
+  /* Mismo caso para "auto" (sistema en claro, sin data-theme explícito):
+     la gemela de components.css es
+     `:root:not([data-theme]) .lyrics__line--tono.voice-text--tenor .syll__note`
+     = (0,5,0) dentro del @media (:root + [data-theme] en :not() + 3 clases);
+     sumarle `.imm-v1` da (0,6,0) → gana. */
+  :root:not([data-theme]) .imm-v1 .lyrics__line--tono.voice-text--tenor .syll__note,
+  :root:not([data-theme]) .imm-v1 .float-label.tono-note.voice-text--tenor,
+  :root:not([data-theme]) .imm-v1 .mix-rail--note.voice-text--tenor {
+    color: var(--color-voice-tenor);
+  }
 }
 
 /* ── FAB pausa (modo timer) ── */

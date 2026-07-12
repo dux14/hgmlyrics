@@ -38,12 +38,12 @@ export default defineConfig({
         // Phaser (~1.35MB, solo /mundo) y chunks admin no deben inflar la
         // instalación del SW de cada visitante: se cachean bajo demanda con
         // la regla lazy-chunks de runtimeCaching (H10 auditoría).
-        globIgnores: ['**/assets/phaser-*.js', '**/assets/Admin*.js'],
+        globIgnores: ['**/assets/phaser-*.js', '**/assets/Admin*.js', '**/assets/SongEditor-*.js'],
         runtimeCaching: [
           {
             // Chunks lazy excluidos del precache: URL con hash de build, así
             // que CacheFirst es seguro (nunca cambia el contenido de una URL).
-            urlPattern: /\/assets\/(?:phaser|Admin)[^/]*\.js$/,
+            urlPattern: /\/assets\/(?:phaser|Admin|SongEditor)[^/]*\.js$/,
             handler: 'CacheFirst',
             options: {
               cacheName: 'lazy-chunks',

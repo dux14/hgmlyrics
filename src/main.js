@@ -36,8 +36,6 @@ import { renderHeader, hideHeader, showHeader } from './components/Header.js';
 import { renderSidebar, updateSidebarContent } from './components/Sidebar.js';
 import { skelLongText } from './lib/skeleton.js';
 import { renderSongView } from './components/SongView.js';
-import { renderSongEditor } from './components/SongEditor.js';
-import { renderAdminDashboard, renderAdminEditList } from './components/AdminDashboard.js';
 import { renderPrayerPage } from './components/PrayerPage.js';
 import { renderListDetail } from './components/ListDetail.js';
 import { initUpdateNotifier } from './components/UpdateNotifier.js';
@@ -249,7 +247,8 @@ async function bootBody() {
 
   privateRoute(
     '/admin',
-    () => {
+    async () => {
+      const { renderAdminDashboard } = await import('./components/AdminDashboard.js');
       renderAdminDashboard(mainContent);
     },
     { adminOnly: true },
@@ -257,7 +256,8 @@ async function bootBody() {
 
   privateRoute(
     '/admin/create',
-    () => {
+    async () => {
+      const { renderSongEditor } = await import('./components/SongEditor.js');
       renderSongEditor(mainContent);
     },
     { adminOnly: true },
@@ -265,7 +265,8 @@ async function bootBody() {
 
   privateRoute(
     '/admin/edit',
-    () => {
+    async () => {
+      const { renderAdminEditList } = await import('./components/AdminDashboard.js');
       renderAdminEditList(mainContent);
     },
     { adminOnly: true },
@@ -273,8 +274,9 @@ async function bootBody() {
 
   privateRoute(
     '/admin/edit/:id',
-    ({ params, query }) => {
+    async ({ params, query }) => {
       const from = new URLSearchParams(query || '').get('from');
+      const { renderSongEditor } = await import('./components/SongEditor.js');
       renderSongEditor(mainContent, params.id, { from });
     },
     { adminOnly: true },

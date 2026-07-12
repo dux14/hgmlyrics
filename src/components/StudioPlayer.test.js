@@ -111,7 +111,7 @@ describe('createStudioPlayer — SEC-X1: safeUrl bloquea javascript: en href y s
     expect(audio.getAttribute('src')).toBe(url);
   });
 
-  it('src invalido saneado: el evento error al montar NO dispara toast', async () => {
+  it('src inválido saneado: el evento error al montar NO dispara toast', async () => {
     const { audio } = createStudioPlayer({ label: 'Voz', url: 'javascript:alert(1)' });
     audio.dispatchEvent(new Event('error'));
     await Promise.resolve();

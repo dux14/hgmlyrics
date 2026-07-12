@@ -148,9 +148,9 @@ export function createStudioPlayer({ label, url }) {
   audio.addEventListener('pause', setPlayIcon);
   audio.addEventListener('ended', setPlayIcon);
   audio.addEventListener('error', async () => {
-    // src invalido saneado por safeUrl (ej. javascript:) no es un fallo de
-    // reproduccion en runtime: dispara 'error' al montar sin que el usuario
-    // haya hecho nada, y ya se ve en el <a> de descarga vacio.
+    // src inválido saneado por safeUrl (ej. javascript:) no es un fallo de
+    // reproducción en runtime: dispara 'error' al montar sin que el usuario
+    // haya hecho nada, y ya se ve en el <a> de descarga vacío.
     if (!sanitizedUrl) return;
     // Sin esto, offline el botón play parecía roto: ni icono ni aviso.
     setPlayIcon();

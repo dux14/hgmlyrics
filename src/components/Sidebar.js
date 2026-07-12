@@ -47,6 +47,14 @@ export function updateSidebarContent() {
         <span>${icon('flame', { size: 18 })}</span>
         <span>Oración del artista</span>
       </div>
+      <div class="sidebar__album-item sidebar__nav-item" data-nav="herramientas">
+        <span>${icon('sliders', { size: 18 })}</span>
+        <span>Herramientas</span>
+      </div>
+      <div class="sidebar__album-item sidebar__nav-item" data-nav="favoritos">
+        <span>${icon('heart', { size: 18 })}</span>
+        <span>Favoritos</span>
+      </div>
     </div>
     <div class="sidebar__divider" role="separator"></div>
 
@@ -161,12 +169,18 @@ function bindSidebarEvents() {
       });
   }
 
-  // Navegación directa (oración)
+  // Navegación directa (oración, herramientas, favoritos, voces)
   sidebarEl.querySelectorAll('[data-nav]').forEach((item) => {
     item.addEventListener('click', () => {
       const dest = item.dataset.nav;
       if (dest === 'oracion') {
         navigate('/oracion');
+      }
+      if (dest === 'herramientas') {
+        navigate('/herramientas');
+      }
+      if (dest === 'favoritos') {
+        navigate('/favoritos');
       }
       if (dest === 'voces') {
         navigate('/voces');

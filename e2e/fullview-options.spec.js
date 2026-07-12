@@ -5,28 +5,28 @@ import { test, expect } from '@playwright/test';
  * inmersiva karaoke, Task 23). Corre contra un servidor real (dev o preview)
  * con datos reales de la DB — no mockea nada.
  *
- * Variables de entorno (mismo patron que tests/e2e/immersive.spec.js):
+ * Variables de entorno (mismo patrón que tests/e2e/immersive.spec.js):
  *   BASE_URL: default http://localhost:3000 (dev:vercel). Para el preview:
  *     BASE_URL=https://hgmlyrics-pitch-preview.vercel.app
- *   ADMIN_STORAGE_STATE: default .playwright-mcp/admin-state.json — sesion
+ *   ADMIN_STORAGE_STATE: default .playwright-mcp/admin-state.json — sesión
  *     Supabase de un admin con flags voz_tono + immersive_player. El token
  *     expira en ~1h: si los tests empiezan a fallar con login wall, regenerar
  *     con `node .playwright-mcp/make-state.mjs`.
  *
  * Fixtures (DB real):
  *   SONG_SYNC ("Santo"): mp3 + beats + timings ready -> promueve a modo sync
- *     (TimingEngine), expone PISTA + METRONOMO, oculta AUTO-SCROLL.
+ *     (TimingEngine), expone PISTA + METRÓNOMO, oculta AUTO-SCROLL.
  *   SONG_TIMER ("A Ti te alabo"): sin audio -> se queda en TimerEngine,
- *     expone AUTO-SCROLL, nunca PISTA/METRONOMO/badge/pulso.
+ *     expone AUTO-SCROLL, nunca PISTA/METRÓNOMO/badge/pulso.
  *
- * Hallazgo empirico (verificado antes de escribir la suite, no documentado
- * en el plan): la promocion a modo sync es asincrona (~1.5-3s, fetch de
+ * Hallazgo empírico (verificado antes de escribir la suite, no documentado
+ * en el plan): la promoción a modo sync es asíncrona (~1.5-3s, fetch de
  * /api/songs/:id/audio) y el auto-ocultado del chrome (3s de inactividad,
  * CONTROLS_HIDE_MS) corre desde el montaje inicial sin reiniciarse al
  * promover — por lo que el chrome puede quedar oculto (pointer-events: none)
  * ANTES de que un test alcance a abrir el sheet. `revealChrome()` reproduce
- * la interaccion real del usuario (tap en la pantalla) para destaparlo sin
- * alterar el estado de reproduccion.
+ * la interacción real del usuario (tap en la pantalla) para destaparlo sin
+ * alterar el estado de reproducción.
  */
 
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000';
@@ -43,7 +43,7 @@ async function enterFullView(page, songId) {
 }
 
 /**
- * Espera a que la sesion se promueva a modo sync (TimingEngine con pista real):
+ * Espera a que la sesión se promueva a modo sync (TimingEngine con pista real):
  * el `<audio>` se monta solo tras resolver /api/songs/:id/audio con timings
  * `ready`. Sin esto, SONG_SYNC se comporta como timer durante la ventana de
  * carga.
@@ -53,8 +53,8 @@ async function waitForSync(page) {
 }
 
 /**
- * Si el chrome esta auto-oculto (pointer-events: none, ver nota de cabecera),
- * lo destapa con un tap neutro en el viewport — misma interaccion que un
+ * Si el chrome está auto-oculto (pointer-events: none, ver nota de cabecera),
+ * lo destapa con un tap neutro en el viewport — misma interacción que un
  * usuario real, sin togglear pausa (el handler de click solo pausa si el
  * chrome YA estaba visible).
  */
@@ -79,7 +79,12 @@ async function closeOptions(page) {
   await expect(page.locator('.osheet')).toHaveCount(0);
 }
 
-/** Limpia solo las claves del full view, sin tocar la sesion Supabase. */
+/**
+ * Limpia solo las claves del full view, sin tocar la sesión Supabase.
+ * `hkn-stage-font-scale` se limpia también porque comparte la perilla de
+ * zoom con SongView — si quedara un valor de una corrida anterior, el
+ * assert de default "1.00" dejaría de ser determinista.
+ */
 async function clearFullViewPrefs(page) {
   await page.evaluate(() => {
     Object.keys(localStorage)
@@ -104,8 +109,8 @@ test.describe('sheet de opciones — matriz completa (Santo, modo sync)', () => 
       await modeBtn.click();
 
       // VOZ solo aparece en mixed/tono, y debe verse SIN cerrar el sheet
-      // (regresion del Frente A: el grupo de voz debe reflejar el modo
-      // recien elegido en el mismo render, sin reabrir).
+      // (regresión del Frente A: el grupo de voz debe reflejar el modo
+      // recién elegido en el mismo render, sin reabrir).
       const voces = page.locator('.osheet [data-voice]');
       if (mode === 'mixed' || mode === 'tono') {
         await expect(voces).toHaveCount(4);
@@ -137,11 +142,13 @@ test.describe('defaults y persistencia', () => {
 
     // Activar la capa de acordes en SongView ANTES de entrar al full view: el
     // full view NO debe heredar este estado — arranca siempre en Letra.
+    // Santo TIENE acordes, así que #layer-chords debe existir en este
+    // entorno; si no está presente la precondición del test es inválida y
+    // debe fallar, no degradarse en silencio.
     const layerChords = page.locator('#layer-chords');
-    if (await layerChords.count()) {
-      await layerChords.click();
-      await expect(layerChords).toHaveAttribute('aria-pressed', 'true');
-    }
+    await expect(layerChords).toBeVisible();
+    await layerChords.click();
+    await expect(layerChords).toHaveAttribute('aria-pressed', 'true');
 
     await page.locator('#enter-stage-btn').click();
     await expect(page.locator('.imm-v1')).toBeVisible();
@@ -196,8 +203,8 @@ test.describe('defaults y persistencia', () => {
   });
 });
 
-test.describe('notacion de acordes', () => {
-  test('cambiar notacion cambia los labels de acordes en el rollo (Do -> G)', async ({
+test.describe('notación de acordes', () => {
+  test('cambiar notación cambia los labels de acordes en el rollo (Do -> G)', async ({
     browser,
   }) => {
     const context = await browser.newContext({ storageState: ADMIN_STORAGE_STATE });
@@ -214,7 +221,7 @@ test.describe('notacion de acordes', () => {
     const chordLabels = page.locator('#imm-roll .chord-label');
     await expect(chordLabels.first()).toBeVisible();
     const latinText = (await chordLabels.allTextContents()).join(' ');
-    // Notacion latina usa Do/Re/Mi/Fa/Sol/La/Si, nunca letras A-G sueltas.
+    // Notación latina usa Do/Re/Mi/Fa/Sol/La/Si, nunca letras A-G sueltas.
     expect(/\b(Do|Re|Mi|Fa|Sol|La|Si)\b/.test(latinText)).toBe(true);
 
     await closeOptions(page);
@@ -249,7 +256,7 @@ test.describe('afinador', () => {
 });
 
 test.describe('secciones condicionadas por modo de motor (sync vs timer)', () => {
-  test('sync (Santo): VELOCIDAD/AUTO-SCROLL oculto; PISTA y METRONOMO visibles', async ({
+  test('sync (Santo): VELOCIDAD/AUTO-SCROLL oculto; PISTA y METRÓNOMO visibles', async ({
     browser,
   }) => {
     const context = await browser.newContext({ storageState: ADMIN_STORAGE_STATE });
@@ -266,7 +273,7 @@ test.describe('secciones condicionadas por modo de motor (sync vs timer)', () =>
     await context.close();
   });
 
-  test('timer (A Ti te alabo): AUTO-SCROLL visible; sin PISTA/METRONOMO/badge/pulso', async ({
+  test('timer (A Ti te alabo): AUTO-SCROLL visible; sin PISTA/METRÓNOMO/badge/pulso', async ({
     browser,
   }) => {
     const context = await browser.newContext({ storageState: ADMIN_STORAGE_STATE });
@@ -274,7 +281,7 @@ test.describe('secciones condicionadas por modo de motor (sync vs timer)', () =>
 
     await enterFullView(page, SONG_TIMER);
     // Ventana de gracia por si el entorno tuviera datos de audio para esta
-    // cancion (no deberia, es la fixture sin mp3): confirmar que NO promueve.
+    // canción (no debería, es la fixture sin mp3): confirmar que NO promueve.
     await page.waitForTimeout(2000);
     await openOptions(page);
 
@@ -315,7 +322,7 @@ test.describe('voz en el sheet', () => {
   });
 });
 
-test.describe('metronomo: badge, pulso y auto-ocultado del chrome', () => {
+test.describe('metrónomo: badge, pulso y auto-ocultado del chrome', () => {
   test('badge y pulso visibles al entrar; el pulso NO se oculta con el chrome', async ({
     browser,
   }) => {
@@ -330,7 +337,7 @@ test.describe('metronomo: badge, pulso y auto-ocultado del chrome', () => {
     await expect(page.locator('#imm-pulse')).toBeVisible();
 
     // El chrome se auto-oculta a los 3s de inactividad (CONTROLS_HIDE_MS):
-    // esperar a que ocurra es la unica forma real de probar que el pulso
+    // esperar a que ocurra es la única forma real de probar que el pulso
     // (hermano del chrome en el DOM, no hijo) sobrevive al ocultado.
     await expect(page.locator('#imm-chrome')).toHaveClass(/imm-v1__chrome--hidden/, {
       timeout: 6000,
@@ -351,31 +358,21 @@ test.describe('metronomo: badge, pulso y auto-ocultado del chrome', () => {
 
     await page.locator('#imm-player-play').click();
 
-    // Santo tiene beats desde 92ms y varios interludios entre lineas; con
+    // Santo tiene beats desde 92ms y varios interludios entre líneas; con
     // gap >= 2 beats el count-in debe aparecer en alguno durante los
-    // primeros ~15s de reproduccion real. Timeout generoso, sin sleeps fijos.
+    // primeros ~15s de reproducción real. Timeout generoso, sin sleeps fijos.
+    // Verificado en corrida real: el count-in SÍ aparece con esta fixture,
+    // así que el assert es duro (debe fallar si la feature regresa).
     const countIn = page.locator('.imm-interlude__count');
-    try {
-      await expect(countIn).toBeVisible({ timeout: 15000 });
-      await expect(countIn).toHaveText(/^\d+$/);
-      await page.screenshot({ path: 'e2e/screenshots/fullview-count-in.png' });
-    } catch (err) {
-      // No degradar a un assert falso: si esta fixture no produce ningun gap
-      // >= 2 beats durante la ventana observada, se reporta como concern en
-      // vez de inventar una aserción que no verifica nada real.
-      test.info().annotations.push({
-        type: 'concern',
-        description:
-          'No se observo .imm-interlude__count en 15s de reproduccion real de Santo; ' +
-          'verificar manualmente si existe algun gap >= 2 beats en esta cancion.',
-      });
-    }
+    await expect(countIn).toBeVisible({ timeout: 15000 });
+    await expect(countIn).toHaveText(/^\d+$/);
+    await page.screenshot({ path: 'e2e/screenshots/fullview-count-in.png' });
 
     await context.close();
   });
 });
 
-test.describe('verificacion visual — layout', () => {
+test.describe('verificación visual — layout', () => {
   test('afinador no tapa la barra de player; el sheet no desborda el viewport', async ({
     browser,
   }) => {
@@ -387,14 +384,18 @@ test.describe('verificacion visual — layout', () => {
     await revealChrome(page);
 
     await page.locator('#imm-tuner-toggle').click();
+    // Ambos elementos deben estar activos en este punto (pista sync + panel
+    // del afinador abierto): si alguno no aparece, el test debe fallar en
+    // vez de saltar el assert de layout en silencio.
     await expect(page.locator('#imm-tuner-panel')).toBeVisible();
+    await expect(page.locator('#imm-player')).toBeVisible();
     await page.screenshot({ path: 'e2e/screenshots/fullview-afinador-player.png' });
 
     const player = await page.locator('#imm-player').boundingBox();
     const tuner = await page.locator('#imm-tuner-panel').boundingBox();
-    if (player && tuner) {
-      expect(tuner.y + tuner.height).toBeLessThanOrEqual(player.y + 1);
-    }
+    expect(player).not.toBeNull();
+    expect(tuner).not.toBeNull();
+    expect(tuner.y + tuner.height).toBeLessThanOrEqual(player.y + 1);
 
     await page.locator('#imm-tuner-toggle').click();
     await openOptions(page);

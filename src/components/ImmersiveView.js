@@ -606,6 +606,7 @@ function setMetronomeOn(s, on) {
     quickBtn.setAttribute('aria-pressed', String(on));
     quickBtn.innerHTML = icon(on ? 'timer' : 'timer-off', { size: 18 });
   }
+  refreshOptionsSheet(s);
 }
 
 /** Cae en caliente de TimingEngine a TimerEngine (p.ej. error del `<audio>`), sin salir de la vista. */
@@ -710,6 +711,7 @@ function mountPlayerBar(s) {
     playBtn.innerHTML = icon('pause', { size: 18 });
     playBtn.setAttribute('aria-label', 'Pausar pista');
     startPulseLoop(s);
+    refreshOptionsSheet(s);
   };
   const onPause = () => {
     s.audioPlaying = false;
@@ -719,6 +721,7 @@ function mountPlayerBar(s) {
     playBtn.setAttribute('aria-label', 'Reproducir pista');
     showControls(s);
     stopPulseLoop(s);
+    refreshOptionsSheet(s);
   };
   const onTimeUpdate = () => {
     scrubber.value = String(s.audioEl.currentTime);
@@ -932,9 +935,15 @@ function selectVoice(s, category) {
     setTunerOn(s, false);
     setTunerOn(s, true);
   }
+  refreshOptionsSheet(s);
 }
 
 // ── SHEET DE OPCIONES ─────────────────────────────────────────────────────
+
+/** Con el sheet abierto, lo re-renderiza contra el estado actual de `s`; cerrado, no-op (nunca lo abre). */
+function refreshOptionsSheet(s) {
+  if (isOptionsSheetOpen()) openOptions(s);
+}
 
 function openOptions(s) {
   showControls(s);
@@ -1032,12 +1041,14 @@ function setTunerOn(s, on) {
         s.tunerOn = false;
         s.els.tunerToggle.setAttribute('aria-pressed', 'false');
         s.els.tunerPanel.hidden = true;
+        refreshOptionsSheet(s);
       },
     });
   } else {
     s.floatingTuner?.destroy();
     s.floatingTuner = null;
   }
+  refreshOptionsSheet(s);
 }
 
 // ── ENTRAR / SALIR ─────────────────────────────────────────────────────

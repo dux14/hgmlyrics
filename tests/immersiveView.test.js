@@ -1647,4 +1647,121 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
       cafSpy.mockRestore();
     });
   });
+
+  // Task 3.1: con el sheet ABIERTO, un cambio de estado disparado desde
+  // FUERA del sheet (toggle rápido, X propia del afinador, play/pausa físico
+  // del audio, chip de voz) debe reflejarse al instante en el sheet — mismo
+  // patrón que `applyMode` ya usa (`isOptionsSheetOpen() -> openOptions(s)`).
+  // Con el sheet CERRADO, ninguno de esos caminos debe abrirlo.
+  describe('refreshOptionsSheet: el sheet abierto refleja cambios hechos desde fuera', () => {
+    it('metrónomo: el toggle rápido con el sheet abierto deja #osheet-metronome en aria-pressed=true', async () => {
+      enablePlayerFlag();
+      getSongAudio.mockResolvedValue(readyTimingsWithBeats());
+      const sv = mountSongView();
+      enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+      await flushAsync();
+
+      document.getElementById('imm-open-options').click();
+      expect(document.getElementById('osheet-metronome').getAttribute('aria-pressed')).toBe(
+        'false',
+      );
+
+      document.getElementById('imm-metronome-toggle').click();
+
+      expect(document.getElementById('osheet-metronome').getAttribute('aria-pressed')).toBe(
+        'true',
+      );
+    });
+
+    it('afinador: el toggle rápido y la X propia del widget refrescan #osheet-tuner con el sheet abierto', () => {
+      const sv = mountSongView();
+      enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+
+      document.getElementById('imm-tuner-toggle').click(); // arranca el mic, sheet aún cerrado
+      document.getElementById('imm-open-options').click();
+      expect(document.getElementById('osheet-tuner').getAttribute('aria-pressed')).toBe('true');
+
+      document.getElementById('imm-tuner-toggle').click(); // apaga vía toggle rápido
+      expect(document.getElementById('osheet-tuner').getAttribute('aria-pressed')).toBe('false');
+
+      document.getElementById('imm-tuner-toggle').click(); // reabre
+      document.getElementById('imm-open-options').click();
+      expect(document.getElementById('osheet-tuner').getAttribute('aria-pressed')).toBe('true');
+
+      // onClose del FloatingTuner pone s.tunerOn=false directo (sin pasar por
+      // setTunerOn) — también debe refrescar el sheet.
+      document.querySelector('[aria-label="Cerrar afinador"]').click();
+      expect(document.getElementById('osheet-tuner').getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('player: play/pause físico del audio refresca #osheet-player con el sheet abierto', async () => {
+      enablePlayerFlag();
+      getSongAudio.mockResolvedValue(readyTimingsWithBeats());
+      const sv = mountSongView();
+      enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+      await flushAsync();
+
+      const audio = document.querySelector('#imm-player-slot audio');
+      document.getElementById('imm-open-options').click();
+      expect(document.getElementById('osheet-player').getAttribute('aria-pressed')).toBe('false');
+
+      audio.dispatchEvent(new Event('play'));
+      expect(document.getElementById('osheet-player').getAttribute('aria-pressed')).toBe('true');
+
+      audio.dispatchEvent(new Event('pause'));
+      expect(document.getElementById('osheet-player').getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('voz: elegir una voz distinta desde el chip de FUERA del sheet refresca la sección VOZ del sheet abierto', () => {
+      // El propio OptionsSheet ya actualiza su DOM al hacer click en un
+      // data-voice interno (optimista, sin pasar por ImmersiveView) — esto
+      // NO prueba el refresh de Task 3.1. La ruta real que sí lo necesita es
+      // el chip #imm-voice-chips, que vive FUERA del sheet.
+      localStorage.setItem('hkn-immersive-mode', 'mixed');
+      const sv = mountSongView();
+      enterImmersive(sv, { song: buildMultiVoiceSong(), getActiveVoice: () => 'soprano-1' });
+
+      document.getElementById('imm-open-options').click();
+      expect(document.querySelector('.osheet [data-voice="soprano"]').getAttribute('aria-pressed')).toBe(
+        'true',
+      );
+
+      document.querySelector('[data-category="tenor"]').click();
+
+      expect(document.querySelector('.osheet [data-voice="tenor"]').getAttribute('aria-pressed')).toBe(
+        'true',
+      );
+      expect(document.querySelector('.osheet [data-voice="soprano"]').getAttribute('aria-pressed')).toBe(
+        'false',
+      );
+    });
+
+    it('con el sheet CERRADO, ninguno de esos caminos lo abre', async () => {
+      enablePlayerFlag();
+      getSongAudio.mockResolvedValue(readyTimingsWithBeats());
+      localStorage.setItem('hkn-immersive-mode', 'mixed');
+      const sv = mountSongView();
+      enterImmersive(sv, { song: buildMultiVoiceSong(), getActiveVoice: () => 'soprano-1' });
+      await flushAsync();
+
+      const audio = document.querySelector('#imm-player-slot audio');
+      expect(document.querySelector('.osheet')).toBeNull();
+
+      document.getElementById('imm-metronome-toggle').click();
+      expect(document.querySelector('.osheet')).toBeNull();
+
+      document.getElementById('imm-tuner-toggle').click();
+      expect(document.querySelector('.osheet')).toBeNull();
+      document.querySelector('[aria-label="Cerrar afinador"]').click();
+      expect(document.querySelector('.osheet')).toBeNull();
+
+      audio.dispatchEvent(new Event('play'));
+      expect(document.querySelector('.osheet')).toBeNull();
+      audio.dispatchEvent(new Event('pause'));
+      expect(document.querySelector('.osheet')).toBeNull();
+
+      document.querySelector('[data-category="tenor"]').click();
+      expect(document.querySelector('.osheet')).toBeNull();
+    });
+  });
 });

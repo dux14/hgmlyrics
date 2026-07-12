@@ -159,7 +159,7 @@ export function createStudioPlayer({ label, url }) {
   });
   playBtn.addEventListener('click', () => {
     // El listener 'error' del audio ya avisa al usuario si play() no arranca;
-    // aqui solo dejamos rastro para debugging (autoplay policy es casi
+    // aquí solo dejamos rastro para debugging (autoplay policy es casi
     // imposible porque siempre parte de un gesto del usuario; AbortError es benigno).
     if (audio.paused) audio.play().catch((e) => console.warn('StudioPlayer play() rechazado', e));
     else audio.pause();

@@ -551,8 +551,8 @@ describe('SongAudioSection', () => {
     }
 
     beforeEach(() => {
-      HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
-      HTMLMediaElement.prototype.pause = vi.fn();
+      window.HTMLMediaElement.prototype.play = vi.fn().mockResolvedValue(undefined);
+      window.HTMLMediaElement.prototype.pause = vi.fn();
     });
 
     it('muestra el texto real de la línea truncado; sin getSong cae a "Línea N"', async () => {
@@ -622,7 +622,8 @@ describe('SongAudioSection', () => {
       );
 
       section.el.querySelectorAll('.audio-line__header')[1].click();
-      const minus500 = () => section.el.querySelector('[data-action="line-nudge"][data-delta="-500"]');
+      const minus500 = () =>
+        section.el.querySelector('[data-action="line-nudge"][data-delta="-500"]');
       const msDisplay = () => section.el.querySelector('.audio-line__ms');
 
       expect(msDisplay().textContent).toBe('0:04.00');
@@ -655,7 +656,8 @@ describe('SongAudioSection', () => {
 
       // última línea: sin next, techo = durationSec*1000 = 4600
       section.el.querySelectorAll('.audio-line__header')[1].click();
-      const plus500 = () => section.el.querySelector('[data-action="line-nudge"][data-delta="500"]');
+      const plus500 = () =>
+        section.el.querySelector('[data-action="line-nudge"][data-delta="500"]');
       plus500().click(); // 4500
       expect(section.el.querySelector('.audio-line__ms').textContent).toBe('0:04.50');
       plus500().click(); // clamp a 4600
@@ -695,9 +697,7 @@ describe('SongAudioSection', () => {
         expect(songAudioApi.patchLineTiming).toHaveBeenCalledWith('song-1', 1, 4100),
       );
       await vi.waitFor(() => expect(songAudioApi.getSongAudio).toHaveBeenCalledTimes(2));
-      await vi.waitFor(() =>
-        expect(section.el.querySelector('.audio-line__editor')).toBeNull(),
-      );
+      await vi.waitFor(() => expect(section.el.querySelector('.audio-line__editor')).toBeNull());
 
       section.el.querySelectorAll('.audio-line__header')[0].click();
       section.el.querySelector('[data-action="line-nudge"][data-delta="100"]').click();
@@ -742,7 +742,7 @@ describe('SongAudioSection', () => {
       section.el.querySelector('[data-action="line-listen"]').click();
 
       section.destroy();
-      expect(HTMLMediaElement.prototype.pause).toHaveBeenCalled();
+      expect(window.HTMLMediaElement.prototype.pause).toHaveBeenCalled();
     });
   });
 });

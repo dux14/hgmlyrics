@@ -231,7 +231,7 @@ export function createSongAudioSection({ songId, getSong = null }) {
         const editorHtml = expandedI === i ? lineEditorMarkup(l, i) : '';
         return `
           <li class="audio-line ${statusClass}">
-            <div class="audio-line__header" data-action="line-expand" data-i="${i}">
+            <div class="audio-line__header" data-action="line-expand" data-i="${i}" role="button" tabindex="0">
               <span class="audio-line__dot" aria-hidden="true"></span>
               <span class="audio-line__label">${escapeHtml(labelText)} · ${escapeHtml(time)}</span>
               ${showSr ? `<span class="sr-only">${escapeHtml(warnText)}</span>` : ''}
@@ -468,7 +468,7 @@ export function createSongAudioSection({ songId, getSong = null }) {
     const line = sortedTimingLines().find((l) => l.i === i);
     previewAudio?.pause();
     expandedI = i;
-    proposedMs = line ? (line.startMs ?? 0) : 0;
+    proposedMs = line ? clampProposedMs(i, line.startMs ?? 0) : 0;
   }
 
   function nudgeLine(deltaStr) {
@@ -478,13 +478,17 @@ export function createSongAudioSection({ songId, getSong = null }) {
 
   function listenFromLine() {
     if (expandedI === null || proposedMs === null || !state.audio?.url) return;
-    if (!previewAudio) previewAudio = new Audio(state.audio.url);
+    // Recrea el preview si aun no existe o si la URL firmada rotó (refresh /
+    // sesión larga) — evita apuntar a una URL vencida.
+    if (!previewAudio || previewAudio.src !== state.audio.url) {
+      previewAudio = new Audio(state.audio.url);
+    }
     if (!previewAudio.paused) {
       previewAudio.pause();
       return;
     }
     previewAudio.currentTime = proposedMs / 1000;
-    previewAudio.play();
+    previewAudio.play().catch(() => {});
   }
 
   async function saveLineTiming() {
@@ -582,6 +586,18 @@ export function createSongAudioSection({ songId, getSong = null }) {
     } else if (target.dataset.action === 'line-save') {
       saveLineTiming();
     }
+  });
+
+  // La cabecera de la fila expandible es un <div role="button"> (no un
+  // <button> real, para no anidar botones dentro): Enter/Espacio disparan la
+  // misma acción line-expand que el click.
+  el.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const target = e.target.closest('[data-action="line-expand"]');
+    if (!target) return;
+    e.preventDefault();
+    expandLine(Number(target.dataset.i));
+    render();
   });
 
   render();

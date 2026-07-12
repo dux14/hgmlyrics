@@ -268,7 +268,7 @@ body.search-focus .search-bar input::placeholder {
 }
 @media (min-width: 768px) {
   .song-tile-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   }
 }
 

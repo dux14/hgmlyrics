@@ -1011,11 +1011,13 @@ async function _renderSongBody(container, songId, isPreview, song) {
 
   // ── Chip BPM (F4-D6): best-effort, no bloquea el render principal. Si el
   // usuario navega fuera antes de resolver, no toca el DOM (mismo patrón de
-  // guard que F5 arriba). ──
+  // guard que F5 arriba). El callback se desuscribe a sí mismo en cuanto
+  // dispara — si el fetch nunca resuelve, el listener no queda huérfano. ──
   if (songId) {
     let bpmDestroyed = false;
     const unsubscribeBpmRoute = onRouteChange(() => {
       bpmDestroyed = true;
+      unsubscribeBpmRoute();
     });
     getSongAudio(songId)
       .catch(() => null)

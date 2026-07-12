@@ -55,11 +55,12 @@ function metronomeMarkup(audio, timings) {
   if (timings?.status !== 'ready') return '';
   const bpmDetected = timings.bpmDetected;
   const bpmDetectedText = Number.isFinite(bpmDetected) ? String(bpmDetected) : 'sin detección';
-  const bpmManualValue = audio?.bpmManual ?? '';
+  const bpmManualValue = escapeHtml(String(audio?.bpmManual ?? ''));
   const timeSignature = audio?.timeSignature ?? '4/4';
-  const beatAnchorValue = audio?.beatAnchor ?? '';
+  const beatAnchorValue = escapeHtml(String(audio?.beatAnchor ?? ''));
   const options = TIME_SIGNATURES.map(
-    (ts) => `<option value="${ts}"${ts === timeSignature ? ' selected' : ''}>${ts}</option>`,
+    (ts) =>
+      `<option value="${escapeHtml(ts)}"${ts === timeSignature ? ' selected' : ''}>${escapeHtml(ts)}</option>`,
   ).join('');
   return `
     <div class="song-audio__metronome">
@@ -189,7 +190,14 @@ export function createSongAudioSection({ songId }) {
     }
   }
 
-  async function saveMetronome(changes) {
+  /**
+   * @param {Record<string, unknown>} changes payload PATCH (valores parseados)
+   * @param {{bpmManual: string, timeSignature: string, beatAnchor: string}} typedRaw
+   *   valores tal cual estaban escritos en los inputs al momento del click —
+   *   si el PATCH falla, render() reconstruye el sub-bloque desde state.audio
+   *   (sin cambios) y borraría lo que el admin tecleó; los reinyectamos.
+   */
+  async function saveMetronome(changes, typedRaw) {
     if (Object.keys(changes).length === 0) return;
     state.error = null;
     try {
@@ -198,7 +206,23 @@ export function createSongAudioSection({ songId }) {
     } catch (err) {
       state.error = err.message || 'No se pudo guardar el ajuste';
       render();
+      restoreMetronomeInputs(typedRaw);
     }
+  }
+
+  function restoreMetronomeInputs(typedRaw) {
+    const wrap = el.querySelector('.song-audio__metronome');
+    if (!wrap) return;
+    const bpmInput = wrap.querySelector('.song-audio__bpm-manual');
+    const tsSelect = wrap.querySelector('.song-audio__time-signature');
+    const anchorInput = wrap.querySelector('.song-audio__beat-anchor');
+    if (bpmInput) bpmInput.value = typedRaw.bpmManual;
+    if (tsSelect) tsSelect.value = typedRaw.timeSignature;
+    if (anchorInput) anchorInput.value = typedRaw.beatAnchor;
+    // updateDirty() vive dentro de wireMetronome (recreada por el render() de
+    // arriba); un evento 'input' la dispara por el listener ya cableado y
+    // reactiva el botón Guardar contra la baseline sin tocar (no cambió).
+    bpmInput?.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   function wireMetronome() {
@@ -249,7 +273,18 @@ export function createSongAudioSection({ songId }) {
       if (cur.beatAnchor !== metronomeBaseline.beatAnchor) {
         changes.beatAnchor = cur.beatAnchor;
       }
-      saveMetronome(changes);
+      if (Object.keys(changes).length === 0) return;
+      const typedRaw = {
+        bpmManual: bpmInput.value,
+        timeSignature: tsSelect.value,
+        beatAnchor: anchorInput.value,
+      };
+      // Evita doble submit mientras el PATCH+refresh está en vuelo. Se
+      // reactiva solo: el render() posterior (éxito) reconstruye el botón
+      // deshabilitado por defecto, y el error path lo reactiva vía
+      // restoreMetronomeInputs() si el ajuste sigue siendo distinto.
+      saveBtn.disabled = true;
+      saveMetronome(changes, typedRaw);
     });
   }
 

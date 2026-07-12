@@ -379,6 +379,10 @@ describe('SongAudioSection', () => {
     await vi.waitFor(() =>
       expect(section.el.querySelector('.song-audio__error')?.textContent).toContain('bpm invalido'),
     );
+    expect(section.el.querySelector('.song-audio__bpm-manual').value).toBe('999');
+    expect(section.el.querySelector('[data-action="song-audio-save-metronome"]').disabled).toBe(
+      false,
+    );
 
     section.destroy();
   });

@@ -157,9 +157,9 @@ body.immersive-active > .floating-tuner {
   transform-origin: left center;
   word-wrap: break-word;
   transition:
-    opacity 0.3s ease,
-    filter 0.3s ease,
-    transform 0.3s ease;
+    opacity 0.22s cubic-bezier(0.33, 1, 0.68, 1),
+    filter 0.22s cubic-bezier(0.33, 1, 0.68, 1),
+    transform 0.22s cubic-bezier(0.33, 1, 0.68, 1);
 }
 
 .imm-line--active {

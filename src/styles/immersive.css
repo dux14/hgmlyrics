@@ -353,6 +353,15 @@ body.immersive-active > .floating-tuner {
   margin: 0;
 }
 
+/* Desktop/tablet: el afinador recupera un tope de ancho centrado en vez de
+   estirarse a todo el ancho de la columna de lectura (auditoria 12-jul). */
+@media (min-width: 768px) {
+  .imm-v1__tuner-panel .floating-tuner {
+    max-width: 480px;
+    margin-inline: auto;
+  }
+}
+
 /* Slot del player de pista (Fase D): oculto hasta que exista audio+flag. */
 .imm-v1__player-slot[hidden] {
   display: none;

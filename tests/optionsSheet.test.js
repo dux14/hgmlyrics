@@ -88,7 +88,13 @@ describe('openOptionsSheet — interacción', () => {
     expect(btn).toBeTruthy();
     expect(btn.classList.contains('is-active')).toBe(true);
     expect(btn.getAttribute('aria-pressed')).toBe('true');
-    expect(btn.textContent).toBe('Activado');
+    expect(btn.textContent).toBe('Sonando');
+  });
+
+  it('showMetronome=true muestra "Silenciado" cuando metronomeOn es false', () => {
+    openOptionsSheet({ showTono: false, showMetronome: true, metronomeOn: false });
+    const btn = document.querySelector('#osheet-metronome');
+    expect(btn.textContent).toBe('Silenciado');
   });
 
   it('toggle METRÓNOMO dispara onMetronomeToggle con el nuevo estado', () => {
@@ -102,8 +108,27 @@ describe('openOptionsSheet — interacción', () => {
     const btn = document.querySelector('[data-act="metronome-toggle"]');
     btn.click();
     expect(onMetronomeToggle).toHaveBeenCalledWith(true);
-    expect(btn.textContent).toBe('Activado');
+    expect(btn.textContent).toBe('Sonando');
     expect(btn.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('sección METRÓNOMO muestra el título "Click del metrónomo" y la línea de guía visual', () => {
+    openOptionsSheet({ showTono: false, showMetronome: true, metronomeOn: true });
+    const headers = Array.from(document.querySelectorAll('.osheet__h')).map((h) => h.textContent);
+    expect(headers).toContain('Click del metrónomo');
+    const hint = document.querySelector('.osheet__hint');
+    expect(hint).toBeTruthy();
+    expect(hint.textContent).toBe('Guía visual activa (badge y pulso)');
+  });
+
+  it('#osheet-player muestra el label dinámico según playerOn', () => {
+    openOptionsSheet({ showTono: false, showPlayerToggle: true, playerOn: true });
+    expect(document.querySelector('#osheet-player').textContent).toBe('Pista: sonando');
+  });
+
+  it('#osheet-player muestra "Pista: en pausa" cuando playerOn es false', () => {
+    openOptionsSheet({ showTono: false, showPlayerToggle: true, playerOn: false });
+    expect(document.querySelector('#osheet-player').textContent).toBe('Pista: en pausa');
   });
 
   it('velocidad autoscroll dispara onAutoscroll y actualiza el valor mostrado', () => {

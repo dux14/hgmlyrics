@@ -84,6 +84,14 @@
   color: var(--color-text-secondary);
 }
 
+/* Texto secundario dentro de una sección (hints). El espaciado respecto
+   al hermano anterior lo da el gap de .osheet__section, sin margin propio. */
+.osheet__hint {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  opacity: 0.65;
+}
+
 /* Controles en fila (tono / tamaño / velocidad) */
 .osheet__seg {
   display: flex;

@@ -779,7 +779,7 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     expect(document.getElementById('imm-fab').hidden).toBe(true);
   });
 
-  it("toggle 'Reproducir pista' en el sheet reproduce/pausa el audio", async () => {
+  it("toggle 'Pista: en pausa/sonando' en el sheet reproduce/pausa el audio", async () => {
     isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
@@ -788,7 +788,7 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
 
     document.getElementById('imm-open-options').click();
     const toggle = document.querySelector('.osheet [data-act="player-toggle"]');
-    expect(toggle.textContent).toBe('Reproducir pista');
+    expect(toggle.textContent).toBe('Pista: en pausa');
     toggle.click();
 
     expect(window.HTMLMediaElement.prototype.play).toHaveBeenCalled();

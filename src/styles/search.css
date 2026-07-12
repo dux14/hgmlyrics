@@ -185,6 +185,17 @@ body.search-focus .search-bar input::placeholder {
 .search-row:active {
   background: var(--color-surface-2, rgba(255, 255, 255, 0.05));
 }
+@media (hover: hover) {
+  .search-row:hover {
+    background: var(--color-surface-hover);
+  }
+  .search-rail__album:hover {
+    transform: translateY(-2px);
+  }
+  .voz-card:hover {
+    transform: translateY(-2px);
+  }
+}
 .search-row__cover {
   width: 56px;
   height: 56px;
@@ -342,6 +353,7 @@ body.search-focus .search-bar input::placeholder {
   flex: none;
   width: 98px;
   text-decoration: none;
+  transition: transform 0.15s ease;
 }
 .search-rail__album img {
   width: 98px;
@@ -371,6 +383,7 @@ body.search-focus .search-bar input::placeholder {
   background: var(--color-surface-2, rgba(255, 255, 255, 0.05));
   border: 1px solid var(--color-border);
   text-decoration: none;
+  transition: transform 0.15s ease;
 }
 .voz-card__art {
   width: 40px;

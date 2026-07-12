@@ -163,6 +163,10 @@
   box-shadow: 0 0 20px color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
+.pf-edit-primary:hover {
+  background: color-mix(in oklch, var(--color-primary) 85%, black);
+}
+
 .pf-edit-primary .icon {
   width: 17px;
   height: 17px;
@@ -497,10 +501,18 @@
   font-family: inherit;
 }
 
+.pf-ab:hover {
+  background: var(--color-surface-hover);
+}
+
 .pf-ab.rm {
   color: var(--color-error);
   border-color: color-mix(in srgb, var(--color-error) 22%, transparent);
   background: transparent;
+}
+
+.pf-ab.rm:hover {
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
 }
 
 .pf-av-note {
@@ -765,6 +777,10 @@ select.pf-inp {
   cursor: pointer;
   box-shadow: 0 0 18px color-mix(in srgb, var(--color-action) 35%, transparent);
   font-family: inherit;
+}
+
+.pf-btn-action:hover:not(.pf-btn-action--sent) {
+  background: color-mix(in oklch, var(--color-action) 85%, black);
 }
 
 .pf-btn-action .icon {

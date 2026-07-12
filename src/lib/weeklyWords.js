@@ -27,6 +27,25 @@ export async function getWeeklyWords() {
   }
 }
 
+/**
+ * Detalle por id con SWR (memoria + idb): visitada una vez, la voz en off
+ * queda disponible offline igual que el listado (H8 auditoría). A diferencia
+ * de getWeeklyWords, propaga el error si no hay stale: la vista decide el
+ * estado de error.
+ * @param {string} id
+ */
+export async function getWeeklyWord(id) {
+  const session = getSession();
+  const headers = session ? { Authorization: `Bearer ${session.access_token}` } : {};
+  const fetcher = async () => {
+    const res = await fetch(`/api/weekly-words/${id}`, { headers });
+    if (!res.ok) throw new Error(`getWeeklyWord failed: ${res.status}`);
+    return res.json();
+  };
+  const { data } = await cached(`weekly-word-${id}`, fetcher, { ttl: TTL });
+  return data;
+}
+
 export function warmWeeklyWords() {
   warm(KEY, fetchWeeklyWords, { ttl: TTL });
 }

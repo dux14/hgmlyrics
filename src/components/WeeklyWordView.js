@@ -111,14 +111,8 @@ export async function renderWeeklyWordById(container, id) {
   renderAsyncRegion(region, {
     skeleton: () => skelLongText(),
     fetcher: async () => {
-      const { supabase } = await import('../lib/supabase.js');
-      const { data: session } = await supabase.auth.getSession();
-      const token = session?.session?.access_token;
-      const res = await fetch(`/api/weekly-words/${id}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error(`${res.status}`);
-      return res.json();
+      const { getWeeklyWord } = await import('../lib/weeklyWords.js');
+      return getWeeklyWord(id);
     },
     render: (word) => renderWeeklyWordView(container, word),
     empty: () => `

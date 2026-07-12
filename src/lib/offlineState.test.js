@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 describe('offlineState', () => {
-  beforeEach(() => { vi.resetModules(); });
+  beforeEach(() => {
+    vi.resetModules();
+  });
 
   it('confia solo en navigator.onLine === false', async () => {
     globalThis.navigator = { onLine: false };
@@ -9,12 +11,23 @@ describe('offlineState', () => {
     expect(await isOnline()).toBe(false);
   });
 
-  it('si onLine es true, confirma con heartbeat HEAD', async () => {
+  it('si onLine es true, confirma con heartbeat GET contra /api/health', async () => {
     globalThis.navigator = { onLine: true };
     globalThis.fetch = vi.fn().mockResolvedValue({ ok: true });
     const { isOnline } = await import('./offlineState.js');
     expect(await isOnline()).toBe(true);
     expect(globalThis.fetch).toHaveBeenCalled();
+    const [url, options] = globalThis.fetch.mock.calls[0];
+    expect(url.startsWith('/api/health')).toBe(true);
+    expect(options).toMatchObject({ cache: 'no-store' });
+    expect(options.method).toBeUndefined();
+  });
+
+  it('heartbeat con res.ok false => offline', async () => {
+    globalThis.navigator = { onLine: true };
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false });
+    const { isOnline } = await import('./offlineState.js');
+    expect(await isOnline()).toBe(false);
   });
 
   it('heartbeat que falla => offline', async () => {

@@ -3,8 +3,10 @@
  *
  * Logica de deteccion:
  *   1. navigator.onLine === false  => offline sin ambiguedad (SO lo sabe).
- *   2. navigator.onLine === true   => confirmar con heartbeat HEAD; un fetch
- *      exitoso (res.ok) => online; cualquier error => offline.
+ *   2. navigator.onLine === true   => confirmar con heartbeat GET contra
+ *      /api/health (función serverless, no el shell estático servido por el
+ *      CDN/SW): detecta también el caso "front arriba, API caída" (H9 de la
+ *      auditoría); un fetch exitoso (res.ok) => online; cualquier error => offline.
  *
  * Estado interno inicializado en null ("desconocido") para que la primera
  * llamada a _setState siempre notifique a los suscriptores, independientemente
@@ -18,8 +20,10 @@ const subs = new Set();
 export async function isOnline() {
   if (!globalThis.navigator?.onLine) return false;
   try {
-    const res = await globalThis.fetch(`/?_=${performance.now()}`, {
-      method: 'HEAD',
+    // /api/health (función serverless) y no '/' (shell estático del CDN):
+    // detecta también "front arriba, API caída" (H9 auditoría).
+    // GET, no HEAD: allowMethods del endpoint solo acepta GET.
+    const res = await globalThis.fetch(`/api/health?_=${performance.now()}`, {
       cache: 'no-store',
     });
     return !!res?.ok;

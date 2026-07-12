@@ -125,9 +125,21 @@ export default withErrors(async (req, res) => {
   // claves extra en el payload.
   const beatsRow = validBeats ? { bpm: validBeats.bpm, beatsMs: validBeats.beatsMs } : null;
 
+  // score/interpolated son best-effort, igual que beats: a diferencia de
+  // i/startMs (ya validados arriba, tumban el webhook si son invalidos), su
+  // ausencia o invalidez nunca descarta el timing de la linea, solo esos dos
+  // campos caen a un default neutro. Shape explicito por linea: solo estas
+  // cuatro claves viajan al JSONB, aunque Modal mande claves extra.
+  const linesRow = lines.map((l) => ({
+    i: l.i,
+    startMs: l.startMs,
+    score: typeof l.score === 'number' && l.score >= 0 && l.score <= 1 ? l.score : null,
+    interpolated: l.interpolated === true,
+  }));
+
   await sql`
     UPDATE song_line_timings
-    SET status = 'ready', lines = ${sql.json(lines)}, provider = ${provider ?? null}, error = NULL,
+    SET status = 'ready', lines = ${sql.json(linesRow)}, provider = ${provider ?? null}, error = NULL,
         bpm_detected = ${beatsRow ? beatsRow.bpm : null}, beats = ${beatsRow ? sql.json(beatsRow) : null}
     WHERE song_id = ${songId} AND status = 'processing'
   `;

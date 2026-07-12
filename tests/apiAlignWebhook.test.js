@@ -157,6 +157,83 @@ describe('POST /api/align/webhook — payload de lines validas', () => {
     expect(update).toBeTruthy();
     expect(update.text).toContain('ready');
     expect(update.text).not.toContain('failed');
+    // values: [linesRow, provider, bpm_detected, beats, songId] — shape explicito
+    // por linea aunque el payload no traiga score/interpolated (Modal viejo).
+    expect(update.values[0]).toEqual([
+      { i: 0, startMs: 0, score: null, interpolated: false },
+      { i: 1, startMs: 1200, score: null, interpolated: false },
+      { i: 2, startMs: 3400, score: null, interpolated: false },
+    ]);
+  });
+});
+
+describe('POST /api/align/webhook — score/interpolated por linea (best-effort)', () => {
+  it('score/interpolated validos → persistidos con shape explicito', async () => {
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    sqlResponses.push([]); // UPDATE ... status='ready'
+    const lines = [
+      { i: 0, startMs: 100, score: 0.87, interpolated: false },
+      { i: 1, startMs: 500, score: null, interpolated: true },
+    ];
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ status: 'ready' });
+    const update = sqlCalls.find((c) => c.text.startsWith('UPDATE song_line_timings'));
+    expect(update.values[0]).toEqual([
+      { i: 0, startMs: 100, score: 0.87, interpolated: false },
+      { i: 1, startMs: 500, score: null, interpolated: true },
+    ]);
+  });
+
+  it('sin score/interpolated (Modal viejo) → caen a null/false, no falla', async () => {
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    sqlResponses.push([]); // UPDATE ... status='ready'
+    const lines = [{ i: 0, startMs: 100 }];
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ status: 'ready' });
+    const update = sqlCalls.find((c) => c.text.startsWith('UPDATE song_line_timings'));
+    expect(update.values[0]).toEqual([{ i: 0, startMs: 100, score: null, interpolated: false }]);
+  });
+
+  it('score fuera de rango o no numerico → cae a null, timing se conserva', async () => {
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    sqlResponses.push([]); // UPDATE ... status='ready'
+    const lines = [
+      { i: 0, startMs: 100, score: 1.5, interpolated: false },
+      { i: 1, startMs: 500, score: -0.2, interpolated: false },
+      { i: 2, startMs: 900, score: 'x', interpolated: false },
+    ];
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ status: 'ready' });
+    const update = sqlCalls.find((c) => c.text.startsWith('UPDATE song_line_timings'));
+    expect(update.values[0]).toEqual([
+      { i: 0, startMs: 100, score: null, interpolated: false },
+      { i: 1, startMs: 500, score: null, interpolated: false },
+      { i: 2, startMs: 900, score: null, interpolated: false },
+    ]);
+  });
+
+  it('interpolated no booleano → cae a false, timing se conserva', async () => {
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    sqlResponses.push([]); // UPDATE ... status='ready'
+    const lines = [
+      { i: 0, startMs: 100, score: 0.5, interpolated: 'true' },
+      { i: 1, startMs: 500, score: 0.5, interpolated: 1 },
+    ];
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ status: 'ready' });
+    const update = sqlCalls.find((c) => c.text.startsWith('UPDATE song_line_timings'));
+    expect(update.values[0]).toEqual([
+      { i: 0, startMs: 100, score: 0.5, interpolated: false },
+      { i: 1, startMs: 500, score: 0.5, interpolated: false },
+    ]);
   });
 });
 

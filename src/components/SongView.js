@@ -46,7 +46,7 @@ import {
   saveAutoscrollSpeed,
   speedToPercentLabel,
 } from '../lib/autoscroll.js';
-import { escapeHtml } from '../lib/escape.js';
+import { escapeHtml, safeUrl } from '../lib/escape.js';
 import { getSongAudio } from '../lib/songAudioApi.js';
 import { enterImmersive } from './ImmersiveView.js';
 import { normalizeSectionType } from '../lib/sectionTypes.js';
@@ -303,11 +303,16 @@ async function _renderSongBody(container, songId, isPreview, song) {
   // handler de #enter-stage-btn ya solo registra el listener en este punto,
   // así que para cuando se dispare el click ya está poblada.
   let stageAutoscrollApi = null;
-  // Audio por sección (F5): se resuelve lazy tras el render principal, no
-  // bloquea. sectionsWithAudio alimenta el icono play junto al label de la
-  // sección en la letra; sectionPlayerApi.pause() se engancha al mismo hook
-  // del stage-btn que pausa el autoscroll clásico.
-  let sectionPlayerApi = null;
+  // Audio por sección (Task 1.2): se resuelve lazy tras el render principal,
+  // no bloquea. sectionsWithAudio alimenta el icono play junto al label de la
+  // sección en la letra; sectionAudioManager.pause() se engancha al mismo
+  // hook del stage-btn que pausa el autoscroll clásico. Un solo manager
+  // compartido (un <audio> real) consumido por un acordeón por sección —
+  // reemplaza al widget global .section-player.
+  let sectionAudioManager = null;
+  let sectionAccordionFactory = null;
+  const sectionAccordions = new Map();
+  let openSectionAudioIndex = null;
   let sectionsWithAudio = new Set();
   // Afinador flotante (T5): bajo demanda desde el mic de la toolbar, null
   // hasta que se abre. Siempre disponible (afinador libre sin voz
@@ -533,16 +538,48 @@ async function _renderSongBody(container, songId, isPreview, song) {
     }
   }
 
-  // Tap en la etiqueta de una sección con audio la reproduce (F5). Se
-  // reconecta en cada reRenderLyrics porque el innerHTML pierde listeners.
+  // Tap en la etiqueta de una sección con audio togglea su acordeón (Task
+  // 1.2). Se reconecta en cada reRenderLyrics porque el innerHTML pierde
+  // listeners y elementos — los paneles se remontan junto con la letra.
   function wireSectionPlayButtons() {
-    if (!sectionPlayerApi) return;
+    sectionAccordions.forEach((acc) => acc.destroy());
+    sectionAccordions.clear();
+    if (sectionAudioManager && sectionAccordionFactory) {
+      container.querySelectorAll('#lyrics-content .lyrics__section').forEach((sectionEl) => {
+        const sectionIndex = Number(sectionEl.dataset.sectionIndex);
+        if (!sectionsWithAudio.has(sectionIndex)) return;
+        const tracks = sectionAudioManager.tracksFor(sectionIndex);
+        if (tracks.length === 0) return;
+        const accordion = sectionAccordionFactory({
+          manager: sectionAudioManager,
+          sectionIndex,
+          tracks,
+        });
+        if (sectionIndex === openSectionAudioIndex) accordion.el.hidden = false;
+        sectionEl.querySelector('.lyrics__section-label')?.insertAdjacentElement('afterend', accordion.el);
+        sectionAccordions.set(sectionIndex, accordion);
+      });
+    }
     container.querySelectorAll('[data-section-audio]').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        sectionPlayerApi.playSection(Number(btn.dataset.sectionAudio));
+        toggleSectionAudioPanel(Number(btn.dataset.sectionAudio));
       });
     });
+  }
+
+  // Un panel abierto a la vez: togglea el de `sectionIndex` y colapsa el
+  // resto. Al abrir por primera vez, carga metadata (duración) sin bajar el
+  // archivo — el usuario decide si reproduce.
+  function toggleSectionAudioPanel(sectionIndex) {
+    const accordion = sectionAccordions.get(sectionIndex);
+    if (!accordion) return;
+    const opening = accordion.el.hidden;
+    sectionAccordions.forEach((acc, idx) => {
+      acc.el.hidden = !(opening && idx === sectionIndex);
+    });
+    openSectionAudioIndex = opening ? sectionIndex : null;
+    if (opening) accordion.load();
   }
 
   // Resalta la sección que suena ahora (.lyrics__section--playing); null
@@ -871,7 +908,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
         },
         pauseAutoscroll: () => {
           stageAutoscrollApi?.pauseAutoscroll();
-          sectionPlayerApi?.pause();
+          sectionAudioManager?.pause();
         },
         onExit: resyncLayersFromStore,
       });
@@ -970,40 +1007,65 @@ async function _renderSongBody(container, songId, isPreview, song) {
   // ── Feature 1: Autoscroll FAB ──
   stageAutoscrollApi = setupAutoscroll(container, song.id);
 
-  // ── F5: Audio por sección — lazy, no bloquea el render principal. Se
+  // ── Task 1.2: Audio por sección — lazy, no bloquea el render principal. Se
   // monta solo si hay tracks; import dinámico para no engordar el bundle
-  // de canciones sin audio (la mayoría, mientras se sube). ──
+  // de canciones sin audio (la mayoría, mientras se sube). Un manager
+  // compartido (un solo <audio>) + un acordeón colapsado por sección con
+  // tracks, insertado tras su encabezado en la letra. ──
   if (songId) {
     let destroyed = false;
     // onRouteChange (no 'hashchange'): navigate(path, {replace:true}) usa
     // history.replaceState y NO dispara 'hashchange' (ver router.js), pero sí
     // pasa por resolve() — logout (Profile.js) y redirects de guardedRoute
-    // dejaban el SectionPlayer vivo (audio sonando) tras salir de la canción.
-    const destroySectionPlayer = () => {
+    // dejaban el audio vivo (sonando) tras salir de la canción.
+    const destroySectionAudio = () => {
       destroyed = true;
-      sectionPlayerApi?.destroy();
-      sectionPlayerApi = null;
-      // Task 4: retira la clase de apilado del FAB de autoscroll junto con el
-      // widget — inofensivo si nunca llegó a montarse (tracks vacíos).
-      document.body.classList.remove('section-player-open');
+      sectionAudioManager?.destroy();
+      sectionAudioManager?.audio.remove();
+      sectionAudioManager = null;
+      sectionAccordionFactory = null;
+      sectionAccordions.forEach((acc) => acc.destroy());
+      sectionAccordions.clear();
+      openSectionAudioIndex = null;
       unsubscribeRouteChange();
     };
-    const unsubscribeRouteChange = onRouteChange(destroySectionPlayer);
+    const unsubscribeRouteChange = onRouteChange(destroySectionAudio);
     (async () => {
       const { fetchSectionAudio } = await import('../lib/sectionAudioApi.js');
       const tracks = await fetchSectionAudio(songId);
       if (destroyed || tracks.length === 0) return;
-      const { createSectionPlayer } = await import('./SectionPlayer.js');
+      const { createSectionAudioManager, createSectionAccordion } = await import(
+        './SectionPlayer.js'
+      );
       const sv = container.querySelector('.song-view');
       if (destroyed || !sv) return;
-      sectionPlayerApi = createSectionPlayer({
-        song,
+      sectionAccordionFactory = createSectionAccordion;
+      sectionAudioManager = createSectionAudioManager({
         tracks,
-        onSectionFocus: highlightPlayingSection,
         refetch: () => fetchSectionAudio(songId),
       });
-      sv.appendChild(sectionPlayerApi.el);
-      document.body.classList.add('section-player-open');
+      // El <audio> del manager no tiene UI propia (lo consumen los acordeones
+      // por sección), pero necesita estar en el DOM para reproducir de forma
+      // fiable — oculto, colgado del contenedor de la vista.
+      sectionAudioManager.audio.hidden = true;
+      sv.appendChild(sectionAudioManager.audio);
+      // Resalta la sección que suena (highlightPlayingSection) buscando, entre
+      // las secciones con audio, cuál trae el track cuyo src coincide con el
+      // <audio> del manager — no hay noción de "foco" en el manager en sí.
+      const findPlayingSection = () => {
+        for (const idx of sectionsWithAudio) {
+          const match = sectionAudioManager
+            .tracksFor(idx)
+            .find((t) => safeUrl(t.url) === sectionAudioManager.audio.src);
+          if (match) return idx;
+        }
+        return null;
+      };
+      sectionAudioManager.audio.addEventListener('play', () => {
+        highlightPlayingSection(findPlayingSection());
+      });
+      sectionAudioManager.audio.addEventListener('pause', () => highlightPlayingSection(null));
+      sectionAudioManager.onEnded(() => highlightPlayingSection(null));
       sectionsWithAudio = new Set(tracks.map((t) => t.sectionIndex));
       reRenderLyrics();
     })();

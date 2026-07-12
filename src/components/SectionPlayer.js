@@ -166,6 +166,128 @@ export function createSectionAudioManager({ tracks: initialTracks, refetch }) {
 }
 
 /**
+ * Panel colapsable de audio de UNA sección, estilo del player inmersivo
+ * (#imm-player en ImmersiveView/immersive.css): play circular + scrubber +
+ * tiempos, con chips de voz si la sección tiene más de un scope. Consume un
+ * `createSectionAudioManager` compartido (no crea su propio <audio>) — varias
+ * instancias en la misma vista comparten un solo elemento de audio real.
+ * @param {{
+ *   manager: ReturnType<typeof createSectionAudioManager>,
+ *   sectionIndex: number,
+ *   tracks: Array<{id:string, sectionIndex:number, voiceScope:string|null, label:string|null, durationSec:number|null, url:string}>,
+ * }} opts
+ * @returns {{ el: HTMLElement, sectionIndex: number, load: () => void, destroy: () => void }}
+ */
+export function createSectionAccordion({ manager, sectionIndex, tracks: sectionTracks }) {
+  const scopes = [...new Set(sectionTracks.map((t) => t.voiceScope))];
+  let activeTrack = sectionTracks[0] || null;
+  let loaded = false;
+
+  const root = document.createElement('div');
+  root.className = 'section-audio';
+  root.hidden = true;
+
+  const chipsHtml =
+    scopes.length > 1
+      ? `<div class="section-audio__chips">${scopes
+          .map((s) => {
+            const value = s === null ? '' : escapeHtml(s);
+            const active = s === activeTrack?.voiceScope;
+            return `<button class="section-audio__chip${active ? ' section-audio__chip--active' : ''}" type="button" data-scope="${value}" aria-pressed="${active}">${escapeHtml(scopeLabel(s))}</button>`;
+          })
+          .join('')}</div>`
+      : '';
+
+  root.innerHTML = `
+    ${chipsHtml}
+    <div class="section-audio__player">
+      <button class="section-audio__play" type="button" aria-label="Reproducir">${icon('play', { size: 16 })}</button>
+      <span class="section-audio__time">0:00</span>
+      <input class="section-audio__scrubber" type="range" min="0" max="100" value="0" step="0.1" />
+      <span class="section-audio__time">0:00</span>
+    </div>
+  `;
+
+  const playBtn = root.querySelector('.section-audio__play');
+  const scrubberEl = root.querySelector('.section-audio__scrubber');
+  const [elapsedEl, totalEl] = root.querySelectorAll('.section-audio__time');
+
+  function isCurrent() {
+    return !!activeTrack && manager.audio.src === safeUrl(activeTrack.url);
+  }
+
+  function paint() {
+    const current = isCurrent();
+    const duration = activeTrack?.durationSec || (current ? manager.audio.duration : 0) || 0;
+    const elapsed = current ? manager.audio.currentTime || 0 : 0;
+    elapsedEl.textContent = fmtTime(elapsed);
+    totalEl.textContent = fmtTime(duration);
+    scrubberEl.max = String(duration || 0);
+    scrubberEl.value = String(elapsed);
+    const playing = current && !manager.audio.paused;
+    playBtn.innerHTML = icon(playing ? 'pause' : 'play', { size: 16 });
+    playBtn.setAttribute('aria-label', playing ? 'Pausar' : 'Reproducir');
+  }
+
+  function selectScope(scope) {
+    const track = sectionTracks.find((t) => t.voiceScope === scope);
+    if (!track || track === activeTrack) return;
+    activeTrack = track;
+    loaded = false;
+    root.querySelectorAll('[data-scope]').forEach((btn) => {
+      const active = (btn.dataset.scope || null) === scope;
+      btn.classList.toggle('section-audio__chip--active', active);
+      btn.setAttribute('aria-pressed', String(active));
+    });
+    paint();
+  }
+
+  root.querySelectorAll('[data-scope]').forEach((btn) => {
+    btn.addEventListener('click', () => selectScope(btn.dataset.scope || null));
+  });
+
+  playBtn.addEventListener('click', () => {
+    if (!activeTrack) return;
+    if (isCurrent() && !manager.audio.paused) {
+      manager.pause();
+    } else {
+      manager.play(activeTrack);
+      loaded = true;
+    }
+  });
+
+  scrubberEl.addEventListener('input', () => {
+    if (!isCurrent()) return;
+    manager.seek(Number(scrubberEl.value));
+  });
+
+  const offTime = manager.onTime(paint);
+  const offEnded = manager.onEnded(paint);
+  manager.audio.addEventListener('play', paint);
+  manager.audio.addEventListener('pause', paint);
+
+  paint();
+
+  return {
+    el: root,
+    sectionIndex,
+    /** Carga metadata (duración) sin reproducir — llamar al expandir el panel. */
+    load() {
+      if (loaded || !activeTrack) return;
+      loaded = true;
+      manager.load(activeTrack, { preload: 'metadata' });
+    },
+    destroy() {
+      offTime();
+      offEnded();
+      manager.audio.removeEventListener('play', paint);
+      manager.audio.removeEventListener('pause', paint);
+      root.remove();
+    },
+  };
+}
+
+/**
  * @param {{
  *   song: object,
  *   tracks: Array<{id:string, sectionIndex:number, voiceScope:string|null, label:string|null, durationSec:number|null, url:string}>,

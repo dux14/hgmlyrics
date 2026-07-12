@@ -1,36 +1,30 @@
-/* section-player.css — Mini-reproductor de audio por sección (F5).
-   Barra sticky dentro de .song-view (NO fixed global): queda pegada al fondo
-   del viewport de scroll de la vista de canción, por encima del bottom-nav
-   global y respetando su altura + safe-area. */
+/* section-player.css — Acordeón de audio por sección (Task 1.2).
+   Cada sección con audio abre un panel .section-audio colapsado tras su
+   encabezado en la letra (no un widget global fijo/sticky). Paridad visual
+   con #imm-player del player inmersivo (immersive.css): play circular brand,
+   tiempos tabular-nums atenuados, scrubber con accent-color brand. */
 
-.section-player {
-  position: sticky;
-  bottom: calc(
-    var(--bnav-offset, 56px) + var(--bottom-nav-fade-extra, 0px) + var(--safe-bottom, 0px)
-  );
-  z-index: 5;
-  margin-top: var(--space-lg);
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--border-radius-md);
-  background: color-mix(in oklch, var(--color-surface) 92%, transparent);
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--color-border);
-  box-shadow: 0 8px 24px var(--color-shadow);
-  transition: bottom 200ms ease-out;
-}
-
-.section-player__scopes {
+.section-audio {
   display: flex;
-  gap: var(--space-xs);
-  flex-wrap: wrap;
-  margin-bottom: var(--space-sm);
+  flex-direction: column;
+  gap: var(--space-xs, 0.5rem);
+  padding: 0.6rem 0.75rem;
+  margin: 0.25rem 0 0.75rem;
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--color-surface) 94%, transparent);
 }
 
-.section-player__scopes[hidden] {
+.section-audio[hidden] {
   display: none;
 }
 
-.section-player__chip {
+.section-audio__chips {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.section-audio__chip {
   border: 1px solid var(--color-border);
   background: transparent;
   color: var(--color-text-secondary);
@@ -39,68 +33,45 @@
   font-size: var(--font-size-xs);
 }
 
-.section-player__chip--active {
-  border-color: var(--color-teal-500);
-  color: var(--color-teal-500);
+.section-audio__chip--active {
+  border-color: var(--color-brand, #01ccd9);
+  color: var(--color-brand, #01ccd9);
 }
 
-.section-player__row {
+.section-audio__player {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
-}
-
-.section-player__play,
-.section-player__loop {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
-  color: var(--color-text);
-}
-
-.section-player__play {
-  background: var(--color-teal-500);
-  color: var(--color-bg);
-}
-
-.section-player__loop--active {
-  color: var(--color-teal-500);
-}
-
-.section-player__scrubber {
-  flex: 1;
-  display: flex;
-  gap: 2px;
+  gap: 0.6rem;
   min-width: 0;
 }
 
-.section-player__segment {
-  height: 4px;
-  min-width: 6px;
-  border: none;
-  border-radius: 2px;
-  background: var(--color-border);
-  padding: 0;
+.section-audio__play {
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-brand, #01ccd9);
+  color: #000;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
 }
 
-.section-player__segment--playing {
-  background: var(--color-teal-500);
-}
-
-.section-player__time {
-  flex-shrink: 0;
+.section-audio__time {
   font-variant-numeric: tabular-nums;
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  opacity: 0.7;
+  flex: none;
 }
 
-/* Icono play junto al label de una sección con audio (F5) */
+.section-audio__scrubber {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--color-brand, #01ccd9);
+}
+
+/* Icono play junto al label de una sección con audio */
 .lyrics__section-play {
   display: inline-flex;
   align-items: center;

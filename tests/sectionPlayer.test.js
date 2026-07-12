@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createSectionAudioManager } from '../src/components/SectionPlayer.js';
+import { createSectionAudioManager, createSectionAccordion } from '../src/components/SectionPlayer.js';
 
 function track(overrides = {}) {
   return {
@@ -316,5 +316,112 @@ describe('createSectionAudioManager — destroy', () => {
     audio.dispatchEvent(new Event('ended'));
     expect(timeCb).not.toHaveBeenCalled();
     expect(endedCb).not.toHaveBeenCalled();
+  });
+});
+
+describe('createSectionAccordion — estructura', () => {
+  it('sin chips cuando hay un solo scope (mezcla)', () => {
+    const t = track({ id: 'a' });
+    const manager = createSectionAudioManager({ tracks: [t] });
+    const { el } = createSectionAccordion({ manager, sectionIndex: 0, tracks: [t] });
+    expect(el.className).toBe('section-audio');
+    expect(el.hidden).toBe(true);
+    expect(el.querySelector('.section-audio__chips')).toBeNull();
+  });
+
+  it('chips por voz cuando hay más de un scope', () => {
+    const tracks = [
+      track({ id: 'mix', voiceScope: null }),
+      track({ id: 'tenor', voiceScope: 'tenor' }),
+    ];
+    const manager = createSectionAudioManager({ tracks });
+    const { el } = createSectionAccordion({ manager, sectionIndex: 0, tracks });
+    const chips = el.querySelectorAll('.section-audio__chip');
+    expect(chips.length).toBe(2);
+    expect(chips[0].getAttribute('aria-pressed')).toBe('true'); // mezcla activa por defecto
+    expect(chips[1].getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('fila del reproductor tiene play, dos tiempos y scrubber', () => {
+    const t = track({ id: 'a' });
+    const manager = createSectionAudioManager({ tracks: [t] });
+    const { el } = createSectionAccordion({ manager, sectionIndex: 0, tracks: [t] });
+    expect(el.querySelector('.section-audio__player')).not.toBeNull();
+    expect(el.querySelector('button.section-audio__play')).not.toBeNull();
+    expect(el.querySelectorAll('span.section-audio__time').length).toBe(2);
+    const scrubber = el.querySelector('input.section-audio__scrubber');
+    expect(scrubber).not.toBeNull();
+    expect(scrubber.type).toBe('range');
+  });
+});
+
+describe('createSectionAccordion — controles', () => {
+  it('el play togglea manager.play/pause del track activo de la sección', () => {
+    const t = track({ id: 'a', url: 'https://x/0.mp3' });
+    const manager = createSectionAudioManager({ tracks: [t] });
+    const { el } = createSectionAccordion({ manager, sectionIndex: 0, tracks: [t] });
+
+    el.querySelector('.section-audio__play').click();
+    expect(manager.audio.src).toBe('https://x/0.mp3');
+    expect(manager.audio.play).toHaveBeenCalled();
+  });
+
+  it('mover el scrubber llama manager.seek() cuando el track de la sección está cargado', () => {
+    const t = track({ id: 'a', url: 'https://x/0.mp3' });
+    const manager = createSectionAudioManager({ tracks: [t] });
+    const { el } = createSectionAccordion({ manager, sectionIndex: 0, tracks: [t] });
+    manager.play(t);
+
+    const scrubber = el.querySelector('.section-audio__scrubber');
+    scrubber.value = '3';
+    scrubber.dispatchEvent(new Event('input'));
+    expect(manager.audio.currentTime).toBe(3);
+  });
+
+  it('clic en un chip cambia el track activo de la sección', () => {
+    const tracks = [
+      track({ id: 'mix', voiceScope: null, url: 'https://x/mix.mp3' }),
+      track({ id: 'tenor', voiceScope: 'tenor', url: 'https://x/tenor.mp3' }),
+    ];
+    const manager = createSectionAudioManager({ tracks });
+    const { el } = createSectionAccordion({ manager, sectionIndex: 0, tracks });
+
+    el.querySelectorAll('.section-audio__chip')[1].click();
+    el.querySelector('.section-audio__play').click();
+    expect(manager.audio.src).toBe('https://x/tenor.mp3');
+  });
+
+  it('onTime del manager repinta el tiempo transcurrido de la sección activa', () => {
+    const t = track({ id: 'a', url: 'https://x/0.mp3', durationSec: 20 });
+    const manager = createSectionAudioManager({ tracks: [t] });
+    const { el } = createSectionAccordion({ manager, sectionIndex: 0, tracks: [t] });
+    manager.play(t);
+    manager.audio.currentTime = 7;
+    manager.audio.dispatchEvent(new Event('timeupdate'));
+
+    const [elapsedEl] = el.querySelectorAll('.section-audio__time');
+    expect(elapsedEl.textContent).toBe('0:07');
+  });
+
+  it('load() carga metadata del track activo sin reproducir', () => {
+    const t = track({ id: 'a', url: 'https://x/0.mp3' });
+    const manager = createSectionAudioManager({ tracks: [t] });
+    manager.audio.play.mockClear();
+    const { el, load } = createSectionAccordion({ manager, sectionIndex: 0, tracks: [t] });
+    load();
+    expect(manager.audio.src).toBe('https://x/0.mp3');
+    expect(manager.audio.preload).toBe('metadata');
+    expect(manager.audio.play).not.toHaveBeenCalled();
+    void el;
+  });
+
+  it('destroy() quita el elemento del DOM y desuscribe del manager', () => {
+    const t = track({ id: 'a' });
+    const manager = createSectionAudioManager({ tracks: [t] });
+    const { el, destroy } = createSectionAccordion({ manager, sectionIndex: 0, tracks: [t] });
+    const parent = document.createElement('div');
+    parent.appendChild(el);
+    destroy();
+    expect(parent.contains(el)).toBe(false);
   });
 });

@@ -38,6 +38,9 @@ vi.mock('../lib/autoscroll.js', () => ({
   stepToward: vi.fn(),
   shouldShowFab: vi.fn(() => false),
 }));
+vi.mock('../lib/songAudioApi.js', () => ({
+  getSongAudio: vi.fn().mockResolvedValue(null),
+}));
 
 import { renderSections } from './SongView.js';
 import { getSongById, fetchSongDetail } from '../lib/store.js';

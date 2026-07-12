@@ -6,6 +6,7 @@ vi.mock('../src/lib/songAudioApi.js', () => ({
   confirmSongAudio: vi.fn(),
   deleteSongAudio: vi.fn(),
   uploadSongAudioFile: vi.fn(),
+  patchSongAudio: vi.fn(),
 }));
 vi.mock('../src/lib/stemsApi.js', () => ({
   readAudioDuration: vi.fn().mockResolvedValue(125),
@@ -223,6 +224,161 @@ describe('SongAudioSection', () => {
     await vi.waitFor(() => expect(confirmDialog).toHaveBeenCalled());
     expect(songAudioApi.deleteSongAudio).not.toHaveBeenCalled();
     expect(section.el.textContent).toContain('Audio: full.mp3');
+
+    section.destroy();
+  });
+
+  it('metrónomo: no aparece si la sincronía no está ready', async () => {
+    songAudioApi.getSongAudio.mockResolvedValue({
+      audio: { url: 'https://x/full.mp3', durationSec: 100 },
+      timings: { status: 'processing' },
+    });
+    const section = createSongAudioSection({ songId: 'song-1' });
+    container.appendChild(section.el);
+
+    await vi.waitFor(() => expect(songAudioApi.getSongAudio).toHaveBeenCalled());
+    expect(section.el.textContent).not.toContain('Metrónomo');
+
+    section.destroy();
+  });
+
+  it('metrónomo: ready muestra BPM detectado + overrides precargados', async () => {
+    songAudioApi.getSongAudio.mockResolvedValue({
+      audio: {
+        url: 'https://x/full.mp3',
+        durationSec: 100,
+        bpmManual: 118,
+        timeSignature: '3/4',
+        beatAnchor: 2,
+      },
+      timings: { status: 'ready', lines: [{}], bpmDetected: 112.35 },
+    });
+    const section = createSongAudioSection({ songId: 'song-1' });
+    container.appendChild(section.el);
+
+    await vi.waitFor(() => expect(section.el.textContent).toContain('BPM detectado: 112.35'));
+
+    const bpmInput = section.el.querySelector('.song-audio__bpm-manual');
+    const compasSelect = section.el.querySelector('.song-audio__time-signature');
+    const anchorInput = section.el.querySelector('.song-audio__beat-anchor');
+    expect(bpmInput.value).toBe('118');
+    expect(compasSelect.value).toBe('3/4');
+    expect(anchorInput.value).toBe('2');
+    expect(['4/4', '3/4', '6/8', '2/4']).toEqual(
+      Array.from(compasSelect.options).map((o) => o.value),
+    );
+
+    const saveBtn = section.el.querySelector('[data-action="song-audio-save-metronome"]');
+    expect(saveBtn.disabled).toBe(true);
+
+    section.destroy();
+  });
+
+  it('metrónomo: sin bpmDetected muestra "sin detección"', async () => {
+    songAudioApi.getSongAudio.mockResolvedValue({
+      audio: { url: 'https://x/full.mp3', durationSec: 100 },
+      timings: { status: 'ready', lines: [{}], bpmDetected: null },
+    });
+    const section = createSongAudioSection({ songId: 'song-1' });
+    container.appendChild(section.el);
+
+    await vi.waitFor(() => expect(section.el.textContent).toContain('sin detección'));
+
+    section.destroy();
+  });
+
+  it('metrónomo: guardar manda solo lo tocado y refresca', async () => {
+    songAudioApi.getSongAudio.mockResolvedValue({
+      audio: {
+        url: 'https://x/full.mp3',
+        durationSec: 100,
+        bpmManual: null,
+        timeSignature: null,
+        beatAnchor: null,
+      },
+      timings: { status: 'ready', lines: [{}], bpmDetected: 112.35 },
+    });
+    songAudioApi.patchSongAudio.mockResolvedValue(undefined);
+    const section = createSongAudioSection({ songId: 'song-1' });
+    container.appendChild(section.el);
+
+    await vi.waitFor(() => expect(section.el.textContent).toContain('BPM detectado: 112.35'));
+
+    const saveBtn = section.el.querySelector('[data-action="song-audio-save-metronome"]');
+    expect(saveBtn.disabled).toBe(true);
+
+    const bpmInput = section.el.querySelector('.song-audio__bpm-manual');
+    bpmInput.value = '130';
+    bpmInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(saveBtn.disabled).toBe(false);
+    saveBtn.click();
+
+    await vi.waitFor(() =>
+      expect(songAudioApi.patchSongAudio).toHaveBeenCalledWith('song-1', { bpmManual: 130 }),
+    );
+    await vi.waitFor(() => expect(songAudioApi.getSongAudio).toHaveBeenCalledTimes(2));
+
+    section.destroy();
+  });
+
+  it('metrónomo: vaciar el BPM manual manda bpmManual:null', async () => {
+    songAudioApi.getSongAudio.mockResolvedValue({
+      audio: {
+        url: 'https://x/full.mp3',
+        durationSec: 100,
+        bpmManual: 118,
+        timeSignature: '4/4',
+        beatAnchor: 1,
+      },
+      timings: { status: 'ready', lines: [{}], bpmDetected: 112.35 },
+    });
+    songAudioApi.patchSongAudio.mockResolvedValue(undefined);
+    const section = createSongAudioSection({ songId: 'song-1' });
+    container.appendChild(section.el);
+
+    await vi.waitFor(() => expect(section.el.textContent).toContain('BPM detectado: 112.35'));
+
+    const bpmInput = section.el.querySelector('.song-audio__bpm-manual');
+    bpmInput.value = '';
+    bpmInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const saveBtn = section.el.querySelector('[data-action="song-audio-save-metronome"]');
+    expect(saveBtn.disabled).toBe(false);
+    saveBtn.click();
+
+    await vi.waitFor(() =>
+      expect(songAudioApi.patchSongAudio).toHaveBeenCalledWith('song-1', { bpmManual: null }),
+    );
+
+    section.destroy();
+  });
+
+  it('metrónomo: error al guardar se muestra inline', async () => {
+    songAudioApi.getSongAudio.mockResolvedValue({
+      audio: {
+        url: 'https://x/full.mp3',
+        durationSec: 100,
+        bpmManual: null,
+        timeSignature: null,
+        beatAnchor: null,
+      },
+      timings: { status: 'ready', lines: [{}], bpmDetected: 112.35 },
+    });
+    songAudioApi.patchSongAudio.mockRejectedValue(new Error('bpm invalido'));
+    const section = createSongAudioSection({ songId: 'song-1' });
+    container.appendChild(section.el);
+
+    await vi.waitFor(() => expect(section.el.textContent).toContain('BPM detectado: 112.35'));
+
+    const bpmInput = section.el.querySelector('.song-audio__bpm-manual');
+    bpmInput.value = '999';
+    bpmInput.dispatchEvent(new Event('input', { bubbles: true }));
+    section.el.querySelector('[data-action="song-audio-save-metronome"]').click();
+
+    await vi.waitFor(() =>
+      expect(section.el.querySelector('.song-audio__error')?.textContent).toContain('bpm invalido'),
+    );
 
     section.destroy();
   });

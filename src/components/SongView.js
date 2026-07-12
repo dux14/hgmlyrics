@@ -47,6 +47,7 @@ import {
   speedToPercentLabel,
 } from '../lib/autoscroll.js';
 import { escapeHtml } from '../lib/escape.js';
+import { getSongAudio } from '../lib/songAudioApi.js';
 import { enterImmersive } from './ImmersiveView.js';
 import { normalizeSectionType } from '../lib/sectionTypes.js';
 
@@ -1006,6 +1007,31 @@ async function _renderSongBody(container, songId, isPreview, song) {
       sectionsWithAudio = new Set(tracks.map((t) => t.sectionIndex));
       reRenderLyrics();
     })();
+  }
+
+  // ── Chip BPM (F4-D6): best-effort, no bloquea el render principal. Si el
+  // usuario navega fuera antes de resolver, no toca el DOM (mismo patrón de
+  // guard que F5 arriba). ──
+  if (songId) {
+    let bpmDestroyed = false;
+    const unsubscribeBpmRoute = onRouteChange(() => {
+      bpmDestroyed = true;
+    });
+    getSongAudio(songId)
+      .catch(() => null)
+      .then((result) => {
+        unsubscribeBpmRoute();
+        if (bpmDestroyed) return;
+        const bpm = result?.audio?.bpmManual ?? result?.timings?.bpmDetected;
+        if (bpm === null || bpm === undefined) return;
+        const meta = container.querySelector('.song-view__meta');
+        if (!meta) return;
+        const timeSignature = result.audio?.timeSignature ?? '4/4';
+        const chip = document.createElement('span');
+        chip.className = 'song-view__bpm';
+        chip.textContent = `${Math.round(bpm)} BPM · ${timeSignature}`;
+        meta.appendChild(chip);
+      });
   }
 
   // Favorita lives on the song card cover in the list view now.

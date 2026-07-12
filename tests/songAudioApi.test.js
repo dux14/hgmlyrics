@@ -15,6 +15,7 @@ import {
   confirmSongAudio,
   deleteSongAudio,
   uploadSongAudioFile,
+  patchSongAudio,
 } from '../src/lib/songAudioApi.js';
 
 describe('getSongAudio', () => {
@@ -144,6 +145,48 @@ describe('deleteSongAudio', () => {
       .mockResolvedValue({ ok: false, json: () => Promise.resolve({ error: 'x' }) });
 
     await expect(deleteSongAudio('song-1')).rejects.toThrow('x');
+  });
+});
+
+describe('patchSongAudio', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('hace PATCH con auth headers y manda solo las claves definidas', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({ success: true }) });
+    global.fetch = fetchMock;
+
+    await patchSongAudio('song-1', { bpmManual: 120, timeSignature: undefined });
+
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/songs/song-1/audio');
+    expect(opts.method).toBe('PATCH');
+    expect(opts.headers.Authorization).toBe('Bearer tok-1');
+    expect(opts.headers['Content-Type']).toBe('application/json');
+    expect(JSON.parse(opts.body)).toEqual({ bpmManual: 120 });
+  });
+
+  it('null se manda explícito (limpia el override)', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({ success: true }) });
+    global.fetch = fetchMock;
+
+    await patchSongAudio('song-1', { bpmManual: null });
+
+    const [, opts] = fetchMock.mock.calls[0];
+    expect(JSON.parse(opts.body)).toEqual({ bpmManual: null });
+  });
+
+  it('respuesta no-ok lanza con el mensaje del backend', async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: false, json: () => Promise.resolve({ error: 'bpm invalido' }) });
+
+    await expect(patchSongAudio('song-1', { bpmManual: -1 })).rejects.toThrow('bpm invalido');
   });
 });
 

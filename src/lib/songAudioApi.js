@@ -78,6 +78,29 @@ export async function deleteSongAudio(songId) {
 }
 
 /**
+ * Actualiza los overrides de metrónomo (bpmManual/timeSignature/beatAnchor).
+ * Admin-only. Solo manda las claves definidas en `fields` — undefined no se
+ * incluye en el body (no toca ese campo en el backend), null sí se manda
+ * (limpia el override y vuelve al valor detectado). Mismo patrón que
+ * confirmSongAudio: lanza en error.
+ * @param {string} songId
+ * @param {{bpmManual?: number|null, timeSignature?: string|null, beatAnchor?: number|null}} fields
+ */
+export async function patchSongAudio(songId, fields) {
+  const body = {};
+  for (const key of ['bpmManual', 'timeSignature', 'beatAnchor']) {
+    if (key in fields && fields[key] !== undefined) body[key] = fields[key];
+  }
+  const res = await fetch(`/api/songs/${songId}/audio`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  const responseBody = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(responseBody.error || 'No se pudo guardar el ajuste');
+}
+
+/**
  * Sube el archivo directo a la signed URL devuelta por createSongAudioUpload
  * (sin auth propia — la firma de Storage ya autoriza la subida).
  * @param {string} uploadUrl

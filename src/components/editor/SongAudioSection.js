@@ -11,6 +11,7 @@ import {
   confirmSongAudio,
   deleteSongAudio,
   uploadSongAudioFile,
+  patchSongAudio,
 } from '../../lib/songAudioApi.js';
 import { readAudioDuration } from '../../lib/stemsApi.js';
 import { confirmDialog } from '../ConfirmDialog.js';
@@ -19,6 +20,7 @@ import { escapeHtml } from '../../lib/escape.js';
 
 const SONG_AUDIO_MAX_BYTES = 25 * 1024 * 1024;
 const POLL_INTERVAL_MS = 5000;
+const TIME_SIGNATURES = ['4/4', '3/4', '6/8', '2/4'];
 
 function formatDuration(sec) {
   if (!Number.isFinite(sec) || sec < 0) return '0:00';
@@ -44,6 +46,43 @@ function syncStatusMarkup(timings) {
 }
 
 /**
+ * Sub-bloque "Metrónomo": solo con sincronía lista. Muestra el BPM detectado
+ * (referencia de solo lectura) y los 3 controles de override, precargados
+ * de audio.bpmManual/timeSignature/beatAnchor. El botón de guardar arranca
+ * deshabilitado; wireMetronome() lo habilita al detectar cambios.
+ */
+function metronomeMarkup(audio, timings) {
+  if (timings?.status !== 'ready') return '';
+  const bpmDetected = timings.bpmDetected;
+  const bpmDetectedText = Number.isFinite(bpmDetected) ? String(bpmDetected) : 'sin detección';
+  const bpmManualValue = audio?.bpmManual ?? '';
+  const timeSignature = audio?.timeSignature ?? '4/4';
+  const beatAnchorValue = audio?.beatAnchor ?? '';
+  const options = TIME_SIGNATURES.map(
+    (ts) => `<option value="${ts}"${ts === timeSignature ? ' selected' : ''}>${ts}</option>`,
+  ).join('');
+  return `
+    <div class="song-audio__metronome">
+      <h3 class="song-audio__metronome-title">Metrónomo</h3>
+      <p class="song-audio__bpm-detected">BPM detectado: ${escapeHtml(bpmDetectedText)}</p>
+      <label class="song-audio__field">
+        BPM manual
+        <input type="number" class="song-audio__bpm-manual" value="${bpmManualValue}" />
+      </label>
+      <label class="song-audio__field">
+        Compás
+        <select class="song-audio__time-signature">${options}</select>
+      </label>
+      <label class="song-audio__field">
+        Ancla del compás
+        <input type="number" min="1" max="12" class="song-audio__beat-anchor" value="${beatAnchorValue}" />
+      </label>
+      <button class="btn btn--secondary" data-action="song-audio-save-metronome" type="button" disabled>Guardar ajustes</button>
+    </div>
+  `;
+}
+
+/**
  * @param {{ songId: string|null }} opts
  * @returns {{ el: HTMLElement, destroy: () => void }}
  */
@@ -60,6 +99,10 @@ export function createSongAudioSection({ songId }) {
 
   let pollTimer = null;
   let destroyed = false;
+  // Snapshot de los valores cargados en los inputs del metrónomo — se
+  // recalcula en cada render() del sub-bloque (que solo ocurre en ready, sin
+  // polling espontáneo) para saber qué tocó el usuario.
+  let metronomeBaseline = null;
 
   function stopPolling() {
     if (pollTimer) {
@@ -146,6 +189,70 @@ export function createSongAudioSection({ songId }) {
     }
   }
 
+  async function saveMetronome(changes) {
+    if (Object.keys(changes).length === 0) return;
+    state.error = null;
+    try {
+      await patchSongAudio(songId, changes);
+      await refresh();
+    } catch (err) {
+      state.error = err.message || 'No se pudo guardar el ajuste';
+      render();
+    }
+  }
+
+  function wireMetronome() {
+    const wrap = el.querySelector('.song-audio__metronome');
+    if (!wrap) return;
+    const bpmInput = wrap.querySelector('.song-audio__bpm-manual');
+    const tsSelect = wrap.querySelector('.song-audio__time-signature');
+    const anchorInput = wrap.querySelector('.song-audio__beat-anchor');
+    const saveBtn = wrap.querySelector('[data-action="song-audio-save-metronome"]');
+
+    metronomeBaseline = {
+      bpmManual: state.audio?.bpmManual ?? null,
+      timeSignature: state.audio?.timeSignature ?? '4/4',
+      beatAnchor: state.audio?.beatAnchor ?? null,
+    };
+
+    function currentValues() {
+      return {
+        bpmManual: bpmInput.value === '' ? null : Number(bpmInput.value),
+        timeSignature: tsSelect.value,
+        beatAnchor: anchorInput.value === '' ? null : Number(anchorInput.value),
+      };
+    }
+
+    function updateDirty() {
+      const cur = currentValues();
+      const dirty =
+        cur.bpmManual !== metronomeBaseline.bpmManual ||
+        cur.timeSignature !== metronomeBaseline.timeSignature ||
+        cur.beatAnchor !== metronomeBaseline.beatAnchor;
+      saveBtn.disabled = !dirty;
+    }
+
+    [bpmInput, tsSelect, anchorInput].forEach((input) => {
+      input.addEventListener('input', updateDirty);
+      input.addEventListener('change', updateDirty);
+    });
+
+    saveBtn.addEventListener('click', () => {
+      const cur = currentValues();
+      const changes = {};
+      if (cur.bpmManual !== metronomeBaseline.bpmManual) {
+        changes.bpmManual = cur.bpmManual;
+      }
+      if (cur.timeSignature !== metronomeBaseline.timeSignature) {
+        changes.timeSignature = cur.timeSignature;
+      }
+      if (cur.beatAnchor !== metronomeBaseline.beatAnchor) {
+        changes.beatAnchor = cur.beatAnchor;
+      }
+      saveMetronome(changes);
+    });
+  }
+
   async function deleteFlow() {
     if (!songId) return;
     const ok = await confirmDialog({
@@ -210,9 +317,11 @@ export function createSongAudioSection({ songId }) {
         ${uploadControlMarkup('Reemplazar mp3')}
         <button class="btn btn--secondary btn--danger" data-action="song-audio-delete" type="button">Eliminar</button>
       </div>
+      ${metronomeMarkup(state.audio, state.timings)}
       ${state.error ? `<p class="song-audio__error" role="alert">${escapeHtml(state.error)}</p>` : ''}
     `;
     wireUploadInput();
+    wireMetronome();
 
     syncPolling();
   }

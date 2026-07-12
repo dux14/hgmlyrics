@@ -322,6 +322,16 @@
   margin-bottom: var(--space-sm);
 }
 
+/* Chip BPM (F4-D6): discreto, mismo tono que year/album — no compite con el
+   título. Inyectado post-render (fetch best-effort de songAudioApi). */
+.song-view__bpm {
+  display: inline-block;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin-top: calc(-1 * var(--space-xs));
+  margin-bottom: var(--space-sm);
+}
+
 /* === Font Size Controls === */
 .font-controls {
   display: flex;

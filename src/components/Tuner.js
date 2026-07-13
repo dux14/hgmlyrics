@@ -28,6 +28,7 @@ import { getSession, refreshProfile, getProfile } from '../lib/authStore.js';
 import { invalidateMyProfile } from '../lib/profileCache.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
+import { showToast } from '../lib/toast.js';
 import {
   getCalibrationCents,
   applyCalibration,
@@ -897,7 +898,7 @@ export async function renderTuner(container, opts = {}) {
       `;
       bodyEl.querySelector('#range-back').addEventListener('click', () => navigate('/perfil'));
     } catch (e) {
-      alert(`Error guardando: ${e.message}`);
+      showToast(`Error guardando: ${e.message}`, { type: 'error' });
       paintBody();
     }
   }

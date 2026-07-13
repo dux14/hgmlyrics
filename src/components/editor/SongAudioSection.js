@@ -504,7 +504,7 @@ export function createSongAudioSection({ songId, getSong = null }) {
     if (!previewAudio || previewAudio.src !== state.audio.url) {
       previewAudio = new Audio();
       // crossOrigin antes del src: sin esto la respuesta cors del SW
-      // (song-audio-v1) llega opaca al <audio> y falla con MEDIA_ELEMENT_ERROR (4).
+      // (song-audio-v2) llega opaca al <audio> y falla con MEDIA_ELEMENT_ERROR (4).
       previewAudio.crossOrigin = 'anonymous';
       previewAudio.src = state.audio.url;
     }

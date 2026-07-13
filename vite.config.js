@@ -76,6 +76,30 @@ export default defineConfig({
             },
           },
           {
+            // GET /api/songs/[id]/audio: la vista inmersiva pide este endpoint EN
+            // VIVO (getSongAudio) para obtener la signed URL del mp3 y montar el
+            // <audio>. Sin cachearlo, offline el fetch falla y el <audio> nunca se
+            // monta (el cache del mp3 ni se consulta). NetworkFirst: online SIEMPRE
+            // trae una signed URL fresca (SWR serviría un token viejo/expirado
+            // primero); offline sirve el payload cacheado, cuya URL — aunque su
+            // token esté "vencido" — nunca sale a la red: la resuelve song-audio-v2
+            // por path (ignoreSearch). timings stale offline es aceptable (offline
+            // es solo lectura). No matchea /section-audio (editor admin).
+            urlPattern: /\/api\/songs\/[^/]+\/audio(?:\?.*)?$/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-song-audio-v1',
+              networkTimeoutSeconds: 3,
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+          {
             // Cache individual song detail API.
             // Exclude /api/songs/all explicitly: it's prefetched into IndexedDB
             // by src/lib/offlineCache.js and must always reflect server `version`.
@@ -111,29 +135,38 @@ export default defineConfig({
           {
             // Pistas mp3 en Supabase Storage: CacheFirst con Range para que el
             // <audio> pueda hacer seek offline (sin rangeRequests el seek rompe).
-            // fetchOptions mode:'cors' fuerza siempre modo cors (igual que
-            // img-storage-v2) para evitar respuestas opacas: workbox-range-requests
-            // hace .blob() sobre la respuesta cacheada para partir el body en el
-            // Range pedido, y un body opaco (status 0) es ilegible para eso.
+            //
+            // CLAVE (bug T4.2): SOLO se cachea el 200 COMPLETO. El <audio> pide
+            // con `Range:` (Chrome bytes=0-..., Safari probe bytes=0-1) y Supabase
+            // responde 206 con SOLO ese tramo. Si cacheáramos ese 206,
+            // workbox-range-requests lo devuelve tal cual sin recortar (guard de
+            // createPartialResponse para respuestas 206) → offline serviría slices
+            // corruptos. Por eso `fetchOptions.headers:{}` REEMPLAZA los headers
+            // del request (StrategyHandler hace `fetch(request, fetchOptions)` y el
+            // constructor Request pisa headers cuando la key existe) → el fetch que
+            // puebla la cache va SIN Range → Supabase responde 200 full → se cachea
+            // el archivo entero → RangeRequestsPlugin recorta localmente en cada
+            // seek. `mode:'cors'` evita respuesta opaca (los players setean
+            // crossOrigin='anonymous' antes del src).
+            //
+            // `matchOptions.ignoreSearch` ignora el `?token=` de la signed URL al
+            // LEER: el token rota en cada GET /audio (storage.js re-firma siempre),
+            // así que sin esto un reload/offline con token nuevo no matchearía la
+            // entrada cacheada. Además evita acumular una entrada por cada reload.
             urlPattern: ({ url, request }) =>
               request.destination === 'audio' && url.hostname.endsWith('.supabase.co'),
             handler: 'CacheFirst',
             options: {
-              cacheName: 'song-audio-v1',
+              cacheName: 'song-audio-v2',
               rangeRequests: true,
+              matchOptions: { ignoreSearch: true },
               expiration: {
                 maxEntries: 8,
                 maxAgeSeconds: 60 * 60 * 24 * 30,
                 purgeOnQuotaError: true,
               },
-              // El <audio> siempre pide con Range (bytes=0-...) y Supabase
-              // responde 206 Partial Content con el cuerpo completo: si solo
-              // aceptamos 200 el SW descarta cada respuesta y la cache nunca
-              // se puebla. fetchOptions mode:'cors' evita una respuesta opaca,
-              // pero para que el navegador la acepte en el <audio> los players
-              // deben setear crossOrigin='anonymous' antes del src.
-              cacheableResponse: { statuses: [200, 206] },
-              fetchOptions: { mode: 'cors' },
+              cacheableResponse: { statuses: [200] },
+              fetchOptions: { mode: 'cors', headers: {} },
             },
           },
           {

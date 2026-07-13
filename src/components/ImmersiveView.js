@@ -511,7 +511,7 @@ function promoteToSync(s, audio, timings) {
 
   const audioEl = document.createElement('audio');
   audioEl.id = 'imm-audio';
-  // crossOrigin antes del src: sin esto la respuesta cors del SW (song-audio-v1)
+  // crossOrigin antes del src: sin esto la respuesta cors del SW (song-audio-v2)
   // llega opaca al <audio> y la reproducción falla con MEDIA_ELEMENT_ERROR (4).
   audioEl.crossOrigin = 'anonymous';
   audioEl.src = audio.url;

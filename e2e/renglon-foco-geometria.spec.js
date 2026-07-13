@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { buildChordsLineHTML, buildTonoLineHTML, buildMixedLineHTML } from '../src/lib/lyricsRender.js';
+import {
+  buildChordsLineHTML,
+  buildTonoLineHTML,
+  buildMixedLineHTML,
+} from '../src/lib/lyricsRender.js';
 
 /**
  * Repro geometrico del "hueco intra-palabra" en modo Acordes (Task 1 del plan
@@ -87,7 +91,7 @@ async function findSplitWordRects(page, firstHalf, secondHalf) {
       let firstHalfNode = null;
       let secondHalfNode = null;
       let node;
-      // eslint-disable-next-line no-cond-assign
+       
       while ((node = walker.nextNode())) {
         if (!firstHalfNode && node.textContent.endsWith(firstHalf)) firstHalfNode = node;
         if (!secondHalfNode && node.textContent.startsWith(secondHalf)) secondHalfNode = node;
@@ -95,8 +99,8 @@ async function findSplitWordRects(page, firstHalf, secondHalf) {
       if (!firstHalfNode || !secondHalfNode) {
         throw new Error(
           `No se encontraron los nodos de texto esperados. firstHalf=${JSON.stringify(
-            firstHalf
-          )} secondHalf=${JSON.stringify(secondHalf)}`
+            firstHalf,
+          )} secondHalf=${JSON.stringify(secondHalf)}`,
         );
       }
       const firstHalfLen = firstHalfNode.textContent.length;
@@ -115,7 +119,7 @@ async function findSplitWordRects(page, firstHalf, secondHalf) {
         firstGlyph: { top: firstGlyphRect.top, left: firstGlyphRect.left },
       };
     },
-    { firstHalf, secondHalf }
+    { firstHalf, secondHalf },
   );
 }
 
@@ -134,7 +138,7 @@ test.describe('renglon foco: hueco intra-palabra (geometria)', () => {
     // plataforma a cada lado, ver CLAUDE.md "sin margen extra").
     await page.setViewportSize({ width: 375, height: 400 });
     await page.setContent(
-      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--chords">${html}</div></div>`
+      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--chords">${html}</div></div>`,
     );
     await page.addStyleTag({ content: TOKENS_CSS });
     await page.addStyleTag({ path: CSS_PATH });
@@ -172,7 +176,7 @@ test.describe('renglon foco: hueco intra-palabra (geometria)', () => {
 
     await page.setViewportSize({ width: 375, height: 400 });
     await page.setContent(
-      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--tono">${html}</div></div>`
+      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--tono">${html}</div></div>`,
     );
     await page.addStyleTag({ content: TOKENS_CSS });
     await page.addStyleTag({ path: CSS_PATH });
@@ -197,7 +201,7 @@ test.describe('renglon foco: hueco intra-palabra (geometria)', () => {
 
     await page.setViewportSize({ width: 375, height: 400 });
     await page.setContent(
-      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--mix">${html}</div></div>`
+      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--mix">${html}</div></div>`,
     );
     await page.addStyleTag({ content: TOKENS_CSS });
     await page.addStyleTag({ path: CSS_PATH });
@@ -240,7 +244,7 @@ test.describe('renglon foco: hueco intra-palabra (geometria)', () => {
 
     await page.setViewportSize({ width: 375, height: 400 });
     await page.setContent(
-      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--chords">${html}</div></div>`
+      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--chords">${html}</div></div>`,
     );
     await page.addStyleTag({ content: TOKENS_CSS });
     await page.addStyleTag({ path: CSS_PATH });
@@ -249,7 +253,7 @@ test.describe('renglon foco: hueco intra-palabra (geometria)', () => {
       [...document.querySelectorAll('.float-label')].map((el) => {
         const r = el.getBoundingClientRect();
         return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
-      })
+      }),
     );
 
     expect(rects.length).toBe(denseChords.length);
@@ -283,7 +287,7 @@ test.describe('renglon foco: hueco intra-palabra (geometria)', () => {
 
     await page.setViewportSize({ width: 375, height: 400 });
     await page.setContent(
-      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--tono">${html}</div></div>`
+      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--tono">${html}</div></div>`,
     );
     await page.addStyleTag({ content: TOKENS_CSS });
     await page.addStyleTag({ path: CSS_PATH });
@@ -296,7 +300,7 @@ test.describe('renglon foco: hueco intra-palabra (geometria)', () => {
       const walker = document.createTreeWalker(seg, NodeFilter.SHOW_TEXT);
       let textNode = null;
       let n;
-      // eslint-disable-next-line no-cond-assign
+       
       while ((n = walker.nextNode())) textNode = n;
       const range = document.createRange();
       range.selectNodeContents(textNode);
@@ -305,5 +309,35 @@ test.describe('renglon foco: hueco intra-palabra (geometria)', () => {
     });
 
     expect(noteTop).toBeGreaterThan(syllableTop);
+  });
+
+  // Task 4 (renglon-foco-consistente-modos): dentro de `.imm-v1`, la letra
+  // del renglón EN FOCO (`.imm-line--active`) debe leerse en blanco pleno en
+  // TODOS los modos — hoy `lyrics__letra-dim` (modo Acordes) trae un gris
+  // incrustado (#8f8f8f, calibrado para la vista normal) que casi la iguala
+  // a las vecinas atenuadas por opacidad del rollo, y el foco deja de
+  // resaltar. Carga components.css (define el gris original) + immersive.css
+  // (debe vencerlo con `.imm-v1 .lyrics__letra-dim{color:inherit}`) y mide
+  // color real vía `getComputedStyle` — NO en jsdom (`color:inherit` no
+  // resuelve a píxeles ahí).
+  test('modo Acordes: la letra del renglón en foco es blanco pleno, no gris #8f8f8f', async ({
+    page,
+  }) => {
+    const html = buildChordsLineHTML('Santo es el Senor', [{ pos: 0, ch: 'C' }], {});
+
+    await page.setViewportSize({ width: 375, height: 400 });
+    await page.setContent(
+      `<div class="imm-v1"><div class="imm-line imm-line--active lyrics__line lyrics__line--chords">${html}</div></div>`,
+    );
+    await page.addStyleTag({ content: TOKENS_CSS });
+    await page.addStyleTag({ path: CSS_PATH });
+    await page.addStyleTag({ path: 'src/styles/immersive.css' });
+
+    const color = await page.evaluate(() => {
+      const el = document.querySelector('.lyrics__letra-dim');
+      return getComputedStyle(el).color;
+    });
+
+    expect(color).toBe('rgb(255, 255, 255)');
   });
 });

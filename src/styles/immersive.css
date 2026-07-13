@@ -282,6 +282,30 @@ body.immersive-active > .floating-tuner {
   opacity: 0.9;
 }
 
+/* Foco en blanco pleno (Task 4): components.css atenúa la letra del modo
+   Acordes (`lyrics__letra-dim` → #8f8f8f) y lo no cantado del modo Tono/Mixto
+   (`lyrics__tono-dim` → #5a5a5a) para que predominen acordes/notas — esos
+   grises están calibrados para la vista normal (fondo claro/oscuro variable).
+   En el rollo (`.imm-v1`) el color del foco debe venir del contenedor
+   (`.imm-line--active{color:#fff}` + opacidad por distancia en las vecinas),
+   no de un gris incrustado por el builder: si no, el renglón en foco queda
+   casi tan apagado como sus vecinas y no resalta. */
+.imm-v1 .lyrics__letra-dim {
+  color: inherit;
+}
+/* Opción B: lo que la voz activa NO canta se sigue leyendo (82% blanco), no
+   casi invisible (#5a5a5a rompía la lectura del renglón en foco). */
+.imm-v1 .lyrics__tono-dim {
+  color: rgba(255, 255, 255, 0.82);
+}
+/* Lo que SÍ canta la voz activa (con o sin nota asignada todavía) va blanco
+   pleno — el color de la voz en el rollo vive en la nota/acorde flotante,
+   no en la palabra (a diferencia de la vista normal). */
+.imm-v1 .lyrics__tono-sung,
+.imm-v1 .lyrics__tono-pending {
+  color: #fff;
+}
+
 /* Vencer la trampa de especificidad (D9, parte B): components.css fuerza
    #8a6800 (marrón oscuro, fix de contraste correcto SOLO sobre fondo blanco)
    en tenor cuando data-theme='light' o el sistema está en claro sin
@@ -511,9 +535,17 @@ body.immersive-active > .floating-tuner {
 
 /* Capa desktop/tablet: columna de lectura centrada (auditoria 12-jul) */
 @media (min-width: 768px) {
-  .imm-v1 { --imm-gutter: 32px; }
-  .imm-v1__viewport { max-width: 920px; margin-inline: auto; width: 100%; }
+  .imm-v1 {
+    --imm-gutter: 32px;
+  }
+  .imm-v1__viewport {
+    max-width: 920px;
+    margin-inline: auto;
+    width: 100%;
+  }
 }
 @media (min-width: 1280px) {
-  .imm-v1 { --imm-gutter: 48px; }
+  .imm-v1 {
+    --imm-gutter: 48px;
+  }
 }

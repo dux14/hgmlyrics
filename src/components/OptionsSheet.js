@@ -75,6 +75,11 @@ export function openOptionsSheet(opts) {
   // Reapertura rápida: retira cualquier hoja anterior aún saliendo (animación).
   document.querySelectorAll('.osheet--closing, .osheet-dim--closing').forEach((el) => el.remove());
 
+  // Elemento que disparó la apertura: se restaura el foco ahí al cerrar
+  // (a11y). Se captura una sola vez aquí, no en `renderContent`, para que la
+  // reapertura idempotente (`openEls.update`) no lo pise.
+  const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
   const dim = document.createElement('div');
   dim.className = 'osheet-dim';
 
@@ -98,6 +103,7 @@ export function openOptionsSheet(opts) {
     dim.remove();
     sheet.remove();
     document.removeEventListener('keydown', onKeydown);
+    if (opener?.isConnected) opener.focus();
   }
 
   function close() {
@@ -128,6 +134,26 @@ export function openOptionsSheet(opts) {
 
   function onKeydown(e) {
     if (e.key === 'Escape') close();
+    if (e.key === 'Tab') {
+      const focusables = sheet.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      // Trap manual: aria-modal no atrapa el foco por si solo; el fondo sigue
+      // tabulable (P2 auditoria del sheet). Ciclo cerrado dentro del dialog.
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === sheet)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      } else if (!sheet.contains(document.activeElement)) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
   }
   document.addEventListener('keydown', onKeydown);
 

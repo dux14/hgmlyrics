@@ -99,3 +99,121 @@ describe('re-render in place (T-refresh)', () => {
     expect(closeB).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('focus trap y retorno de foco (a11y)', () => {
+  function baseOpts(extra = {}) {
+    return {
+      showTono: true,
+      tonoLabel: '0 · Original',
+      useFlats: false,
+      notation: 'latin',
+      fontLabel: '1.00',
+      autoscrollLabel: '50%',
+      ...extra,
+    };
+  }
+
+  function tabEvent(shiftKey = false) {
+    return new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, shiftKey });
+  }
+
+  it('al abrir, el foco pasa al sheet', () => {
+    const opener = document.createElement('button');
+    opener.textContent = 'Abrir opciones';
+    document.body.append(opener);
+    opener.focus();
+    expect(document.activeElement).toBe(opener);
+
+    openOptionsSheet(baseOpts());
+
+    expect(document.activeElement.classList.contains('osheet')).toBe(true);
+  });
+
+  it('Tab desde el último focusable cicla al primero', () => {
+    openOptionsSheet(baseOpts());
+    const sheet = document.querySelector('.osheet');
+    const focusables = sheet.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+
+    last.focus();
+    document.dispatchEvent(tabEvent(false));
+
+    expect(document.activeElement).toBe(first);
+  });
+
+  it('Shift+Tab desde el primer focusable cicla al último', () => {
+    openOptionsSheet(baseOpts());
+    const sheet = document.querySelector('.osheet');
+    const focusables = sheet.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+
+    first.focus();
+    document.dispatchEvent(tabEvent(true));
+
+    expect(document.activeElement).toBe(last);
+  });
+
+  it('al cerrar (reduce-motion), el foco vuelve al elemento que abrió el sheet', () => {
+    window.matchMedia = () => ({ matches: true });
+
+    const opener = document.createElement('button');
+    opener.textContent = 'Abrir opciones';
+    document.body.append(opener);
+    opener.focus();
+
+    openOptionsSheet(baseOpts());
+    expect(document.activeElement.classList.contains('osheet')).toBe(true);
+
+    closeOptionsSheet();
+
+    expect(document.activeElement).toBe(opener);
+
+    delete window.matchMedia;
+  });
+
+  it('si el opener fue removido del DOM antes de cerrar, no lanza y no intenta enfocarlo', () => {
+    window.matchMedia = () => ({ matches: true });
+
+    const opener = document.createElement('button');
+    document.body.append(opener);
+    opener.focus();
+
+    openOptionsSheet(baseOpts());
+    opener.remove();
+
+    expect(() => closeOptionsSheet()).not.toThrow();
+
+    delete window.matchMedia;
+  });
+
+  it('reapertura idempotente (update) no pisa el opener original', () => {
+    window.matchMedia = () => ({ matches: true });
+
+    const opener = document.createElement('button');
+    opener.textContent = 'Abrir opciones';
+    document.body.append(opener);
+    opener.focus();
+
+    openOptionsSheet(baseOpts());
+
+    const otherButton = document.createElement('button');
+    document.body.append(otherButton);
+    otherButton.focus();
+    // Reapertura idempotente: ya hay hoja abierta, dispara `update` en vez de
+    // recrear el sheet; el opener capturado en la apertura original NO debe
+    // ser reemplazado por `otherButton`.
+    openOptionsSheet(baseOpts({ fontLabel: '1.10' }));
+
+    closeOptionsSheet();
+
+    expect(document.activeElement).toBe(opener);
+
+    delete window.matchMedia;
+  });
+});

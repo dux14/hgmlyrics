@@ -5,8 +5,32 @@
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0F0F0F",
-  "theme_color": "#0097A7",
+  "theme_color": "#0F0F0F",
   "orientation": "portrait-primary",
+  "shortcuts": [
+    {
+      "name": "Buscar",
+      "short_name": "Buscar",
+      "url": "/#/buscar",
+      "icons": [
+        {
+          "src": "/icons/pwa-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Favoritos",
+      "short_name": "Favoritos",
+      "url": "/#/favoritos",
+      "icons": [
+        {
+          "src": "/icons/pwa-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
   "icons": [
     {
       "src": "/icons/pwa-64x64.png",

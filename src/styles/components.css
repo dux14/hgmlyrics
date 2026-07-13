@@ -547,6 +547,18 @@
 .lyrics__line--tono .line-seg {
   flex-direction: column-reverse;
 }
+/* En column-reverse, la caja del segmento arranca (top) en la sílaba (último
+   hijo en el DOM, ver comentario arriba) y termina (bottom) en la nota si la
+   hay. `.line-word` alinea sus segmentos/palabras vecinos por el FONDO
+   (align-items/vertical-align: bottom, L521/523) — eso encaja perfecto en
+   Acordes/Mix (nota arriba manda el tope), pero en Tono hunde la sílaba SIN
+   nota (caja corta, solo texto) al nivel del fondo de la caja con nota
+   (texto+nota, más alta). Alinear por el TOPE en Tono deja la fila de letra
+   siempre arriba, haya o no nota debajo. */
+.lyrics__line--tono .line-word {
+  align-items: flex-start;
+  vertical-align: top;
+}
 .lyrics__line--chords .float-label {
   position: static;
   top: auto;
@@ -1594,13 +1606,18 @@ body.floating-tuner-open .autoscroll-fab {
   line-height: 0;
 }
 
-/* ─── Modo Tono: notas por sílaba (ruby) ─── */
-.lyrics__line--tono {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.15rem 0.35rem;
-}
+/* ─── Modo Tono: notas por sílaba (ruby, sistema v2 legacy) ───
+   `buildSyllableNotesHTML`/`.syll` (voiceSystem.js) no tiene ningún caller
+   vivo — quedó reemplazado por el modelo v3 `.line-word`/`.line-seg`
+   (buildTonoLineHTML, ver L531+). El selector `.lyrics__line--tono` de este
+   bloque SÍ seguía coincidiendo con el contenedor real (aunque sus hijos
+   `.syll` nunca se rendericen), y al llegar después en la cascada ganaba
+   sobre las reglas vivas: `display:flex; align-items:flex-end` convertía la
+   línea en flex container y hundía las palabras SIN nota (caja corta) al
+   fondo de las palabras CON nota (caja alta) — la sílaba dim caía a la
+   altura de la fila de notas en vez de compartir la fila de letra de
+   arriba. Se retira la regla del contenedor; `.syll`/`.syll__note`/
+   `.syll__text` quedan intactas por si se retoma la función algún día. */
 
 .syll {
   display: inline-flex;

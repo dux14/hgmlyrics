@@ -340,4 +340,81 @@ test.describe('renglon foco: hueco intra-palabra (geometria)', () => {
 
     expect(color).toBe('rgb(255, 255, 255)');
   });
+
+  // Regresión reportada por Samu (screenshot, modo Tono full view): en un
+  // renglón donde la voz activa canta ALGUNAS sílabas (con nota, ver test
+  // anterior "la nota queda debajo de la silaba") y NO OTRAS (dim, sin nota,
+  // `lyrics__tono-dim`), las sílabas dim quedan HUNDIDAS a la altura de la
+  // fila de notas en vez de alinearse con la fila de letra de arriba.
+  //
+  // Causa: `.line-word` (wrapper que agrupa los `.line-seg`/palabras de la
+  // línea) tiene `align-items: flex-end` (dentro de una palabra partida) y
+  // `vertical-align: bottom` (entre palabras distintas de la línea) — ambos
+  // alinean por el BORDE INFERIOR de la caja. En Tono cada `.line-seg` es
+  // `column-reverse` [nota abajo / sílaba arriba]: la caja de un segmento CON
+  // nota es más alta (2 líneas) que la de uno SIN nota (1 línea, solo
+  // sílaba). Alinear por el fondo empuja la sílaba corta hacia abajo, a la
+  // altura del fondo de la caja alta (el nivel de la nota).
+  //
+  // "to"/"la" quedan fuera de los `groups` de la voz activa → sin nota,
+  // clase base `lyrics__tono-dim`. "a"/"do"/"doooo" sí están cubiertos por
+  // groups CON nota → `lyrics__tono-sung` + `.float-label.tono-note`.
+  test('modo Tono: silaba SIN nota (dim) alinea con la fila de letra, no cae a las notas', async ({
+    page,
+  }) => {
+    const text = 'a do doooo to la';
+    // Índices: a(0) ' '(1) do(2-4) ' '(4) doooo(5-10) ' '(10) to(11-13) ' '(13) la(14-16)
+    const line = {
+      text,
+      groups: [
+        { voiceId: 'sop1', start: 0, end: 1, note: 'Ab3' },
+        { voiceId: 'sop1', start: 2, end: 4, note: 'G3' },
+        { voiceId: 'sop1', start: 5, end: 10, note: 'Ab3' },
+      ],
+    };
+    const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano', {});
+
+    expect(html).toContain('lyrics__tono-sung');
+    expect(html).toContain('lyrics__tono-dim');
+    expect(html).toContain('tono-note');
+
+    // Ancho generoso para que TODA la línea quepa en un solo renglón visual
+    // (el objetivo es medir alineación vertical dentro de la misma línea,
+    // no interacción con wrap).
+    await page.setViewportSize({ width: 900, height: 400 });
+    await page.setContent(
+      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--tono">${html}</div></div>`,
+    );
+    await page.addStyleTag({ content: TOKENS_CSS });
+    await page.addStyleTag({ path: CSS_PATH });
+
+    const { sungTop, dimTop } = await page.evaluate(() => {
+      const words = [...document.querySelectorAll('.lyrics__line--tono .line-word')];
+      // Top del glifo de la SÍLABA (no de la nota): camina los nodos de
+      // texto de la palabra y descarta los que cuelgan de `.float-label`
+      // (la nota, cuando existe, va ANTES que la sílaba en el DOM — ver
+      // buildAnnotatedLineHTML).
+      const topOfSyllableGlyph = (word) => {
+        const walker = document.createTreeWalker(word, NodeFilter.SHOW_TEXT);
+        let n;
+        let target = null;
+        while ((n = walker.nextNode())) {
+          if (n.parentElement.closest('.float-label')) continue;
+          target = n;
+          break;
+        }
+        const range = document.createRange();
+        range.setStart(target, 0);
+        range.setEnd(target, 1);
+        return range.getBoundingClientRect().top;
+      };
+      const sungWord = words.find((w) => w.querySelector('.lyrics__tono-sung'));
+      const dimWord = words.find((w) => w.querySelector('.lyrics__tono-dim'));
+      return { sungTop: topOfSyllableGlyph(sungWord), dimTop: topOfSyllableGlyph(dimWord) };
+    });
+
+    // HOY debe FALLAR: dimTop queda notablemente por debajo de sungTop (a la
+    // altura de la fila de notas), en vez de compartir la fila de letra.
+    expect(Math.abs(sungTop - dimTop)).toBeLessThan(3);
+  });
 });

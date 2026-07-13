@@ -262,8 +262,22 @@ function runPass(rootEl) {
   });
 
   // Fase de escritura: se aplican todos los ajustes calculados.
+  //
+  // ACUMULATIVO, no un `set` absoluto: `resolveLabelOverlaps` corre dos
+  // pasadas SIN limpiar entre ellas (ver su comentario), a propósito, porque
+  // el margin-right de la pasada 1 puede cambiar el wrap y la pasada 2 debe
+  // corregir sobre eso. Pero el margin-right propio de un segmento nunca
+  // mueve la posición de SU PROPIO label (solo empuja lo que viene después),
+  // así que en la pasada 2 ese label se vuelve a medir en el mismo sitio y
+  // `computeOverlapAdjustments` devuelve el ajuste RESIDUAL que falta, no el
+  // total. Si aquí se sobrescribiera `marginRight` con ese residuo (bug real:
+  // un `=` en vez de `+=`), un residuo pequeño (colisión ya casi resuelta)
+  // borraba el empuje grande de la pasada 1 y el label volvía a solaparse
+  // con el siguiente — caso real: sílabas de 1 carácter dentro de la misma
+  // palabra, notas "pegadas" con un desplazamiento de pocos px.
   writes.forEach(({ segEl, adjustPx }) => {
-    segEl.style.marginRight = `${adjustPx}px`;
+    const previousPx = parseFloat(segEl.style.marginRight) || 0;
+    segEl.style.marginRight = `${previousPx + adjustPx}px`;
     segEl.setAttribute('data-overlap-fix', '1');
   });
 }

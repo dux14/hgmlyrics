@@ -200,7 +200,15 @@ test.describe('etiquetas de acorde/nota: sin empuje + anti-colision (geometria)'
     });
 
     const { rects, fixedCount } = await page.evaluate(() => {
-      const labels = [...document.querySelectorAll('.float-label.tono-note')];
+      // Medir el `<i>` interno, NO el `.float-label` que lo envuelve: el
+      // envoltorio va a `width: 0` a propósito (ver "Etiqueta sobre la
+      // sílaba sin ensancharla" en components.css) para no aportar ancho a
+      // la columna — el `<i>` es quien tiene el ancho real y sobresale. Medir
+      // el envoltorio da rects de ancho 0 siempre, lo que vuelve vacua
+      // cualquier comprobación de solape (bug de cobertura detectado junto
+      // con la causa raíz real en labelOverlap.js: con el envoltorio, este
+      // mismo caso "pasaba" aunque las etiquetas SÍ se solapaban).
+      const labels = [...document.querySelectorAll('.float-label.tono-note i')];
       const rects = labels.map((el) => {
         const r = el.getBoundingClientRect();
         return { top: r.top, left: r.left, right: r.right };
@@ -225,6 +233,116 @@ test.describe('etiquetas de acorde/nota: sin empuje + anti-colision (geometria)'
         const [left, right] = a.left <= b.left ? [a, b] : [b, a];
         expect(right.left).toBeGreaterThanOrEqual(left.right - 0.5);
       }
+    }
+  });
+
+  // Regresión del bug reportado: "dormir tranquiiilo" con Ab3/G3/Bb3, donde
+  // el par final Ab3+G3 (silabas de 1 caracter dentro de la MISMA palabra,
+  // "l"+"o" al final de "tranquiiilo") se pintaba casi montado. Causa raiz
+  // real (labelOverlap.js runPass, fase de escritura): `resolveLabelOverlaps`
+  // corre 2 pasadas SIN limpiar entre ellas a proposito (el margin-right de
+  // la pasada 1 puede cambiar el wrap, la pasada 2 corrige sobre eso), pero
+  // la escritura hacia un `=` absoluto en vez de acumular con `+=`. El label
+  // propio de un segmento no se mueve por su propio margin-right (solo
+  // empuja lo que viene despues), asi que en la pasada 2 se remedia en el
+  // mismo sitio y `computeOverlapAdjustments` devuelve el ajuste RESIDUAL que
+  // falta (chico, pero > 0) — al escribirlo con `=` en vez de `+=` borraba
+  // casi todo el empuje grande de la pasada 1, dejando un remanente de pocos
+  // px de solape (el desplazamiento chico que se ve en la captura).
+  test('modo Tono-solo: sílabas de 1 carácter adyacentes en la MISMA palabra no quedan montadas', async ({
+    page,
+  }) => {
+    // "dormir tranquiiilo": tranquiii(9)="tranquiii" Ab3, l(1)="l" G3, o(1)="o" Bb3.
+    const line = {
+      text: 'dormir tranquiiilo',
+      groups: [
+        { voiceId: 'sop1', start: 7, end: 16, note: 'Ab3' },
+        { voiceId: 'sop1', start: 16, end: 17, note: 'G3' },
+        { voiceId: 'sop1', start: 17, end: 19, note: 'Bb3' },
+      ],
+    };
+    const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano', {});
+    expect(html).toContain('tono-note');
+
+    await page.setViewportSize({ width: 900, height: 400 });
+    await page.setContent(
+      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--tono">${html}</div></div>`,
+    );
+    await page.addStyleTag({ content: TOKENS_CSS });
+    await page.addStyleTag({ path: CSS_PATH });
+    await injectLabelOverlap(page);
+
+    await page.evaluate(() => {
+      window.resolveLabelOverlaps(document.querySelector('.lyrics__line--tono'));
+    });
+
+    const { rects, fixedCount } = await page.evaluate(() => {
+      const labels = [...document.querySelectorAll('.float-label.tono-note i')];
+      const rects = labels.map((el) => {
+        const r = el.getBoundingClientRect();
+        return { top: r.top, left: r.left, right: r.right, text: el.textContent };
+      });
+      const fixedCount = document.querySelectorAll('[data-overlap-fix]').length;
+      return { rects, fixedCount };
+    });
+
+    expect(rects.length).toBe(3);
+    expect(fixedCount).toBeGreaterThan(0);
+    for (let i = 0; i < rects.length - 1; i++) {
+      const a = rects[i];
+      const b = rects[i + 1];
+      if (Math.abs(a.top - b.top) >= 4) continue;
+      expect(b.left).toBeGreaterThanOrEqual(a.right - 0.5);
+    }
+  });
+
+  // Mismo fixture que el test de Tono-solo de arriba, pero disparado por el
+  // carril de nota del modo Mixto (combinación no cubierta por el test
+  // anterior — carriles/segmentos `.mix-seg`/`.mix-rail--note` en vez de
+  // `.line-seg`/`.float-label`).
+  test('modo Mixto: sílabas de 1 carácter adyacentes en la MISMA palabra no quedan montadas (carril de nota)', async ({
+    page,
+  }) => {
+    const line = {
+      text: 'dormir tranquiiilo',
+      groups: [
+        { voiceId: 'sop1', start: 7, end: 16, note: 'Ab3' },
+        { voiceId: 'sop1', start: 16, end: 17, note: 'G3' },
+        { voiceId: 'sop1', start: 17, end: 19, note: 'Bb3' },
+      ],
+    };
+    const html = buildMixedLineHTML(line, [], 'sop1', 'voice-text--soprano', {});
+    expect(html).toContain('mix-rail--note');
+
+    await page.setViewportSize({ width: 900, height: 400 });
+    await page.setContent(
+      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--mix">${html}</div></div>`,
+    );
+    await page.addStyleTag({ content: TOKENS_CSS });
+    await page.addStyleTag({ path: CSS_PATH });
+    await injectLabelOverlap(page);
+
+    await page.evaluate(() => {
+      window.resolveLabelOverlaps(document.querySelector('.lyrics__line--mix'));
+    });
+
+    const { rects, fixedCount } = await page.evaluate(() => {
+      const labels = [...document.querySelectorAll('.mix-rail--note i')];
+      const rects = labels.map((el) => {
+        const r = el.getBoundingClientRect();
+        return { top: r.top, left: r.left, right: r.right, text: el.textContent };
+      });
+      const fixedCount = document.querySelectorAll('[data-overlap-fix]').length;
+      return { rects, fixedCount };
+    });
+
+    expect(rects.length).toBe(3);
+    expect(fixedCount).toBeGreaterThan(0);
+    for (let i = 0; i < rects.length - 1; i++) {
+      const a = rects[i];
+      const b = rects[i + 1];
+      if (Math.abs(a.top - b.top) >= 4) continue;
+      expect(b.left).toBeGreaterThanOrEqual(a.right - 0.5);
     }
   });
 
@@ -300,7 +418,11 @@ test.describe('etiquetas de acorde/nota: sin empuje + anti-colision (geometria)'
 
     const measure = () =>
       page.evaluate(() =>
-        [...document.querySelectorAll('.float-label.tono-note')].map((el) => {
+        // El `<i>` interno es el que tiene ancho real (ver comentario en el
+        // test denso más arriba); medirlo aquí también valida que el fix de
+        // acumulación de `margin-right` entre pasadas (labelOverlap.js
+        // runPass) no introduzca oscilación entre la 1ra y la 2da pasada.
+        [...document.querySelectorAll('.float-label.tono-note i')].map((el) => {
           const r = el.getBoundingClientRect();
           return { top: r.top, left: r.left, right: r.right };
         }),

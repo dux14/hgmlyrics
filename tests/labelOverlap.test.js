@@ -161,6 +161,72 @@ describe('resolveLabelOverlaps (smoke jsdom)', () => {
     expect(() => resolveLabelOverlaps(empty)).not.toThrow();
   });
 
+  it('acumula el margin-right entre pasadas en vez de sobrescribirlo (regresión: notas pegadas en la misma palabra)', () => {
+    // jsdom no calcula layout real (getBoundingClientRect da 0 siempre), así
+    // que para reproducir el bug de acumulación entre pasadas hay que
+    // stubear `getBoundingClientRect` de los dos labels para simular lo que
+    // pasa en un navegador real (repro completo en
+    // e2e/labels-sin-empuje.spec.js "sílabas de 1 carácter adyacentes..."):
+    //
+    //   Pasada 1: label A [0,20] y label B [15,35] colisionan (gap=4) →
+    //     needed = 20+4-15 = 9 → el segmento de A recibe margin-right=9px.
+    //   Pasada 2: el margin-right propio de A no mueve la posición de SU
+    //     PROPIO label (solo empuja lo que viene después), así que A se
+    //     vuelve a medir en [0,20]. B, ya empujado por el navegador, se mide
+    //     casi en su sitio correcto pero con un residuo de medición
+    //     (subpíxel/redondeo) de 0.01px → needed = 20+4-23.99 = 0.01 → el
+    //     segmento de A recibe un ajuste ADICIONAL de 0.01px.
+    //
+    // Antes del fix, la fase de escritura hacía `segEl.style.marginRight =
+    // adjustPx + 'px'` (asignación absoluta): el 0.01px de la pasada 2
+    // SOBRESCRIBÍA el 9px de la pasada 1, dejando el segmento casi sin
+    // empuje y los labels vueltos a solapar. El fix acumula (`previousPx +
+    // adjustPx`), así que el resultado final debe ser 9 + 0.01 = 9.01px.
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<p class="lyrics__line lyrics__line--tono">' +
+      '<span class="line-seg"><span class="float-label tono-note"><i>A</i></span></span>' +
+      '<span class="line-seg"><span class="float-label tono-note"><i>B</i></span></span>' +
+      '</p>';
+    const [segA, segB] = root.querySelectorAll('.line-seg');
+    const [labelA, labelB] = root.querySelectorAll('.float-label.tono-note i');
+
+    let readCount = 0;
+    Object.defineProperty(labelA, 'getBoundingClientRect', {
+      value: () => ({ left: 0, right: 20, top: 0 }),
+    });
+    Object.defineProperty(labelB, 'getBoundingClientRect', {
+      value: () => {
+        readCount += 1;
+        // 1ra lectura (pasada 1): posición original, colisiona con A.
+        // 2da lectura (pasada 2): B ya fue empujado por el margin-right de
+        // A (9px), con un residuo de 0.01px de "redondeo" simulado.
+        return readCount === 1
+          ? { left: 15, right: 35, top: 0 }
+          : { left: 23.99, right: 43.99, top: 0 };
+      },
+    });
+    // La línea y el `<i>` necesitan getBoundingClientRect/getComputedStyle
+    // utilizables; jsdom ya da font-size por defecto vía getComputedStyle.
+    Object.defineProperty(root.querySelector('.lyrics__line--tono'), 'getBoundingClientRect', {
+      value: () => ({ left: 0, right: 1000, top: 0 }),
+    });
+
+    resolveLabelOverlaps(root);
+
+    // gapPx real = fontSize (16px jsdom default) * 0.35 = 5.6, no 4 como en
+    // el comentario de arriba (simplificado); el valor exacto no importa
+    // para esta aserción: lo que importa es que el ajuste de la pasada 2 se
+    // SUMÓ al de la pasada 1 en vez de reemplazarlo.
+    const finalMarginPx = parseFloat(segA.style.marginRight);
+    expect(segA.hasAttribute('data-overlap-fix')).toBe(true);
+    // Con `=` (bug) el resultado final habría sido ~0.01-0.6px (solo el
+    // residuo de la 2da pasada). Con `+=` (fix) debe ser >= al ajuste ya
+    // grande de la 1ra pasada.
+    expect(finalMarginPx).toBeGreaterThan(5);
+    expect(segB.style.marginRight).toBe('');
+  });
+
   it('resuelve cuando rootEl es la propia línea (no un contenedor de varias) — caso ImmersiveView.setActiveIndex', () => {
     // ImmersiveView aplica la clase de modo directamente sobre el nodo
     // `.imm-line` (ver renderRoll/renderLineContent), así que el nodo que se

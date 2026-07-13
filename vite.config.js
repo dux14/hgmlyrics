@@ -126,7 +126,13 @@ export default defineConfig({
                 maxAgeSeconds: 60 * 60 * 24 * 30,
                 purgeOnQuotaError: true,
               },
-              cacheableResponse: { statuses: [200] },
+              // El <audio> siempre pide con Range (bytes=0-...) y Supabase
+              // responde 206 Partial Content con el cuerpo completo: si solo
+              // aceptamos 200 el SW descarta cada respuesta y la cache nunca
+              // se puebla. fetchOptions mode:'cors' evita una respuesta opaca,
+              // pero para que el navegador la acepte en el <audio> los players
+              // deben setear crossOrigin='anonymous' antes del src.
+              cacheableResponse: { statuses: [200, 206] },
               fetchOptions: { mode: 'cors' },
             },
           },

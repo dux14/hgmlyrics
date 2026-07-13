@@ -161,7 +161,10 @@ export default defineConfig({
               rangeRequests: true,
               matchOptions: { ignoreSearch: true },
               expiration: {
-                maxEntries: 8,
+                // 24 (no 8): el gestor de audio de la vista inmersiva cachea
+                // pistas POR SECCION ademas del full.mp3 (TANDA 1 players), asi
+                // que 8 desalojaba pistas de una misma cancion larga en uso.
+                maxEntries: 24,
                 maxAgeSeconds: 60 * 60 * 24 * 30,
                 purgeOnQuotaError: true,
               },

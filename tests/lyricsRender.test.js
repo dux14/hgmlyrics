@@ -43,7 +43,9 @@ describe('transposeChord', () => {
 describe('buildChordsLineHTML', () => {
   // visibleText: texto sin tags — la letra (sin las etiquetas flotantes) no debe partirse.
   const lyricsOnly = (html) =>
-    html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '').replace(/<[^>]*>/g, '');
+    html
+      .replace(/<span class="float-label[^"]*"><i>[^<]*<\/i><\/span>/g, '')
+      .replace(/<[^>]*>/g, '');
 
   it('acorde flota sin partir la palabra', () => {
     const html = buildChordsLineHTML('universo', [{ pos: 0, ch: 'D' }]);
@@ -82,7 +84,9 @@ describe('buildTonoLineHTML', () => {
     groups: [{ start: 0, end: 5, voiceId: 'sop1', note: 'B3' }],
   };
   const lyricsOnly = (html) =>
-    html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '').replace(/<[^>]*>/g, '');
+    html
+      .replace(/<span class="float-label[^"]*"><i>[^<]*<\/i><\/span>/g, '')
+      .replace(/<[^>]*>/g, '');
 
   it('la letra cantada de la voz activa va neutra (lyrics__tono-sung), no con el color de voz', () => {
     const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano');
@@ -352,7 +356,7 @@ describe('buildMixedLineHTML — carriles estrictos', () => {
       [{ pos: 2, ch: 'G' }],
       'v1',
       'voice-text--tenor',
-      {}
+      {},
     );
     const wordMatches = html.match(/<span class="line-word">/g) || [];
     expect(wordMatches.length).toBe(2); // "ab" y "cd" siguen siendo .line-word independientes

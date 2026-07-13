@@ -279,7 +279,7 @@ export function buildAnnotatedLineHTML(text, options = {}) {
     if (!labelByPos.has(l.pos)) labelByPos.set(l.pos, l);
   }
   const labelHtml = (l) =>
-    `<span class="float-label ${l.className || ''}">${escapeHtml(l.text)}</span>`;
+    `<span class="float-label ${l.className || ''}"><i>${escapeHtml(l.text)}</i></span>`;
 
   let html = '';
   let wordBuf = ''; // acumula los .line-seg de la palabra en curso antes de volcarlos
@@ -507,29 +507,39 @@ export function validateSongV3(song) {
  * @param {string} message @returns {string}
  */
 function translateValidationMessage(message) {
-  if (message.startsWith('schemaVersion debe ser'))
-    {return 'La canción tiene un formato de datos inesperado. Vuelve a abrir el editor.';}
-  if (message.startsWith('category inválida en roster'))
-    {return 'El elenco de voces tiene una categoría no reconocida.';}
-  if (message.startsWith('id de roster duplicado'))
-    {return 'El elenco de voces tiene un identificador repetido.';}
-  if (message.startsWith('referenceKey'))
-    {return 'Una voz del elenco tiene una nota de referencia inválida.';}
+  if (message.startsWith('schemaVersion debe ser')) {
+    return 'La canción tiene un formato de datos inesperado. Vuelve a abrir el editor.';
+  }
+  if (message.startsWith('category inválida en roster')) {
+    return 'El elenco de voces tiene una categoría no reconocida.';
+  }
+  if (message.startsWith('id de roster duplicado')) {
+    return 'El elenco de voces tiene un identificador repetido.';
+  }
+  if (message.startsWith('referenceKey')) {
+    return 'Una voz del elenco tiene una nota de referencia inválida.';
+  }
   if (message === 'spoken debe ser boolean') return 'Hay un valor inválido en una línea hablada.';
-  if (message === 'group fuera de rango' || message === 'syllable fuera de rango')
-    {return 'Hay una asignación de voz que no coincide con el texto de la línea.';}
-  if (message.startsWith('group referencia roster inexistente'))
-    {return 'Hay una asignación de voz que no corresponde a ninguna voz del elenco.';}
-  if (message.startsWith('voiceLines referencia roster inexistente'))
-    {return 'Hay una línea de voz que no corresponde a ninguna voz del elenco.';}
+  if (message === 'group fuera de rango' || message === 'syllable fuera de rango') {
+    return 'Hay una asignación de voz que no coincide con el texto de la línea.';
+  }
+  if (message.startsWith('group referencia roster inexistente')) {
+    return 'Hay una asignación de voz que no corresponde a ninguna voz del elenco.';
+  }
+  if (message.startsWith('voiceLines referencia roster inexistente')) {
+    return 'Hay una línea de voz que no corresponde a ninguna voz del elenco.';
+  }
   if (message.startsWith('nota inválida')) return 'Hay una nota musical inválida.';
   if (message === 'chord pos fuera de rango') return 'Hay un acorde ubicado fuera del texto.';
   if (message === 'chord vacío') return 'Hay un acorde vacío.';
-  if (message === 'syllables solapadas (overlap)') return 'Hay sílabas que se solapan en una línea.';
-  if (message === 'sungSyllables y notes con length distinto (no alineados)')
-    {return 'Las notas de una voz no coinciden con sus sílabas.';}
-  if (message === 'sungSyllables fuera de índice')
-    {return 'Una voz referencia una sílaba que no existe.';}
+  if (message === 'syllables solapadas (overlap)')
+    {return 'Hay sílabas que se solapan en una línea.';}
+  if (message === 'sungSyllables y notes con length distinto (no alineados)') {
+    return 'Las notas de una voz no coinciden con sus sílabas.';
+  }
+  if (message === 'sungSyllables fuera de índice') {
+    return 'Una voz referencia una sílaba que no existe.';
+  }
   return message;
 }
 

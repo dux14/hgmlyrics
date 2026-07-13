@@ -851,7 +851,7 @@ describe('buildAnnotatedLineHTML', () => {
       ],
     });
     // El texto de la letra (quitando las etiquetas flotantes) sigue siendo "universo".
-    const noLabels = html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '');
+    const noLabels = html.replace(/<span class="float-label[^"]*"><i>[^<]*<\/i><\/span>/g, '');
     expect(visibleText(noLabels)).toBe('universo');
   });
 
@@ -870,7 +870,7 @@ describe('buildAnnotatedLineHTML', () => {
     expect(html).toContain('float-label');
     expect(html).toContain('>G<');
     // el texto visible de la letra sigue siendo "ab" (la G es etiqueta flotante)
-    const noLabels = html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '');
+    const noLabels = html.replace(/<span class="float-label[^"]*"><i>[^<]*<\/i><\/span>/g, '');
     expect(visibleText(noLabels)).toBe('ab');
   });
 
@@ -899,7 +899,11 @@ describe('buildAnnotatedLineHTML — integridad de palabra (line-word)', () => {
       labels: [{ pos: 13, text: 'G', className: 'chord-label' }],
       baseClass: 'lyrics__letra-dim',
     });
-    const words = [...html.matchAll(/<span class="line-word">(.*?)<\/span><\/span>|<span class="line-word">(.*?)<\/span>/g)];
+    const words = [
+      ...html.matchAll(
+        /<span class="line-word">(.*?)<\/span><\/span>|<span class="line-word">(.*?)<\/span>/g,
+      ),
+    ];
     // Extrae el contenido visible (sin tags) de cada .line-word y verifica que no tenga espacios.
     const container = html;
     const wordBlocks = [];
@@ -936,7 +940,7 @@ describe('buildAnnotatedLineHTML — integridad de palabra (line-word)', () => {
     });
     const visible = html.replace(/<[^>]*>/g, '');
     // El texto visible incluye la etiqueta "G" además de la letra — se remueve por separado.
-    const withoutLabel = html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '');
+    const withoutLabel = html.replace(/<span class="float-label[^"]*"><i>[^<]*<\/i><\/span>/g, '');
     expect(withoutLabel.replace(/<[^>]*>/g, '')).toBe('Llevame contigooo caminando siempre');
     expect(visible).toContain('G');
   });
@@ -954,7 +958,7 @@ describe('buildAnnotatedLineHTML — integridad de palabra (line-word)', () => {
     const wordMatches = html.match(/<span class="line-word">/g) || [];
     expect(wordMatches.length).toBe(2); // "ab" y "cd" siguen siendo .line-word independientes
     // El textContent se preserva exacto (letra + etiqueta, espacio ni se pierde ni se duplica).
-    const withoutLabel = html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '');
+    const withoutLabel = html.replace(/<span class="float-label[^"]*"><i>[^<]*<\/i><\/span>/g, '');
     expect(withoutLabel.replace(/<[^>]*>/g, '')).toBe('ab cd');
     expect(html).toContain('>G<');
   });
@@ -1025,7 +1029,9 @@ describe('validateSongPreSave', () => {
       schemaVersion: 3,
       voiceRoster: [{ id: 'sop1', category: 'soprano' }],
       sections: [
-        { lines: [{ text: 'Santo', groups: [{ start: 0, end: 5, voiceId: 'ghost', note: null }] }] },
+        {
+          lines: [{ text: 'Santo', groups: [{ start: 0, end: 5, voiceId: 'ghost', note: null }] }],
+        },
       ],
     };
     const result = validateSongPreSave(s);

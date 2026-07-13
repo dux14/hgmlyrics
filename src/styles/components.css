@@ -473,6 +473,15 @@
   /* Los acordes mandan en modo Acordes: bien grandes como antes (legacy 1.4em). */
   font-size: 0.95em;
   top: -1.25em;
+}
+/* El box visual (pill/subrayado) vive en el <i> hijo, no en el span: así el
+   span puede ir a width:0 (ver bloque "Reservar espacio") sin recortar el
+   contenido, que sobresale con su tamaño natural. En el caso absolute (modo
+   Letra) el <i> hereda normal, sin efecto visible extra. */
+.float-label.chord-label i {
+  font-style: normal;
+  display: inline-block;
+  white-space: nowrap;
   /* Pill de fondo para despegar el acorde de la letra (igual que las notas de Tono). */
   background: var(--color-chord-bg);
   padding: 0.1em 0.35em;
@@ -484,6 +493,11 @@
    sirve para las 4 voces). La letra cantada manda; la nota es anotación. */
 .float-label.tono-note {
   font-size: 0.68em;
+}
+.float-label.tono-note i {
+  font-style: normal;
+  display: inline-block;
+  white-space: nowrap;
   padding: 0 0.1em 0.2em;
   border-bottom: 1.5px solid color-mix(in srgb, currentColor 45%, transparent);
 }
@@ -523,11 +537,16 @@
   vertical-align: bottom;
 }
 
-/* ─── Reservar espacio: la nota/acorde empuja su sílaba (estilo cancionero) ───
-   Cada .line-seg pasa a columna in-flow [nota arriba / sílaba abajo], así su
-   ancho ≥ ancho de la etiqueta y las etiquetas vecinas NUNCA se solapan en
-   líneas densas. Solo Tono/Acordes (Letra no usa .line-seg). `pre-wrap`
-   conserva los espacios entre palabras (los segmentos pasan a inline-flex). */
+/* ─── Etiqueta sobre la sílaba sin ensancharla ───
+   Cada .line-seg pasa a columna in-flow [nota arriba / sílaba abajo], pero el
+   .float-label toma width:0 (ver más abajo) para que la etiqueta NO aporte
+   ancho a la columna: el ancho del segmento lo decide solo la sílaba, y la
+   etiqueta (su <i> hijo, con tamaño natural) sobresale hacia la derecha sin
+   empujar el resto de la línea. La anti-colisión entre etiquetas vecinas ya
+   no vive en CSS: la resuelve un módulo JS medido (src/lib/labelOverlap.js)
+   que desplaza o esconde etiquetas que se solaparían. Solo Tono/Acordes
+   (Letra no usa .line-seg). `pre-wrap` conserva los espacios entre palabras
+   (los segmentos pasan a inline-flex). */
 .lyrics__line--tono,
 .lyrics__line--chords {
   padding-top: 0.35em;
@@ -563,12 +582,14 @@
   position: static;
   top: auto;
   left: auto;
+  width: 0;
   margin-bottom: 0.08em;
 }
 .lyrics__line--tono .float-label {
   position: static;
   top: auto;
   left: auto;
+  width: 0;
   margin-top: 0.4em;
 }
 /* Separación entre líneas del modo Tono (colchón "aire + letra manda") */
@@ -595,10 +616,13 @@
   line-height: 1;
   white-space: pre;
 }
+/* width:0 → el acorde/nota no ensancha su columna (mismo modelo que
+   .float-label arriba); el <i> sobresale a la derecha con su ancho natural. */
 .mix-rail--chord {
   height: 1.5em;
   font-size: 0.78em;
   font-weight: 700;
+  width: 0;
 }
 .mix-rail--chord i {
   font-style: normal;
@@ -607,6 +631,7 @@
   padding: 0.12em 0.4em;
   border-radius: 5px;
   display: inline-block;
+  white-space: nowrap;
 }
 .mix-rail--lyric {
   line-height: var(--line-height-lyrics);
@@ -616,12 +641,14 @@
   font-size: 0.68em;
   font-weight: 700;
   padding-top: 0.55em;
+  width: 0;
 }
 .mix-rail--note i {
   font-style: normal;
   border-top: 1.5px solid color-mix(in srgb, currentColor 45%, transparent);
   padding-top: 0.25em;
   display: inline-block;
+  white-space: nowrap;
 }
 
 /* Wave 4: el modo Acordes agrupa sus herramientas en cajas temáticas

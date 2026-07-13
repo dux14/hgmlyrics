@@ -27,6 +27,7 @@ import {
   transposeNote,
 } from '../lib/lyricsRender.js';
 import { getChordNotation, setChordNotation } from '../lib/chordNotation.js';
+import { resolveLabelOverlaps, observeLabelOverlaps } from '../lib/labelOverlap.js';
 import { getTranspose, setTranspose, normalizeSemitones } from '../lib/transposeStore.js';
 import { getLayers, setLayer, deriveViewMode } from '../lib/layerStore.js';
 import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
@@ -541,6 +542,26 @@ async function _renderSongBody(container, songId, isPreview, song) {
       });
       if (!isPreview) applyFontSize(fontSize);
       wireSectionPlayButtons();
+      resolveLabelOverlaps(lyricsEl);
+    }
+  }
+
+  // Anti-colisión de etiquetas de acorde/nota (Acordes/Tono/Mixto): resuelve
+  // la primera pintada siempre (incluido preview) y, fuera de preview,
+  // engancha además el observer de resize/fonts con su propio teardown por
+  // onRouteChange. El preview (editor) no navega por router, no hay ruta de
+  // la que salir (mismo razonamiento que el afinador flotante, ver
+  // comentario más abajo) — se conforma con la resolución puntual al montar.
+  const lyricsElInitial = container.querySelector('#lyrics-content');
+  if (lyricsElInitial) {
+    if (isPreview) {
+      resolveLabelOverlaps(lyricsElInitial);
+    } else {
+      const disconnectLabelOverlaps = observeLabelOverlaps(lyricsElInitial);
+      const unsubscribeLabelOverlapsRoute = onRouteChange(() => {
+        disconnectLabelOverlaps();
+        unsubscribeLabelOverlapsRoute();
+      });
     }
   }
 
@@ -571,7 +592,9 @@ async function _renderSongBody(container, songId, isPreview, song) {
         });
         const isOpen = sectionIndex === openSectionAudioIndex;
         accordion.el.hidden = !isOpen;
-        sectionEl.querySelector('.lyrics__section-label')?.insertAdjacentElement('afterend', accordion.el);
+        sectionEl
+          .querySelector('.lyrics__section-label')
+          ?.insertAdjacentElement('afterend', accordion.el);
         sectionAccordions.set(sectionIndex, accordion);
       });
     }
@@ -586,7 +609,10 @@ async function _renderSongBody(container, songId, isPreview, song) {
   }
 
   function updateSectionPlayButtonLabel(btn, isOpen) {
-    btn.setAttribute('aria-label', isOpen ? 'Ocultar audio de la sección' : 'Mostrar audio de la sección');
+    btn.setAttribute(
+      'aria-label',
+      isOpen ? 'Ocultar audio de la sección' : 'Mostrar audio de la sección',
+    );
   }
 
   // Un panel abierto a la vez: togglea el de `sectionIndex` y colapsa el
@@ -600,7 +626,10 @@ async function _renderSongBody(container, songId, isPreview, song) {
       acc.el.hidden = !(opening && idx === sectionIndex);
     });
     container.querySelectorAll('[data-section-audio]').forEach((btn) => {
-      updateSectionPlayButtonLabel(btn, opening && Number(btn.dataset.sectionAudio) === sectionIndex);
+      updateSectionPlayButtonLabel(
+        btn,
+        opening && Number(btn.dataset.sectionAudio) === sectionIndex,
+      );
     });
     openSectionAudioIndex = opening ? sectionIndex : null;
     if (opening) accordion.load();
@@ -1089,9 +1118,8 @@ async function _renderSongBody(container, songId, isPreview, song) {
       const { fetchSectionAudio } = await import('../lib/sectionAudioApi.js');
       const tracks = await fetchSectionAudio(songId);
       if (destroyed || tracks.length === 0) return;
-      const { createSectionAudioManager, createSectionAccordion } = await import(
-        './SectionPlayer.js'
-      );
+      const { createSectionAudioManager, createSectionAccordion } =
+        await import('./SectionPlayer.js');
       const sv = container.querySelector('.song-view');
       if (destroyed || !sv) return;
       sectionAccordionFactory = createSectionAccordion;

@@ -56,6 +56,8 @@ export default [
         alert: 'readonly',
         NodeFilter: 'readonly',
         IntersectionObserver: 'readonly',
+        ResizeObserver: 'readonly',
+        getComputedStyle: 'readonly',
         XMLHttpRequest: 'readonly',
       },
     },

@@ -44,6 +44,7 @@ import { openOptionsSheet, closeOptionsSheet, isOptionsSheetOpen } from './Optio
 import { projectLines } from '../lib/projectLines.js';
 import { getImmersiveMode, setImmersiveMode, availableModes } from '../lib/immersiveStore.js';
 import { createSpring } from '../lib/spring.js';
+import { resolveLabelOverlaps, observeLabelOverlaps } from '../lib/labelOverlap.js';
 import '../styles/immersive.css';
 
 // Duración por línea en el extremo lento (fallback de scheduleAdvance cuando
@@ -265,6 +266,10 @@ function renderRoll(s) {
     .join('');
   s.lineEls = Array.from(s.els.roll.children);
   updateDistanceClasses(s);
+  // El rollo se pinta entero de una vez: resuelve colisiones/rebase de
+  // etiquetas de acorde/tono sobre TODAS las líneas recién montadas (el
+  // observer de resize/fonts se engancha una sola vez en enterImmersive).
+  resolveLabelOverlaps(s.els.roll);
 }
 
 /**
@@ -889,7 +894,10 @@ function showInterlude(s, { index, progress }) {
   }
   const perBar = s.beatClock?.perBar ?? 4;
   const showCount =
-    s.metronomeVisualOn && remainingBeats !== null && remainingBeats >= 1 && remainingBeats <= perBar;
+    s.metronomeVisualOn &&
+    remainingBeats !== null &&
+    remainingBeats >= 1 &&
+    remainingBeats <= perBar;
 
   let el = s.els.roll.querySelector('.imm-interlude');
   if (!el || el.dataset.after !== String(index)) {
@@ -1227,6 +1235,10 @@ export function enterImmersive(songViewEl, ctx = {}) {
     // entrar; el usuario desmutea pista y/o click por separado). Solo aplica en
     // sync (donde existe el <audio>); en timer no hay pista.
     trackMuted: true,
+    // Anti-colisión de etiquetas: un solo observer sobre el rollo, montado
+    // aquí y desconectado en exitImmersive (mismo ciclo de vida que el resto
+    // de listeners de la sesión).
+    disconnectLabelOverlaps: null,
   };
 
   const activeCategory =
@@ -1235,6 +1247,7 @@ export function enterImmersive(songViewEl, ctx = {}) {
   updateVoiceChipsVisibility(session);
 
   renderRoll(session);
+  session.disconnectLabelOverlaps = observeLabelOverlaps(els.roll);
   updateSectionLabel(session);
   session.spring.snap(0); // sin animación de entrada: arranca ya en posición
   els.roll.style.transform = 'translateY(0px)';
@@ -1384,6 +1397,7 @@ export function exitImmersive() {
   clearTimeout(timer);
   clearTimeout(hideControlsTimer);
   stopScrollLoop(session);
+  session.disconnectLabelOverlaps?.();
 
   // Player sincronizado (D3): el audio.pause()+src='' pasa por TODOS los
   // caminos de salida, esté o no promovido a sync (cleanupAudioEl es no-op

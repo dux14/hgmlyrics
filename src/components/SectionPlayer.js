@@ -187,7 +187,12 @@ export function createSectionAudioManager({ tracks: initialTracks, refetch }) {
  * }} opts
  * @returns {{ el: HTMLElement, sectionIndex: number, getActiveTrackId: () => string|null, load: () => void, destroy: () => void }}
  */
-export function createSectionAccordion({ manager, sectionIndex, tracks: sectionTracks, initialTrackId = null }) {
+export function createSectionAccordion({
+  manager,
+  sectionIndex,
+  tracks: sectionTracks,
+  initialTrackId = null,
+}) {
   const scopes = [...new Set(sectionTracks.map((t) => t.voiceScope))];
   // El track activo al crear el panel se elige en este orden: (1) lo que
   // REALMENTE suena/está cargado en el manager si pertenece a esta sección
@@ -241,9 +246,22 @@ export function createSectionAccordion({ manager, sectionIndex, tracks: sectionT
     return !!current && !!activeTrack && current.id === activeTrack.id;
   }
 
+  // durationSec llega como string desde la API (columna numeric de Postgres →
+  // postgres.js la serializa como "135.846893", no como number). Sin coaccionar,
+  // fmtTime(string) cae en !Number.isFinite y pinta "0:00". Se prioriza el valor
+  // persistido; si falta (pistas viejas sin duración), se usa la duración real
+  // del <audio> cuando esta pista es la que suena, siempre que sea finita
+  // (los mp3 sin header pueden reportar Infinity).
+  function resolveDuration(current) {
+    const meta = Number(activeTrack?.durationSec);
+    if (Number.isFinite(meta) && meta > 0) return meta;
+    const live = current ? manager.audio.duration : 0;
+    return Number.isFinite(live) && live > 0 ? live : 0;
+  }
+
   function paint() {
     const current = isCurrent();
-    const duration = activeTrack?.durationSec || (current ? manager.audio.duration : 0) || 0;
+    const duration = resolveDuration(current);
     const elapsed = current ? manager.audio.currentTime || 0 : 0;
     elapsedEl.textContent = fmtTime(elapsed);
     totalEl.textContent = fmtTime(duration);

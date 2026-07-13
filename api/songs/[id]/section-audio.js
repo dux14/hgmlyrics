@@ -14,7 +14,7 @@ const VOICE_SCOPES = ['soprano', 'contralto', 'tenor', 'bass', 'lead', 'backing'
 async function getSectionAudio(_req, res, songId) {
   const rows = await sql`
     SELECT id, section_index AS "sectionIndex", voice_scope AS "voiceScope",
-           storage_key AS "storageKey", label, duration_sec AS "durationSec"
+           storage_key AS "storageKey", label, duration_sec::float8 AS "durationSec"
     FROM song_section_audio
     WHERE song_id = ${songId}
     ORDER BY section_index, voice_scope

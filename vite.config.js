@@ -111,6 +111,10 @@ export default defineConfig({
           {
             // Pistas mp3 en Supabase Storage: CacheFirst con Range para que el
             // <audio> pueda hacer seek offline (sin rangeRequests el seek rompe).
+            // fetchOptions mode:'cors' fuerza siempre modo cors (igual que
+            // img-storage-v2) para evitar respuestas opacas: workbox-range-requests
+            // hace .blob() sobre la respuesta cacheada para partir el body en el
+            // Range pedido, y un body opaco (status 0) es ilegible para eso.
             urlPattern: ({ url, request }) =>
               request.destination === 'audio' && url.hostname.endsWith('.supabase.co'),
             handler: 'CacheFirst',
@@ -122,7 +126,8 @@ export default defineConfig({
                 maxAgeSeconds: 60 * 60 * 24 * 30,
                 purgeOnQuotaError: true,
               },
-              cacheableResponse: { statuses: [0, 200] },
+              cacheableResponse: { statuses: [200] },
+              fetchOptions: { mode: 'cors' },
             },
           },
           {

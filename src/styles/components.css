@@ -597,6 +597,33 @@
   margin-bottom: 0.6em;
 }
 
+/* ─── Nota promovida (labelOverlap.js decideNotePromotions) ───
+   Cuando dos notas del carril inferior colisionan, la de la DERECHA del par
+   se PROMUEVE arriba de su sílaba en vez de empujar la letra (ver JSDoc de
+   cabecera de labelOverlap.js). Sale del flujo (position: absolute) para que
+   la sílaba no pierda ni gane un píxel de posición — el .line-seg sigue
+   determinando su ancho SOLO por la sílaba (igual que sin promoción), la
+   nota promovida ya no aporta altura ni ancho a la columna. `top` es un
+   desplazamiento fijo en em (no % — el .line-seg no tiene una altura
+   explícita contra la que resolver un porcentaje una vez la nota sale del
+   flujo) calibrado para que quede claramente sobre la sílaba sin pisar la
+   fila anterior. */
+.lyrics__line--tono .line-seg--note-flip .float-label {
+  position: absolute;
+  top: -1.35em;
+  left: 0;
+  width: 0;
+  margin: 0;
+}
+/* La fila con al menos una nota promovida necesita aire arriba para que la
+   nota volada no roce la línea anterior. Limitación aceptada: con wrap
+   multilínea, una promoción en la fila 2+ (no la primera del renglón) puede
+   rozar la fila anterior del mismo wrap — caso raro, requiere colisión y
+   wrap a la vez; no se resuelve aquí. */
+.lyrics__line--tono.lyrics__line--has-flip {
+  padding-top: 1.6em;
+}
+
 /* ─── Wave 4: vista combinada (letra+acordes+tono por voz) — 3 rieles ESTRICTOS
    de altura fija. El riel existe en todo segmento (con o sin contenido) para
    que comas/guiones/texto-dim alineen SIEMPRE con la letra, nunca con notas. */
@@ -610,6 +637,10 @@
   flex-direction: column;
   align-items: flex-start;
   vertical-align: bottom;
+  /* Ancla de la nota promovida (labelOverlap.js, ver bloque más abajo): sin
+     esto, `position: absolute` en `.mix-rail--note` se resolvería contra un
+     ancestro más lejano y ya no quedaría dentro de SU segmento. */
+  position: relative;
 }
 .mix-rail {
   display: block;
@@ -649,6 +680,39 @@
   padding-top: 0.25em;
   display: inline-block;
   white-space: nowrap;
+}
+
+/* ─── Nota promovida en Mixto (labelOverlap.js decideNotePromotions) ───
+   Cuando dos notas del riel de abajo colisionan, la de la DERECHA del par
+   sube al área SUPERIOR de su segmento, apilada por debajo del acorde si lo
+   hay: orden vertical ACORDE → NOTA → letra. Si el segmento no tiene acorde,
+   la nota promovida ocupa igual esa franja (mismo nivel vertical que si
+   estuviera apilada, para que todas las notas promovidas de la línea queden
+   a la misma altura).
+
+   OJO: `position: absolute` va en el `<i>` (el contenido), NO en
+   `.mix-rail--note` (el riel/contenedor). El riel CONSERVA su altura fija
+   normal siempre, promovida o no — si se sacara el riel entero del flujo, el
+   segmento se queda más bajo que sus vecinos de la misma `.line-word`, y como
+   `.line-word` alinea sus segmentos por el FONDO (`align-items: flex-end`,
+   ver "Integridad de palabra" arriba), el segmento más corto se reubica hacia
+   ABAJO para igualar el fondo del más alto — hundiendo la fila de letra de
+   ESE segmento respecto a sus vecinos (bug real detectado al calibrar con
+   Playwright: la letra "o" quedaba más abajo que "dormir"/"tranquiii"/"l" en
+   la misma palabra). Dejando el riel en flujo (vacío, mismo alto de
+   siempre) el segmento nunca cambia de altura total, así que nunca se
+   desalinea. */
+.mix-seg--note-flip .mix-rail--note i {
+  position: absolute;
+  top: 1.75em;
+  left: 0;
+}
+/* Con al menos una nota promovida en la línea, el riel de acorde crece EN
+   TODA la línea (uniforme para las dos filas de wrap si las hay) para dejar
+   sitio a la nota apilada debajo — así ningún segmento de la fila desalinea
+   su letra respecto a los demás. */
+.lyrics__line--mix.lyrics__line--has-flip .mix-rail--chord {
+  height: 2.95em;
 }
 
 /* Wave 4: el modo Acordes agrupa sus herramientas en cajas temáticas

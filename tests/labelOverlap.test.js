@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   computeOverlapAdjustments,
+  decideNotePromotions,
   resolveLabelOverlaps,
   observeLabelOverlaps,
 } from '../src/lib/labelOverlap.js';
@@ -78,6 +79,73 @@ describe('computeOverlapAdjustments', () => {
 
   it('lista vacía devuelve arreglo vacío', () => {
     expect(computeOverlapAdjustments([], 4, Infinity)).toEqual([]);
+  });
+});
+
+describe('decideNotePromotions', () => {
+  it('lista vacía no promueve nada', () => {
+    expect(decideNotePromotions([], 4)).toEqual(new Set());
+  });
+
+  it('un solo item nunca se promueve (no tiene vecino a su izquierda)', () => {
+    const items = [{ left: 0, right: 20, top: 0 }];
+    expect(decideNotePromotions(items, 4)).toEqual(new Set());
+  });
+
+  it('sin colisión, ningún item se promueve', () => {
+    const items = [
+      { left: 0, right: 20, top: 0 },
+      { left: 40, right: 60, top: 0 },
+      { left: 80, right: 100, top: 0 },
+    ];
+    expect(decideNotePromotions(items, 4)).toEqual(new Set());
+  });
+
+  it('dos items colisionados: se promueve el de la DERECHA del par', () => {
+    const items = [
+      { left: 0, right: 20, top: 0 },
+      { left: 15, right: 35, top: 0 }, // choca con el primero (gap=4: 20+4>15)
+    ];
+    expect(decideNotePromotions(items, 4)).toEqual(new Set([1]));
+  });
+
+  it('items en filas distintas (top diferente) nunca compiten, aunque se solapen en X', () => {
+    const items = [
+      { left: 0, right: 50, top: 0 },
+      { left: 10, right: 60, top: 20 },
+    ];
+    expect(decideNotePromotions(items, 4)).toEqual(new Set());
+  });
+
+  it('cadena de 3+ colisionados: el ancla no cambia tras promover, así que el 3ro se compara contra el 1ro (no contra el promovido)', () => {
+    // A[0,20] y B[15,35] chocan (gap=2 → 20+2>15) → B se promueve, el ancla
+    // SIGUE siendo A. C[36,56] no choca con A (20+2=22 <= 36) → C se queda
+    // abajo. Si el ancla hubiera pasado a B (bug), C sí competiría con B
+    // ([15,35]) y probablemente también se promovería — este test fija el
+    // comportamiento correcto: la nota promovida deja de "ocupar" el carril
+    // de abajo, así que no arrastra promociones en cascada innecesarias.
+    const items = [
+      { left: 0, right: 20, top: 0 },
+      { left: 15, right: 35, top: 0 },
+      { left: 36, right: 56, top: 0 },
+    ];
+    expect(decideNotePromotions(items, 2)).toEqual(new Set([1]));
+  });
+
+  it('3 sílabas de 1 carácter consecutivas que TODAS chocan entre sí: se promueven la 2da y la 3ra', () => {
+    // A[0,10], B[8,18] choca con A (gap=1: 10+1>8) → B promovido, ancla sigue en A.
+    // C[16,26]: contra el ancla A (right=10+1=11 <= 16) NO choca... pero si
+    // C también choca con B habría que evaluarlo en el carril de arriba (eso
+    // lo resuelve el margin-right residual de runPass sobre el sub-carril
+    // promovido, no esta función). Aquí armamos un caso donde C SÍ choca
+    // contra el ancla (A se mueve más a la derecha) para forzar su propia
+    // promoción.
+    const items = [
+      { left: 0, right: 10, top: 0 },
+      { left: 8, right: 18, top: 0 },
+      { left: 9, right: 19, top: 0 },
+    ];
+    expect(decideNotePromotions(items, 1)).toEqual(new Set([1, 2]));
   });
 });
 
@@ -161,7 +229,16 @@ describe('resolveLabelOverlaps (smoke jsdom)', () => {
     expect(() => resolveLabelOverlaps(empty)).not.toThrow();
   });
 
-  it('acumula el margin-right entre pasadas en vez de sobrescribirlo (regresión: notas pegadas en la misma palabra)', () => {
+  it('acumula el margin-right entre pasadas en vez de sobrescribirlo (regresión: etiquetas pegadas en la misma palabra)', () => {
+    // Fixture en modo ACORDES (no Tono/Mix): desde la promoción vertical
+    // (`decideNotePromotions`), dos NOTAS colisionadas en Tono/Mix se
+    // resuelven promoviendo la de la derecha, no con `margin-right` — este
+    // test de regresión sigue probando el mecanismo de empuje puro, así que
+    // usa `.lyrics__line--chords`/`.float-label.chord-label`: los ACORDES
+    // NUNCA promueven (ver JSDoc de cabecera del módulo), conservan el
+    // empuje medido de siempre y son el fixture correcto para esta
+    // regresión. El bug y el fix documentados abajo no cambiaron.
+    //
     // jsdom no calcula layout real (getBoundingClientRect da 0 siempre), así
     // que para reproducir el bug de acumulación entre pasadas hay que
     // stubear `getBoundingClientRect` de los dos labels para simular lo que
@@ -184,12 +261,12 @@ describe('resolveLabelOverlaps (smoke jsdom)', () => {
     // adjustPx`), así que el resultado final debe ser 9 + 0.01 = 9.01px.
     const root = document.createElement('div');
     root.innerHTML =
-      '<p class="lyrics__line lyrics__line--tono">' +
-      '<span class="line-seg"><span class="float-label tono-note"><i>A</i></span></span>' +
-      '<span class="line-seg"><span class="float-label tono-note"><i>B</i></span></span>' +
+      '<p class="lyrics__line lyrics__line--chords">' +
+      '<span class="line-seg"><span class="float-label chord-label"><i>A</i></span></span>' +
+      '<span class="line-seg"><span class="float-label chord-label"><i>B</i></span></span>' +
       '</p>';
     const [segA, segB] = root.querySelectorAll('.line-seg');
-    const [labelA, labelB] = root.querySelectorAll('.float-label.tono-note i');
+    const [labelA, labelB] = root.querySelectorAll('.float-label.chord-label i');
 
     let readCount = 0;
     Object.defineProperty(labelA, 'getBoundingClientRect', {
@@ -208,7 +285,7 @@ describe('resolveLabelOverlaps (smoke jsdom)', () => {
     });
     // La línea y el `<i>` necesitan getBoundingClientRect/getComputedStyle
     // utilizables; jsdom ya da font-size por defecto vía getComputedStyle.
-    Object.defineProperty(root.querySelector('.lyrics__line--tono'), 'getBoundingClientRect', {
+    Object.defineProperty(root.querySelector('.lyrics__line--chords'), 'getBoundingClientRect', {
       value: () => ({ left: 0, right: 1000, top: 0 }),
     });
 
@@ -225,6 +302,77 @@ describe('resolveLabelOverlaps (smoke jsdom)', () => {
     // grande de la 1ra pasada.
     expect(finalMarginPx).toBeGreaterThan(5);
     expect(segB.style.marginRight).toBe('');
+  });
+
+  it('Tono-solo: dos notas colisionadas promueven la de la derecha (clase de flip aplicada, sin margin-right)', () => {
+    // Mismo par A/B del test de arriba, pero en `.lyrics__line--tono` (carril
+    // de NOTAS, sí promueve) en vez de `.lyrics__line--chords`: la colisión
+    // se resuelve subiendo B, no empujando A con margin-right.
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<p class="lyrics__line lyrics__line--tono">' +
+      '<span class="line-seg"><span class="float-label tono-note"><i>A</i></span></span>' +
+      '<span class="line-seg"><span class="float-label tono-note"><i>B</i></span></span>' +
+      '</p>';
+    const [segA, segB] = root.querySelectorAll('.line-seg');
+    const [labelA, labelB] = root.querySelectorAll('.float-label.tono-note i');
+    Object.defineProperty(labelA, 'getBoundingClientRect', {
+      value: () => ({ left: 0, right: 20, top: 0 }),
+    });
+    Object.defineProperty(labelB, 'getBoundingClientRect', {
+      value: () => ({ left: 15, right: 35, top: 0 }),
+    });
+    Object.defineProperty(root.querySelector('.lyrics__line--tono'), 'getBoundingClientRect', {
+      value: () => ({ left: 0, right: 1000, top: 0 }),
+    });
+
+    resolveLabelOverlaps(root);
+
+    expect(segB.classList.contains('line-seg--note-flip')).toBe(true);
+    expect(segB.hasAttribute('data-overlap-flip')).toBe(true);
+    expect(segA.classList.contains('line-seg--note-flip')).toBe(false);
+    expect(
+      root.querySelector('.lyrics__line--tono').classList.contains('lyrics__line--has-flip'),
+    ).toBe(true);
+    // La promoción resolvió la colisión: ninguno de los dos necesitó
+    // margin-right (carriles distintos, ver collectRails).
+    expect(segA.style.marginRight).toBe('');
+    expect(segB.style.marginRight).toBe('');
+  });
+
+  it('limpia la promoción de una pasada previa cuando la nueva geometría ya no colisiona', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<p class="lyrics__line lyrics__line--tono">' +
+      '<span class="line-seg"><span class="float-label tono-note"><i>A</i></span></span>' +
+      '<span class="line-seg"><span class="float-label tono-note"><i>B</i></span></span>' +
+      '</p>';
+    const [, segB] = root.querySelectorAll('.line-seg');
+    const [labelA, labelB] = root.querySelectorAll('.float-label.tono-note i');
+    Object.defineProperty(root.querySelector('.lyrics__line--tono'), 'getBoundingClientRect', {
+      value: () => ({ left: 0, right: 1000, top: 0 }),
+    });
+
+    // Simula el residuo de una pasada previa que sí había promovido B.
+    segB.classList.add('line-seg--note-flip');
+    segB.setAttribute('data-overlap-flip', '1');
+    root.querySelector('.lyrics__line--tono').classList.add('lyrics__line--has-flip');
+
+    // Nueva geometría: A y B ya no colisionan (muy separados).
+    Object.defineProperty(labelA, 'getBoundingClientRect', {
+      value: () => ({ left: 0, right: 20, top: 0 }),
+    });
+    Object.defineProperty(labelB, 'getBoundingClientRect', {
+      value: () => ({ left: 500, right: 520, top: 0 }),
+    });
+
+    resolveLabelOverlaps(root);
+
+    expect(segB.classList.contains('line-seg--note-flip')).toBe(false);
+    expect(segB.hasAttribute('data-overlap-flip')).toBe(false);
+    expect(
+      root.querySelector('.lyrics__line--tono').classList.contains('lyrics__line--has-flip'),
+    ).toBe(false);
   });
 
   it('resuelve cuando rootEl es la propia línea (no un contenedor de varias) — caso ImmersiveView.setActiveIndex', () => {

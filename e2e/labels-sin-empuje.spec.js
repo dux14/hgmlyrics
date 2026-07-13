@@ -173,6 +173,13 @@ test.describe('etiquetas de acorde/nota: sin empuje + anti-colision (geometria)'
     // "ba jo tu re": 4 silabas cortas (2 letras cada una) con notas de 3
     // caracteres — el label es mas ancho que la silaba, forzando colision
     // horizontal en el carril de notas sin el ajuste de labelOverlap.js.
+    //
+    // CAMBIO DE MECANISMO (esta feature): la colisión ahora se resuelve
+    // promoviendo las notas de la derecha de cada par colisionado
+    // (`decideNotePromotions`), no empujando con margin-right — por eso la
+    // aserción ya no exige `fixedCount > 0` sino `flippedCount > 0` (al
+    // menos una promoción real), conservando la garantía que le importa al
+    // usuario: sin solape entre etiquetas.
     const line = {
       text: 'ba jo tu re',
       groups: [
@@ -199,7 +206,7 @@ test.describe('etiquetas de acorde/nota: sin empuje + anti-colision (geometria)'
       window.resolveLabelOverlaps(document.querySelector('.lyrics__line--tono'));
     });
 
-    const { rects, fixedCount } = await page.evaluate(() => {
+    const { rects, flippedCount } = await page.evaluate(() => {
       // Medir el `<i>` interno, NO el `.float-label` que lo envuelve: el
       // envoltorio va a `width: 0` a propósito (ver "Etiqueta sobre la
       // sílaba sin ensancharla" en components.css) para no aportar ancho a
@@ -213,14 +220,13 @@ test.describe('etiquetas de acorde/nota: sin empuje + anti-colision (geometria)'
         const r = el.getBoundingClientRect();
         return { top: r.top, left: r.left, right: r.right };
       });
-      const fixedCount = document.querySelectorAll('[data-overlap-fix]').length;
-      return { rects, fixedCount };
+      const flippedCount = document.querySelectorAll('[data-overlap-flip]').length;
+      return { rects, flippedCount };
     });
 
     expect(rects.length).toBe(4);
-    // El caso realmente colisionaba: labelOverlap.js tuvo que aplicar al
-    // menos un ajuste de margin-right.
-    expect(fixedCount).toBeGreaterThan(0);
+    // El caso realmente colisionaba: al menos una nota fue promovida.
+    expect(flippedCount).toBeGreaterThan(0);
 
     // Sin solape entre etiquetas vecinas de la misma fila visual (mismo
     // `top`, tolerancia 4px como en labelOverlap.js ROW_TOLERANCE_PX).
@@ -249,6 +255,17 @@ test.describe('etiquetas de acorde/nota: sin empuje + anti-colision (geometria)'
   // falta (chico, pero > 0) — al escribirlo con `=` en vez de `+=` borraba
   // casi todo el empuje grande de la pasada 1, dejando un remanente de pocos
   // px de solape (el desplazamiento chico que se ve en la captura).
+  //
+  // CAMBIO DE MECANISMO (esta feature): con `decideNotePromotions`, el par
+  // que colisiona ("l" G3 + "o" Bb3, sílabas de 1 carácter) ya no se resuelve
+  // empujando con margin-right — Bb3 (la nota de la DERECHA del par) se
+  // PROMUEVE arriba de su sílaba. La aserción original ("fixedCount > 0",
+  // asumía que el mecanismo SIEMPRE era margin) ya no aplica tal cual: aquí
+  // se reemplaza por (a) sin solape entre notas de la misma fila visual (se
+  // mantiene, es la garantía real que le importa al usuario), (b) la letra
+  // no se movió ni un píxel respecto a la versión sin notas, y (c) al menos
+  // una nota fue promovida (confirma que el caso realmente disparó el
+  // mecanismo, no que "no había nada que resolver").
   test('modo Tono-solo: sílabas de 1 carácter adyacentes en la MISMA palabra no quedan montadas', async ({
     page,
   }) => {
@@ -261,45 +278,57 @@ test.describe('etiquetas de acorde/nota: sin empuje + anti-colision (geometria)'
         { voiceId: 'sop1', start: 17, end: 19, note: 'Bb3' },
       ],
     };
+    const lineNoNotes = { ...line, groups: line.groups.map((g) => ({ ...g, note: '' })) };
     const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano', {});
+    const htmlNoNotes = buildTonoLineHTML(lineNoNotes, 'sop1', 'voice-text--soprano', {});
     expect(html).toContain('tono-note');
 
     await page.setViewportSize({ width: 900, height: 400 });
     await page.setContent(
-      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--tono">${html}</div></div>`,
+      `<div id="with" style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--tono">${html}</div></div>` +
+        `<div id="without" style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--tono">${htmlNoNotes}</div></div>`,
     );
     await page.addStyleTag({ content: TOKENS_CSS });
     await page.addStyleTag({ path: CSS_PATH });
     await injectLabelOverlap(page);
 
     await page.evaluate(() => {
-      window.resolveLabelOverlaps(document.querySelector('.lyrics__line--tono'));
+      window.resolveLabelOverlaps(document.querySelector('#with .lyrics__line--tono'));
     });
 
-    const { rects, fixedCount } = await page.evaluate(() => {
-      const labels = [...document.querySelectorAll('.float-label.tono-note i')];
+    const { rects, flippedCount } = await page.evaluate(() => {
+      const labels = [...document.querySelectorAll('#with .float-label.tono-note i')];
       const rects = labels.map((el) => {
         const r = el.getBoundingClientRect();
         return { top: r.top, left: r.left, right: r.right, text: el.textContent };
       });
-      const fixedCount = document.querySelectorAll('[data-overlap-fix]').length;
-      return { rects, fixedCount };
+      const flippedCount = document.querySelectorAll('#with [data-overlap-flip]').length;
+      return { rects, flippedCount };
     });
 
     expect(rects.length).toBe(3);
-    expect(fixedCount).toBeGreaterThan(0);
+    // El caso realmente disparó el mecanismo: al menos una nota promovida.
+    expect(flippedCount).toBeGreaterThan(0);
     for (let i = 0; i < rects.length - 1; i++) {
       const a = rects[i];
       const b = rects[i + 1];
       if (Math.abs(a.top - b.top) >= 4) continue;
       expect(b.left).toBeGreaterThanOrEqual(a.right - 0.5);
     }
+
+    const leftsWith = await wordLefts(page, '#with');
+    const leftsWithout = await wordLefts(page, '#without');
+    expect(leftsWith.length).toBe(leftsWithout.length);
+    for (let i = 0; i < leftsWith.length; i++) {
+      expect(Math.abs(leftsWith[i] - leftsWithout[i])).toBeLessThan(1.5);
+    }
   });
 
   // Mismo fixture que el test de Tono-solo de arriba, pero disparado por el
   // carril de nota del modo Mixto (combinación no cubierta por el test
   // anterior — carriles/segmentos `.mix-seg`/`.mix-rail--note` en vez de
-  // `.line-seg`/`.float-label`).
+  // `.line-seg`/`.float-label`). Mismo cambio de mecanismo: ver comentario
+  // del test de Tono-solo de arriba.
   test('modo Mixto: sílabas de 1 carácter adyacentes en la MISMA palabra no quedan montadas (carril de nota)', async ({
     page,
   }) => {
@@ -311,38 +340,48 @@ test.describe('etiquetas de acorde/nota: sin empuje + anti-colision (geometria)'
         { voiceId: 'sop1', start: 17, end: 19, note: 'Bb3' },
       ],
     };
+    const lineNoNotes = { ...line, groups: line.groups.map((g) => ({ ...g, note: '' })) };
     const html = buildMixedLineHTML(line, [], 'sop1', 'voice-text--soprano', {});
+    const htmlNoNotes = buildMixedLineHTML(lineNoNotes, [], 'sop1', 'voice-text--soprano', {});
     expect(html).toContain('mix-rail--note');
 
     await page.setViewportSize({ width: 900, height: 400 });
     await page.setContent(
-      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--mix">${html}</div></div>`,
+      `<div id="with" style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--mix">${html}</div></div>` +
+        `<div id="without" style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--mix">${htmlNoNotes}</div></div>`,
     );
     await page.addStyleTag({ content: TOKENS_CSS });
     await page.addStyleTag({ path: CSS_PATH });
     await injectLabelOverlap(page);
 
     await page.evaluate(() => {
-      window.resolveLabelOverlaps(document.querySelector('.lyrics__line--mix'));
+      window.resolveLabelOverlaps(document.querySelector('#with .lyrics__line--mix'));
     });
 
-    const { rects, fixedCount } = await page.evaluate(() => {
-      const labels = [...document.querySelectorAll('.mix-rail--note i')];
+    const { rects, flippedCount } = await page.evaluate(() => {
+      const labels = [...document.querySelectorAll('#with .mix-rail--note i')];
       const rects = labels.map((el) => {
         const r = el.getBoundingClientRect();
         return { top: r.top, left: r.left, right: r.right, text: el.textContent };
       });
-      const fixedCount = document.querySelectorAll('[data-overlap-fix]').length;
-      return { rects, fixedCount };
+      const flippedCount = document.querySelectorAll('#with [data-overlap-flip]').length;
+      return { rects, flippedCount };
     });
 
     expect(rects.length).toBe(3);
-    expect(fixedCount).toBeGreaterThan(0);
+    expect(flippedCount).toBeGreaterThan(0);
     for (let i = 0; i < rects.length - 1; i++) {
       const a = rects[i];
       const b = rects[i + 1];
       if (Math.abs(a.top - b.top) >= 4) continue;
       expect(b.left).toBeGreaterThanOrEqual(a.right - 0.5);
+    }
+
+    const leftsWith = await wordLefts(page, '#with');
+    const leftsWithout = await wordLefts(page, '#without');
+    expect(leftsWith.length).toBe(leftsWithout.length);
+    for (let i = 0; i < leftsWith.length; i++) {
+      expect(Math.abs(leftsWith[i] - leftsWithout[i])).toBeLessThan(1.5);
     }
   });
 
@@ -444,5 +483,214 @@ test.describe('etiquetas de acorde/nota: sin empuje + anti-colision (geometria)'
       expect(Math.abs(firstPass[i].left - secondPass[i].left)).toBeLessThan(0.5);
       expect(Math.abs(firstPass[i].right - secondPass[i].right)).toBeLessThan(0.5);
     }
+  });
+
+  // ─── Promoción vertical (decideNotePromotions): la nota que colisiona con
+  // su vecina sube arriba en vez de empujar la letra ───
+  test.describe('promoción vertical de notas (nota colisionada sube en vez de empujar la letra)', () => {
+    // Mismo fixture que la regresión de arriba: "dormir tranquiiilo", donde
+    // el par final "l" G3 + "o" Bb3 (sílabas de 1 carácter) colisiona.
+    const PROMO_LINE = {
+      text: 'dormir tranquiiilo',
+      groups: [
+        { voiceId: 'sop1', start: 7, end: 16, note: 'Ab3' },
+        { voiceId: 'sop1', start: 16, end: 17, note: 'G3' },
+        { voiceId: 'sop1', start: 17, end: 19, note: 'Bb3' },
+      ],
+    };
+    const PROMO_LINE_NO_NOTES = {
+      ...PROMO_LINE,
+      groups: PROMO_LINE.groups.map((g) => ({ ...g, note: '' })),
+    };
+
+    test('Tono-solo: la nota promovida queda arriba de su sílaba, la letra no se mueve y ninguna nota se solapa', async ({
+      page,
+    }) => {
+      const html = buildTonoLineHTML(PROMO_LINE, 'sop1', 'voice-text--soprano', {});
+      const htmlNoNotes = buildTonoLineHTML(PROMO_LINE_NO_NOTES, 'sop1', 'voice-text--soprano', {});
+
+      await page.setViewportSize({ width: 900, height: 400 });
+      await page.setContent(
+        `<div id="with" style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--tono">${html}</div></div>` +
+          `<div id="without" style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--tono">${htmlNoNotes}</div></div>`,
+      );
+      await page.addStyleTag({ content: TOKENS_CSS });
+      await page.addStyleTag({ path: CSS_PATH });
+      await injectLabelOverlap(page);
+
+      await page.evaluate(() => {
+        window.resolveLabelOverlaps(document.querySelector('#with .lyrics__line--tono'));
+      });
+
+      const { notes, syllTops } = await page.evaluate(() => {
+        const segs = [...document.querySelectorAll('#with .line-seg')];
+        const notes = segs
+          .map((seg) => {
+            const i = seg.querySelector('.float-label i');
+            if (!i) return null;
+            const r = i.getBoundingClientRect();
+            return { flipped: seg.classList.contains('line-seg--note-flip'), rect: r };
+          })
+          .filter(Boolean);
+        // top de la fila de letra: el <span> de sílaba pintado por cada
+        // .line-seg (nodo de texto directo, medido con un Range).
+        const syllTops = segs.map((seg) => {
+          const range = document.createRange();
+          const textNode = [...seg.childNodes].find((n) => n.nodeType === 3); // 3 = TEXT_NODE
+          if (!textNode) return null;
+          range.selectNodeContents(textNode);
+          return range.getBoundingClientRect().top;
+        });
+        return { notes, syllTops };
+      });
+
+      expect(notes.length).toBe(3);
+      const promoted = notes.filter((n) => n.flipped);
+      const notPromoted = notes.filter((n) => !n.flipped);
+      expect(promoted.length).toBeGreaterThan(0);
+      expect(notPromoted.length).toBeGreaterThan(0);
+
+      // La fila de letra es la misma para todas las sílabas (mismo top,
+      // tolerancia 1px) — la promoción no la movió.
+      const rowTops = syllTops.filter((t) => t !== null);
+      for (const t of rowTops) expect(Math.abs(t - rowTops[0])).toBeLessThan(1);
+
+      // La nota promovida queda ARRIBA de la fila de letra; las no
+      // promovidas quedan ABAJO (debajo de la sílaba, como siempre).
+      for (const n of promoted) expect(n.rect.top).toBeLessThan(rowTops[0]);
+      for (const n of notPromoted) expect(n.rect.top).toBeGreaterThan(rowTops[0]);
+
+      // Ninguna nota se solapa con otra de la misma fila visual.
+      for (let i = 0; i < notes.length; i++) {
+        for (let j = i + 1; j < notes.length; j++) {
+          const a = notes[i].rect;
+          const b = notes[j].rect;
+          if (Math.abs(a.top - b.top) >= 4) continue;
+          const [left, right] = a.left <= b.left ? [a, b] : [b, a];
+          expect(right.left).toBeGreaterThanOrEqual(left.right - 0.5);
+        }
+      }
+
+      // La letra no se movió ni un píxel horizontalmente vs. la versión sin notas.
+      const leftsWith = await wordLefts(page, '#with');
+      const leftsWithout = await wordLefts(page, '#without');
+      expect(leftsWith.length).toBe(leftsWithout.length);
+      for (let i = 0; i < leftsWith.length; i++) {
+        expect(Math.abs(leftsWith[i] - leftsWithout[i])).toBeLessThan(1.5);
+      }
+    });
+
+    test('Mixto CON acorde en la posición de la nota promovida: orden vertical acorde < nota < letra', async ({
+      page,
+    }) => {
+      // Ancla el acorde en pos 17 ("o", inicio del grupo Bb3 — la nota que
+      // se promueve en este fixture): así el acorde y la nota promovida
+      // comparten el MISMO .mix-seg, el caso de apilamiento del spec.
+      const chords = [{ pos: 17, ch: 'G' }];
+      const html = buildMixedLineHTML(PROMO_LINE, chords, 'sop1', 'voice-text--soprano', {});
+      const htmlNoNotes = buildMixedLineHTML(
+        PROMO_LINE_NO_NOTES,
+        chords,
+        'sop1',
+        'voice-text--soprano',
+        {},
+      );
+
+      await page.setViewportSize({ width: 900, height: 400 });
+      await page.setContent(
+        `<div id="with" style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--mix">${html}</div></div>` +
+          `<div id="without" style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--mix">${htmlNoNotes}</div></div>`,
+      );
+      await page.addStyleTag({ content: TOKENS_CSS });
+      await page.addStyleTag({ path: CSS_PATH });
+      await injectLabelOverlap(page);
+
+      await page.evaluate(() => {
+        window.resolveLabelOverlaps(document.querySelector('#with .lyrics__line--mix'));
+      });
+
+      const { chordRect, noteRect, lyricRect } = await page.evaluate(() => {
+        const flippedSeg = document.querySelector('#with .mix-seg--note-flip');
+        const chordI = flippedSeg.querySelector('.mix-rail--chord i');
+        const noteI = flippedSeg.querySelector('.mix-rail--note i');
+        const lyricEl = flippedSeg.querySelector('.mix-rail--lyric');
+        return {
+          chordRect: chordI ? chordI.getBoundingClientRect() : null,
+          noteRect: noteI.getBoundingClientRect(),
+          lyricRect: lyricEl.getBoundingClientRect(),
+        };
+      });
+
+      expect(chordRect).not.toBeNull();
+      // Orden vertical estricto: acorde arriba, nota en medio, letra abajo.
+      expect(chordRect.top).toBeLessThan(noteRect.top);
+      expect(noteRect.top).toBeLessThan(lyricRect.top);
+      // Sin solape vertical entre acorde y nota, ni entre nota y letra.
+      expect(noteRect.top).toBeGreaterThanOrEqual(chordRect.bottom - 0.5);
+      expect(lyricRect.top).toBeGreaterThanOrEqual(noteRect.bottom - 0.5);
+
+      // La letra no se movió horizontalmente vs. la versión sin notas
+      // (mismo acorde en ambas, así que el único delta es la nota).
+      const leftsWith = await wordLefts(page, '#with');
+      const leftsWithout = await wordLefts(page, '#without');
+      expect(leftsWith.length).toBe(leftsWithout.length);
+      for (let i = 0; i < leftsWith.length; i++) {
+        expect(Math.abs(leftsWith[i] - leftsWithout[i])).toBeLessThan(1.5);
+      }
+    });
+
+    test('Mixto SIN acorde en la posición de la nota promovida: la nota sube igual, la letra no se mueve', async ({
+      page,
+    }) => {
+      // Acorde en pos 16 (grupo G3, NO el que se promueve) — el segmento de
+      // la nota promovida (Bb3, pos 17) queda sin acorde propio.
+      const chords = [{ pos: 16, ch: 'G' }];
+      const html = buildMixedLineHTML(PROMO_LINE, chords, 'sop1', 'voice-text--soprano', {});
+      const htmlNoNotes = buildMixedLineHTML(
+        PROMO_LINE_NO_NOTES,
+        chords,
+        'sop1',
+        'voice-text--soprano',
+        {},
+      );
+
+      await page.setViewportSize({ width: 900, height: 400 });
+      await page.setContent(
+        `<div id="with" style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--mix">${html}</div></div>` +
+          `<div id="without" style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--mix">${htmlNoNotes}</div></div>`,
+      );
+      await page.addStyleTag({ content: TOKENS_CSS });
+      await page.addStyleTag({ path: CSS_PATH });
+      await injectLabelOverlap(page);
+
+      await page.evaluate(() => {
+        window.resolveLabelOverlaps(document.querySelector('#with .lyrics__line--mix'));
+      });
+
+      const { chordI, noteRect, lyricRect } = await page.evaluate(() => {
+        const flippedSeg = document.querySelector('#with .mix-seg--note-flip');
+        const chordI = flippedSeg.querySelector('.mix-rail--chord i');
+        const noteI = flippedSeg.querySelector('.mix-rail--note i');
+        const lyricEl = flippedSeg.querySelector('.mix-rail--lyric');
+        return {
+          chordI: !!chordI,
+          noteRect: noteI.getBoundingClientRect(),
+          lyricRect: lyricEl.getBoundingClientRect(),
+        };
+      });
+
+      // Confirma el caso: este segmento NO tiene acorde propio.
+      expect(chordI).toBe(false);
+      // La nota promovida sigue arriba de la letra aunque no haya acorde.
+      expect(noteRect.top).toBeLessThan(lyricRect.top);
+      expect(lyricRect.top).toBeGreaterThanOrEqual(noteRect.bottom - 0.5);
+
+      const leftsWith = await wordLefts(page, '#with');
+      const leftsWithout = await wordLefts(page, '#without');
+      expect(leftsWith.length).toBe(leftsWithout.length);
+      for (let i = 0; i < leftsWith.length; i++) {
+        expect(Math.abs(leftsWith[i] - leftsWithout[i])).toBeLessThan(1.5);
+      }
+    });
   });
 });

@@ -14,6 +14,23 @@
  *       en la vista inmersiva el ancestro `.imm-v1__viewport` tiene
  *       `overflow: hidden` y la recorta.
  *
+ * MODELO (promoción primero, empuje residual después): cuando dos NOTAS
+ * vecinas del carril inferior colisionan, la letra NUNCA se mueve. En vez de
+ * empujar el segmento con `margin-right` (lo que antes desplazaba la sílaba
+ * siguiente y con ella la fila de letra), la nota de la DERECHA del par se
+ * PROMUEVE a un carril superior (fuera del flujo, `position: absolute` en
+ * CSS — ver "nota promovida" en components.css): en Tono-solo sube arriba de
+ * la sílaba; en Mixto sube al riel de acorde, apilada debajo de él si lo hay.
+ * `decideNotePromotions` decide qué índices promover; `applyNotePromotions`
+ * aplica la clase correspondiente ANTES de medir márgenes. Los ACORDES entre
+ * sí NUNCA promueven (conservan el empuje medido tal cual). Tras promover,
+ * las notas promovidas forman su propio carril (no compiten con las no
+ * promovidas): si dentro de cualquiera de los dos carriles sigue habiendo
+ * colisión (p. ej. 3+ notas de 1 carácter consecutivas que también chocan
+ * entre sí una vez promovidas), se aplica el `margin-right` residual de
+ * siempre — la promoción es el mecanismo preferente, el empuje es el último
+ * recurso.
+ *
  * Este módulo mide las etiquetas ya pintadas (`getBoundingClientRect`) y
  * aplica el empuje mínimo necesario como `margin-right` en el segmento
  * contenedor (`.line-seg`/`.mix-seg`). No toca el layout de la sílaba: solo
@@ -145,8 +162,124 @@ export function computeOverlapAdjustments(items, gapPx, boundRight) {
   return adjust;
 }
 
+/**
+ * Decide, dentro de UN carril de notas (rects ya medidos, en orden DOM
+ * izquierda→derecha), qué índices se PROMUEVEN a un carril superior para
+ * resolver su colisión sin mover la letra ni la posición horizontal de
+ * ninguna etiqueta — la promoción es una decisión de a qué carril VERTICAL
+ * pertenece cada nota, no un reflow.
+ *
+ * Recorre de izquierda a derecha manteniendo el índice de la última nota que
+ * QUEDA en el carril de abajo ("ancla"): si la siguiente nota choca con el
+ * ancla (misma fila visual + se solapan con `gapPx` de margen), se promueve
+ * y el ancla no cambia — la nota promovida ya no compite por espacio en el
+ * carril de abajo, así que la siguiente nota se compara contra la misma
+ * ancla de antes, no contra la que acaba de subir. Si no choca, la nota se
+ * queda abajo y pasa a ser la nueva ancla.
+ *
+ * Misma noción de "misma fila visual" y mismo `gapPx` que
+ * `computeOverlapAdjustments` (ROW_TOLERANCE_PX = 4px), para que promoción y
+ * empuje residual sean consistentes entre sí.
+ *
+ * @param {Array<{left:number, right:number, top:number}>} items rects de las
+ *   notas de UN carril, en orden visual del DOM.
+ * @param {number} gapPx separación mínima deseada entre dos notas vecinas.
+ * @returns {Set<number>} índices (dentro de `items`) que deben promoverse.
+ */
+export function decideNotePromotions(items, gapPx) {
+  const ROW_TOLERANCE_PX = 4;
+  const promoted = new Set();
+  if (items.length === 0) return promoted;
+
+  let anchor = 0; // la primera nota siempre queda abajo: no tiene vecina a su izquierda.
+  for (let i = 1; i < items.length; i++) {
+    const a = items[anchor];
+    const b = items[i];
+    const sameRow = Math.abs(a.top - b.top) <= ROW_TOLERANCE_PX;
+    const collides = sameRow && a.right + gapPx > b.left;
+    if (collides) {
+      promoted.add(i);
+      // El ancla NO cambia: i queda fuera del carril de abajo, así que la
+      // próxima comparación sigue siendo contra la última nota que de verdad
+      // ocupa espacio ahí.
+    } else {
+      anchor = i;
+    }
+  }
+  return promoted;
+}
+
 /** Selector de líneas que usan el modelo de etiquetas medido (Acordes/Tono/Mix). */
 const LINE_SELECTOR = '.lyrics__line--chords, .lyrics__line--tono, .lyrics__line--mix';
+
+/** Selector de líneas cuyo carril de notas participa en la promoción vertical
+ *  (Tono-solo y Mixto). Los ACORDES nunca promueven — conservan el empuje
+ *  medido de siempre (ver JSDoc de cabecera del módulo). */
+const NOTE_PROMOTION_LINE_SELECTOR = '.lyrics__line--tono, .lyrics__line--mix';
+
+/**
+ * Pares segmento+`<i>` del carril de NOTAS de una línea (el único carril de
+ * `.line-seg` en Tono-solo; el carril `.mix-rail--note` en Mixto — el carril
+ * de acordes queda fuera a propósito, no promueve).
+ * @param {HTMLElement} lineEl
+ * @returns {{segEl: HTMLElement, labelI: HTMLElement}[]}
+ */
+function getNoteRailPairs(lineEl) {
+  const pairs = [];
+  if (lineEl.classList.contains('lyrics__line--mix')) {
+    lineEl.querySelectorAll('.mix-seg').forEach((segEl) => {
+      const noteI = segEl.querySelector('.mix-rail--note i');
+      if (noteI) pairs.push({ segEl, labelI: noteI });
+    });
+    return pairs;
+  }
+  lineEl.querySelectorAll('.line-seg').forEach((segEl) => {
+    const i = segEl.querySelector('.float-label i');
+    if (i) pairs.push({ segEl, labelI: i });
+  });
+  return pairs;
+}
+
+/**
+ * Mide el carril de notas de cada línea elegible y aplica la clase de
+ * promoción (`line-seg--note-flip`/`mix-seg--note-flip` en el segmento,
+ * `lyrics__line--has-flip` en la línea) a las notas que `decideNotePromotions`
+ * marca como colisionadas. Corre UNA sola vez, ANTES de `runPass`, sobre la
+ * geometría original (sin promociones ni márgenes aplicados todavía) — así la
+ * decisión de qué promueve no se contamina con ajustes de una nota que ya
+ * cambió de carril.
+ * @param {HTMLElement} rootEl
+ */
+function applyNotePromotions(rootEl) {
+  const lineEls = [
+    ...(rootEl.matches?.(NOTE_PROMOTION_LINE_SELECTOR) ? [rootEl] : []),
+    ...rootEl.querySelectorAll(NOTE_PROMOTION_LINE_SELECTOR),
+  ];
+  if (lineEls.length === 0) return;
+
+  const writes = []; // { lineEl, segEl }
+  lineEls.forEach((lineEl) => {
+    const pairs = getNoteRailPairs(lineEl);
+    if (pairs.length < 2) return; // sin vecino, nada que promover.
+    const items = pairs.map(({ labelI }) => {
+      const r = labelI.getBoundingClientRect();
+      return { left: r.left, right: r.right, top: r.top };
+    });
+    const fontSizePx = parseFloat(getComputedStyle(pairs[0].labelI).fontSize) || 16;
+    const gapPx = fontSizePx * 0.35;
+    const promoted = decideNotePromotions(items, gapPx);
+    promoted.forEach((idx) => writes.push({ lineEl, segEl: pairs[idx].segEl }));
+  });
+
+  writes.forEach(({ lineEl, segEl }) => {
+    const flipClass = lineEl.classList.contains('lyrics__line--mix')
+      ? 'mix-seg--note-flip'
+      : 'line-seg--note-flip';
+    segEl.classList.add(flipClass);
+    segEl.setAttribute('data-overlap-flip', '1');
+    lineEl.classList.add('lyrics__line--has-flip');
+  });
+}
 
 /**
  * Agrupa, dentro de una línea, los labels por carril independiente:
@@ -154,34 +287,57 @@ const LINE_SELECTOR = '.lyrics__line--chords, .lyrics__line--tono, .lyrics__line
  * (un acorde no colisiona con una nota, viven en filas distintas del mismo
  * segmento); en chords/tono-solo hay un único carril de `.float-label`.
  *
+ * El carril de NOTAS se divide además en dos sub-carriles según ya tenga o
+ * no aplicada la clase de promoción (`applyNotePromotions` corre ANTES que
+ * esta función): las notas promovidas ("arriba") y las no promovidas
+ * ("abajo") viven en carriles verticales distintos y por lo tanto NUNCA
+ * compiten por espacio entre sí — el empuje residual (`margin-right`) que
+ * calcula `runPass` solo se aplica dentro de cada sub-carril (p. ej. dos
+ * notas promovidas vecinas que también chocan entre sí, caso de 3+ sílabas
+ * de 1 carácter consecutivas). En modo Acordes las notas no existen, así que
+ * esto no cambia nada ahí.
+ *
  * @param {HTMLElement} lineEl
  * @returns {Array<{segEl: HTMLElement, labelI: HTMLElement}[]>} un array por
  *   carril, cada uno con los pares segmento+`<i>` en orden visual del DOM.
  */
 function collectRails(lineEl) {
+  const isFlipped = (segEl, cls) => segEl.classList.contains(cls);
   if (lineEl.classList.contains('lyrics__line--mix')) {
     const chordRail = [];
-    const noteRail = [];
+    const noteRailBottom = [];
+    const noteRailTop = [];
     lineEl.querySelectorAll('.mix-seg').forEach((segEl) => {
       const chordI = segEl.querySelector('.mix-rail--chord i');
       if (chordI) chordRail.push({ segEl, labelI: chordI });
       const noteI = segEl.querySelector('.mix-rail--note i');
-      if (noteI) noteRail.push({ segEl, labelI: noteI });
+      if (noteI) {
+        (isFlipped(segEl, 'mix-seg--note-flip') ? noteRailTop : noteRailBottom).push({
+          segEl,
+          labelI: noteI,
+        });
+      }
     });
-    return [chordRail, noteRail].filter((rail) => rail.length > 0);
+    return [chordRail, noteRailBottom, noteRailTop].filter((rail) => rail.length > 0);
   }
-  const rail = [];
+  const railBottom = [];
+  const railTop = [];
   lineEl.querySelectorAll('.line-seg').forEach((segEl) => {
     const i = segEl.querySelector('.float-label i');
-    if (i) rail.push({ segEl, labelI: i });
+    if (i) {
+      (isFlipped(segEl, 'line-seg--note-flip') ? railTop : railBottom).push({ segEl, labelI: i });
+    }
   });
-  return rail.length > 0 ? [rail] : [];
+  return [railBottom, railTop].filter((rail) => rail.length > 0);
 }
 
 /**
  * Quita los ajustes de una pasada previa (limpieza antes de volver a medir:
- * si no se limpia, el margen aplicado en la pasada anterior contamina la
- * medición de la nueva).
+ * si no se limpia, el margen o la promoción aplicados en la pasada anterior
+ * contaminan la medición de la nueva). Limpia tanto el `margin-right`
+ * residual (`data-overlap-fix`) como la promoción vertical
+ * (`data-overlap-flip` + clase de flip en el segmento + `has-flip` en la
+ * línea, incluida la propia `rootEl` si es ella misma una línea).
  * @param {HTMLElement} rootEl
  */
 function clearPreviousAdjustments(rootEl) {
@@ -189,6 +345,16 @@ function clearPreviousAdjustments(rootEl) {
     el.style.marginRight = '';
     el.removeAttribute('data-overlap-fix');
   });
+  rootEl.querySelectorAll('[data-overlap-flip]').forEach((el) => {
+    el.classList.remove('line-seg--note-flip', 'mix-seg--note-flip');
+    el.removeAttribute('data-overlap-flip');
+  });
+  rootEl.querySelectorAll('.lyrics__line--has-flip').forEach((el) => {
+    el.classList.remove('lyrics__line--has-flip');
+  });
+  if (rootEl.classList?.contains('lyrics__line--has-flip')) {
+    rootEl.classList.remove('lyrics__line--has-flip');
+  }
 }
 
 /**
@@ -227,6 +393,10 @@ export function resolveLabelOverlaps(rootEl) {
   if (!rootEl) return;
 
   clearPreviousAdjustments(rootEl);
+  // Decide y aplica las promociones ANTES de medir márgenes: la promoción es
+  // el mecanismo preferente (ver JSDoc de cabecera), el empuje de `runPass`
+  // es el residual que queda dentro de cada sub-carril tras promover.
+  applyNotePromotions(rootEl);
   runPass(rootEl);
   // Segunda pasada: el margin-right aplicado en la primera puede haber
   // cambiado el wrap (una etiqueta que antes sobresalía del borde ahora cae

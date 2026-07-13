@@ -532,8 +532,9 @@ function translateValidationMessage(message) {
   if (message.startsWith('nota inválida')) return 'Hay una nota musical inválida.';
   if (message === 'chord pos fuera de rango') return 'Hay un acorde ubicado fuera del texto.';
   if (message === 'chord vacío') return 'Hay un acorde vacío.';
-  if (message === 'syllables solapadas (overlap)')
-    {return 'Hay sílabas que se solapan en una línea.';}
+  if (message === 'syllables solapadas (overlap)') {
+    return 'Hay sílabas que se solapan en una línea.';
+  }
   if (message === 'sungSyllables y notes con length distinto (no alineados)') {
     return 'Las notas de una voz no coinciden con sus sílabas.';
   }

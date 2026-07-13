@@ -251,12 +251,11 @@ export function buildMixedLineHTML(line, chords, voiceId, colorClass, opts = {})
     const b = points[i + 1];
     if (a >= b) continue;
     const slice = text.slice(a, b);
+    const hasAnchor = chordByPos.has(a) || noteByPos.has(a);
+    const isSpaceSlice = /^\s+$/.test(slice);
     // Slice solo-espacios sin acorde/nota anclados en su inicio → texto plano
     // fuera de cualquier wrapper (abre oportunidad de wrap entre palabras).
-    // Si trae acorde/nota (ancla cayó sobre un espacio, caso borde) se
-    // preserva como .mix-seg suelto, igual que antes de agrupar por palabra.
-    const isPlainSpace = !chordByPos.has(a) && !noteByPos.has(a) && /^\s+$/.test(slice);
-    if (isPlainSpace) {
+    if (isSpaceSlice && !hasAnchor) {
       flushWord();
       html += esc(slice);
       continue;
@@ -266,7 +265,18 @@ export function buildMixedLineHTML(line, chords, voiceId, colorClass, opts = {})
     if (group) {
       lyricCls = hasNote(group) ? 'lyrics__tono-sung' : `lyrics__tono-pending ${cls}`.trim();
     }
-    wordBuf += seg(chordByPos.get(a), lyricCls, slice, noteByPos.get(a));
+    const segHtml = seg(chordByPos.get(a), lyricCls, slice, noteByPos.get(a));
+    if (isSpaceSlice) {
+      // Ancla cayó exactamente sobre un espacio (caso borde, p.ej. columnas
+      // de ChordPro alineadas al espacio entre palabras): el espacio SIGUE
+      // siendo punto de corte de línea válido, así que el .mix-seg va suelto
+      // — flushea la palabra previa ANTES y arranca una nueva después, para
+      // no fusionar las dos palabras vecinas en un .line-word inquebrantable.
+      flushWord();
+      html += segHtml;
+    } else {
+      wordBuf += segHtml;
+    }
   }
   flushWord();
   // noteByPos.has(len) es defensivo — el esquema v3 impide g.start === len

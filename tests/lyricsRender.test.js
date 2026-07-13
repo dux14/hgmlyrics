@@ -326,6 +326,24 @@ describe('buildMixedLineHTML — carriles estrictos', () => {
       .replace(/<[^>]*>/g, '');
     expect(lyricOnly).toBe('contigooo caminando');
   });
+
+  it('REGRESIÓN (review Important): un acorde anclado exactamente sobre el espacio entre "ab" y "cd" NO debe fusionar ambas palabras en un solo .line-word', () => {
+    const html = buildMixedLineHTML(
+      { text: 'ab cd', groups: [] },
+      [{ pos: 2, ch: 'G' }],
+      'v1',
+      'voice-text--tenor',
+      {}
+    );
+    const wordMatches = html.match(/<span class="line-word">/g) || [];
+    expect(wordMatches.length).toBe(2); // "ab" y "cd" siguen siendo .line-word independientes
+    const lyricOnly = html
+      .replace(/<span class="mix-rail mix-rail--chord">.*?<\/span>/g, '')
+      .replace(/<span class="mix-rail mix-rail--note[^"]*">.*?<\/span>/g, '')
+      .replace(/<[^>]*>/g, '');
+    expect(lyricOnly).toBe('ab cd');
+    expect(html).toContain('>G</i>');
+  });
 });
 
 describe('transposeKey (T3)', () => {

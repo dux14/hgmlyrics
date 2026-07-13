@@ -216,17 +216,27 @@ test.describe('renglon foco: hueco intra-palabra (geometria)', () => {
     page,
   }) => {
     const denseText = 'Santo Santo Santo';
+    // pos 5 y 11 caen exactamente sobre los espacios entre palabras (repro
+    // del fallo Important de review: ancla sobre el espacio no debe fusionar
+    // las dos palabras vecinas en un solo .line-word inquebrantable).
     const denseChords = [
       { pos: 0, ch: 'C' },
       { pos: 2, ch: 'D' },
       { pos: 4, ch: 'E' },
+      { pos: 5, ch: 'Em' },
       { pos: 6, ch: 'F' },
       { pos: 8, ch: 'G' },
       { pos: 10, ch: 'A' },
+      { pos: 11, ch: 'Am' },
       { pos: 12, ch: 'B' },
       { pos: 14, ch: 'C' },
     ];
     const html = buildChordsLineHTML(denseText, denseChords, {});
+
+    // Las 3 "Santo" siguen siendo 3 .line-word independientes — el ancla
+    // sobre el espacio no las fusiona.
+    const wordCount = (html.match(/<span class="line-word">/g) || []).length;
+    expect(wordCount).toBe(3);
 
     await page.setViewportSize({ width: 375, height: 400 });
     await page.setContent(

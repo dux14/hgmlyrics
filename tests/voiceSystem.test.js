@@ -948,6 +948,16 @@ describe('buildAnnotatedLineHTML — integridad de palabra (line-word)', () => {
     // El espacio no debe quedar envuelto en ningún span — debe ser texto plano entre wrappers.
     expect(html).toMatch(/<\/span><\/span> <span class="line-word">/);
   });
+
+  it('REGRESIÓN (review Important): un label anclado exactamente sobre el espacio entre "ab" y "cd" NO debe fusionar ambas palabras en un solo .line-word', () => {
+    const html = buildAnnotatedLineHTML('ab cd', { labels: [{ pos: 2, text: 'G' }] });
+    const wordMatches = html.match(/<span class="line-word">/g) || [];
+    expect(wordMatches.length).toBe(2); // "ab" y "cd" siguen siendo .line-word independientes
+    // El textContent se preserva exacto (letra + etiqueta, espacio ni se pierde ni se duplica).
+    const withoutLabel = html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '');
+    expect(withoutLabel.replace(/<[^>]*>/g, '')).toBe('ab cd');
+    expect(html).toContain('>G<');
+  });
 });
 
 import { validateSongPreSave } from '../src/lib/voiceSystem.js';

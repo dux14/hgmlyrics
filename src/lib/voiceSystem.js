@@ -296,12 +296,10 @@ export function buildAnnotatedLineHTML(text, options = {}) {
     const span = spans.find((s) => s.start <= a && s.end >= b && s.start < s.end);
     const cls = span ? span.className || '' : baseClass;
     const label = labelByPos.get(a);
+    const isSpaceSlice = hasAnnotations && /^\s+$/.test(slice);
     // Slice solo-espacios sin etiqueta propia → texto plano fuera de cualquier
-    // wrapper (abre oportunidad de wrap entre palabras). Si trae etiqueta
-    // (ancla cayó sobre un espacio, caso borde) se preserva como .line-seg
-    // suelto, igual que antes de agrupar por palabra.
-    const isPlainSpace = hasAnnotations && !label && /^\s+$/.test(slice);
-    if (isPlainSpace) {
+    // wrapper (abre oportunidad de wrap entre palabras).
+    if (isSpaceSlice && !label) {
       flushWord();
       html += escapeHtml(slice);
       continue;
@@ -312,7 +310,15 @@ export function buildAnnotatedLineHTML(text, options = {}) {
             label ? labelHtml(label) : ''
           }${escapeHtml(slice)}</span>`
         : escapeHtml(slice);
-    if (hasAnnotations) {
+    if (isSpaceSlice) {
+      // Ancla cayó exactamente sobre un espacio (caso borde, p.ej. columnas
+      // de ChordPro alineadas al espacio entre palabras): el espacio SIGUE
+      // siendo punto de corte de línea válido, así que el .line-seg va suelto
+      // — flushea la palabra previa ANTES y arranca una nueva después, para
+      // no fusionar las dos palabras vecinas en un .line-word inquebrantable.
+      flushWord();
+      html += seg;
+    } else if (hasAnnotations) {
       wordBuf += seg;
     } else {
       html += seg;

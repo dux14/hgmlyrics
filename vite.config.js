@@ -38,7 +38,12 @@ export default defineConfig({
         // Phaser (~1.35MB, solo /mundo) y chunks admin no deben inflar la
         // instalación del SW de cada visitante: se cachean bajo demanda con
         // la regla lazy-chunks de runtimeCaching (H10 auditoría).
-        globIgnores: ['**/assets/phaser-*.js', '**/assets/Admin*.js', '**/assets/SongEditor-*.js'],
+        globIgnores: [
+          '**/assets/phaser-*.js',
+          '**/assets/Admin*.js',
+          '**/assets/SongEditor-*.js',
+          'world/**',
+        ],
         runtimeCaching: [
           {
             // Chunks lazy excluidos del precache: URL con hash de build, así
@@ -97,6 +102,23 @@ export default defineConfig({
               cacheName: 'img-uploads',
               expiration: {
                 maxEntries: 300,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+                purgeOnQuotaError: true,
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Pistas mp3 en Supabase Storage: CacheFirst con Range para que el
+            // <audio> pueda hacer seek offline (sin rangeRequests el seek rompe).
+            urlPattern: ({ url, request }) =>
+              request.destination === 'audio' && url.hostname.endsWith('.supabase.co'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'song-audio-v1',
+              rangeRequests: true,
+              expiration: {
+                maxEntries: 8,
                 maxAgeSeconds: 60 * 60 * 24 * 30,
                 purgeOnQuotaError: true,
               },

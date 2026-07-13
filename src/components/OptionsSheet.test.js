@@ -221,52 +221,89 @@ describe('focus trap y retorno de foco (a11y)', () => {
   });
 });
 
-describe('OptionsSheet — sección metrónomo (TANDA B, toggle maestro)', () => {
-  it('título "Metrónomo", labels Activado/Desactivado y sin el hint de guía visual', () => {
+describe('OptionsSheet — sección metrónomo (TANDA B, dos toggles: sonido/guía visual)', () => {
+  it('título "Metrónomo" y labels de sonido/guía visual activados', () => {
     openOptionsSheet({
       showTono: false,
       notation: 'anglo',
       fontLabel: '1.00',
       autoscrollLabel: '50%',
       showMetronome: true,
-      metronomeOn: true,
+      metronomeAudioOn: true,
+      metronomeVisualOn: true,
     });
 
     const headers = Array.from(document.querySelectorAll('.osheet__h')).map((h) => h.textContent);
     expect(headers).toContain('Metrónomo');
-    expect(headers).not.toContain('Click del metrónomo');
-    expect(document.querySelector('#osheet-metronome').textContent).toBe('Activado');
+    expect(document.querySelector('#osheet-metronome-audio').textContent).toBe('Sonido: activado');
+    expect(document.querySelector('#osheet-metronome-visual').textContent).toBe(
+      'Guía visual: activada',
+    );
     expect(document.querySelector('.osheet__hint')).toBeNull();
   });
 
-  it('metronomeOn false renderiza el label Desactivado', () => {
+  it('metronomeAudioOn/metronomeVisualOn false renderizan los labels apagados', () => {
     openOptionsSheet({
       showTono: false,
       notation: 'anglo',
       fontLabel: '1.00',
       autoscrollLabel: '50%',
       showMetronome: true,
-      metronomeOn: false,
+      metronomeAudioOn: false,
+      metronomeVisualOn: false,
     });
 
-    expect(document.querySelector('#osheet-metronome').textContent).toBe('Desactivado');
+    expect(document.querySelector('#osheet-metronome-audio').textContent).toBe(
+      'Sonido: silenciado',
+    );
+    expect(document.querySelector('#osheet-metronome-visual').textContent).toBe(
+      'Guía visual: oculta',
+    );
   });
 
-  it('el click del botón alterna a Activado/Desactivado y llama a onMetronomeToggle', () => {
-    const onMetronomeToggle = vi.fn();
+  it('el click en el botón de sonido alterna el label y llama a onMetronomeAudioToggle, sin tocar el de guía visual', () => {
+    const onMetronomeAudioToggle = vi.fn();
+    const onMetronomeVisualToggle = vi.fn();
     openOptionsSheet({
       showTono: false,
       notation: 'anglo',
       fontLabel: '1.00',
       autoscrollLabel: '50%',
       showMetronome: true,
-      metronomeOn: false,
-      onMetronomeToggle,
+      metronomeAudioOn: false,
+      metronomeVisualOn: true,
+      onMetronomeAudioToggle,
+      onMetronomeVisualToggle,
     });
 
-    document.querySelector('#osheet-metronome').click();
+    document.querySelector('#osheet-metronome-audio').click();
 
-    expect(document.querySelector('#osheet-metronome').textContent).toBe('Activado');
-    expect(onMetronomeToggle).toHaveBeenCalledWith(true);
+    expect(document.querySelector('#osheet-metronome-audio').textContent).toBe('Sonido: activado');
+    expect(onMetronomeAudioToggle).toHaveBeenCalledWith(true);
+    expect(onMetronomeVisualToggle).not.toHaveBeenCalled();
+  });
+
+  it('el click en el botón de guía visual alterna el label y llama a onMetronomeVisualToggle, sin tocar el de sonido', () => {
+    const onMetronomeAudioToggle = vi.fn();
+    const onMetronomeVisualToggle = vi.fn();
+    openOptionsSheet({
+      showTono: false,
+      notation: 'anglo',
+      fontLabel: '1.00',
+      autoscrollLabel: '50%',
+      showMetronome: true,
+      metronomeAudioOn: true,
+      metronomeVisualOn: true,
+      onMetronomeAudioToggle,
+      onMetronomeVisualToggle,
+    });
+
+    document.querySelector('#osheet-metronome-visual').click();
+
+    expect(document.querySelector('#osheet-metronome-visual').textContent).toBe(
+      'Guía visual: oculta',
+    );
+    expect(onMetronomeVisualToggle).toHaveBeenCalledWith(false);
+    expect(onMetronomeAudioToggle).not.toHaveBeenCalled();
   });
 });

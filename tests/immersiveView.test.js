@@ -1498,7 +1498,7 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     expect(document.querySelectorAll('#imm-roll .imm-interlude__dot').length).toBe(3);
   });
 
-  it('sheet: showMetronome pinta la sección y el toggle dispara onMetronomeToggle (setMuted)', async () => {
+  it('sheet: showMetronome pinta la sección y el toggle de sonido dispara onMetronomeAudioToggle (setMuted)', async () => {
     enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats());
     const sv = mountSongView();
@@ -1506,16 +1506,34 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     await flushAsync();
 
     document.getElementById('imm-open-options').click();
-    const toggle = document.querySelector('.osheet [data-act="metronome-toggle"]');
+    const toggle = document.querySelector('.osheet [data-act="metronome-audio-toggle"]');
     expect(toggle).toBeTruthy();
-    // TANDA B: toggle maestro, default encendido al entrar.
+    // Split F4/TANDA B: audio arranca apagado al entrar.
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    toggle.click();
+
+    expect(metronomeSetMuted).toHaveBeenCalledWith(false);
+  });
+
+  it('sheet: el toggle VISUAL arranca encendido y dispara onMetronomeVisualToggle', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimingsWithBeats());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    document.getElementById('imm-open-options').click();
+    const toggle = document.querySelector('.osheet [data-act="metronome-visual-toggle"]');
+    expect(toggle).toBeTruthy();
+    // Split F4/TANDA B: visual arranca encendido al entrar.
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
     toggle.click();
 
-    expect(metronomeSetMuted).toHaveBeenCalledWith(true);
+    expect(document.getElementById('imm-pulse').hidden).toBe(true);
+    expect(document.getElementById('imm-bpm-badge').hidden).toBe(true);
   });
 
-  it('sheet: el toggle de METRÓNOMO también refleja el estado en el toggle rápido de la barra (mismo setMetronomeOn)', async () => {
+  it('sheet: el toggle de sonido también refleja el estado en el toggle rápido de la barra (mismo setMetronomeAudioOn)', async () => {
     enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats());
     const sv = mountSongView();
@@ -1523,27 +1541,28 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     await flushAsync();
 
     const quickToggle = document.getElementById('imm-metronome-toggle');
-    // TANDA B: toggle maestro, default encendido al entrar.
-    expect(quickToggle.getAttribute('aria-pressed')).toBe('true');
-
-    document.getElementById('imm-open-options').click();
-    const sheetToggle = document.querySelector('.osheet [data-act="metronome-toggle"]');
-    sheetToggle.click();
+    // Split F4/TANDA B: audio arranca apagado al entrar.
     expect(quickToggle.getAttribute('aria-pressed')).toBe('false');
 
     document.getElementById('imm-open-options').click();
-    document.querySelector('.osheet [data-act="metronome-toggle"]').click();
+    const sheetToggle = document.querySelector('.osheet [data-act="metronome-audio-toggle"]');
+    sheetToggle.click();
     expect(quickToggle.getAttribute('aria-pressed')).toBe('true');
+
+    document.getElementById('imm-open-options').click();
+    document.querySelector('.osheet [data-act="metronome-audio-toggle"]').click();
+    expect(quickToggle.getAttribute('aria-pressed')).toBe('false');
   });
 
   it('sheet: sin beat grid, METRÓNOMO no aparece', async () => {
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
     document.getElementById('imm-open-options').click();
-    expect(document.querySelector('.osheet [data-act="metronome-toggle"]')).toBeNull();
+    expect(document.querySelector('.osheet [data-act="metronome-audio-toggle"]')).toBeNull();
+    expect(document.querySelector('.osheet [data-act="metronome-visual-toggle"]')).toBeNull();
   });
 
-  it('toggle rápido en la barra de player: existe con beat grid, arranca encendido (TANDA B), un clic lo apaga (setMuted(true))', async () => {
+  it('toggle rápido en la barra de player: existe con beat grid, arranca apagado (split F4/TANDA B), un clic lo enciende (setMuted(false))', async () => {
     enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats());
     const sv = mountSongView();
@@ -1552,13 +1571,13 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
 
     const quickToggle = document.getElementById('imm-metronome-toggle');
     expect(quickToggle).toBeTruthy();
-    expect(quickToggle.getAttribute('aria-label')).toBe('Metrónomo');
-    // TANDA B: toggle maestro, default encendido al entrar.
-    expect(quickToggle.getAttribute('aria-pressed')).toBe('true');
+    expect(quickToggle.getAttribute('aria-label')).toBe('Sonido del metrónomo');
+    // Split F4/TANDA B: audio arranca apagado al entrar.
+    expect(quickToggle.getAttribute('aria-pressed')).toBe('false');
 
     quickToggle.click();
-    expect(metronomeSetMuted).toHaveBeenCalledWith(true);
-    expect(quickToggle.getAttribute('aria-pressed')).toBe('false');
+    expect(metronomeSetMuted).toHaveBeenCalledWith(false);
+    expect(quickToggle.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('salir de la vista inmersiva detiene el click del metrónomo (stop)', async () => {
@@ -1667,7 +1686,7 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
   // patrón que `applyMode` ya usa (`isOptionsSheetOpen() -> openOptions(s)`).
   // Con el sheet CERRADO, ninguno de esos caminos debe abrirlo.
   describe('refreshOptionsSheet: el sheet abierto refleja cambios hechos desde fuera', () => {
-    it('metrónomo: el toggle rápido con el sheet abierto deja #osheet-metronome en aria-pressed=false', async () => {
+    it('metrónomo: el toggle rápido (audio) con el sheet abierto refresca #osheet-metronome-audio', async () => {
       enablePlayerFlag();
       getSongAudio.mockResolvedValue(readyTimingsWithBeats());
       const sv = mountSongView();
@@ -1675,15 +1694,15 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
       await flushAsync();
 
       document.getElementById('imm-open-options').click();
-      // TANDA B: toggle maestro, default encendido al entrar.
-      expect(document.getElementById('osheet-metronome').getAttribute('aria-pressed')).toBe(
-        'true',
+      // Split F4/TANDA B: audio arranca apagado al entrar.
+      expect(document.getElementById('osheet-metronome-audio').getAttribute('aria-pressed')).toBe(
+        'false',
       );
 
       document.getElementById('imm-metronome-toggle').click();
 
-      expect(document.getElementById('osheet-metronome').getAttribute('aria-pressed')).toBe(
-        'false',
+      expect(document.getElementById('osheet-metronome-audio').getAttribute('aria-pressed')).toBe(
+        'true',
       );
     });
 

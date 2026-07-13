@@ -287,7 +287,7 @@ describe('ImmersiveView — toggle maestro del metrónomo (TANDA B)', () => {
    * Sesión sync con un hueco > GAP_INTERLUDIO_MS (5000ms) entre la línea 0 y
    * la 1 (0 -> 12000ms), único caso en que `timingEngine` dispara
    * `onInterlude` (showInterlude) — necesario para exercitar el guard
-   * `s.metronomeOn` del count-in. Rejilla de 25 beats c/500ms (perBar=4):
+   * `s.metronomeVisualOn` del count-in. Rejilla de 25 beats c/500ms (perBar=4):
    * a los 10000ms faltan exactamente 4 beats para la línea 1 (dentro de
    * `[1, perBar]`), el caso que muestra el contador cuando el toggle está ON.
    */
@@ -331,39 +331,54 @@ describe('ImmersiveView — toggle maestro del metrónomo (TANDA B)', () => {
     delete globalThis.AudioContext;
   });
 
-  it('al montar una sesión sync con beats, el metrónomo arranca activado (badge+pulso visibles, click desmuteado)', async () => {
+  it('al montar una sesión sync con beats, la guía visual arranca activada (badge+pulso visibles) y el audio arranca apagado (click muteado)', async () => {
     await enterSyncSessionWithBeats();
 
     expect(document.getElementById('imm-pulse').hidden).toBe(false);
     expect(document.getElementById('imm-bpm-badge').hidden).toBe(false);
     const quickBtn = document.getElementById('imm-metronome-toggle');
-    expect(quickBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(quickBtn.getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('apagar el toggle oculta pulso+badge y mutea el click, sin destruir beatClock', async () => {
+  it('el botón rápido solo mutea/desmutea el click, sin tocar pulso ni badge', async () => {
     await enterSyncSessionWithBeats();
     const quickBtn = document.getElementById('imm-metronome-toggle');
 
     quickBtn.click();
 
-    expect(document.getElementById('imm-pulse').hidden).toBe(true);
-    expect(document.getElementById('imm-bpm-badge').hidden).toBe(true);
-    expect(quickBtn.getAttribute('aria-pressed')).toBe('false');
+    expect(quickBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(document.getElementById('imm-pulse').hidden).toBe(false);
+    expect(document.getElementById('imm-bpm-badge').hidden).toBe(false);
   });
 
-  it('reencender el toggle restaura pulso+badge+click sin recrear el beatClock', async () => {
+  it('apagar la guía visual desde el sheet oculta pulso+badge, sin destruir beatClock', async () => {
     await enterSyncSessionWithBeats();
+    document.getElementById('imm-open-options').click();
+    const opts = openOptionsSheet.mock.calls.at(-1)[0];
+
+    opts.onMetronomeVisualToggle(false);
+
+    expect(document.getElementById('imm-pulse').hidden).toBe(true);
+    expect(document.getElementById('imm-bpm-badge').hidden).toBe(true);
+  });
+
+  it('reencender la guía visual restaura pulso+badge; reencender el audio restaura el botón rápido', async () => {
+    await enterSyncSessionWithBeats();
+    document.getElementById('imm-open-options').click();
+    const opts = openOptionsSheet.mock.calls.at(-1)[0];
     const quickBtn = document.getElementById('imm-metronome-toggle');
 
-    quickBtn.click(); // apaga
-    quickBtn.click(); // reenciende
+    opts.onMetronomeVisualToggle(false); // apaga
+    opts.onMetronomeVisualToggle(true); // reenciende
+    quickBtn.click(); // enciende audio
+    quickBtn.click(); // apaga audio
 
     expect(document.getElementById('imm-pulse').hidden).toBe(false);
     expect(document.getElementById('imm-bpm-badge').hidden).toBe(false);
-    expect(quickBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(quickBtn.getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('count-in con metrónomo ON: faltando exactamente perBar beats pinta .imm-interlude__count', async () => {
+  it('count-in con guía visual ON: faltando exactamente perBar beats pinta .imm-interlude__count', async () => {
     const audioEl = await enterSyncSessionForCountIn();
 
     audioEl.currentTime = 10; // faltan 4 beats (== perBar) para la línea 1 (12000ms)
@@ -375,9 +390,11 @@ describe('ImmersiveView — toggle maestro del metrónomo (TANDA B)', () => {
     expect(document.querySelectorAll('#imm-roll .imm-interlude__dot').length).toBe(0);
   });
 
-  it('count-in con metrónomo OFF: el mismo hueco cae a los puntitos, sin .imm-interlude__count', async () => {
+  it('count-in con guía visual OFF: el mismo hueco cae a los puntitos, sin .imm-interlude__count', async () => {
     const audioEl = await enterSyncSessionForCountIn();
-    document.getElementById('imm-metronome-toggle').click(); // apaga el toggle maestro
+    document.getElementById('imm-open-options').click();
+    const opts = openOptionsSheet.mock.calls.at(-1)[0];
+    opts.onMetronomeVisualToggle(false); // apaga la guía visual (no el botón rápido de audio)
 
     audioEl.currentTime = 10; // mismo remainingBeats=4 que el test ON
     audioEl.dispatchEvent(new Event('timeupdate'));

@@ -6,10 +6,10 @@
  *  - TONO: stepper ±½ + bubble (tap = reset) + toggle ♯/♭.
  *  - NOTACIÓN: segmented control Do Re Mi / A B C (chordNotation.js).
  *  - TAMAÑO DE LETRA: A−/valor/A+.
- *  - Metrónomo (F4, vista inmersiva sync): toggle maestro del subsistema
- *    completo (click audible + badge de BPM + pulso visual + count-in del
- *    interludio) — Activado/Desactivado. Apagado equivale a que la canción
- *    no tuviera beats, sin destruir el reloj de beats (re-encendido en caliente).
+ *  - Metrónomo (F4, vista inmersiva sync; TANDA B split): dos toggles
+ *    independientes — "Sonido" (click audible) y "Guía visual" (badge de BPM
+ *    + pulso + count-in del interludio). Cada uno apaga solo su eje, sin
+ *    destruir el reloj de beats (re-encendido en caliente).
  *  - AUTO-SCROLL: −/valor/+.
  *
  * No introduce lógica nueva de dominio; es aditivo sobre los closures de
@@ -49,7 +49,8 @@ let openEls = null;
  *   showPlayerToggle?: boolean,
  *   playerOn?: boolean,
  *   showMetronome?: boolean,
- *   metronomeOn?: boolean,
+ *   metronomeAudioOn?: boolean,
+ *   metronomeVisualOn?: boolean,
  *   onTranspose?: (dir: 1|-1) => void,
  *   onResetTranspose?: () => void,
  *   onToggleAccidental?: () => void,
@@ -60,7 +61,8 @@ let openEls = null;
  *   onVoiceChange?: (category: string) => void,
  *   onTunerToggle?: () => void,
  *   onPlayerToggle?: (on: boolean) => void,
- *   onMetronomeToggle?: (on: boolean) => void,
+ *   onMetronomeAudioToggle?: (on: boolean) => void,
+ *   onMetronomeVisualToggle?: (on: boolean) => void,
  *   onClose?: () => void,
  * }} opts modes/voiceOptions/showTuner/showPlayerToggle son opcionales
  *   (T-inmersiva): sin ellos las secciones MODO/VOZ/AFINADOR/PISTA simplemente
@@ -280,16 +282,19 @@ function buildSheetHtml(opts) {
     </div>`
     : '';
 
-  // METRÓNOMO (F4, TANDA B): toggle maestro, solo visible cuando la sesión
-  // sync trae rejilla de beats (`showMetronome: !!s.beatClock`) — mismo
-  // patrón que PISTA/AFINADOR. Enciende/apaga el subsistema completo (click
-  // audible + badge BPM + pulso + count-in del interludio), no solo el click.
+  // METRÓNOMO (F4, TANDA B split): DOS toggles independientes cuando la sesión
+  // sync trae rejilla de beats (`showMetronome`). "Sonido" mutea/activa el
+  // click; "Guía visual" muestra/oculta badge+pulso+count-in. Estados y copy
+  // autodescriptivos (sin hint aparte).
   const metronomeSectionHtml = opts.showMetronome
     ? `
     <div class="osheet__section">
       <div class="osheet__h syn">Metrónomo</div>
       <div class="osheet__seg">
-        <button class="osheet__seg-btn${opts.metronomeOn ? ' is-active' : ''}" data-act="metronome-toggle" id="osheet-metronome" aria-pressed="${!!opts.metronomeOn}">${opts.metronomeOn ? 'Activado' : 'Desactivado'}</button>
+        <button class="osheet__seg-btn${opts.metronomeAudioOn ? ' is-active' : ''}" data-act="metronome-audio-toggle" id="osheet-metronome-audio" aria-pressed="${!!opts.metronomeAudioOn}">${opts.metronomeAudioOn ? 'Sonido: activado' : 'Sonido: silenciado'}</button>
+      </div>
+      <div class="osheet__seg">
+        <button class="osheet__seg-btn${opts.metronomeVisualOn ? ' is-active' : ''}" data-act="metronome-visual-toggle" id="osheet-metronome-visual" aria-pressed="${!!opts.metronomeVisualOn}">${opts.metronomeVisualOn ? 'Guía visual: activada' : 'Guía visual: oculta'}</button>
       </div>
     </div>`
     : '';
@@ -351,12 +356,18 @@ function bindSheetHandlers(sheet, opts) {
         b.classList.toggle('is-active', nowOn);
         b.textContent = nowOn ? 'Pista: sonando' : 'Pista: en pausa';
         opts.onPlayerToggle?.(nowOn);
-      } else if (a === 'metronome-toggle') {
+      } else if (a === 'metronome-audio-toggle') {
         const nowOn = b.getAttribute('aria-pressed') !== 'true';
         b.setAttribute('aria-pressed', String(nowOn));
         b.classList.toggle('is-active', nowOn);
-        b.textContent = nowOn ? 'Activado' : 'Desactivado';
-        opts.onMetronomeToggle?.(nowOn);
+        b.textContent = nowOn ? 'Sonido: activado' : 'Sonido: silenciado';
+        opts.onMetronomeAudioToggle?.(nowOn);
+      } else if (a === 'metronome-visual-toggle') {
+        const nowOn = b.getAttribute('aria-pressed') !== 'true';
+        b.setAttribute('aria-pressed', String(nowOn));
+        b.classList.toggle('is-active', nowOn);
+        b.textContent = nowOn ? 'Guía visual: activada' : 'Guía visual: oculta';
+        opts.onMetronomeVisualToggle?.(nowOn);
       }
     }),
   );

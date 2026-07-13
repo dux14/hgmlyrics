@@ -549,18 +549,21 @@ function promoteToSync(s, audio, timings) {
 
   setupMetronome(s, audio, timings);
   mountPlayerBar(s);
-  // Aplica el estado inicial del toggle maestro (TANDA B, default `true`):
-  // desmutea el click si corresponde y refleja pulso/badge/botón rápido en
-  // un solo lugar. No-op si esta canción no tiene beats (`s.beatClock` null).
-  if (s.beatClock) setMetronomeOn(s, s.metronomeOn);
+  // Aplica el estado inicial de los dos toggles (F4/TANDA B split): audio
+  // (mutea/desmutea el click) y visual (pulso/badge/count-in), cada uno
+  // reflejado en su control. No-op si esta canción no tiene beats (`s.beatClock` null).
+  if (s.beatClock) {
+    setMetronomeAudioOn(s, s.metronomeAudioOn);
+    setMetronomeVisualOn(s, s.metronomeVisualOn);
+  }
 }
 
 /**
  * Deriva rejilla+reloj de beats de `timings.beats` (D3, endpoint expone
  * beats + overrides de bpm/compas/ancla) y prepara contenido del badge BPM +
  * pulso visual (guarda `s.hasBpmBadge` para el caso sin-BPM). NO decide
- * visibilidad — eso es responsabilidad exclusiva de `setMetronomeOn` (toggle
- * maestro, TANDA B), que se llama después de montar. Sin beats (canción sin
+ * visibilidad — eso es responsabilidad exclusiva de `setMetronomeAudioOn`/
+ * `setMetronomeVisualOn` (toggles split, TANDA B), llamados después de montar. Sin beats (canción sin
  * beat-tracking o audio de reproceso) es un no-op: el badge y el pulso quedan
  * `hidden`, como al entrar. Se llama ANTES de `mountPlayerBar` para que su
  * plantilla pueda decidir si pinta el toggle rápido del click según `s.beatClock`.
@@ -611,24 +614,35 @@ function stopPulseLoop(s) {
 }
 
 /**
- * Toggle maestro del metrónomo (TANDA B): `on` enciende/apaga el subsistema
- * COMPLETO — click audible, badge de BPM, pulso visual y count-in del
- * interludio (guard en `showInterlude` via `s.metronomeOn`) — no solo el
- * click. Apagado equivale a que la canción no tuviera beats, pero NUNCA
- * destruye `s.beatClock`/`s.metronome`: re-encender restaura todo en caliente.
+ * Toggle de AUDIO del metrónomo (F4/TANDA B split): `on` desmutea/mutea SOLO
+ * el click audible (`s.metronome.setMuted`). NUNCA toca pulso/badge/count-in
+ * (eso es `setMetronomeVisualOn`) ni destruye `s.metronome`. Refleja el estado
+ * en el botón rápido de la barra (que controla el audio) y en el sheet.
  */
-function setMetronomeOn(s, on) {
-  s.metronomeOn = on;
+function setMetronomeAudioOn(s, on) {
+  s.metronomeAudioOn = on;
   s.metronome?.setMuted(!on);
-  s.els.pulse.hidden = !on || !s.beatClock;
-  s.els.bpmBadge.hidden = !on || !s.beatClock || !s.hasBpmBadge;
-  if (on && s.audioPlaying) startPulseLoop(s);
-  else stopPulseLoop(s);
   const quickBtn = s.els.overlay.querySelector('#imm-metronome-toggle');
   if (quickBtn) {
     quickBtn.setAttribute('aria-pressed', String(on));
     quickBtn.innerHTML = icon(on ? 'timer' : 'timer-off', { size: 18 });
   }
+  refreshOptionsSheet(s);
+}
+
+/**
+ * Toggle VISUAL del metrónomo (F4/TANDA B split): `on` muestra/oculta la guía
+ * visual completa — pulso, badge de BPM (respetando `s.hasBpmBadge`), el pulse
+ * loop rAF y el count-in del interludio (guard `s.metronomeVisualOn` en
+ * `showInterlude`). No toca el click audible (eso es `setMetronomeAudioOn`) ni
+ * destruye `s.beatClock`: re-encender restaura todo en caliente.
+ */
+function setMetronomeVisualOn(s, on) {
+  s.metronomeVisualOn = on;
+  s.els.pulse.hidden = !on || !s.beatClock;
+  s.els.bpmBadge.hidden = !on || !s.beatClock || !s.hasBpmBadge;
+  if (on && s.audioPlaying) startPulseLoop(s);
+  else stopPulseLoop(s);
   refreshOptionsSheet(s);
 }
 
@@ -643,7 +657,8 @@ function fallbackToTimer(s) {
   stopPulseLoop(s);
   s.beatClock = null;
   s.metronome = null;
-  s.metronomeOn = false;
+  s.metronomeAudioOn = false;
+  s.metronomeVisualOn = false;
   s.els.pulse.hidden = true;
   s.els.bpmBadge.hidden = true;
   unmountPlayerBar(s);
@@ -705,7 +720,7 @@ function mountPlayerBar(s) {
       <button class="imm-player__mute" id="imm-player-mute" type="button" aria-pressed="false" aria-label="Silenciar pista">${icon('volume-2', { size: 18 })}</button>
       ${
         s.beatClock
-          ? `<button class="imm-v1__btn imm-v1__metronome-toggle" id="imm-metronome-toggle" type="button" aria-pressed="false" aria-label="Metrónomo">${icon('timer-off', { size: 18 })}</button>`
+          ? `<button class="imm-v1__btn imm-v1__metronome-toggle" id="imm-metronome-toggle" type="button" aria-pressed="false" aria-label="Sonido del metrónomo">${icon('timer-off', { size: 18 })}</button>`
           : ''
       }
     </div>`;
@@ -733,10 +748,10 @@ function mountPlayerBar(s) {
     s.els.overlay.classList.remove('imm-v1--paused');
     playBtn.innerHTML = icon('pause', { size: 18 });
     playBtn.setAttribute('aria-label', 'Pausar pista');
-    // Gátéalo al toggle maestro (TANDA B): con el metrónomo apagado no debe
-    // quedar un rAF corriendo aunque la pista suene; setMetronomeOn ya
-    // arranca el loop si se enciende mientras suena.
-    if (s.metronomeOn) startPulseLoop(s);
+    // Gátéalo al toggle VISUAL del metrónomo (split): con la guía visual
+    // apagada no debe quedar un rAF corriendo aunque la pista suene;
+    // setMetronomeVisualOn ya arranca el loop si se enciende mientras suena.
+    if (s.metronomeVisualOn) startPulseLoop(s);
     refreshOptionsSheet(s);
   };
   const onPause = () => {
@@ -776,11 +791,11 @@ function mountPlayerBar(s) {
     );
   };
 
-  // Toggle rápido del metrónomo (F4/TANDA B): arranca según `s.metronomeOn`
-  // (default encendido — ver estado inicial de la sesión), un solo clic
-  // alterna el subsistema completo sin pasar por el sheet — mismo estado que
-  // refleja METRÓNOMO en Opciones.
-  const onMetronomeBtnClick = () => setMetronomeOn(s, !s.metronomeOn);
+  // Toggle rápido del metrónomo (F4/TANDA B split): controla el SONIDO/click,
+  // arranca según `s.metronomeAudioOn` (default apagado — ver estado inicial
+  // de la sesión), un solo clic alterna el audio sin pasar por el sheet —
+  // mismo estado que refleja "Sonido" en Opciones.
+  const onMetronomeBtnClick = () => setMetronomeAudioOn(s, !s.metronomeAudioOn);
   metronomeBtn?.addEventListener('click', onMetronomeBtnClick);
 
   s.audioEl.addEventListener('play', onPlay);
@@ -861,7 +876,7 @@ function showInterlude(s, { index, progress }) {
   }
   const perBar = s.beatClock?.perBar ?? 4;
   const showCount =
-    s.metronomeOn && remainingBeats !== null && remainingBeats >= 1 && remainingBeats <= perBar;
+    s.metronomeVisualOn && remainingBeats !== null && remainingBeats >= 1 && remainingBeats <= perBar;
 
   let el = s.els.roll.querySelector('.imm-interlude');
   if (!el || el.dataset.after !== String(index)) {
@@ -1037,8 +1052,10 @@ function openOptions(s) {
     },
     onTunerToggle: (on) => setTunerOn(s, on),
     showMetronome: !!s.beatClock,
-    metronomeOn: s.metronomeOn,
-    onMetronomeToggle: (on) => setMetronomeOn(s, on),
+    metronomeAudioOn: s.metronomeAudioOn,
+    metronomeVisualOn: s.metronomeVisualOn,
+    onMetronomeAudioToggle: (on) => setMetronomeAudioOn(s, on),
+    onMetronomeVisualToggle: (on) => setMetronomeVisualOn(s, on),
     onClose: () => showControls(s),
   });
 }
@@ -1185,9 +1202,11 @@ export function enterImmersive(songViewEl, ctx = {}) {
     beatRafId: null,
     metronome: null,
     hasBpmBadge: false,
-    // Default encendido (TANDA B, toggle maestro): la guía visual se ve al
-    // entrar, igual que antes; el click igual solo suena con la pista sonando.
-    metronomeOn: true,
+    // Metrónomo (F4/TANDA B split): dos toggles independientes. Default audio
+    // OFF (click muteado) + visual ON (badge/pulso/count-in visibles), = el
+    // comportamiento pre-toggle-maestro. El click igual solo suena con la pista sonando.
+    metronomeAudioOn: false,
+    metronomeVisualOn: true,
   };
 
   const activeCategory =

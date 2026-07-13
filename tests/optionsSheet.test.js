@@ -171,6 +171,51 @@ describe('openOptionsSheet — interacción', () => {
     expect(document.querySelector('#osheet-player').textContent).toBe('Pista: en pausa');
   });
 
+  it('#osheet-track-sound muestra "silenciada" con trackSoundOn false y dispara onTrackSoundToggle sin tocar el metrónomo', () => {
+    const onTrackSoundToggle = vi.fn();
+    const onMetronomeAudioToggle = vi.fn();
+    const onMetronomeVisualToggle = vi.fn();
+    openOptionsSheet({
+      showTono: false,
+      showPlayerToggle: true,
+      playerOn: false,
+      showTrackSound: true,
+      trackSoundOn: false,
+      showMetronome: true,
+      metronomeAudioOn: false,
+      metronomeVisualOn: true,
+      onTrackSoundToggle,
+      onMetronomeAudioToggle,
+      onMetronomeVisualToggle,
+    });
+    const btn = document.querySelector('#osheet-track-sound');
+    expect(btn.textContent).toBe('Sonido de la pista: silenciada');
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
+
+    btn.click();
+    expect(onTrackSoundToggle).toHaveBeenCalledWith(true);
+    expect(onMetronomeAudioToggle).not.toHaveBeenCalled();
+    expect(onMetronomeVisualToggle).not.toHaveBeenCalled();
+  });
+
+  it('#osheet-track-sound muestra "activada" con trackSoundOn true', () => {
+    openOptionsSheet({
+      showTono: false,
+      showPlayerToggle: true,
+      playerOn: true,
+      showTrackSound: true,
+      trackSoundOn: true,
+    });
+    const btn = document.querySelector('#osheet-track-sound');
+    expect(btn.textContent).toBe('Sonido de la pista: activada');
+    expect(btn.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('sin showTrackSound no pinta la fila de sonido de la pista', () => {
+    openOptionsSheet({ showTono: false, showPlayerToggle: true, playerOn: true });
+    expect(document.querySelector('#osheet-track-sound')).toBeNull();
+  });
+
   it('velocidad autoscroll dispara onAutoscroll y actualiza el valor mostrado', () => {
     const onAutoscroll = vi.fn().mockReturnValue('75%');
     openOptionsSheet({

@@ -1229,6 +1229,20 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     vi.useRealTimers();
   });
 
+  it('al entrar en sync la pista arranca muteada', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimings());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    const muteBtn = document.getElementById('imm-player-mute');
+    expect(audio.muted).toBe(true);
+    expect(muteBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(muteBtn.getAttribute('aria-label')).toBe('Activar sonido de la pista');
+  });
+
   it('el botón de altavoz silencia/activa la pista (muted) sin pausarla', async () => {
     enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimings());
@@ -1239,18 +1253,55 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     const audio = document.querySelector('#imm-player-slot audio');
     const muteBtn = document.getElementById('imm-player-mute');
     expect(muteBtn).toBeTruthy();
-    expect(audio.muted).toBe(false);
-
-    muteBtn.click();
+    // Default: pista muteada al entrar (spec).
     expect(audio.muted).toBe(true);
-    expect(muteBtn.getAttribute('aria-pressed')).toBe('true');
 
     muteBtn.click();
     expect(audio.muted).toBe(false);
     expect(muteBtn.getAttribute('aria-pressed')).toBe('false');
+
+    muteBtn.click();
+    expect(audio.muted).toBe(true);
+    expect(muteBtn.getAttribute('aria-pressed')).toBe('true');
     // Silenciar no pausa: la vista arranca en pausa (nadie dio play todavía
     // en este test) igual que antes de tocar el mute — el mute no la altera.
     expect(document.querySelector('.imm-v1').classList.contains('imm-v1--paused')).toBe(true);
+  });
+
+  it('barra y sheet sincronizados: el altavoz de la barra refleja #osheet-track-sound y viceversa', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimings());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const muteBtn = document.getElementById('imm-player-mute');
+    document.getElementById('imm-open-options').click();
+    const sheetBtn = document.getElementById('osheet-track-sound');
+    expect(sheetBtn).toBeTruthy();
+    // Default muteado -> "silenciada" (aria-pressed false = no activada).
+    expect(sheetBtn.getAttribute('aria-pressed')).toBe('false');
+
+    muteBtn.click(); // desmutea
+    expect(document.getElementById('osheet-track-sound').getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+
+    document.getElementById('osheet-track-sound').click(); // vuelve a mutear
+    expect(muteBtn.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('independencia: mutear la pista no llama a metronomeSetMuted (canales separados)', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimings());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    metronomeSetMuted.mockClear();
+    const muteBtn = document.getElementById('imm-player-mute');
+    muteBtn.click();
+    expect(metronomeSetMuted).not.toHaveBeenCalled();
   });
 
   it('seek con la pista pausada: el highlight llega vía timeupdate, el timer NUNCA retoma en sync', async () => {
@@ -1527,10 +1578,31 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     expect(toggle).toBeTruthy();
     // Split F4/TANDA B: visual arranca encendido al entrar.
     expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    metronomeSetMuted.mockClear(); // aísla del setMuted disparado por el mount
     toggle.click();
 
     expect(document.getElementById('imm-pulse').hidden).toBe(true);
     expect(document.getElementById('imm-bpm-badge').hidden).toBe(true);
+    // Minor del reviewer: el toggle VISUAL no toca el eje de sonido del
+    // metrónomo (canales independientes).
+    expect(metronomeSetMuted).not.toHaveBeenCalled();
+    expect(document.getElementById('imm-metronome-toggle').getAttribute('aria-pressed')).toBe(
+      'false',
+    );
+  });
+
+  it('independencia: togglear el sonido del metrónomo no muta audio.muted de la pista', async () => {
+    enablePlayerFlag();
+    getSongAudio.mockResolvedValue(readyTimingsWithBeats());
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    await flushAsync();
+
+    const audio = document.querySelector('#imm-player-slot audio');
+    const mutedBefore = audio.muted;
+    document.getElementById('imm-open-options').click();
+    document.getElementById('osheet-metronome-audio').click();
+    expect(audio.muted).toBe(mutedBefore);
   });
 
   it('sheet: el toggle de sonido también refleja el estado en el toggle rápido de la barra (mismo setMetronomeAudioOn)', async () => {

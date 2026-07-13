@@ -549,6 +549,8 @@ function promoteToSync(s, audio, timings) {
 
   setupMetronome(s, audio, timings);
   mountPlayerBar(s);
+  // Aplica el default de mute de la pista (muteada) y sincroniza botón + sheet.
+  setTrackMuted(s, s.trackMuted);
   // Aplica el estado inicial de los dos toggles (F4/TANDA B split): audio
   // (mutea/desmutea el click) y visual (pulso/badge/count-in), cada uno
   // reflejado en su control. No-op si esta canción no tiene beats (`s.beatClock` null).
@@ -707,6 +709,24 @@ function seekSyncToLine(s, idx) {
   if (best) s.audioEl.currentTime = best.startMs / 1000;
 }
 
+/**
+ * Fuente única del mute de la pista: aplica `muted` al `<audio>` y refleja el
+ * estado en el botón de altavoz de la barra (`#imm-player-mute`) y en el sheet.
+ * Independiente del click del metrónomo (Web Audio, `setMetronomeAudioOn`):
+ * mutear la pista no silencia el click ni al revés.
+ */
+function setTrackMuted(s, muted) {
+  s.trackMuted = muted;
+  if (s.audioEl) s.audioEl.muted = muted;
+  const muteBtn = s.els.overlay.querySelector('#imm-player-mute');
+  if (muteBtn) {
+    muteBtn.innerHTML = icon(muted ? 'volume-x' : 'volume-2', { size: 18 });
+    muteBtn.setAttribute('aria-pressed', String(muted));
+    muteBtn.setAttribute('aria-label', muted ? 'Activar sonido de la pista' : 'Silenciar pista');
+  }
+  refreshOptionsSheet(s);
+}
+
 /** Monta la barra de player en `#imm-player-slot`: scrubber + play/pausa + tiempos + altavoz. */
 function mountPlayerBar(s) {
   const slot = s.els.playerSlot;
@@ -717,7 +737,7 @@ function mountPlayerBar(s) {
       <span class="imm-player__time" id="imm-player-time">0:00</span>
       <input class="imm-player__scrubber" id="imm-player-scrubber" type="range" min="0" max="0" step="0.1" value="0" aria-label="Progreso de la pista" />
       <span class="imm-player__time" id="imm-player-duration">0:00</span>
-      <button class="imm-player__mute" id="imm-player-mute" type="button" aria-pressed="false" aria-label="Silenciar pista">${icon('volume-2', { size: 18 })}</button>
+      <button class="imm-player__mute" id="imm-player-mute" type="button" aria-pressed="true" aria-label="Activar sonido de la pista">${icon('volume-x', { size: 18 })}</button>
       ${
         s.beatClock
           ? `<button class="imm-v1__btn imm-v1__metronome-toggle" id="imm-metronome-toggle" type="button" aria-pressed="false" aria-label="Sonido del metrónomo">${icon('timer-off', { size: 18 })}</button>`
@@ -780,16 +800,9 @@ function mountPlayerBar(s) {
     s.audioEl.currentTime = Number(scrubber.value);
   };
   // Altavoz: silencia la pista sin pausarla (el avance sigue sincronizado al
-  // audio, solo deja de sonar).
-  const onMuteBtnClick = () => {
-    s.audioEl.muted = !s.audioEl.muted;
-    muteBtn.innerHTML = icon(s.audioEl.muted ? 'volume-x' : 'volume-2', { size: 18 });
-    muteBtn.setAttribute('aria-pressed', String(s.audioEl.muted));
-    muteBtn.setAttribute(
-      'aria-label',
-      s.audioEl.muted ? 'Activar sonido de la pista' : 'Silenciar pista',
-    );
-  };
+  // audio, solo deja de sonar). Delegado a `setTrackMuted`, fuente única del
+  // mute de la pista (sincroniza también el sheet).
+  const onMuteBtnClick = () => setTrackMuted(s, !s.trackMuted);
 
   // Toggle rápido del metrónomo (F4/TANDA B split): controla el SONIDO/click,
   // arranca según `s.metronomeAudioOn` (default apagado — ver estado inicial
@@ -1024,6 +1037,9 @@ function openOptions(s) {
       if (on) s.audioEl.play().catch(() => {});
       else s.audioEl.pause();
     },
+    showTrackSound: isSync,
+    trackSoundOn: isSync && !s.trackMuted,
+    onTrackSoundToggle: (on) => setTrackMuted(s, !on),
     onModeChange: (mode) => applyMode(s, mode),
     onVoiceChange: (category) => selectVoice(s, category),
     onNotationChange: (value) => {
@@ -1207,6 +1223,10 @@ export function enterImmersive(songViewEl, ctx = {}) {
     // comportamiento pre-toggle-maestro. El click igual solo suena con la pista sonando.
     metronomeAudioOn: false,
     metronomeVisualOn: true,
+    // Pista muteada por default al entrar (spec: ambos audios silenciados al
+    // entrar; el usuario desmutea pista y/o click por separado). Solo aplica en
+    // sync (donde existe el <audio>); en timer no hay pista.
+    trackMuted: true,
   };
 
   const activeCategory =

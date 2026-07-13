@@ -6,6 +6,9 @@
  *  - TONO: stepper ±½ + bubble (tap = reset) + toggle ♯/♭.
  *  - NOTACIÓN: segmented control Do Re Mi / A B C (chordNotation.js).
  *  - TAMAÑO DE LETRA: A−/valor/A+.
+ *  - Pista (vista inmersiva sync): "Pista: sonando/en pausa" + "Sonido de la
+ *    pista: activada/silenciada" (mutea el `<audio>`, sincronizado con el
+ *    altavoz de la barra — pista muteada por default al entrar).
  *  - Metrónomo (F4, vista inmersiva sync; TANDA B split): dos toggles
  *    independientes — "Sonido" (click audible) y "Guía visual" (badge de BPM
  *    + pulso + count-in del interludio). Cada uno apaga solo su eje, sin
@@ -48,6 +51,8 @@ let openEls = null;
  *   tunerOn?: boolean,
  *   showPlayerToggle?: boolean,
  *   playerOn?: boolean,
+ *   showTrackSound?: boolean,
+ *   trackSoundOn?: boolean,
  *   showMetronome?: boolean,
  *   metronomeAudioOn?: boolean,
  *   metronomeVisualOn?: boolean,
@@ -61,6 +66,7 @@ let openEls = null;
  *   onVoiceChange?: (category: string) => void,
  *   onTunerToggle?: () => void,
  *   onPlayerToggle?: (on: boolean) => void,
+ *   onTrackSoundToggle?: (on: boolean) => void,
  *   onMetronomeAudioToggle?: (on: boolean) => void,
  *   onMetronomeVisualToggle?: (on: boolean) => void,
  *   onClose?: () => void,
@@ -272,13 +278,23 @@ function buildSheetHtml(opts) {
   // PISTA (D3, flag immersive_player): toggle "Reproducir pista" — solo
   // ImmersiveView lo pasa (`showPlayerToggle: true`) cuando ya está en modo
   // sync (audio+timings listos); SongView y el resto queda sin cambios.
+  // Segunda fila "Sonido de la pista" (`showTrackSound`, misma condición sync):
+  // mutea/desmutea el `<audio>`, sincronizada con el botón de altavoz de la
+  // barra vía `setTrackMuted` en ImmersiveView — no toca el click del metrónomo.
   const playerSectionHtml = opts.showPlayerToggle
     ? `
     <div class="osheet__section">
-      <div class="osheet__h syn">PISTA</div>
+      <div class="osheet__h syn">Pista</div>
       <div class="osheet__seg">
         <button class="osheet__seg-btn${opts.playerOn ? ' is-active' : ''}" data-act="player-toggle" id="osheet-player" aria-pressed="${!!opts.playerOn}">${opts.playerOn ? 'Pista: sonando' : 'Pista: en pausa'}</button>
-      </div>
+      </div>${
+        opts.showTrackSound
+          ? `
+      <div class="osheet__seg">
+        <button class="osheet__seg-btn${opts.trackSoundOn ? ' is-active' : ''}" data-act="track-sound-toggle" id="osheet-track-sound" aria-pressed="${!!opts.trackSoundOn}">${opts.trackSoundOn ? 'Sonido de la pista: activada' : 'Sonido de la pista: silenciada'}</button>
+      </div>`
+          : ''
+      }
     </div>`
     : '';
 
@@ -356,6 +372,12 @@ function bindSheetHandlers(sheet, opts) {
         b.classList.toggle('is-active', nowOn);
         b.textContent = nowOn ? 'Pista: sonando' : 'Pista: en pausa';
         opts.onPlayerToggle?.(nowOn);
+      } else if (a === 'track-sound-toggle') {
+        const nowOn = b.getAttribute('aria-pressed') !== 'true';
+        b.setAttribute('aria-pressed', String(nowOn));
+        b.classList.toggle('is-active', nowOn);
+        b.textContent = nowOn ? 'Sonido de la pista: activada' : 'Sonido de la pista: silenciada';
+        opts.onTrackSoundToggle?.(nowOn);
       } else if (a === 'metronome-audio-toggle') {
         const nowOn = b.getAttribute('aria-pressed') !== 'true';
         b.setAttribute('aria-pressed', String(nowOn));

@@ -9,6 +9,7 @@ import { isFounder, founderCrownHtml } from '../lib/founders.js';
 import { icon } from '../lib/icons.js';
 import { renderAsyncRegion } from '../lib/renderAsync.js';
 import { skelRowList } from '../lib/skeleton.js';
+import { showToast } from '../lib/toast.js';
 import {
   getFriends,
   invalidateFriends,
@@ -234,8 +235,13 @@ export function renderFriendsPanel(container) {
   }
 
   async function doAction(act, id, username) {
-    if (act === 'accept') await respondRequest(id, 'accept');
-    else await removeFriendship(id); // reject | cancel | unfriend
+    try {
+      if (act === 'accept') await respondRequest(id, 'accept');
+      else await removeFriendship(id); // reject | cancel | unfriend
+    } catch {
+      showToast('Sin conexión. Intenta de nuevo.', { type: 'error' });
+      return;
+    }
     listCache = await reloadList({ fresh: true });
     // accept/unfriend cambian friendCount propio; reject/cancel cambian el
     // friendStatus visto desde el perfil de la contraparte. Invalidar ambos
@@ -291,7 +297,15 @@ export function renderFriendsPanel(container) {
     b.disabled = true;
     const prev = b.textContent;
     b.textContent = '...';
-    const r = await sendRequest(b.dataset.username);
+    let r;
+    try {
+      r = await sendRequest(b.dataset.username);
+    } catch {
+      b.textContent = prev;
+      b.disabled = false;
+      showToast('Sin conexión. Intenta de nuevo.', { type: 'error' });
+      return;
+    }
     if (r.ok) {
       b.textContent = 'Enviada';
       b.classList.remove('friend-pill--add');

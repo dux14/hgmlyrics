@@ -51,6 +51,9 @@ export function createSectionAudioManager({ tracks: initialTracks, refetch }) {
 
   const audio = document.createElement('audio');
   audio.preload = 'none';
+  // crossOrigin antes del src: sin esto la respuesta cors del SW (song-audio-v1)
+  // llega opaca al <audio> y la reproducción falla con MEDIA_ELEMENT_ERROR (4).
+  audio.crossOrigin = 'anonymous';
 
   function warnPlayRejected(e) {
     console.warn('No se pudo iniciar la reproducción de la sección', e);

@@ -96,7 +96,7 @@ export function createStudioPlayer({ label, url }) {
         </div>
       </div>
     </div>
-    <audio preload="none" src="${sanitizedUrl}"></audio>
+    <audio preload="none" crossorigin="anonymous" src="${sanitizedUrl}"></audio>
   `;
 
   const audio = root.querySelector('audio');

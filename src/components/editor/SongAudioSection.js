@@ -502,7 +502,11 @@ export function createSongAudioSection({ songId, getSong = null }) {
     // Recrea el preview si aun no existe o si la URL firmada rotó (refresh /
     // sesión larga) — evita apuntar a una URL vencida.
     if (!previewAudio || previewAudio.src !== state.audio.url) {
-      previewAudio = new Audio(state.audio.url);
+      previewAudio = new Audio();
+      // crossOrigin antes del src: sin esto la respuesta cors del SW
+      // (song-audio-v1) llega opaca al <audio> y falla con MEDIA_ELEMENT_ERROR (4).
+      previewAudio.crossOrigin = 'anonymous';
+      previewAudio.src = state.audio.url;
     }
     if (!previewAudio.paused) {
       previewAudio.pause();

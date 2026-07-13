@@ -265,7 +265,7 @@ describe('buildMixedLineHTML — carriles estrictos', () => {
 
   it('texto plano sin grupos ni acordes devuelve una línea dim íntegra', () => {
     const html = buildMixedLineHTML({ text: 'solo texto', groups: [] }, [], 'v1', '', {});
-    expect(html).toContain('solo texto');
+    expect(html.replace(/<[^>]*>/g, '')).toBe('solo texto');
     expect(html).toContain('lyrics__tono-dim');
   });
 
@@ -311,6 +311,20 @@ describe('buildMixedLineHTML — carriles estrictos', () => {
     expect(html).toContain('>Re</i>');
     expect(html).toContain('>Si3</i>');
     expect(html).toContain('>La3</i>');
+  });
+
+  it('agrupa los .mix-seg de una palabra partida por una anotación en un .line-word, y el espacio va como texto plano entre palabras', () => {
+    const l = { text: 'contigooo caminando', groups: [] };
+    const html = buildMixedLineHTML(l, [{ pos: 5, ch: 'G' }], 'v1', 'voice-text--tenor', {});
+    const wordMatches = html.match(/<span class="line-word">/g) || [];
+    expect(wordMatches.length).toBe(2); // "contigooo" (partida por el ancla) + "caminando"
+    // el textContent del riel de letra (sin acorde/nota) se preserva exacto,
+    // incluido el espacio entre palabras.
+    const lyricOnly = html
+      .replace(/<span class="mix-rail mix-rail--chord">.*?<\/span>/g, '')
+      .replace(/<span class="mix-rail mix-rail--note[^"]*">.*?<\/span>/g, '')
+      .replace(/<[^>]*>/g, '');
+    expect(lyricOnly).toBe('contigooo caminando');
   });
 });
 

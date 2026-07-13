@@ -511,6 +511,18 @@
   text-underline-offset: 0.25em;
 }
 
+/* ─── Integridad de palabra: .line-word agrupa los .line-seg/.mix-seg de una
+   misma palabra (run de texto sin espacios) en UNA caja atómica que nunca se
+   parte entre renglones — el wrap solo ocurre en los espacios, que viajan
+   como texto plano entre wrappers (ver buildAnnotatedLineHTML/buildMixedLineHTML
+   en lyricsRender.js/voiceSystem.js). Compartida por Acordes/Tono/Mix. */
+.line-word {
+  display: inline-flex;
+  align-items: flex-end;
+  white-space: pre;
+  vertical-align: bottom;
+}
+
 /* ─── Reservar espacio: la nota/acorde empuja su sílaba (estilo cancionero) ───
    Cada .line-seg pasa a columna in-flow [nota arriba / sílaba abajo], así su
    ancho ≥ ancho de la etiqueta y las etiquetas vecinas NUNCA se solapan en

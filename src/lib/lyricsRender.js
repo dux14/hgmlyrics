@@ -225,6 +225,11 @@ export function buildMixedLineHTML(line, chords, voiceId, colorClass, opts = {})
     if (g.start >= 0 && g.start <= len) cuts.add(g.start);
     if (g.end >= 0 && g.end <= len) cuts.add(g.end);
   }
+  // Corta también en los límites espacio/no-espacio: una palabra (run sin
+  // espacios) es la unidad de wrap; nunca se parte entre renglones.
+  for (let i = 1; i < len; i++) {
+    if (/\s/.test(text[i - 1]) !== /\s/.test(text[i])) cuts.add(i);
+  }
   const points = [...cuts].sort((a, b) => a - b);
 
   const seg = (chord, lyricCls, slice, note) =>
@@ -235,17 +240,35 @@ export function buildMixedLineHTML(line, chords, voiceId, colorClass, opts = {})
     `</span>`;
 
   let html = '';
+  let wordBuf = ''; // acumula los .mix-seg de la palabra en curso antes de volcarlos
+  const flushWord = () => {
+    if (!wordBuf) return;
+    html += `<span class="line-word">${wordBuf}</span>`;
+    wordBuf = '';
+  };
   for (let i = 0; i < points.length - 1; i++) {
     const a = points[i];
     const b = points[i + 1];
     if (a >= b) continue;
+    const slice = text.slice(a, b);
+    // Slice solo-espacios sin acorde/nota anclados en su inicio → texto plano
+    // fuera de cualquier wrapper (abre oportunidad de wrap entre palabras).
+    // Si trae acorde/nota (ancla cayó sobre un espacio, caso borde) se
+    // preserva como .mix-seg suelto, igual que antes de agrupar por palabra.
+    const isPlainSpace = !chordByPos.has(a) && !noteByPos.has(a) && /^\s+$/.test(slice);
+    if (isPlainSpace) {
+      flushWord();
+      html += esc(slice);
+      continue;
+    }
     const group = groups.find((g) => g.start <= a && g.end >= b && g.start < g.end);
     let lyricCls = 'lyrics__tono-dim';
     if (group) {
       lyricCls = hasNote(group) ? 'lyrics__tono-sung' : `lyrics__tono-pending ${cls}`.trim();
     }
-    html += seg(chordByPos.get(a), lyricCls, text.slice(a, b), noteByPos.get(a));
+    wordBuf += seg(chordByPos.get(a), lyricCls, slice, noteByPos.get(a));
   }
+  flushWord();
   // noteByPos.has(len) es defensivo — el esquema v3 impide g.start === len
   if (chordByPos.has(len) || noteByPos.has(len)) {
     html += seg(chordByPos.get(len), 'lyrics__tono-dim', '', noteByPos.get(len));

@@ -880,6 +880,76 @@ describe('buildAnnotatedLineHTML', () => {
   });
 });
 
+describe('buildAnnotatedLineHTML — integridad de palabra (line-word)', () => {
+  it('modo Letra puro (sin labels/spans/baseClass) no genera .line-word', () => {
+    const html = buildAnnotatedLineHTML('Llevame contigooo caminando', {});
+    expect(html).not.toContain('line-word');
+  });
+
+  it('con anotaciones, agrupa una palabra partida por una anotación intra-palabra en UN solo .line-word', () => {
+    const html = buildAnnotatedLineHTML('contigooo', {
+      labels: [{ pos: 5, text: 'G', className: 'chord-label' }],
+    });
+    const wordMatches = html.match(/<span class="line-word">/g) || [];
+    expect(wordMatches.length).toBe(1);
+  });
+
+  it('ninguna .line-word contiene un caracter de espacio', () => {
+    const html = buildAnnotatedLineHTML('Llevame contigooo', {
+      labels: [{ pos: 13, text: 'G', className: 'chord-label' }],
+      baseClass: 'lyrics__letra-dim',
+    });
+    const words = [...html.matchAll(/<span class="line-word">(.*?)<\/span><\/span>|<span class="line-word">(.*?)<\/span>/g)];
+    // Extrae el contenido visible (sin tags) de cada .line-word y verifica que no tenga espacios.
+    const container = html;
+    const wordBlocks = [];
+    let idx = 0;
+    while ((idx = container.indexOf('<span class="line-word">', idx)) !== -1) {
+      let depth = 1;
+      let cursor = idx + '<span class="line-word">'.length;
+      while (depth > 0) {
+        const nextOpen = container.indexOf('<span', cursor);
+        const nextClose = container.indexOf('</span>', cursor);
+        if (nextClose === -1) break;
+        if (nextOpen !== -1 && nextOpen < nextClose) {
+          depth++;
+          cursor = nextOpen + 5;
+        } else {
+          depth--;
+          cursor = nextClose + 7;
+        }
+      }
+      wordBlocks.push(container.slice(idx, cursor));
+      idx = cursor;
+    }
+    expect(wordBlocks.length).toBeGreaterThan(0);
+    for (const block of wordBlocks) {
+      const visible = block.replace(/<[^>]*>/g, '');
+      expect(visible).not.toMatch(/\s/);
+    }
+  });
+
+  it('preserva el textContent exacto (incluidos espacios) con anotaciones', () => {
+    const html = buildAnnotatedLineHTML('Llevame contigooo caminando siempre', {
+      labels: [{ pos: 13, text: 'G', className: 'chord-label' }],
+      baseClass: 'lyrics__letra-dim',
+    });
+    const visible = html.replace(/<[^>]*>/g, '');
+    // El texto visible incluye la etiqueta "G" además de la letra — se remueve por separado.
+    const withoutLabel = html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '');
+    expect(withoutLabel.replace(/<[^>]*>/g, '')).toBe('Llevame contigooo caminando siempre');
+    expect(visible).toContain('G');
+  });
+
+  it('separa palabras distintas en .line-word distintos, con el espacio como texto plano entre ellos', () => {
+    const html = buildAnnotatedLineHTML('ab cd', { baseClass: 'dim' });
+    const wordMatches = html.match(/<span class="line-word">/g) || [];
+    expect(wordMatches.length).toBe(2);
+    // El espacio no debe quedar envuelto en ningún span — debe ser texto plano entre wrappers.
+    expect(html).toMatch(/<\/span><\/span> <span class="line-word">/);
+  });
+});
+
 import { validateSongPreSave } from '../src/lib/voiceSystem.js';
 
 describe('validateSongPreSave', () => {

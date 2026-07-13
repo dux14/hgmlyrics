@@ -253,6 +253,9 @@ export function buildAnnotatedLineHTML(text, options = {}) {
   const labels = Array.isArray(options.labels) ? options.labels : [];
   const spans = Array.isArray(options.spans) ? options.spans : [];
   const baseClass = options.baseClass || '';
+  // Modo Letra puro (buildLetraLineHTML) no pasa labels/spans/baseClass — ahí
+  // no hay .line-seg que agrupar, así que el modelo de palabra no aplica.
+  const hasAnnotations = labels.length > 0 || spans.length > 0 || !!baseClass;
 
   const cuts = new Set([0, len]);
   for (const s of spans) {
@@ -261,6 +264,13 @@ export function buildAnnotatedLineHTML(text, options = {}) {
   }
   for (const l of labels) {
     if (l.pos >= 0 && l.pos <= len) cuts.add(l.pos);
+  }
+  if (hasAnnotations) {
+    // Corta también en los límites espacio/no-espacio: una palabra (run sin
+    // espacios) es la unidad de wrap; nunca se parte entre renglones.
+    for (let i = 1; i < len; i++) {
+      if (/\s/.test(str[i - 1]) !== /\s/.test(str[i])) cuts.add(i);
+    }
   }
   const points = [...cuts].sort((a, b) => a - b);
 
@@ -272,6 +282,12 @@ export function buildAnnotatedLineHTML(text, options = {}) {
     `<span class="float-label ${l.className || ''}">${escapeHtml(l.text)}</span>`;
 
   let html = '';
+  let wordBuf = ''; // acumula los .line-seg de la palabra en curso antes de volcarlos
+  const flushWord = () => {
+    if (!wordBuf) return;
+    html += `<span class="line-word">${wordBuf}</span>`;
+    wordBuf = '';
+  };
   for (let i = 0; i < points.length - 1; i++) {
     const a = points[i];
     const b = points[i + 1];
@@ -280,13 +296,29 @@ export function buildAnnotatedLineHTML(text, options = {}) {
     const span = spans.find((s) => s.start <= a && s.end >= b && s.start < s.end);
     const cls = span ? span.className || '' : baseClass;
     const label = labelByPos.get(a);
-    if (label || cls) {
-      const wrapCls = ['line-seg', cls].filter(Boolean).join(' ');
-      html += `<span class="${wrapCls}">${label ? labelHtml(label) : ''}${escapeHtml(slice)}</span>`;
-    } else {
+    // Slice solo-espacios sin etiqueta propia → texto plano fuera de cualquier
+    // wrapper (abre oportunidad de wrap entre palabras). Si trae etiqueta
+    // (ancla cayó sobre un espacio, caso borde) se preserva como .line-seg
+    // suelto, igual que antes de agrupar por palabra.
+    const isPlainSpace = hasAnnotations && !label && /^\s+$/.test(slice);
+    if (isPlainSpace) {
+      flushWord();
       html += escapeHtml(slice);
+      continue;
+    }
+    const seg =
+      label || cls
+        ? `<span class="${['line-seg', cls].filter(Boolean).join(' ')}">${
+            label ? labelHtml(label) : ''
+          }${escapeHtml(slice)}</span>`
+        : escapeHtml(slice);
+    if (hasAnnotations) {
+      wordBuf += seg;
+    } else {
+      html += seg;
     }
   }
+  flushWord();
   // Etiqueta anclada al final de la línea (pos === len).
   if (labelByPos.has(len)) {
     html += `<span class="line-seg">${labelHtml(labelByPos.get(len))}</span>`;

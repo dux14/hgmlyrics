@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { buildChordsLineHTML } from '../src/lib/lyricsRender.js';
+import { buildChordsLineHTML, buildTonoLineHTML, buildMixedLineHTML } from '../src/lib/lyricsRender.js';
 
 /**
  * Repro geometrico del "hueco intra-palabra" en modo Acordes (Task 1 del plan
@@ -54,6 +54,7 @@ const TOKENS_CSS = `
     --color-chord: #a5d6a7;
     --color-chord-bg: rgba(165, 214, 167, 0.12);
     --color-text: #ffffff;
+    --line-height-lyrics: 1.8;
   }
   body {
     background: #121212;
@@ -152,5 +153,107 @@ test.describe('renglon foco: hueco intra-palabra (geometria)', () => {
     // i.e. ambas mitades comparten linea): el hueco horizontal entre el
     // ultimo glifo de "conti" y el primero de "gooo" debe ser chico.
     expect(firstGlyph.left - lastGlyph.right).toBeLessThan(1.5);
+  });
+
+  // Misma palabra/ancho de columna que el repro de Acordes, pero el corte
+  // intra-palabra viene de un limite de grupo de voz (start/end), no de un
+  // chord label — mismo mecanismo de fondo (cut a mitad de "contigooo").
+  test('modo Tono: limite de grupo a mitad de "contigooo" no parte la palabra en dos lineas', async ({
+    page,
+  }) => {
+    const line = {
+      text: TEXT,
+      groups: [{ voiceId: 'sop1', start: 0, end: 13, note: 'B3' }],
+    };
+    const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano', {});
+
+    expect(html).toContain('conti');
+    expect(html).toContain('gooo');
+
+    await page.setViewportSize({ width: 375, height: 400 });
+    await page.setContent(
+      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--tono">${html}</div></div>`
+    );
+    await page.addStyleTag({ content: TOKENS_CSS });
+    await page.addStyleTag({ path: CSS_PATH });
+
+    const { lastGlyph, firstGlyph } = await findSplitWordRects(page, 'conti', 'gooo');
+
+    expect(Math.abs(firstGlyph.top - lastGlyph.top)).toBeLessThan(3);
+    expect(firstGlyph.left - lastGlyph.right).toBeLessThan(1.5);
+  });
+
+  test('modo Mixto: ancla de acorde a mitad de "contigooo" no parte la palabra en dos lineas', async ({
+    page,
+  }) => {
+    const line = {
+      text: TEXT,
+      groups: [{ voiceId: 'v1', start: 0, end: 13, note: 'B3' }],
+    };
+    const html = buildMixedLineHTML(line, CHORDS, 'v1', 'voice-text--tenor', {});
+
+    expect(html).toContain('conti');
+    expect(html).toContain('gooo');
+
+    await page.setViewportSize({ width: 375, height: 400 });
+    await page.setContent(
+      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--mix">${html}</div></div>`
+    );
+    await page.addStyleTag({ content: TOKENS_CSS });
+    await page.addStyleTag({ path: CSS_PATH });
+
+    const { lastGlyph, firstGlyph } = await findSplitWordRects(page, 'conti', 'gooo');
+
+    expect(Math.abs(firstGlyph.top - lastGlyph.top)).toBeLessThan(3);
+    expect(firstGlyph.left - lastGlyph.right).toBeLessThan(1.5);
+  });
+
+  // No-regresion del motivo original del modelo columna (ver comentario de
+  // cabecera en components.css ~L514/L548): con varias anclas de acorde muy
+  // juntas (una por silaba), agrupar por palabra en .line-word NO debe hacer
+  // que las etiquetas flotantes vecinas se solapen entre si.
+  test('modo Acordes: linea densa (anclas por silaba) no solapa etiquetas flotantes', async ({
+    page,
+  }) => {
+    const denseText = 'Santo Santo Santo';
+    const denseChords = [
+      { pos: 0, ch: 'C' },
+      { pos: 2, ch: 'D' },
+      { pos: 4, ch: 'E' },
+      { pos: 6, ch: 'F' },
+      { pos: 8, ch: 'G' },
+      { pos: 10, ch: 'A' },
+      { pos: 12, ch: 'B' },
+      { pos: 14, ch: 'C' },
+    ];
+    const html = buildChordsLineHTML(denseText, denseChords, {});
+
+    await page.setViewportSize({ width: 375, height: 400 });
+    await page.setContent(
+      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--chords">${html}</div></div>`
+    );
+    await page.addStyleTag({ content: TOKENS_CSS });
+    await page.addStyleTag({ path: CSS_PATH });
+
+    const rects = await page.evaluate(() =>
+      [...document.querySelectorAll('.float-label')].map((el) => {
+        const r = el.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+      })
+    );
+
+    expect(rects.length).toBe(denseChords.length);
+    // Ninguna etiqueta flotante se superpone (interseccion de rects) con otra
+    // que comparta linea visual (mismo `top`, dentro de tolerancia de 1px).
+    for (let i = 0; i < rects.length; i++) {
+      for (let j = i + 1; j < rects.length; j++) {
+        const a = rects[i];
+        const b = rects[j];
+        const sameLine = Math.abs(a.top - b.top) < 1;
+        if (!sameLine) continue;
+        const overlaps = a.left < b.right && b.left < a.right;
+        expect(overlaps).toBe(false);
+      }
+    }
   });
 });

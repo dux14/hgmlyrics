@@ -1552,7 +1552,7 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
 
     const quickToggle = document.getElementById('imm-metronome-toggle');
     expect(quickToggle).toBeTruthy();
-    expect(quickToggle.getAttribute('aria-label')).toBe('Click del metrónomo');
+    expect(quickToggle.getAttribute('aria-label')).toBe('Metrónomo');
     // TANDA B: toggle maestro, default encendido al entrar.
     expect(quickToggle.getAttribute('aria-pressed')).toBe('true');
 

@@ -705,7 +705,7 @@ function mountPlayerBar(s) {
       <button class="imm-player__mute" id="imm-player-mute" type="button" aria-pressed="false" aria-label="Silenciar pista">${icon('volume-2', { size: 18 })}</button>
       ${
         s.beatClock
-          ? `<button class="imm-v1__btn imm-v1__metronome-toggle" id="imm-metronome-toggle" type="button" aria-pressed="false" aria-label="Click del metrónomo">${icon('timer-off', { size: 18 })}</button>`
+          ? `<button class="imm-v1__btn imm-v1__metronome-toggle" id="imm-metronome-toggle" type="button" aria-pressed="false" aria-label="Metrónomo">${icon('timer-off', { size: 18 })}</button>`
           : ''
       }
     </div>`;
@@ -733,7 +733,10 @@ function mountPlayerBar(s) {
     s.els.overlay.classList.remove('imm-v1--paused');
     playBtn.innerHTML = icon('pause', { size: 18 });
     playBtn.setAttribute('aria-label', 'Pausar pista');
-    startPulseLoop(s);
+    // Gátéalo al toggle maestro (TANDA B): con el metrónomo apagado no debe
+    // quedar un rAF corriendo aunque la pista suene; setMetronomeOn ya
+    // arranca el loop si se enciende mientras suena.
+    if (s.metronomeOn) startPulseLoop(s);
     refreshOptionsSheet(s);
   };
   const onPause = () => {
@@ -773,9 +776,10 @@ function mountPlayerBar(s) {
     );
   };
 
-  // Toggle rápido del click del metrónomo (F4): arranca SIEMPRE muteado
-  // (createMetronomeClick), un solo clic lo activa/desactiva sin pasar por
-  // el sheet — mismo estado que refleja METRÓNOMO en Opciones.
+  // Toggle rápido del metrónomo (F4/TANDA B): arranca según `s.metronomeOn`
+  // (default encendido — ver estado inicial de la sesión), un solo clic
+  // alterna el subsistema completo sin pasar por el sheet — mismo estado que
+  // refleja METRÓNOMO en Opciones.
   const onMetronomeBtnClick = () => setMetronomeOn(s, !s.metronomeOn);
   metronomeBtn?.addEventListener('click', onMetronomeBtnClick);
 

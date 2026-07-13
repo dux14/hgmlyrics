@@ -283,6 +283,38 @@ describe('ImmersiveView — toggle maestro del metrónomo (TANDA B)', () => {
     return song;
   }
 
+  /**
+   * Sesión sync con un hueco > GAP_INTERLUDIO_MS (5000ms) entre la línea 0 y
+   * la 1 (0 -> 12000ms), único caso en que `timingEngine` dispara
+   * `onInterlude` (showInterlude) — necesario para exercitar el guard
+   * `s.metronomeOn` del count-in. Rejilla de 25 beats c/500ms (perBar=4):
+   * a los 10000ms faltan exactamente 4 beats para la línea 1 (dentro de
+   * `[1, perBar]`), el caso que muestra el contador cuando el toggle está ON.
+   */
+  async function enterSyncSessionForCountIn() {
+    const song = buildSong();
+    const { getSongAudio } = await import('../lib/songAudioApi.js');
+    const { isFeatureEnabled } = await import('../lib/authStore.js');
+    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
+    getSongAudio.mockResolvedValueOnce({
+      audio: { url: 'https://example.com/full.mp3', bpmManual: 120, timeSignature: '4/4' },
+      timings: {
+        status: 'ready',
+        lines: [{ i: 0, startMs: 0 }, { i: 1, startMs: 12000 }],
+        beats: Array.from({ length: 25 }, (_, i) => i * 500),
+      },
+    });
+
+    enterImmersive(songViewEl, buildCtx(song));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const audioEl = document.querySelector('#imm-player-slot audio');
+    audioEl.currentTime = 2;
+    audioEl.dispatchEvent(new Event('timeupdate'));
+    return audioEl;
+  }
+
   beforeEach(() => {
     localStorage.clear();
     stubAudioContext();
@@ -329,5 +361,28 @@ describe('ImmersiveView — toggle maestro del metrónomo (TANDA B)', () => {
     expect(document.getElementById('imm-pulse').hidden).toBe(false);
     expect(document.getElementById('imm-bpm-badge').hidden).toBe(false);
     expect(quickBtn.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('count-in con metrónomo ON: faltando exactamente perBar beats pinta .imm-interlude__count', async () => {
+    const audioEl = await enterSyncSessionForCountIn();
+
+    audioEl.currentTime = 10; // faltan 4 beats (== perBar) para la línea 1 (12000ms)
+    audioEl.dispatchEvent(new Event('timeupdate'));
+
+    const count = document.querySelector('#imm-roll .imm-interlude__count');
+    expect(count).toBeTruthy();
+    expect(count.textContent).toBe('4');
+    expect(document.querySelectorAll('#imm-roll .imm-interlude__dot').length).toBe(0);
+  });
+
+  it('count-in con metrónomo OFF: el mismo hueco cae a los puntitos, sin .imm-interlude__count', async () => {
+    const audioEl = await enterSyncSessionForCountIn();
+    document.getElementById('imm-metronome-toggle').click(); // apaga el toggle maestro
+
+    audioEl.currentTime = 10; // mismo remainingBeats=4 que el test ON
+    audioEl.dispatchEvent(new Event('timeupdate'));
+
+    expect(document.querySelector('#imm-roll .imm-interlude__count')).toBeNull();
+    expect(document.querySelectorAll('#imm-roll .imm-interlude__dot').length).toBe(3);
   });
 });

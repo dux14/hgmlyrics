@@ -46,6 +46,20 @@
  *     más ancha que el contenedor no tiene wrap posible sin recortarse a
  *     sí misma, y este módulo no trunca contenido.
  *
+ *     OJO: este mecanismo depende de que `.line-word` sea una caja atómica
+ *     (ver CSS "Integridad de palabra") — el margin-right en el segmento
+ *     ANTERIOR solo corrige el rebase si de verdad fuerza el re-wrap de la
+ *     PALABRA del segmento ofensor a la fila siguiente. Si esa palabra
+ *     sigue cabiendo en la misma fila pese al empuje (por ejemplo, porque el
+ *     margen no alcanza a completar el ancho restante de la fila), la
+ *     etiqueta ofensora puede terminar con MÁS overshoot que antes (el
+ *     margen movió su posición pero no su fila). Como `resolveLabelOverlaps`
+ *     nunca resta márgenes entre pasadas (solo limpia al INICIO de una
+ *     resolución completa, no entre la pasada 1 y la 2), ese caso queda sin
+ *     corregir por diseño: es preferible un residuo de overshoot a una
+ *     oscilación de márgenes que nunca converge. No se trunca contenido en
+ *     ningún caso.
+ *
  * Los ajustes son ACUMULATIVOS a lo largo de una fila: una cadena de N
  * etiquetas solapadas en cascada resuelve el ajuste de izquierda a
  * derecha, cada uno considerando el desplazamiento ya aplicado a los

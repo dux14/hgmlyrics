@@ -552,6 +552,10 @@ async function _renderSongBody(container, songId, isPreview, song) {
   // onRouteChange. El preview (editor) no navega por router, no hay ruta de
   // la que salir (mismo razonamiento que el afinador flotante, ver
   // comentario más abajo) — se conforma con la resolución puntual al montar.
+  // Consecuencia: en preview NO hay observer, por lo que no hay re-resolve
+  // tras un resize de la ventana ni al cargar fuentes de forma diferida —
+  // limitación aceptada (el editor es una superficie acotada, no la lectura
+  // final de la canción).
   const lyricsElInitial = container.querySelector('#lyrics-content');
   if (lyricsElInitial) {
     if (isPreview) {

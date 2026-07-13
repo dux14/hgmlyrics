@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeOverlapAdjustments, resolveLabelOverlaps } from '../src/lib/labelOverlap.js';
+import { buildTonoLineHTML, buildMixedLineHTML } from '../src/lib/lyricsRender.js';
 
 describe('computeOverlapAdjustments', () => {
   it('sin colisión ni rebase, todos los ajustes son 0', () => {
@@ -77,51 +78,76 @@ describe('computeOverlapAdjustments', () => {
 });
 
 describe('resolveLabelOverlaps (smoke jsdom)', () => {
-  it('corre sin lanzar sobre HTML real de modo Acordes, aunque getBoundingClientRect dé 0 en jsdom', () => {
+  // Misma línea de tono que usan los tests de lyricsRender.test.js — dos
+  // grupos con nota real, para que el HTML generado por el builder traiga
+  // labels `.float-label.tono-note` de verdad (no fabricados a mano).
+  const tonoLine = {
+    text: 'San to canta',
+    groups: [
+      { voiceId: 'v1', start: 0, end: 3, note: 'B3' },
+      { voiceId: 'v1', start: 4, end: 6, note: 'A3' },
+    ],
+  };
+
+  // Línea mixta equivalente a la de buildMixedLineHTML — carril de acordes +
+  // carril de notas ambos con contenido real.
+  const mixedLine = {
+    text: 'San to, Dioos del',
+    chords: [],
+    groups: [
+      { voiceId: 'v1', start: 0, end: 3, note: 'B3' },
+      { voiceId: 'v1', start: 4, end: 6, note: 'A3' },
+    ],
+  };
+  const mixedChords = [
+    { pos: 0, ch: 'D' },
+    { pos: 14, ch: 'G' },
+  ];
+
+  it('corre sin lanzar sobre HTML real de modo Tono (buildTonoLineHTML), aunque getBoundingClientRect dé 0 en jsdom', () => {
+    const html = buildTonoLineHTML(tonoLine, 'v1', 'voice-text--soprano');
     const root = document.createElement('div');
-    root.innerHTML = `
-      <p class="lyrics__line lyrics__line--chords">
-        <span class="line-word">
-          <span class="line-seg"><span class="float-label chord-label"><i>C</i></span>San</span>
-          <span class="line-seg"><span class="float-label chord-label"><i>G</i></span>to</span>
-        </span>
-      </p>
-    `;
+    root.innerHTML = `<p class="lyrics__line lyrics__line--tono">${html}</p>`;
+    // El builder real sí produce labels de nota — confirma que el smoke no
+    // está probando una línea vacía.
+    expect(root.querySelectorAll('.float-label.tono-note').length).toBeGreaterThan(0);
     expect(() => resolveLabelOverlaps(root)).not.toThrow();
   });
 
   it('limpia data-overlap-fix de una pasada previa antes de volver a medir', () => {
+    // Un solo grupo (un único label en el carril): sin vecino con quien
+    // colisionar. En jsdom `getBoundingClientRect` da 0 en TODOS los rects
+    // (incluida la línea, el `boundRight`), así que ni la colisión (a) ni el
+    // rebase de borde (b) se disparan aquí — a diferencia del smoke anterior
+    // (dos grupos), donde dos labels con rects idénticos en 0 SÍ producen un
+    // ajuste porque el hueco mínimo (`gapPx`) exige separación aunque no
+    // haya geometría real. Este caso aislado deja ver la limpieza sola.
+    const singleGroupLine = {
+      text: 'San to canta',
+      groups: [{ voiceId: 'v1', start: 0, end: 3, note: 'B3' }],
+    };
+    const html = buildTonoLineHTML(singleGroupLine, 'v1', 'voice-text--soprano');
     const root = document.createElement('div');
-    root.innerHTML = `
-      <p class="lyrics__line lyrics__line--tono">
-        <span class="line-word">
-          <span class="line-seg" data-overlap-fix="1" style="margin-right: 12px">
-            <span class="float-label tono-note"><i>Do</i></span>Sol
-          </span>
-        </span>
-      </p>
-    `;
+    root.innerHTML = `<p class="lyrics__line lyrics__line--tono">${html}</p>`;
+    // Simula el residuo de una pasada anterior sobre el segmento real con label.
+    const firstSeg = root.querySelector('.line-seg');
+    firstSeg.setAttribute('data-overlap-fix', '1');
+    firstSeg.style.marginRight = '12px';
+
     resolveLabelOverlaps(root);
-    const seg = root.querySelector('.line-seg');
-    // En jsdom los rects dan todos 0 → no hay colisión que resolver, así que
-    // el ajuste previo se limpia y no se reaplica ninguno nuevo.
-    expect(seg.hasAttribute('data-overlap-fix')).toBe(false);
-    expect(seg.style.marginRight).toBe('');
+
+    // Sin vecino ni rebase de borde (rects a 0, un solo label por fila), la
+    // pasada no reaplica ajuste: el residuo previo queda limpio.
+    expect(firstSeg.hasAttribute('data-overlap-fix')).toBe(false);
+    expect(firstSeg.style.marginRight).toBe('');
   });
 
-  it('modo mixto: separa el carril de acordes del de notas sin lanzar', () => {
+  it('modo mixto (buildMixedLineHTML): separa el carril de acordes del de notas sin lanzar', () => {
+    const html = buildMixedLineHTML(mixedLine, mixedChords, 'v1', 'voice-text--tenor', {});
     const root = document.createElement('div');
-    root.innerHTML = `
-      <p class="lyrics__line lyrics__line--mix">
-        <span class="line-word">
-          <span class="mix-seg">
-            <span class="mix-rail mix-rail--chord"><i>C</i></span>
-            <span class="mix-rail mix-rail--lyric">San</span>
-            <span class="mix-rail mix-rail--note"><i>Do</i></span>
-          </span>
-        </span>
-      </p>
-    `;
+    root.innerHTML = `<p class="lyrics__line lyrics__line--mix">${html}</p>`;
+    expect(root.querySelectorAll('.mix-rail--chord i').length).toBeGreaterThan(0);
+    expect(root.querySelectorAll('.mix-rail--note i').length).toBeGreaterThan(0);
     expect(() => resolveLabelOverlaps(root)).not.toThrow();
   });
 

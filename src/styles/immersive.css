@@ -237,7 +237,7 @@ body.immersive-active > .floating-tuner {
   margin-bottom: 0.15em;
 }
 .imm-v1 .lyrics__line--tono .float-label {
-  margin-bottom: 0.3em;
+  margin-top: 0.3em;
 }
 /* Rieles del mix compactos: la línea activa (2.1rem) no debe explotar.
    OJO: height/padding se resuelven contra el font-size YA reducido del riel.

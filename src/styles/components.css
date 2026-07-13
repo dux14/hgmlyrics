@@ -540,6 +540,13 @@
   align-items: flex-start;
   vertical-align: bottom;
 }
+/* Tono-solo: la nota (emitida ANTES que la sílaba en el DOM, ver
+   buildAnnotatedLineHTML) va DEBAJO de la letra — mismo patrón "acordes
+   arriba / tono abajo" del modo Mixto. column-reverse invierte el orden
+   visual sin tocar el builder. */
+.lyrics__line--tono .line-seg {
+  flex-direction: column-reverse;
+}
 .lyrics__line--chords .float-label {
   position: static;
   top: auto;
@@ -550,7 +557,7 @@
   position: static;
   top: auto;
   left: auto;
-  margin-bottom: 0.4em;
+  margin-top: 0.4em;
 }
 /* Separación entre líneas del modo Tono (colchón "aire + letra manda") */
 .lyrics__line--tono {

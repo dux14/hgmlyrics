@@ -266,4 +266,44 @@ test.describe('renglon foco: hueco intra-palabra (geometria)', () => {
       }
     }
   });
+
+  // Task 3 (renglon-foco-consistente-modos): en modo Tono-solo la nota debe
+  // quedar ABAJO de la silaba (mismo patron "acordes arriba / tono abajo"
+  // del modo Mixto). Mide que el `top` de la nota (.float-label.tono-note)
+  // es MAYOR (mas abajo en pantalla) que el `top` de su silaba, dentro del
+  // mismo `.line-seg`.
+  test('modo Tono: la nota queda debajo de la silaba, no encima', async ({ page }) => {
+    const line = {
+      text: 'Santo es el Senor',
+      groups: [{ voiceId: 'sop1', start: 0, end: 5, note: 'B3' }],
+    };
+    const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano', {});
+
+    expect(html).toContain('tono-note');
+
+    await page.setViewportSize({ width: 375, height: 400 });
+    await page.setContent(
+      `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--tono">${html}</div></div>`
+    );
+    await page.addStyleTag({ content: TOKENS_CSS });
+    await page.addStyleTag({ path: CSS_PATH });
+
+    const { noteTop, syllableTop } = await page.evaluate(() => {
+      const seg = document.querySelector('.lyrics__line--tono .line-seg');
+      const note = seg.querySelector('.float-label.tono-note');
+      const noteRect = note.getBoundingClientRect();
+      // Ultimo nodo de texto del .line-seg (la silaba, fuera del label).
+      const walker = document.createTreeWalker(seg, NodeFilter.SHOW_TEXT);
+      let textNode = null;
+      let n;
+      // eslint-disable-next-line no-cond-assign
+      while ((n = walker.nextNode())) textNode = n;
+      const range = document.createRange();
+      range.selectNodeContents(textNode);
+      const syllableRect = range.getBoundingClientRect();
+      return { noteTop: noteRect.top, syllableTop: syllableRect.top };
+    });
+
+    expect(noteTop).toBeGreaterThan(syllableTop);
+  });
 });

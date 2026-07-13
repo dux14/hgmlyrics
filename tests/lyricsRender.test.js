@@ -145,6 +145,25 @@ describe('buildTonoLineHTML', () => {
     const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano');
     expect(html).toContain('>B3<');
   });
+
+  // Task 3 (renglon-foco-consistente-modos): CSS pinta la nota DEBAJO de la
+  // silaba con `flex-direction: column-reverse` sobre `.line-seg` — para que
+  // eso funcione, el label (float-label) debe seguir emitido ANTES que el
+  // texto de la silaba dentro del mismo .line-seg (mismo orden DOM que ya
+  // usa el modo Acordes; jsdom no mide layout, así que el contrato se
+  // verifica sobre el orden de los nodos, no sobre píxeles).
+  it('el label de la nota precede al texto de la sílaba dentro del mismo .line-seg (contrato de orden para CSS column-reverse)', () => {
+    const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano');
+    document.body.innerHTML = `<div class="lyrics__line lyrics__line--tono">${html}</div>`;
+    const seg = document.querySelector('.line-seg.lyrics__tono-sung');
+    expect(seg).not.toBeNull();
+    const label = seg.querySelector(':scope > .float-label.tono-note');
+    expect(label).not.toBeNull();
+    expect(seg.firstElementChild).toBe(label);
+    // El label convive con el texto de la sílaba en el mismo .line-seg.
+    expect(seg.textContent).toContain('B3');
+    expect(seg.textContent).toContain('Santo');
+  });
 });
 
 describe('transposeNote', () => {

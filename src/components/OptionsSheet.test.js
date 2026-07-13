@@ -186,8 +186,11 @@ describe('focus trap y retorno de foco (a11y)', () => {
 
     openOptionsSheet(baseOpts());
     opener.remove();
+    const focusSpy = vi.spyOn(opener, 'focus');
 
     expect(() => closeOptionsSheet()).not.toThrow();
+    // El guard opener?.isConnected evita reenfocar un nodo desconectado.
+    expect(focusSpy).not.toHaveBeenCalled();
 
     delete window.matchMedia;
   });

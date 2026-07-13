@@ -88,13 +88,13 @@ describe('openOptionsSheet — interacción', () => {
     expect(btn).toBeTruthy();
     expect(btn.classList.contains('is-active')).toBe(true);
     expect(btn.getAttribute('aria-pressed')).toBe('true');
-    expect(btn.textContent).toBe('Sonando');
+    expect(btn.textContent).toBe('Activado');
   });
 
-  it('showMetronome=true muestra "Silenciado" cuando metronomeOn es false', () => {
+  it('showMetronome=true muestra "Desactivado" cuando metronomeOn es false', () => {
     openOptionsSheet({ showTono: false, showMetronome: true, metronomeOn: false });
     const btn = document.querySelector('#osheet-metronome');
-    expect(btn.textContent).toBe('Silenciado');
+    expect(btn.textContent).toBe('Desactivado');
   });
 
   it('toggle METRÓNOMO dispara onMetronomeToggle con el nuevo estado', () => {
@@ -108,17 +108,15 @@ describe('openOptionsSheet — interacción', () => {
     const btn = document.querySelector('[data-act="metronome-toggle"]');
     btn.click();
     expect(onMetronomeToggle).toHaveBeenCalledWith(true);
-    expect(btn.textContent).toBe('Sonando');
+    expect(btn.textContent).toBe('Activado');
     expect(btn.getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('sección METRÓNOMO muestra el título "Click del metrónomo" y la línea de guía visual', () => {
+  it('sección METRÓNOMO muestra el título "Metrónomo" (toggle maestro, sin hint de guía visual)', () => {
     openOptionsSheet({ showTono: false, showMetronome: true, metronomeOn: true });
     const headers = Array.from(document.querySelectorAll('.osheet__h')).map((h) => h.textContent);
-    expect(headers).toContain('Click del metrónomo');
-    const hint = document.querySelector('.osheet__hint');
-    expect(hint).toBeTruthy();
-    expect(hint.textContent).toBe('Guía visual activa (badge y pulso)');
+    expect(headers).toContain('Metrónomo');
+    expect(document.querySelector('.osheet__hint')).toBeNull();
   });
 
   it('#osheet-player muestra el label dinámico según playerOn', () => {

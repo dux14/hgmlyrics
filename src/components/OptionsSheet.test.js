@@ -220,3 +220,53 @@ describe('focus trap y retorno de foco (a11y)', () => {
     delete window.matchMedia;
   });
 });
+
+describe('OptionsSheet — sección metrónomo (TANDA B, toggle maestro)', () => {
+  it('título "Metrónomo", labels Activado/Desactivado y sin el hint de guía visual', () => {
+    openOptionsSheet({
+      showTono: false,
+      notation: 'anglo',
+      fontLabel: '1.00',
+      autoscrollLabel: '50%',
+      showMetronome: true,
+      metronomeOn: true,
+    });
+
+    const headers = Array.from(document.querySelectorAll('.osheet__h')).map((h) => h.textContent);
+    expect(headers).toContain('Metrónomo');
+    expect(headers).not.toContain('Click del metrónomo');
+    expect(document.querySelector('#osheet-metronome').textContent).toBe('Activado');
+    expect(document.querySelector('.osheet__hint')).toBeNull();
+  });
+
+  it('metronomeOn false renderiza el label Desactivado', () => {
+    openOptionsSheet({
+      showTono: false,
+      notation: 'anglo',
+      fontLabel: '1.00',
+      autoscrollLabel: '50%',
+      showMetronome: true,
+      metronomeOn: false,
+    });
+
+    expect(document.querySelector('#osheet-metronome').textContent).toBe('Desactivado');
+  });
+
+  it('el click del botón alterna a Activado/Desactivado y llama a onMetronomeToggle', () => {
+    const onMetronomeToggle = vi.fn();
+    openOptionsSheet({
+      showTono: false,
+      notation: 'anglo',
+      fontLabel: '1.00',
+      autoscrollLabel: '50%',
+      showMetronome: true,
+      metronomeOn: false,
+      onMetronomeToggle,
+    });
+
+    document.querySelector('#osheet-metronome').click();
+
+    expect(document.querySelector('#osheet-metronome').textContent).toBe('Activado');
+    expect(onMetronomeToggle).toHaveBeenCalledWith(true);
+  });
+});

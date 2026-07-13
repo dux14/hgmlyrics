@@ -224,3 +224,110 @@ describe('ImmersiveView — clases de modo por línea + paridad de voz', () => {
     expect(openOptionsSheet).not.toHaveBeenCalled();
   });
 });
+
+describe('ImmersiveView — toggle maestro del metrónomo (TANDA B)', () => {
+  let songViewEl;
+
+  /** Fake AudioContext mínimo: createMetronomeClick lo crea lazy al desmutear. */
+  function stubAudioContext() {
+    class FakeAudioContext {
+      constructor() {
+        this.state = 'running';
+        this.currentTime = 0;
+        this.destination = {};
+      }
+      createOscillator() {
+        return {
+          connect: vi.fn(),
+          start: vi.fn(),
+          stop: vi.fn(),
+          frequency: { value: 0 },
+        };
+      }
+      createGain() {
+        return {
+          connect: vi.fn(),
+          gain: {
+            setValueAtTime: vi.fn(),
+            linearRampToValueAtTime: vi.fn(),
+            exponentialRampToValueAtTime: vi.fn(),
+          },
+        };
+      }
+      close() {}
+      addEventListener() {}
+      removeEventListener() {}
+    }
+    globalThis.AudioContext = FakeAudioContext;
+  }
+
+  /** Monta una sesión sync (promoteToSync) con beats + BPM, esperando el `then` de getSongAudio. */
+  async function enterSyncSessionWithBeats() {
+    const song = buildSong();
+    const { getSongAudio } = await import('../lib/songAudioApi.js');
+    const { isFeatureEnabled } = await import('../lib/authStore.js');
+    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
+    getSongAudio.mockResolvedValueOnce({
+      audio: { url: 'https://example.com/full.mp3', bpmManual: 120, timeSignature: '4/4' },
+      timings: {
+        status: 'ready',
+        lines: [{ i: 0, startMs: 0 }, { i: 1, startMs: 4000 }],
+        beats: [0, 500, 1000, 1500, 2000, 2500, 3000, 3500],
+      },
+    });
+
+    enterImmersive(songViewEl, buildCtx(song));
+    // getSongAudio resuelve async (Promise.resolve/mockResolvedValueOnce): dejar correr microtasks.
+    await Promise.resolve();
+    await Promise.resolve();
+    return song;
+  }
+
+  beforeEach(() => {
+    localStorage.clear();
+    stubAudioContext();
+    songViewEl = document.createElement('div');
+    document.body.appendChild(songViewEl);
+  });
+
+  afterEach(() => {
+    exitImmersive();
+    songViewEl.remove();
+    document.body.innerHTML = '';
+    vi.clearAllMocks();
+    isOptionsSheetOpen.mockReturnValue(false);
+    delete globalThis.AudioContext;
+  });
+
+  it('al montar una sesión sync con beats, el metrónomo arranca activado (badge+pulso visibles, click desmuteado)', async () => {
+    await enterSyncSessionWithBeats();
+
+    expect(document.getElementById('imm-pulse').hidden).toBe(false);
+    expect(document.getElementById('imm-bpm-badge').hidden).toBe(false);
+    const quickBtn = document.getElementById('imm-metronome-toggle');
+    expect(quickBtn.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('apagar el toggle oculta pulso+badge y mutea el click, sin destruir beatClock', async () => {
+    await enterSyncSessionWithBeats();
+    const quickBtn = document.getElementById('imm-metronome-toggle');
+
+    quickBtn.click();
+
+    expect(document.getElementById('imm-pulse').hidden).toBe(true);
+    expect(document.getElementById('imm-bpm-badge').hidden).toBe(true);
+    expect(quickBtn.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('reencender el toggle restaura pulso+badge+click sin recrear el beatClock', async () => {
+    await enterSyncSessionWithBeats();
+    const quickBtn = document.getElementById('imm-metronome-toggle');
+
+    quickBtn.click(); // apaga
+    quickBtn.click(); // reenciende
+
+    expect(document.getElementById('imm-pulse').hidden).toBe(false);
+    expect(document.getElementById('imm-bpm-badge').hidden).toBe(false);
+    expect(quickBtn.getAttribute('aria-pressed')).toBe('true');
+  });
+});

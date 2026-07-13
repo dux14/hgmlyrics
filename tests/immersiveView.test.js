@@ -1508,10 +1508,11 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     document.getElementById('imm-open-options').click();
     const toggle = document.querySelector('.osheet [data-act="metronome-toggle"]');
     expect(toggle).toBeTruthy();
-    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    // TANDA B: toggle maestro, default encendido al entrar.
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
     toggle.click();
 
-    expect(metronomeSetMuted).toHaveBeenCalledWith(false);
+    expect(metronomeSetMuted).toHaveBeenCalledWith(true);
   });
 
   it('sheet: el toggle de METRÓNOMO también refleja el estado en el toggle rápido de la barra (mismo setMetronomeOn)', async () => {
@@ -1522,16 +1523,17 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     await flushAsync();
 
     const quickToggle = document.getElementById('imm-metronome-toggle');
-    expect(quickToggle.getAttribute('aria-pressed')).toBe('false');
+    // TANDA B: toggle maestro, default encendido al entrar.
+    expect(quickToggle.getAttribute('aria-pressed')).toBe('true');
 
     document.getElementById('imm-open-options').click();
     const sheetToggle = document.querySelector('.osheet [data-act="metronome-toggle"]');
     sheetToggle.click();
-    expect(quickToggle.getAttribute('aria-pressed')).toBe('true');
+    expect(quickToggle.getAttribute('aria-pressed')).toBe('false');
 
     document.getElementById('imm-open-options').click();
     document.querySelector('.osheet [data-act="metronome-toggle"]').click();
-    expect(quickToggle.getAttribute('aria-pressed')).toBe('false');
+    expect(quickToggle.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('sheet: sin beat grid, METRÓNOMO no aparece', async () => {
@@ -1541,7 +1543,7 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     expect(document.querySelector('.osheet [data-act="metronome-toggle"]')).toBeNull();
   });
 
-  it('toggle rápido en la barra de player: existe con beat grid, arranca apagado, un clic activa el click (setMuted(false))', async () => {
+  it('toggle rápido en la barra de player: existe con beat grid, arranca encendido (TANDA B), un clic lo apaga (setMuted(true))', async () => {
     enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats());
     const sv = mountSongView();
@@ -1551,11 +1553,12 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     const quickToggle = document.getElementById('imm-metronome-toggle');
     expect(quickToggle).toBeTruthy();
     expect(quickToggle.getAttribute('aria-label')).toBe('Click del metrónomo');
-    expect(quickToggle.getAttribute('aria-pressed')).toBe('false');
+    // TANDA B: toggle maestro, default encendido al entrar.
+    expect(quickToggle.getAttribute('aria-pressed')).toBe('true');
 
     quickToggle.click();
-    expect(metronomeSetMuted).toHaveBeenCalledWith(false);
-    expect(quickToggle.getAttribute('aria-pressed')).toBe('true');
+    expect(metronomeSetMuted).toHaveBeenCalledWith(true);
+    expect(quickToggle.getAttribute('aria-pressed')).toBe('false');
   });
 
   it('salir de la vista inmersiva detiene el click del metrónomo (stop)', async () => {
@@ -1664,7 +1667,7 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
   // patrón que `applyMode` ya usa (`isOptionsSheetOpen() -> openOptions(s)`).
   // Con el sheet CERRADO, ninguno de esos caminos debe abrirlo.
   describe('refreshOptionsSheet: el sheet abierto refleja cambios hechos desde fuera', () => {
-    it('metrónomo: el toggle rápido con el sheet abierto deja #osheet-metronome en aria-pressed=true', async () => {
+    it('metrónomo: el toggle rápido con el sheet abierto deja #osheet-metronome en aria-pressed=false', async () => {
       enablePlayerFlag();
       getSongAudio.mockResolvedValue(readyTimingsWithBeats());
       const sv = mountSongView();
@@ -1672,14 +1675,15 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
       await flushAsync();
 
       document.getElementById('imm-open-options').click();
+      // TANDA B: toggle maestro, default encendido al entrar.
       expect(document.getElementById('osheet-metronome').getAttribute('aria-pressed')).toBe(
-        'false',
+        'true',
       );
 
       document.getElementById('imm-metronome-toggle').click();
 
       expect(document.getElementById('osheet-metronome').getAttribute('aria-pressed')).toBe(
-        'true',
+        'false',
       );
     });
 

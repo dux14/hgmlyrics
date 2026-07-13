@@ -549,15 +549,21 @@ function promoteToSync(s, audio, timings) {
 
   setupMetronome(s, audio, timings);
   mountPlayerBar(s);
+  // Aplica el estado inicial del toggle maestro (TANDA B, default `true`):
+  // desmutea el click si corresponde y refleja pulso/badge/botón rápido en
+  // un solo lugar. No-op si esta canción no tiene beats (`s.beatClock` null).
+  if (s.beatClock) setMetronomeOn(s, s.metronomeOn);
 }
 
 /**
  * Deriva rejilla+reloj de beats de `timings.beats` (D3, endpoint expone
- * beats + overrides de bpm/compas/ancla) y monta badge BPM + pulso visual.
- * Sin beats (canción sin beat-tracking o audio de reproceso) es un no-op: el
- * badge y el pulso quedan `hidden`, como al entrar. Se llama ANTES de
- * `mountPlayerBar` para que su plantilla pueda decidir si pinta el toggle
- * rápido del click según `s.beatClock`.
+ * beats + overrides de bpm/compas/ancla) y prepara contenido del badge BPM +
+ * pulso visual (guarda `s.hasBpmBadge` para el caso sin-BPM). NO decide
+ * visibilidad — eso es responsabilidad exclusiva de `setMetronomeOn` (toggle
+ * maestro, TANDA B), que se llama después de montar. Sin beats (canción sin
+ * beat-tracking o audio de reproceso) es un no-op: el badge y el pulso quedan
+ * `hidden`, como al entrar. Se llama ANTES de `mountPlayerBar` para que su
+ * plantilla pueda decidir si pinta el toggle rápido del click según `s.beatClock`.
  */
 function setupMetronome(s, audio, timings) {
   if (!Array.isArray(timings.beats) || timings.beats.length === 0) return;
@@ -572,16 +578,15 @@ function setupMetronome(s, audio, timings) {
     getTimeMs: () => s.audioEl.currentTime * 1000,
   });
 
-  if (bpm !== null && bpm !== undefined) {
+  s.hasBpmBadge = bpm !== null && bpm !== undefined;
+  if (s.hasBpmBadge) {
     s.els.bpmBadge.textContent = `${Math.round(bpm)} BPM · ${timeSignature}`;
-    s.els.bpmBadge.hidden = false;
   }
 
   s.els.pulse.innerHTML = Array.from(
     { length: s.beatClock.perBar },
     () => '<span class="imm-v1__pulse-dot"></span>',
   ).join('');
-  s.els.pulse.hidden = false;
 }
 
 /** rAF que resalta el dot del beat actual mientras suena la pista (solo con beatClock). */
@@ -605,10 +610,20 @@ function stopPulseLoop(s) {
   s.beatRafId = null;
 }
 
-/** Refleja `on` en el estado + el mute del click + los toggles (rápido y del sheet). */
+/**
+ * Toggle maestro del metrónomo (TANDA B): `on` enciende/apaga el subsistema
+ * COMPLETO — click audible, badge de BPM, pulso visual y count-in del
+ * interludio (guard en `showInterlude` via `s.metronomeOn`) — no solo el
+ * click. Apagado equivale a que la canción no tuviera beats, pero NUNCA
+ * destruye `s.beatClock`/`s.metronome`: re-encender restaura todo en caliente.
+ */
 function setMetronomeOn(s, on) {
   s.metronomeOn = on;
   s.metronome?.setMuted(!on);
+  s.els.pulse.hidden = !on || !s.beatClock;
+  s.els.bpmBadge.hidden = !on || !s.beatClock || !s.hasBpmBadge;
+  if (on && s.audioPlaying) startPulseLoop(s);
+  else stopPulseLoop(s);
   const quickBtn = s.els.overlay.querySelector('#imm-metronome-toggle');
   if (quickBtn) {
     quickBtn.setAttribute('aria-pressed', String(on));
@@ -841,7 +856,8 @@ function showInterlude(s, { index, progress }) {
     remainingBeats = s.beatClock.beatsUntil(s.audioEl.currentTime * 1000, nextLine.startMs);
   }
   const perBar = s.beatClock?.perBar ?? 4;
-  const showCount = remainingBeats !== null && remainingBeats >= 1 && remainingBeats <= perBar;
+  const showCount =
+    s.metronomeOn && remainingBeats !== null && remainingBeats >= 1 && remainingBeats <= perBar;
 
   let el = s.els.roll.querySelector('.imm-interlude');
   if (!el || el.dataset.after !== String(index)) {
@@ -1164,7 +1180,10 @@ export function enterImmersive(songViewEl, ctx = {}) {
     beatClock: null,
     beatRafId: null,
     metronome: null,
-    metronomeOn: false,
+    hasBpmBadge: false,
+    // Default encendido (TANDA B, toggle maestro): la guía visual se ve al
+    // entrar, igual que antes; el click igual solo suena con la pista sonando.
+    metronomeOn: true,
   };
 
   const activeCategory =

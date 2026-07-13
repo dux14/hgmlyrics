@@ -6,9 +6,10 @@
  *  - TONO: stepper ±½ + bubble (tap = reset) + toggle ♯/♭.
  *  - NOTACIÓN: segmented control Do Re Mi / A B C (chordNotation.js).
  *  - TAMAÑO DE LETRA: A−/valor/A+.
- *  - Click del metrónomo (F4, vista inmersiva sync): toggle del click audible
- *    (Sonando/Silenciado); badge de BPM y pulso visual corren siempre que hay
- *    beats + pista sonando, independiente de este toggle (hint en la sección).
+ *  - Metrónomo (F4, vista inmersiva sync): toggle maestro del subsistema
+ *    completo (click audible + badge de BPM + pulso visual + count-in del
+ *    interludio) — Activado/Desactivado. Apagado equivale a que la canción
+ *    no tuviera beats, sin destruir el reloj de beats (re-encendido en caliente).
  *  - AUTO-SCROLL: −/valor/+.
  *
  * No introduce lógica nueva de dominio; es aditivo sobre los closures de
@@ -279,19 +280,17 @@ function buildSheetHtml(opts) {
     </div>`
     : '';
 
-  // METRÓNOMO (F4): toggle del click, solo visible cuando la sesión sync
-  // trae rejilla de beats (`showMetronome: !!s.beatClock`) — mismo patrón
-  // que PISTA/AFINADOR. El toggle SOLO controla el click audible; el badge
-  // de BPM y el pulso visual corren siempre que hay beats + pista sonando
-  // (guía visual pasiva, decisión de producto), de ahí la línea informativa.
+  // METRÓNOMO (F4, TANDA B): toggle maestro, solo visible cuando la sesión
+  // sync trae rejilla de beats (`showMetronome: !!s.beatClock`) — mismo
+  // patrón que PISTA/AFINADOR. Enciende/apaga el subsistema completo (click
+  // audible + badge BPM + pulso + count-in del interludio), no solo el click.
   const metronomeSectionHtml = opts.showMetronome
     ? `
     <div class="osheet__section">
-      <div class="osheet__h syn">Click del metrónomo</div>
+      <div class="osheet__h syn">Metrónomo</div>
       <div class="osheet__seg">
-        <button class="osheet__seg-btn${opts.metronomeOn ? ' is-active' : ''}" data-act="metronome-toggle" id="osheet-metronome" aria-pressed="${!!opts.metronomeOn}">${opts.metronomeOn ? 'Sonando' : 'Silenciado'}</button>
+        <button class="osheet__seg-btn${opts.metronomeOn ? ' is-active' : ''}" data-act="metronome-toggle" id="osheet-metronome" aria-pressed="${!!opts.metronomeOn}">${opts.metronomeOn ? 'Activado' : 'Desactivado'}</button>
       </div>
-      <div class="osheet__hint">Guía visual activa (badge y pulso)</div>
     </div>`
     : '';
 
@@ -356,7 +355,7 @@ function bindSheetHandlers(sheet, opts) {
         const nowOn = b.getAttribute('aria-pressed') !== 'true';
         b.setAttribute('aria-pressed', String(nowOn));
         b.classList.toggle('is-active', nowOn);
-        b.textContent = nowOn ? 'Sonando' : 'Silenciado';
+        b.textContent = nowOn ? 'Activado' : 'Desactivado';
         opts.onMetronomeToggle?.(nowOn);
       }
     }),

@@ -391,6 +391,16 @@ function setActiveIndex(s, index) {
   if (clamped !== prevIndex) {
     renderLineContent(s, prevIndex);
     renderLineContent(s, clamped);
+    // `renderLineContent` reemplaza el innerHTML de esas dos líneas (nodos
+    // nuevos): el `margin-right`/`data-overlap-fix` de la pasada anterior se
+    // pierde, y el ResizeObserver de `observeLabelOverlaps` no cubre este
+    // camino de forma garantizada (solo dispara si el tamaño del rollo
+    // cambia). Resuelve acotado a las dos líneas repintadas, no todo
+    // `s.els.roll` — evita medir cientos de líneas sin cambios en cada avance.
+    const prevEl = s.lineEls[prevIndex];
+    if (prevEl) resolveLabelOverlaps(prevEl);
+    const activeEl = s.lineEls[clamped];
+    if (activeEl) resolveLabelOverlaps(activeEl);
   }
   updateSectionLabel(s);
   updateTunerNote(s);

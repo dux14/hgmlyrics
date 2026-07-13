@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest';
-import { computeOverlapAdjustments, resolveLabelOverlaps } from '../src/lib/labelOverlap.js';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import {
+  computeOverlapAdjustments,
+  resolveLabelOverlaps,
+  observeLabelOverlaps,
+} from '../src/lib/labelOverlap.js';
 import { buildTonoLineHTML, buildMixedLineHTML } from '../src/lib/lyricsRender.js';
 
 describe('computeOverlapAdjustments', () => {
@@ -155,5 +159,98 @@ describe('resolveLabelOverlaps (smoke jsdom)', () => {
     expect(() => resolveLabelOverlaps(null)).not.toThrow();
     const empty = document.createElement('div');
     expect(() => resolveLabelOverlaps(empty)).not.toThrow();
+  });
+
+  it('resuelve cuando rootEl es la propia línea (no un contenedor de varias) — caso ImmersiveView.setActiveIndex', () => {
+    // ImmersiveView aplica la clase de modo directamente sobre el nodo
+    // `.imm-line` (ver renderRoll/renderLineContent), así que el nodo que se
+    // pasa a resolveLabelOverlaps tras repintar una línea individual ES la
+    // línea, no un envoltorio con descendientes .lyrics__line--*. Un solo
+    // grupo (un único label): sin vecino con quien colisionar en jsdom (ver
+    // nota del test de limpieza más arriba sobre rects a 0).
+    const singleGroupLine = {
+      text: 'San to canta',
+      groups: [{ voiceId: 'v1', start: 0, end: 3, note: 'B3' }],
+    };
+    const html = buildTonoLineHTML(singleGroupLine, 'v1', 'voice-text--soprano');
+    const lineEl = document.createElement('div');
+    lineEl.className = 'imm-line lyrics__line--tono';
+    lineEl.innerHTML = html;
+    const firstSeg = lineEl.querySelector('.line-seg');
+    firstSeg.setAttribute('data-overlap-fix', '1');
+    firstSeg.style.marginRight = '99px';
+
+    // querySelectorAll(LINE_SELECTOR) sobre lineEl NUNCA incluye a lineEl
+    // mismo — si resolveLabelOverlaps no contemplara este caso, no limpiaría
+    // ni volvería a medir nada y el residuo de 99px quedaría intacto.
+    resolveLabelOverlaps(lineEl);
+
+    expect(firstSeg.hasAttribute('data-overlap-fix')).toBe(false);
+  });
+});
+
+describe('observeLabelOverlaps (stubs, sin layout real)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('disconnect() cancela el rAF pendiente', () => {
+    let nextId = 1;
+    const rafStub = vi.fn(() => nextId++);
+    const cafStub = vi.fn();
+    vi.stubGlobal('requestAnimationFrame', rafStub);
+    vi.stubGlobal('cancelAnimationFrame', cafStub);
+
+    const root = document.createElement('div');
+    const disconnect = observeLabelOverlaps(root);
+
+    // scheduleRun() inicial pide un rAF; como el stub nunca invoca el
+    // callback, ese rAF queda "pendiente" cuando llamamos a disconnect().
+    expect(rafStub).toHaveBeenCalledTimes(1);
+    disconnect();
+    expect(cafStub).toHaveBeenCalledTimes(1);
+    expect(cafStub).toHaveBeenCalledWith(1);
+  });
+
+  it('una resolución de document.fonts.ready que llega DESPUÉS de disconnect() no reprograma nada (guard fontsReadyCancelled)', async () => {
+    let resolveFontsReady;
+    const fontsReadyPromise = new Promise((resolve) => {
+      resolveFontsReady = resolve;
+    });
+    const originalFonts = document.fonts;
+    Object.defineProperty(document, 'fonts', {
+      value: { ready: fontsReadyPromise },
+      configurable: true,
+    });
+
+    const rafStub = vi.fn(() => 1);
+    const cafStub = vi.fn();
+    vi.stubGlobal('requestAnimationFrame', rafStub);
+    vi.stubGlobal('cancelAnimationFrame', cafStub);
+
+    const root = document.createElement('div');
+    const disconnect = observeLabelOverlaps(root);
+    expect(rafStub).toHaveBeenCalledTimes(1); // scheduleRun() inicial
+
+    disconnect();
+    resolveFontsReady();
+    await fontsReadyPromise;
+    await Promise.resolve(); // deja correr el .then() de fonts.ready
+
+    // Si el guard no cortara, fonts.ready dispararía un scheduleRun extra
+    // (un segundo requestAnimationFrame) después de desconectar.
+    expect(rafStub).toHaveBeenCalledTimes(1);
+
+    Object.defineProperty(document, 'fonts', { value: originalFonts, configurable: true });
+  });
+
+  it('sin ResizeObserver en el entorno (caso real de jsdom aquí), no lanza al montar ni al desconectar', () => {
+    expect(typeof ResizeObserver).toBe('undefined');
+    const root = document.createElement('div');
+    let disconnect;
+    expect(() => {
+      disconnect = observeLabelOverlaps(root);
+    }).not.toThrow();
+    expect(() => disconnect()).not.toThrow();
   });
 });

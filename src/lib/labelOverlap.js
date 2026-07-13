@@ -192,14 +192,36 @@ function clearPreviousAdjustments(rootEl) {
 }
 
 /**
- * Recorre las líneas de acordes/tono/mixto dentro de `rootEl`, mide sus
- * etiquetas y aplica el empuje mínimo para que no se solapen ni rebasen el
- * borde de la línea. Dos fases sin intercalar (lectura completa primero,
- * escritura después) para evitar layout thrashing; una segunda pasada
- * repite lectura+escritura porque el nuevo margin-right puede cambiar el
- * wrap de la línea (máximo 2 pasadas en total).
+ * Devuelve las líneas de acordes/tono/mixto a procesar dentro de `rootEl`:
+ * las descendientes que matcheen `LINE_SELECTOR` MÁS el propio `rootEl` si
+ * es él mismo una línea. Este segundo caso es lo que permite una resolución
+ * ACOTADA a una o dos líneas puntuales (p. ej. tras repintar solo la línea
+ * activa en `ImmersiveView.setActiveIndex`) sin tener que barrer todo el
+ * rollo — `querySelectorAll` nunca incluye al propio nodo de partida.
+ * @param {HTMLElement} rootEl
+ * @returns {HTMLElement[]}
+ */
+function getLineEls(rootEl) {
+  const self = rootEl.matches?.(LINE_SELECTOR) ? [rootEl] : [];
+  return [...self, ...rootEl.querySelectorAll(LINE_SELECTOR)];
+}
+
+/**
+ * Recorre las líneas de acordes/tono/mixto dentro de `rootEl` (o `rootEl`
+ * mismo si ya es una línea — ver `getLineEls`), mide sus etiquetas y aplica
+ * el empuje mínimo para que no se solapen ni rebasen el borde de la línea.
+ * Dos fases sin intercalar (lectura completa primero, escritura después)
+ * para evitar layout thrashing; una segunda pasada repite lectura+escritura
+ * porque el nuevo margin-right puede cambiar el wrap de la línea (máximo 2
+ * pasadas en total).
  *
- * @param {HTMLElement} rootEl contenedor que envuelve una o más líneas.
+ * Aceptar tanto un contenedor de varias líneas como una línea suelta es lo
+ * que permite a los llamadores elegir el alcance: todo el rollo al montar,
+ * o solo las líneas recién repintadas en una actualización puntual (evita
+ * medir cientos de líneas sin cambios en cada avance).
+ *
+ * @param {HTMLElement} rootEl contenedor que envuelve una o más líneas, o
+ *   una línea individual.
  */
 export function resolveLabelOverlaps(rootEl) {
   if (!rootEl) return;
@@ -216,7 +238,7 @@ export function resolveLabelOverlaps(rootEl) {
 
 /** Ejecuta una pasada completa de lectura+escritura sobre todas las líneas de `rootEl`. */
 function runPass(rootEl) {
-  const lineEls = rootEl.querySelectorAll(LINE_SELECTOR);
+  const lineEls = getLineEls(rootEl);
   if (lineEls.length === 0) return;
 
   // Fase de lectura: todas las mediciones antes de tocar el DOM.

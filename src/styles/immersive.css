@@ -268,6 +268,47 @@ body.immersive-active > .floating-tuner {
   margin-bottom: 0;
 }
 
+/* ─── Nota promovida en Tono-solo dentro de immersive (bug real, captura de
+   usuario: "dormir tranquiiilo", Bb3 montada sobre la "o") ───
+   El `top: -1.35em` de components.css (nota promovida, ver ese archivo) se
+   calibró para vista normal, donde la nota y la sílaba comparten el MISMO
+   font-size — ahí el lift despeja el glifo sin ambigüedad. En immersive la
+   nota vive a 0.52em de la línea (regla de arriba) mientras la sílaba se
+   pinta con el font-size GRANDE de la línea (2.1rem activa / 1.5rem
+   vecinas): mismo `-1.35em`, pero resuelto contra un font mucho más chico
+   → el lift real en píxeles es una fracción de lo que necesita el glifo
+   grande, la nota queda encima de la letra en vez de despejarla.
+   Como la nota SIEMPRE es 0.52em de la línea en cualquiera de los DOS
+   tamaños de fila que muestran notas (activa y vecina comparten el mismo
+   ratio fijo, ver `.imm-v1 .float-label.tono-note` arriba), un único
+   offset más grande EXPRESADO EN em-de-nota (no en rem ni en unidades de
+   línea) escala correctamente para ambos tamaños sin duplicar reglas por
+   fila — no hace falta una variable CSS aparte. Calibrado con Playwright
+   (harness `e2e/immersive-nota-promovida.spec.js`, árbol real de
+   ImmersiveView + components.css + immersive.css, mismo fixture de la
+   captura): `-1.75em` despeja el glifo con margen en fila activa (2.1rem)
+   y vecina (1.5rem). */
+.imm-v1 .lyrics__line--tono .line-seg--note-flip .float-label {
+  top: -1.75em;
+}
+/* El conector (`::after`, ver components.css) es hijo del `.float-label` y
+   se traslada CON él — su propio `top` (relativo al float-label, no a la
+   línea) sigue arrancando en el mismo punto, justo bajo el subrayado de la
+   nota. Lo único que cambia es que la sílaba quedó más lejos: la `height`
+   crece la misma distancia extra que ganó el lift de arriba (0.4em) para
+   seguir llegando justo hasta la sílaba sin pisarla ni quedar corto. */
+.imm-v1 .lyrics__line--tono .line-seg--note-flip .float-label.tono-note::after {
+  height: 0.84em;
+}
+/* La fila con nota promovida necesita más aire arriba: el lift creció
+   0.4em-de-nota (0.52em-de-línea), así que el headroom (en em-de-línea,
+   este sí ya estaba en la unidad correcta — ver comentario en
+   components.css) crece la misma distancia real para que la nota no roce
+   la fila anterior del rollo. */
+.imm-v1 .lyrics__line--tono.lyrics__line--has-flip {
+  padding-top: 1.85em;
+}
+
 /* Legibilidad del acorde en la línea ACTIVA (hallazgo "acordes casi
    invisibles" en modo mixed): la garantiza el color propio --imm-chord sobre
    el fondo oscuro del overlay (independiente del token compartido). El

@@ -41,6 +41,23 @@ const TOKENS_CSS = `
   }
 `;
 
+// Fuente real (Montserrat 700, la que usa `.imm-line`) embebida como data URI:
+// Arial (fallback genérico del harness) tiene métricas de glifo más cortas
+// que Montserrat y esconde el solape real — con Arial el test de Mixto abajo
+// da verde incluso sin el fix (verde vacío). Solo se usa en ese test.
+const MONTSERRAT_700_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../public/fonts/montserrat-latin-700.woff2',
+);
+const MONTSERRAT_700_CSS = `
+  @font-face {
+    font-family: 'Montserrat';
+    font-weight: 700;
+    src: url('data:font/woff2;base64,${readFileSync(MONTSERRAT_700_PATH).toString('base64')}') format('woff2');
+  }
+  body { font-family: 'Montserrat', sans-serif; }
+`;
+
 const LABEL_OVERLAP_PATH = resolve(
   dirname(fileURLToPath(import.meta.url)),
   '../src/lib/labelOverlap.js',
@@ -214,17 +231,21 @@ test.describe('nota promovida en vista inmersiva: libra la caja de la letra gran
     expect(result.notFlippedContent).toBe('none');
   });
 
-  // Nota: en Mixto la medicion original de este test comparaba contra el
-  // TOP del riel `.mix-rail--lyric` (caja con el line-height completo, no
-  // el glifo real) y reportaba un falso solape de ~3px que no existe
-  // visualmente (confirmado con captura: orden acorde > nota > letra, sin
-  // pisar nada — ver antes-de-tocar CSS). Aqui se mide el glifo real (Range
-  // sobre el nodo de texto), igual que en los tests de Tono-solo arriba,
-  // que es la unica medicion que le importa al usuario.
+  // El bug real (capturado en vivo sobre el preview): en el modo MIXTO,
+  // la línea EN FOCO de full view siempre se pinta con el builder mixto
+  // (`.lyrics__line--mix`), sin importar el toggle Tono/Acordes. Cuando la
+  // nota de "o" (pos 17) se promueve a la banda superior, el `top: 1.75em`
+  // de components.css (calibrado para vista normal) resuelto contra el
+  // riel de nota chico de immersive (0.52em) NO libra el glifo grande
+  // (2.1rem) de la línea activa: la nota queda encima de la letra.
+  // Fixture fiel al escenario real: la sílaba promovida ("o", pos 17) NO
+  // tiene acorde propio — cae en una banda de acorde vacía sobre la letra,
+  // que es exactamente donde el fix la sube. El acorde va en otra sílaba
+  // ("dormir", pos 0) para que la línea sea realista de modo mixto.
   test('Mixto, fila activa: la nota promovida no se solapa con el glifo real de la letra', async ({
     page,
   }) => {
-    const chords = [{ pos: 17, ch: 'G' }];
+    const chords = [{ pos: 0, ch: 'G' }];
     const html = buildMixedLineHTML(PROMO_LINE, chords, 'sop1', 'voice-text--soprano', {});
     await page.setViewportSize({ width: 400, height: 700 });
     await page.setContent(
@@ -233,30 +254,39 @@ test.describe('nota promovida en vista inmersiva: libra la caja de la letra gran
     await page.addStyleTag({ content: TOKENS_CSS });
     await page.addStyleTag({ path: COMPONENTS_CSS_PATH });
     await page.addStyleTag({ path: IMMERSIVE_CSS_PATH });
+    await page.addStyleTag({ content: MONTSERRAT_700_CSS });
+    await page.evaluate(() => document.fonts.ready);
     await injectLabelOverlap(page);
     await page.evaluate(() => {
       window.resolveLabelOverlaps(document.querySelector('.lyrics__line--mix'));
     });
 
-    const { chordRect, noteRect, glyphRect } = await page.evaluate(() => {
+    const { hasFlip, noteRect, glyphRect } = await page.evaluate(() => {
+      const line = document.querySelector('.lyrics__line--mix');
       const flippedSeg = document.querySelector('.mix-seg--note-flip');
-      const chordI = flippedSeg.querySelector('.mix-rail--chord i');
       const noteI = flippedSeg.querySelector('.mix-rail--note i');
       const lyricRail = flippedSeg.querySelector('.mix-rail--lyric');
       const textNode = [...lyricRail.childNodes].find((n) => n.nodeType === 3);
       const range = document.createRange();
       range.selectNodeContents(textNode);
       return {
-        chordRect: chordI ? chordI.getBoundingClientRect() : null,
+        hasFlip: line.classList.contains('lyrics__line--has-flip'),
         noteRect: noteI.getBoundingClientRect(),
         glyphRect: range.getBoundingClientRect(),
       };
     });
 
-    expect(chordRect).not.toBeNull();
-    // Orden vertical: acorde arriba, nota debajo del acorde, ambos por
-    // encima del glifo real de la letra.
-    expect(chordRect.top).toBeLessThan(noteRect.top);
-    expect(noteRect.bottom).toBeLessThanOrEqual(glyphRect.top - 1);
+    // La promoción realmente disparó (si no, el test daría verde vacío).
+    expect(hasFlip).toBe(true);
+    // Única aserción que le importa al usuario: la nota promovida termina
+    // (bottom) por encima del top del glifo real de la letra, con el margen
+    // de ~8px que el fix documenta en immersive.css ("aire limpio sobre el
+    // glifo"). Con margen de 1px (como en Tono-solo) el bug no se detecta
+    // aquí: el `top: 1.75em` viejo deja ~6px de aire, no negativo, porque
+    // Range.getBoundingClientRect mide el glifo más ajustado que la caja
+    // visual con la que se calibró el fix contra el preview real. 8px es el
+    // umbral mínimo que separa el aire "limpio" (con fix, ~43px) del aire
+    // "apretado" (sin fix, ~6px) sin ser un número arbitrario.
+    expect(noteRect.bottom).toBeLessThanOrEqual(glyphRect.top - 8);
   });
 });

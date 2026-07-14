@@ -309,6 +309,39 @@ body.immersive-active > .floating-tuner {
   padding-top: 1.85em;
 }
 
+/* ─── Nota promovida en MIXTO dentro de immersive (bug real iter. 6, captura
+   de usuario: línea activa "dormir tranquiiilo", G3 montada sobre la "o") ───
+   En full view la línea EN FOCO siempre se pinta con el builder MIXTO
+   (`.lyrics__line--mix`, ver ImmersiveView.buildLine) sin importar el toggle
+   Tono/Acordes. El `top: 1.75em` de components.css (nota promovida mixta) se
+   calibró para la vista normal; resuelto contra el font-size chico del riel de
+   nota en immersive (0.52em de la línea, ver `.imm-v1 .mix-rail--note` arriba)
+   deja la nota promovida DENTRO del glifo grande de la línea activa (2.1rem):
+   medido en vivo (preview 7b0858ed) la nota caía en t266–b291 sobre el glifo
+   t258–b325.
+   La banda de acorde vacía sobre la letra (segTop→lyricTop, ~26px a este
+   tamaño) es exactamente donde debe subir la nota. `top: -0.35em` (em-de-nota)
+   la sube a t226–b250 → ~8px de aire limpio sobre el glifo (top 258), sin
+   invadir la fila anterior del rollo (queda dentro del padding-top de línea).
+   Escala igual para la fila activa y la vecina porque la nota es 0.52em en
+   ambas. Calibrado midiendo rects en Playwright sobre el preview real (no
+   harness: en full view el foco es MIXTO, el harness tono-solo dio verde
+   falso — ver labels-sin-empuje iter. 6). */
+.imm-v1 .mix-seg--note-flip .mix-rail--note i {
+  top: -0.35em;
+}
+/* Conector (leader line) recalibrado para immersive: el `::after` de
+   components.css apunta a la posición NORMAL de la nota (top 3.15em, ~292px),
+   pero acá la nota subió a la banda de acorde, así que el conector quedaría
+   colgando bajo la letra. Reubicado para tender el punteado desde el borde
+   inferior de la nota (~b250, 0.94em bajo segTop en em-de-riel) hasta el tope
+   del glifo (~t258), cubriendo el hueco de ~8px sin pisar ninguno de los dos.
+   Calibrado en el mismo pase Playwright. */
+.imm-v1 .mix-seg--note-flip .mix-rail--note::after {
+  top: 0.94em;
+  height: 0.42em;
+}
+
 /* Legibilidad del acorde en la línea ACTIVA (hallazgo "acordes casi
    invisibles" en modo mixed): la garantiza el color propio --imm-chord sobre
    el fondo oscuro del overlay (independiente del token compartido). El

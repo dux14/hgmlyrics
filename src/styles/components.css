@@ -615,6 +615,25 @@
   width: 0;
   margin: 0;
 }
+/* Conector visual (leader line) entre la nota promovida y su sílaba: sin
+   esto, la nota volada arriba queda visualmente huérfana (feedback real de
+   usuario — no se distingue de qué sílaba es, podía leerse como de la
+   vecina). Pseudo-elemento sobre `.float-label` (ya lleva la clase de voz →
+   `currentColor` correcto) para no tocar el layout de la sílaba: fuera de
+   flujo, mismo `color-mix` que el subrayado de la nota (45% de currentColor)
+   para que ambos elementos se lean como una sola anotación. `top`/`height`
+   calibrados con Playwright (harness ad-hoc, caso "dormir tranquiiilo") para
+   que el conector arranque justo bajo el subrayado de la nota y termine
+   justo sobre el glifo de la sílaba, sin pisar ninguno de los dos. */
+.lyrics__line--tono .line-seg--note-flip .float-label.tono-note::after {
+  content: '';
+  position: absolute;
+  top: 1.35em;
+  left: 0;
+  width: 0;
+  height: 0.44em;
+  border-left: 1.5px dotted color-mix(in srgb, currentColor 45%, transparent);
+}
 /* La fila con al menos una nota promovida necesita aire arriba para que la
    nota volada no roce la línea anterior. Limitación aceptada: con wrap
    multilínea, una promoción en la fila 2+ (no la primera del renglón) puede
@@ -706,6 +725,27 @@
   position: absolute;
   top: 1.75em;
   left: 0;
+}
+/* Conector visual (leader line), mismo propósito que en Tono-solo arriba
+   (ver ese comentario). Aquí va en `.mix-rail--note` (lleva la clase de
+   voz → `currentColor` correcto), NO en el `<i>` — el `<i>` es el que se
+   mueve (`position: absolute`), pero el riel sigue en flujo como ancla
+   estable para el pseudo-elemento. Su containing block real es `.mix-seg`
+   (`position: relative`, ver arriba), no el propio riel (que no está
+   posicionado) — por eso `top` se calibró en unidades absolutas desde el
+   TOPE del segmento, no relativas al riel. Calibrado con el mismo harness
+   Playwright que Tono-solo: el hueco vertical libre entre el subrayado de
+   la nota y la fila de letra es angosto en Mixto (apenas ~4px a este
+   tamaño), así que el conector queda corto a propósito — preferible a que
+   pise texto. */
+.mix-seg--note-flip .mix-rail--note::after {
+  content: '';
+  position: absolute;
+  top: 3.15em;
+  left: 0;
+  width: 0;
+  height: 0.18em;
+  border-left: 1.5px dotted color-mix(in srgb, currentColor 45%, transparent);
 }
 /* Con al menos una nota promovida en la línea, el riel de acorde crece EN
    TODA la línea (uniforme para las dos filas de wrap si las hay) para dejar

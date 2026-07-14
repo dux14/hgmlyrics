@@ -692,5 +692,88 @@ test.describe('etiquetas de acorde/nota: sin empuje + anti-colision (geometria)'
         expect(Math.abs(leftsWith[i] - leftsWithout[i])).toBeLessThan(1.5);
       }
     });
+
+    // Feedback de usuario: la nota promovida quedaba huérfana visualmente
+    // (no se distinguía a qué sílaba pertenecía). El fix agrega un conector
+    // (leader line, pseudo-elemento `::after`) que solo debe existir en el
+    // segmento PROMOVIDO, nunca en uno sin promover — jsdom no resuelve
+    // pseudo-elementos con geometría, por eso esto vive en e2e (Playwright),
+    // no en un unit test.
+    test('Tono-solo: el segmento promovido tiene conector visual (::after), el no promovido no', async ({
+      page,
+    }) => {
+      const html = buildTonoLineHTML(PROMO_LINE, 'sop1', 'voice-text--soprano', {});
+
+      await page.setViewportSize({ width: 900, height: 400 });
+      await page.setContent(
+        `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--tono">${html}</div></div>`,
+      );
+      await page.addStyleTag({ content: TOKENS_CSS });
+      await page.addStyleTag({ path: CSS_PATH });
+      await injectLabelOverlap(page);
+
+      await page.evaluate(() => {
+        window.resolveLabelOverlaps(document.querySelector('.lyrics__line--tono'));
+      });
+
+      const result = await page.evaluate(() => {
+        const flipped = document.querySelector('.line-seg--note-flip .float-label.tono-note');
+        const notFlipped = document.querySelector(
+          '.line-seg:not(.line-seg--note-flip) .float-label.tono-note',
+        );
+        const flippedAfter = getComputedStyle(flipped, '::after');
+        const notFlippedAfter = getComputedStyle(notFlipped, '::after');
+        return {
+          flippedContent: flippedAfter.content,
+          flippedBorderLeftWidth: parseFloat(flippedAfter.borderLeftWidth),
+          notFlippedContent: notFlippedAfter.content,
+          notFlippedBorderLeftWidth: parseFloat(notFlippedAfter.borderLeftWidth),
+        };
+      });
+
+      expect(result.flippedContent).not.toBe('none');
+      expect(result.flippedBorderLeftWidth).toBeGreaterThan(0);
+      expect(result.notFlippedContent).toBe('none');
+      expect(result.notFlippedBorderLeftWidth).toBe(0);
+    });
+
+    test('Mixto: el segmento promovido tiene conector visual (::after), el no promovido no', async ({
+      page,
+    }) => {
+      const chords = [{ pos: 17, ch: 'G' }];
+      const html = buildMixedLineHTML(PROMO_LINE, chords, 'sop1', 'voice-text--soprano', {});
+
+      await page.setViewportSize({ width: 900, height: 400 });
+      await page.setContent(
+        `<div style="padding:16px;box-sizing:border-box;"><div class="lyrics__line lyrics__line--mix">${html}</div></div>`,
+      );
+      await page.addStyleTag({ content: TOKENS_CSS });
+      await page.addStyleTag({ path: CSS_PATH });
+      await injectLabelOverlap(page);
+
+      await page.evaluate(() => {
+        window.resolveLabelOverlaps(document.querySelector('.lyrics__line--mix'));
+      });
+
+      const result = await page.evaluate(() => {
+        const flipped = document.querySelector('.mix-seg--note-flip .mix-rail--note');
+        const notFlipped = document.querySelector(
+          '.mix-seg:not(.mix-seg--note-flip) .mix-rail--note',
+        );
+        const flippedAfter = getComputedStyle(flipped, '::after');
+        const notFlippedAfter = getComputedStyle(notFlipped, '::after');
+        return {
+          flippedContent: flippedAfter.content,
+          flippedBorderLeftWidth: parseFloat(flippedAfter.borderLeftWidth),
+          notFlippedContent: notFlippedAfter.content,
+          notFlippedBorderLeftWidth: parseFloat(notFlippedAfter.borderLeftWidth),
+        };
+      });
+
+      expect(result.flippedContent).not.toBe('none');
+      expect(result.flippedBorderLeftWidth).toBeGreaterThan(0);
+      expect(result.notFlippedContent).toBe('none');
+      expect(result.notFlippedBorderLeftWidth).toBe(0);
+    });
   });
 });

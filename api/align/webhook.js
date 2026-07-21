@@ -7,6 +7,29 @@ import { allowMethods, withErrors } from '../_lib/http.js';
 import { verifyModalSignature } from '../_lib/modal.js';
 import { projectCanonicalLines } from '../_lib/align.js';
 import { validateBeats } from '../_lib/beats.js';
+import { applyPipelinePhaseEvent } from '../_lib/pipeline/process.js';
+
+// Puente hacia el run unificado (pipeline por canción): este webhook es el
+// LEGACY de alineamiento standalone, pero cuando la fase `sync` de un run está
+// corriendo, este es el único callback que sabe si el align terminó. Sin este
+// puente `sync` queda 'running' para siempre y el run nunca completa (Critical
+// #3 del code-review). Si no hay run activo (align standalone, sin pipeline)
+// no hace nada — preserva el flujo legacy intacto.
+// NOTA: no dispara auto-advance a `clips` — eso depende del snapshot de letra
+// aprobado (plan C, aún no implementado).
+async function notifyPipelineSync(songId, ok, error) {
+  try {
+    const [run] = await sql`
+      SELECT id, phases FROM song_pipeline_runs
+      WHERE song_id = ${songId} AND status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')
+      ORDER BY created_at DESC LIMIT 1
+    `;
+    if (!run || run.phases?.sync?.status !== 'running') return;
+    await applyPipelinePhaseEvent(sql, run.id, { phase: 'sync', ok, error });
+  } catch (e) {
+    console.error('notifyPipelineSync falló:', e);
+  }
+}
 
 // Raw body necesario para verificar la firma HMAC.
 export const config = {
@@ -93,6 +116,7 @@ export default withErrors(async (req, res) => {
       SET status = 'failed', error = ${String(error).slice(0, 300)}
       WHERE song_id = ${songId} AND status = 'processing'
     `;
+    await notifyPipelineSync(songId, false, String(error).slice(0, 300));
     res.status(200).json({ status: 'failed' });
     return;
   }
@@ -107,6 +131,7 @@ export default withErrors(async (req, res) => {
       SET status = 'failed', error = ${`Timings inválidos: ${validationError}`.slice(0, 300)}
       WHERE song_id = ${songId} AND status = 'processing'
     `;
+    await notifyPipelineSync(songId, false, `Timings inválidos: ${validationError}`.slice(0, 300));
     // Estructuralmente valido el request, semanticamente invalidos los datos:
     // no es un error del caller, no reintenta Modal con un 4xx.
     res.status(200).json({ status: 'failed' });
@@ -143,5 +168,6 @@ export default withErrors(async (req, res) => {
         bpm_detected = ${beatsRow ? beatsRow.bpm : null}, beats = ${beatsRow ? sql.json(beatsRow) : null}
     WHERE song_id = ${songId} AND status = 'processing'
   `;
+  await notifyPipelineSync(songId, true);
   res.status(200).json({ status: 'ready' });
 });

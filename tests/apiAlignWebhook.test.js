@@ -38,6 +38,11 @@ vi.mock('../src/lib/voiceSystem.js', () => ({
   validateSongV3: vi.fn(),
 }));
 
+const applyPipelinePhaseEventMock = vi.fn(async () => ({ status: 'running', next: {}, songId: 'song-1' }));
+vi.mock('../api/_lib/pipeline/process.js', () => ({
+  applyPipelinePhaseEvent: (...args) => applyPipelinePhaseEventMock(...args),
+}));
+
 process.env.SUPABASE_URL = 'https://x.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'key';
 process.env.DATABASE_URL = 'postgresql://test';
@@ -82,6 +87,7 @@ function modalAlignReq(bodyObj) {
 beforeEach(() => {
   sqlResponses.length = 0;
   sqlCalls.length = 0;
+  applyPipelinePhaseEventMock.mockClear();
 });
 
 // Fixture: 3 lineas canonicas (misma proyeccion que api/_lib/align.js).
@@ -378,6 +384,62 @@ describe('POST /api/align/webhook — lines estructuralmente invalidas (200 + fa
     expect(res.statusCode).toBe(200);
     const update = sqlCalls.find((c) => c.text.startsWith('UPDATE song_line_timings'));
     expect(update.text).toContain("status = 'processing'");
+  });
+});
+
+describe('POST /api/align/webhook — puente al run unificado (fase sync)', () => {
+  it('ready + run activo con sync running → notifica applyPipelinePhaseEvent({phase:sync, ok:true})', async () => {
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    sqlResponses.push([]); // UPDATE song_line_timings ... status='ready'
+    sqlResponses.push([{ id: 'run-1', phases: { sync: { status: 'running' } } }]); // SELECT run activo
+    const lines = [
+      { i: 0, startMs: 0 },
+      { i: 1, startMs: 1200 },
+    ];
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
+    expect(res.statusCode).toBe(200);
+    const runSelect = sqlCalls.find((c) => c.text.startsWith('SELECT id, phases FROM song_pipeline_runs'));
+    expect(runSelect).toBeTruthy();
+    expect(applyPipelinePhaseEventMock).toHaveBeenCalledTimes(1);
+    expect(applyPipelinePhaseEventMock.mock.calls[0][1]).toBe('run-1');
+    expect(applyPipelinePhaseEventMock.mock.calls[0][2]).toEqual({ phase: 'sync', ok: true, error: undefined });
+  });
+
+  it('failed (error de Modal) + run activo con sync running → notifica ok:false', async () => {
+    sqlResponses.push([]); // UPDATE song_line_timings ... status='failed'
+    sqlResponses.push([{ id: 'run-2', phases: { sync: { status: 'running' } } }]); // SELECT run activo
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', error: 'Modal boom' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(applyPipelinePhaseEventMock).toHaveBeenCalledTimes(1);
+    expect(applyPipelinePhaseEventMock.mock.calls[0][2]).toEqual({
+      phase: 'sync',
+      ok: false,
+      error: 'Modal boom',
+    });
+  });
+
+  it('ready SIN run activo → NO toca song_pipeline_runs (flujo legacy intacto)', async () => {
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    sqlResponses.push([]); // UPDATE song_line_timings ... status='ready'
+    sqlResponses.push([]); // SELECT run activo → sin filas
+    const lines = [{ i: 0, startMs: 0 }];
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(applyPipelinePhaseEventMock).not.toHaveBeenCalled();
+  });
+
+  it('ready con run activo pero sync NO running → NO notifica (fase ya terminal o distinta)', async () => {
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    sqlResponses.push([]); // UPDATE song_line_timings ... status='ready'
+    sqlResponses.push([{ id: 'run-3', phases: { sync: { status: 'done' } } }]); // SELECT run activo
+    const lines = [{ i: 0, startMs: 0 }];
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(applyPipelinePhaseEventMock).not.toHaveBeenCalled();
   });
 });
 

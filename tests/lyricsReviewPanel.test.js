@@ -98,6 +98,18 @@ describe('LyricsReviewPanel', () => {
     expect(approveBtn.textContent).toBe('Aprobar letra');
   });
 
+  it('el header sticky muestra el contador de pendientes junto al pill de temperatura', async () => {
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+    const header = el.querySelector('.lrp__header');
+    const headerPending = header.querySelector('.lrp__header-pending');
+    const headerTemp = header.querySelector('.temp');
+    expect(headerPending).not.toBeNull();
+    // 1 conflicto + 1 vocalización sin decidir del fixture base.
+    expect(headerPending.textContent).toBe('2 pendientes');
+    expect(headerTemp.textContent).toBe('80%');
+  });
+
   it('click en "Usar canónica" llama sendLyricsAction y habilita Aprobar al resolverse todo', async () => {
     sendLyricsAction.mockResolvedValue(resolvedResult());
     const el = await LyricsReviewPanel({ songId: 'song-1' });

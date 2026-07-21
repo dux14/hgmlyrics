@@ -262,6 +262,9 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
     el.className = `lrp${motion}`;
     el.innerHTML = `
       <div class="lrp__header">
+        <span class="lrp__header-pending${pending === 0 ? ' is-done' : ''}">${
+          pending === 0 ? 'Listo' : `${pending} pendiente${pending === 1 ? '' : 's'}`
+        }</span>
         <span class="temp lrp__temp">${Math.round(state.temperature * 100)}%</span>
       </div>
       <div class="lrp__body">

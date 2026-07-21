@@ -6,7 +6,7 @@ DAG:
   S1 (extract ep_317+htdemucs_6s) ─┐
   S2 (structure SongFormer)  ├─ paralelo al inicio
                               │
-  S3 (leadBacking MedleyVox) ┤ arranca cuando S1 termina (necesita vocals key)
+  S3 (leadBacking Mel-RoFormer Karaoke) ┤ arranca cuando S1 termina (necesita vocals key)
   S4 (gender chorus_bs_roformer) ┘ arranca cuando S1 termina (idem, flag OFF)
 
 Cada nodo postea su propio webhook al terminar (éxito o fallo).
@@ -33,7 +33,7 @@ import modal
 from sections._common import extract_storage_key, post_webhook
 from sections.extract import run_extract as _run_extract_impl
 from sections.gender import run_gender as _run_gender_impl
-from sections.medley_vox import run_medley_vox as _run_medley_vox_impl
+from sections.lead_backing import run_lead_backing as _run_lead_backing_impl
 from sections.songformer import run_songformer as _run_songformer_impl
 
 
@@ -138,25 +138,27 @@ def s2_structure(payload: dict) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# S3 — lead / backing (MedleyVox real, GPU)
+# S3 — lead / backing (Mel-RoFormer Karaoke, GPU)
 # ──────────────────────────────────────────────────────────────────────────────
 
-@app.function(image=image, secrets=_webhook_secrets, gpu="T4", timeout=900)
+@app.function(image=image, secrets=_webhook_secrets, gpu="T4", timeout=600)
 def s3_lead_backing(payload: dict, vocals_key: str | None) -> None:
     """
-    S3: separa voz líder (lead) y coros (backing) con MedleyVox.
+    S3: separa voz líder (lead) y coros (backing) con Mel-RoFormer Karaoke
+    (checkpoint elegido en Task 4, SDR ~10.2, reemplaza a MedleyVox SDR ~6.9).
 
-    Usa el checkpoint Cyru5/MedleyVox@"vocals 238" (Conv-TasNet STFT, 24 kHz).
     Re-extrae el stem vocal desde el audio original (payload["input"]["getUrl"])
     porque Modal no tiene la service-role key de Supabase para firmar un GET
     del objeto ya subido por S1. vocals_key se recibe por compatibilidad con el
     spawn del orquestador pero NO se usa para descargar audio.
 
-    Timeout: 900 s para dar margen a la descarga de pesos desde HuggingFace
-    (~466 MB vocals.pth) en cold start + extracción vocal BS-RoFormer (~120 s)
-    + inferencia MedleyVox (~60-120 s en T4).
+    Timeout: bajado de 900 a 600 s — el checkpoint karaoke se resuelve como
+    cualquier otro modelo de audio-separator (sin descarga de pesos vía
+    huggingface_hub ni carga de asteroid/TDConvNet), cold start más corto que
+    MedleyVox. Sigue dando margen a extracción vocal BS-RoFormer (~120 s) +
+    inferencia karaoke (~60-120 s en T4).
     """
-    _run_medley_vox_impl(payload)
+    _run_lead_backing_impl(payload)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

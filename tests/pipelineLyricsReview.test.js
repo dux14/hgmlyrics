@@ -112,6 +112,55 @@ describe('applyReviewAction', () => {
     const merged = applyReviewAction(split, { type: 'mergeLines', section: 0, line: 0 });
     expect(merged.sections[0].lines[0].text).toBe('Nadie me ama como tu me amas');
   });
+  it('splitLine reparte los chords por posicion y reajusta los del segundo renglon', () => {
+    const dbSectionsChords = [
+      { type: 'chorus', lines: [
+        { text: 'Nadie me ama como tu me amas', chords: [{ ch: 'D', pos: 2 }, { ch: 'G', pos: 24 }] },
+      ] },
+    ];
+    const withChords = buildReviewDoc({
+      dbSections: dbSectionsChords,
+      canonical: null,
+      transcription: { text: '', words: [], perLine: [], transLines: [] },
+    });
+    // afterWord:4 -> primer renglon "Nadie me ama como tu" (20 caracteres),
+    // cutOffset = 21. pos:2 cae antes del corte, pos:24 cae despues.
+    const d = applyReviewAction(withChords, { type: 'splitLine', section: 0, line: 0, afterWord: 4 });
+    expect(d.sections[0].lines[0].chords).toEqual([{ ch: 'D', pos: 2 }]);
+    expect(d.sections[0].lines[1].chords).toEqual([{ ch: 'G', pos: 3 }]); // 24 - 21
+  });
+  it('mergeLines fusiona los chords de ambos renglones reajustando los del segundo', () => {
+    const dbSectionsChords = [
+      { type: 'chorus', lines: [
+        { text: 'Nadie me ama como tu', chords: [{ ch: 'D', pos: 2 }] },
+        { text: 'me amas', chords: [{ ch: 'G', pos: 3 }] },
+      ] },
+    ];
+    const withChords = buildReviewDoc({
+      dbSections: dbSectionsChords,
+      canonical: null,
+      transcription: { text: '', words: [], perLine: [], transLines: [] },
+    });
+    // offset = largo del primer texto (20) + separador (1) = 21.
+    const d = applyReviewAction(withChords, { type: 'mergeLines', section: 0, line: 0 });
+    expect(d.sections[0].lines[0].text).toBe('Nadie me ama como tu me amas');
+    expect(d.sections[0].lines[0].chords).toEqual([{ ch: 'D', pos: 2 }, { ch: 'G', pos: 24 }]);
+  });
+  it('mergeLines fusiona voiceRanges reajustando start/end del segundo renglon', () => {
+    const dbSectionsVoice = [
+      { type: 'chorus', lines: [
+        { text: 'Nadie me ama como tu', voiceRanges: [{ start: 0, end: 5 }] },
+        { text: 'me amas', voiceRanges: [{ start: 0, end: 2 }] },
+      ] },
+    ];
+    const withVoice = buildReviewDoc({
+      dbSections: dbSectionsVoice,
+      canonical: null,
+      transcription: { text: '', words: [], perLine: [], transLines: [] },
+    });
+    const d = applyReviewAction(withVoice, { type: 'mergeLines', section: 0, line: 0 });
+    expect(d.sections[0].lines[0].voiceRanges).toEqual([{ start: 0, end: 5 }, { start: 21, end: 23 }]);
+  });
   it('acceptVocalization la convierte en renglon vocalization tras la linea ancla', () => {
     const d = applyReviewAction(doc(), { type: 'acceptVocalization', index: 0, section: 0, afterLine: 1 });
     expect(d.sections[0].lines[2].vocalization).toBe(true);

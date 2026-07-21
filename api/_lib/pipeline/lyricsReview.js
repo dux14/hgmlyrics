@@ -266,6 +266,64 @@ function requireInt(value, name) {
   return value;
 }
 
+// Incluye `key` en el objeto solo si `value` no es undefined — evita crear
+// campos vacios/undefined donde la linea original no los tenia (regla 3 de
+// C1: preservar la ausencia de chords/voiceRanges/groups).
+function withOptionalField(key, value) {
+  return value === undefined ? {} : { [key]: value };
+}
+
+// Reparte items anclados por posicion de caracter (chords: {pos}, ver
+// voiceRanges abajo con {start,end}) segun un offset de corte de texto: los
+// que caen antes del corte quedan en el primer renglon con su posicion sin
+// tocar; los que caen en/despues pasan al segundo renglon con la posicion
+// reajustada restando el offset. `keys` son los campos de posicion a
+// reajustar; se clasifica por el primero (`pos` o `start`). Ausencia
+// (undefined) se preserva como undefined en ambos lados, sin inventar
+// arrays vacios.
+function splitPositional(items, cutOffset, keys) {
+  if (!items) return [undefined, undefined];
+  const classifyKey = keys[0];
+  const before = items.filter((it) => it[classifyKey] < cutOffset);
+  const after = items
+    .filter((it) => it[classifyKey] >= cutOffset)
+    .map((it) => {
+      const shifted = { ...it };
+      for (const k of keys) shifted[k] -= cutOffset;
+      return shifted;
+    });
+  return [before.length ? before : undefined, after.length ? after : undefined];
+}
+
+// Reajusta items posicionales sumandoles `offset` (usado al fusionar: la
+// metadata del segundo renglon se corre por el largo del primero + separador).
+function shiftPositional(items, offset, keys) {
+  if (!items) return undefined;
+  return items.map((it) => {
+    const shifted = { ...it };
+    for (const k of keys) shifted[k] += offset;
+    return shifted;
+  });
+}
+
+// Concatena dos listas opcionales sin inventar un array donde ambas fuentes
+// son undefined (preserva la ausencia).
+function concatOptional(a, b) {
+  if (a === undefined && b === undefined) return undefined;
+  return [...(a ?? []), ...(b ?? [])];
+}
+
+// Quita chords/voiceRanges/groups de una linea para reconstruir esos campos
+// a mano (evita que el spread `...line` arrastre el array completo del
+// original con posiciones invalidas para el renglon nuevo).
+function stripPositionalFields(line) {
+  const base = { ...line };
+  delete base.chords;
+  delete base.voiceRanges;
+  delete base.groups;
+  return base;
+}
+
 /**
  * Aplica una accion de revision sobre el documento y devuelve un documento
  * NUEVO (no muta `doc`). Accion sobre un indice inexistente lanza RangeError.
@@ -307,8 +365,34 @@ export function applyReviewAction(doc, action) {
       }
       const first = words.slice(0, afterWord + 1).join(' ');
       const second = words.slice(afterWord + 1).join(' ');
-      const firstLine = { ...line, text: first };
-      const secondLine = { ...line, text: second };
+      // Offset de corte en el texto: largo del prefijo + el separador (un
+      // espacio) usado para unir las palabras del primer renglon. chords y
+      // voiceRanges estan anclados por posicion de caracter en el texto
+      // ORIGINAL — hay que repartirlos segun ese corte, no copiarlos enteros
+      // a las dos mitades (eso invalidaria sus posiciones).
+      const cutOffset = first.length + 1;
+      const [chordsFirst, chordsSecond] = splitPositional(line.chords, cutOffset, ['pos']);
+      const [voiceRangesFirst, voiceRangesSecond] = splitPositional(
+        line.voiceRanges, cutOffset, ['start', 'end'],
+      );
+      // `groups` no tiene confirmado un unico campo de posicion como chords
+      // (`pos`) o voiceRanges (`start`/`end`): ante la duda, conservador —
+      // se queda entero en el primer renglon (no se duplica ni se pierde,
+      // pero tampoco se reubica a ciegas sin saber su shape).
+      const base = stripPositionalFields(line);
+      const firstLine = {
+        ...base,
+        text: first,
+        ...withOptionalField('chords', chordsFirst),
+        ...withOptionalField('voiceRanges', voiceRangesFirst),
+        ...withOptionalField('groups', line.groups),
+      };
+      const secondLine = {
+        ...base,
+        text: second,
+        ...withOptionalField('chords', chordsSecond),
+        ...withOptionalField('voiceRanges', voiceRangesSecond),
+      };
       section.lines.splice(action.line, 1, firstLine, secondLine);
       break;
     }
@@ -316,7 +400,25 @@ export function applyReviewAction(doc, action) {
       const section = requireSection(next, action.section);
       const line = requireLine(section, action.line);
       const nextLine = requireLine(section, action.line + 1);
-      const merged = { ...line, text: `${line.text} ${nextLine.text}`.trim() };
+      // Offset para reubicar la metadata del segundo renglon: largo del
+      // texto del primero + el separador con el que se concatenan.
+      const offset = line.text.length + 1;
+      const mergedChords = concatOptional(line.chords, shiftPositional(nextLine.chords, offset, ['pos']));
+      const mergedVoiceRanges = concatOptional(
+        line.voiceRanges, shiftPositional(nextLine.voiceRanges, offset, ['start', 'end']),
+      );
+      // `groups`: mismo criterio conservador que en splitLine (shape de
+      // posicion no confirmado) — se concatenan ambos arrays tal cual, sin
+      // reubicar ningun campo.
+      const mergedGroups = concatOptional(line.groups, nextLine.groups);
+      const base = stripPositionalFields(line);
+      const merged = {
+        ...base,
+        text: `${line.text} ${nextLine.text}`.trim(),
+        ...withOptionalField('chords', mergedChords),
+        ...withOptionalField('voiceRanges', mergedVoiceRanges),
+        ...withOptionalField('groups', mergedGroups),
+      };
       section.lines.splice(action.line, 2, merged);
       break;
     }

@@ -14,8 +14,8 @@
 //                                                  hace upsert por cancion
 //                                                  matcheada.
 //
-// Requiere env: ANTHROPIC_API_KEY (la provee Samu) y DATABASE_URL (dry-run
-// no necesita DATABASE_URL, solo --commit).
+// Requiere env: ANTHROPIC_API_KEY (la provee Samu) y DATABASE_URL en AMBOS
+// modos (dry-run también consulta `songs` para matchear títulos).
 import { readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -35,12 +35,23 @@ const PDF_PATH = path.join(__dirname, '..', 'Cancionero + Acordes 2026.pdf');
 const OUTPUT_PATH = path.join(__dirname, 'cancionero-extracted.json');
 const SOURCE_LABEL = 'cancionero-2026-pdf';
 
+// Fail-fast de DATABASE_URL, válido en AMBOS modos (dry-run también lo
+// necesita para matchear contra `songs`). Se llama al inicio de cada modo,
+// antes de leer el PDF y ANTES de llamar a Claude -- evita gastar una
+// llamada completa a Claude para después fallar por falta de connection
+// string.
+function requireDatabaseUrl() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error('Falta DATABASE_URL.');
+  }
+}
+
 async function extractWithClaude() {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error('Falta ANTHROPIC_API_KEY. La provee Samu.');
   }
   if (!existsSync(PDF_PATH)) {
-    throw new Error(`No se encontro el PDF en ${PDF_PATH}.`);
+    throw new Error(`No se encontró el PDF en ${PDF_PATH}.`);
   }
   const pdfBase64 = (await readFile(PDF_PATH)).toString('base64');
   const client = new Anthropic();
@@ -63,10 +74,9 @@ async function extractWithClaude() {
   });
   const msg = await stream.finalMessage();
   if (msg.stop_reason === 'max_tokens') {
-    console.warn(
-      'AVISO: la respuesta se trunco por max_tokens. El cancionero puede exceder ' +
-        '64000 tokens de output -- si pasa, hay que chunkear la extracción por rangos ' +
-        'de páginas (no implementado en esta version simple).',
+    throw new Error(
+      'El output se truncó (max_tokens): el cancionero excede el límite; hay que ' +
+        'chunkear por rangos de páginas.',
     );
   }
   const textBlock = msg.content.find((b) => b.type === 'text');
@@ -79,6 +89,7 @@ async function fetchSongsFromDb(sql) {
 }
 
 async function runDryRun() {
+  requireDatabaseUrl();
   const canciones = await extractWithClaude();
   const sql = postgres(process.env.DATABASE_URL, { ssl: 'require', prepare: false, max: 1 });
   let songsFromDb;
@@ -105,6 +116,7 @@ async function runDryRun() {
 }
 
 async function runCommit() {
+  requireDatabaseUrl();
   if (!existsSync(OUTPUT_PATH)) {
     throw new Error(
       `No existe ${OUTPUT_PATH}. Corre primero el dry-run y revisa el JSON antes de --commit.`,
@@ -122,7 +134,10 @@ async function runCommit() {
       await sql`
         INSERT INTO song_lyrics_canonical (song_id, source, content)
         VALUES (${songId}, ${SOURCE_LABEL}, ${sql.json(content)})
-        ON CONFLICT (song_id) DO UPDATE SET content = EXCLUDED.content, source = EXCLUDED.source
+        ON CONFLICT (song_id) DO UPDATE SET
+          content = EXCLUDED.content,
+          source = EXCLUDED.source,
+          ingested_at = now()
       `;
       console.log(`commiteado ${songId} ("${content.titulo}")`);
     }

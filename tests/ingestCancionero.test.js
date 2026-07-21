@@ -17,9 +17,7 @@ import {
 describe('parseExtraction', () => {
   it('parsea un JSON válido y devuelve las canciones', () => {
     const text = JSON.stringify({
-      canciones: [
-        { titulo: 'Sion', secciones: [{ lineas: [{ texto: 'primera linea' }] }] },
-      ],
+      canciones: [{ titulo: 'Sion', secciones: [{ lineas: [{ texto: 'primera linea' }] }] }],
     });
     const canciones = parseExtraction(text);
     expect(canciones).toHaveLength(1);
@@ -77,9 +75,7 @@ describe('buildUpserts', () => {
         songId: 'song-sion',
         cancion: {
           titulo: 'Sion',
-          secciones: [
-            { tipo: 'estrofa', lineas: [{ texto: 'primera linea', acordes: 'Do Sol' }] },
-          ],
+          secciones: [{ tipo: 'estrofa', lineas: [{ texto: 'primera linea', acordes: 'Do Sol' }] }],
         },
       },
     ];
@@ -92,7 +88,7 @@ describe('buildUpserts', () => {
     });
   });
 
-  it('omite acordes cuando no vienen en la extraccion', () => {
+  it('omite acordes cuando no vienen en la extracción', () => {
     const linked = [
       {
         songId: 'song-x',
@@ -169,10 +165,24 @@ describe('flujo dry-run (mocks de SDK + postgres + fs)', () => {
     expect(mockStream).not.toHaveBeenCalled();
   });
 
+  it('sin DATABASE_URL falla con mensaje claro y no llama a la API', async () => {
+    delete process.env.DATABASE_URL;
+    const { runDryRun } = await import('../scripts/ingest-cancionero.mjs');
+    await expect(runDryRun()).rejects.toThrow(/DATABASE_URL/);
+    expect(mockStream).not.toHaveBeenCalled();
+  });
+
   it('si no existe el PDF, falla con mensaje claro', async () => {
     mockExistsSync.mockReturnValue(false);
     const { runDryRun } = await import('../scripts/ingest-cancionero.mjs');
     await expect(runDryRun()).rejects.toThrow(/PDF/);
+  });
+
+  it('si la respuesta se trunca por max_tokens, falla con mensaje claro', async () => {
+    mockReadFile.mockResolvedValue(Buffer.from('%PDF-fake%'));
+    mockFinalMessage.mockResolvedValue({ stop_reason: 'max_tokens', content: [] });
+    const { runDryRun } = await import('../scripts/ingest-cancionero.mjs');
+    await expect(runDryRun()).rejects.toThrow(/max_tokens/);
   });
 
   it('extrae, matchea contra songs y escribe el JSON de revisión', async () => {
@@ -196,9 +206,7 @@ describe('flujo dry-run (mocks de SDK + postgres + fs)', () => {
     const { runDryRun } = await import('../scripts/ingest-cancionero.mjs');
     await runDryRun();
 
-    expect(mockStream).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'claude-sonnet-5' }),
-    );
+    expect(mockStream).toHaveBeenCalledWith(expect.objectContaining({ model: 'claude-sonnet-5' }));
     expect(mockWriteFile).toHaveBeenCalledTimes(1);
     const [, jsonWritten] = mockWriteFile.mock.calls[0];
     const parsed = JSON.parse(jsonWritten);
@@ -230,12 +238,18 @@ describe('flujo --commit (mocks de postgres + fs)', () => {
     const { runCommit } = await import('../scripts/ingest-cancionero.mjs');
     await runCommit();
 
-    expect(topLevelResponses).toHaveLength(0); // se consumio el upsert
+    expect(topLevelResponses).toHaveLength(0); // se consumió el upsert
   });
 
   it('si no existe el JSON de revisión, falla pidiendo correr el dry-run primero', async () => {
     mockExistsSync.mockReturnValue(false);
     const { runCommit } = await import('../scripts/ingest-cancionero.mjs');
     await expect(runCommit()).rejects.toThrow(/dry-run/);
+  });
+
+  it('sin DATABASE_URL falla con mensaje claro', async () => {
+    delete process.env.DATABASE_URL;
+    const { runCommit } = await import('../scripts/ingest-cancionero.mjs');
+    await expect(runCommit()).rejects.toThrow(/DATABASE_URL/);
   });
 });

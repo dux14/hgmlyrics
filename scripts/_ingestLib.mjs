@@ -47,7 +47,7 @@ export const EXTRACTION_SCHEMA = {
   },
 };
 
-export const EXTRACTION_PROMPT = `Extrae TODAS las canciones de este cancionero en formato JSON segun el schema dado.
+export const EXTRACTION_PROMPT = `Extrae TODAS las canciones de este cancionero en formato JSON según el schema dado.
 
 Para cada cancion:
 - "titulo": el titulo tal como aparece impreso.

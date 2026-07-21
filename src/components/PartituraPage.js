@@ -10,6 +10,7 @@ import { skelBlock, skelLine } from '../lib/skeleton.js';
 import { PHASE_ORDER, phaseLabel, phaseProgress, isTerminalStatus } from '../lib/pitchProgress.js';
 import { escapeHtml, safeUrl } from '../lib/escape.js';
 import { createPoller } from '../lib/poller.js';
+import { renderVoiceLines } from '../lib/partituraRender.js';
 
 const POLL_MS = 3000;
 let poller = null;
@@ -341,17 +342,7 @@ async function renderResult(body, job, quota) {
 // letra, una columna por sílaba (texto arriba, nota debajo).
 function renderVoice(voiceKey, voice) {
   if (!voice?.lines) return '';
-  const lines = voice.lines
-    .map((line) => {
-      const syllables = (line.syllables ?? [])
-        .map((s) => {
-          const label = s.blank ? '' : s.ditto ? "''" : (s.note ?? '');
-          return `<span class="partitura__syl"><span class="partitura__syl-text">${escapeHtml(s.text)}</span><span class="partitura__syl-note">${escapeHtml(label)}</span></span>`;
-        })
-        .join('');
-      return `<p class="partitura__line">${syllables}</p>`;
-    })
-    .join('');
+  const lines = renderVoiceLines(voice);
   return `<section class="partitura__voice"><h3>${escapeHtml(voiceKey)}</h3>${lines}</section>`;
 }
 

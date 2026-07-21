@@ -164,7 +164,7 @@ describe('ToneLyrics — render', () => {
   beforeEach(() => {
     matchMediaMock = vi.fn().mockReturnValue({ matches: false });
     window.matchMedia = matchMediaMock;
-    Element.prototype.scrollIntoView = vi.fn();
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
   it('pinta líneas y sílabas con el texto de la voz base (lead)', () => {
@@ -207,7 +207,7 @@ describe('ToneLyrics — render', () => {
     expect(moreBtn).toBeTruthy();
     const panel = ohSyl.querySelector('.tone-more-panel');
     expect(panel.hidden).toBe(true);
-    moreBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    moreBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     expect(panel.hidden).toBe(false);
     expect(moreBtn.getAttribute('aria-expanded')).toBe('true');
   });
@@ -216,7 +216,7 @@ describe('ToneLyrics — render', () => {
 describe('ToneLyrics — setActiveTime', () => {
   beforeEach(() => {
     window.matchMedia = vi.fn().mockReturnValue({ matches: false });
-    Element.prototype.scrollIntoView = vi.fn();
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
   it('marca .hot la sílaba correcta por [start,end) y hace scroll a la línea', () => {
@@ -224,8 +224,8 @@ describe('ToneLyrics — setActiveTime', () => {
     setActiveTime(0.6);
     const hotSyl = el.querySelector('.tone-syl.hot');
     expect(hotSyl.querySelector('.tone-syl-text').textContent).toBe('vá');
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith(
+    expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalledWith(
       expect.objectContaining({ block: 'center', behavior: 'smooth' }),
     );
   });
@@ -234,14 +234,14 @@ describe('ToneLyrics — setActiveTime', () => {
     const { setActiveTime } = createToneLyrics({ analysis: makeAnalysis() });
     setActiveTime(0.35);
     setActiveTime(0.6);
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
   });
 
   it('respeta prefers-reduced-motion (behavior: auto)', () => {
     window.matchMedia = vi.fn().mockReturnValue({ matches: true });
     const { setActiveTime } = createToneLyrics({ analysis: makeAnalysis() });
     setActiveTime(0.35);
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith(
+    expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalledWith(
       expect.objectContaining({ behavior: 'auto' }),
     );
   });
@@ -250,14 +250,14 @@ describe('ToneLyrics — setActiveTime', () => {
 describe('ToneLyrics — tap en línea y destroy', () => {
   beforeEach(() => {
     window.matchMedia = vi.fn().mockReturnValue({ matches: false });
-    Element.prototype.scrollIntoView = vi.fn();
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
   it('tap en línea llama onSeek con el start (en segundos) de la primera sílaba', () => {
     const onSeek = vi.fn();
     const { el } = createToneLyrics({ analysis: makeAnalysis(), onSeek });
     const secondLine = el.querySelectorAll('.tone-line')[1];
-    secondLine.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    secondLine.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     expect(onSeek).toHaveBeenCalledWith(1.0);
   });
 
@@ -266,7 +266,7 @@ describe('ToneLyrics — tap en línea y destroy', () => {
     const { el, destroy } = createToneLyrics({ analysis: makeAnalysis(), onSeek });
     destroy();
     const line = el.querySelector('.tone-line');
-    line.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    line.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     expect(onSeek).not.toHaveBeenCalled();
   });
 
@@ -291,5 +291,71 @@ describe('ToneLyrics — analysis vacío', () => {
 
   it('analysis null no crashea', () => {
     expect(() => createToneLyrics({ analysis: null })).not.toThrow();
+  });
+});
+
+describe('ToneLyrics — voz secundaria más corta que la base', () => {
+  it('renderiza la base completa sin crashear cuando una voz tiene menos líneas/sílabas', () => {
+    const analysis = {
+      voices_present: ['lead', 'backing'],
+      voices: {
+        lead: {
+          lines: [
+            {
+              syllables: [
+                { text: 'Me', start: 0.31, end: 0.44, blank: false, ditto: false, note: 'C4' },
+                { text: 'he', start: 0.44, end: 0.55, blank: false, ditto: false, note: 'C4' },
+              ],
+            },
+            {
+              syllables: [
+                { text: 'Oh', start: 1.0, end: 1.2, blank: false, ditto: false, note: 'E4' },
+              ],
+            },
+          ],
+        },
+        // Voz más corta: una sola línea, con menos sílabas que la línea 0 de
+        // la base. Las sílabas de lead sin contraparte no deben mostrar nota
+        // de esta voz (optional chaining), y la línea 1 de la base tampoco
+        // crashea al no existir línea 1 en backing.
+        backing: {
+          lines: [
+            {
+              syllables: [
+                { text: 'Me', start: 0.31, end: 0.44, blank: false, ditto: false, note: 'G3' },
+              ],
+            },
+          ],
+        },
+      },
+    };
+
+    let result;
+    expect(() => {
+      result = createToneLyrics({ analysis });
+    }).not.toThrow();
+
+    const { el } = result;
+    const lines = el.querySelectorAll('.tone-line');
+    expect(lines.length).toBe(2);
+    expect(el.textContent).toContain('Me');
+    expect(el.textContent).toContain('he');
+    expect(el.textContent).toContain('Oh');
+
+    // 1ra sílaba de la línea 0 tiene nota en ambas voces.
+    const firstSyl = lines[0].querySelectorAll('.tone-syl')[0];
+    expect(firstSyl.querySelector('.tone-note--lead').textContent).toBe('C4');
+    expect(firstSyl.querySelector('.tone-note--alt').textContent).toBe('G3');
+
+    // 2da sílaba de la línea 0 ("he") no tiene contraparte en backing: solo
+    // muestra la nota de lead.
+    const secondSyl = lines[0].querySelectorAll('.tone-syl')[1];
+    expect(secondSyl.querySelector('.tone-note--lead').textContent).toBe('C4');
+    expect(secondSyl.querySelector('.tone-note--alt')).toBeNull();
+
+    // Línea 1 ("Oh") no existe en backing: solo nota de lead, sin crash.
+    const ohSyl = lines[1].querySelector('.tone-syl');
+    expect(ohSyl.querySelector('.tone-note--lead').textContent).toBe('E4');
+    expect(ohSyl.querySelector('.tone-note--alt')).toBeNull();
   });
 });

@@ -78,7 +78,7 @@ export function createToneLyrics({ analysis, onSeek } = {}) {
   let lastActiveLineEl = null;
 
   const voicesPresent = Array.isArray(analysis?.voices_present) ? analysis.voices_present : [];
-  const baseKey = voicesPresent.find((k) => analysis?.voices?.[k]?.lines);
+  const baseKey = voicesPresent.find((k) => analysis?.voices?.[k]?.lines?.length);
   const baseLines = baseKey ? (analysis.voices[baseKey].lines ?? []) : [];
 
   if (!baseKey || baseLines.length === 0) {
@@ -115,6 +115,22 @@ export function createToneLyrics({ analysis, onSeek } = {}) {
 
   el.innerHTML = html;
 
+  // Cache de nodos para setActiveTime (se llama ~4Hz en cada timeupdate del
+  // player): evita re-consultar el DOM completo con querySelectorAll en cada
+  // llamada. Si el DOM se reconstruye (re-render), llamar a rebuildLineCache().
+  let lineCache = [];
+  function rebuildLineCache() {
+    lineCache = [...el.querySelectorAll('.tone-line')].map((lineEl) => ({
+      lineEl,
+      syls: [...lineEl.querySelectorAll('.tone-syl')].map((sylEl) => ({
+        sylEl,
+        start: Number(sylEl.dataset.start),
+        end: Number(sylEl.dataset.end),
+      })),
+    }));
+  }
+  rebuildLineCache();
+
   el.addEventListener(
     'click',
     (e) => {
@@ -138,12 +154,8 @@ export function createToneLyrics({ analysis, onSeek } = {}) {
   function setActiveTime(seconds) {
     if (destroyed) return;
     let activeLineEl = null;
-    const lines = el.querySelectorAll('.tone-line');
-    for (const lineEl of lines) {
-      const syls = lineEl.querySelectorAll('.tone-syl');
-      for (const sylEl of syls) {
-        const start = Number(sylEl.dataset.start);
-        const end = Number(sylEl.dataset.end);
+    for (const { lineEl, syls } of lineCache) {
+      for (const { sylEl, start, end } of syls) {
         const isHot = seconds >= start && seconds < end;
         if (isHot) activeLineEl = lineEl;
         sylEl.classList.toggle('hot', isHot);

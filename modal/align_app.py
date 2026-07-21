@@ -422,7 +422,6 @@ def run_transcribe(payload: dict) -> None:
     webhook_url = payload.get("webhookUrl")
     vocals_get_url = payload.get("vocalsGetUrl")
     db_lines: list[str] = payload.get("dbLines") or []
-    canonical_lines: list[str] | None = payload.get("canonicalLines")
     snapshot_hash = payload.get("snapshotHash")
 
     try:
@@ -478,9 +477,6 @@ def run_transcribe(payload: dict) -> None:
                 })
 
         per_line = line_scores(trans_lines, db_lines)
-        # canonicalLines es opcional: si llega, se agrega un segundo diff para
-        # comparar tambien contra la letra canonica (no reemplaza el de DB).
-        per_line_canonical = line_scores(trans_lines, canonical_lines) if canonical_lines else None
 
         payload_out = {
             "text": " ".join(full_text_parts),
@@ -492,8 +488,6 @@ def run_transcribe(payload: dict) -> None:
             # degrada a sources.trans=null y sin vocalizaciones en runs reales.
             "transLines": trans_lines,
         }
-        if per_line_canonical is not None:
-            payload_out["perLineCanonical"] = per_line_canonical
 
         _post_align_webhook(
             webhook_url,

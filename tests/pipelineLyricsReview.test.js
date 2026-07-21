@@ -41,6 +41,28 @@ describe('buildReviewDoc', () => {
     expect(doc.vocalizations[0].text).toBe('oooh oh');
     expect(doc.vocalizations[0].accepted).toBe(null);
   });
+  it('con distinta cantidad de lineas, la que no tiene match exacto queda en conflicto', () => {
+    const dbSectionsExtra = [
+      { type: 'chorus', lines: [
+        { text: 'Nadie me ama como tu me amas' },
+        { text: 'linea extra sin contraparte' },
+      ] },
+    ];
+    const canonicalOneLine = { secciones: [
+      { tipo: 'chorus', lineas: [
+        { texto: 'Nadie me ama como tu me amas' },
+      ] },
+    ] };
+    const doc = buildReviewDoc({
+      dbSections: dbSectionsExtra,
+      canonical: canonicalOneLine,
+      transcription: { text: '', words: [], perLine: [], transLines: [] },
+    });
+    expect(doc.sections[0].lines[0].conflict).toBe(false); // matcheo exacto
+    const extra = doc.sections[0].lines[1];
+    expect(extra.conflict).toBe(true);
+    expect(extra.sources.canonical).toBe(null);
+  });
   it('sin canonica trabaja con 2 fuentes y lo marca', () => {
     const doc = buildReviewDoc({ dbSections, canonical: null, transcription });
     expect(doc.hasCanonical).toBe(false);

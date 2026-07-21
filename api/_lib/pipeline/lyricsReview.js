@@ -55,9 +55,10 @@ function matchCanonicalSections(dbSections, canonical) {
 }
 
 // Empareja lineas db<->canonicas dentro de una seccion ya emparejada por
-// tipo. Igual cantidad: 1 a 1 por posicion. Distinta cantidad: primero
-// exacta por normalize(), el resto se asigna posicionalmente entre lo que
-// quede libre (mejor esfuerzo; el resto sin match queda null).
+// tipo. Igual cantidad: 1 a 1 por posicion (aunque el texto difiera, es la
+// contraparte). Distinta cantidad: SOLO match por normalize()-igualdad
+// exacta; la linea db que no encuentra exacta queda sin canonica (null) y
+// el llamador la deja en conflicto (necesita atencion humana).
 function matchLines(dbLines, canonLines) {
   if (dbLines.length === canonLines.length) {
     return dbLines.map((_, i) => canonLines[i]);
@@ -67,14 +68,6 @@ function matchLines(dbLines, canonLines) {
   dbLines.forEach((dbText, i) => {
     const dbNorm = normalize(dbText);
     const idx = canonLines.findIndex((c, ci) => !usedCanon.has(ci) && normalize(c) === dbNorm);
-    if (idx !== -1) {
-      result[i] = canonLines[idx];
-      usedCanon.add(idx);
-    }
-  });
-  dbLines.forEach((_, i) => {
-    if (result[i] !== null) return;
-    const idx = canonLines.findIndex((_c, ci) => !usedCanon.has(ci));
     if (idx !== -1) {
       result[i] = canonLines[idx];
       usedCanon.add(idx);
@@ -151,6 +144,7 @@ export function buildReviewDoc({ dbSections, canonical, transcription }) {
 
   const sections = dbSections.map((section, sIdx) => {
     const canonSection = canonicalPerSection[sIdx];
+    const hadCanonicalSection = canonSection != null;
     const canonLines = canonSection?.lineas?.map((l) => l.texto) ?? [];
     const matchedCanon = matchLines(section.lines.map((l) => l.text), canonLines);
 
@@ -159,7 +153,12 @@ export function buildReviewDoc({ dbSections, canonical, transcription }) {
       const perLineEntry = perLineByDbIndex.get(flatIndex) ?? null;
       const transText = perLineEntry ? (transLines[perLineEntry.transIndex] ?? null) : null;
       const canonicalText = matchedCanon[lIdx];
-      const conflict = canonicalText != null && normalize(line.text) !== normalize(canonicalText);
+      // Con seccion canonica presente: conflicto si no hubo match (canonica
+      // de distinta cantidad, sin exacta -> necesita atencion humana) o si
+      // el texto normalizado difiere. Sin seccion canonica no hay con que
+      // comparar, no es conflicto.
+      const conflict = hadCanonicalSection
+        && (canonicalText == null || normalize(line.text) !== normalize(canonicalText));
       return {
         text: line.text,
         conflict,

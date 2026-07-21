@@ -33,17 +33,27 @@ def extract_storage_key(signed_put_url: str) -> str:
     El formato del URL es:
       https://<project>.supabase.co/storage/v1/object/upload/sign/<bucket>/<key>?token=...
 
-    Devuelve el <key> (p.ej. `<userId>/<jobId>/voiceInstrumental/vocals.mp3`).
+    Devuelve el <key> (p.ej. `<userId>/<jobId>/voiceInstrumental/vocals.mp3`),
+    relativa al bucket. Es bucket-agnóstico a propósito: el mismo helper lo
+    comparten el Estudio legacy (bucket 'stems-jobs') y el pipeline unificado
+    por canción (bucket 'song-audio'); el bucket se aplica del lado JS al firmar
+    la descarga, así que aquí solo importa la key relativa.
     Lanza ValueError si el URL no tiene el formato esperado.
     """
     path = urlparse(signed_put_url).path  # /storage/v1/object/upload/sign/<bucket>/<key>
-    marker = f"/object/upload/sign/{STEMS_BUCKET}/"
+    marker = "/object/upload/sign/"
     idx = path.find(marker)
     if idx == -1:
         raise ValueError(
-            f"No se pudo extraer la storage key del URL (bucket '{STEMS_BUCKET}' no encontrado): {signed_put_url[:120]}"
+            f"No se pudo extraer la storage key del URL (marker de upload firmado no encontrado): {signed_put_url[:120]}"
         )
-    return path[idx + len(marker):]
+    rest = path[idx + len(marker):]  # <bucket>/<key>
+    slash = rest.find("/")
+    if slash == -1:
+        raise ValueError(
+            f"No se pudo extraer la storage key del URL (falta la key tras el bucket): {signed_put_url[:120]}"
+        )
+    return rest[slash + 1:]
 
 
 def extract_vocals_stem(get_url: str) -> str:

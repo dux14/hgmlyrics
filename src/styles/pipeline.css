@@ -1,0 +1,287 @@
+/**
+ * pipeline.css — Estilos compartidos del pipeline unificado por canción
+ * (planes C/D: gate de letra en C3, runs en D). Todo escopado bajo `.lrp`
+ * para no filtrar `.btn`/`.btn2`/`.card` etc. al resto de la app: este
+ * módulo se importa directo desde el componente (chunk lazy, plan D lo
+ * monta), no vive dentro de la cascada de capas de app.css.
+ */
+
+.lrp {
+  max-width: 480px;
+  margin: 0 auto;
+  color: var(--color-text);
+}
+
+.lrp__error {
+  padding: var(--space-md);
+  color: var(--color-danger);
+}
+
+.lrp__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: var(--space-md);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.lrp .temp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: color-mix(in oklch, var(--color-brand) 12%, transparent);
+  color: var(--color-brand);
+  border-radius: 999px;
+  padding: 3px 11px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition: background-color 0.3s var(--ease-out);
+}
+
+.lrp__body {
+  padding: var(--space-md);
+}
+
+.lrp__section {
+  margin-bottom: var(--space-md);
+}
+
+.lrp__label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--color-text-secondary);
+  margin-bottom: 4px;
+}
+
+.lrp__label.section-verse {
+  color: var(--color-section-verse);
+}
+.lrp__label.section-chorus {
+  color: var(--color-section-chorus);
+}
+.lrp__label.section-bridge {
+  color: var(--color-section-bridge);
+}
+.lrp__label.section-prechorus {
+  color: var(--color-section-prechorus);
+}
+.lrp__label.section-intro {
+  color: var(--color-section-intro);
+}
+.lrp__label.section-outro {
+  color: var(--color-section-outro);
+}
+
+.lrp__line {
+  font-size: 0.92rem;
+  padding: 6px 0;
+  position: relative;
+}
+
+.lrp .lrp__split {
+  display: inline-flex;
+  vertical-align: middle;
+  margin: 0 2px;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition:
+    color 0.15s var(--ease-out),
+    background-color 0.15s var(--ease-out);
+}
+.lrp .lrp__split:hover {
+  color: var(--color-brand);
+  background: color-mix(in oklch, var(--color-brand) 10%, transparent);
+}
+
+.lrp .lrp__merge {
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+  background: none;
+  border: none;
+  padding: 2px 0;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease-out);
+}
+.lrp__section:hover .lrp__merge,
+.lrp .lrp__merge:focus-visible {
+  opacity: 1;
+}
+
+/* Tarjeta de conflicto: NUNCA border-left de acento (regla de plataforma). */
+.lrp .conf {
+  background: color-mix(in oklch, var(--color-danger) 7%, var(--color-surface));
+  border: 1px solid color-mix(in oklch, var(--color-danger) 25%, transparent);
+  border-radius: var(--border-radius-md);
+  padding: 10px 12px;
+  margin: 8px 0;
+  clip-path: inset(0 round var(--border-radius-md));
+  overflow: hidden;
+  transition:
+    clip-path 0.2s var(--ease-out),
+    opacity 0.2s var(--ease-out);
+}
+.lrp .conf.is-resolving {
+  clip-path: inset(50% 0 50% 0 round var(--border-radius-md));
+  opacity: 0;
+}
+
+.lrp .old {
+  color: var(--color-danger);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  font-size: 0.88rem;
+}
+.lrp .new {
+  color: var(--color-success);
+  font-size: 0.88rem;
+}
+
+.lrp .conf__actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.lrp .lrp__edit-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+}
+
+/* Vocalización: hallazgo de la AI, violeta, nunca color de error. */
+.lrp .voc {
+  background: color-mix(in oklch, var(--color-accent-2) 14%, transparent);
+  border: 1px solid color-mix(in oklch, var(--color-accent-2) 30%, transparent);
+  border-radius: var(--border-radius-md);
+  padding: 9px 12px;
+  margin: 8px 0;
+  font-size: 0.85rem;
+}
+.lrp .voc .lab {
+  font-size: 0.68rem;
+  color: var(--color-accent-2);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.lrp .voc__text {
+  margin-top: 3px;
+  font-style: italic;
+}
+.lrp .voc__actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 7px;
+  flex-wrap: wrap;
+}
+
+.lrp .btn {
+  display: inline-block;
+  background: var(--color-action);
+  color: var(--color-bg);
+  font-weight: 700;
+  font-size: 0.82rem;
+  border: none;
+  border-radius: 9px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition:
+    transform 0.12s var(--ease-out),
+    filter 0.15s var(--ease-out),
+    opacity 0.2s var(--ease-out);
+}
+.lrp .btn:hover {
+  filter: brightness(1.06);
+}
+.lrp .btn:active {
+  transform: scale(0.97);
+}
+.lrp .btn[disabled] {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.lrp .btn2 {
+  display: inline-block;
+  background: none;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  padding: 7px 13px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition:
+    transform 0.12s var(--ease-out),
+    border-color 0.15s var(--ease-out);
+}
+.lrp .btn2:hover {
+  border-color: var(--color-text-secondary);
+}
+.lrp .btn2:active {
+  transform: scale(0.97);
+}
+
+.lrp__footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+}
+
+.lrp__pending {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+/* Flash de confirmación teal-soft tras resolver un conflicto/línea. */
+.lrp--motion .lrp__line.is-resolved,
+.lrp--motion .voc.is-resolved {
+  animation: lrp-flash 0.4s var(--ease-out);
+}
+@keyframes lrp-flash {
+  0% {
+    background: color-mix(in oklch, var(--color-brand) 20%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lrp .conf,
+  .lrp .lrp__split,
+  .lrp .lrp__merge,
+  .lrp .btn,
+  .lrp .btn2,
+  .lrp .temp {
+    transition-duration: 0.001ms !important;
+  }
+  .lrp--motion .lrp__line.is-resolved,
+  .lrp--motion .voc.is-resolved {
+    animation: none;
+  }
+}

@@ -8,6 +8,11 @@
  */
 import { applyPhaseEvent, runStatusFromPhases } from './state.js';
 
+// Estados de run donde un evento de fase todavía puede aplicar efectos.
+// Mismo set que el índice único parcial song_pipeline_runs_one_active_per_song
+// y que los filtros WHERE status IN (...) del resto del pipeline.
+const ACTIVE_RUN_STATUSES = new Set(['created', 'uploading', 'processing', 'awaiting_lyrics', 'running']);
+
 // Fases derivadas de la letra aprobada: si llegan con un snapshotHash viejo
 // (el admin editó la letra mientras Modal seguía procesando el run anterior),
 // NO se publican — quedan 'stale'. Esto cubre el gap de que applyPhaseEvent
@@ -34,6 +39,12 @@ export async function applyPipelinePhaseEvent(sql, runId, event) {
     `;
     if (rows.length === 0) return null;
     const run = rows[0];
+
+    // Guarda: un webhook tardío de Modal sobre un run ya no-activo (cancelled/
+    // superseded/done/failed) no debe aplicar ningún efecto — song_stems/
+    // song_pitch_analysis/song_section_audio se indexan por song_id, no por
+    // run_id, y pisarían los datos de un run más nuevo para la misma canción.
+    if (!ACTIVE_RUN_STATUSES.has(run.status)) return { ignored: true };
 
     const approvedHash = run.lyricsReview?.approvedHash;
     if (

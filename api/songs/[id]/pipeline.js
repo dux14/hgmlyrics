@@ -83,7 +83,9 @@ async function createRun(req, res, songId) {
   } catch (err) {
     // Índice único parcial song_pipeline_runs_one_active_per_song: ya hay un
     // run vivo para esta canción (mismo patrón 23505 de pitch/jobs.js).
-    if (err?.code === '23505') {
+    // Se valida el constraint exacto para no tragar otras violaciones de
+    // unicidad (p.ej. una PK) como si fueran este caso esperado.
+    if (err?.code === '23505' && err?.constraint_name === 'song_pipeline_runs_one_active_per_song') {
       res.status(409).json({ error: 'Ya hay una ejecución activa para esta canción' });
       return;
     }

@@ -48,6 +48,10 @@ function routeSql(handlers) {
     return [];
   });
   sql.json = (o) => o;
+  // retry.js usa sql.begin para el claim transaccional (FOR UPDATE); el mock
+  // no distingue tx boundaries, así que corre el callback con el mismo sql
+  // (misma cola de handlers por texto, funciona igual dentro o fuera de tx).
+  sql.begin = async (cb) => cb(sql);
 }
 
 describe('POST /api/songs/:id/pipeline (crear run)', () => {
@@ -297,10 +301,14 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
 
   it('dispatch falla: la fase vuelve a failed (run retry-able), 502', async () => {
     dispatchPhase.mockRejectedValue(new Error('modal down'));
+    const runningPhases = activePhasesWithStemsFailed();
+    runningPhases.stems.status = 'running';
     let finalPhases;
     let call = 0;
     routeSql([
       ["status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')", [{ id: 'r1', songId: 's1', status: 'processing', phases: activePhasesWithStemsFailed(), inputPath: 'p' }]],
+      // re-lectura FOR UPDATE dentro de la tx del handler de fallo de dispatch.
+      ['SELECT phases FROM song_pipeline_runs WHERE id = ', [{ phases: runningPhases }]],
       ['UPDATE song_pipeline_runs SET phases = ', (values) => {
         call += 1;
         if (call === 2) finalPhases = values.find((v) => v && v.stems);
@@ -311,5 +319,18 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
     await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
     expect(res.status).toHaveBeenCalledWith(502);
     expect(finalPhases.stems.status).toBe('failed');
+  });
+
+  it('409 si al reintentar la fase ya no está failed/stale (otra sesión ya la retomó)', async () => {
+    const phases = initialPhases();
+    phases.upload.status = 'done';
+    phases.stems = { status: 'done', error: null, tracks: { vocals: 'k1' }, artifacts: undefined };
+    routeSql([
+      ["status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')", [{ id: 'r1', songId: 's1', status: 'processing', phases, inputPath: 'p' }]],
+    ]);
+    const res = makeRes();
+    await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(dispatchPhase).not.toHaveBeenCalled();
   });
 });

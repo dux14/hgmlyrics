@@ -86,6 +86,7 @@ export default [
         clearInterval: 'readonly',
         URL: 'readonly',
         global: 'readonly',
+        structuredClone: 'readonly',
       },
     },
     rules: {

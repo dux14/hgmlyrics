@@ -1,6 +1,6 @@
 /**
  * apiPipelineCleanup.test.js — TDD para GET /api/pipeline/cleanup (cron job).
- * Mismo patron de mocks que tests/pipelineWebhook.test.js (sql.begin con sql
+ * Mismo patrón de mocks que tests/pipelineWebhook.test.js (sql.begin con sql
  * interno que va sacando de sqlResponses) + tests/apiStemsCleanup.test.js
  * (auth fail-closed, Promise.allSettled).
  */
@@ -112,10 +112,10 @@ describe('GET /api/pipeline/cleanup — fase zombi (running > 30 min)', () => {
     );
   });
 
-  it('CAS: si la fase ya no esta running dentro de la tx (webhook la completo), no la toca', async () => {
+  it('CAS: si la fase ya no está running dentro de la tx (webhook la completó), no la toca', async () => {
     const phases = initialPhases();
     phases.upload.status = 'done';
-    phases.stems.status = 'done'; // ya no esta running al releer dentro de la tx
+    phases.stems.status = 'done'; // ya no está running al releer dentro de la tx
 
     topLevelResponses.push([{ id: 'run-1' }]);
     sqlResponses.push([{ phases }]); // SELECT ... FOR UPDATE: fase ya terminal
@@ -182,7 +182,7 @@ describe('GET /api/pipeline/cleanup — runs superseded', () => {
     );
   });
 
-  it('un borrado de storage que falla no marca el run como limpio (se reintenta despues)', async () => {
+  it('un borrado de storage que falla no marca el run como limpio (se reintenta después)', async () => {
     topLevelResponses.push([]);
     topLevelResponses.push([]);
     topLevelResponses.push([
@@ -193,7 +193,7 @@ describe('GET /api/pipeline/cleanup — runs superseded', () => {
 
     mockDeleteSongAudioObject
       .mockReset()
-      .mockRejectedValueOnce(new Error('storage caido'))
+      .mockRejectedValueOnce(new Error('storage caído'))
       .mockResolvedValue(undefined);
 
     const res = makeRes();

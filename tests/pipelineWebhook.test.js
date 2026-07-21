@@ -140,7 +140,12 @@ describe('POST /api/pipeline/webhook — stems parcial y final', () => {
     sqlResponses.push([runRow({ phases })]);
     sqlResponses.push([]); // insert song_stems lead
     sqlResponses.push([]); // insert song_stems backing
-    sqlResponses.push([]); // UPDATE song_pipeline_runs
+    sqlResponses.push([]); // UPDATE song_pipeline_runs (commit del CAS del webhook)
+    // advanceNextPhase re-lee `phases` FRESCO en su propia tx antes de despachar.
+    const doneStemsPhases = structuredClone(phases);
+    doneStemsPhases.stems = { status: 'done', tracks: { vocals: 'k1', instrumental: 'k2', lead: 'k3', backing: 'k4' } };
+    sqlResponses.push([{ phases: doneStemsPhases }]); // SELECT phases FOR UPDATE (claim)
+    sqlResponses.push([]); // UPDATE phases (marca transcription 'running')
 
     const res = makeRes();
     await handler(
@@ -295,6 +300,24 @@ describe('POST /api/pipeline/webhook — clips', () => {
     const upserts = sqlCalls.filter((c) => c.text.includes('song_section_audio'));
     expect(upserts.length).toBe(2);
     expect(upserts.every((c) => c.text.includes('run_id IS NOT NULL'))).toBe(true);
+  });
+});
+
+describe('POST /api/pipeline/webhook — guarda de run terminal', () => {
+  it('run cancelled → 200 ignorado, sin efectos de publicación ni dispatch', async () => {
+    sqlResponses.push([runRow({ status: 'cancelled' })]); // SELECT FOR UPDATE
+
+    const res = makeRes();
+    await handler(
+      signedReq({ runId: 'run-1', phase: 'stems', ok: true, tracks: { vocals: 'k1' } }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ignored).toBe(true);
+    expect(dispatchPhaseMock).not.toHaveBeenCalled();
+    expect(sqlCalls.some((c) => c.text.includes('UPDATE song_pipeline_runs'))).toBe(false);
+    expect(sqlCalls.some((c) => c.text.includes('INSERT INTO song_stems'))).toBe(false);
   });
 });
 

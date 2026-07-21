@@ -1,11 +1,11 @@
 /**
  * cleanup.js — Cron de limpieza del pipeline unificado (song_pipeline_runs).
- * Calca el patron de auth/http de api/stems/cleanup.js.
+ * Calca el patrón de auth/http de api/stems/cleanup.js.
  *
  * 1) Fases 'running' zombis (run sin updates > 30 min) → 'failed' (timeout),
- *    con CAS: se re-lee `phases` dentro de la transaccion (FOR UPDATE) y solo
+ *    con CAS: se re-lee `phases` dentro de la transacción (FOR UPDATE) y solo
  *    se toca la fase si SIGUE en 'running' — evita pisar un webhook de Modal
- *    que completo la fase entre el candidato y el UPDATE.
+ *    que completó la fase entre el candidato y el UPDATE.
  * 2) Runs 'created'/'uploading' abandonados (> 24h) → se borran junto con el
  *    storage de su input.
  * 3) Runs 'superseded' → se borra el storage de su input (el prefijo
@@ -30,10 +30,12 @@ export default withErrors(async (req, res) => {
   }
 
   // 1) Fases zombi: running > 30 min sin actividad → failed (timeout).
+  // LIMIT 200: el resto lo procesa la próxima corrida horaria (maxDuration=60).
   const staleCandidates = await sql`
     SELECT id FROM song_pipeline_runs
     WHERE updated_at < now() - interval '30 minutes'
       AND status NOT IN ('done', 'failed', 'cancelled', 'superseded')
+    LIMIT 200
   `;
   let timedOut = 0;
   for (const { id } of staleCandidates) {
@@ -42,13 +44,17 @@ export default withErrors(async (req, res) => {
         SELECT phases FROM song_pipeline_runs WHERE id = ${id} FOR UPDATE
       `;
       if (rows.length === 0) return false;
-      // Re-verificar dentro de la tx: si un webhook completo la fase entre el
-      // candidato de arriba y este FOR UPDATE, ya no aparecera como 'running'.
+      // Re-verificar dentro de la tx: si un webhook completó la fase entre el
+      // candidato de arriba y este FOR UPDATE, ya no aparecerá como 'running'.
       let phases = rows[0].phases;
       let changed = false;
       for (const phase of PHASES) {
         if (phases[phase]?.status !== 'running') continue;
-        const next = applyPhaseEvent(phases, { phase, ok: false, error: 'timeout' });
+        const next = applyPhaseEvent(phases, {
+          phase,
+          ok: false,
+          error: 'La fase tardó demasiado y fue cancelada.',
+        });
         if (next) {
           phases = next;
           changed = true;
@@ -77,8 +83,8 @@ export default withErrors(async (req, res) => {
   );
 
   // 3) Runs superseded: borrar storage de su input. Igual que stems/cleanup,
-  // solo se limpia input_path (marca "ya limpiado") si el borrado tuvo exito;
-  // si falla, el proximo cron lo reintenta en vez de dejar storage huerfano.
+  // solo se limpia input_path (marca "ya limpiado") si el borrado tuvo éxito;
+  // si falla, el próximo cron lo reintenta en vez de dejar storage huérfano.
   const superseded = await sql`
     SELECT id, input_path FROM song_pipeline_runs
     WHERE status = 'superseded' AND input_path IS NOT NULL

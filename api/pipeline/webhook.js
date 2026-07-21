@@ -31,26 +31,45 @@ function readRawBody(req) {
   });
 }
 
-// Dispara la fase siguiente tras un commit exitoso. Aislado en try/catch: un
-// fallo de dispatch no debe romper la respuesta 200 del webhook (mismo
-// criterio que confirm.js/retry.js) — solo la fase que se intentó arrancar
-// queda 'failed' y admite reintento manual vía retry.js.
-async function advanceNextPhase(run, phase) {
-  const runningPhases = structuredClone(run.phases);
-  runningPhases[phase] = { ...runningPhases[phase], status: 'running' };
-  await sql`
-    UPDATE song_pipeline_runs SET phases = ${sql.json(runningPhases)}, updated_at = now()
-    WHERE id = ${run.id}
-  `;
-  try {
-    await dispatchPhase(phase, { ...run, phases: runningPhases });
-  } catch (err) {
-    const failedPhases = structuredClone(runningPhases);
-    failedPhases[phase] = { status: 'failed', error: String(err?.message ?? err).slice(0, 300) };
-    await sql`
-      UPDATE song_pipeline_runs SET phases = ${sql.json(failedPhases)}, updated_at = now()
-      WHERE id = ${run.id}
+// Dispara la fase siguiente tras un commit exitoso. CAS transaccional: el
+// claim (leer `phases` FRESCO + validar canStartPhase + marcar 'running') va
+// en una sola tx con FOR UPDATE para no pisar un commit concurrente de otra
+// fase (pitch/sync corren en paralelo) — el UPDATE ciego anterior sobrescribía
+// todo el jsonb con un snapshot viejo (lost update). El dispatch va FUERA de
+// la tx (llamada de red); un fallo de dispatch no debe romper la respuesta
+// 200 del webhook (mismo criterio que confirm.js/retry.js) — solo la fase que
+// se intentó arrancar queda 'failed' y admite reintento manual vía retry.js.
+async function advanceNextPhase(runId, songId, phase) {
+  const claimed = await sql.begin(async (tx) => {
+    const rows = await tx`SELECT phases FROM song_pipeline_runs WHERE id = ${runId} FOR UPDATE`;
+    if (rows.length === 0) return null;
+    const fresh = rows[0].phases;
+    if (!canStartPhase(fresh, phase)) return null;
+    const next = structuredClone(fresh);
+    next[phase] = { ...next[phase], status: 'running' };
+    await tx`
+      UPDATE song_pipeline_runs SET phases = ${tx.json(next)}, updated_at = now()
+      WHERE id = ${runId}
     `;
+    return next;
+  });
+  if (!claimed) return;
+
+  try {
+    await dispatchPhase(phase, { id: runId, songId, phases: claimed });
+  } catch (err) {
+    await sql.begin(async (tx) => {
+      const rows = await tx`SELECT phases FROM song_pipeline_runs WHERE id = ${runId} FOR UPDATE`;
+      if (rows.length === 0) return;
+      const fresh = rows[0].phases;
+      if (fresh[phase]?.status !== 'running') return;
+      const failed = structuredClone(fresh);
+      failed[phase] = { status: 'failed', error: String(err?.message ?? err).slice(0, 300) };
+      await tx`
+        UPDATE song_pipeline_runs SET phases = ${tx.json(failed)}, updated_at = now()
+        WHERE id = ${runId}
+      `;
+    });
   }
 }
 
@@ -69,7 +88,13 @@ export default withErrors(async (req, res) => {
     return;
   }
 
-  const event = JSON.parse(body);
+  let event;
+  try {
+    event = JSON.parse(body);
+  } catch {
+    res.status(400).json({ error: 'Body JSON inválido' });
+    return;
+  }
   const { runId, phase } = event;
   if (!runId || !phase) {
     res.status(400).json({ error: 'Parámetros runId/phase requeridos' });
@@ -98,10 +123,11 @@ export default withErrors(async (req, res) => {
   if (advance && canStartPhase(outcome.next, advance)) {
     // Fuera de la transacción del CAS: el commit de `phases` ya está firme.
     try {
-      await advanceNextPhase({ id: runId, songId: outcome.songId, phases: outcome.next }, advance);
-    } catch {
+      await advanceNextPhase(runId, outcome.songId, advance);
+    } catch (err) {
       // advanceNextPhase ya captura sus propios errores de dispatch; este
       // catch es solo un cinturón extra para nunca romper el 200 del webhook.
+      console.error('advanceNextPhase falló:', err);
     }
   }
 

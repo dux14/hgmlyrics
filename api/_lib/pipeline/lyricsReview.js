@@ -51,7 +51,8 @@ function round4(n) {
 }
 
 // eqeqeq del repo no admite `!= null`; helper explicito para null/undefined.
-function isNil(value) {
+// Exportado: lo reusa api/songs/[id]/pipeline/lyrics.js (evita duplicarlo).
+export function isNil(value) {
   return value === null || value === undefined;
 }
 
@@ -237,6 +238,16 @@ function requireVocalization(doc, index) {
   return vocalization;
 }
 
+// Los indices de accion (afterWord, etc.) se usan tanto como indice de array
+// (donde undefined/NaN/no-entero simplemente no calzan y ya revientan via
+// requireSection/Line/Vocalization) como en comparaciones aritmeticas
+// (`< 0`, `>= len-1`) que con undefined/NaN dan siempre `false` y DEJAN
+// PASAR el valor invalido — ahi hace falta esta guarda explicita.
+function requireInt(value, name) {
+  if (!Number.isInteger(value)) throw new RangeError(`${name} invalido: ${value}`);
+  return value;
+}
+
 /**
  * Aplica una accion de revision sobre el documento y devuelve un documento
  * NUEVO (no muta `doc`). Accion sobre un indice inexistente lanza RangeError.
@@ -252,7 +263,16 @@ export function applyReviewAction(doc, action) {
       const line = requireLine(section, action.line);
       if (action.choice === 'canonical') line.text = line.sources.canonical;
       else if (action.choice === 'db') line.text = line.sources.db;
-      else if (action.choice === 'edit') line.text = action.text;
+      else if (action.choice === 'edit') {
+        // 'edit' sin texto (o vacio) corromperia line.text en silencio
+        // (undefined) — se exige string no vacio.
+        if (typeof action.text !== 'string' || action.text.trim() === '') {
+          throw new RangeError(`text invalido para choice 'edit': ${action.text}`);
+        }
+        line.text = action.text;
+      } else {
+        throw new RangeError(`choice invalido: ${action.choice}`);
+      }
       line.conflict = false;
       break;
     }
@@ -260,14 +280,15 @@ export function applyReviewAction(doc, action) {
       const section = requireSection(next, action.section);
       const line = requireLine(section, action.line);
       const words = line.text.split(/\s+/).filter(Boolean);
+      const afterWord = requireInt(action.afterWord, 'afterWord');
       // afterWord es el indice (0-based) de la ultima palabra que queda en
       // el primer renglon; el resto pasa al segundo. Fuera de [0, len-2]
       // dejaria un renglon vacio: invalido.
-      if (action.afterWord < 0 || action.afterWord >= words.length - 1) {
-        throw new RangeError(`afterWord fuera de rango: ${action.afterWord}`);
+      if (afterWord < 0 || afterWord >= words.length - 1) {
+        throw new RangeError(`afterWord fuera de rango: ${afterWord}`);
       }
-      const first = words.slice(0, action.afterWord + 1).join(' ');
-      const second = words.slice(action.afterWord + 1).join(' ');
+      const first = words.slice(0, afterWord + 1).join(' ');
+      const second = words.slice(afterWord + 1).join(' ');
       const firstLine = { ...line, text: first };
       const secondLine = { ...line, text: second };
       section.lines.splice(action.line, 1, firstLine, secondLine);

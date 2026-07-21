@@ -102,7 +102,7 @@ function runRow(overrides = {}) {
 
 describe('GET /api/songs/:id/pipeline/lyrics', () => {
   it('404 si no hay un run en awaiting_lyrics', async () => {
-    routeSql([["status = 'awaiting_lyrics'", []]]);
+    routeSql([['AS "lyricsReview"', []]]);
     const res = makeRes();
     await lyricsHandler({ method: 'GET', query: { id: 's1' } }, res);
     expect(res.status).toHaveBeenCalledWith(404);
@@ -111,7 +111,7 @@ describe('GET /api/songs/:id/pipeline/lyrics', () => {
   it('construye el review bajo demanda desde transcripcion+sections+canonica y lo persiste', async () => {
     let persistedReview;
     routeSql([
-      ["status = 'awaiting_lyrics'", [runRow({ lyricsReview: { transcription } })]],
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { transcription } })]],
       ['SELECT sections FROM songs', [{ sections: dbSections }]],
       ['SELECT content FROM song_lyrics_canonical', [{ content: canonicalContent }]],
       ['UPDATE song_pipeline_runs SET lyrics_review', (values) => {
@@ -140,7 +140,7 @@ describe('GET /api/songs/:id/pipeline/lyrics', () => {
     };
     let updateCalled = false;
     routeSql([
-      ["status = 'awaiting_lyrics'", [runRow({ lyricsReview: { review: existingReview, transcription } })]],
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { review: existingReview, transcription } })]],
       ['SELECT sections FROM songs', [{ sections: dbSections }]],
       ['UPDATE song_pipeline_runs SET lyrics_review', () => {
         updateCalled = true;
@@ -158,7 +158,7 @@ describe('GET /api/songs/:id/pipeline/lyrics', () => {
 
   it('devuelve suggestions con divisiones por respiracion mapeadas a la linea db', async () => {
     routeSql([
-      ["status = 'awaiting_lyrics'", [runRow({ lyricsReview: { transcription } })]],
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { transcription } })]],
       ['SELECT sections FROM songs', [{ sections: dbSections }]],
       ['SELECT content FROM song_lyrics_canonical', [{ content: canonicalContent }]],
       ['UPDATE song_pipeline_runs SET lyrics_review', { count: 1 }],
@@ -172,7 +172,7 @@ describe('GET /api/songs/:id/pipeline/lyrics', () => {
 
 describe('PUT /api/songs/:id/pipeline/lyrics', () => {
   it('404 si no hay un run en awaiting_lyrics', async () => {
-    routeSql([["status = 'awaiting_lyrics'", []]]);
+    routeSql([['AS "lyricsReview"', []]]);
     const res = makeRes();
     await lyricsHandler({ method: 'PUT', query: { id: 's1' }, body: { action: { type: 'resolve', section: 0, line: 1, choice: 'db' } } }, res);
     expect(res.status).toHaveBeenCalledWith(404);
@@ -195,7 +195,7 @@ describe('PUT /api/songs/:id/pipeline/lyrics', () => {
     };
     let persistedReview;
     routeSql([
-      ["status = 'awaiting_lyrics'", [runRow({ lyricsReview: { review: existingReview } })]],
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { review: existingReview } })]],
       ['UPDATE song_pipeline_runs SET lyrics_review', (values) => {
         persistedReview = values.find((v) => v && typeof v === 'object' && 'review' in v);
         return { count: 1 };
@@ -225,11 +225,117 @@ describe('PUT /api/songs/:id/pipeline/lyrics', () => {
       temperature: 1,
     };
     routeSql([
-      ["status = 'awaiting_lyrics'", [runRow({ lyricsReview: { review: existingReview } })]],
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { review: existingReview } })]],
     ]);
     const res = makeRes();
     await lyricsHandler(
       { method: 'PUT', query: { id: 's1' }, body: { action: { type: 'resolve', section: 5, line: 0, choice: 'db' } } },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(422);
+  });
+
+  it('422 si la accion referencia un indice no numerico', async () => {
+    const existingReview = {
+      sections: [{ type: 'chorus', label: undefined, temperature: 1, lines: [
+        { text: 'linea unica', conflict: false, vocalization: false, score: 1, sources: { db: 'linea unica', canonical: null, trans: null } },
+      ] }],
+      vocalizations: [],
+      hasCanonical: false,
+      temperature: 1,
+    };
+    routeSql([
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { review: existingReview } })]],
+    ]);
+    const res = makeRes();
+    await lyricsHandler(
+      { method: 'PUT', query: { id: 's1' }, body: { action: { type: 'resolve', section: 'abc', line: 0, choice: 'db' } } },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(422);
+  });
+
+  it("422 si resolve trae choice:'edit' sin text (corromperia line.text en silencio)", async () => {
+    const existingReview = {
+      sections: [{ type: 'chorus', label: undefined, temperature: 1, lines: [
+        { text: 'linea unica', conflict: false, vocalization: false, score: 1, sources: { db: 'linea unica', canonical: null, trans: null } },
+      ] }],
+      vocalizations: [],
+      hasCanonical: false,
+      temperature: 1,
+    };
+    let updateCalled = false;
+    routeSql([
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { review: existingReview } })]],
+      ['UPDATE song_pipeline_runs SET lyrics_review', () => {
+        updateCalled = true;
+        return { count: 1 };
+      }],
+    ]);
+    const res = makeRes();
+    await lyricsHandler(
+      { method: 'PUT', query: { id: 's1' }, body: { action: { type: 'resolve', section: 0, line: 0, choice: 'edit' } } },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(updateCalled).toBe(false); // nunca llega a persistir el doc corrupto
+  });
+
+  it('422 si resolve trae un choice invalido (ni canonical/db/edit)', async () => {
+    const existingReview = {
+      sections: [{ type: 'chorus', label: undefined, temperature: 1, lines: [
+        { text: 'linea unica', conflict: false, vocalization: false, score: 1, sources: { db: 'linea unica', canonical: null, trans: null } },
+      ] }],
+      vocalizations: [],
+      hasCanonical: false,
+      temperature: 1,
+    };
+    routeSql([
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { review: existingReview } })]],
+    ]);
+    const res = makeRes();
+    await lyricsHandler(
+      { method: 'PUT', query: { id: 's1' }, body: { action: { type: 'resolve', section: 0, line: 0, choice: 'typo' } } },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(422);
+  });
+
+  it('422 si splitLine no trae afterWord (undefined burla la comparacion numerica)', async () => {
+    const existingReview = {
+      sections: [{ type: 'chorus', label: undefined, temperature: 1, lines: [
+        { text: 'una linea con varias palabras aqui', conflict: false, vocalization: false, score: 1, sources: { db: 'una linea con varias palabras aqui', canonical: null, trans: null } },
+      ] }],
+      vocalizations: [],
+      hasCanonical: false,
+      temperature: 1,
+    };
+    routeSql([
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { review: existingReview } })]],
+    ]);
+    const res = makeRes();
+    await lyricsHandler(
+      { method: 'PUT', query: { id: 's1' }, body: { action: { type: 'splitLine', section: 0, line: 0 } } },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(422);
+  });
+
+  it('422 si splitLine trae afterWord NaN', async () => {
+    const existingReview = {
+      sections: [{ type: 'chorus', label: undefined, temperature: 1, lines: [
+        { text: 'una linea con varias palabras aqui', conflict: false, vocalization: false, score: 1, sources: { db: 'una linea con varias palabras aqui', canonical: null, trans: null } },
+      ] }],
+      vocalizations: [],
+      hasCanonical: false,
+      temperature: 1,
+    };
+    routeSql([
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { review: existingReview } })]],
+    ]);
+    const res = makeRes();
+    await lyricsHandler(
+      { method: 'PUT', query: { id: 's1' }, body: { action: { type: 'splitLine', section: 0, line: 0, afterWord: Number.NaN } } },
       res,
     );
     expect(res.status).toHaveBeenCalledWith(422);
@@ -249,7 +355,7 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
   }
 
   it('404 si no hay un run en awaiting_lyrics', async () => {
-    routeSql([["status = 'awaiting_lyrics'", []]]);
+    routeSql([['AS "lyricsReview"', []]]);
     const res = makeRes();
     await lyricsHandler({ method: 'POST', query: { id: 's1' } }, res);
     expect(res.status).toHaveBeenCalledWith(404);
@@ -265,7 +371,7 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
       temperature: 0.5,
     };
     routeSql([
-      ["status = 'awaiting_lyrics'", [runRow({ lyricsReview: { review: reviewWithConflict } })]],
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { review: reviewWithConflict } })]],
     ]);
     const res = makeRes();
     await lyricsHandler({ method: 'POST', query: { id: 's1' } }, res);
@@ -278,7 +384,7 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
     let mainRunUpdateValues;
     let insertedAudio;
     routeSql([
-      ["status = 'awaiting_lyrics'", [runRow({ lyricsReview: { review: approvableReview() } })]],
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { review: approvableReview() } })]],
       ['UPDATE songs SET sections', (values) => {
         updatedSongSections = values.find((v) => Array.isArray(v));
         return { count: 1 };
@@ -324,7 +430,7 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
     });
     let failedPhasesUpdate;
     routeSql([
-      ["status = 'awaiting_lyrics'", [runRow({ lyricsReview: { review: approvableReview() } })]],
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { review: approvableReview() } })]],
       ['UPDATE songs SET sections', { count: 1 }],
       // needle exclusivo del update combinado (phases+lyrics_review+status),
       // debe listarse ANTES del handler generico de abajo para no perder la

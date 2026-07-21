@@ -15,6 +15,7 @@ import {
   reviewTemperature,
   canApprove,
   approvedSnapshot,
+  isNil,
 } from '../../../_lib/pipeline/lyricsReview.js';
 import { suggestLineBreaks } from '../../../_lib/pipeline/phrasing.js';
 import { applyPhaseEvent, runStatusFromPhases } from '../../../_lib/pipeline/state.js';
@@ -31,36 +32,37 @@ async function findAwaitingRun(songId) {
   return rows[0] ?? null;
 }
 
-// eqeqeq del repo no admite `!= null`; helper explicito para null/undefined.
-function isNil(value) {
-  return value === null || value === undefined;
-}
-
 /**
- * Devuelve lyrics_review con `review` garantizado: si ya existe lo reusa tal
+ * Devuelve lyrics_review con `review` garantizado (si ya existe lo reusa tal
  * cual, si no lo construye desde transcripcion+sections+canonica y lo
- * persiste (para no reconstruirlo en cada GET/PUT siguiente).
+ * persiste, para no reconstruirlo en cada GET/PUT siguiente) junto con
+ * `dbSections`, en UN solo round-trip a `songs` (lo necesita tanto el build
+ * como las suggestions del GET — se evita pedirlo dos veces).
  * @param {{id:string, lyricsReview:object|null}} run
  * @param {string} songId
- * @returns {Promise<object>} lyrics_review completo (con `review` presente)
+ * @returns {Promise<{lyricsReview:object, dbSections:Array}>}
  */
 async function ensureReview(run, songId) {
-  const lyricsReview = run.lyricsReview ?? {};
-  if (lyricsReview.review) return lyricsReview;
-
   const [songRow] = await sql`SELECT sections FROM songs WHERE id = ${songId}`;
   const dbSections = songRow?.sections ?? [];
+
+  const lyricsReview = run.lyricsReview ?? {};
+  if (lyricsReview.review) return { lyricsReview, dbSections };
+
   const [canonicalRow] = await sql`SELECT content FROM song_lyrics_canonical WHERE song_id = ${songId}`;
   const canonical = canonicalRow?.content ?? null;
   const transcription = lyricsReview.transcription ?? { text: '', words: [], perLine: [] };
 
   const review = buildReviewDoc({ dbSections, canonical, transcription });
   const next = { ...lyricsReview, review };
+  // CAS: si el run ya no esta en awaiting_lyrics (se aprobo/cancelo entre el
+  // findAwaitingRun y este punto) no pisa lyrics_review — mismo criterio que
+  // el resto del pipeline (confirm.js/retry.js/approveGate).
   await sql`
     UPDATE song_pipeline_runs SET lyrics_review = ${sql.json(next)}, updated_at = now()
-    WHERE id = ${run.id}
+    WHERE id = ${run.id} AND status = 'awaiting_lyrics'
   `;
-  return next;
+  return { lyricsReview: next, dbSections };
 }
 
 /**
@@ -108,9 +110,7 @@ async function getGate(res, songId) {
     res.status(404).json({ error: 'No hay una ejecución esperando revisión de letra' });
     return;
   }
-  const lyricsReview = await ensureReview(run, songId);
-  const [songRow] = await sql`SELECT sections FROM songs WHERE id = ${songId}`;
-  const dbSections = songRow?.sections ?? [];
+  const { lyricsReview, dbSections } = await ensureReview(run, songId);
   const suggestions = buildSuggestions({ dbSections, transcription: lyricsReview.transcription });
   res.status(200).json({
     review: lyricsReview.review,
@@ -131,7 +131,7 @@ async function putGate(req, res, songId) {
     res.status(404).json({ error: 'No hay una ejecución esperando revisión de letra' });
     return;
   }
-  const lyricsReview = await ensureReview(run, songId);
+  const { lyricsReview } = await ensureReview(run, songId);
 
   let next;
   try {
@@ -145,9 +145,11 @@ async function putGate(req, res, songId) {
   }
 
   const nextLyricsReview = { ...lyricsReview, review: next };
+  // CAS: mismo criterio que confirm.js/retry.js/approveGate — no pisa el doc
+  // si el run ya dejo awaiting_lyrics entre el findAwaitingRun y este UPDATE.
   await sql`
     UPDATE song_pipeline_runs SET lyrics_review = ${sql.json(nextLyricsReview)}, updated_at = now()
-    WHERE id = ${run.id}
+    WHERE id = ${run.id} AND status = 'awaiting_lyrics'
   `;
   res.status(200).json({ review: next, temperature: reviewTemperature(next), canApprove: canApprove(next) });
 }

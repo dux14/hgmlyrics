@@ -51,6 +51,24 @@ vi.mock('../src/components/pipeline/StemTracksDetail.js', () => ({
   }),
 }));
 
+// D3d (SyncFineTuning) tiene su propio test dedicado: acá se mockea como
+// caja negra, igual que UploadPhaseCard y StemTracksDetail.
+let lastSyncTuningDestroy = null;
+let lastSyncTuningUpdate = null;
+
+vi.mock('../src/components/pipeline/SyncFineTuning.js', () => ({
+  createSyncFineTuning: vi.fn(() => {
+    lastSyncTuningDestroy = vi.fn();
+    lastSyncTuningUpdate = vi.fn();
+    return {
+      el: document.createElement('div'),
+      refresh: vi.fn(),
+      update: lastSyncTuningUpdate,
+      destroy: lastSyncTuningDestroy,
+    };
+  }),
+}));
+
 let routeCb = null;
 
 vi.mock('../src/router.js', () => ({
@@ -103,6 +121,8 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     lastUploadCardDispose = null;
     lastStemTracksDestroy = null;
     lastStemTracksUpdate = null;
+    lastSyncTuningDestroy = null;
+    lastSyncTuningUpdate = null;
     vi.clearAllMocks();
   });
 
@@ -258,6 +278,24 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     routeCb();
 
     expect(lastStemTracksDestroy).toHaveBeenCalled();
+  });
+
+  it('fila Sincronía monta el detalle de SyncFineTuning y lo actualiza en cada render', () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({ run: buildRun({ sync: { status: 'running' } }) });
+
+    const row = container.querySelector('[data-phase="sync"]');
+    expect(row.querySelector('.phase__detail').children.length).toBeGreaterThan(0);
+    expect(lastSyncTuningUpdate).toHaveBeenCalled();
+  });
+
+  it('teardown: llama syncTuning.destroy() para soltar el mini-player', () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({ run: buildRun() });
+
+    routeCb();
+
+    expect(lastSyncTuningDestroy).toHaveBeenCalled();
   });
 
   it('mount-once bajo carrera async real: dos eventos sin await entre ellos montan el panel una sola vez', async () => {

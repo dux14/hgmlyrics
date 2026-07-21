@@ -885,3 +885,221 @@
 .track--clips .track__label {
   color: var(--color-success);
 }
+
+/* ---- Detalle de sincronía / ajustes finos por línea (Task D3d) -------- */
+
+.sync-tuning {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.sync-tuning__hint {
+  font-size: 0.84rem;
+  color: var(--color-text-secondary);
+}
+
+.sync-tuning__error {
+  font-size: 0.84rem;
+  color: var(--color-danger);
+}
+
+.sync-tuning__legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--color-text-secondary);
+}
+.sync-tuning__legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sync-tuning__summary {
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+}
+
+.sync-tuning__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* Dot de confianza: hi = alineada (teal lleno), int = interpolada o de baja
+   confianza (teal hueco), man = ajuste manual (ámbar — SOLO acciones). */
+.cdot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cdot.hi {
+  background: var(--color-brand);
+}
+.cdot.int {
+  background: transparent;
+  border: 1.5px solid var(--color-brand);
+}
+.cdot.man {
+  background: var(--color-action);
+}
+
+.lineRow {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--border-radius-sm);
+  transition: background-color 0.2s var(--ease-out);
+}
+
+.lineRow--playing {
+  background: color-mix(in oklch, var(--color-brand) 10%, transparent);
+}
+
+.lineRow--flash {
+  animation: sync-tuning-flash 0.4s var(--ease-out);
+}
+@keyframes sync-tuning-flash {
+  0% {
+    background: color-mix(in oklch, var(--color-action) 22%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.lineRow__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+  padding: 6px 4px;
+}
+
+.lineRow__label {
+  flex: 1;
+  font-size: 0.84rem;
+  color: var(--color-text);
+}
+
+.lineRow__time {
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+
+.lineRow__editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) 4px var(--space-sm) 20px;
+}
+
+.lineRow__nudge {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+.lineRow__nudge button {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.lineRow__nudge button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lineRow__ms {
+  min-width: 5.5em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.lineRow__editor-actions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+/* ── Sub-bloque metrónomo dentro de Sincronía ── */
+.sync-tuning__metronome {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.sync-tuning__metronome-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.sync-tuning__bpm-detected {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.sync-tuning__field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.sync-tuning__bpm-manual,
+.sync-tuning__time-signature,
+.sync-tuning__beat-anchor {
+  padding: 0 var(--space-sm);
+  height: 34px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text);
+  font-size: 0.88rem;
+  font-family: inherit;
+  transition: border-color 0.15s var(--ease-out);
+}
+.sync-tuning__bpm-manual,
+.sync-tuning__beat-anchor {
+  width: 6ch;
+}
+.sync-tuning__bpm-manual:focus,
+.sync-tuning__time-signature:focus,
+.sync-tuning__beat-anchor:focus {
+  outline: none;
+  border-color: var(--color-brand);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lineRow,
+  .lineRow__nudge button,
+  .sync-tuning__bpm-manual,
+  .sync-tuning__time-signature,
+  .sync-tuning__beat-anchor {
+    transition-duration: 0.001ms !important;
+  }
+  .lineRow--flash {
+    animation: none;
+  }
+}

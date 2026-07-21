@@ -5,7 +5,7 @@
  * propia, D3b la muestra como sub-línea de Pistas) con estado progresivo vía
  * `watchPipelineRun`. Esta sub-tarea es el esqueleto: dot + copy + retry +
  * stale + montaje del panel de letra (C3). El detalle de Audio/Pistas/
- * Sincronía lo montan D3b/D3c dentro del slot que deja cada `PhaseRow`.
+ * Sincronía lo montan D3b/D3c/D3d dentro del slot que deja cada `PhaseRow`.
  */
 import '../../styles/pipeline.css';
 import { icon } from '../../lib/icons.js';
@@ -16,6 +16,7 @@ import { LyricsReviewPanel } from './LyricsReviewPanel.js';
 import { PhaseRow } from './PhaseRow.js';
 import { createUploadPhaseCard } from './UploadPhaseCard.js';
 import { createStemTracksDetail } from './StemTracksDetail.js';
+import { createSyncFineTuning } from './SyncFineTuning.js';
 
 // Filas visibles del stepper, en orden. lyrics_review es la fase "Letra".
 const ROWS = [
@@ -118,6 +119,16 @@ export function renderSongPipelineView(container, songId) {
   // Detalle de Pistas (D3c): mount-once igual que el card de subida, para no
   // recrear el gestor de audio único (y su <audio> real) en cada re-render.
   const stemTracks = createStemTracksDetail({ songId });
+
+  // Detalle de Sincronía (D3d): mount-once, mismo motivo (estado local de
+  // línea expandida + mini-player propio del stem de voz). Esta vista no
+  // tiene acceso a la canción proyectada, así que getSong cae al fallback
+  // "Línea N"; getVocalsUrl lee siempre el run más reciente.
+  const syncTuning = createSyncFineTuning({
+    songId,
+    getSong: () => null,
+    getVocalsUrl: () => lastRun?.phases?.stems?.tracks?.vocals ?? null,
+  });
 
   async function ensureLyricsPanel() {
     if (lyricsPanelEl || lyricsPanelLoading) return;
@@ -235,6 +246,7 @@ export function renderSongPipelineView(container, songId) {
 
     uploadCard.update(run);
     stemTracks.update(run);
+    syncTuning.update(run);
 
     ROWS.forEach((r, i) => {
       const phase = phases[r.key] || { status: 'pending' };
@@ -245,6 +257,8 @@ export function renderSongPipelineView(container, songId) {
         detail = uploadCard.el;
       } else if (r.key === 'stems') {
         detail = stemTracks.el;
+      } else if (r.key === 'sync') {
+        detail = syncTuning.el;
       } else if (r.key === 'lyrics_review') {
         if (run?.status === 'awaiting_lyrics' && phase.status !== 'done') {
           if (!lyricsPanelEl && !lyricsPanelLoading) ensureLyricsPanel();
@@ -254,7 +268,6 @@ export function renderSongPipelineView(container, songId) {
           lyricsPanelEl = null;
         }
       }
-      // D3c queda pendiente el detalle de Sincronía en este slot.
 
       const row = PhaseRow({
         key: r.key,
@@ -289,5 +302,6 @@ export function renderSongPipelineView(container, songId) {
     uploadCard.dispose?.();
     uploadCard.el.remove();
     stemTracks.destroy();
+    syncTuning.destroy();
   });
 }

@@ -68,7 +68,7 @@ align_image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("ffmpeg", "git")
     .pip_install_from_requirements("requirements.txt")
-    .pip_install("whisperx==3.3.1", "torch==2.4.1", "torchaudio==2.4.1")
+    .pip_install("whisperx==3.3.1", "torch==2.4.1", "torchaudio==2.4.1", "ctc-forced-aligner")
     .add_local_python_source("sections")
     .add_local_python_source("align_mapping")
 )
@@ -229,23 +229,48 @@ def run_align(payload: dict) -> None:
         beats = _detect_beats(audio_path)
         vocals_path = _extract_vocals_from_path(audio_path)
 
-        # ── 3. WhisperX: alinear el texto CONOCIDO (no transcripcion libre) ─
-        # Se importa aqui dentro (patron del repo, ver extract_vocals_stem):
-        # whisperx solo existe en la imagen Modal, no en el entorno local que
-        # evalua este modulo durante `modal deploy`.
-        import whisperx
-
-        audio = whisperx.load_audio(vocals_path)
-        duration_sec = len(audio) / 16000.0
-
+        # ── 3. Alinear el texto CONOCIDO (no transcripcion libre) ───────────
+        # Motor seleccionable por flag ALIGN_ENGINE (default whisperx). Los
+        # imports pesados de cada motor van DENTRO de su rama: whisperx solo
+        # existe en la imagen Modal (no en el entorno local que evalua este
+        # modulo durante `modal deploy`), y ctc-forced-aligner no esta
+        # instalado localmente (por eso los tests CPU no lo ejercitan).
         texto_completo = " ".join(line.get("text", "") for line in lines)
-        segments = [{"text": texto_completo, "start": 0.0, "end": duration_sec}]
 
-        align_model, metadata = whisperx.load_align_model(language_code="es", device="cuda")
-        result = whisperx.align(segments, align_model, metadata, audio, "cuda")
+        engine = os.environ.get("ALIGN_ENGINE", "whisperx")
+        if engine == "ctc":
+            import torch
+            from ctc_forced_aligner import (
+                load_alignment_model, generate_emissions, preprocess_text,
+                get_alignments, get_spans, postprocess_results, load_audio,
+            )
+            from align_ctc_adapter import ctc_words_to_whisperx_segments
+
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            model, tokenizer = load_alignment_model(
+                device, dtype=torch.float16 if device == "cuda" else torch.float32
+            )
+            audio_wav = load_audio(vocals_path, model.dtype, model.device)
+            emissions, stride = generate_emissions(model, audio_wav, batch_size=8)
+            tokens_starred, text_starred = preprocess_text(
+                texto_completo, romanize=True, language="spa"
+            )
+            segments_ctc, scores, blank_token = get_alignments(emissions, tokens_starred, tokenizer)
+            spans = get_spans(tokens_starred, segments_ctc, blank_token)
+            word_timestamps = postprocess_results(text_starred, spans, stride, scores)
+            aligned_segments = ctc_words_to_whisperx_segments(word_timestamps)
+        else:
+            import whisperx
+
+            audio = whisperx.load_audio(vocals_path)
+            duration_sec = len(audio) / 16000.0
+            segments = [{"text": texto_completo, "start": 0.0, "end": duration_sec}]
+            align_model, metadata = whisperx.load_align_model(language_code="es", device="cuda")
+            result = whisperx.align(segments, align_model, metadata, audio, "cuda")
+            aligned_segments = result.get("segments", [])
 
         words: list[dict] = []
-        for segment in result.get("segments", []):
+        for segment in aligned_segments:
             words.extend(segment.get("words", []))
 
         # ── 4. Mapear palabras alineadas -> lineas ──────────────────────────

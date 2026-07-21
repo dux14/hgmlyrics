@@ -11,10 +11,21 @@ vi.mock('../src/lib/pipelineApi.js', () => ({
     return lastUnsub;
   }),
   retryPipelinePhase: vi.fn(() => Promise.resolve({ success: true })),
+  getPipelineRun: vi.fn(() => Promise.resolve(null)),
 }));
 
 vi.mock('../src/components/pipeline/LyricsReviewPanel.js', () => ({
   LyricsReviewPanel: vi.fn(async () => document.createElement('div')),
+}));
+
+// D3b (UploadPhaseCard) tiene su propio test dedicado: acá se mockea como
+// una caja negra para no acoplar el esqueleto del stepper a su máquina de
+// estados interna.
+vi.mock('../src/components/pipeline/UploadPhaseCard.js', () => ({
+  createUploadPhaseCard: vi.fn(() => ({
+    el: document.createElement('div'),
+    update: vi.fn(),
+  })),
 }));
 
 let routeCb = null;

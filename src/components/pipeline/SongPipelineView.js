@@ -10,10 +10,11 @@
 import '../../styles/pipeline.css';
 import { icon } from '../../lib/icons.js';
 import { goBack, onRouteChange } from '../../router.js';
-import { watchPipelineRun, retryPipelinePhase } from '../../lib/pipelineApi.js';
+import { watchPipelineRun, retryPipelinePhase, getPipelineRun } from '../../lib/pipelineApi.js';
 import { showToast } from '../../lib/toast.js';
 import { LyricsReviewPanel } from './LyricsReviewPanel.js';
 import { PhaseRow } from './PhaseRow.js';
+import { createUploadPhaseCard } from './UploadPhaseCard.js';
 
 // Filas visibles del stepper, en orden. lyrics_review es la fase "Letra".
 const ROWS = [
@@ -98,6 +99,20 @@ export function renderSongPipelineView(container, songId) {
   let destroyed = false;
   let lastSig = null;
   let firstRender = true;
+
+  // Tarjeta de subida (D3b): mount-once igual que el panel de letra, para
+  // no perder su máquina de estados local (validando/advertencia/subiendo)
+  // en cada re-render de filas.
+  const uploadCard = createUploadPhaseCard({
+    songId,
+    onAfterConfirm: () => {
+      getPipelineRun(songId)
+        .then((data) => renderPhases(data?.run ?? null))
+        .catch((err) => {
+          console.error('SongPipelineView: no se pudo refrescar el run tras confirmar', err);
+        });
+    },
+  });
 
   async function ensureLyricsPanel() {
     if (lyricsPanelEl || lyricsPanelLoading) return;
@@ -206,27 +221,24 @@ export function renderSongPipelineView(container, songId) {
 
     rowsEl.innerHTML = '';
 
-    if (!run) {
-      const empty = document.createElement('p');
-      empty.className = 'pipeline-view__empty';
-      empty.textContent = 'No hay un procesamiento activo para esta canción.';
-      rowsEl.appendChild(empty);
-      pillEl.textContent = '0 de 5 fases';
-      return;
-    }
-
-    const phases = run.phases || {};
+    // run puede ser null (sin procesamiento activo todavía): el stepper se
+    // monta igual, con la fila Audio en su estado empty y el resto en espera.
+    const phases = run?.phases || {};
     const lyricsApproved = phases.lyrics_review?.status === 'done';
     const doneCount = ROWS.filter((r) => phases[r.key]?.status === 'done').length;
     pillEl.textContent = `${doneCount} de 5 fases`;
 
+    uploadCard.update(run);
+
     ROWS.forEach((r, i) => {
       const phase = phases[r.key] || { status: 'pending' };
-      const info = describePhase(r.key, phase, run.status, lyricsApproved);
+      const info = describePhase(r.key, phase, run?.status, lyricsApproved);
 
       let detail = null;
-      if (r.key === 'lyrics_review') {
-        if (run.status === 'awaiting_lyrics' && phase.status !== 'done') {
+      if (r.key === 'upload') {
+        detail = uploadCard.el;
+      } else if (r.key === 'lyrics_review') {
+        if (run?.status === 'awaiting_lyrics' && phase.status !== 'done') {
           if (!lyricsPanelEl && !lyricsPanelLoading) ensureLyricsPanel();
           detail = lyricsPanelEl;
         } else {
@@ -234,7 +246,7 @@ export function renderSongPipelineView(container, songId) {
           lyricsPanelEl = null;
         }
       }
-      // D3b/D3c montan el detalle de Audio/Pistas/Sincronía en este slot.
+      // D3c monta el detalle de Pistas/Sincronía en este slot.
 
       const row = PhaseRow({
         key: r.key,
@@ -266,5 +278,6 @@ export function renderSongPipelineView(container, songId) {
     unsub();
     offRoute();
     lyricsPanelEl = null;
+    uploadCard.el.remove();
   });
 }

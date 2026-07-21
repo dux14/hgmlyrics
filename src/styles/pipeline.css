@@ -611,3 +611,208 @@
     animation: none;
   }
 }
+
+/* ---- Tarjeta de subida (Task D3b) -------------------------------------- */
+
+.upload-card {
+  color: var(--color-text);
+}
+
+.upload-card__drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 20px var(--space-md);
+  border: 1.5px dashed var(--color-border);
+  border-radius: var(--border-radius-md);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s var(--ease-out);
+}
+.upload-card__drop:hover,
+.upload-card__drop:focus-within {
+  border-color: var(--color-brand);
+}
+
+.upload-card__drop-title {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.upload-card__drop-hint {
+  font-size: 0.76rem;
+}
+
+.upload-card__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.upload-card__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+}
+
+.upload-card__warning {
+  background: color-mix(in oklch, var(--color-action) 8%, transparent);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-md);
+}
+
+.upload-card__warning-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-sm);
+  margin-bottom: 10px;
+}
+
+.upload-card__warning-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.upload-card__warning-value {
+  display: block;
+  font-size: 0.84rem;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.upload-card__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  margin-bottom: 10px;
+}
+
+.upload-card__name-input,
+.upload-card__rename-input {
+  font-size: 0.86rem;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+
+.upload-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.upload-card .btn {
+  display: inline-block;
+  background: var(--color-action);
+  color: var(--color-bg);
+  font-weight: 700;
+  font-size: 0.82rem;
+  border: none;
+  border-radius: 9px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition:
+    transform 0.12s var(--ease-out),
+    filter 0.15s var(--ease-out);
+}
+.upload-card .btn:hover {
+  filter: brightness(1.06);
+}
+.upload-card .btn:active {
+  transform: scale(0.97);
+}
+
+.upload-card .btn2 {
+  display: inline-block;
+  background: none;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  padding: 7px 13px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition:
+    transform 0.12s var(--ease-out),
+    border-color 0.15s var(--ease-out);
+}
+.upload-card .btn2:hover {
+  border-color: var(--color-text-secondary);
+}
+.upload-card .btn2:active {
+  transform: scale(0.97);
+}
+
+.upload-card__confirmed {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.upload-card__name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.upload-card__name {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.upload-card__rename-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 2px;
+  transition: color 0.15s var(--ease-out);
+}
+.upload-card__rename-btn:hover {
+  color: var(--color-text);
+}
+
+.upload-card__original {
+  font-size: 0.72rem;
+  color: var(--color-text-secondary);
+}
+
+.upload-card__rename-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .upload-card__drop,
+  .upload-card .btn,
+  .upload-card .btn2,
+  .upload-card__rename-btn {
+    transition-duration: 0.001ms !important;
+  }
+}

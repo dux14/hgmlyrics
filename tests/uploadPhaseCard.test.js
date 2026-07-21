@@ -1,0 +1,178 @@
+// @vitest-environment jsdom
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+vi.mock('../src/lib/pipelineApi.js', () => ({
+  createPipelineRun: vi.fn(),
+  confirmPipelineUpload: vi.fn(() => Promise.resolve({ success: true })),
+  renamePipelineAudio: vi.fn(() => Promise.resolve({ success: true })),
+  cancelPipelineRun: vi.fn(() => Promise.resolve({ success: true })),
+}));
+
+vi.mock('../src/lib/stemsApi.js', () => ({
+  readAudioDuration: vi.fn(() => Promise.resolve(180)),
+}));
+
+vi.mock('../src/lib/toast.js', () => ({
+  showToast: vi.fn(),
+}));
+
+import { createUploadPhaseCard } from '../src/components/pipeline/UploadPhaseCard.js';
+import {
+  createPipelineRun,
+  confirmPipelineUpload,
+  renamePipelineAudio,
+  cancelPipelineRun,
+} from '../src/lib/pipelineApi.js';
+import { readAudioDuration } from '../src/lib/stemsApi.js';
+
+const SONG_ID = 'song-1';
+
+function makeFile(name = 'cancion.mp3') {
+  return new File(['x'.repeat(10)], name, { type: 'audio/mpeg' });
+}
+
+function selectFile(el, file) {
+  const input = el.querySelector('.upload-card__input');
+  Object.defineProperty(input, 'files', { value: [file], configurable: true });
+  input.dispatchEvent(new Event('change'));
+}
+
+/** Espera N vueltas de microtask para flushear las promesas de la máquina de estados. */
+async function flush(times = 4) {
+  for (let i = 0; i < times; i += 1) {
+    await Promise.resolve();
+  }
+}
+
+describe('UploadPhaseCard — subida del audio (Task D3b)', () => {
+  beforeEach(() => {
+    global.fetch = vi.fn(() => Promise.resolve({ ok: true }));
+    vi.clearAllMocks();
+    readAudioDuration.mockResolvedValue(180);
+    confirmPipelineUpload.mockResolvedValue({ success: true });
+    renamePipelineAudio.mockResolvedValue({ success: true });
+    cancelPipelineRun.mockResolvedValue({ success: true });
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('estado empty: muestra la dropzone con los límites', () => {
+    const { el } = createUploadPhaseCard({ songId: SONG_ID });
+    expect(el.querySelector('.upload-card__drop-hint').textContent).toContain('MP3');
+    expect(el.querySelector('.upload-card__input')).toBeTruthy();
+  });
+
+  it('elegir archivo con coincidencia alta: llama createPipelineRun y sube directo', async () => {
+    createPipelineRun.mockResolvedValue({
+      runId: 'r1',
+      uploadUrl: 'https://upload.example/x',
+      titleScore: 0.95,
+      threshold: 0.6,
+    });
+    const { el } = createUploadPhaseCard({ songId: SONG_ID });
+
+    selectFile(el, makeFile());
+    await flush();
+
+    expect(createPipelineRun).toHaveBeenCalledWith(
+      SONG_ID,
+      expect.objectContaining({ fileName: 'cancion.mp3' }),
+    );
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://upload.example/x',
+      expect.objectContaining({ method: 'PUT' }),
+    );
+    expect(confirmPipelineUpload).toHaveBeenCalledWith(SONG_ID, { durationSec: 180 });
+  });
+
+  it('coincidencia baja: muestra estado warning con grid y campo de nombre', async () => {
+    createPipelineRun.mockResolvedValue({
+      runId: 'r1',
+      uploadUrl: 'https://upload.example/x',
+      titleScore: 0.2,
+      threshold: 0.6,
+    });
+    const { el } = createUploadPhaseCard({ songId: SONG_ID });
+
+    selectFile(el, makeFile());
+    await flush();
+
+    expect(el.querySelector('.upload-card__warning')).toBeTruthy();
+    expect(el.querySelector('.upload-card__warning-value').textContent).toBe('cancion.mp3');
+    expect(el.querySelector('.upload-card__name-input')).toBeTruthy();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('warning → Continuar de todas formas: sube el archivo y confirma', async () => {
+    createPipelineRun.mockResolvedValue({
+      runId: 'r1',
+      uploadUrl: 'https://upload.example/x',
+      titleScore: 0.2,
+      threshold: 0.6,
+    });
+    const { el } = createUploadPhaseCard({ songId: SONG_ID });
+
+    selectFile(el, makeFile());
+    await flush();
+
+    el.querySelector('.upload-card__continue').click();
+    await flush();
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://upload.example/x',
+      expect.objectContaining({ method: 'PUT' }),
+    );
+    expect(confirmPipelineUpload).toHaveBeenCalledWith(SONG_ID, { durationSec: 180 });
+  });
+
+  it('run con upload done: estado confirmed muestra el nombre display y Reemplazar', () => {
+    const { el, update } = createUploadPhaseCard({ songId: SONG_ID });
+    update({
+      status: 'processing',
+      phases: { upload: { status: 'done' } },
+      inputMeta: { filename: 'original.mp3', displayName: 'Mi nombre' },
+    });
+
+    expect(el.querySelector('.upload-card__name').textContent).toBe('Mi nombre');
+    expect(el.querySelector('.upload-card__original').textContent).toBe('original.mp3');
+    expect(el.querySelector('.upload-card__replace')).toBeTruthy();
+  });
+
+  it('confirmed → click en lapiz → Guardar: llama renamePipelineAudio', async () => {
+    const { el, update } = createUploadPhaseCard({ songId: SONG_ID });
+    update({
+      status: 'done',
+      phases: { upload: { status: 'done' } },
+      inputMeta: { filename: 'original.mp3' },
+    });
+
+    el.querySelector('.upload-card__rename-btn').click();
+    const input = el.querySelector('.upload-card__rename-input');
+    input.value = 'Nuevo nombre';
+    el.querySelector('.upload-card__rename-save').click();
+    await flush();
+
+    expect(renamePipelineAudio).toHaveBeenCalledWith(SONG_ID, 'Nuevo nombre');
+  });
+
+  it('update(run) no pisa un flujo local en curso (validating/warning/uploading)', async () => {
+    createPipelineRun.mockResolvedValue({
+      runId: 'r1',
+      uploadUrl: 'https://upload.example/x',
+      titleScore: 0.2,
+      threshold: 0.6,
+    });
+    const { el, update } = createUploadPhaseCard({ songId: SONG_ID });
+
+    selectFile(el, makeFile());
+    await flush();
+    expect(el.querySelector('.upload-card__warning')).toBeTruthy();
+
+    // Un evento del watcher llega mientras el card sigue en warning: no debe
+    // pisar el flujo local.
+    update({ status: 'created', phases: { upload: { status: 'pending' } }, inputMeta: {} });
+    expect(el.querySelector('.upload-card__warning')).toBeTruthy();
+  });
+});

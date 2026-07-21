@@ -447,7 +447,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
         <button class="song-toolbar__icon" id="enter-stage-btn" aria-label="Modo escenario">${icon('maximize', { size: 18 })}</button>
         <button class="song-toolbar__icon" id="open-options-sheet" aria-label="Opciones">${icon('sliders', { size: 18 })}</button>
         ${isAdmin() ? `<a href="#/admin/edit/${song.id}?from=${song.id}" class="song-toolbar__icon" aria-label="Editar">${icon('pencil', { size: 16 })}</a>` : ''}
-        ${isAdmin() ? `<button class="song-toolbar__icon" id="open-pipeline-btn" aria-label="Procesamiento de audio">${icon('activity', { size: 18 })}<span class="pipeline-badge" hidden></span></button>` : ''}
+        ${isAdmin() ? `<button class="song-toolbar__icon" id="open-pipeline-btn" aria-label="Procesamiento de audio">${icon('activity', { size: 18 })}<span class="pipeline-badge" hidden aria-hidden="true"></span></button>` : ''}
       </div>
 
       ${
@@ -996,31 +996,33 @@ async function _renderSongBody(container, songId, isPreview, song) {
   });
 
   // Badge de estado del pipeline (sin Realtime, una sola llamada al montar):
-  // ambar = requiere accion del admin, cyan pulsante = en proceso, sin badge
-  // si no hay run activo o ya esta 'done'.
-  (async () => {
-    let data;
-    try {
-      data = await getPipelineRun(song.id);
-    } catch {
-      return;
-    }
-    const btn = container.querySelector('#open-pipeline-btn');
-    const badge = btn?.querySelector('.pipeline-badge');
-    if (!badge) return;
-    const status = data?.run?.status;
-    if (!status || status === 'done') {
-      badge.hidden = true;
-      return;
-    }
-    if (status === 'awaiting_lyrics' || status === 'failed') {
-      badge.className = 'pipeline-badge need';
-      badge.hidden = false;
-    } else if (['created', 'uploading', 'processing', 'running'].includes(status)) {
-      badge.className = 'pipeline-badge proc';
-      badge.hidden = false;
-    }
-  })();
+  // ámbar = requiere acción del admin, cyan pulsante = en proceso, sin badge
+  // si no hay run activo o ya está 'done'.
+  if (isAdmin()) {
+    (async () => {
+      let data;
+      try {
+        data = await getPipelineRun(song.id);
+      } catch {
+        return;
+      }
+      const btn = container.querySelector('#open-pipeline-btn');
+      const badge = btn?.querySelector('.pipeline-badge');
+      if (!badge) return;
+      const status = data?.run?.status;
+      if (!status || status === 'done') {
+        badge.hidden = true;
+        return;
+      }
+      if (status === 'awaiting_lyrics' || status === 'failed') {
+        badge.className = 'pipeline-badge need';
+        badge.hidden = false;
+      } else if (['created', 'uploading', 'processing', 'running'].includes(status)) {
+        badge.className = 'pipeline-badge proc';
+        badge.hidden = false;
+      }
+    })();
+  }
 
   // Title → links page
   container.querySelector('#song-title-link')?.addEventListener('click', () => {

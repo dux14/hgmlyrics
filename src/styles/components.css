@@ -1094,7 +1094,7 @@
 }
 
 /* === Badge de estado del pipeline (D2) — punto sobre #open-pipeline-btn ===
-   need (ambar) = requiere accion del admin, fijo. proc (cyan) = en proceso,
+   need (ámbar) = requiere acción del admin, fijo. proc (cyan) = en proceso,
    pulso infinito con box-shadow expansivo. */
 #open-pipeline-btn {
   position: relative;

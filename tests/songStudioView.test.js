@@ -36,12 +36,13 @@ function makePlayerStub() {
     seek: vi.fn(),
   };
 }
-function makeToneStub() {
+function makeToneStub(voices = []) {
   return {
     el: document.createElement('div'),
     setActiveTime: vi.fn(),
     setVoiceDimmed: vi.fn(),
     destroy: vi.fn(),
+    voices,
   };
 }
 
@@ -52,7 +53,18 @@ function makeStudioData(overrides = {}) {
       { kind: 'vocals', url: 'https://x/v.mp3', display: null, durationSec: 100 },
       { kind: 'drums', url: 'https://x/d.mp3', display: null, durationSec: 100 },
     ],
-    analysis: { voices_present: ['lead', 'backing', 'choir'], voices: {} },
+    // Caso realista: lead/backing tienen `.lines` (ToneLyrics las pinta),
+    // male/female llegan con `{notes}` sin `.lines` (ToneLyrics NO les
+    // pinta nada, así que no deben generar ítem de leyenda).
+    analysis: {
+      voices_present: ['lead', 'backing', 'male', 'female'],
+      voices: {
+        lead: { lines: [{ syllables: [{ text: 'Me', start: 0, end: 0.2, note: 'C4' }] }] },
+        backing: { lines: [{ syllables: [{ text: 'Me', start: 0, end: 0.2, note: 'G3' }] }] },
+        male: { notes: [] },
+        female: { notes: [] },
+      },
+    },
     sections: [],
     timings: null,
     ...overrides,
@@ -132,9 +144,12 @@ describe('SongStudioView', () => {
     expect(container.querySelector('.pipeline-view__title').textContent).toBe('Cancion de prueba');
   });
 
-  it('click en un item de la leyenda llama setVoiceDimmed (toggle)', async () => {
+  it('click en un item de la leyenda llama setVoiceDimmed (toggle), solo con voces que ToneLyrics pinta', async () => {
     const playerStub = makePlayerStub();
-    const toneStub = makeToneStub();
+    const toneStub = makeToneStub([
+      { key: 'lead', role: 'lead', label: 'Voz principal' },
+      { key: 'backing', role: 'alt', label: 'Alterna' },
+    ]);
     createMultiTrackPlayer.mockReturnValue(playerStub);
     createToneLyrics.mockReturnValue(toneStub);
     getSongStudio.mockResolvedValue(makeStudioData());
@@ -143,16 +158,18 @@ describe('SongStudioView', () => {
     await Promise.resolve();
     await Promise.resolve();
 
+    // Leyenda: SOLO lead + backing (male/female no tienen .lines, ToneLyrics
+    // no les pinta notas, así que no aparecen — no hay ítem "Coros" muerto).
     const items = container.querySelectorAll('.studio-view__legend-item');
-    expect(items.length).toBe(3); // lead, backing, choir presentes
+    expect(items.length).toBe(2);
 
-    items[0].click();
-    expect(toneStub.setVoiceDimmed).toHaveBeenCalledWith('lead', true);
-    expect(items[0].getAttribute('aria-pressed')).toBe('true');
+    items[1].click();
+    expect(toneStub.setVoiceDimmed).toHaveBeenCalledWith('backing', true);
+    expect(items[1].getAttribute('aria-pressed')).toBe('true');
 
-    items[0].click();
-    expect(toneStub.setVoiceDimmed).toHaveBeenCalledWith('lead', false);
-    expect(items[0].getAttribute('aria-pressed')).toBe('false');
+    items[1].click();
+    expect(toneStub.setVoiceDimmed).toHaveBeenCalledWith('backing', false);
+    expect(items[1].getAttribute('aria-pressed')).toBe('false');
   });
 
   it('teardown en cambio de ruta llama destroy() de ambos y desuscribe', async () => {

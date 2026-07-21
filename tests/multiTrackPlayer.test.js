@@ -228,6 +228,17 @@ describe('createMultiTrackPlayer', () => {
     destroy();
   });
 
+  it('seek: notifica a los listeners de onTime con el tiempo buscado (highlight en vivo con player en pausa)', () => {
+    const { onTime, seek, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
+    const cb = vi.fn();
+    onTime(cb);
+
+    seek(30);
+
+    expect(cb).toHaveBeenCalledWith(30);
+    destroy();
+  });
+
   it('destroy() limpia los callbacks de onTime (no quedan huerfanos)', () => {
     const { onTime, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
     const cb = vi.fn();

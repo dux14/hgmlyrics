@@ -50,23 +50,15 @@ function stemsToTracks(stems) {
   return [...voces, ...instrumentos];
 }
 
-// Leyenda de voces: nivel 0 (base) = "Voz principal" (teal), nivel 1 =
-// "Alterna" (violeta), nivel 2+ = "Coros" (rosa, puede agrupar más de una
-// voz — se atenúan/reactivan juntas bajo un solo ítem).
-function buildLegendItems(voicesPresent) {
-  const items = [];
-  if (voicesPresent[0]) {
-    items.push({ label: 'Voz principal', cls: 'tone-note--lead', keys: [voicesPresent[0]] });
-  }
-  if (voicesPresent[1]) {
-    items.push({ label: 'Alterna', cls: 'tone-note--alt', keys: [voicesPresent[1]] });
-  }
-  const coros = voicesPresent.slice(2);
-  if (coros.length) {
-    items.push({ label: 'Coros', cls: 'tone-note--coros', keys: coros });
-  }
-  return items;
-}
+// Clase de color por rol — mismo vocabulario que ToneLyrics.ROLE_CLASS
+// (teal=lead, violeta=alt, rosa=coros). La leyenda sale de `tone.voices`
+// (las voces que ToneLyrics REALMENTE pinta), nunca de una posición fija en
+// `voices_present`: así ningún ítem atenúa un control muerto.
+const ROLE_SWATCH_CLASS = {
+  lead: 'tone-note--lead',
+  alt: 'tone-note--alt',
+  coros: 'tone-note--coros',
+};
 
 /**
  * @param {HTMLElement} container
@@ -145,10 +137,9 @@ export function renderSongStudioView(container, songId) {
 
     player.onTime((sec) => tone.setActiveTime(sec));
 
-    const voicesPresent = Array.isArray(data.analysis?.voices_present)
-      ? data.analysis.voices_present
-      : [];
-    const legendItems = buildLegendItems(voicesPresent);
+    // Leyenda: un ítem por voz que ToneLyrics efectivamente pinta
+    // (tone.voices), no por posición en voices_present.
+    const legendItems = Array.isArray(tone.voices) ? tone.voices : [];
     const legendEl = view.querySelector('.studio-view__legend');
     if (legendItems.length) {
       const dimmed = new Set();
@@ -156,7 +147,7 @@ export function renderSongStudioView(container, songId) {
         .map(
           (item, i) =>
             `<button type="button" class="studio-view__legend-item" data-idx="${i}" aria-pressed="false">
-              <span class="tone-note ${item.cls}">●</span>
+              <span class="tone-note ${ROLE_SWATCH_CLASS[item.role] || 'tone-note--coros'}">●</span>
               <span>${item.label}</span>
             </button>`,
         )
@@ -169,7 +160,7 @@ export function renderSongStudioView(container, songId) {
           else dimmed.add(i);
           btn.setAttribute('aria-pressed', String(!isDimmed));
           btn.classList.toggle('is-dimmed', !isDimmed);
-          item.keys.forEach((key) => tone?.setVoiceDimmed(key, !isDimmed));
+          tone?.setVoiceDimmed(item.key, !isDimmed);
         });
       });
     }

@@ -30,6 +30,19 @@ function roleClassFor(voiceKey, levelIndex) {
       : 'tone-note--coros';
 }
 
+// Etiqueta legible de la leyenda por rol de color (mismo vocabulario que
+// ROLE_CLASS, sin el prefijo `tone-note--`).
+const ROLE_LABEL = { lead: 'Voz principal', alt: 'Alterna', coros: 'Coros' };
+
+function roleKeyFor(voiceKey, levelIndex) {
+  return roleClassFor(voiceKey, levelIndex).replace('tone-note--', '');
+}
+
+// Voces que `setVoiceDimmed` acepta — enum fijo del pipeline (ver
+// `voices_present`). Cualquier otra clave se ignora (defensa ante selector
+// interpolado con `data-voice`).
+const KNOWN_VOICE_KEYS = new Set(['lead', 'backing', 'male', 'female', 'choir']);
+
 // Etiqueta de una sílaba para una voz dada: '' si ditto (sostiene la nota
 // anterior), nada (null) si blank (sin nota), el nombre de nota si no.
 function noteLabel(syl) {
@@ -86,10 +99,19 @@ export function createToneLyrics({ analysis, onSeek } = {}) {
 
   if (!baseKey || baseLines.length === 0) {
     el.innerHTML = '<p class="tone-lyrics__empty">No hay datos de partitura para esta canción.</p>';
-    return { el, setActiveTime() {}, setVoiceDimmed() {}, destroy() {} };
+    return { el, setActiveTime() {}, setVoiceDimmed() {}, destroy() {}, voices: [] };
   }
 
   const otherKeys = voicesPresent.filter((k) => k !== baseKey && analysis.voices?.[k]?.lines);
+
+  // Voces efectivamente renderizadas, en el mismo orden que las notas
+  // apiladas (base primero): fuente única de verdad para la leyenda — así
+  // nunca atenúa un control muerto (voz presente en `voices_present` pero
+  // sin `.lines`, por ende sin notas pintadas).
+  const voices = [baseKey, ...otherKeys].map((key, levelIndex) => {
+    const role = roleKeyFor(key, levelIndex);
+    return { key, role, label: ROLE_LABEL[role] };
+  });
 
   const html = baseLines
     .map((line, li) => {
@@ -180,6 +202,7 @@ export function createToneLyrics({ analysis, onSeek } = {}) {
   // alterna o coros sin perder la referencia de las demás.
   function setVoiceDimmed(voiceKey, dimmed) {
     if (destroyed) return;
+    if (!KNOWN_VOICE_KEYS.has(voiceKey)) return;
     el.querySelectorAll(`.tone-note[data-voice="${voiceKey}"]`).forEach((noteEl) => {
       noteEl.classList.toggle('dim', dimmed);
     });
@@ -194,5 +217,6 @@ export function createToneLyrics({ analysis, onSeek } = {}) {
       destroyed = true;
       ac.abort();
     },
+    voices,
   };
 }

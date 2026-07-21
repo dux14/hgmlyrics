@@ -313,12 +313,42 @@ describe('ToneLyrics — setVoiceDimmed', () => {
   });
 });
 
+describe('ToneLyrics — voices (leyenda)', () => {
+  beforeEach(() => {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: false });
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('devuelve una entrada por voz efectivamente pintada, base primero, con role y label', () => {
+    const { voices } = createToneLyrics({ analysis: makeAnalysis() });
+    expect(voices).toEqual([
+      { key: 'lead', role: 'lead', label: 'Voz principal' },
+      { key: 'backing', role: 'alt', label: 'Alterna' },
+      { key: 'choir', role: 'coros', label: 'Coros' },
+    ]);
+  });
+
+  it('una voz presente en voices_present pero sin .lines (solo notes) no aparece en voices', () => {
+    const analysis = makeAnalysis();
+    analysis.voices_present = ['lead', 'backing', 'male', 'female'];
+    // male/female llegan con {notes} sin .lines (shape real del backend).
+    analysis.voices.male = { notes: [] };
+    analysis.voices.female = { notes: [] };
+    const { voices } = createToneLyrics({ analysis });
+    expect(voices).toEqual([
+      { key: 'lead', role: 'lead', label: 'Voz principal' },
+      { key: 'backing', role: 'alt', label: 'Alterna' },
+    ]);
+  });
+});
+
 describe('ToneLyrics — analysis vacío', () => {
   it('sin voces no crashea y pinta estado vacío', () => {
-    const { el, setActiveTime, destroy } = createToneLyrics({
+    const { el, setActiveTime, destroy, voices } = createToneLyrics({
       analysis: { voices_present: [], voices: {} },
     });
     expect(el.querySelector('.tone-lyrics__empty')).toBeTruthy();
+    expect(voices).toEqual([]);
     expect(() => setActiveTime(1)).not.toThrow();
     expect(() => destroy()).not.toThrow();
   });

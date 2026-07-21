@@ -182,12 +182,17 @@ export function createMultiTrackPlayer({ tracks }) {
     return () => timeListeners.delete(cb);
   };
 
+  /** Notifica a los listeners de tiempo (onTime) con `sec` en segundos. */
+  const notifyTime = (sec) => {
+    timeListeners.forEach((cb) => cb(sec));
+  };
+
   const tick = () => {
     const master = masterAudio();
     const masterTime = master ? master.currentTime : 0;
     syncStep(audios, masterTime);
     if (!scrubbing) paintAt(masterTime);
-    timeListeners.forEach((cb) => cb(masterTime));
+    notifyTime(masterTime);
     if (master && master.ended) {
       pauseAll();
       return;
@@ -342,7 +347,9 @@ export function createMultiTrackPlayer({ tracks }) {
   // saltar a un punto de la letra (p. ej. tap en línea de ToneLyrics).
   const seek = (time) => {
     seekAll(clamp(time, 0, masterDuration()));
-    paintAt(masterAudio() ? masterAudio().currentTime : 0);
+    const sec = masterAudio() ? masterAudio().currentTime : 0;
+    paintAt(sec);
+    notifyTime(sec);
   };
 
   return { el: root, destroy, onTime, seek };

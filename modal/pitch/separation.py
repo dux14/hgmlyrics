@@ -14,6 +14,7 @@ modulos NO se importan (dominio distinto).
 """
 from __future__ import annotations
 import os
+import re
 
 from _common import request_signed_put, upload_put, post_webhook, artifact, extract_storage_key
 
@@ -90,8 +91,15 @@ def run_separation(job_id, webhook, sign_upload_url, inbound_secret, audio_bytes
         lead_path = backing_path = None
         for fname in karaoke_files:
             fpath = fname if os.path.isabs(fname) else os.path.join(karaoke_out, fname)
-            low = os.path.basename(fpath).lower()
-            if "(vocals)" in low:
+            # El input del karaoke es el stem vocal ya extraido, cuyo nombre
+            # trae de fabrica el prefijo "(vocals)". audio-separator agrega
+            # SU PROPIA etiqueta al final, asi que ambos stems producidos
+            # contienen "(vocals)" en algun punto del nombre: se clasifica
+            # por la ULTIMA etiqueta entre parentesis (la que agrega el
+            # karaoke), no por contencion simple.
+            tags = re.findall(r"\(([^)]*)\)", os.path.basename(fpath).lower())
+            last = tags[-1] if tags else ""
+            if "vocals" in last:
                 lead_path = fpath
             else:
                 # El stem no-lead se mapea a backing sin importar como lo

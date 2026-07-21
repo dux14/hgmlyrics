@@ -26,6 +26,7 @@ patrón que _extract_vocals_from_path en _common.py. Cold start más corto.
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 
 # Checkpoint elegido en Task 4. Rollback por env var, igual patrón que
@@ -41,16 +42,18 @@ _MODEL_LABEL = _KARAOKE_MODEL_CKPT.removesuffix(".ckpt")
 
 def _classify_karaoke_stem(filename: str) -> "str | None":
     """Mapea el nombre de archivo de un stem del modelo karaoke a 'lead' o
-    'backing'. audio-separator produce nombres del tipo
-    'vocals_(Vocals)_mel_band_roformer_karaoke_...mp3' /
-    '..._(Instrumental)_...mp3' (el nombre exacto del stem no-lead depende del
-    checkpoint, p. ej. otros modelos lo llaman '(other)'). El modelo produce
-    EXACTAMENTE 2 stems, así que cualquier stem que no sea '(vocals)' se
-    mapea a 'backing'."""
-    low = filename.lower()
-    if "(vocals)" in low:
-        return "lead"
-    return "backing"
+    'backing'. El input de este modelo ya es el stem vocal extraído en el
+    paso anterior (extract_vocals_stem), cuyo nombre de archivo trae de
+    fábrica el prefijo '(vocals)'. audio-separator agrega SU PROPIA etiqueta
+    al final del nombre ('(Vocals)' o '(Instrumental)'/'(other)' según el
+    checkpoint), por lo que ambos stems producidos por el karaoke contienen
+    '(vocals)' en algún punto del nombre y no se puede clasificar por simple
+    contención. Por eso se decide por la ÚLTIMA etiqueta entre paréntesis
+    (la que agrega el karaoke): si esa última etiqueta menciona 'vocals' es
+    lead, si no, es backing (el modelo produce EXACTAMENTE 2 stems)."""
+    tags = re.findall(r"\(([^)]*)\)", filename.lower())
+    last = tags[-1] if tags else ""
+    return "lead" if "vocals" in last else "backing"
 
 
 def separate_lead_backing(vocals_path: str) -> dict:

@@ -93,7 +93,10 @@ def run_separation(job_id, webhook, sign_upload_url, inbound_secret, audio_bytes
             low = os.path.basename(fpath).lower()
             if "(vocals)" in low:
                 lead_path = fpath
-            elif "(instrumental)" in low:
+            else:
+                # El stem no-lead se mapea a backing sin importar como lo
+                # nombre el checkpoint (p. ej. "(instrumental)" u "(other)");
+                # el modelo produce exactamente 2 stems.
                 backing_path = fpath
         if lead_path is None or backing_path is None:
             raise RuntimeError(

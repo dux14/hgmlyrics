@@ -50,20 +50,23 @@ _OUTPUT_STEMS = ["vocals", "instrumental"] + _DEMUCS_INSTRUMENT_STEMS
 
 def _classify_ep317_stem(filename: str) -> "str | None":
     """
-    Mapea el nombre de archivo de un stem de ep_317 a 'vocals' o 'instrumental'.
+    Mapea el nombre de archivo de un stem del separador vocal a 'vocals' o
+    'instrumental'.
 
     audio-separator produce nombres del tipo:
       song_(Vocals)_model_bs_roformer_ep_317_sdr_12.9755.ckpt.mp3
       song_(Instrumental)_model_bs_roformer_ep_317_sdr_12.9755.ckpt.mp3
 
-    Devuelve None si el nombre no es reconocido (el llamador lanzará).
+    El nombre del stem no-vocal depende del checkpoint: ep_317 lo llama
+    '(Instrumental)', pero melband_roformer_big_beta4 (SOTA actual) lo llama
+    '(other)'. Como el modelo produce EXACTAMENTE 2 stems (vocal + su
+    compañero), cualquier stem que no sea '(vocals)' se mapea a
+    'instrumental' sin importar cómo lo nombre el checkpoint.
     """
     low = filename.lower()
     if "(vocals)" in low:
         return "vocals"
-    if "(instrumental)" in low:
-        return "instrumental"
-    return None
+    return "instrumental"
 
 
 def extract_all_stems(src_path: str) -> dict:

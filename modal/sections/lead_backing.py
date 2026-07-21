@@ -43,13 +43,14 @@ def _classify_karaoke_stem(filename: str) -> "str | None":
     """Mapea el nombre de archivo de un stem del modelo karaoke a 'lead' o
     'backing'. audio-separator produce nombres del tipo
     'vocals_(Vocals)_mel_band_roformer_karaoke_...mp3' /
-    '..._(Instrumental)_...mp3'. None si no se reconoce."""
+    '..._(Instrumental)_...mp3' (el nombre exacto del stem no-lead depende del
+    checkpoint, p. ej. otros modelos lo llaman '(other)'). El modelo produce
+    EXACTAMENTE 2 stems, así que cualquier stem que no sea '(vocals)' se
+    mapea a 'backing'."""
     low = filename.lower()
     if "(vocals)" in low:
         return "lead"
-    if "(instrumental)" in low:
-        return "backing"
-    return None
+    return "backing"
 
 
 def separate_lead_backing(vocals_path: str) -> dict:
@@ -79,11 +80,6 @@ def separate_lead_backing(vocals_path: str) -> dict:
     for fname in out_files:
         fpath = fname if os.path.isabs(fname) else os.path.join(out_dir, fname)
         label = _classify_karaoke_stem(os.path.basename(fpath))
-        if label is None:
-            raise RuntimeError(
-                "karaoke produjo un stem inesperado (no contiene '(vocals)' ni "
-                f"'(instrumental)'): {os.path.basename(fpath)}"
-            )
         stems[label] = fpath
 
     for required in ("lead", "backing"):

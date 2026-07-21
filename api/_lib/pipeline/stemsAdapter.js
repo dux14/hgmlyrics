@@ -15,22 +15,26 @@ const FINALIZER_SECTION = 'leadBacking';
  *          result?:{status:string, model?:string, outputs?:object}, error?:string}} body
  * @returns {{runId:string, phase:'stems', ok:boolean, partial?:boolean,
  *            tracks?:object, error?:string} | null}
- *   null si el evento debe ignorarse (sección no finalizadora que falló —
- *   no crítica para el DAG, p.ej. gender opcional o voiceInstrumental sin
- *   slot de upload en modo unificado).
+ *   Solo se contemplan status 'done'/'failed' (enum cerrado). null si el
+ *   evento debe ignorarse: status ausente o desconocido (p.ej. 'running') —
+ *   aun no hay resultado, no debe finalizar ni fallar la fase — o sección no
+ *   finalizadora que falló (no crítica para el DAG, p.ej. gender opcional o
+ *   voiceInstrumental sin slot de upload en modo unificado).
  */
 export function sectionEventToPhaseEvent(body) {
   const { jobId, section, result = {}, error } = body;
   const outputs = result.outputs || {};
   const tracks = Object.fromEntries(Object.entries(outputs).filter(([, v]) => v !== null && v !== undefined));
+  const isFinalizer = section === FINALIZER_SECTION;
 
-  if (section === FINALIZER_SECTION) {
-    if (result.status === 'failed') {
-      return { runId: jobId, phase: 'stems', ok: false, error: error ?? 'error desconocido' };
-    }
-    return { runId: jobId, phase: 'stems', ok: true, partial: false, tracks };
+  if (result.status === 'failed') {
+    if (!isFinalizer) return null;
+    return { runId: jobId, phase: 'stems', ok: false, error: error ?? 'error desconocido' };
   }
 
-  if (result.status === 'failed') return null;
-  return { runId: jobId, phase: 'stems', ok: true, partial: true, tracks };
+  if (result.status !== 'done') return null;
+
+  return isFinalizer
+    ? { runId: jobId, phase: 'stems', ok: true, partial: false, tracks }
+    : { runId: jobId, phase: 'stems', ok: true, partial: true, tracks };
 }

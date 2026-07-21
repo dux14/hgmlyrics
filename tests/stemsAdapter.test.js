@@ -54,4 +54,45 @@ describe('sectionEventToPhaseEvent', () => {
     });
     expect(out.tracks).toEqual({});
   });
+
+  it('sin result (ni outputs) → ignorado (null), no revienta leyendo outputs', () => {
+    const out = sectionEventToPhaseEvent({ jobId: 'run-1', section: 'leadBacking' });
+    expect(out).toBeNull();
+  });
+
+  it('leadBacking status running → ignorado (null), no finaliza la fase aun', () => {
+    const out = sectionEventToPhaseEvent({
+      jobId: 'run-1',
+      section: 'leadBacking',
+      result: { status: 'running', model: 'karaoke', outputs: {} },
+    });
+    expect(out).toBeNull();
+  });
+
+  it('leadBacking sin status → ignorado (null), no finaliza la fase aun', () => {
+    const out = sectionEventToPhaseEvent({
+      jobId: 'run-1',
+      section: 'leadBacking',
+      result: { model: 'karaoke', outputs: {} },
+    });
+    expect(out).toBeNull();
+  });
+
+  it('voiceInstrumental status running → ignorado (null), sección no finalizadora sin resultado aun', () => {
+    const out = sectionEventToPhaseEvent({
+      jobId: 'run-1',
+      section: 'voiceInstrumental',
+      result: { status: 'running', model: 'x', outputs: {} },
+    });
+    expect(out).toBeNull();
+  });
+
+  it('gender sin status → ignorado (null), sección no finalizadora sin resultado aun', () => {
+    const out = sectionEventToPhaseEvent({
+      jobId: 'run-1',
+      section: 'gender',
+      result: { model: 'x', outputs: {} },
+    });
+    expect(out).toBeNull();
+  });
 });

@@ -15,6 +15,7 @@ import { showToast } from '../../lib/toast.js';
 import { LyricsReviewPanel } from './LyricsReviewPanel.js';
 import { PhaseRow } from './PhaseRow.js';
 import { createUploadPhaseCard } from './UploadPhaseCard.js';
+import { createStemTracksDetail } from './StemTracksDetail.js';
 
 // Filas visibles del stepper, en orden. lyrics_review es la fase "Letra".
 const ROWS = [
@@ -113,6 +114,10 @@ export function renderSongPipelineView(container, songId) {
         });
     },
   });
+
+  // Detalle de Pistas (D3c): mount-once igual que el card de subida, para no
+  // recrear el gestor de audio único (y su <audio> real) en cada re-render.
+  const stemTracks = createStemTracksDetail({ songId });
 
   async function ensureLyricsPanel() {
     if (lyricsPanelEl || lyricsPanelLoading) return;
@@ -229,6 +234,7 @@ export function renderSongPipelineView(container, songId) {
     pillEl.textContent = `${doneCount} de 5 fases`;
 
     uploadCard.update(run);
+    stemTracks.update(run);
 
     ROWS.forEach((r, i) => {
       const phase = phases[r.key] || { status: 'pending' };
@@ -237,6 +243,8 @@ export function renderSongPipelineView(container, songId) {
       let detail = null;
       if (r.key === 'upload') {
         detail = uploadCard.el;
+      } else if (r.key === 'stems') {
+        detail = stemTracks.el;
       } else if (r.key === 'lyrics_review') {
         if (run?.status === 'awaiting_lyrics' && phase.status !== 'done') {
           if (!lyricsPanelEl && !lyricsPanelLoading) ensureLyricsPanel();
@@ -246,7 +254,7 @@ export function renderSongPipelineView(container, songId) {
           lyricsPanelEl = null;
         }
       }
-      // D3c monta el detalle de Pistas/Sincronía en este slot.
+      // D3c queda pendiente el detalle de Sincronía en este slot.
 
       const row = PhaseRow({
         key: r.key,
@@ -280,5 +288,6 @@ export function renderSongPipelineView(container, songId) {
     lyricsPanelEl = null;
     uploadCard.dispose?.();
     uploadCard.el.remove();
+    stemTracks.destroy();
   });
 }

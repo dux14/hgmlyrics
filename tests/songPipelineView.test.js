@@ -34,6 +34,23 @@ vi.mock('../src/components/pipeline/UploadPhaseCard.js', () => ({
   }),
 }));
 
+// D3c (StemTracksDetail) tiene su propio test dedicado: acá se mockea como
+// caja negra, igual que UploadPhaseCard.
+let lastStemTracksDestroy = null;
+let lastStemTracksUpdate = null;
+
+vi.mock('../src/components/pipeline/StemTracksDetail.js', () => ({
+  createStemTracksDetail: vi.fn(() => {
+    lastStemTracksDestroy = vi.fn();
+    lastStemTracksUpdate = vi.fn();
+    return {
+      el: document.createElement('div'),
+      update: lastStemTracksUpdate,
+      destroy: lastStemTracksDestroy,
+    };
+  }),
+}));
+
 let routeCb = null;
 
 vi.mock('../src/router.js', () => ({
@@ -84,6 +101,8 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     lastUnsub = null;
     routeCb = null;
     lastUploadCardDispose = null;
+    lastStemTracksDestroy = null;
+    lastStemTracksUpdate = null;
     vi.clearAllMocks();
   });
 
@@ -221,6 +240,24 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     routeCb();
 
     expect(lastUploadCardDispose).toHaveBeenCalled();
+  });
+
+  it('fila Pistas monta el detalle de StemTracksDetail y lo actualiza en cada render', () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({ run: buildRun({ stems: { status: 'running' } }) });
+
+    const row = container.querySelector('[data-phase="stems"]');
+    expect(row.querySelector('.phase__detail').children.length).toBeGreaterThan(0);
+    expect(lastStemTracksUpdate).toHaveBeenCalled();
+  });
+
+  it('teardown: llama stemTracks.destroy() para soltar el <audio> del gestor', () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({ run: buildRun() });
+
+    routeCb();
+
+    expect(lastStemTracksDestroy).toHaveBeenCalled();
   });
 
   it('mount-once bajo carrera async real: dos eventos sin await entre ellos montan el panel una sola vez', async () => {

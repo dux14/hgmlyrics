@@ -822,3 +822,66 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ---- Detalle de pistas (Task D3c) -------------------------------------- */
+
+.stem-tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 0.84rem;
+  color: var(--color-text);
+}
+
+.track__play {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  transition:
+    background-color 0.15s var(--ease-out),
+    border-color 0.15s var(--ease-out);
+}
+.track__play:hover {
+  border-color: var(--color-brand);
+}
+
+.track--playing .track__play {
+  background: color-mix(in oklch, var(--color-brand) 16%, transparent);
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+}
+
+.track__label {
+  color: var(--color-text-secondary);
+}
+.track--playing .track__label {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.track--eq .track__label {
+  font-style: italic;
+}
+
+.track--clips {
+  color: var(--color-success);
+  font-size: 0.8rem;
+}
+.track--clips .track__label {
+  color: var(--color-success);
+}

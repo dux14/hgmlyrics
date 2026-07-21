@@ -53,13 +53,16 @@ function renderSylNotes(voiceKeys) {
   const stackedHtml = stacked
     .map(
       (n, idx) =>
-        `<span class="tone-note ${roleClassFor(n.key, idx)}">${escapeHtml(n.label)}</span>`,
+        `<span class="tone-note ${roleClassFor(n.key, idx)}" data-voice="${escapeHtml(n.key)}">${escapeHtml(n.label)}</span>`,
     )
     .join('');
   const moreHtml = extra.length
     ? `<button type="button" class="tone-more" data-action="tone-more" aria-expanded="false">+${extra.length}</button>
        <span class="tone-more-panel" hidden>${extra
-         .map((n) => `<span class="tone-note tone-note--coros">${escapeHtml(n.label)}</span>`)
+         .map(
+           (n) =>
+             `<span class="tone-note tone-note--coros" data-voice="${escapeHtml(n.key)}">${escapeHtml(n.label)}</span>`,
+         )
          .join('')}</span>`
     : '';
   return `<span class="tone-syl-notes">${stackedHtml}${moreHtml}</span>`;
@@ -83,7 +86,7 @@ export function createToneLyrics({ analysis, onSeek } = {}) {
 
   if (!baseKey || baseLines.length === 0) {
     el.innerHTML = '<p class="tone-lyrics__empty">No hay datos de partitura para esta canción.</p>';
-    return { el, setActiveTime() {}, destroy() {} };
+    return { el, setActiveTime() {}, setVoiceDimmed() {}, destroy() {} };
   }
 
   const otherKeys = voicesPresent.filter((k) => k !== baseKey && analysis.voices?.[k]?.lines);
@@ -172,9 +175,20 @@ export function createToneLyrics({ analysis, onSeek } = {}) {
     }
   }
 
+  // Atenúa (opacity, sin remover nodos) las notas de una voz puntual — usado
+  // por la leyenda de voces para "aislar" auditivamente/visualmente lead,
+  // alterna o coros sin perder la referencia de las demás.
+  function setVoiceDimmed(voiceKey, dimmed) {
+    if (destroyed) return;
+    el.querySelectorAll(`.tone-note[data-voice="${voiceKey}"]`).forEach((noteEl) => {
+      noteEl.classList.toggle('dim', dimmed);
+    });
+  }
+
   return {
     el,
     setActiveTime,
+    setVoiceDimmed,
     destroy() {
       if (destroyed) return;
       destroyed = true;

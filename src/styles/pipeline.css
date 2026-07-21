@@ -1237,6 +1237,18 @@
   gap: 2px;
 }
 
+.mtp__group {
+  padding: 0.3rem var(--space-sm) 0.15rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--color-text-tertiary, var(--color-text-secondary));
+  opacity: 0.7;
+}
+.mtp__group:not(:first-child) {
+  margin-top: 4px;
+}
+
 .mtp__row {
   display: flex;
   align-items: center;
@@ -1375,6 +1387,9 @@
 .tone-note--coros {
   color: var(--tone-coros);
 }
+.tone-note.dim {
+  opacity: 0.35;
+}
 
 .tone-more {
   font-size: var(--font-size-xs);
@@ -1400,6 +1415,53 @@
 @media (prefers-reduced-motion: reduce) {
   .tone-line,
   .tone-syl.hot .tone-syl-text {
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* --- SongStudioView (D4d): player multipista + letra con tono --- */
+.studio-view__body {
+  padding: 0 var(--space-md) var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.studio-view__loading,
+.studio-view__empty {
+  padding: var(--space-md) 0;
+  color: var(--color-text-secondary);
+}
+
+.studio-view__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.studio-view__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--border-radius-full, 999px);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.studio-view__legend-item.is-dimmed {
+  opacity: 0.5;
+}
+.studio-view__legend-item:focus-visible {
+  outline: 2px solid var(--color-action);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-view__legend-item {
     transition-duration: 0.001ms !important;
   }
 }

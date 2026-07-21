@@ -279,6 +279,40 @@ describe('ToneLyrics — tap en línea y destroy', () => {
   });
 });
 
+describe('ToneLyrics — setVoiceDimmed', () => {
+  beforeEach(() => {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: false });
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('marca .dim en las notas de esa voz sin remover nodos', () => {
+    const { el, setVoiceDimmed } = createToneLyrics({ analysis: makeAnalysis() });
+    const before = el.querySelectorAll('.tone-note[data-voice="backing"]').length;
+    expect(before).toBeGreaterThan(0);
+
+    setVoiceDimmed('backing', true);
+    const dimmed = el.querySelectorAll('.tone-note[data-voice="backing"].dim');
+    expect(dimmed.length).toBe(before);
+    // Los nodos siguen ahi, solo atenuados.
+    expect(el.querySelectorAll('.tone-note[data-voice="backing"]').length).toBe(before);
+
+    // Otras voces (lead) no quedan afectadas.
+    expect(el.querySelectorAll('.tone-note[data-voice="lead"].dim').length).toBe(0);
+
+    setVoiceDimmed('backing', false);
+    expect(el.querySelectorAll('.tone-note[data-voice="backing"].dim').length).toBe(0);
+  });
+
+  it('no crashea si se llama tras destroy() ni en el estado vacio', () => {
+    const { destroy, setVoiceDimmed } = createToneLyrics({ analysis: makeAnalysis() });
+    destroy();
+    expect(() => setVoiceDimmed('lead', true)).not.toThrow();
+
+    const empty = createToneLyrics({ analysis: { voices_present: [], voices: {} } });
+    expect(() => empty.setVoiceDimmed('lead', true)).not.toThrow();
+  });
+});
+
 describe('ToneLyrics — analysis vacío', () => {
   it('sin voces no crashea y pinta estado vacío', () => {
     const { el, setActiveTime, destroy } = createToneLyrics({

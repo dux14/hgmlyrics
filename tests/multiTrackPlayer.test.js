@@ -186,6 +186,76 @@ describe('createMultiTrackPlayer', () => {
     audios.forEach((audio) => expect(pausedOn).toContain(audio));
     expect(() => destroy()).not.toThrow();
   });
+
+  it('onTime: el callback se llama con el tiempo maestro en segundos en cada tick', () => {
+    const { el, onTime, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
+    const audios = el.querySelectorAll('audio');
+    audios[0].currentTime = 12.5;
+    const cb = vi.fn();
+    onTime(cb);
+
+    el.querySelector('.mtp__play').click(); // arranca el loop (rAF mockeado ejecuta tick 0 veces automaticamente)
+    // requestAnimationFrame esta mockeado sin ejecutar el callback; disparamos
+    // el primer tick manualmente via el mock para simular un frame.
+    const tickFn = window.requestAnimationFrame.mock.calls[0][0];
+    tickFn();
+
+    expect(cb).toHaveBeenCalledWith(12.5);
+    destroy();
+  });
+
+  it('onTime: la funcion de unsubscribe deja de invocar el callback', () => {
+    const { el, onTime, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
+    const cb = vi.fn();
+    const off = onTime(cb);
+    off();
+
+    el.querySelector('.mtp__play').click();
+    const tickFn = window.requestAnimationFrame.mock.calls[0][0];
+    tickFn();
+
+    expect(cb).not.toHaveBeenCalled();
+    destroy();
+  });
+
+  it('seek: mueve el transporte a un tiempo dado (equivalente a un scrub programatico)', () => {
+    const { el, seek, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
+    const audios = el.querySelectorAll('audio');
+
+    seek(30);
+
+    audios.forEach((audio) => expect(audio.currentTime).toBe(30));
+    destroy();
+  });
+
+  it('destroy() limpia los callbacks de onTime (no quedan huerfanos)', () => {
+    const { onTime, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
+    const cb = vi.fn();
+    onTime(cb);
+    expect(() => destroy()).not.toThrow();
+  });
+});
+
+describe('createMultiTrackPlayer — agrupacion de pistas', () => {
+  it('sin group en los tracks, no aparece ningun encabezado (lista plana)', () => {
+    const { el, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
+    expect(el.querySelectorAll('.mtp__group').length).toBe(0);
+    destroy();
+  });
+
+  it('con group, inserta un encabezado por grupo solo cuando cambia', () => {
+    const tracks = [
+      { kind: 'vocals', url: 'https://x/v.mp3', label: 'Voz', group: 'voces' },
+      { kind: 'backing', url: 'https://x/b.mp3', label: 'Coros', group: 'voces' },
+      { kind: 'drums', url: 'https://x/d.mp3', label: 'Bateria', group: 'instrumentos' },
+    ];
+    const { el, destroy } = createMultiTrackPlayer({ tracks });
+    const groups = el.querySelectorAll('.mtp__group');
+    expect(groups.length).toBe(2);
+    expect(groups[0].textContent).toBe('VOCES');
+    expect(groups[1].textContent).toBe('INSTRUMENTOS');
+    destroy();
+  });
 });
 
 describe('syncStep', () => {

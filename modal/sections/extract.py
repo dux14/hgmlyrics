@@ -28,11 +28,15 @@ import tempfile
 # 'ensemble' → TODO: upgrade (ver docstring de módulo arriba). No implementado.
 S1_EXTRACTOR = "ep_317"
 
-# Modelo BS-RoFormer para separación vocal.
-_BS_ROFORMER_MODEL = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
+# Modelo de separación vocal. Swap SOTA jul-2026 con rollback por env var.
+# VOCAL_MODEL_CKPT=<filename> permite volver a ep_317 sin redeploy de código.
+_BS_ROFORMER_MODEL = os.environ.get(
+    "VOCAL_MODEL_CKPT",
+    "melband_roformer_big_beta4.ckpt",
+)
 
 # Etiqueta de modelo que se reporta en los webhooks (éxito y fallo).
-_MODEL_LABEL = "bs_roformer_ep_317+htdemucs_6s"
+_MODEL_LABEL = f"{_BS_ROFORMER_MODEL.removesuffix('.ckpt')}+htdemucs_6s"
 
 # Pistas de percusión/melodía que extraemos de demucs htdemucs_6s.
 # La pista `vocals` de demucs se descarta (usamos la de ep_317).

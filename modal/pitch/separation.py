@@ -16,8 +16,13 @@ import os
 
 from _common import request_signed_put, upload_put, post_webhook, artifact, extract_storage_key
 
-# Modelo BS-RoFormer para separacion vocal (igual que sections/extract.py).
-_BS_ROFORMER_MODEL = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
+# Modelo de separacion vocal (igual que sections/extract.py). Swap SOTA
+# jul-2026 con rollback por env var: VOCAL_MODEL_CKPT=<filename> permite
+# volver a ep_317 sin redeploy de codigo.
+_BS_ROFORMER_MODEL = os.environ.get(
+    "VOCAL_MODEL_CKPT",
+    "melband_roformer_big_beta4.ckpt",
+)
 
 # Pesos MedleyVox (igual que sections/medley_vox.py).
 _HF_REPO = "Cyru5/MedleyVox"

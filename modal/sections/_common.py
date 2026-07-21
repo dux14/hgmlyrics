@@ -93,10 +93,16 @@ def _extract_vocals_from_path(src_path: str) -> str:
 
     from audio_separator.separator import Separator  # solo en el contenedor
 
-    # ── BS-RoFormer ep_317 → solo stem Vocals ───────────────────────────────
+    # ── BS-RoFormer → solo stem Vocals ──────────────────────────────────────
+    # Modelo con rollback por env var (igual patrón que sections/extract.py):
+    # VOCAL_MODEL_CKPT=<filename> permite volver a ep_317 sin redeploy de código.
+    vocal_model_ckpt = os.environ.get(
+        "VOCAL_MODEL_CKPT",
+        "melband_roformer_big_beta4.ckpt",
+    )
     ep317_out = tempfile.mkdtemp()
     sep = Separator(output_dir=ep317_out, output_format="mp3")
-    sep.load_model(model_filename="model_bs_roformer_ep_317_sdr_12.9755.ckpt")
+    sep.load_model(model_filename=vocal_model_ckpt)
     # En audio-separator 0.28.5 `output_single_stem` NO es kwarg de separate()
     # (lanza TypeError). Se separan ambos stems (Vocals + Instrumental) y se
     # localiza el "(Vocals)" por nombre — patrón idéntico al de extract.py (S1).

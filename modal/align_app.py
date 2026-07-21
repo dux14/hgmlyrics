@@ -466,6 +466,11 @@ def run_transcribe(payload: dict) -> None:
             "text": " ".join(full_text_parts),
             "words": words,
             "perLine": per_line,
+            # transLines: el texto transcrito linea a linea (segmentos). El gate
+            # de letra (plan C) lo necesita para poblar sources.trans y derivar
+            # vocalizaciones (segmentos sin match en DB). Sin esto, buildReviewDoc
+            # degrada a sources.trans=null y sin vocalizaciones en runs reales.
+            "transLines": trans_lines,
         }
         if per_line_canonical is not None:
             payload_out["perLineCanonical"] = per_line_canonical

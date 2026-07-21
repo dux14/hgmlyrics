@@ -91,6 +91,54 @@ describe('applyReviewAction', () => {
     expect(d.sections[0].lines[2].vocalization).toBe(true);
     expect(d.vocalizations[0].accepted).toBe(true);
   });
+  it('acceptVocalization con afterLine -1 (o null) ancla al inicio de la seccion', () => {
+    const d1 = applyReviewAction(doc(), { type: 'acceptVocalization', index: 0, section: 0, afterLine: -1 });
+    expect(d1.sections[0].lines[0].vocalization).toBe(true);
+    expect(d1.sections[0].lines[0].text).toBe('oooh oh');
+    const d2 = applyReviewAction(doc(), { type: 'acceptVocalization', index: 0, section: 0, afterLine: null });
+    expect(d2.sections[0].lines[0].vocalization).toBe(true);
+  });
+  it('rejectVocalization marca accepted:false sin tocar los renglones', () => {
+    const d = applyReviewAction(doc(), { type: 'rejectVocalization', index: 0 });
+    expect(d.vocalizations[0].accepted).toBe(false);
+    expect(d.sections[0].lines).toHaveLength(2);
+  });
+  it('setSectionType normaliza el tipo de la seccion', () => {
+    const d = applyReviewAction(doc(), { type: 'setSectionType', section: 0, sectionType: 'estribillo' });
+    expect(d.sections[0].type).toBe('chorus');
+  });
+  it('splitSection parte la seccion en el indice de linea dado', () => {
+    const d = applyReviewAction(doc(), { type: 'splitSection', section: 0, afterLine: 0 });
+    expect(d.sections).toHaveLength(2);
+    expect(d.sections[0].lines).toHaveLength(1);
+    expect(d.sections[0].lines[0].text).toBe('Nadie me ama como tu me amas');
+    expect(d.sections[1].lines).toHaveLength(1);
+    expect(d.sections[1].lines[0].text).toBe('y en la noche oscura brillara');
+  });
+  it('mergeSections une dos secciones contiguas', () => {
+    const split = applyReviewAction(doc(), { type: 'splitSection', section: 0, afterLine: 0 });
+    const merged = applyReviewAction(split, { type: 'mergeSections', section: 0 });
+    expect(merged.sections).toHaveLength(1);
+    expect(merged.sections[0].lines).toHaveLength(2);
+  });
+  it('accion sobre indice inexistente lanza RangeError', () => {
+    expect(() => applyReviewAction(doc(), { type: 'resolve', section: 5, line: 0, choice: 'db' }))
+      .toThrow(RangeError);
+    expect(() => applyReviewAction(doc(), { type: 'resolve', section: 0, line: 9, choice: 'db' }))
+      .toThrow(RangeError);
+    expect(() => applyReviewAction(doc(), { type: 'rejectVocalization', index: 9 }))
+      .toThrow(RangeError);
+  });
+  it('splitLine fuera de rango (afterWord invalido) lanza RangeError', () => {
+    expect(() => applyReviewAction(doc(), { type: 'splitLine', section: 0, line: 0, afterWord: -1 }))
+      .toThrow(RangeError);
+    expect(() => applyReviewAction(doc(), { type: 'splitLine', section: 0, line: 0, afterWord: 6 }))
+      .toThrow(RangeError); // 7 palabras, indice 6 = ultima -> segundo renglon vacio
+  });
+  it('splitSection en la ultima linea (seccion nueva vacia) lanza RangeError', () => {
+    expect(() => applyReviewAction(doc(), { type: 'splitSection', section: 0, afterLine: 1 }))
+      .toThrow(RangeError);
+  });
 });
 
 describe('temperatura y aprobacion', () => {

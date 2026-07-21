@@ -9,11 +9,31 @@
  * y phrasing.js en este mismo directorio.
  */
 import { createHash } from 'node:crypto';
-import { normalizeSectionType } from '../../../src/lib/sectionTypes.js';
 
 // Score por defecto cuando una linea en conflicto no tiene score de trans
 // (p.ej. lineas nacidas de un splitLine, sin contraparte en perLine).
 const FALLBACK_CONFLICT_SCORE = 0.5;
+
+// Normalizacion minima de tipo de seccion, DUPLICADA a proposito (ver header
+// de src/lib/sectionTypes.js: la logica se duplica ahi mismo para que
+// ImmersiveView no dependa de SongView; misma razon aplica aca al reves,
+// api/_lib no debe acoplarse al arbol de src/). Solo lo que este modulo
+// necesita: agrupar por tipo y validar/normalizar el tipo de setSectionType.
+const KNOWN_SECTION_TYPES = ['verse', 'chorus', 'bridge', 'prechorus', 'intro', 'outro'];
+const SECTION_TYPE_ALIASES = {
+  verso: 'verse',
+  estribillo: 'chorus',
+  coro: 'chorus',
+  puente: 'bridge',
+  'pre-estribillo': 'prechorus',
+  'pre-coro': 'prechorus',
+  precoro: 'prechorus',
+};
+function normalizeSectionType(type) {
+  const slug = (type || '').toString().trim().toLowerCase();
+  if (KNOWN_SECTION_TYPES.includes(slug)) return slug;
+  return SECTION_TYPE_ALIASES[slug] || 'verse';
+}
 
 /** Misma logica que normalize_for_compare de modal/transcribe_diff.py:
  * NFD + minusculas + sin diacriticos/puntuacion + espacios colapsados. */
@@ -28,6 +48,11 @@ function normalize(text) {
 
 function round4(n) {
   return Math.round(n * 10000) / 10000;
+}
+
+// eqeqeq del repo no admite `!= null`; helper explicito para null/undefined.
+function isNil(value) {
+  return value === null || value === undefined;
 }
 
 // Empareja cada seccion db con su seccion canonica del mismo tipo, en orden
@@ -81,7 +106,7 @@ function matchLines(dbLines, canonLines) {
 function lineWeight(line) {
   if (line.vocalization) return null;
   if (!line.conflict) return 1.0;
-  return line.score != null ? line.score : FALLBACK_CONFLICT_SCORE;
+  return isNil(line.score) ? FALLBACK_CONFLICT_SCORE : line.score;
 }
 
 function sectionTemperature(section) {
@@ -144,7 +169,7 @@ export function buildReviewDoc({ dbSections, canonical, transcription }) {
 
   const sections = dbSections.map((section, sIdx) => {
     const canonSection = canonicalPerSection[sIdx];
-    const hadCanonicalSection = canonSection != null;
+    const hadCanonicalSection = !isNil(canonSection);
     const canonLines = canonSection?.lineas?.map((l) => l.texto) ?? [];
     const matchedCanon = matchLines(section.lines.map((l) => l.text), canonLines);
 
@@ -158,7 +183,7 @@ export function buildReviewDoc({ dbSections, canonical, transcription }) {
       // el texto normalizado difiere. Sin seccion canonica no hay con que
       // comparar, no es conflicto.
       const conflict = hadCanonicalSection
-        && (canonicalText == null || normalize(line.text) !== normalize(canonicalText));
+        && (isNil(canonicalText) || normalize(line.text) !== normalize(canonicalText));
       return {
         text: line.text,
         conflict,
@@ -189,7 +214,7 @@ export function buildReviewDoc({ dbSections, canonical, transcription }) {
     }
   }
 
-  const doc = { sections, vocalizations, hasCanonical: canonical != null, temperature: 1 };
+  const doc = { sections, vocalizations, hasCanonical: !isNil(canonical), temperature: 1 };
   recomputeTemperatures(doc);
   return doc;
 }
@@ -236,7 +261,11 @@ export function applyReviewAction(doc, action) {
       const line = requireLine(section, action.line);
       const words = line.text.split(/\s+/).filter(Boolean);
       // afterWord es el indice (0-based) de la ultima palabra que queda en
-      // el primer renglon; el resto pasa al segundo.
+      // el primer renglon; el resto pasa al segundo. Fuera de [0, len-2]
+      // dejaria un renglon vacio: invalido.
+      if (action.afterWord < 0 || action.afterWord >= words.length - 1) {
+        throw new RangeError(`afterWord fuera de rango: ${action.afterWord}`);
+      }
       const first = words.slice(0, action.afterWord + 1).join(' ');
       const second = words.slice(action.afterWord + 1).join(' ');
       const firstLine = { ...line, text: first };
@@ -255,7 +284,13 @@ export function applyReviewAction(doc, action) {
     case 'acceptVocalization': {
       const vocalization = requireVocalization(next, action.index);
       const section = requireSection(next, action.section);
-      requireLine(section, action.afterLine);
+      // afterLine -1 (o null/undefined, como llega anchorAfterLine:null de
+      // una vocalizacion previa a cualquier linea matcheada) ancla al
+      // inicio de la seccion; cualquier otro valor debe apuntar a una linea
+      // existente.
+      const afterLine = isNil(action.afterLine) ? -1 : action.afterLine;
+      if (afterLine < -1) throw new RangeError(`afterLine fuera de rango: ${afterLine}`);
+      if (afterLine !== -1) requireLine(section, afterLine);
       vocalization.accepted = true;
       const newLine = {
         text: vocalization.text,
@@ -264,7 +299,7 @@ export function applyReviewAction(doc, action) {
         score: null,
         sources: { db: null, canonical: null, trans: vocalization.text },
       };
-      section.lines.splice(action.afterLine + 1, 0, newLine);
+      section.lines.splice(afterLine + 1, 0, newLine);
       break;
     }
     case 'rejectVocalization': {
@@ -280,6 +315,10 @@ export function applyReviewAction(doc, action) {
     case 'splitSection': {
       const section = requireSection(next, action.section);
       requireLine(section, action.afterLine);
+      // Ultima linea como corte dejaria la seccion nueva vacia: invalido.
+      if (action.afterLine === section.lines.length - 1) {
+        throw new RangeError(`afterLine deja la seccion nueva vacia: ${action.afterLine}`);
+      }
       const remainder = section.lines.splice(action.afterLine + 1);
       const newSection = { type: section.type, label: section.label, lines: remainder, temperature: 1 };
       next.sections.splice(action.section + 1, 0, newSection);

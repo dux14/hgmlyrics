@@ -76,7 +76,6 @@ def smoke_full(name: str, original_bytes: bytes) -> dict:
     from sections.gender import (
         separate_by_gender,
         _CHORUS_MODEL_CKPT,
-        _AUFR33_MODEL_CKPT,
     )
 
     fd, src = tempfile.mkstemp(suffix=".mp3")
@@ -123,12 +122,12 @@ def smoke_full(name: str, original_bytes: bytes) -> dict:
     with open(sep3["backing_mp3"], "rb") as f:
         s3_backing = f.read()
 
-    # ── S4: A/B de género sobre el vocal de S1 — 2 modelos ───────────────────
-    # A = chorus_bs_roformer (Sucial, default actual); B = aufr33 (alternativa).
-    # Mismo vocal ep_317 para ambos → comparación limpia modelo-vs-modelo.
+    # ── S4: género sobre el vocal de S1 — chorus_bs_roformer ─────────────────
+    # Rama 'aufr33' eliminada (ver docstring de sections/gender.py): el probe
+    # de checkpoints no encontró ningún Mel-Band RoFormer male/female de aufr33.
     s4: dict[str, dict] = {}
     s4_errors: dict[str, str] = {}
-    for tag, ckpt in (("chorus", _CHORUS_MODEL_CKPT), ("aufr33", _AUFR33_MODEL_CKPT)):
+    for tag, ckpt in (("chorus", _CHORUS_MODEL_CKPT),):
         print(f"[{name}] S4 — {tag} ({ckpt})…")
         try:
             st = separate_by_gender(vocals_path, model_ckpt=ckpt)
@@ -203,13 +202,12 @@ def main(mp3: str = "/Users/samu/Downloads/huracan.mp3"):
         rms = res["s3_rms"][track]
         manifest[fname] = f"S3 lider/coros — {es} (RMS {rms:.4f})"
 
-    # ── S4: A/B de género (2 modelos) renombrados S4 - N ─────────────────────
-    # chorus = S4 - 1/2, aufr33 = S4 - 3/4. Mismo vocal ep_317 para ambos.
+    # ── S4: género (chorus_bs_roformer) renombrado S4 - N ────────────────────
     s4 = res["s4"]
     s4_errors = res.get("s4_errors", {})
     i = 1
-    for tag in ("chorus", "aufr33"):
-        modelo = "chorus_bs_roformer" if tag == "chorus" else "aufr33"
+    for tag in ("chorus",):
+        modelo = "chorus_bs_roformer"
         if tag not in s4:
             err = s4_errors.get(tag, "sin salida")
             manifest[f"S4 ({modelo})"] = f"S4 genero {modelo} — FALLO: {err[:60]}"

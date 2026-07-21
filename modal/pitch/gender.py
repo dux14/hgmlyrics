@@ -4,13 +4,14 @@ ambos son voces "sin letra" del mismo experimento M5): separa el stem lead en
 male/female con chorus_bs_roformer (ep_267, overlap 16) y calcula f0/notas por
 cada uno con el mismo pipeline que f0.py/core.py (torchcrepe + note_events_from_f0).
 
-Tecnica de separacion espejada de modal/sections/gender.py (Estudio), con dos
-diffs deliberados:
-  1. UN SOLO modelo (chorus_bs_roformer). sections/gender.py corre TAMBIEN
-     aufr33 en un A/B; ese A/B no se justifica en un flag experimental — mas
-     tiempo GPU y mas complejidad por una comparacion que nadie va a mirar aqui.
-  2. Imports de _common/core/f0 de PITCH (no de sections): dominio propio, no
+Tecnica de separacion espejada de modal/sections/gender.py (Estudio), con un
+diff deliberado:
+  1. Imports de _common/core/f0 de PITCH (no de sections): dominio propio, no
      se importa modal/sections/ (mismo criterio que separation.py).
+
+(Nota historica: sections/gender.py llego a correr TAMBIEN aufr33 en un A/B;
+se elimino esa rama en Task 7 al no encontrarse checkpoint aufr33 valido en
+audio-separator 0.28.5, asi que ambos modulos usan hoy UN SOLO modelo.)
 
 Igual que choir_basicpitch.py: opcional, NUNCA re-lanza (un fallo no debe
 tumbar el pipeline REQUIRED de pitch_app.py)."""

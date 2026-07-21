@@ -133,6 +133,22 @@
   opacity: 1;
 }
 
+/* Colapso de tarjeta al resolver (conflicto o vocalización): clip-path+fade
+   200ms --ease-out, compartido entre `.conf` y `.voc` (misma coreografía). */
+.lrp .conf,
+.lrp .voc {
+  clip-path: inset(0 round var(--border-radius-md));
+  overflow: hidden;
+  transition:
+    clip-path 0.2s var(--ease-out),
+    opacity 0.2s var(--ease-out);
+}
+.lrp .conf.is-resolving,
+.lrp .voc.is-resolving {
+  clip-path: inset(50% 0 50% 0 round var(--border-radius-md));
+  opacity: 0;
+}
+
 /* Tarjeta de conflicto: NUNCA border-left de acento (regla de plataforma). */
 .lrp .conf {
   background: color-mix(in oklch, var(--color-danger) 7%, var(--color-surface));
@@ -140,15 +156,6 @@
   border-radius: var(--border-radius-md);
   padding: 10px 12px;
   margin: 8px 0;
-  clip-path: inset(0 round var(--border-radius-md));
-  overflow: hidden;
-  transition:
-    clip-path 0.2s var(--ease-out),
-    opacity 0.2s var(--ease-out);
-}
-.lrp .conf.is-resolving {
-  clip-path: inset(50% 0 50% 0 round var(--border-radius-md));
-  opacity: 0;
 }
 
 .lrp .old {
@@ -251,6 +258,16 @@
 .lrp .btn2:active {
   transform: scale(0.97);
 }
+.lrp .btn2[disabled] {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.lrp .lrp__split[disabled],
+.lrp .lrp__merge[disabled] {
+  opacity: 0.38;
+  cursor: default;
+}
 
 .lrp__footer {
   position: sticky;
@@ -269,9 +286,10 @@
   color: var(--color-text-secondary);
 }
 
-/* Flash de confirmación teal-soft tras resolver un conflicto/línea. */
-.lrp--motion .lrp__line.is-resolved,
-.lrp--motion .voc.is-resolved {
+/* Flash de confirmación teal-soft 400ms en la línea resultante (renglón
+   normal o el nuevo renglón de una vocalización aceptada) — no en la
+   tarjeta, que ya colapsó y desapareció del documento. */
+.lrp--motion .lrp__line.is-resolved {
   animation: lrp-flash 0.4s var(--ease-out);
 }
 @keyframes lrp-flash {
@@ -285,6 +303,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .lrp .conf,
+  .lrp .voc,
   .lrp .lrp__split,
   .lrp .lrp__merge,
   .lrp .btn,
@@ -292,8 +311,7 @@
   .lrp .temp {
     transition-duration: 0.001ms !important;
   }
-  .lrp--motion .lrp__line.is-resolved,
-  .lrp--motion .voc.is-resolved {
+  .lrp--motion .lrp__line.is-resolved {
     animation: none;
   }
 }

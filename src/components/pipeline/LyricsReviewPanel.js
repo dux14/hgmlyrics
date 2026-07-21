@@ -20,9 +20,27 @@ import { SECTION_TYPE_LABELS, normalizeSectionType } from '../../lib/sectionType
 import { getLyricsReview, sendLyricsAction, approveLyrics } from '../../lib/pipelineApi.js';
 
 const REDUCE_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+// Fallback si `transitionend` no llega (jsdom no corre transiciones, o el
+// navegador tarda más de lo esperado): nunca deja la promesa colgada.
+const COLLAPSE_FALLBACK_MS = 220;
 
 function reduceMotion() {
   return window.matchMedia?.(REDUCE_MOTION_QUERY).matches ?? false;
+}
+
+/** Espera `transitionend` en `elm` o, si no llega, el timeout de respaldo. */
+function waitForCollapse(elm) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      elm.removeEventListener('transitionend', finish);
+      resolve();
+    };
+    elm.addEventListener('transitionend', finish, { once: true });
+    setTimeout(finish, COLLAPSE_FALLBACK_MS);
+  });
 }
 
 /** Cantidad de conflictos + vocalizaciones sin decidir del documento. */
@@ -36,22 +54,24 @@ function pendingCount(review) {
 }
 
 /** Marca de tijera inline en el texto de una línea, en cada punto sugerido de corte. */
-function lineTextWithSplits(text, afterWords) {
+function lineTextWithSplits(text, afterWords, disabled) {
   const words = text.split(/\s+/).filter(Boolean);
   if (!afterWords || afterWords.length === 0) return escapeHtml(text);
+  const dis = disabled ? ' disabled' : '';
   let html = '';
   words.forEach((word, i) => {
     html += escapeHtml(word);
     if (afterWords.includes(i) && i < words.length - 1) {
-      html += `<button type="button" class="lrp__split" data-after-word="${i}" aria-label="Partir línea después de «${escapeHtml(word)}»">${icon('scissors', { size: 12 })}</button>`;
+      html += `<button type="button" class="lrp__split" data-after-word="${i}" aria-label="Partir línea después de «${escapeHtml(word)}»"${dis}>${icon('scissors', { size: 12 })}</button>`;
     }
     if (i < words.length - 1) html += ' ';
   });
   return html;
 }
 
-function conflictCardHtml(line, sIdx, lIdx) {
+function conflictCardHtml(line, sIdx, lIdx, disabled) {
   const hasCanonical = line.sources.canonical !== null && line.sources.canonical !== undefined;
+  const dis = disabled ? ' disabled' : '';
   return `
     <div class="conf" data-section="${sIdx}" data-line="${lIdx}">
       <div class="old">${escapeHtml(line.sources.db)}</div>
@@ -59,23 +79,24 @@ function conflictCardHtml(line, sIdx, lIdx) {
       <div class="conf__actions">
         ${
           hasCanonical
-            ? `<button type="button" class="btn lrp__resolve" data-choice="canonical">Usar canónica</button>`
+            ? `<button type="button" class="btn lrp__resolve" data-choice="canonical"${dis}>Usar canónica</button>`
             : ''
         }
-        <button type="button" class="btn2 lrp__resolve" data-choice="db">Mantener actual</button>
-        <button type="button" class="btn2 lrp__edit-start">Editar línea</button>
+        <button type="button" class="btn2 lrp__resolve" data-choice="db"${dis}>Mantener actual</button>
+        <button type="button" class="btn2 lrp__edit-start"${dis}>Editar línea</button>
       </div>
     </div>`;
 }
 
-function vocalizationCardHtml(vocalization, vIdx) {
+function vocalizationCardHtml(vocalization, vIdx, disabled) {
+  const dis = disabled ? ' disabled' : '';
   return `
     <div class="voc" data-index="${vIdx}">
       <div class="lab">LA AI ESCUCHÓ ADEMÁS</div>
       <div class="voc__text">${escapeHtml(vocalization.text)}</div>
       <div class="voc__actions">
-        <button type="button" class="btn2 lrp__voc-accept">Agregar como vocalización</button>
-        <button type="button" class="btn2 lrp__voc-reject">Descartar</button>
+        <button type="button" class="btn2 lrp__voc-accept"${dis}>Agregar como vocalización</button>
+        <button type="button" class="btn2 lrp__voc-reject"${dis}>Descartar</button>
       </div>
     </div>`;
 }
@@ -104,25 +125,32 @@ function suggestionsByLine(suggestions) {
   return byLine;
 }
 
-function sectionHtml(section, sIdx, byAnchor, byLine) {
+/**
+ * @param {{disabled: boolean, flash: {section:number, line:number}|null}} opts
+ *   `disabled` bloquea los controles interactivos (acción en vuelo); `flash`
+ *   marca con `.is-resolved` (motion) la línea recién resuelta, si cae en
+ *   esta sección.
+ */
+function sectionHtml(section, sIdx, byAnchor, byLine, { disabled, flash } = {}) {
   const type = normalizeSectionType(section.type);
   const anchoredHere = byAnchor.get(`${sIdx}:-1`) || [];
   const topVocalizations = anchoredHere.map(({ vocalization, index }) =>
-    vocalizationCardHtml(vocalization, index),
+    vocalizationCardHtml(vocalization, index, disabled),
   );
 
   const linesHtml = section.lines
     .map((line, lIdx) => {
+      const isFlash = flash && flash.section === sIdx && flash.line === lIdx;
       const lineHtml = line.conflict
-        ? conflictCardHtml(line, sIdx, lIdx)
-        : `<div class="lrp__line" data-section="${sIdx}" data-line="${lIdx}">${lineTextWithSplits(line.text, byLine.get(`${sIdx}:${lIdx}`))}</div>`;
+        ? conflictCardHtml(line, sIdx, lIdx, disabled)
+        : `<div class="lrp__line${isFlash ? ' is-resolved' : ''}" data-section="${sIdx}" data-line="${lIdx}">${lineTextWithSplits(line.text, byLine.get(`${sIdx}:${lIdx}`), disabled)}</div>`;
       const anchored = byAnchor.get(`${sIdx}:${lIdx}`) || [];
       const vocsHtml = anchored
-        .map(({ vocalization, index }) => vocalizationCardHtml(vocalization, index))
+        .map(({ vocalization, index }) => vocalizationCardHtml(vocalization, index, disabled))
         .join('');
       const mergeHtml =
         lIdx < section.lines.length - 1
-          ? `<button type="button" class="lrp__merge" data-section="${sIdx}" data-line="${lIdx}">Unir con el siguiente renglón</button>`
+          ? `<button type="button" class="lrp__merge" data-section="${sIdx}" data-line="${lIdx}"${disabled ? ' disabled' : ''}>Unir con el siguiente renglón</button>`
           : '';
       return `${lineHtml}${vocsHtml}${mergeHtml}`;
     })
@@ -146,39 +174,109 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
 
   let state;
   try {
-    state = await getLyricsReview(songId);
+    const initial = await getLyricsReview(songId);
+    state = { ...initial, busy: false };
   } catch (err) {
     el.innerHTML = `<p class="lrp__error">${escapeHtml(err.message || 'No se pudo cargar la revisión de letra')}</p>`;
     return el;
   }
 
-  function applyResult(result) {
-    state = { ...state, ...result };
+  // Coordenadas {section, line} de la línea a resaltar con el flash
+  // teal-soft 400ms en el PRÓXIMO render (se consume una sola vez, ver
+  // render()). Solo resolve/acceptVocalization la fijan: son las únicas
+  // acciones que "resuelven una tarjeta" según el spec de motion —
+  // splitLine/mergeLines/rejectVocalization no llevan flash.
+  let pendingFlash = null;
+
+  /**
+   * Lock instantáneo de los controles interactivos, sin esperar al render()
+   * final: mientras hay un PUT/POST en vuelo (o corriendo la animación de
+   * colapso previa) un doble click o dos acciones distintas dispararían
+   * PUTs paralelos sobre el mismo documento — el backend tiene CAS por
+   * status (`AND status='awaiting_lyrics'`), así que la 2a request puede
+   * fallar en silencio si no se bloquea acá.
+   */
+  function lockControls() {
+    el.querySelectorAll(
+      '.lrp__resolve, .lrp__edit-start, .lrp__edit-save, .lrp__edit-cancel, .lrp__split, .lrp__merge, .lrp__voc-accept, .lrp__voc-reject, .lrp__approve',
+    ).forEach((btn) => {
+      btn.disabled = true;
+    });
+  }
+
+  /**
+   * Re-trae el documento del servidor tras un fallo de acción o de
+   * aprobación: el admin nunca queda viendo un estado potencialmente viejo
+   * sin más salida que recargar la página (mismo criterio que el CAS del
+   * backend — si la acción falló porque el run ya no está en
+   * awaiting_lyrics, esto lo refleja). También resuelve la staleness de
+   * índices de startEdit: tras un resync, el documento en memoria vuelve a
+   * estar al día.
+   */
+  async function resync() {
+    try {
+      const fresh = await getLyricsReview(songId);
+      state = { ...fresh, busy: false };
+    } catch (err) {
+      state.busy = false;
+      showToast(err.message || 'No se pudo re-sincronizar la revisión. Recargá la página.', {
+        type: 'error',
+      });
+    }
+    pendingFlash = null;
     render();
   }
 
-  async function runAction(action) {
+  async function performAction(action, flashKey) {
     try {
       const result = await sendLyricsAction(songId, action);
-      applyResult(result);
+      state = { ...state, ...result, busy: false };
+      pendingFlash = flashKey;
+      render();
     } catch (err) {
       showToast(err.message || 'No se pudo aplicar el cambio', { type: 'error' });
+      await resync();
     }
   }
 
+  /**
+   * Punto de entrada único de toda acción de edición: guarda de
+   * concurrencia (`state.busy`), lock instantáneo de controles y — si hay
+   * `cardEl` (tarjeta de conflicto o vocalización) y reduce-motion no está
+   * activo — colapso clip-path+fade 200ms de esa tarjeta antes de pintar el
+   * resultado (spec motion). Sin `cardEl` (splitLine/mergeLines: no son
+   * "tarjetas" que se resuelven) va directo a la acción, sin animar.
+   * @param {object} action
+   * @param {{cardEl?: HTMLElement|null, flashKey?: {section:number, line:number}|null}} [opts]
+   */
+  async function runAction(action, { cardEl = null, flashKey = null } = {}) {
+    if (state.busy) return;
+    state.busy = true;
+    lockControls();
+    if (cardEl && !reduceMotion()) {
+      cardEl.classList.add('is-resolving');
+      await waitForCollapse(cardEl);
+    }
+    await performAction(action, flashKey);
+  }
+
   async function handleApprove() {
-    const btn = el.querySelector('.lrp__approve');
-    if (btn) btn.disabled = true;
+    if (state.busy) return;
+    state.busy = true;
+    lockControls();
     try {
       await approveLyrics(songId);
+      state.busy = false;
       onApproved?.();
+      render();
     } catch (err) {
       showToast(err.message || 'No se pudo aprobar la letra', { type: 'error' });
-      if (btn) btn.disabled = !state.canApprove;
+      await resync();
     }
   }
 
   function startEdit(confEl) {
+    if (state.busy) return;
     const sIdx = Number(confEl.dataset.section);
     const lIdx = Number(confEl.dataset.line);
     const line = state.review.sections[sIdx].lines[lIdx];
@@ -191,7 +289,10 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
     actions.querySelector('.lrp__edit-save').addEventListener('click', () => {
       const text = actions.querySelector('.lrp__edit-input').value;
       if (!text.trim()) return;
-      runAction({ type: 'resolve', section: sIdx, line: lIdx, choice: 'edit', text });
+      runAction(
+        { type: 'resolve', section: sIdx, line: lIdx, choice: 'edit', text },
+        { cardEl: confEl, flashKey: { section: sIdx, line: lIdx } },
+      );
     });
   }
 
@@ -199,12 +300,12 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
     el.querySelectorAll('.lrp__resolve').forEach((btn) =>
       btn.addEventListener('click', () => {
         const conf = btn.closest('.conf');
-        runAction({
-          type: 'resolve',
-          section: Number(conf.dataset.section),
-          line: Number(conf.dataset.line),
-          choice: btn.dataset.choice,
-        });
+        const sIdx = Number(conf.dataset.section);
+        const lIdx = Number(conf.dataset.line);
+        runAction(
+          { type: 'resolve', section: sIdx, line: lIdx, choice: btn.dataset.choice },
+          { cardEl: conf, flashKey: { section: sIdx, line: lIdx } },
+        );
       }),
     );
 
@@ -237,20 +338,43 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
     el.querySelectorAll('.voc').forEach((vocEl) => {
       const idx = Number(vocEl.dataset.index);
       const vocalization = state.review.vocalizations[idx];
-      vocEl.querySelector('.lrp__voc-accept').addEventListener('click', () =>
-        runAction({
-          type: 'acceptVocalization',
-          index: idx,
-          section: vocalization.anchorAfterLine?.section ?? 0,
-          afterLine: vocalization.anchorAfterLine?.line ?? -1,
-        }),
-      );
+      const section = vocalization.anchorAfterLine?.section ?? 0;
+      const afterLine = vocalization.anchorAfterLine?.line ?? -1;
+      vocEl
+        .querySelector('.lrp__voc-accept')
+        .addEventListener('click', () =>
+          runAction(
+            { type: 'acceptVocalization', index: idx, section, afterLine },
+            { cardEl: vocEl, flashKey: { section, line: afterLine + 1 } },
+          ),
+        );
       vocEl
         .querySelector('.lrp__voc-reject')
-        .addEventListener('click', () => runAction({ type: 'rejectVocalization', index: idx }));
+        .addEventListener('click', () =>
+          runAction({ type: 'rejectVocalization', index: idx }, { cardEl: vocEl }),
+        );
     });
 
     el.querySelector('.lrp__approve')?.addEventListener('click', handleApprove);
+  }
+
+  /**
+   * Restaura el foco tras cada render (el innerHTML completo se reemplaza
+   * en cada pintura, así que sin esto el foco cae a <body> — regresión de
+   * teclado). Orden de prioridad, de más a menos "lo próximo que el admin
+   * querría hacer": siguiente conflicto pendiente > siguiente vocalización
+   * pendiente > botón Aprobar (si ya se puede aprobar) > header (contenedor
+   * con tabindex -1, último recurso cuando no queda nada interactivo
+   * relevante — p.ej. recién montado con todo resuelto salvo Aprobar
+   * deshabilitado por una acción en vuelo).
+   */
+  function restoreFocus() {
+    const target =
+      el.querySelector('.conf .lrp__resolve, .conf .btn2') ||
+      el.querySelector('.voc .lrp__voc-accept') ||
+      (state.canApprove ? el.querySelector('.lrp__approve') : null) ||
+      el.querySelector('.lrp__header');
+    target?.focus();
   }
 
   function render() {
@@ -258,23 +382,29 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
     const byLine = suggestionsByLine(state.suggestions || []);
     const pending = pendingCount(state.review);
     const motion = reduceMotion() ? '' : ' lrp--motion';
+    const disabled = state.busy;
+    const flash = pendingFlash;
+    pendingFlash = null;
 
     el.className = `lrp${motion}`;
     el.innerHTML = `
-      <div class="lrp__header">
+      <div class="lrp__header" tabindex="-1">
         <span class="lrp__header-pending${pending === 0 ? ' is-done' : ''}">${
           pending === 0 ? 'Listo' : `${pending} pendiente${pending === 1 ? '' : 's'}`
         }</span>
         <span class="temp lrp__temp">${Math.round(state.temperature * 100)}%</span>
       </div>
       <div class="lrp__body">
-        ${state.review.sections.map((s, i) => sectionHtml(s, i, byAnchor, byLine)).join('')}
+        ${state.review.sections
+          .map((s, i) => sectionHtml(s, i, byAnchor, byLine, { disabled, flash }))
+          .join('')}
       </div>
       <div class="lrp__footer">
         <span class="lrp__pending">${pending} diferencia${pending === 1 ? '' : 's'} sin resolver</span>
-        <button type="button" class="btn lrp__approve"${state.canApprove ? '' : ' disabled'}>Aprobar letra</button>
+        <button type="button" class="btn lrp__approve"${state.canApprove && !disabled ? '' : ' disabled'}>Aprobar letra</button>
       </div>`;
     bind();
+    restoreFocus();
   }
 
   render();

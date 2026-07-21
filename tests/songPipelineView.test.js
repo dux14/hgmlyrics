@@ -2,11 +2,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 let watchOnChange = null;
+let lastUnsub = null;
 
 vi.mock('../src/lib/pipelineApi.js', () => ({
   watchPipelineRun: vi.fn((songId, onChange) => {
     watchOnChange = onChange;
-    return vi.fn(); // unsubscribe
+    lastUnsub = vi.fn(); // unsubscribe
+    return lastUnsub;
   }),
   retryPipelinePhase: vi.fn(() => Promise.resolve({ success: true })),
 }));
@@ -15,9 +17,14 @@ vi.mock('../src/components/pipeline/LyricsReviewPanel.js', () => ({
   LyricsReviewPanel: vi.fn(async () => document.createElement('div')),
 }));
 
+let routeCb = null;
+
 vi.mock('../src/router.js', () => ({
   goBack: vi.fn(),
-  onRouteChange: vi.fn(() => vi.fn()),
+  onRouteChange: vi.fn((cb) => {
+    routeCb = cb;
+    return vi.fn();
+  }),
 }));
 
 import { renderSongPipelineView } from '../src/components/pipeline/SongPipelineView.js';
@@ -57,6 +64,8 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     watchOnChange = null;
+    lastUnsub = null;
+    routeCb = null;
     vi.clearAllMocks();
   });
 
@@ -169,5 +178,46 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
   it('suscribe watchPipelineRun al montar', () => {
     renderSongPipelineView(container, SONG_ID);
     expect(watchPipelineRun).toHaveBeenCalledWith(SONG_ID, expect.any(Function));
+  });
+
+  it('teardown: navegar afuera desuscribe el watcher y bloquea re-renders posteriores', () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({ run: buildRun() });
+    const view = container.querySelector('.pipeline-view');
+
+    routeCb();
+    expect(lastUnsub).toHaveBeenCalled();
+
+    // Un evento posterior del watcher (p. ej. una promesa en vuelo) no debe
+    // operar sobre nodos huérfanos: el guard `destroyed` corta el render.
+    watchOnChange({ run: buildRun({ upload: { status: 'done' } }) });
+    expect(container.querySelector('.pipeline-view')).toBe(view);
+    const pill = container.querySelector('.pipeline-view__pill');
+    expect(pill.textContent).toBe('0 de 5 fases');
+  });
+
+  it('mount-once bajo carrera async real: dos eventos sin await entre ellos montan el panel una sola vez', async () => {
+    renderSongPipelineView(container, SONG_ID);
+
+    watchOnChange({ run: buildRun({}, { status: 'awaiting_lyrics' }) });
+    watchOnChange({ run: buildRun({}, { status: 'awaiting_lyrics' }) });
+    await flushPromises();
+
+    expect(LyricsReviewPanel).toHaveBeenCalledTimes(1);
+  });
+
+  it('skip por firma: dos eventos con el mismo estado no reconstruyen las filas', () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({ run: buildRun() });
+
+    const row = container.querySelector('[data-phase="upload"]');
+    expect(row.classList.contains('phase--enter')).toBe(true);
+    row.classList.remove('phase--enter'); // marca que este render "ya paso"
+
+    watchOnChange({ run: buildRun() }); // mismo estado exacto
+
+    const rowAfter = container.querySelector('[data-phase="upload"]');
+    expect(rowAfter).toBe(row); // mismo nodo: no se recreo la fila
+    expect(rowAfter.classList.contains('phase--enter')).toBe(false); // no se re-animo
   });
 });

@@ -11,6 +11,7 @@ import '../../styles/pipeline.css';
 import { icon } from '../../lib/icons.js';
 import { goBack, onRouteChange } from '../../router.js';
 import { watchPipelineRun, retryPipelinePhase } from '../../lib/pipelineApi.js';
+import { showToast } from '../../lib/toast.js';
 import { LyricsReviewPanel } from './LyricsReviewPanel.js';
 import { PhaseRow } from './PhaseRow.js';
 
@@ -94,6 +95,9 @@ export function renderSongPipelineView(container, songId) {
   let lyricsPanelEl = null;
   let lyricsPanelLoading = false;
   let lastRun = null;
+  let destroyed = false;
+  let lastSig = null;
+  let firstRender = true;
 
   async function ensureLyricsPanel() {
     if (lyricsPanelEl || lyricsPanelLoading) return;
@@ -108,9 +112,20 @@ export function renderSongPipelineView(container, songId) {
       });
     } catch (err) {
       console.error('SongPipelineView: no se pudo montar el panel de letra', err);
+      // Sentinel de error: sin esto, cada poll de 3s reintenta la factory
+      // indefinidamente (retry-storm) porque el catch no dejaba nada montado.
+      const errorEl = document.createElement('p');
+      errorEl.className = 'lrp__error';
+      errorEl.textContent = 'No se pudo cargar la revisión de letra';
+      lyricsPanelEl = errorEl;
     } finally {
       lyricsPanelLoading = false;
     }
+    if (destroyed) return;
+    // El panel (o su sentinel de error) recién quedó listo: es un cambio real
+    // aunque la firma de status/phases no haya variado, así que forzamos el
+    // rebuild invalidando la firma cacheada.
+    lastSig = null;
     renderPhases(lastRun);
   }
 
@@ -130,6 +145,7 @@ export function renderSongPipelineView(container, songId) {
             await retryPipelinePhase(songId, 'pitch');
           } catch (err) {
             console.error('SongPipelineView: no se pudo reprocesar sincronía y tono', err);
+            showToast('No se pudo reintentar la fase. Intentá de nuevo.');
           }
         },
       };
@@ -145,6 +161,7 @@ export function renderSongPipelineView(container, songId) {
             await retryPipelinePhase(songId, k);
           } catch (err) {
             console.error('SongPipelineView: no se pudo reintentar la fase', err);
+            showToast('No se pudo reintentar la fase. Intentá de nuevo.');
           }
         },
       };
@@ -170,7 +187,23 @@ export function renderSongPipelineView(container, songId) {
   }
 
   function renderPhases(run) {
+    if (destroyed) return;
     lastRun = run;
+
+    // Firma del estado relevante: si no cambió desde el último render, saltar
+    // el rebuild. Evita desprender/reinsertar el nodo del panel de letra (y
+    // que el input pierda foco) en cada tick del polling de 3s cuando lo
+    // único que cambió fue contenido interno del documento de revisión.
+    const sig = JSON.stringify({
+      st: run?.status ?? null,
+      ph: ['upload', 'stems', 'lyrics_review', 'sync', 'pitch', 'clips'].map(
+        (k) => run?.phases?.[k]?.status ?? null,
+      ),
+      tr: Object.keys(run?.phases?.stems?.tracks ?? {}).sort(),
+    });
+    if (sig === lastSig) return;
+    lastSig = sig;
+
     rowsEl.innerHTML = '';
 
     if (!run) {
@@ -215,18 +248,21 @@ export function renderSongPipelineView(container, songId) {
         onRetry: info.onRetry,
       });
 
-      if (!reduceMotion) {
+      if (!reduceMotion && firstRender) {
         row.style.animationDelay = `${i * 40}ms`;
         row.classList.add('phase--enter');
       }
 
       rowsEl.appendChild(row);
     });
+
+    firstRender = false;
   }
 
   const unsub = watchPipelineRun(songId, (data) => renderPhases(data?.run ?? null));
 
   const offRoute = onRouteChange(() => {
+    destroyed = true;
     unsub();
     offRoute();
     lyricsPanelEl = null;

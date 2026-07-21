@@ -394,7 +394,7 @@
 /* Fila que requiere accion: tinte ambar suave, SIN border-left (regla dura
    de plataforma: nunca border-left de acento). */
 .phase--action {
-  background: rgba(245, 158, 11, 0.06);
+  background: color-mix(in oklch, var(--color-action) 6%, transparent);
   margin: 0 calc(var(--space-md) * -1);
   padding-left: var(--space-md);
   padding-right: var(--space-md);

@@ -175,4 +175,116 @@ describe('UploadPhaseCard — subida del audio (Task D3b)', () => {
     update({ status: 'created', phases: { upload: { status: 'pending' } }, inputMeta: {} });
     expect(el.querySelector('.upload-card__warning')).toBeTruthy();
   });
+
+  it('warning: Revalidar llama renamePipelineAudio (NO crea un run nuevo) y actualiza la coincidencia', async () => {
+    createPipelineRun.mockResolvedValue({
+      runId: 'r1',
+      uploadUrl: 'https://upload.example/x',
+      titleScore: 0.2,
+      threshold: 0.6,
+      songTitle: 'Sion',
+    });
+    renamePipelineAudio.mockResolvedValue({
+      success: true,
+      titleScore: 0.9,
+      threshold: 0.6,
+      songTitle: 'Sion',
+    });
+    const { el } = createUploadPhaseCard({ songId: SONG_ID });
+
+    selectFile(el, makeFile());
+    await flush();
+    expect(createPipelineRun).toHaveBeenCalledTimes(1);
+
+    el.querySelector('.upload-card__revalidate').click();
+    await flush();
+
+    expect(renamePipelineAudio).toHaveBeenCalledWith(SONG_ID, 'cancion.mp3');
+    // Revalidar NO vuelve a llamar createPipelineRun (evita el 409 del run activo).
+    expect(createPipelineRun).toHaveBeenCalledTimes(1);
+    expect(el.querySelector('.upload-card__warning-value').textContent).toBe('cancion.mp3');
+    expect(el.textContent).toContain('90%');
+  });
+
+  it('beginUpload: PUT falla → cancela el run huérfano y vuelve a empty', async () => {
+    createPipelineRun.mockResolvedValue({
+      runId: 'r1',
+      uploadUrl: 'https://upload.example/x',
+      titleScore: 0.95,
+      threshold: 0.6,
+    });
+    global.fetch = vi.fn(() => Promise.resolve({ ok: false }));
+    const { el } = createUploadPhaseCard({ songId: SONG_ID });
+
+    selectFile(el, makeFile());
+    await flush();
+
+    expect(cancelPipelineRun).toHaveBeenCalledWith(SONG_ID);
+    expect(el.querySelector('.upload-card__input')).toBeTruthy(); // volvió a empty
+  });
+
+  it('beginUpload: PUT ok pero confirm falla → estado confirmError con Reintentar (sin cancelar ni re-subir)', async () => {
+    createPipelineRun.mockResolvedValue({
+      runId: 'r1',
+      uploadUrl: 'https://upload.example/x',
+      titleScore: 0.95,
+      threshold: 0.6,
+    });
+    confirmPipelineUpload.mockRejectedValueOnce(new Error('502'));
+    const { el } = createUploadPhaseCard({ songId: SONG_ID });
+
+    selectFile(el, makeFile());
+    await flush();
+
+    expect(cancelPipelineRun).not.toHaveBeenCalled();
+    const retryBtn = el.querySelector('.upload-card__retry-confirm');
+    expect(retryBtn).toBeTruthy();
+
+    confirmPipelineUpload.mockResolvedValueOnce({ success: true });
+    retryBtn.click();
+    await flush();
+
+    // El reintento no vuelve a hacer PUT (fetch sigue llamado una sola vez).
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(confirmPipelineUpload).toHaveBeenCalledTimes(2);
+    expect(cancelPipelineRun).not.toHaveBeenCalled();
+  });
+
+  it('update(run) durante state==="renaming" no reemplaza el formulario en curso', () => {
+    const { el, update } = createUploadPhaseCard({ songId: SONG_ID });
+    update({
+      status: 'processing',
+      phases: { upload: { status: 'done' } },
+      inputMeta: { filename: 'original.mp3' },
+    });
+
+    el.querySelector('.upload-card__rename-btn').click();
+    const input = el.querySelector('.upload-card__rename-input');
+    input.value = 'A medio escribir';
+
+    update({
+      status: 'processing',
+      phases: { upload: { status: 'done' } },
+      inputMeta: { filename: 'original.mp3' },
+    });
+
+    expect(el.querySelector('.upload-card__rename-input').value).toBe('A medio escribir');
+  });
+
+  it('grid de warning muestra el songTitle en la celda Canción', async () => {
+    createPipelineRun.mockResolvedValue({
+      runId: 'r1',
+      uploadUrl: 'https://upload.example/x',
+      titleScore: 0.2,
+      threshold: 0.6,
+      songTitle: 'Sion',
+    });
+    const { el } = createUploadPhaseCard({ songId: SONG_ID });
+
+    selectFile(el, makeFile());
+    await flush();
+
+    const values = el.querySelectorAll('.upload-card__warning-value');
+    expect(values[1].textContent).toBe('Sion');
+  });
 });

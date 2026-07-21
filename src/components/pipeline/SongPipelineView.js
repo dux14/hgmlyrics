@@ -278,6 +278,7 @@ export function renderSongPipelineView(container, songId) {
     unsub();
     offRoute();
     lyricsPanelEl = null;
+    uploadCard.dispose?.();
     uploadCard.el.remove();
   });
 }

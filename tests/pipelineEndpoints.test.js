@@ -97,6 +97,7 @@ describe('POST /api/songs/:id/pipeline (crear run)', () => {
     expect(body.uploadUrl).toBe('https://signed/put/s1/runs/r1/full.mp3');
     expect(body.titleScore).toBeGreaterThan(0.6);
     expect(body.threshold).toBe(0.6);
+    expect(body.songTitle).toBe('Sion');
     expect(createSongAudioSignedPutUrl).toHaveBeenCalledWith('s1/runs/r1/full.mp3');
   });
 
@@ -358,9 +359,20 @@ describe('PATCH /api/songs/:id/pipeline (renombrar audio)', () => {
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
-  it('mergea input_meta.displayName sin pisar filename/size/mime', async () => {
+  it('404 si la canción no existe', async () => {
+    routeSql([['SELECT title FROM songs', []]]);
+    const res = makeRes();
+    await pipelineHandler(
+      { method: 'PATCH', query: { id: 's1' }, body: { displayName: 'Voz principal' } },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(404);
+  });
+
+  it('mergea input_meta.displayName + recompute titleScore sin pisar filename/size/mime', async () => {
     let mergedValue;
     routeSql([
+      ['SELECT title FROM songs', [{ title: 'Voz principal' }]],
       [
         'UPDATE song_pipeline_runs',
         (values) => {
@@ -375,14 +387,21 @@ describe('PATCH /api/songs/:id/pipeline (renombrar audio)', () => {
       res,
     );
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ success: true });
+    const body = res.json.mock.calls[0][0];
+    expect(body.success).toBe(true);
+    expect(body.songTitle).toBe('Voz principal');
+    expect(body.titleScore).toBeGreaterThan(0.6);
+    expect(body.threshold).toBe(0.6);
     // El merge se hace con `||` sobre input_meta existente en el SQL (no pisa
-    // filename/size/mime): el valor pasado al placeholder solo trae displayName.
-    expect(mergedValue).toEqual({ displayName: 'Voz principal' });
+    // filename/size/mime): el valor pasado al placeholder trae displayName + titleScore.
+    expect(mergedValue).toEqual({ displayName: 'Voz principal', titleScore: body.titleScore });
   });
 
   it('404 si no hay una ejecución activa (UPDATE afecta 0 filas)', async () => {
-    routeSql([['UPDATE song_pipeline_runs', { count: 0 }]]);
+    routeSql([
+      ['SELECT title FROM songs', [{ title: 'Voz principal' }]],
+      ['UPDATE song_pipeline_runs', { count: 0 }],
+    ]);
     const res = makeRes();
     await pipelineHandler(
       { method: 'PATCH', query: { id: 's1' }, body: { displayName: 'Voz principal' } },

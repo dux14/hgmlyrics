@@ -21,11 +21,17 @@ vi.mock('../src/components/pipeline/LyricsReviewPanel.js', () => ({
 // D3b (UploadPhaseCard) tiene su propio test dedicado: acá se mockea como
 // una caja negra para no acoplar el esqueleto del stepper a su máquina de
 // estados interna.
+let lastUploadCardDispose = null;
+
 vi.mock('../src/components/pipeline/UploadPhaseCard.js', () => ({
-  createUploadPhaseCard: vi.fn(() => ({
-    el: document.createElement('div'),
-    update: vi.fn(),
-  })),
+  createUploadPhaseCard: vi.fn(() => {
+    lastUploadCardDispose = vi.fn();
+    return {
+      el: document.createElement('div'),
+      update: vi.fn(),
+      dispose: lastUploadCardDispose,
+    };
+  }),
 }));
 
 let routeCb = null;
@@ -77,6 +83,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     watchOnChange = null;
     lastUnsub = null;
     routeCb = null;
+    lastUploadCardDispose = null;
     vi.clearAllMocks();
   });
 
@@ -205,6 +212,15 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     expect(container.querySelector('.pipeline-view')).toBe(view);
     const pill = container.querySelector('.pipeline-view__pill');
     expect(pill.textContent).toBe('0 de 5 fases');
+  });
+
+  it('teardown: llama uploadCard.dispose() para limpiar runs huérfanos', () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({ run: buildRun() });
+
+    routeCb();
+
+    expect(lastUploadCardDispose).toHaveBeenCalled();
   });
 
   it('mount-once bajo carrera async real: dos eventos sin await entre ellos montan el panel una sola vez', async () => {

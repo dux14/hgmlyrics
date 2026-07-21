@@ -96,7 +96,7 @@ async function createRun(req, res, songId) {
   await sql`UPDATE song_pipeline_runs SET input_path = ${inputPath}, updated_at = now() WHERE id = ${runId}`;
 
   const uploadUrl = await createSongAudioSignedPutUrl(inputPath);
-  res.status(200).json({ runId, uploadUrl, titleScore, threshold: TITLE_MATCH_THRESHOLD });
+  res.status(200).json({ runId, uploadUrl, titleScore, threshold: TITLE_MATCH_THRESHOLD, songTitle: song.title });
 }
 
 async function cancelRun(req, res, songId) {
@@ -121,9 +121,20 @@ async function renameRun(req, res, songId) {
     return;
   }
   const clean = displayName.trim().slice(0, 200);
+
+  const songRows = await sql`SELECT title FROM songs WHERE id = ${songId}`;
+  if (songRows.length === 0) {
+    res.status(404).json({ error: 'Canción no encontrada' });
+    return;
+  }
+  const song = songRows[0];
+  // El rename revalida contra el título real (review D3b): un "Revalidar" tras
+  // corregir el nombre debe reflejar la coincidencia nueva, no la del POST original.
+  const titleScore = titleSimilarity(clean, song.title);
+
   const result = await sql`
     UPDATE song_pipeline_runs
-    SET input_meta = COALESCE(input_meta, '{}'::jsonb) || ${sql.json({ displayName: clean })}::jsonb,
+    SET input_meta = COALESCE(input_meta, '{}'::jsonb) || ${sql.json({ displayName: clean, titleScore })}::jsonb,
         updated_at = now()
     WHERE song_id = ${songId}
       AND status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')
@@ -132,7 +143,7 @@ async function renameRun(req, res, songId) {
     res.status(404).json({ error: 'No hay una ejecución activa para esta canción' });
     return;
   }
-  res.status(200).json({ success: true });
+  res.status(200).json({ success: true, titleScore, threshold: TITLE_MATCH_THRESHOLD, songTitle: song.title });
 }
 
 export default withErrors(async (req, res) => {

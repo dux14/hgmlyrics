@@ -83,7 +83,7 @@ export async function getPipelineRun(songId) {
  * POST; se aplica después con renamePipelineAudio si el admin puso nombre propio.
  * @param {string} songId
  * @param {{fileName:string, size?:number, mime?:string}} opts
- * @returns {Promise<{runId:string, uploadUrl:string, titleScore:number, threshold:number}>}
+ * @returns {Promise<{runId:string, uploadUrl:string, titleScore:number, threshold:number, songTitle:string}>}
  */
 export async function createPipelineRun(songId, { fileName, size = null, mime = null } = {}) {
   const res = await fetch(`/api/songs/${songId}/pipeline`, {
@@ -147,7 +147,7 @@ export async function cancelPipelineRun(songId) {
  * Edita el nombre mostrado del audio del run activo (input_meta.displayName).
  * @param {string} songId
  * @param {string} displayName
- * @returns {Promise<{success:boolean}>}
+ * @returns {Promise<{success:boolean, titleScore:number, threshold:number, songTitle:string}>}
  */
 export async function renamePipelineAudio(songId, displayName) {
   const res = await fetch(`/api/songs/${songId}/pipeline`, {

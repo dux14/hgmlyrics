@@ -1,10 +1,11 @@
 /**
  * UploadPhaseCard.js — flujo de subida del mp3 dentro de la fila Audio del
  * stepper (pipeline unificado, plan D, Task D3b). Máquina de estados propia
- * (empty → validating → warning? → uploading → confirmed/processing) que
- * `update(run)` sincroniza SIN pisar un flujo local en curso: mientras el
- * card está validando, mostrando la advertencia de título o subiendo, el
- * watcher del run queda mudo para esta tarjeta.
+ * (empty → validating → warning? → uploading → confirmed/processing, con
+ * 'renaming' y 'confirmError' como desvíos locales) que `update(run)`
+ * sincroniza SIN pisar un flujo local en curso: mientras el card está
+ * validando, mostrando la advertencia de título, subiendo, renombrando o en
+ * confirmError, el watcher del run queda mudo para esta tarjeta (LOCAL_STATES).
  */
 import { icon } from '../../lib/icons.js';
 import { escapeHtml } from '../../lib/escape.js';
@@ -17,11 +18,14 @@ import {
   cancelPipelineRun,
 } from '../../lib/pipelineApi.js';
 
-const LOCAL_STATES = new Set(['validating', 'warning', 'uploading']);
+// 'renaming' y 'confirmError' también son flujos locales: sin esto, el
+// próximo tick del watcher (poll de 3s) pisaría el formulario de rename a
+// medio escribir o el botón Reintentar de un confirm fallido.
+const LOCAL_STATES = new Set(['validating', 'warning', 'uploading', 'renaming', 'confirmError']);
 
 /**
  * @param {{ songId: string, onAfterConfirm?: () => void }} opts
- * @returns {{ el: HTMLElement, update: (run: object|null) => void }}
+ * @returns {{ el: HTMLElement, update: (run: object|null) => void, dispose: () => void }}
  */
 export function createUploadPhaseCard({ songId, onAfterConfirm }) {
   const el = document.createElement('div');
@@ -32,13 +36,14 @@ export function createUploadPhaseCard({ songId, onAfterConfirm }) {
   // se re-deriva directo del run recibido por `update`.
   let state = 'empty';
   let lastRun = null;
-  let ctx = {}; // file, durationSec, uploadUrl, titleScore, threshold, displayName
+  let ctx = {}; // file, durationSec, uploadUrl, titleScore, threshold, songTitle, displayName, uploadMessage
 
   function render() {
     if (state === 'empty') return renderEmpty();
     if (state === 'validating') return renderValidating();
     if (state === 'warning') return renderWarning();
     if (state === 'uploading') return renderUploading();
+    if (state === 'confirmError') return renderConfirmError();
     return renderConfirmed();
   }
 
@@ -114,6 +119,18 @@ export function createUploadPhaseCard({ songId, onAfterConfirm }) {
     `;
   }
 
+  function renderConfirmError() {
+    el.innerHTML = `
+      <div class="upload-card__warning">
+        <p class="upload-card__error-msg">El audio se subió pero no se pudo iniciar el procesamiento.</p>
+        <div class="upload-card__actions">
+          <button type="button" class="btn upload-card__retry-confirm">Reintentar</button>
+        </div>
+      </div>
+    `;
+    el.querySelector('.upload-card__retry-confirm').addEventListener('click', () => retryConfirm());
+  }
+
   function renderConfirmed() {
     const run = lastRun;
     const meta = run?.inputMeta || {};
@@ -152,6 +169,11 @@ export function createUploadPhaseCard({ songId, onAfterConfirm }) {
       if (!value) return;
       try {
         await renamePipelineAudio(songId, value);
+        // Optimista: reflejar el nombre nuevo ANTES del próximo poll, para no
+        // esperar hasta 3s a que el watcher lo traiga de vuelta.
+        if (lastRun) {
+          lastRun = { ...lastRun, inputMeta: { ...lastRun.inputMeta, displayName: value } };
+        }
         showToast('Nombre actualizado');
       } catch (err) {
         console.error('UploadPhaseCard: no se pudo renombrar el audio', err);
@@ -168,6 +190,7 @@ export function createUploadPhaseCard({ songId, onAfterConfirm }) {
 
   function startRename() {
     const meta = lastRun?.inputMeta || {};
+    state = 'renaming';
     renderRenaming(meta.displayName || meta.filename || '');
   }
 
@@ -205,16 +228,15 @@ export function createUploadPhaseCard({ songId, onAfterConfirm }) {
   }
 
   async function revalidate() {
+    // NO crea un run nuevo (Critical #1 del review): el run 'created' de la
+    // validación inicial ya existe, y un segundo createPipelineRun choca con
+    // el índice único de run activo (409). Revalidar es renombrar el mismo
+    // run y recalcular la coincidencia contra el nombre editado.
     try {
-      const created = await createPipelineRun(songId, {
-        fileName: ctx.displayName || ctx.file.name,
-        size: ctx.file.size,
-        mime: ctx.file.type,
-      });
-      ctx.uploadUrl = created.uploadUrl;
-      ctx.titleScore = created.titleScore;
-      ctx.threshold = created.threshold;
-      ctx.songTitle = created.songTitle;
+      const r = await renamePipelineAudio(songId, ctx.displayName || ctx.file.name);
+      ctx.titleScore = r.titleScore;
+      ctx.threshold = r.threshold;
+      ctx.songTitle = r.songTitle;
       render();
     } catch (err) {
       console.error('UploadPhaseCard: no se pudo revalidar', err);
@@ -223,6 +245,8 @@ export function createUploadPhaseCard({ songId, onAfterConfirm }) {
   }
 
   async function changeFile() {
+    // Hay un run 'created' vivo de la validación: cancelarlo antes de volver
+    // a empty, si no el índice único de run activo bloquea el próximo intento.
     try {
       await cancelPipelineRun(songId);
     } catch (err) {
@@ -230,6 +254,7 @@ export function createUploadPhaseCard({ songId, onAfterConfirm }) {
       showToast(err.message || 'No se pudo cancelar el procesamiento', { type: 'error' });
     }
     ctx = {};
+    lastRun = null;
     state = 'empty';
     render();
   }
@@ -238,10 +263,31 @@ export function createUploadPhaseCard({ songId, onAfterConfirm }) {
     await beginUpload();
   }
 
+  /** Aplica el nombre elegido (si difiere del original) y cierra en confirmed. */
+  async function finalizeConfirm() {
+    if (ctx.displayName && ctx.file && ctx.displayName !== ctx.file.name) {
+      try {
+        await renamePipelineAudio(songId, ctx.displayName);
+      } catch (err) {
+        console.error('UploadPhaseCard: no se pudo aplicar el nombre elegido', err);
+      }
+    }
+    onAfterConfirm?.();
+    // El card queda en confirmed a la espera del próximo `update(run)` del
+    // watcher; hasta entonces, sin lastRun, cae en confirmed vacío.
+    state = 'confirmed';
+    render();
+  }
+
   async function beginUpload() {
     state = 'uploading';
     ctx.uploadMessage = 'Subiendo...';
     render();
+    // Distingue si el fallo fue en el PUT (nada subido todavía: el run
+    // 'created' es huérfano, se cancela) o en el confirm posterior (el
+    // archivo YA está en storage: cancelar lo perdería, se ofrece reintentar
+    // solo el confirm).
+    let putOk = false;
     try {
       const res = await fetch(ctx.uploadUrl, {
         method: 'PUT',
@@ -249,31 +295,35 @@ export function createUploadPhaseCard({ songId, onAfterConfirm }) {
         body: ctx.file,
       });
       if (!res.ok) throw new Error('La subida falló.');
+      putOk = true;
       ctx.uploadMessage = 'Procesando en segundo plano...';
       render();
       await confirmPipelineUpload(songId, { durationSec: ctx.durationSec });
-      if (
-        ctx.displayName &&
-        ctx.file &&
-        ctx.displayName !== ctx.file.name
-      ) {
-        try {
-          await renamePipelineAudio(songId, ctx.displayName);
-        } catch (err) {
-          console.error('UploadPhaseCard: no se pudo aplicar el nombre elegido', err);
-        }
-      }
-      onAfterConfirm?.();
-      // El card queda en confirmed a la espera del próximo `update(run)` del
-      // watcher; hasta entonces, sin lastRun, cae en confirmed vacío.
-      state = 'confirmed';
-      render();
+      await finalizeConfirm();
     } catch (err) {
       console.error('UploadPhaseCard: no se pudo subir el audio', err);
-      showToast(err.message || 'No se pudo subir el audio', { type: 'error' });
-      state = 'empty';
-      ctx = {};
-      render();
+      if (!putOk) {
+        await cancelPipelineRun(songId).catch(() => {});
+        showToast('La subida falló. Intentá de nuevo.');
+        state = 'empty';
+        ctx = {};
+        render();
+      } else {
+        state = 'confirmError';
+        render();
+      }
+    }
+  }
+
+  /** Reintento del confirm tras un fallo con el archivo ya subido (no re-sube). */
+  async function retryConfirm() {
+    try {
+      await confirmPipelineUpload(songId, { durationSec: ctx.durationSec });
+      await finalizeConfirm();
+    } catch (err) {
+      console.error('UploadPhaseCard: no se pudo confirmar la subida', err);
+      showToast(err.message || 'El audio se subió pero no se pudo iniciar el procesamiento.', { type: 'error' });
+      // Se queda en confirmError: el admin puede reintentar de nuevo.
     }
   }
 
@@ -304,7 +354,21 @@ export function createUploadPhaseCard({ songId, onAfterConfirm }) {
     render();
   }
 
+  /**
+   * Teardown best-effort: si el card se desmonta en medio de un flujo local
+   * cuyo run todavía no quedó confirmado (upload sin terminar), cancela ese
+   * run huérfano para no dejarlo bloqueando el índice único. Si el run ya
+   * está confirmado (p.ej. 'renaming' sobre un audio ya procesado), no toca
+   * nada: cancelarlo mataría un procesamiento legítimo.
+   */
+  function dispose() {
+    if (!LOCAL_STATES.has(state)) return;
+    const uploadConfirmed = lastRun?.phases?.upload?.status === 'done';
+    if (uploadConfirmed) return;
+    cancelPipelineRun(songId).catch(() => {});
+  }
+
   render();
 
-  return { el, update };
+  return { el, update, dispose };
 }

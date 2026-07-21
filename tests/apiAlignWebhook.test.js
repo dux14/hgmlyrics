@@ -43,6 +43,14 @@ vi.mock('../api/_lib/pipeline/process.js', () => ({
   applyPipelinePhaseEvent: (...args) => applyPipelinePhaseEventMock(...args),
 }));
 
+// dispatchPhase real toca Modal/Storage — se mockea para aislar el webhook,
+// mismo criterio que apiPipelineWebhook.test.js (advanceNextPhase lo importa
+// de este mismo módulo vía api/_lib/pipeline/advance.js).
+const dispatchPhaseMock = vi.fn().mockResolvedValue({ id: 'call-1' });
+vi.mock('../api/songs/[id]/pipeline/_dispatch.js', () => ({
+  dispatchPhase: (...args) => dispatchPhaseMock(...args),
+}));
+
 process.env.SUPABASE_URL = 'https://x.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'key';
 process.env.DATABASE_URL = 'postgresql://test';
@@ -50,6 +58,7 @@ process.env.PUBLIC_BASE_URL = 'https://hgmlyrics.vercel.app';
 process.env.MODAL_WEBHOOK_SECRET = 'modalwebhooksecret';
 
 const webhookHandler = (await import('../api/align/webhook.js')).default;
+const { initialPhases } = await import('../api/_lib/pipeline/state.js');
 
 function makeRes() {
   return {
@@ -88,6 +97,7 @@ beforeEach(() => {
   sqlResponses.length = 0;
   sqlCalls.length = 0;
   applyPipelinePhaseEventMock.mockClear();
+  dispatchPhaseMock.mockClear();
 });
 
 // Fixture: 3 lineas canonicas (misma proyeccion que api/_lib/align.js).
@@ -488,6 +498,63 @@ describe('POST /api/align/webhook — puente al run unificado (fase sync)', () =
     await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
     expect(res.statusCode).toBe(200);
     expect(applyPipelinePhaseEventMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/align/webhook — auto-avance sync→clips', () => {
+  it('sync completa con exito y clips puede arrancar → dispara dispatch de clips', async () => {
+    const phasesConSyncDone = initialPhases();
+    phasesConSyncDone.sync = { status: 'done' };
+    applyPipelinePhaseEventMock.mockResolvedValueOnce({
+      status: 'running',
+      next: phasesConSyncDone,
+      songId: 'song-1',
+    });
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    sqlResponses.push([]); // UPDATE song_line_timings ... status='ready'
+    sqlResponses.push([{ id: 'run-1', phases: { sync: { status: 'running' } } }]); // SELECT run activo
+    // advanceNextPhase re-lee `phases` FRESCO en su propia tx antes de despachar.
+    sqlResponses.push([{ phases: phasesConSyncDone }]); // SELECT phases FOR UPDATE (claim)
+    sqlResponses.push([]); // UPDATE phases (marca clips 'running')
+
+    const lines = [{ i: 0, startMs: 0 }];
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(dispatchPhaseMock).toHaveBeenCalledWith('clips', expect.anything());
+  });
+
+  it('sync falla → NO dispara clips (canStartPhase exige sync done)', async () => {
+    const phasesConSyncFailed = initialPhases();
+    phasesConSyncFailed.sync = { status: 'failed', error: 'Modal boom' };
+    applyPipelinePhaseEventMock.mockResolvedValueOnce({
+      status: 'running',
+      next: phasesConSyncFailed,
+      songId: 'song-1',
+    });
+    sqlResponses.push([]); // UPDATE song_line_timings ... status='failed'
+    sqlResponses.push([{ id: 'run-2', phases: { sync: { status: 'running' } } }]); // SELECT run activo
+
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', error: 'Modal boom' }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(dispatchPhaseMock).not.toHaveBeenCalled();
+  });
+
+  it('el evento queda ignored/stale (sin next) → NO dispara clips', async () => {
+    applyPipelinePhaseEventMock.mockResolvedValueOnce({ stale: true });
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    sqlResponses.push([]); // UPDATE song_line_timings ... status='ready'
+    sqlResponses.push([{ id: 'run-7', phases: { sync: { status: 'running' } } }]); // SELECT run activo
+
+    const lines = [{ i: 0, startMs: 0 }];
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(dispatchPhaseMock).not.toHaveBeenCalled();
   });
 });
 

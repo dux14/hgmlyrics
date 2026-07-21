@@ -11,6 +11,8 @@ import { verifyModalSignature } from '../_lib/modal.js';
 import { projectCanonicalLines } from '../_lib/align.js';
 import { validateBeats } from '../_lib/beats.js';
 import { applyPipelinePhaseEvent } from '../_lib/pipeline/process.js';
+import { ADVANCE_AFTER, advanceNextPhase } from '../_lib/pipeline/advance.js';
+import { canStartPhase } from '../_lib/pipeline/state.js';
 
 // Puente hacia el run unificado (pipeline por canción): este webhook es el
 // LEGACY de alineamiento standalone, pero cuando la fase `sync` de un run está
@@ -18,8 +20,10 @@ import { applyPipelinePhaseEvent } from '../_lib/pipeline/process.js';
 // puente `sync` queda 'running' para siempre y el run nunca completa (Critical
 // #3 del code-review). Si no hay run activo (align standalone, sin pipeline)
 // no hace nada — preserva el flujo legacy intacto.
-// NOTA: no dispara auto-advance a `clips` — eso depende del snapshot de letra
-// aprobado (plan C, aún no implementado).
+// Tras aplicar el evento, dispara el avance a `clips` (mismo criterio que
+// api/pipeline/webhook.js): applyPipelinePhaseEvent ya devuelve `next` solo
+// cuando el evento se aplicó de verdad (ni ignored ni stale), y canStartPhase
+// exige sync 'done' para clips — un sync fallido nunca llega a avanzar.
 async function notifyPipelineSync(songId, ok, error, snapshotHash) {
   try {
     const [run] = await sql`
@@ -28,7 +32,11 @@ async function notifyPipelineSync(songId, ok, error, snapshotHash) {
       ORDER BY created_at DESC LIMIT 1
     `;
     if (!run || run.phases?.sync?.status !== 'running') return;
-    await applyPipelinePhaseEvent(sql, run.id, { phase: 'sync', ok, error, snapshotHash });
+    const outcome = await applyPipelinePhaseEvent(sql, run.id, { phase: 'sync', ok, error, snapshotHash });
+    const advance = outcome?.next && ADVANCE_AFTER.sync;
+    if (advance && canStartPhase(outcome.next, advance)) {
+      await advanceNextPhase(sql, run.id, songId, advance);
+    }
   } catch (e) {
     console.error('notifyPipelineSync falló:', e);
   }

@@ -15,7 +15,7 @@ import { verifyModalSignature } from '../_lib/modal.js';
 import { PHASES, canStartPhase } from '../_lib/pipeline/state.js';
 import { applyPipelinePhaseEvent } from '../_lib/pipeline/process.js';
 import { sectionEventToPhaseEvent } from '../_lib/pipeline/stemsAdapter.js';
-import { dispatchPhase } from '../songs/[id]/pipeline/_dispatch.js';
+import { ADVANCE_AFTER, advanceNextPhase } from '../_lib/pipeline/advance.js';
 import { SECTION_KEYS } from '../stems/_sections.js';
 
 // Raw body necesario para verificar la firma HMAC.
@@ -24,12 +24,6 @@ export const config = {
   maxDuration: 300,
 };
 
-// Fase que se dispara automáticamente al completarse la fase clave (DAG
-// lineal de esta etapa). sync→clips y stems→transcription son las únicas
-// transiciones automáticas; lyrics_review/sync/pitch se disparan desde otros
-// endpoints (aprobación de letra), fuera del alcance de este webhook.
-const ADVANCE_AFTER = { stems: 'transcription', sync: 'clips' };
-
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -37,48 +31,6 @@ function readRawBody(req) {
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
-}
-
-// Dispara la fase siguiente tras un commit exitoso. CAS transaccional: el
-// claim (leer `phases` FRESCO + validar canStartPhase + marcar 'running') va
-// en una sola tx con FOR UPDATE para no pisar un commit concurrente de otra
-// fase (pitch/sync corren en paralelo) — el UPDATE ciego anterior sobrescribía
-// todo el jsonb con un snapshot viejo (lost update). El dispatch va FUERA de
-// la tx (llamada de red); un fallo de dispatch no debe romper la respuesta
-// 200 del webhook (mismo criterio que confirm.js/retry.js) — solo la fase que
-// se intentó arrancar queda 'failed' y admite reintento manual vía retry.js.
-async function advanceNextPhase(runId, songId, phase) {
-  const claimed = await sql.begin(async (tx) => {
-    const rows = await tx`SELECT phases FROM song_pipeline_runs WHERE id = ${runId} FOR UPDATE`;
-    if (rows.length === 0) return null;
-    const fresh = rows[0].phases;
-    if (!canStartPhase(fresh, phase)) return null;
-    const next = structuredClone(fresh);
-    next[phase] = { ...next[phase], status: 'running' };
-    await tx`
-      UPDATE song_pipeline_runs SET phases = ${tx.json(next)}, updated_at = now()
-      WHERE id = ${runId}
-    `;
-    return next;
-  });
-  if (!claimed) return;
-
-  try {
-    await dispatchPhase(phase, { id: runId, songId, phases: claimed });
-  } catch (err) {
-    await sql.begin(async (tx) => {
-      const rows = await tx`SELECT phases FROM song_pipeline_runs WHERE id = ${runId} FOR UPDATE`;
-      if (rows.length === 0) return;
-      const fresh = rows[0].phases;
-      if (fresh[phase]?.status !== 'running') return;
-      const failed = structuredClone(fresh);
-      failed[phase] = { status: 'failed', error: String(err?.message ?? err).slice(0, 300) };
-      await tx`
-        UPDATE song_pipeline_runs SET phases = ${tx.json(failed)}, updated_at = now()
-        WHERE id = ${runId}
-      `;
-    });
-  }
 }
 
 export default withErrors(async (req, res) => {
@@ -158,7 +110,7 @@ export default withErrors(async (req, res) => {
   if (advance && canStartPhase(outcome.next, advance)) {
     // Fuera de la transacción del CAS: el commit de `phases` ya está firme.
     try {
-      await advanceNextPhase(runId, outcome.songId, advance);
+      await advanceNextPhase(sql, runId, outcome.songId, advance);
     } catch (err) {
       // advanceNextPhase ya captura sus propios errores de dispatch; este
       // catch es solo un cinturón extra para nunca romper el 200 del webhook.

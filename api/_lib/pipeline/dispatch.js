@@ -35,15 +35,18 @@ export async function dispatchStems({ run, uploads, webhookUrl }) {
 }
 
 /**
- * transcription: función NUEVA hkn-align/transcribe (Task B5). El endpoint aún
- * no existe (MODAL_TRANSCRIBE_ENDPOINT sin valor) — se referencia igual para
- * que el shape del payload quede listo. Calca fetch/headers de align.js;
- * reusa MODAL_INBOUND_SECRET (misma familia que stems/align, ver concern en el
- * reporte).
- * @param {{ run:{id:string, songId:string}, vocalsGetUrl:string, webhookUrl:string }} args
+ * transcription: función hkn-align/transcribe (Task B5, `modal/align_app.py`
+ * `run_transcribe` + endpoint `transcribe`). Payload EXACTO del contrato real
+ * (ver `_validate_transcribe_payload`): { runId, vocalsGetUrl, dbLines,
+ * canonicalLines?, webhookUrl, snapshotHash? }. `dbLines` es obligatorio (la
+ * función Modal rechaza el payload si viene vacío). Calca fetch/headers de
+ * align.js; reusa MODAL_INBOUND_SECRET (misma familia que stems/align).
+ * @param {{ run:{id:string, songId:string}, vocalsGetUrl:string,
+ *           dbLines:string[], canonicalLines?:string[], snapshotHash?:string,
+ *           webhookUrl:string }} args
  * @returns {Promise<{id:string}>}
  */
-export async function dispatchTranscribe({ run, vocalsGetUrl, webhookUrl }) {
+export async function dispatchTranscribe({ run, vocalsGetUrl, dbLines, canonicalLines, snapshotHash, webhookUrl }) {
   const endpoint = process.env.MODAL_TRANSCRIBE_ENDPOINT;
   const secret = process.env.MODAL_INBOUND_SECRET;
   if (!endpoint || !secret) {
@@ -57,11 +60,12 @@ export async function dispatchTranscribe({ run, vocalsGetUrl, webhookUrl }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-inbound-secret': secret },
       body: JSON.stringify({
-        fn: 'transcribe',
-        jobId: run.id,
-        songId: run.songId,
-        audioUrl: vocalsGetUrl,
+        runId: run.id,
+        vocalsGetUrl,
+        dbLines,
+        canonicalLines,
         webhookUrl,
+        snapshotHash,
       }),
     },
     { timeoutMs: 8000, label: 'Modal (transcribe)' },
@@ -85,29 +89,41 @@ export { dispatchAlign };
  * api/pitch/jobs/[id]/approve.js (una sola pista `input.getUrl`), el pipeline
  * unificado ya separó lead/backing en la fase de stems, así que se mandan
  * ambas URLs firmadas.
+ * `snapshotHash` (fase derivada de la letra, plan C) viaja dentro de `input`
+ * para que `run_pipeline` la re-postee tal cual al webhook — `process.js` la
+ * lee top-level del body que postea Modal.
  * @param {{ run:{id:string, songId:string, profile?:string}, leadGetUrl:string,
- *           backingGetUrl:string, webhookUrl:string }} args
+ *           backingGetUrl:string, snapshotHash?:string, webhookUrl:string }} args
  * @returns {Promise<{id:string}>}
  */
-export async function dispatchPitch({ run, leadGetUrl, backingGetUrl, webhookUrl }) {
+export async function dispatchPitch({ run, leadGetUrl, backingGetUrl, snapshotHash, webhookUrl }) {
   return invokePitchPipeline({
     jobId: run.id,
     profile: run.profile ?? 'default',
-    input: { leadGetUrl, backingGetUrl },
+    input: { leadGetUrl, backingGetUrl, snapshotHash },
     uploads: {},
     webhook: { url: webhookUrl },
   });
 }
 
 /**
- * clips: función NUEVA hkn-clips (Task B6). El endpoint aún no existe
- * (MODAL_CLIPS_ENDPOINT sin valor) — se referencia igual para dejar el
- * payload listo. Reusa MODAL_INBOUND_SECRET (mismo concern que transcribe).
- * @param {{ run:{id:string, songId:string}, stems:object, sections:object,
- *           timings:object, uploads:object, webhookUrl:string }} args
+ * clips: función hkn-clips (Task B6, `modal/clips_app.py` `run_clips` +
+ * endpoint `start`). Payload EXACTO del contrato real (ver docstring del
+ * módulo + `_validate_clips_payload`): { runId, webhookUrl, snapshotHash?,
+ * stems:[{kind,getUrl}], lines:[{i,startMs}], lineSections:[int], totalMs,
+ * uploads:{kind:{sectionIndex:putUrl}}, uploadKeys:{kind:{sectionIndex:key}} }.
+ * `lineSections`/`totalMs` dependen del snapshot de letra aprobado (plan C,
+ * aún no existe) — ver CONCERN en `_dispatch.js`. Reusa MODAL_INBOUND_SECRET
+ * (mismo concern que transcribe).
+ * @param {{ run:{id:string, songId:string}, stems:Array<{kind:string,getUrl:string}>,
+ *           lines:Array<{i:number,startMs:number}>, lineSections:number[],
+ *           totalMs:number, uploads:object, uploadKeys:object,
+ *           snapshotHash?:string, webhookUrl:string }} args
  * @returns {Promise<{id:string}>}
  */
-export async function dispatchClips({ run, stems, sections, timings, uploads, webhookUrl }) {
+export async function dispatchClips({
+  run, stems, lines, lineSections, totalMs, uploads, uploadKeys, snapshotHash, webhookUrl,
+}) {
   const endpoint = process.env.MODAL_CLIPS_ENDPOINT;
   const secret = process.env.MODAL_INBOUND_SECRET;
   if (!endpoint || !secret) {
@@ -121,14 +137,15 @@ export async function dispatchClips({ run, stems, sections, timings, uploads, we
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-inbound-secret': secret },
       body: JSON.stringify({
-        fn: 'render_clips',
-        jobId: run.id,
-        songId: run.songId,
-        stems,
-        sections,
-        timings,
-        uploads,
+        runId: run.id,
         webhookUrl,
+        snapshotHash,
+        stems,
+        lines,
+        lineSections,
+        totalMs,
+        uploads,
+        uploadKeys,
       }),
     },
     { timeoutMs: 8000, label: 'Modal (clips)' },

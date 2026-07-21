@@ -1307,3 +1307,99 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ToneLyrics — letra con notas apiladas por sílaba (plan D, Task D4c).
+   Roles de color: lead = teal (--color-brand, ya tokenizado); backing/
+   male/female = violeta y choir/3er nivel = rosa, sin tokens propios en
+   variables.css todavía (hallazgo AI nuevo) → vars scopeadas acá. */
+.tone-lyrics {
+  --tone-alt: #a78bfa;
+  --tone-coros: #f9a8d4;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  color: var(--color-text);
+}
+
+.tone-lyrics__empty {
+  padding: var(--space-md);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.tone-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 2px var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  margin: 0;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.tone-line:hover {
+  background: color-mix(in srgb, var(--color-action) 6%, transparent);
+}
+
+.tone-syl {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.tone-syl-text {
+  font-size: var(--font-size-lyrics);
+  line-height: 1.2;
+}
+
+.tone-syl-notes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.tone-note {
+  font-size: var(--font-size-xs);
+  line-height: 1;
+  font-weight: 600;
+}
+.tone-note--lead {
+  color: var(--color-brand);
+}
+.tone-note--alt {
+  color: var(--tone-alt);
+}
+.tone-note--coros {
+  color: var(--tone-coros);
+}
+
+.tone-more {
+  font-size: var(--font-size-xs);
+  line-height: 1;
+  padding: 0 2px;
+  background: transparent;
+  border: none;
+  color: var(--tone-coros);
+  cursor: pointer;
+}
+.tone-more-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.tone-syl.hot .tone-syl-text {
+  color: var(--color-brand);
+  transition: color 0.2s var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tone-line,
+  .tone-syl.hot .tone-syl-text {
+    transition-duration: 0.001ms !important;
+  }
+}

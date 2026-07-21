@@ -1465,3 +1465,24 @@
     transition-duration: 0.001ms !important;
   }
 }
+
+/* --- SongPartituraView (D5b): partitura por canción (letra↔nota) --- */
+.partitura-view__title {
+  font-family: 'Cormorant Garamond', 'Cormorant-fallback', Georgia, serif;
+  font-weight: 600;
+  font-size: 1.3rem;
+}
+
+.partitura-view__body {
+  padding: 0 var(--space-md) var(--space-md);
+}
+
+.partitura-view__loading,
+.partitura-view__empty {
+  padding: var(--space-md) 0;
+  color: var(--color-text-secondary);
+}
+
+.partitura-view__voice {
+  margin-top: var(--space-md);
+}

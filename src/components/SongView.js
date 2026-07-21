@@ -1219,9 +1219,10 @@ async function _renderSongBody(container, songId, isPreview, song) {
     });
   }
 
-  // ── Acceso a Estudio (D4e): visible a TODOS los usuarios (no gateado por
-  // isAdmin), solo si la canción tiene estudio publicado. Mismo patrón de
-  // guard de teardown que el chip BPM. ──
+  // ── Acceso a Estudio (D4e) + Partitura (D5b): visibles a TODOS los
+  // usuarios (no gateados por isAdmin), condicionados a lo que trae el
+  // MISMO fetch de getSongStudio (un solo request, dos chips posibles).
+  // Mismo patrón de guard de teardown que el chip BPM. ──
   if (songId) {
     let estudioDestroyed = false;
     const unsubscribeEstudioRoute = onRouteChange(() => {
@@ -1232,19 +1233,35 @@ async function _renderSongBody(container, songId, isPreview, song) {
       .then((result) => {
         unsubscribeEstudioRoute();
         if (estudioDestroyed) return;
-        if (!result?.stems?.length) return;
         const toolbar = container.querySelector('.song-toolbar');
         if (!toolbar) return;
-        const btn = document.createElement('button');
-        btn.className = 'song-toolbar__btn';
-        btn.id = 'open-studio-btn';
-        btn.type = 'button';
-        btn.setAttribute('aria-label', 'Abrir Estudio de la canción');
-        btn.innerHTML = `${icon('audio-lines', { size: 16 })}<span>Estudio</span>`;
-        btn.addEventListener('click', () => {
-          navigate(`/song/${song.id}/estudio`);
-        });
-        toolbar.appendChild(btn);
+        if (result?.stems?.length) {
+          const btn = document.createElement('button');
+          btn.className = 'song-toolbar__btn';
+          btn.id = 'open-studio-btn';
+          btn.type = 'button';
+          btn.setAttribute('aria-label', 'Abrir Estudio de la canción');
+          btn.innerHTML = `${icon('audio-lines', { size: 16 })}<span>Estudio</span>`;
+          btn.addEventListener('click', () => {
+            navigate(`/song/${song.id}/estudio`);
+          });
+          toolbar.appendChild(btn);
+        }
+        const tieneVocesConLetra = Object.values(result?.analysis?.voices ?? {}).some(
+          (v) => v?.lines?.length,
+        );
+        if (tieneVocesConLetra) {
+          const btn = document.createElement('button');
+          btn.className = 'song-toolbar__btn';
+          btn.id = 'open-partitura-btn';
+          btn.type = 'button';
+          btn.setAttribute('aria-label', 'Abrir Partitura de la canción');
+          btn.innerHTML = `${icon('music', { size: 16 })}<span>Partitura</span>`;
+          btn.addEventListener('click', () => {
+            navigate(`/song/${song.id}/partitura`);
+          });
+          toolbar.appendChild(btn);
+        }
       })
       .catch(() => {
         unsubscribeEstudioRoute();

@@ -125,4 +125,54 @@ describe('SongView — acceso al Estudio publico desde la vista de cancion (D4e)
 
     expect(container.querySelector('#open-studio-btn')).toBeNull();
   });
+
+  it('analysis con voces con letra: el chip Partitura existe y navega al hacer click', async () => {
+    isAdmin.mockReturnValue(false);
+    getPipelineRun.mockResolvedValue(null);
+    getSongStudio.mockResolvedValue({
+      stems: [],
+      analysis: { voices_present: ['lead'], voices: { lead: { lines: [{ syllables: [] }] } } },
+    });
+    const song = buildSong('song-partitura-1');
+    getSongById.mockReturnValue(song);
+    const container = document.createElement('div');
+    await renderSongView(container, 'song-partitura-1');
+    await flushMicrotasks();
+
+    const btn = container.querySelector('#open-partitura-btn');
+    expect(btn).toBeTruthy();
+    expect(btn.textContent).toContain('Partitura');
+
+    btn.click();
+    expect(navigate).toHaveBeenCalledWith('/song/song-partitura-1/partitura');
+  });
+
+  it('sin analysis: el chip Partitura no aparece', async () => {
+    isAdmin.mockReturnValue(false);
+    getPipelineRun.mockResolvedValue(null);
+    getSongStudio.mockResolvedValue({ stems: [{ kind: 'vocals' }], analysis: null });
+    const song = buildSong('song-partitura-2');
+    getSongById.mockReturnValue(song);
+    const container = document.createElement('div');
+    await renderSongView(container, 'song-partitura-2');
+    await flushMicrotasks();
+
+    expect(container.querySelector('#open-partitura-btn')).toBeNull();
+  });
+
+  it('analysis con solo voces sin letra ({notes}): el chip Partitura no aparece', async () => {
+    isAdmin.mockReturnValue(false);
+    getPipelineRun.mockResolvedValue(null);
+    getSongStudio.mockResolvedValue({
+      stems: [],
+      analysis: { voices_present: ['male'], voices: { male: { notes: [] } } },
+    });
+    const song = buildSong('song-partitura-3');
+    getSongById.mockReturnValue(song);
+    const container = document.createElement('div');
+    await renderSongView(container, 'song-partitura-3');
+    await flushMicrotasks();
+
+    expect(container.querySelector('#open-partitura-btn')).toBeNull();
+  });
 });

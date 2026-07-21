@@ -164,21 +164,35 @@ export async function renamePipelineAudio(songId, displayName) {
  * 'pipeline:run:{songId}', evento 'change' que emite el trigger
  * song_pipeline_runs_broadcast_status) es solo la señal "algo cambió": el dato
  * real lo trae getPipelineRun. Un polling de 3s actúa de fallback si el
- * Realtime no conecta. onChange recibe el run ({run} | null).
+ * Realtime no conecta. onChange recibe la respuesta del GET ({run} | null).
  * @param {string} songId
- * @param {(run:object|null)=>void} onChange
+ * @param {(data:{run:object}|null)=>void} onChange
  * @returns {()=>void} unsubscribe idempotente.
  */
 export function watchPipelineRun(songId, onChange) {
   let stopped = false;
+  // Contador monotónico: polling y broadcast pueden solaparse y resolver fuera
+  // de orden. Solo la petición más reciente emite, para no regresar la vista a
+  // un estado viejo.
+  let lastReqId = 0;
 
   async function refresh() {
+    const reqId = (lastReqId += 1);
+    let data;
     try {
-      const data = await getPipelineRun(songId);
-      if (!stopped) onChange(data);
-    } catch {
-      // Error transitorio de red: el próximo tick de polling reintenta.
+      data = await getPipelineRun(songId);
+    } catch (err) {
+      // No cortamos el watch: el próximo tick de polling reintenta. Se loguea
+      // para que un fallo permanente (sesión muerta, admin revocado, 500
+      // persistente) no deje la vista muda sin señal alguna.
+      console.error('watchPipelineRun: no se pudo refrescar el run', err);
+      return;
     }
+    // Descarta respuestas obsoletas o posteriores al unsubscribe. onChange
+    // queda FUERA del try: un error del consumer no debe enmascararse como
+    // ruido de red.
+    if (stopped || reqId !== lastReqId) return;
+    onChange(data);
   }
 
   const channel = supabase.channel(`pipeline:run:${songId}`, {

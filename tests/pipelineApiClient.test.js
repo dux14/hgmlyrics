@@ -208,4 +208,23 @@ describe('watchPipelineRun', () => {
     expect(() => unsubscribe()).not.toThrow();
     expect(removeChannelSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('descarta una respuesta que resuelve despues de unsubscribe (guard stopped)', async () => {
+    let resolveFetch;
+    global.fetch = vi.fn(
+      () =>
+        new Promise((r) => {
+          resolveFetch = r;
+        }),
+    );
+    const onChange = vi.fn();
+    const unsubscribe = watchPipelineRun('s1', onChange);
+    await vi.advanceTimersByTimeAsync(0);
+
+    unsubscribe();
+    resolveFetch(jsonResponse(200, { run: { id: 'r1' } }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });

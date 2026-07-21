@@ -46,6 +46,7 @@
     "vitest": "^4.1.0"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.112.4",
     "@supabase/supabase-js": "^2.106.0",
     "fflate": "^0.8.3",
     "file-type": "^22.0.1",

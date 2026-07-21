@@ -57,6 +57,9 @@ Letras HGM Bogotá_files/
 
 # Local backup of original covers (created by scripts/optimize-covers.mjs)
 public/covers.backup/
+
+# Output de scripts/ingest-cancionero.mjs (dry-run), pendiente de revision humana
+scripts/cancionero-extracted.json
 .vercel
 .env*
 

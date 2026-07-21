@@ -105,7 +105,13 @@ lyrics_image = (
         "gender", "choir_basicpitch"
     )
 )
-_secrets = [modal.Secret.from_name("pitch-hmac")]  # PITCH_MODAL_INBOUND_SECRET + PITCH_MODAL_WEBHOOK_SECRET
+_secrets = [
+    modal.Secret.from_name("pitch-hmac"),  # PITCH_MODAL_INBOUND_SECRET + PITCH_MODAL_WEBHOOK_SECRET
+    # Flags de rollback de modelos (F0_ENGINE=fcpe|crepe, etc.). Se puede
+    # flipear el valor con `modal secret create hkn-pitch-flags K=V --force`
+    # sin redeploy; el contenedor lo lee en el proximo arranque.
+    modal.Secret.from_name("hkn-pitch-flags"),
+]
 
 # Dict persistente para idempotencia por jobId (jobId -> callId del run_pipeline).
 _seen = modal.Dict.from_name("pitch-jobs-seen", create_if_missing=True)

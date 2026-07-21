@@ -50,6 +50,7 @@ import {
 } from '../lib/autoscroll.js';
 import { escapeHtml, safeUrl } from '../lib/escape.js';
 import { getSongAudio } from '../lib/songAudioApi.js';
+import { getSongStudio } from '../lib/studioApi.js';
 import { enterImmersive } from './ImmersiveView.js';
 import { normalizeSectionType } from '../lib/sectionTypes.js';
 
@@ -1216,6 +1217,38 @@ async function _renderSongBody(container, songId, isPreview, song) {
       chip.textContent = `${Math.round(bpm)} BPM · ${timeSignature}`;
       meta.appendChild(chip);
     });
+  }
+
+  // ── Acceso a Estudio (D4e): visible a TODOS los usuarios (no gateado por
+  // isAdmin), solo si la canción tiene estudio publicado. Mismo patrón de
+  // guard de teardown que el chip BPM. ──
+  if (songId) {
+    let estudioDestroyed = false;
+    const unsubscribeEstudioRoute = onRouteChange(() => {
+      estudioDestroyed = true;
+      unsubscribeEstudioRoute();
+    });
+    getSongStudio(songId)
+      .then((result) => {
+        unsubscribeEstudioRoute();
+        if (estudioDestroyed) return;
+        if (!result?.stems?.length) return;
+        const toolbar = container.querySelector('.song-toolbar');
+        if (!toolbar) return;
+        const btn = document.createElement('button');
+        btn.className = 'song-toolbar__btn';
+        btn.id = 'open-studio-btn';
+        btn.type = 'button';
+        btn.setAttribute('aria-label', 'Abrir Estudio de la canción');
+        btn.innerHTML = `${icon('audio-lines', { size: 16 })}<span>Estudio</span>`;
+        btn.addEventListener('click', () => {
+          navigate(`/song/${song.id}/estudio`);
+        });
+        toolbar.appendChild(btn);
+      })
+      .catch(() => {
+        unsubscribeEstudioRoute();
+      });
   }
 
   // Favorita lives on the song card cover in the list view now.

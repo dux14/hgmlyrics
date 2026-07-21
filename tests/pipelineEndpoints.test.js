@@ -334,3 +334,60 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
     expect(dispatchPhase).not.toHaveBeenCalled();
   });
 });
+
+describe('PATCH /api/songs/:id/pipeline (renombrar audio)', () => {
+  it('403 si no es admin', async () => {
+    requireAdmin.mockRejectedValueOnce(Object.assign(new Error('Forbidden'), { status: 403 }));
+    const res = makeRes();
+    await pipelineHandler(
+      { method: 'PATCH', query: { id: 's1' }, body: { displayName: 'Voz principal' } },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  it('400 si displayName está vacío', async () => {
+    const res = makeRes();
+    await pipelineHandler({ method: 'PATCH', query: { id: 's1' }, body: { displayName: '   ' } }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('400 si displayName no es string', async () => {
+    const res = makeRes();
+    await pipelineHandler({ method: 'PATCH', query: { id: 's1' }, body: { displayName: 42 } }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('mergea input_meta.displayName sin pisar filename/size/mime', async () => {
+    let mergedValue;
+    routeSql([
+      [
+        'UPDATE song_pipeline_runs',
+        (values) => {
+          mergedValue = values.find((v) => v && typeof v === 'object' && 'displayName' in v);
+          return { count: 1 };
+        },
+      ],
+    ]);
+    const res = makeRes();
+    await pipelineHandler(
+      { method: 'PATCH', query: { id: 's1' }, body: { displayName: 'Voz principal' } },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ success: true });
+    // El merge se hace con `||` sobre input_meta existente en el SQL (no pisa
+    // filename/size/mime): el valor pasado al placeholder solo trae displayName.
+    expect(mergedValue).toEqual({ displayName: 'Voz principal' });
+  });
+
+  it('404 si no hay una ejecución activa (UPDATE afecta 0 filas)', async () => {
+    routeSql([['UPDATE song_pipeline_runs', { count: 0 }]]);
+    const res = makeRes();
+    await pipelineHandler(
+      { method: 'PATCH', query: { id: 's1' }, body: { displayName: 'Voz principal' } },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(404);
+  });
+});

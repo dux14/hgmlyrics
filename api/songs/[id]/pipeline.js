@@ -113,8 +113,30 @@ async function cancelRun(req, res, songId) {
   res.status(200).json({ success: true });
 }
 
+async function renameRun(req, res, songId) {
+  await requireAdmin(req, sql);
+  const { displayName } = req.body ?? {};
+  if (typeof displayName !== 'string' || !displayName.trim()) {
+    res.status(400).json({ error: 'displayName es obligatorio' });
+    return;
+  }
+  const clean = displayName.trim().slice(0, 200);
+  const result = await sql`
+    UPDATE song_pipeline_runs
+    SET input_meta = COALESCE(input_meta, '{}'::jsonb) || ${sql.json({ displayName: clean })}::jsonb,
+        updated_at = now()
+    WHERE song_id = ${songId}
+      AND status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')
+  `;
+  if (result.count === 0) {
+    res.status(404).json({ error: 'No hay una ejecución activa para esta canción' });
+    return;
+  }
+  res.status(200).json({ success: true });
+}
+
 export default withErrors(async (req, res) => {
-  if (allowMethods(req, res, ['GET', 'POST', 'DELETE'])) return;
+  if (allowMethods(req, res, ['GET', 'POST', 'DELETE', 'PATCH'])) return;
   const songId = req.query.id;
   if (!songId || typeof songId !== 'string') {
     res.status(400).json({ error: 'id es obligatorio' });
@@ -125,5 +147,6 @@ export default withErrors(async (req, res) => {
     return getRun(req, res, songId);
   }
   if (req.method === 'POST') return createRun(req, res, songId);
+  if (req.method === 'PATCH') return renameRun(req, res, songId);
   return cancelRun(req, res, songId);
 });

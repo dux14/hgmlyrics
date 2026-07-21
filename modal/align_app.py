@@ -73,6 +73,24 @@ align_image = (
     # jiwer: CER por linea para el gate de letra (transcribe_diff.line_scores),
     # sin pines de torch/numpy propios -- no interfiere con el resto de la imagen.
     .pip_install("jiwer==3.0.4")
+    # ctranslate2 4.5.0 es la primera linea construida contra cuDNN 9 (las
+    # <=4.4.0 buscan libcudnn_ops_infer.so.8). torch==2.4.1 ya bundlea cuDNN 9
+    # (nvidia-cudnn-cu12 9.1.x), asi que reusamos ESE cuDNN en vez de instalar
+    # un segundo (instalar cuDNN 8 romperia el cuDNN 9 que necesita whisperx.align
+    # en run_align/karaoke -> prod). Rango permitido por faster-whisper (<5).
+    # Sin esto, run_transcribe (model.transcribe -> faster-whisper -> ctranslate2)
+    # crashea con SIGABRT (exit 134) al no encontrar cuDNN 8, y como es SIGABRT
+    # (no excepcion Python) el except no postea webhook -> fase transcription
+    # queda huerfana en 'running'. run_align (forced-align wav2vec2) no toca
+    # ctranslate2, por eso karaoke nunca vio este crash.
+    .pip_install("ctranslate2==4.5.0")
+    # ctranslate2 hace dlopen de cuDNN en runtime y NO busca en site-packages
+    # de torch por defecto: hay que ponerlo en LD_LIBRARY_PATH explicitamente.
+    .env(
+        {
+            "LD_LIBRARY_PATH": "/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib:/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib"
+        }
+    )
     .add_local_python_source("sections")
     .add_local_python_source("align_mapping")
     .add_local_python_source("transcribe_diff")

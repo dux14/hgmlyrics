@@ -209,7 +209,11 @@ async function approveGate(res, songId) {
     const nextPhases = applyPhaseEvent(run.phases, { phase: 'lyrics_review', ok: true });
     const runStatus = runStatusFromPhases(nextPhases);
     const nextLyricsReview = { ...run.lyricsReview, approvedHash: snapshot.hash };
-    const durationSec = run.inputMeta?.durationSec ?? null;
+    // input_meta.durationSec la persiste confirm.js (best-effort, D1); jsonb
+    // preserva el tipo number, pero se coerce igual por si llegó como string.
+    const rawDuration = run.inputMeta?.durationSec;
+    const numDuration = rawDuration == null ? NaN : Number(rawDuration);
+    const durationSec = Number.isFinite(numDuration) ? numDuration : null;
 
     await tx`UPDATE songs SET sections = ${tx.json(snapshot.sections)}, updated_at = now() WHERE id = ${songId}`;
     await tx`

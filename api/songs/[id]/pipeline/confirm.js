@@ -47,12 +47,25 @@ export default withErrors(async (req, res) => {
   // este punto, así que applyPhaseEvent nunca devuelve null aquí.
   const phases = applyPhaseEvent(run.phases, { phase: 'upload', ok: true });
 
+  // La duración se lee en el browser (readAudioDuration) y viaja best-effort:
+  // si falta o es inválida no tumba el confirm, solo se pierde el dato (el
+  // swap del approve queda con duration_sec null, igual que hoy).
+  const { durationSec } = req.body ?? {};
+  const hasValidDuration = typeof durationSec === 'number' && Number.isFinite(durationSec) && durationSec >= 0;
+
   // CAS: solo confirma si el run sigue en 'created' (cierra la carrera de
   // doble-confirm/doble-dispatch, mismo criterio que audio.js/approve.js).
-  const claimed = await sql`
-    UPDATE song_pipeline_runs SET status = 'processing', phases = ${sql.json(phases)}, updated_at = now()
-    WHERE id = ${run.id} AND status = 'created'
-  `;
+  const claimed = hasValidDuration
+    ? await sql`
+        UPDATE song_pipeline_runs SET status = 'processing', phases = ${sql.json(phases)},
+          input_meta = COALESCE(input_meta, '{}'::jsonb) || ${sql.json({ durationSec })}::jsonb,
+          updated_at = now()
+        WHERE id = ${run.id} AND status = 'created'
+      `
+    : await sql`
+        UPDATE song_pipeline_runs SET status = 'processing', phases = ${sql.json(phases)}, updated_at = now()
+        WHERE id = ${run.id} AND status = 'created'
+      `;
   if (claimed.count === 0) {
     res.status(409).json({ error: 'La ejecución ya fue confirmada' });
     return;

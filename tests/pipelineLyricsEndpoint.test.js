@@ -426,6 +426,24 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
     expect(dispatchPhase).toHaveBeenCalledWith('pitch', expect.objectContaining({ id: 'r1', songId: 's1' }));
   });
 
+  it('sin durationSec en input_meta: el swap de audio queda con duration_sec null', async () => {
+    let insertedAudio;
+    routeSql([
+      ['AS "lyricsReview"', [runRow({ inputMeta: { filename: 'sion.mp3' }, lyricsReview: { review: approvableReview() } })]],
+      ['UPDATE songs SET sections', { count: 1 }],
+      ['status = ', { count: 1 }],
+      ['INSERT INTO song_audio', (values) => {
+        insertedAudio = values;
+        return { count: 1 };
+      }],
+    ]);
+    const res = makeRes();
+    await lyricsHandler({ method: 'POST', query: { id: 's1' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(insertedAudio).toContain('s1/runs/r1/full.mp3');
+    expect(insertedAudio).toContain(null);
+  });
+
   it('el fallo de dispatch (sync) NO rompe la respuesta 200; la fase queda failed', async () => {
     dispatchPhase.mockImplementation(async (phase) => {
       if (phase === 'sync') throw new Error('modal down');

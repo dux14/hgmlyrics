@@ -208,6 +208,54 @@ describe('POST /api/songs/:id/pipeline/confirm', () => {
     expect(persistedPhases.upload.status).toBe('done');
   });
 
+  it('feliz con durationSec válida: mergea input_meta en el UPDATE a processing', async () => {
+    let updatedRow;
+    routeSql([
+      ['SELECT id, song_id AS "songId"', [{ id: 'r1', songId: 's1', status: 'created', phases: initialPhases(), inputPath: 's1/runs/r1/full.mp3' }]],
+      ["UPDATE song_pipeline_runs SET status = 'processing'", (values) => {
+        updatedRow = values;
+        return { count: 1 };
+      }],
+    ]);
+    const res = makeRes();
+    await confirmHandler({ method: 'POST', query: { id: 's1' }, body: { durationSec: 187.5 } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    const mergedMeta = updatedRow.find((v) => v && typeof v === 'object' && 'durationSec' in v);
+    expect(mergedMeta.durationSec).toBe(187.5);
+  });
+
+  it('durationSec inválida (negativa) no rompe el confirm y no toca input_meta', async () => {
+    let updatedRow;
+    routeSql([
+      ['SELECT id, song_id AS "songId"', [{ id: 'r1', songId: 's1', status: 'created', phases: initialPhases(), inputPath: 's1/runs/r1/full.mp3' }]],
+      ["UPDATE song_pipeline_runs SET status = 'processing'", (values) => {
+        updatedRow = values;
+        return { count: 1 };
+      }],
+    ]);
+    const res = makeRes();
+    await confirmHandler({ method: 'POST', query: { id: 's1' }, body: { durationSec: -5 } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    const mergedMeta = updatedRow.find((v) => v && typeof v === 'object' && 'durationSec' in v);
+    expect(mergedMeta).toBeUndefined();
+  });
+
+  it('sin durationSec en el body: no rompe el confirm y no toca input_meta', async () => {
+    let updatedRow;
+    routeSql([
+      ['SELECT id, song_id AS "songId"', [{ id: 'r1', songId: 's1', status: 'created', phases: initialPhases(), inputPath: 's1/runs/r1/full.mp3' }]],
+      ["UPDATE song_pipeline_runs SET status = 'processing'", (values) => {
+        updatedRow = values;
+        return { count: 1 };
+      }],
+    ]);
+    const res = makeRes();
+    await confirmHandler({ method: 'POST', query: { id: 's1' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    const mergedMeta = updatedRow.find((v) => v && typeof v === 'object' && 'durationSec' in v);
+    expect(mergedMeta).toBeUndefined();
+  });
+
   it('409 si el CAS pierde la carrera (ya confirmado)', async () => {
     routeSql([
       ['SELECT id, song_id AS "songId"', [{ id: 'r1', songId: 's1', status: 'created', phases: initialPhases(), inputPath: 's1/runs/r1/full.mp3' }]],

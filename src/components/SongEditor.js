@@ -668,9 +668,8 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   //   mismo tras el splice real; delete-section-audio no lo necesita en
   //   absoluto porque persiste contra el back de inmediato (igual que
   //   toggle-audio), sin dejar estado sin guardar en el editor.
-  // - song-audio-retry / song-audio-delete (SongAudioSection.js): igual que
-  //   delete-section-audio, persisten solas contra el back (reintentar
-  //   sincronía o borrar el mp3 completo) sin dejar estado sin guardar.
+  // - song-audio-open (SongAudioSection.js): solo navega al stepper de
+  //   procesamiento, no muta la canción — no debe marcar dirty.
   const DIRTY_CLICK_SKIP_ACTIONS = new Set([
     'toggle-preview',
     'toggle-audio',
@@ -678,8 +677,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     'open-tono',
     'delete-section',
     'delete-section-audio',
-    'song-audio-retry',
-    'song-audio-delete',
+    'song-audio-open',
   ]);
   container.addEventListener('input', () => {
     dirty = true;

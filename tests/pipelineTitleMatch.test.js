@@ -16,9 +16,12 @@ describe('titleSimilarity', () => {
   it('nombres sin relacion quedan bajo el umbral', () => {
     expect(titleSimilarity('ensayo_grupo_mix03.mp3', 'Sión')).toBeLessThan(0.6);
   });
-  it('es simetrica y acotada 0..1', () => {
+  it('acotada 0..1 incluso con titulos de palabras repetidas', () => {
     const a = titleSimilarity('alfarero.mp3', 'El Alfarero');
     expect(a).toBeGreaterThan(0);
     expect(a).toBeLessThanOrEqual(1);
+    // titulos de alabanza con repeticion no deben exceder 1 (dominio real)
+    expect(titleSimilarity('santo.mp3', 'Santo Santo Santo')).toBeLessThanOrEqual(1);
+    expect(titleSimilarity('santo_es_el_senor.mp3', 'Santo Santo Santo Es El Senor')).toBeLessThanOrEqual(1);
   });
 });

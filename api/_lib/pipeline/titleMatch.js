@@ -43,9 +43,9 @@ export function titleSimilarity(fileName, songTitle) {
   const b = normalizeTitle(songTitle);
   if (!a || !b) return 0;
   const lev = 1 - levenshtein(a, b) / Math.max(a.length, b.length);
-  const tokensB = new Set(b.split(' '));
-  const hit = b.split(' ').filter((t) => a.includes(t)).length;
-  const containment = hit / tokensB.size;
+  const tokensB = [...new Set(b.split(' '))];
+  const hit = tokensB.filter((t) => a.includes(t)).length;
+  const containment = hit / tokensB.length;
   return Math.max(lev, containment * 0.95);
 }
 

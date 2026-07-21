@@ -60,6 +60,11 @@ export function createSyncFineTuning({ songId, getSong = () => null, getVocalsUr
   let previewUrl = null;
 
   let metronomeBaseline = null;
+  // Cierra el guard de update(): mientras haya un valor de metrónomo
+  // tecleado sin guardar, un refresh() automático (sync que vuelve a
+  // "done" via retry + watcher) no debe reescribir el sub-bloque y
+  // descartarlo.
+  let metronomeDirty = false;
 
   function sortedTimingLines() {
     return [...(state.timings?.lines || [])].sort((a, b) => (a.i ?? 0) - (b.i ?? 0));
@@ -98,8 +103,7 @@ export function createSyncFineTuning({ songId, getSong = () => null, getVocalsUr
   function dotClass(l) {
     if (l.manual === true) return 'man';
     if (l.interpolated === true) return 'int';
-    if (typeof l.score === 'number' && l.score >= 0.75) return 'hi';
-    return 'int';
+    return 'hi';
   }
 
   function lineEditorMarkup(l, i) {
@@ -251,6 +255,7 @@ export function createSyncFineTuning({ songId, getSong = () => null, getVocalsUr
       timeSignature: state.audio?.timeSignature ?? '4/4',
       beatAnchor: state.audio?.beatAnchor ?? null,
     };
+    metronomeDirty = false;
 
     function currentValues() {
       return {
@@ -267,6 +272,7 @@ export function createSyncFineTuning({ songId, getSong = () => null, getVocalsUr
         cur.timeSignature !== metronomeBaseline.timeSignature ||
         cur.beatAnchor !== metronomeBaseline.beatAnchor;
       saveBtn.disabled = !dirty;
+      metronomeDirty = dirty;
     }
 
     [bpmInput, tsSelect, anchorInput].forEach((input) => {
@@ -436,9 +442,10 @@ export function createSyncFineTuning({ songId, getSong = () => null, getVocalsUr
       const becameDone = status === 'done' && lastSyncStatus !== 'done';
       lastSyncStatus = status;
       // Evita pisar el estado local mientras el admin está editando una
-      // línea: el próximo refresh() disparado por un evento real (guardar,
-      // descartar) ya trae la sincronía al día.
-      if (becameDone && expandedI === null) refresh();
+      // línea o tiene un valor de metrónomo sin guardar: el próximo
+      // refresh() disparado por un evento real (guardar, descartar) ya
+      // trae la sincronía al día.
+      if (becameDone && expandedI === null && !metronomeDirty) refresh();
     },
     destroy() {
       destroyed = true;

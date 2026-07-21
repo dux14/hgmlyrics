@@ -89,16 +89,26 @@ describe('SyncFineTuning', () => {
     container.appendChild(detail.el);
     await vi.waitFor(() => expect(detail.el.querySelectorAll('.lineRow__header').length).toBe(1));
 
+    let capturedCurrentTime = null;
+    const currentTimeSetter = vi
+      .spyOn(window.HTMLMediaElement.prototype, 'currentTime', 'set')
+      .mockImplementation((v) => {
+        capturedCurrentTime = v;
+      });
+
     detail.el.querySelector('.lineRow__header').click();
     detail.el.querySelector('[data-action="line-listen"]').click();
 
     await vi.waitFor(() => expect(window.HTMLMediaElement.prototype.play).toHaveBeenCalled());
+
+    expect(capturedCurrentTime).toBe(2500 / 1000);
 
     const audioEls = detail.el.ownerDocument.querySelectorAll('audio');
     // El <audio> del mini-player no se inserta en el DOM (patrón previewAudio):
     // en cambio, validamos vía el mock global de play/pause que se disparó.
     expect(audioEls.length).toBe(0);
 
+    currentTimeSetter.mockRestore();
     detail.destroy();
   });
 
@@ -135,6 +145,81 @@ describe('SyncFineTuning', () => {
 
     await vi.waitFor(() => expect(songAudioApi.getSongAudio).toHaveBeenCalled());
     expect(detail.el.textContent).toContain('La sincronía todavía no está lista');
+
+    detail.destroy();
+  });
+
+  it('dotClass: score bajo pero interpolated:false es "hi" (alineada), no "int"', async () => {
+    mockReady([{ i: 0, startMs: 0, score: 0.2, interpolated: false }]);
+    const detail = createSyncFineTuning({ songId: 'song-1' });
+    container.appendChild(detail.el);
+
+    await vi.waitFor(() => expect(detail.el.querySelectorAll('.lineRow').length).toBe(1));
+    const dot = detail.el.querySelector('.lineRow .cdot');
+    expect(dot.classList.contains('hi')).toBe(true);
+    expect(dot.classList.contains('int')).toBe(false);
+
+    detail.destroy();
+  });
+
+  it('update(run) no pisa una línea expandida aunque sync pase a done', async () => {
+    mockReady([
+      { i: 0, startMs: 1000, score: 0.9, interpolated: false },
+      { i: 1, startMs: 4000, score: 0.9, interpolated: false },
+    ]);
+    const detail = createSyncFineTuning({ songId: 'song-1' });
+    container.appendChild(detail.el);
+    await vi.waitFor(() => expect(detail.el.querySelectorAll('.lineRow__header').length).toBe(2));
+
+    detail.el.querySelectorAll('.lineRow__header')[0].click();
+    expect(detail.el.querySelector('.lineRow__editor')).toBeTruthy();
+
+    detail.update({ phases: { sync: { status: 'done' } } });
+
+    // No debe haber disparado un refresh (getSongAudio sigue en 1) y el
+    // editor de la línea sigue expandido.
+    expect(songAudioApi.getSongAudio).toHaveBeenCalledTimes(1);
+    expect(detail.el.querySelector('.lineRow__editor')).toBeTruthy();
+
+    detail.destroy();
+  });
+
+  it('update(run) no pisa un valor de metrónomo sin guardar aunque sync pase a done', async () => {
+    mockReady([{ i: 0, startMs: 0, score: 0.9, interpolated: false }]);
+    const detail = createSyncFineTuning({ songId: 'song-1' });
+    container.appendChild(detail.el);
+
+    await vi.waitFor(() => expect(detail.el.textContent).toContain('BPM detectado: 112.35'));
+
+    const bpmInput = detail.el.querySelector('.sync-tuning__bpm-manual');
+    bpmInput.value = '145';
+    bpmInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    detail.update({ phases: { sync: { status: 'done' } } });
+
+    expect(songAudioApi.getSongAudio).toHaveBeenCalledTimes(1);
+    expect(detail.el.querySelector('.sync-tuning__bpm-manual').value).toBe('145');
+
+    detail.destroy();
+  });
+
+  it('nudge que toparía con la línea vecina queda clampeado', async () => {
+    mockReady([
+      { i: 0, startMs: 1000, score: 0.9, interpolated: false },
+      { i: 1, startMs: 1050, score: 0.9, interpolated: false },
+    ]);
+    const detail = createSyncFineTuning({ songId: 'song-1' });
+    container.appendChild(detail.el);
+    await vi.waitFor(() => expect(detail.el.querySelectorAll('.lineRow__header').length).toBe(2));
+
+    detail.el.querySelectorAll('.lineRow__header')[0].click();
+    detail.el.querySelector('[data-action="line-nudge"][data-delta="100"]').click();
+
+    // max = next.startMs - 1 = 1049, proposed 1000+100=1100 clampeado a 1049.
+    expect(detail.el.querySelector('.lineRow__ms').textContent).toBe('0:01.05');
+    expect(
+      detail.el.querySelector('[data-action="line-nudge"][data-delta="100"]').disabled,
+    ).toBe(true);
 
     detail.destroy();
   });

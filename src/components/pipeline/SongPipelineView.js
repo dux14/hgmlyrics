@@ -1,4 +1,65 @@
-// Stub de la Task D2; la Task D3/D4/D5 monta la vista real.
+/**
+ * SongPipelineView.js — vista admin "stepper" del procesamiento por canción
+ * (pipeline unificado, plan D, Task D3a). Muestra las 5 fases visibles
+ * (Audio, Pistas, Letra, Sincronía, Tono por sílaba — `clips` no es fila
+ * propia, D3b la muestra como sub-línea de Pistas) con estado progresivo vía
+ * `watchPipelineRun`. Esta sub-tarea es el esqueleto: dot + copy + retry +
+ * stale + montaje del panel de letra (C3). El detalle de Audio/Pistas/
+ * Sincronía lo montan D3b/D3c dentro del slot que deja cada `PhaseRow`.
+ */
+import '../../styles/pipeline.css';
+import { icon } from '../../lib/icons.js';
+import { goBack, onRouteChange } from '../../router.js';
+import { watchPipelineRun, retryPipelinePhase } from '../../lib/pipelineApi.js';
+import { LyricsReviewPanel } from './LyricsReviewPanel.js';
+import { PhaseRow } from './PhaseRow.js';
+
+// Filas visibles del stepper, en orden. lyrics_review es la fase "Letra".
+const ROWS = [
+  { key: 'upload', title: 'Audio' },
+  { key: 'stems', title: 'Pistas' },
+  { key: 'lyrics_review', title: 'Letra' },
+  { key: 'sync', title: 'Sincronía' },
+  { key: 'pitch', title: 'Tono por sílaba' },
+];
+
+const SUBTITLES = {
+  upload: {
+    pending: 'En espera',
+    running: 'Subiendo audio...',
+    done: 'Audio cargado',
+    failed: 'No se pudo cargar el audio',
+  },
+  stems: {
+    pending: 'En espera',
+    running: 'Separando pistas...',
+    done: 'Pistas separadas',
+    failed: 'No se pudo separar las pistas',
+  },
+  lyrics_review: {
+    pending: 'En espera',
+    running: 'Transcribiendo letra...',
+    awaiting: 'Revisá la letra transcrita',
+    done: 'Letra aprobada',
+    failed: 'No se pudo transcribir la letra',
+  },
+  sync: {
+    pending: 'En espera',
+    blocked: 'Arranca al aprobar la letra',
+    running: 'Sincronizando letra con el audio...',
+    done: 'Sincronía lista',
+    failed: 'No se pudo sincronizar',
+    stale: 'Desactualizado respecto a la letra',
+  },
+  pitch: {
+    pending: 'En espera',
+    blocked: 'Arranca al aprobar la letra',
+    running: 'Calculando tono por sílaba...',
+    done: 'Tono por sílaba listo',
+    failed: 'No se pudo calcular el tono',
+    stale: 'Desactualizado respecto a la letra',
+  },
+};
 
 /**
  * @param {HTMLElement} container
@@ -6,12 +67,168 @@
  */
 export function renderSongPipelineView(container, songId) {
   container.innerHTML = '';
-  const section = document.createElement('section');
-  section.style.padding = '16px';
-  section.dataset.songId = songId;
-  section.innerHTML = `
-    <h1>Procesamiento de audio</h1>
-    <p>En construcción.</p>
+  container.dataset.songId = songId;
+
+  const view = document.createElement('div');
+  view.className = 'pipeline-view';
+  view.innerHTML = `
+    <header class="pipeline-view__header">
+      <button type="button" class="pipeline-view__back" aria-label="Volver">${icon('arrow-left')}</button>
+      <h1 class="pipeline-view__title">Procesamiento</h1>
+      <span class="pipeline-view__pill">0 de 5 fases</span>
+    </header>
+    <div class="pipeline-view__rows"></div>
   `;
-  container.appendChild(section);
+  container.appendChild(view);
+
+  view.querySelector('.pipeline-view__back').addEventListener('click', () => goBack());
+
+  const rowsEl = view.querySelector('.pipeline-view__rows');
+  const pillEl = view.querySelector('.pipeline-view__pill');
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+
+  // El panel de letra (C3) es una factory async: se monta UNA sola vez
+  // mientras el run esté en awaiting_lyrics y se reubica (sin recrear) en
+  // cada re-render de filas, para no perder su estado interno (documento,
+  // conflictos resueltos, scroll) en cada evento del watcher.
+  let lyricsPanelEl = null;
+  let lyricsPanelLoading = false;
+  let lastRun = null;
+
+  async function ensureLyricsPanel() {
+    if (lyricsPanelEl || lyricsPanelLoading) return;
+    lyricsPanelLoading = true;
+    try {
+      lyricsPanelEl = await LyricsReviewPanel({
+        songId,
+        onApproved: () => {
+          // El próximo evento del watcher (broadcast o polling) trae
+          // lyrics_review en done y renderPhases suelta el panel solo.
+        },
+      });
+    } catch (err) {
+      console.error('SongPipelineView: no se pudo montar el panel de letra', err);
+    } finally {
+      lyricsPanelLoading = false;
+    }
+    renderPhases(lastRun);
+  }
+
+  /** Calcula estado visual + copy + acción de una fase. */
+  function describePhase(key, phase, runStatus, lyricsApproved) {
+    const status = phase.status;
+    const table = SUBTITLES[key];
+
+    if (status === 'stale') {
+      return {
+        state: 'stale',
+        subtitle: table.stale,
+        actionLabel: 'Re-procesar sincronía y tono',
+        onRetry: async () => {
+          try {
+            await retryPipelinePhase(songId, 'sync');
+            await retryPipelinePhase(songId, 'pitch');
+          } catch (err) {
+            console.error('SongPipelineView: no se pudo reprocesar sincronía y tono', err);
+          }
+        },
+      };
+    }
+
+    if (status === 'failed') {
+      return {
+        state: 'failed',
+        subtitle: table.failed,
+        actionLabel: 'Reintentar fase',
+        onRetry: async (k) => {
+          try {
+            await retryPipelinePhase(songId, k);
+          } catch (err) {
+            console.error('SongPipelineView: no se pudo reintentar la fase', err);
+          }
+        },
+      };
+    }
+
+    if (status === 'running') {
+      return { state: 'running', subtitle: table.running };
+    }
+
+    if (status === 'done') {
+      return { state: 'done', subtitle: table.done };
+    }
+
+    // pending: la fila Letra en awaiting_lyrics requiere acción del admin;
+    // sync/pitch en pending quedan bloqueadas hasta aprobar la letra.
+    if (key === 'lyrics_review' && runStatus === 'awaiting_lyrics') {
+      return { state: 'act', subtitle: table.awaiting };
+    }
+    if ((key === 'sync' || key === 'pitch') && !lyricsApproved) {
+      return { state: 'blocked', subtitle: table.blocked };
+    }
+    return { state: 'pending', subtitle: table.pending };
+  }
+
+  function renderPhases(run) {
+    lastRun = run;
+    rowsEl.innerHTML = '';
+
+    if (!run) {
+      const empty = document.createElement('p');
+      empty.className = 'pipeline-view__empty';
+      empty.textContent = 'No hay un procesamiento activo para esta canción.';
+      rowsEl.appendChild(empty);
+      pillEl.textContent = '0 de 5 fases';
+      return;
+    }
+
+    const phases = run.phases || {};
+    const lyricsApproved = phases.lyrics_review?.status === 'done';
+    const doneCount = ROWS.filter((r) => phases[r.key]?.status === 'done').length;
+    pillEl.textContent = `${doneCount} de 5 fases`;
+
+    ROWS.forEach((r, i) => {
+      const phase = phases[r.key] || { status: 'pending' };
+      const info = describePhase(r.key, phase, run.status, lyricsApproved);
+
+      let detail = null;
+      if (r.key === 'lyrics_review') {
+        if (run.status === 'awaiting_lyrics' && phase.status !== 'done') {
+          if (!lyricsPanelEl && !lyricsPanelLoading) ensureLyricsPanel();
+          detail = lyricsPanelEl;
+        } else {
+          // Letra aprobada (u otro estado): soltar la referencia del panel.
+          lyricsPanelEl = null;
+        }
+      }
+      // D3b/D3c montan el detalle de Audio/Pistas/Sincronía en este slot.
+
+      const row = PhaseRow({
+        key: r.key,
+        index: i + 1,
+        title: r.title,
+        subtitle: info.subtitle,
+        state: info.state,
+        error: phase.error || '',
+        detail,
+        actionLabel: info.actionLabel,
+        onRetry: info.onRetry,
+      });
+
+      if (!reduceMotion) {
+        row.style.animationDelay = `${i * 40}ms`;
+        row.classList.add('phase--enter');
+      }
+
+      rowsEl.appendChild(row);
+    });
+  }
+
+  const unsub = watchPipelineRun(songId, (data) => renderPhases(data?.run ?? null));
+
+  const offRoute = onRouteChange(() => {
+    unsub();
+    offRoute();
+    lyricsPanelEl = null;
+  });
 }

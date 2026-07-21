@@ -315,3 +315,299 @@
     animation: none;
   }
 }
+
+/* ---- Stepper de procesamiento (Task D3a) ------------------------------ */
+
+.pipeline-view {
+  max-width: 560px;
+  margin: 0 auto;
+  color: var(--color-text);
+}
+
+.pipeline-view__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.pipeline-view__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--color-text);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  transition: background-color 0.15s var(--ease-out);
+}
+.pipeline-view__back:hover {
+  background: var(--color-surface-hover);
+}
+
+.pipeline-view__title {
+  flex: 1;
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.pipeline-view__pill {
+  display: inline-flex;
+  align-items: center;
+  background: color-mix(in oklch, var(--color-brand) 12%, transparent);
+  color: var(--color-brand);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pipeline-view__rows {
+  padding: 0 var(--space-md);
+}
+
+.pipeline-view__empty {
+  padding: var(--space-md) 0;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.phase {
+  display: flex;
+  gap: 12px;
+  padding: var(--space-md) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.phase:last-child {
+  border-bottom: none;
+}
+
+/* Fila que requiere accion: tinte ambar suave, SIN border-left (regla dura
+   de plataforma: nunca border-left de acento). */
+.phase--action {
+  background: rgba(245, 158, 11, 0.06);
+  margin: 0 calc(var(--space-md) * -1);
+  padding-left: var(--space-md);
+  padding-right: var(--space-md);
+  border-radius: var(--border-radius-md);
+}
+
+.phase .dot {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.phase .dot.wait {
+  border: 1.5px dashed var(--color-border);
+  color: var(--color-text-secondary);
+}
+.phase .dot.run {
+  background: color-mix(in oklch, var(--color-brand) 18%, transparent);
+  color: var(--color-brand);
+}
+.phase .dot.done {
+  background: var(--color-success);
+  color: var(--color-bg);
+}
+.phase .dot.act {
+  background: var(--color-action);
+  color: var(--color-bg);
+}
+
+.phase .ph-dot-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: ph-pulse 1s ease-in-out infinite;
+}
+@keyframes ph-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.phase__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.phase__title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0 0 2px;
+}
+
+.phase__subtitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.phase__error {
+  font-size: 0.8rem;
+  color: var(--color-danger);
+  margin: 6px 0 0;
+}
+
+.phase__action {
+  margin-top: 8px;
+  background: var(--color-action);
+  color: var(--color-bg);
+  border: none;
+  border-radius: 9px;
+  padding: 7px 13px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    filter 0.15s var(--ease-out),
+    transform 0.12s var(--ease-out);
+}
+.phase__action:hover {
+  filter: brightness(1.06);
+}
+.phase__action:active {
+  transform: scale(0.97);
+}
+
+.phase__detail:empty {
+  display: none;
+}
+.phase__detail {
+  margin-top: 8px;
+}
+
+/* Loaders inline por fase, junto al subtitulo mientras corre. */
+.ph-loader {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ph-loader--eq i {
+  display: block;
+  width: 3px;
+  height: 10px;
+  background: var(--color-brand);
+  border-radius: 2px;
+  animation: ph-eq 0.9s ease-in-out infinite;
+}
+.ph-loader--eq i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.ph-loader--eq i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.ph-loader--eq i:nth-child(4) {
+  animation-delay: 0.45s;
+}
+@keyframes ph-eq {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.ph-loader--notes i {
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-accent-2);
+  animation: ph-bob 1s ease-in-out infinite;
+}
+.ph-loader--notes i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.ph-loader--notes i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes ph-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+.ph-loader--shimmer {
+  width: 60px;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--color-border) 25%,
+    var(--color-surface-hover) 50%,
+    var(--color-border) 75%
+  );
+  background-size: 200% 100%;
+  animation: ph-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes ph-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.phase--enter {
+  animation: phase-enter 0.32s var(--ease-entrance) backwards;
+}
+@keyframes phase-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phase--enter {
+    animation: none;
+  }
+  .ph-dot-pulse,
+  .ph-loader--eq i,
+  .ph-loader--notes i,
+  .ph-loader--shimmer {
+    animation: none;
+  }
+}

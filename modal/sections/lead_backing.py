@@ -127,18 +127,21 @@ def run_lead_backing(payload: dict) -> None:
         stems = separate_lead_backing(vocals_path)
 
         # ── 3. Subir pistas y recopilar keys ─────────────────────────────────
+        # Incluye el vocal intermedio (pre-karaoke): es la única fuente de
+        # `tracks.vocals` del pipeline unificado (voiceInstrumental no sube
+        # nada en este modo, ver STEM_KINDS en songs/[id]/pipeline/_dispatch.js).
         outputs: dict[str, str] = {}
-        for track, tmp_path in (("lead", stems["lead"]), ("backing", stems["backing"])):
+        for track, tmp_path in (("lead", stems["lead"]), ("backing", stems["backing"]), ("vocals", vocals_path)):
             put_url = uploads_lb.get(track)
             if not put_url:
-                # SUPUESTO: si no hay PUT URL para la pista (leadBacking no habilitado
-                # en el payload), se omite silenciosamente y el output queda vacío.
+                # SUPUESTO: si no hay PUT URL para la pista (leadBacking no habilitado,
+                # o flujo legacy del Estudio sin slot 'vocals'), se omite en silencio.
                 continue
             upload_put(put_url, tmp_path, content_type="audio/mpeg")
             outputs[track] = extract_storage_key(put_url)
 
         # Limpiar mp3 temporales.
-        for tmp in (stems["lead"], stems["backing"]):
+        for tmp in (stems["lead"], stems["backing"], vocals_path):
             try:
                 os.unlink(tmp)
             except OSError:

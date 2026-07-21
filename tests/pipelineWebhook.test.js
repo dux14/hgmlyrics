@@ -321,6 +321,108 @@ describe('POST /api/pipeline/webhook — guarda de run terminal', () => {
   });
 });
 
+describe('POST /api/pipeline/webhook — sección de stems (adapter hkn-stems)', () => {
+  it('leadBacking done con {lead,backing,vocals} → fase stems final, upsert 3 tracks, dispara transcription', async () => {
+    const phases = initialPhases();
+    phases.upload.status = 'done';
+    phases.stems.status = 'running';
+    sqlResponses.push([runRow({ phases })]); // SELECT FOR UPDATE
+    sqlResponses.push([]); // insert song_stems lead
+    sqlResponses.push([]); // insert song_stems backing
+    sqlResponses.push([]); // insert song_stems vocals
+    sqlResponses.push([]); // UPDATE song_pipeline_runs (commit del CAS del webhook)
+    const doneStemsPhases = structuredClone(phases);
+    doneStemsPhases.stems = { status: 'done', tracks: { lead: 'k-lead', backing: 'k-back', vocals: 'k-voc' } };
+    sqlResponses.push([{ phases: doneStemsPhases }]); // advanceNextPhase: claim
+    sqlResponses.push([]); // marca transcription 'running'
+
+    const res = makeRes();
+    await handler(
+      signedReq({
+        jobId: 'run-1',
+        section: 'leadBacking',
+        result: { status: 'done', model: 'karaoke', outputs: { lead: 'k-lead', backing: 'k-back', vocals: 'k-voc' } },
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(sqlCalls.filter((c) => c.text.includes('INSERT INTO song_stems')).length).toBe(3);
+    expect(dispatchPhaseMock).toHaveBeenCalledWith('transcription', expect.anything());
+  });
+
+  it('voiceInstrumental done con outputs vacíos → partial, sin upsert de song_stems ni advance', async () => {
+    const phases = initialPhases();
+    phases.stems.status = 'running';
+    sqlResponses.push([runRow({ phases })]); // SELECT FOR UPDATE
+    sqlResponses.push([]); // UPDATE song_pipeline_runs (sin tracks que insertar)
+
+    const res = makeRes();
+    await handler(
+      signedReq({
+        jobId: 'run-1',
+        section: 'voiceInstrumental',
+        result: { status: 'done', model: 'x', outputs: {} },
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(sqlCalls.some((c) => c.text.includes('INSERT INTO song_stems'))).toBe(false);
+    expect(dispatchPhaseMock).not.toHaveBeenCalled();
+  });
+
+  it('leadBacking failed → fase stems queda failed', async () => {
+    const phases = initialPhases();
+    phases.stems.status = 'running';
+    sqlResponses.push([runRow({ phases })]); // SELECT FOR UPDATE
+    sqlResponses.push([]); // UPDATE song_pipeline_runs
+
+    const res = makeRes();
+    await handler(
+      signedReq({
+        jobId: 'run-1',
+        section: 'leadBacking',
+        result: { status: 'failed', model: 'karaoke', outputs: {} },
+        error: 'boom',
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    const upd = sqlCalls.find((c) => c.text.includes('UPDATE song_pipeline_runs'));
+    const phasesArg = upd.values.find((v) => v && typeof v === 'object' && v.stems);
+    expect(phasesArg.stems.status).toBe('failed');
+    expect(dispatchPhaseMock).not.toHaveBeenCalled();
+  });
+
+  it('gender failed → ignorado (200), la fase stems no falla', async () => {
+    const res = makeRes();
+    await handler(
+      signedReq({
+        jobId: 'run-1',
+        section: 'gender',
+        result: { status: 'failed', model: 'x', outputs: {} },
+        error: 'sin género detectado',
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ignored).toBe(true);
+    expect(sqlCalls.length).toBe(0); // ni siquiera llega al CAS: adapter la ignora antes
+  });
+
+  it('sección desconocida → 400', async () => {
+    const res = makeRes();
+    await handler(
+      signedReq({ jobId: 'run-1', section: 'unknown', result: { status: 'done', outputs: {} } }),
+      res,
+    );
+    expect(res.statusCode).toBe(400);
+  });
+});
+
 describe('applyPipelinePhaseEvent — CAS directo (reuso B7)', () => {
   it('run inexistente → null', async () => {
     sqlResponses.push([]);

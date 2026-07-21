@@ -18,7 +18,11 @@ import sql from '../../../_lib/db.js';
 
 // Pistas que produce la fase 'stems' agrupadas por sección Modal (mismo shape
 // {seccion: {pista: url}} que arma api/stems/jobs/[id]/start.js).
-const STEM_KINDS = { leadBacking: ['lead', 'backing'], gender: ['male', 'female'] };
+// leadBacking incluye 'vocals': la sección re-extrae el stem vocal intermedio
+// (extract_vocals_stem) antes de separar lead/backing y ahora lo sube también
+// (ver modal/sections/lead_backing.py) — es la única fuente de `tracks.vocals`
+// en el pipeline unificado (voiceInstrumental no sube nada en este modo).
+const STEM_KINDS = { leadBacking: ['lead', 'backing', 'vocals'], gender: ['male', 'female'] };
 
 function webhookUrl() {
   return `${process.env.PUBLIC_BASE_URL}/api/pipeline/webhook`;

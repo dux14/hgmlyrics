@@ -3,12 +3,20 @@
 // api/_lib/modal.js contra MODAL_WEBHOOK_SECRET. Un solo endpoint recibe los
 // callbacks de todas las apps Modal del pipeline (stems/transcription/
 // sync/pitch/clips), identificadas por { runId, phase } en el body.
+//
+// La app hkn-stems (reusada por la fase 'stems', ver dispatchStems) postea en
+// cambio por SECCIÓN ({ jobId, section, result }, ver post_webhook en
+// modal/sections/_common.py) — no conoce el concepto de fase del pipeline
+// unificado. El adapter de abajo traduce ese shape al phase-event de 'stems'
+// y sigue por el mismo camino que el resto de fases.
 import sql from '../_lib/db.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { verifyModalSignature } from '../_lib/modal.js';
 import { PHASES, canStartPhase } from '../_lib/pipeline/state.js';
 import { applyPipelinePhaseEvent } from '../_lib/pipeline/process.js';
+import { sectionEventToPhaseEvent } from '../_lib/pipeline/stemsAdapter.js';
 import { dispatchPhase } from '../songs/[id]/pipeline/_dispatch.js';
+import { SECTION_KEYS } from '../stems/_sections.js';
 
 // Raw body necesario para verificar la firma HMAC.
 export const config = {
@@ -95,17 +103,44 @@ export default withErrors(async (req, res) => {
     res.status(400).json({ error: 'Body JSON inválido' });
     return;
   }
-  const { runId, phase } = event;
-  if (!runId || !phase) {
-    res.status(400).json({ error: 'Parámetros runId/phase requeridos' });
-    return;
-  }
-  if (!PHASES.includes(phase)) {
-    res.status(400).json({ error: `Fase inválida: ${phase}` });
-    return;
+
+  let phaseEvent;
+  if (event.phase) {
+    // Camino de fase (transcription/sync/pitch/clips postean así, y también
+    // lo produce el adapter de sección de abajo).
+    const { runId, phase } = event;
+    if (!runId || !phase) {
+      res.status(400).json({ error: 'Parámetros runId/phase requeridos' });
+      return;
+    }
+    if (!PHASES.includes(phase)) {
+      res.status(400).json({ error: `Fase inválida: ${phase}` });
+      return;
+    }
+    phaseEvent = event;
+  } else {
+    // Camino de sección de stems (hkn-stems no conoce fases, ver nota arriba).
+    const { jobId, section } = event;
+    if (!jobId || !section) {
+      res.status(400).json({ error: 'Parámetros jobId/section requeridos' });
+      return;
+    }
+    if (!SECTION_KEYS.includes(section)) {
+      res.status(400).json({ error: `Sección inválida: ${section}` });
+      return;
+    }
+    const translated = sectionEventToPhaseEvent(event);
+    if (translated === null) {
+      // Sección no finalizadora (voiceInstrumental/gender/structure) que
+      // falló: no es crítica para el DAG, se ignora sin tocar el run.
+      res.status(200).json({ ignored: true });
+      return;
+    }
+    phaseEvent = translated;
   }
 
-  const outcome = await applyPipelinePhaseEvent(sql, runId, event);
+  const { runId, phase } = phaseEvent;
+  const outcome = await applyPipelinePhaseEvent(sql, runId, phaseEvent);
   if (outcome === null) {
     res.status(404).json({ error: 'Ejecución no encontrada' });
     return;

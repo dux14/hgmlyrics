@@ -6,7 +6,10 @@ from __future__ import annotations
 
 import json
 
-from core import fuse_syllables_notes, detect_modulations, merge_voices_present
+from core import (
+    fuse_syllables_notes, detect_modulations, merge_voices_present,
+    detect_key, key_uses_flats, midi_to_name, NOTE_NAMES_FLAT, NOTE_NAMES_SHARP,
+)
 from _common import request_signed_put, upload_put, post_webhook, artifact, extract_storage_key
 
 
@@ -32,11 +35,35 @@ def run_fusion(job_id, webhook, sign_upload_url, inbound_secret, notes_lead, not
     En fallo: post_webhook(..., {"ok": False, "error": str(exc)[:400]}) y re-lanza.
     """
     try:
+        # Detecta la tonalidad (histograma de pitch-classes ponderado por duracion,
+        # sumando todas las voces) para elegir bemoles o sostenidos en la armadura.
+        def _accumulate(hist, events):
+            for ev in events or []:
+                midi = ev.get("midi")
+                if midi is None:
+                    continue
+                dur = ev.get("end", 0.0) - ev.get("start", 0.0)
+                hist[int(round(midi)) % 12] += dur if dur and dur > 0 else 1.0
+
+        hist = [0.0] * 12
+        _accumulate(hist, notes_lead)
+        _accumulate(hist, notes_backing)
+        for v in (extra_voices or {}).values():
+            _accumulate(hist, v.get("notes", []))
+
+        tonic_pc, mode = detect_key(hist)
+        use_flats = key_uses_flats(tonic_pc, mode)
+
+        for v in (extra_voices or {}).values():
+            for n in v.get("notes", []):
+                if n.get("midi") is not None:
+                    n["note"] = midi_to_name(n["midi"], use_flats)
+
         def voice_lines(note_events):
             lines = []
             for words in lines_words:
                 syls = [dict(w) for w in words]
-                fuse_syllables_notes(syls, note_events)
+                fuse_syllables_notes(syls, note_events, use_flats)
                 lines.append({"syllables": syls})
             return lines
 
@@ -44,7 +71,14 @@ def run_fusion(job_id, webhook, sign_upload_url, inbound_secret, notes_lead, not
             "lead": {"lines": voice_lines(notes_lead)},
             "backing": {"lines": voice_lines(notes_backing)},
         }
-        analysis = assemble_analysis(base_voices, detect_modulations(notes_lead), ["lead", "backing"], extra_voices)
+        analysis = assemble_analysis(
+            base_voices, detect_modulations(notes_lead, use_flats=use_flats), ["lead", "backing"], extra_voices
+        )
+        analysis["key"] = {
+            "tonic": (NOTE_NAMES_FLAT if use_flats else NOTE_NAMES_SHARP)[tonic_pc],
+            "mode": mode,
+            "use_flats": use_flats,
+        }
 
         put_url = request_signed_put(sign_upload_url, inbound_secret, job_id, "export/analysis.json")
         upload_put(put_url, json.dumps(analysis, ensure_ascii=False).encode("utf-8"), content_type="application/json")

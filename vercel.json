@@ -22,13 +22,17 @@
     "api/pitch/cleanup.js": {
       "maxDuration": 60
     },
+    "api/pipeline/cleanup.js": {
+      "maxDuration": 60
+    },
     "api/**/*.js": {
       "maxDuration": 10
     }
   },
   "crons": [
     { "path": "/api/stems/cleanup", "schedule": "0 * * * *" },
-    { "path": "/api/pitch/cleanup", "schedule": "0 * * * *" }
+    { "path": "/api/pitch/cleanup", "schedule": "0 * * * *" },
+    { "path": "/api/pipeline/cleanup", "schedule": "0 * * * *" }
   ],
   "headers": [
     {

@@ -1,6 +1,6 @@
 // scripts/_ingestLib.mjs
 // Funciones puras de la ingesta del cancionero (Task A6): parseo de la
-// respuesta de Claude, matching de titulos contra `songs` y armado de los
+// respuesta de Claude, matching de títulos contra `songs` y armado de los
 // upserts. Sin I/O — testeables sin mockear filesystem/red/DB.
 import { titleSimilarity, TITLE_MATCH_THRESHOLD } from '../api/_lib/pipeline/titleMatch.js';
 
@@ -68,14 +68,14 @@ export function parseExtraction(text) {
   try {
     data = JSON.parse(text);
   } catch (err) {
-    throw new Error(`Respuesta de Claude no es JSON valido: ${err.message}`, { cause: err });
+    throw new Error(`Respuesta de Claude no es JSON válido: ${err.message}`, { cause: err });
   }
   if (!data || !Array.isArray(data.canciones)) {
     throw new Error('Respuesta sin campo "canciones" (array).');
   }
   for (const cancion of data.canciones) {
     if (!cancion?.titulo || typeof cancion.titulo !== 'string') {
-      throw new Error('Cancion sin "titulo" valido.');
+      throw new Error('Cancion sin "titulo" válido.');
     }
     if (!Array.isArray(cancion.secciones) || cancion.secciones.length === 0) {
       throw new Error(`Cancion "${cancion.titulo}" sin "secciones".`);
@@ -97,7 +97,7 @@ export function parseExtraction(text) {
 // Matchea cada cancion extraida contra `songsFromDb` ({id, title}[]) por
 // similitud de titulo (reusa titleMatch.js, umbral 60%). Devuelve
 // { linked, unlinked }: linked trae songId + score, unlinked queda para
-// revision manual (nunca inventamos song_id).
+// revisión manual (nunca inventamos song_id).
 export function matchSongs(canciones, songsFromDb) {
   const linked = [];
   const unlinked = [];

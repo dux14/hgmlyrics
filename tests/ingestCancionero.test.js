@@ -15,7 +15,7 @@ import {
 // ── Funciones puras ──────────────────────────────────────────────────────
 
 describe('parseExtraction', () => {
-  it('parsea un JSON valido y devuelve las canciones', () => {
+  it('parsea un JSON válido y devuelve las canciones', () => {
     const text = JSON.stringify({
       canciones: [
         { titulo: 'Sion', secciones: [{ lineas: [{ texto: 'primera linea' }] }] },
@@ -26,8 +26,8 @@ describe('parseExtraction', () => {
     expect(canciones[0].titulo).toBe('Sion');
   });
 
-  it('rechaza JSON invalido', () => {
-    expect(() => parseExtraction('{no es json')).toThrow(/JSON valido/);
+  it('rechaza JSON inválido', () => {
+    expect(() => parseExtraction('{no es json')).toThrow(/JSON válido/);
   });
 
   it('rechaza cancion sin lineas con texto', () => {
@@ -175,7 +175,7 @@ describe('flujo dry-run (mocks de SDK + postgres + fs)', () => {
     await expect(runDryRun()).rejects.toThrow(/PDF/);
   });
 
-  it('extrae, matchea contra songs y escribe el JSON de revision', async () => {
+  it('extrae, matchea contra songs y escribe el JSON de revisión', async () => {
     mockReadFile.mockResolvedValue(Buffer.from('%PDF-fake%'));
     mockFinalMessage.mockResolvedValue({
       stop_reason: 'end_turn',
@@ -233,7 +233,7 @@ describe('flujo --commit (mocks de postgres + fs)', () => {
     expect(topLevelResponses).toHaveLength(0); // se consumio el upsert
   });
 
-  it('si no existe el JSON de revision, falla pidiendo correr el dry-run primero', async () => {
+  it('si no existe el JSON de revisión, falla pidiendo correr el dry-run primero', async () => {
     mockExistsSync.mockReturnValue(false);
     const { runCommit } = await import('../scripts/ingest-cancionero.mjs');
     await expect(runCommit()).rejects.toThrow(/dry-run/);

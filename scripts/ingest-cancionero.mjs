@@ -1,6 +1,6 @@
 // scripts/ingest-cancionero.mjs
 // Task A6: ingesta del cancionero PDF ("Cancionero + Acordes 2026.pdf") a
-// letra canonica (`song_lyrics_canonical`), via Claude con output
+// letra canónica (`song_lyrics_canonical`), vía Claude con output
 // estructurado. Script one-off repetible, NO forma parte del pipeline en
 // runtime.
 //
@@ -8,8 +8,8 @@
 //   node scripts/ingest-cancionero.mjs            dry-run: extrae con Claude,
 //                                                  escribe scripts/cancionero-extracted.json
 //                                                  y NO toca la DB.
-//   (revisar scripts/cancionero-extracted.json a mano -- esa revision humana
-//   ES el paso de validacion antes de escribir en produccion)
+//   (revisar scripts/cancionero-extracted.json a mano -- esa revisión humana
+//   ES el paso de validación antes de escribir en producción)
 //   node scripts/ingest-cancionero.mjs --commit    lee el JSON revisado y
 //                                                  hace upsert por cancion
 //                                                  matcheada.
@@ -65,8 +65,8 @@ async function extractWithClaude() {
   if (msg.stop_reason === 'max_tokens') {
     console.warn(
       'AVISO: la respuesta se trunco por max_tokens. El cancionero puede exceder ' +
-        '64000 tokens de output -- si pasa, hay que chunkear la extraccion por rangos ' +
-        'de paginas (no implementado en esta version simple).',
+        '64000 tokens de output -- si pasa, hay que chunkear la extracción por rangos ' +
+        'de páginas (no implementado en esta version simple).',
     );
   }
   const textBlock = msg.content.find((b) => b.type === 'text');
@@ -92,7 +92,7 @@ async function runDryRun() {
     OUTPUT_PATH,
     JSON.stringify({ linked, unlinked: unlinked.map((u) => u.cancion) }, null, 2),
   );
-  console.log(`[dry-run] ${canciones.length} canciones extraidas del PDF.`);
+  console.log(`[dry-run] ${canciones.length} canciones extraídas del PDF.`);
   console.log(`[dry-run] ${linked.length} matchearon a un song_id existente:`);
   for (const { cancion, songId, score } of linked) {
     console.log(`  - "${cancion.titulo}" -> ${songId} (score ${score.toFixed(2)})`);
@@ -112,7 +112,7 @@ async function runCommit() {
   }
   const { linked } = JSON.parse(await readFile(OUTPUT_PATH, 'utf8'));
   if (!Array.isArray(linked) || linked.length === 0) {
-    console.log('Nada para commitear: "linked" vacio en scripts/cancionero-extracted.json.');
+    console.log('Nada para commitear: "linked" vacío en scripts/cancionero-extracted.json.');
     return;
   }
   const upserts = buildUpserts(linked);

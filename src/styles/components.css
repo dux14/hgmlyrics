@@ -1093,6 +1093,46 @@
   background: color-mix(in srgb, var(--color-teal-500) 15%, transparent);
 }
 
+/* === Badge de estado del pipeline (D2) — punto sobre #open-pipeline-btn ===
+   need (ambar) = requiere accion del admin, fijo. proc (cyan) = en proceso,
+   pulso infinito con box-shadow expansivo. */
+#open-pipeline-btn {
+  position: relative;
+}
+
+.pipeline-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.pipeline-badge.need {
+  background: var(--color-action);
+}
+
+.pipeline-badge.proc {
+  background: var(--color-brand);
+  animation: pipelineBadgePulse 1.6s infinite;
+}
+
+@keyframes pipelineBadgePulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-brand) 50%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-brand) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pipeline-badge.proc {
+    animation: none;
+  }
+}
+
 /* === Layer toggles (T3) — Acordes/Tono independientes, NO exclusivos ===
    A diferencia de .chord-toggle (segmented control, cyan primary), cada capa
    es su propio pill on/off; el acento es teal para no chocar con el cyan de

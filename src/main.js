@@ -246,6 +246,25 @@ async function bootBody() {
   });
 
   privateRoute(
+    '/song/:id/procesamiento',
+    async ({ params }) => {
+      const { renderSongPipelineView } = await import('./components/pipeline/SongPipelineView.js');
+      renderSongPipelineView(mainContent, params.id);
+    },
+    { adminOnly: true },
+  );
+
+  privateRoute('/song/:id/estudio', async ({ params }) => {
+    const { renderSongStudioView } = await import('./components/pipeline/SongStudioView.js');
+    renderSongStudioView(mainContent, params.id);
+  });
+
+  privateRoute('/song/:id/partitura', async ({ params }) => {
+    const { renderSongPartituraView } = await import('./components/pipeline/SongPartituraView.js');
+    renderSongPartituraView(mainContent, params.id);
+  });
+
+  privateRoute(
     '/admin',
     async () => {
       const { renderAdminDashboard } = await import('./components/AdminDashboard.js');

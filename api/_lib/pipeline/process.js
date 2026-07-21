@@ -84,8 +84,13 @@ export async function applyPipelinePhaseEvent(sql, runId, event) {
 
     let lyricsReview = run.lyricsReview ?? {};
     if (event.phase === 'transcription' && event.ok && !event.partial && event.payload) {
-      const { text, words, perLine } = event.payload;
-      lyricsReview = { ...lyricsReview, transcription: { text, words, perLine } };
+      // transLines (plan C, gate de letra): lineas de texto transcritas en el
+      // mismo orden que `words` — lo usa buildReviewDoc para las 3 fuentes y
+      // suggestLineBreaks para mapear palabras a renglon. Opcional: un
+      // payload sin transLines (apps Modal viejas) degrada con gracia a []
+      // en lyricsReview.js/lyrics.js, sin romper el resto del gate.
+      const { text, words, perLine, transLines } = event.payload;
+      lyricsReview = { ...lyricsReview, transcription: { text, words, perLine, transLines } };
     }
 
     if (event.phase === 'pitch' && event.ok && !event.partial) {

@@ -7,7 +7,8 @@ DAG:
   S2 (structure SongFormer)  ├─ paralelo al inicio
                               │
   S3 (leadBacking Mel-RoFormer Karaoke) ┤ arranca cuando S1 termina (necesita vocals key)
-  S4 (gender chorus_bs_roformer) ┘ arranca cuando S1 termina (idem, flag OFF)
+  S4 (gender chorus_bs_roformer) ┤ arranca cuando S1 termina (idem, flag OFF)
+  S5 (duet MedleyVox, opt-in)    ┘ arranca cuando S1 termina (idem, latente hasta activarse)
 
 Cada nodo postea su propio webhook al terminar (éxito o fallo).
 La Vercel API acumula los resultados en la columna `sections` del job.
@@ -34,6 +35,7 @@ from sections._common import extract_storage_key, post_webhook
 from sections.extract import run_extract as _run_extract_impl
 from sections.gender import run_gender as _run_gender_impl
 from sections.lead_backing import run_lead_backing as _run_lead_backing_impl
+from sections.medley_vox import run_medley_vox as _run_medley_vox_impl
 from sections.songformer import run_songformer as _run_songformer_impl
 
 
@@ -162,6 +164,22 @@ def s3_lead_backing(payload: dict, vocals_key: str | None) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# S5 — dúo por identidad de cantante (MedleyVox, GPU, opt-in)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.function(image=image, secrets=_webhook_secrets, gpu="T4", timeout=900)
+def s5_duet(payload: dict, vocals_key: str | None) -> None:
+    """
+    S5 (opt-in): separacion de DUOS por identidad de cantante con MedleyVox
+    (Cyru5/MedleyVox "vocals 238"). A diferencia de S3 (karaoke: lead vs
+    backing por rol), MedleyVox separa dos cantantes simultaneos (p. ej.
+    hombre+mujer cantando juntos). Solo corre si "duet" esta en
+    enabledSections. Reusa run_medley_vox (sube a uploads["duet"]).
+    """
+    _run_medley_vox_impl(payload, section="duet", labels=("voice_a", "voice_b"))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # S4 — separación de voces por género (chorus_bs_roformer, GPU)
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -193,11 +211,12 @@ def s4_gender(payload: dict, vocals_key: str | None) -> None:
 @app.function(image=image, secrets=_webhook_secrets, timeout=1200)
 def run_pipeline(payload: dict) -> None:
     """
-    Orquestador DAG de las 4 secciones del Estudio.
+    Orquestador DAG de las secciones del Estudio.
 
     DAG:
       Fase A (paralelo): S1 (extract) + S2 (structure stub)
-      Fase B (tras S1):  S3 (leadBacking stub) + S4 (gender stub, si habilitado)
+      Fase B (tras S1):  S3 (leadBacking) + S4 (gender, si habilitado)
+                         + S5 (duet, opt-in, si habilitado)
 
     Cada nodo postea su webhook de forma independiente; un fallo en un nodo
     no cancela los demás (Modal registra el error en el log del nodo).
@@ -239,12 +258,19 @@ def run_pipeline(payload: dict) -> None:
         if "gender" in enabled
         else None
     )
+    # S5 (duet, opt-in): latente hasta que otro plan lo active desde el front
+    # (el front hoy nunca manda "duet" en enabledSections).
+    s5_call = (
+        s5_duet.spawn(payload, vocals_key)
+        if "duet" in enabled
+        else None
+    )
 
-    # Esperar a que S3/S4 terminen (para que el orquestador no muera antes de
-    # que posteen sus webhooks; Modal cobra mientras el contenedor está vivo).
+    # Esperar a que S3/S4/S5 terminen (para que el orquestador no muera antes
+    # de que posteen sus webhooks; Modal cobra mientras el contenedor está vivo).
     # S3 (MedleyVox) puede tardar hasta ~900 s en cold start (descarga de pesos
     # + extracción vocal + inferencia); el orquestador tiene timeout=1200 s.
-    for call in (s3_call, s4_call):
+    for call in (s3_call, s4_call, s5_call):
         if call is not None:
             try:
                 call.get(timeout=950)

@@ -206,3 +206,39 @@ export async function deleteSongAudioObjects(keys) {
   const { error } = await supabase.storage.from(SONG_AUDIO_BUCKET).remove(keys);
   if (error && !/not.*found/i.test(error.message || '')) throw error;
 }
+
+// ──────────────────────────────────────────────
+// Pipeline unificado — keys dentro del mismo bucket 'song-audio' (spec fase A).
+// La firma PUT/GET reutiliza createSongAudioSignedPutUrl/signSongAudioDownload
+// de arriba; estas funciones solo arman la ruta.
+// ──────────────────────────────────────────────
+
+/**
+ * Key del mp3 completo subido como input de un run del pipeline.
+ * @param {string} songId
+ * @param {string} runId
+ * @returns {string}
+ */
+export function pipelineInputKey(songId, runId) {
+  return `${songId}/runs/${runId}/full.mp3`;
+}
+
+/**
+ * Key de una pista publicada del pipeline (p.ej. 'lead', 'backing', 'vocals').
+ * @param {string} songId
+ * @param {string} kind
+ * @returns {string}
+ */
+export function pipelineStemKey(songId, kind) {
+  return `${songId}/stems/${kind}.mp3`;
+}
+
+/**
+ * Key de un artefacto de la partitura vocal generado por el pipeline.
+ * @param {string} songId
+ * @param {string} name
+ * @returns {string}
+ */
+export function pipelinePartituraKey(songId, name) {
+  return `${songId}/partitura/${name}`;
+}

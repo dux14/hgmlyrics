@@ -1141,3 +1141,169 @@
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* MultiTrackPlayer (D4b) — transporte maestro + mute/solo por pista.   */
+/* ------------------------------------------------------------------ */
+.mtp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.mtp__transport {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.mtp__play {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  background: var(--color-action);
+  color: #fff;
+  border: none;
+  border-radius: 19px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    transform 0.12s;
+}
+.mtp__play:hover {
+  background: var(--color-amber-600);
+  transform: translateY(-1px);
+}
+.mtp__play:active {
+  transform: translateY(0);
+}
+.mtp__play:focus-visible {
+  outline: 2px solid var(--color-action);
+  outline-offset: 3px;
+}
+
+.mtp__bar {
+  position: relative;
+  flex: 1;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+}
+.mtp__bar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: var(--color-border);
+  border-radius: 3px;
+}
+.mtp__fill {
+  position: absolute;
+  left: 0;
+  height: 5px;
+  background: var(--color-brand);
+  border-radius: 3px;
+  pointer-events: none;
+}
+.mtp__thumb {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-text);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.mtp__time {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.mtp__tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mtp__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: 0.3rem var(--space-sm);
+  border-radius: var(--border-radius-sm);
+  transition: background-color 0.12s ease;
+}
+.mtp__row:hover {
+  background: color-mix(in srgb, var(--color-action) 6%, transparent);
+}
+
+.mtp__row-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mtp__row-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.mtp__row-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition:
+    background-color 0.12s,
+    color 0.12s,
+    border-color 0.12s;
+}
+.mtp__row-btn:hover {
+  border-color: var(--color-text-secondary);
+}
+.mtp__row-btn:focus-visible {
+  outline: 2px solid var(--color-action);
+  outline-offset: 2px;
+}
+.mtp__row-btn--mute.is-active {
+  background: var(--color-danger);
+  color: #fff;
+  border-color: var(--color-danger);
+}
+.mtp__row-btn--solo.is-active {
+  background: var(--color-action);
+  color: #fff;
+  border-color: var(--color-action);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mtp__play,
+  .mtp__row,
+  .mtp__row-btn {
+    transition-duration: 0.001ms !important;
+  }
+}

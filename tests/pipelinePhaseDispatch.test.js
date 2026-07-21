@@ -28,7 +28,9 @@ vi.mock('../api/_lib/db.js', () => ({ default: sqlMock }));
 process.env.PUBLIC_BASE_URL = 'https://hgmlyrics.vercel.app';
 
 const { dispatchPhase } = await import('../api/songs/[id]/pipeline/_dispatch.js');
-const { dispatchTranscribe, dispatchPitch, dispatchClips } = await import('../api/_lib/pipeline/dispatch.js');
+const { dispatchTranscribe, dispatchAlign, dispatchPitch, dispatchClips } = await import(
+  '../api/_lib/pipeline/dispatch.js'
+);
 
 const SANTO_SECTIONS = [
   { type: 'verse', lines: [{ text: 'Santo, Santo, Santo' }, { text: '(instrumental)', annotation: true }] },
@@ -103,6 +105,20 @@ describe("dispatchPhase('pitch')", () => {
     await dispatchPhase('pitch', run);
     const args = dispatchPitch.mock.calls[0][0];
     expect(args.snapshotHash).toBeUndefined();
+  });
+});
+
+describe("dispatchPhase('sync')", () => {
+  it('pasa snapshotHash desde run.lyricsReview.approvedHash cuando está presente', async () => {
+    const run = { id: 'run1', songId: 'song1', phases: {}, lyricsReview: { approvedHash: 'hash123' } };
+    await dispatchPhase('sync', run);
+    expect(dispatchAlign).toHaveBeenCalledWith('song1', 'hash123');
+  });
+
+  it('sin lyricsReview (karaoke) → snapshotHash undefined, no rompe', async () => {
+    const run = { id: 'run1', songId: 'song1', phases: {} };
+    await dispatchPhase('sync', run);
+    expect(dispatchAlign).toHaveBeenCalledWith('song1', undefined);
   });
 });
 

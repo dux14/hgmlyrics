@@ -431,6 +431,54 @@ describe('POST /api/align/webhook — puente al run unificado (fase sync)', () =
     expect(applyPipelinePhaseEventMock).not.toHaveBeenCalled();
   });
 
+  it('ready + snapshotHash en el payload de Modal → se reenvía tal cual al phase-event', async () => {
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    sqlResponses.push([]); // UPDATE song_line_timings ... status='ready'
+    sqlResponses.push([{ id: 'run-4', phases: { sync: { status: 'running' } } }]); // SELECT run activo
+    const lines = [{ i: 0, startMs: 0 }];
+    const res = makeRes();
+    await webhookHandler(
+      modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx', snapshotHash: 'hash123' }),
+      res,
+    );
+    expect(res.statusCode).toBe(200);
+    expect(applyPipelinePhaseEventMock.mock.calls[0][2]).toEqual({
+      phase: 'sync',
+      ok: true,
+      error: undefined,
+      snapshotHash: 'hash123',
+    });
+  });
+
+  it('error con snapshotHash en el payload de Modal → se reenvía al phase-event de sync', async () => {
+    sqlResponses.push([]); // UPDATE song_line_timings ... status='failed'
+    sqlResponses.push([{ id: 'run-5', phases: { sync: { status: 'running' } } }]); // SELECT run activo
+    const res = makeRes();
+    await webhookHandler(
+      modalAlignReq({ songId: 'song-1', error: 'Modal boom', snapshotHash: 'hash456' }),
+      res,
+    );
+    expect(res.statusCode).toBe(200);
+    expect(applyPipelinePhaseEventMock.mock.calls[0][2]).toEqual({
+      phase: 'sync',
+      ok: false,
+      error: 'Modal boom',
+      snapshotHash: 'hash456',
+    });
+  });
+
+  it('ready SIN snapshotHash (karaoke) → phase-event sigue funcionando sin el campo', async () => {
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    sqlResponses.push([]); // UPDATE song_line_timings ... status='ready'
+    sqlResponses.push([{ id: 'run-6', phases: { sync: { status: 'running' } } }]); // SELECT run activo
+    const lines = [{ i: 0, startMs: 0 }];
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(applyPipelinePhaseEventMock).toHaveBeenCalledTimes(1);
+    expect(applyPipelinePhaseEventMock.mock.calls[0][2].snapshotHash).toBeUndefined();
+  });
+
   it('ready con run activo pero sync NO running → NO notifica (fase ya terminal o distinta)', async () => {
     sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
     sqlResponses.push([]); // UPDATE song_line_timings ... status='ready'

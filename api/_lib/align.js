@@ -50,9 +50,12 @@ export function projectLineSections(sections) {
  * Dispara (o re-dispara) el forced alignment en Modal para `songId`.
  * Idempotente: si song_line_timings ya esta en 'processing', no hace nada.
  * @param {string} songId
+ * @param {string} [snapshotHash] Hash de la letra aprobada (fase `sync` del
+ *   pipeline unificado, plan C). Opcional: karaoke standalone llama sin este
+ *   parametro y el payload viaja igual que antes (snapshotHash ausente/null).
  * @throws {Error & {status:number}} 409 'Sin audio' si no hay song_audio.
  */
-export async function dispatchAlign(songId) {
+export async function dispatchAlign(songId, snapshotHash) {
   // Lecturas independientes por songId: en paralelo (menos latencia antes del
   // POST a Modal, que ya es lento de por si).
   const [[audio], [timings]] = await Promise.all([
@@ -100,7 +103,7 @@ export async function dispatchAlign(songId) {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-inbound-secret': secret },
-        body: JSON.stringify({ songId, audioUrl, lines, webhookUrl }),
+        body: JSON.stringify({ songId, audioUrl, lines, webhookUrl, snapshotHash }),
       },
       { timeoutMs: 8000, label: 'Modal align' },
     );

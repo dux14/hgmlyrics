@@ -214,6 +214,56 @@ describe('POST /api/pipeline/webhook — transcription', () => {
   });
 });
 
+describe('POST /api/pipeline/webhook — sync', () => {
+  it('sync ok con snapshotHash igual al approvedHash → NO queda stale', async () => {
+    const phases = initialPhases();
+    phases.lyrics_review.status = 'done';
+    phases.sync.status = 'running';
+    sqlResponses.push([runRow({ phases, lyricsReview: { approvedHash: 'h1' } })]);
+    sqlResponses.push([]); // UPDATE song_pipeline_runs
+
+    const res = makeRes();
+    await handler(
+      signedReq({ runId: 'run-1', phase: 'sync', ok: true, snapshotHash: 'h1' }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.stale).toBeUndefined();
+  });
+
+  it('sync con snapshotHash distinto al approvedHash → fase stale (guarda anti-zombie)', async () => {
+    const phases = initialPhases();
+    phases.lyrics_review.status = 'done';
+    phases.sync.status = 'running';
+    sqlResponses.push([runRow({ phases, lyricsReview: { approvedHash: 'h1' } })]);
+    sqlResponses.push([]); // UPDATE song_pipeline_runs (marca stale)
+
+    const res = makeRes();
+    await handler(
+      signedReq({ runId: 'run-1', phase: 'sync', ok: true, snapshotHash: 'h-vieja' }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.stale).toBe(true);
+  });
+
+  it('sync sin snapshotHash (karaoke, no debería llegar por este webhook pero no debe romper) → no queda stale', async () => {
+    const phases = initialPhases();
+    phases.lyrics_review.status = 'done';
+    phases.sync.status = 'running';
+    sqlResponses.push([runRow({ phases, lyricsReview: { approvedHash: 'h1' } })]);
+    sqlResponses.push([]); // UPDATE song_pipeline_runs
+
+    const res = makeRes();
+    await handler(signedReq({ runId: 'run-1', phase: 'sync', ok: true }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.stale).toBeUndefined();
+  });
+});
+
 describe('POST /api/pipeline/webhook — pitch', () => {
   it('pitch done → upsert song_pitch_analysis (analysis + artifacts)', async () => {
     const phases = initialPhases();

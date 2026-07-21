@@ -18,12 +18,16 @@ Pipeline de una sola funcion GPU:
      excepcion — nunca silencio).
 
 Contrato de entrada (payload que postea api/_lib/align.js):
-  { songId, audioUrl, lines: [{i, text}], webhookUrl }
+  { songId, audioUrl, lines: [{i, text}], webhookUrl, snapshotHash? }
 
 Contrato de salida (webhook, ver api/align/webhook.js):
   exito: { songId, lines: [{i, startMs}, ...], provider: 'whisperx',
-           beats: { bpm, beatsMs: [int, ...] } | null }
-  error: { songId, error: str }
+           beats: { bpm, beatsMs: [int, ...] } | null, snapshotHash? }
+  error: { songId, error: str, snapshotHash? }
+
+snapshotHash es opcional: solo viaja cuando dispatchAlign lo recibe (fase
+`sync` del pipeline unificado, guarda anti-zombie de process.js). Karaoke
+standalone no lo manda -- se echa de vuelta tal cual (None si no vino).
 
 `beats` sale de un beat-tracking con librosa sobre la MEZCLA completa
 (best-effort: None si la deteccion no es usable, nunca tumba el pipeline).
@@ -226,16 +230,22 @@ def _download_audio(get_url: str) -> str:
 @app.function(image=align_image, secrets=_webhook_secrets, gpu="T4", timeout=900)
 def run_align(payload: dict) -> None:
     """
-    payload: { songId, audioUrl, lines: [{i,text}], webhookUrl }
+    payload: { songId, audioUrl, lines: [{i,text}], webhookUrl, snapshotHash? }
 
-    En CUALQUIER excepcion postea { songId, error: str(e) } al webhook — nunca
-    deja el pedido de Vercel esperando en silencio (song_line_timings quedaria
-    'processing' para siempre si no se notifica).
+    En CUALQUIER excepcion postea { songId, error: str(e), snapshotHash? } al
+    webhook — nunca deja el pedido de Vercel esperando en silencio
+    (song_line_timings quedaria 'processing' para siempre si no se notifica).
+
+    snapshotHash es opcional (fase `sync` del pipeline unificado, plan C /
+    guarda anti-zombie de process.js): si viene en el payload se echa de
+    vuelta tal cual en el webhook de salida, exito o error. Karaoke standalone
+    no lo manda -- queda None y el shape del body no cambia observablemente.
     """
     song_id = payload.get("songId")
     webhook_url = payload.get("webhookUrl")
     audio_url = payload.get("audioUrl")
     lines: list[dict] = payload.get("lines") or []
+    snapshot_hash = payload.get("snapshotHash")
 
     try:
         if not song_id or not webhook_url:
@@ -302,14 +312,24 @@ def run_align(payload: dict) -> None:
         # ── 5. Webhook de exito ──────────────────────────────────────────────
         _post_align_webhook(
             webhook_url,
-            {"songId": song_id, "lines": mapped_lines, "provider": "whisperx", "beats": beats},
+            {
+                "songId": song_id,
+                "lines": mapped_lines,
+                "provider": "whisperx",
+                "beats": beats,
+                "snapshotHash": snapshot_hash,
+            },
         )
     except Exception as e:  # noqa: BLE001 — cualquier excepcion se reporta, nunca se silencia
         if webhook_url:
             try:
                 _post_align_webhook(
                     webhook_url,
-                    {"songId": song_id, "error": _sanitize_error_message(e)},
+                    {
+                        "songId": song_id,
+                        "error": _sanitize_error_message(e),
+                        "snapshotHash": snapshot_hash,
+                    },
                 )
             except Exception:
                 pass  # el webhook de error tambien puede fallar (red); no hay mas fallback

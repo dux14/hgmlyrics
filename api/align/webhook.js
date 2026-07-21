@@ -1,7 +1,10 @@
 // Webhook de callback para el forced alignment (WhisperX en Modal). Espeja la
 // firma HMAC de api/stems/webhook.js. Contrato:
-//  - exito: { songId, lines: [{i, startMs}, ...], provider, beats: {bpm, beatsMs}|null }
-//  - error: { songId, error }
+//  - exito: { songId, lines: [{i, startMs}, ...], provider, beats: {bpm, beatsMs}|null, snapshotHash? }
+//  - error: { songId, error, snapshotHash? }
+// snapshotHash es opcional: solo lo manda run_align cuando dispatchAlign lo
+// recibió (fase `sync` del pipeline unificado). Karaoke standalone no lo
+// manda, y este webhook lo reenvía tal cual al phase-event de sync.
 import sql from '../_lib/db.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { verifyModalSignature } from '../_lib/modal.js';
@@ -17,7 +20,7 @@ import { applyPipelinePhaseEvent } from '../_lib/pipeline/process.js';
 // no hace nada — preserva el flujo legacy intacto.
 // NOTA: no dispara auto-advance a `clips` — eso depende del snapshot de letra
 // aprobado (plan C, aún no implementado).
-async function notifyPipelineSync(songId, ok, error) {
+async function notifyPipelineSync(songId, ok, error, snapshotHash) {
   try {
     const [run] = await sql`
       SELECT id, phases FROM song_pipeline_runs
@@ -25,7 +28,7 @@ async function notifyPipelineSync(songId, ok, error) {
       ORDER BY created_at DESC LIMIT 1
     `;
     if (!run || run.phases?.sync?.status !== 'running') return;
-    await applyPipelinePhaseEvent(sql, run.id, { phase: 'sync', ok, error });
+    await applyPipelinePhaseEvent(sql, run.id, { phase: 'sync', ok, error, snapshotHash });
   } catch (e) {
     console.error('notifyPipelineSync falló:', e);
   }
@@ -95,7 +98,7 @@ export default withErrors(async (req, res) => {
   }
 
   const payload = JSON.parse(body);
-  const { songId, lines, provider, error, beats } = payload;
+  const { songId, lines, provider, error, beats, snapshotHash } = payload;
 
   if (!songId || typeof songId !== 'string') {
     res.status(400).json({ error: 'Parámetro songId requerido' });
@@ -116,7 +119,7 @@ export default withErrors(async (req, res) => {
       SET status = 'failed', error = ${String(error).slice(0, 300)}
       WHERE song_id = ${songId} AND status = 'processing'
     `;
-    await notifyPipelineSync(songId, false, String(error).slice(0, 300));
+    await notifyPipelineSync(songId, false, String(error).slice(0, 300), snapshotHash);
     res.status(200).json({ status: 'failed' });
     return;
   }
@@ -131,7 +134,12 @@ export default withErrors(async (req, res) => {
       SET status = 'failed', error = ${`Timings inválidos: ${validationError}`.slice(0, 300)}
       WHERE song_id = ${songId} AND status = 'processing'
     `;
-    await notifyPipelineSync(songId, false, `Timings inválidos: ${validationError}`.slice(0, 300));
+    await notifyPipelineSync(
+      songId,
+      false,
+      `Timings inválidos: ${validationError}`.slice(0, 300),
+      snapshotHash,
+    );
     // Estructuralmente valido el request, semanticamente invalidos los datos:
     // no es un error del caller, no reintenta Modal con un 4xx.
     res.status(200).json({ status: 'failed' });
@@ -168,6 +176,6 @@ export default withErrors(async (req, res) => {
         bpm_detected = ${beatsRow ? beatsRow.bpm : null}, beats = ${beatsRow ? sql.json(beatsRow) : null}
     WHERE song_id = ${songId} AND status = 'processing'
   `;
-  await notifyPipelineSync(songId, true);
+  await notifyPipelineSync(songId, true, undefined, snapshotHash);
   res.status(200).json({ status: 'ready' });
 });

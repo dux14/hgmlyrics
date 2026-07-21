@@ -137,6 +137,19 @@ describe('dispatchAlign', () => {
     });
   });
 
+  it('con snapshotHash → viaja en el payload posteado a Modal (fase sync del pipeline)', async () => {
+    sqlResponses.push([{ storageKey: 'song-1/full.mp3' }]); // SELECT song_audio
+    sqlResponses.push([{ status: 'ready' }]); // SELECT song_line_timings
+    sqlResponses.push([{ sections: [] }]); // SELECT songs
+    sqlResponses.push([]); // INSERT ... processing
+
+    await dispatchAlign('song-1', 'hash123');
+
+    const [, opts] = fetchWithTimeout.mock.calls[0];
+    const body = JSON.parse(opts.body);
+    expect(body.snapshotHash).toBe('hash123');
+  });
+
   it('Modal responde non-2xx → marca failed con el error y relanza', async () => {
     sqlResponses.push([{ storageKey: 'song-1/full.mp3' }]); // SELECT song_audio
     sqlResponses.push([]); // SELECT song_line_timings (sin fila -> pending)

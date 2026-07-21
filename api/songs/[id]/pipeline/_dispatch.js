@@ -115,7 +115,9 @@ export async function dispatchPhase(phase, run) {
     });
   }
   if (phase === 'sync') {
-    return dispatchAlign(run.songId);
+    // ver nota de transcription/pitch arriba: run.lyricsReview aún no viaja
+    // desde confirm.js/retry.js, undefined por ahora si no hay aprobación.
+    return dispatchAlign(run.songId, run.lyricsReview?.approvedHash);
   }
   if (phase === 'pitch') {
     const leadKey = run.phases.stems?.tracks?.lead;

@@ -54,7 +54,10 @@ app = modal.App("hkn-clips")
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("ffmpeg")
-    .pip_install("httpx")
+    # fastapi es requerido explícitamente por @modal.fastapi_endpoint (Modal ya
+    # no lo instala implícito); mismo pin que requirements.txt para no divergir
+    # de las demás apps (align/stems lo traen vía pip_install_from_requirements).
+    .pip_install("httpx", "fastapi[standard]==0.115.6")
 )
 
 # Mismo secret que stems_app/align_app: MODAL_INBOUND_SECRET (auth del

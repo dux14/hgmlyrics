@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createMultiTrackPlayer, syncStep } from '../src/components/pipeline/MultiTrackPlayer.js';
 
 function makeTracks() {
@@ -23,6 +23,15 @@ describe('createMultiTrackPlayer', () => {
   beforeEach(() => {
     vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
     vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn(() => 1)
+    );
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('crea un <audio> por pista', () => {
@@ -32,12 +41,13 @@ describe('createMultiTrackPlayer', () => {
     destroy();
   });
 
-  it('play global llama play() en todas las pistas no-muteadas', () => {
+  it('play global llama play() en TODAS las pistas, incluidas las muteadas', () => {
     const { el, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
     const audios = el.querySelectorAll('audio');
     const muteBtns = el.querySelectorAll('.mtp__row-btn--mute');
 
-    // Silenciar la pista 1 (Batería) antes de reproducir
+    // Silenciar la pista 1 (Batería) antes de reproducir: solo debe afectar
+    // audibilidad (muted), no si la pista reproduce.
     muteBtns[1].click();
     expect(audios[1].muted).toBe(true);
 
@@ -48,9 +58,69 @@ describe('createMultiTrackPlayer', () => {
     // llamada (mock.instances).
     const playedOn = window.HTMLMediaElement.prototype.play.mock.instances;
     expect(playedOn).toContain(audios[0]);
-    expect(playedOn).not.toContain(audios[1]);
+    expect(playedOn).toContain(audios[1]);
     expect(playedOn).toContain(audios[2]);
     destroy();
+  });
+
+  it('mute/unmute en caliente: la pista sigue reproduciendo, nunca se pausa', () => {
+    const { el, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
+    const audios = el.querySelectorAll('audio');
+    const muteBtns = el.querySelectorAll('.mtp__row-btn--mute');
+
+    el.querySelector('.mtp__play').click();
+    window.HTMLMediaElement.prototype.pause.mockClear();
+
+    muteBtns[0].click();
+    expect(audios[0].muted).toBe(true);
+    muteBtns[0].click();
+    expect(audios[0].muted).toBe(false);
+
+    expect(window.HTMLMediaElement.prototype.pause).not.toHaveBeenCalled();
+    destroy();
+  });
+
+  it('maestra muteada: igual reproduce y su currentTime avanza (no arrastra a 0)', () => {
+    const { el, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
+    const audios = el.querySelectorAll('audio');
+    const muteBtns = el.querySelectorAll('.mtp__row-btn--mute');
+
+    muteBtns[0].click();
+    expect(audios[0].muted).toBe(true);
+
+    el.querySelector('.mtp__play').click();
+
+    const playedOn = window.HTMLMediaElement.prototype.play.mock.instances;
+    expect(playedOn).toContain(audios[0]);
+    destroy();
+  });
+
+  it('multiples solos simultaneos: las soleadas quedan audibles, el resto muteado', () => {
+    const { el, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
+    const audios = el.querySelectorAll('audio');
+    const soloBtns = el.querySelectorAll('.mtp__row-btn--solo');
+
+    soloBtns[0].click();
+    soloBtns[2].click();
+
+    expect(audios[0].muted).toBe(false);
+    expect(audios[1].muted).toBe(true);
+    expect(audios[2].muted).toBe(false);
+    destroy();
+  });
+
+  it('rAF: play arranca el loop, pause y destroy lo cancelan sin dejarlo huerfano', () => {
+    const { el, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
+
+    el.querySelector('.mtp__play').click();
+    expect(window.requestAnimationFrame).toHaveBeenCalled();
+
+    el.querySelector('.mtp__play').click(); // pausa
+    expect(window.cancelAnimationFrame).toHaveBeenCalled();
+
+    el.querySelector('.mtp__play').click(); // vuelve a reproducir
+    destroy();
+    expect(window.cancelAnimationFrame).toHaveBeenCalledTimes(2);
   });
 
   it('mute de una pista: solo esa pista queda muted', () => {

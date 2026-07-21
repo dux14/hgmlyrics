@@ -3,8 +3,8 @@
  * Suena varias pistas (stems) a la vez con transporte maestro, mute y solo
  * por pista. Componente autonomo, lo compone D4d (detalle de stems).
  *
- * Sincronia: un audio de referencia (la primera pista) actua de reloj
- * maestro; en cada frame (rAF) las demas se realinean si se desvian mas de
+ * Sincronía: un audio de referencia (la primera pista) actúa de reloj
+ * maestro; en cada frame (rAF) las demás se realinean si se desvían más de
  * DRIFT_THRESHOLD_S (syncStep, pura y testeable sin rAF real).
  */
 import { icon } from '../../lib/icons.js';
@@ -15,8 +15,8 @@ import '../../styles/pipeline.css';
 const DRIFT_THRESHOLD_S = 0.04;
 
 /**
- * Corrige el drift entre pistas: si el currentTime de una pista se desvia
- * de masterTime mas del umbral, la realinea a masterTime.
+ * Corrige el drift entre pistas: si el currentTime de una pista se desvía
+ * de masterTime más del umbral, la realinea a masterTime.
  * @param {HTMLAudioElement[]} audios
  * @param {number} masterTime
  * @param {number} [threshold]
@@ -40,6 +40,7 @@ export function syncStep(audios, masterTime, threshold = DRIFT_THRESHOLD_S) {
  * @returns {{ el: HTMLElement, destroy: () => void }}
  */
 export function createMultiTrackPlayer({ tracks }) {
+  const ac = new AbortController();
   const root = document.createElement('div');
   root.className = 'mtp';
 
@@ -128,8 +129,8 @@ export function createMultiTrackPlayer({ tracks }) {
     else soloed.add(i);
     applyAudibility();
   };
-  muteBtns.forEach((btn) => btn.addEventListener('click', onMuteClick));
-  soloBtns.forEach((btn) => btn.addEventListener('click', onSoloClick));
+  muteBtns.forEach((btn) => btn.addEventListener('click', onMuteClick, { signal: ac.signal }));
+  soloBtns.forEach((btn) => btn.addEventListener('click', onSoloClick, { signal: ac.signal }));
 
   // --- Duracion / tiempo maestro ---
   const durationOf = (i) => {
@@ -158,7 +159,7 @@ export function createMultiTrackPlayer({ tracks }) {
     playBtn.setAttribute('aria-label', playing ? 'Pausar' : 'Reproducir');
   };
 
-  // --- Loop de sincronia (rAF) ---
+  // --- Loop de sincronía (rAF) ---
   let rafId = null;
   let playing = false;
 
@@ -185,10 +186,13 @@ export function createMultiTrackPlayer({ tracks }) {
   const playAll = () => {
     playing = true;
     setPlayIcon(true);
+    // Reproduce SIEMPRE todas las pistas, muteadas o no: la audibilidad es
+    // responsabilidad exclusiva de audio.muted (applyAudibility). Si la
+    // maestra no reproduce, su currentTime queda en 0 y syncStep arrastra
+    // a 0 a las demás; y des-mutear en pleno playback debe sonar al
+    // instante, no requerir un nuevo play().
     audios.forEach((audio) => {
-      if (!audio.muted) {
-        audio.play().catch((e) => console.warn('MultiTrackPlayer play() rechazado', e));
-      }
+      audio.play().catch((e) => console.warn('MultiTrackPlayer play() rechazado', e));
     });
     startLoop();
   };
@@ -200,10 +204,14 @@ export function createMultiTrackPlayer({ tracks }) {
     stopLoop();
   };
 
-  playBtn.addEventListener('click', () => {
-    if (playing) pauseAll();
-    else playAll();
-  });
+  playBtn.addEventListener(
+    'click',
+    () => {
+      if (playing) pauseAll();
+      else playAll();
+    },
+    { signal: ac.signal }
+  );
 
   // --- Scrubber maestro: commit-on-release, igual patron que StudioPlayer ---
   const ratioOf = (clientX) => {
@@ -222,20 +230,28 @@ export function createMultiTrackPlayer({ tracks }) {
     });
   };
 
-  bar.addEventListener('pointerdown', (e) => {
-    try {
-      bar.setPointerCapture(e.pointerId);
-    } catch {
-      // pointer capture no soportado — no-op
-    }
-    scrubbing = true;
-    applyPreviewVisual(posToTime(ratioOf(e.clientX), masterDuration()));
-  });
+  bar.addEventListener(
+    'pointerdown',
+    (e) => {
+      try {
+        bar.setPointerCapture(e.pointerId);
+      } catch {
+        // pointer capture no soportado — no-op
+      }
+      scrubbing = true;
+      applyPreviewVisual(posToTime(ratioOf(e.clientX), masterDuration()));
+    },
+    { signal: ac.signal }
+  );
 
-  bar.addEventListener('pointermove', (e) => {
-    if (!scrubbing) return;
-    applyPreviewVisual(posToTime(ratioOf(e.clientX), masterDuration()));
-  });
+  bar.addEventListener(
+    'pointermove',
+    (e) => {
+      if (!scrubbing) return;
+      applyPreviewVisual(posToTime(ratioOf(e.clientX), masterDuration()));
+    },
+    { signal: ac.signal }
+  );
 
   const commitScrub = (e) => {
     if (!scrubbing) return;
@@ -250,31 +266,41 @@ export function createMultiTrackPlayer({ tracks }) {
       }
     }
   };
-  bar.addEventListener('pointerup', commitScrub);
-  bar.addEventListener('pointercancel', () => {
-    scrubbing = false;
-    paintAt(masterAudio() ? masterAudio().currentTime : 0);
-  });
+  bar.addEventListener('pointerup', commitScrub, { signal: ac.signal });
+  bar.addEventListener(
+    'pointercancel',
+    () => {
+      scrubbing = false;
+      paintAt(masterAudio() ? masterAudio().currentTime : 0);
+    },
+    { signal: ac.signal }
+  );
 
-  bar.addEventListener('keydown', (e) => {
-    const dur = masterDuration();
-    if (e.key === ' ' || e.key === 'Enter') {
-      e.preventDefault();
-      if (playing) pauseAll();
-      else playAll();
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      seekAll(clamp((masterAudio()?.currentTime || 0) + 1, 0, dur));
-    } else if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      seekAll(clamp((masterAudio()?.currentTime || 0) - 1, 0, dur));
-    }
-  });
+  bar.addEventListener(
+    'keydown',
+    (e) => {
+      const dur = masterDuration();
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        if (playing) pauseAll();
+        else playAll();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        seekAll(clamp((masterAudio()?.currentTime || 0) + 1, 0, dur));
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        seekAll(clamp((masterAudio()?.currentTime || 0) - 1, 0, dur));
+      }
+    },
+    { signal: ac.signal }
+  );
 
   const onLoadedMetadata = () => {
     if (!playing && !scrubbing) paintAt(masterAudio() ? masterAudio().currentTime : 0);
   };
-  audios.forEach((audio) => audio.addEventListener('loadedmetadata', onLoadedMetadata));
+  audios.forEach((audio) =>
+    audio.addEventListener('loadedmetadata', onLoadedMetadata, { signal: ac.signal })
+  );
 
   paintAt(0);
 
@@ -283,15 +309,12 @@ export function createMultiTrackPlayer({ tracks }) {
     if (destroyed) return;
     destroyed = true;
     stopLoop();
+    ac.abort();
     audios.forEach((audio) => {
       audio.pause();
-      audio.removeEventListener('loadedmetadata', onLoadedMetadata);
       audio.removeAttribute('src');
       audio.load();
     });
-    muteBtns.forEach((btn) => btn.removeEventListener('click', onMuteClick));
-    soloBtns.forEach((btn) => btn.removeEventListener('click', onSoloClick));
-    bar.removeEventListener('pointerup', commitScrub);
   };
 
   return { el: root, destroy };

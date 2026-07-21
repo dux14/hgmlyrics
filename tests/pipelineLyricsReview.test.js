@@ -67,6 +67,32 @@ describe('buildReviewDoc', () => {
     const doc = buildReviewDoc({ dbSections, canonical: null, transcription });
     expect(doc.hasCanonical).toBe(false);
   });
+  it('tolera shape real de songs.sections: coro repetido con lines null y lineas con chords/voiceRanges', () => {
+    const dbSectionsReal = [
+      { type: 'verse', label: 'Verso 1', lines: [
+        { text: 'Nadie me ama como tu me amas', chords: [{ ch: 'D', pos: 0 }], voiceRanges: [] },
+      ] },
+      { type: 'chorus', label: 'Coro 1', lines: [
+        { text: 'y en la noche oscura brillara', chords: [], voiceRanges: [] },
+      ] },
+      { type: 'chorus', label: 'Coro 2', lines: null }, // coro repetido, sin letra propia
+    ];
+    const build = () => buildReviewDoc({
+      dbSections: dbSectionsReal,
+      canonical: null,
+      transcription: { text: '', words: [], perLine: [], transLines: [] },
+    });
+    expect(build).not.toThrow();
+    const doc = build();
+    expect(doc.sections[2].lines).toEqual([]); // 0 lineas editables, no null
+    expect(doc.sections[0].lines[0].chords).toEqual([{ ch: 'D', pos: 0 }]);
+    expect(doc.sections[0].lines[0].voiceRanges).toEqual([]);
+
+    const snap = approvedSnapshot(doc);
+    expect(snap.sections[2].lines).toBe(null); // round-trip: sigue siendo coro repetido
+    expect(snap.sections[0].lines[0].chords).toEqual([{ ch: 'D', pos: 0 }]);
+    expect(snap.sections[0].lines[0].voiceRanges).toEqual([]);
+  });
 });
 
 describe('applyReviewAction', () => {

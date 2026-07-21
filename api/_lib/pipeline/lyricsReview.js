@@ -56,6 +56,13 @@ export function isNil(value) {
   return value === null || value === undefined;
 }
 
+// `songs.sections` real trae `lines: null` en secciones que no tienen letra
+// propia (coros repetidos que referencian un coro anterior, ver "Primero el
+// Cielo"). Normaliza a array vacio para poder iterar sin explotar.
+function linesOf(section) {
+  return Array.isArray(section.lines) ? section.lines : [];
+}
+
 // Empareja cada seccion db con su seccion canonica del mismo tipo, en orden
 // de aparicion (tipo->tipo, 1a con 1a, 2a con 2a, etc). Sin canonica o sin
 // mas secciones canonicas de ese tipo, devuelve null (esa seccion queda sin
@@ -113,7 +120,7 @@ function lineWeight(line) {
 function sectionTemperature(section) {
   let sum = 0;
   let count = 0;
-  for (const line of section.lines) {
+  for (const line of linesOf(section)) {
     const w = lineWeight(line);
     if (w === null) continue;
     sum += w;
@@ -129,7 +136,7 @@ function recomputeTemperatures(doc) {
   let count = 0;
   for (const section of doc.sections) {
     section.temperature = sectionTemperature(section);
-    for (const line of section.lines) {
+    for (const line of linesOf(section)) {
       const w = lineWeight(line);
       if (w === null) continue;
       sum += w;
@@ -154,7 +161,7 @@ export function buildReviewDoc({ dbSections, canonical, transcription }) {
   // que indexa sobre el flat de todas las lineas db del run.
   const flatDbLines = [];
   dbSections.forEach((section, sIdx) => {
-    section.lines.forEach((line, lIdx) => {
+    linesOf(section).forEach((line, lIdx) => {
       flatDbLines.push({ section: sIdx, line: lIdx, text: line.text });
     });
   });
@@ -172,9 +179,10 @@ export function buildReviewDoc({ dbSections, canonical, transcription }) {
     const canonSection = canonicalPerSection[sIdx];
     const hadCanonicalSection = !isNil(canonSection);
     const canonLines = canonSection?.lineas?.map((l) => l.texto) ?? [];
-    const matchedCanon = matchLines(section.lines.map((l) => l.text), canonLines);
+    const dbLines = linesOf(section);
+    const matchedCanon = matchLines(dbLines.map((l) => l.text), canonLines);
 
-    const lines = section.lines.map((line, lIdx) => {
+    const lines = dbLines.map((line, lIdx) => {
       const flatIndex = flatDbLines.findIndex((f) => f.section === sIdx && f.line === lIdx);
       const perLineEntry = perLineByDbIndex.get(flatIndex) ?? null;
       const transText = perLineEntry ? (transLines[perLineEntry.transIndex] ?? null) : null;
@@ -193,10 +201,20 @@ export function buildReviewDoc({ dbSections, canonical, transcription }) {
         sources: { db: line.text, canonical: canonicalText, trans: transText },
         ...(line.chords ? { chords: line.chords } : {}),
         ...(line.groups ? { groups: line.groups } : {}),
+        ...(line.voiceRanges ? { voiceRanges: line.voiceRanges } : {}),
       };
     });
 
-    return { type: section.type, label: section.label, lines, temperature: 1 };
+    // `lines: null` en la fuente (coro repetido sin letra propia) se
+    // recuerda para que approvedSnapshot pueda devolverla igual (ver ahi):
+    // no inventamos un array vacio persistente donde antes no habia lineas.
+    return {
+      type: section.type,
+      label: section.label,
+      lines,
+      temperature: 1,
+      hadNullLines: !Array.isArray(section.lines),
+    };
   });
 
   // Vocalizaciones: segmentos transcritos sin dbIndex asociado.
@@ -364,7 +382,7 @@ export function reviewTemperature(doc) {
   let sum = 0;
   let count = 0;
   for (const section of doc.sections) {
-    for (const line of section.lines) {
+    for (const line of linesOf(section)) {
       const w = lineWeight(line);
       if (w === null) continue;
       sum += w;
@@ -376,7 +394,7 @@ export function reviewTemperature(doc) {
 
 /** true si no quedan conflictos sin resolver ni vocalizaciones sin decidir. */
 export function canApprove(doc) {
-  const hasConflict = doc.sections.some((s) => s.lines.some((l) => l.conflict));
+  const hasConflict = doc.sections.some((s) => linesOf(s).some((l) => l.conflict));
   const hasUndecidedVocalization = doc.vocalizations.some((v) => v.accepted === null);
   return !hasConflict && !hasUndecidedVocalization;
 }
@@ -397,17 +415,30 @@ function stableStringify(value) {
  * @returns {{sections: Array, hash: string}}
  */
 export function approvedSnapshot(doc) {
-  const sections = doc.sections.map((section) => ({
-    type: section.type,
-    ...(section.label !== undefined ? { label: section.label } : {}),
-    lines: section.lines.map((line) => {
-      const out = { text: line.text };
-      if (line.chords) out.chords = line.chords;
-      if (line.groups) out.groups = line.groups;
-      if (line.vocalization) out.vocalization = true;
-      return out;
-    }),
-  }));
+  const sections = doc.sections.map((section) => {
+    const currentLines = linesOf(section);
+    // Seccion que llego con `lines: null` (coro repetido sin letra propia,
+    // ver linesOf) y que nadie edito (no se le agregaron renglones en la
+    // revision): se devuelve tal cual, `lines: null`, para no alterar la
+    // semantica original en `songs.sections`. Si se le agrego contenido
+    // (split, vocalizacion aceptada, etc.) ya deja de estar vacia y sale
+    // como el resto de las secciones.
+    const lines = (section.hadNullLines && currentLines.length === 0)
+      ? null
+      : currentLines.map((line) => {
+        const out = { text: line.text };
+        if (line.chords) out.chords = line.chords;
+        if (line.groups) out.groups = line.groups;
+        if (line.voiceRanges) out.voiceRanges = line.voiceRanges;
+        if (line.vocalization) out.vocalization = true;
+        return out;
+      });
+    return {
+      type: section.type,
+      ...(section.label !== undefined ? { label: section.label } : {}),
+      lines,
+    };
+  });
   const hash = createHash('sha256').update(stableStringify(sections)).digest('hex');
   return { sections, hash };
 }

@@ -242,3 +242,22 @@ export function pipelineStemKey(songId, kind) {
 export function pipelinePartituraKey(songId, name) {
   return `${songId}/partitura/${name}`;
 }
+
+/**
+ * Verifica que el input subido por el cliente (PUT firmado, sin confirmar
+ * server-side) exista realmente en Storage y su tamaño (spec Task B2: el
+ * cliente pudo cancelar la subida a mitad de camino, o el archivo puede
+ * superar el límite de 25MB que el PUT firmado no rechaza por sí solo).
+ * Mismo patrón `list()` que deleteStemsPrefix arriba.
+ * @param {string} key - p.ej. `${songId}/runs/${runId}/full.mp3`
+ * @returns {Promise<{ exists: boolean, size: number|null }>}
+ */
+export async function pipelineInputStat(key) {
+  const prefix = key.slice(0, key.lastIndexOf('/'));
+  const name = key.slice(key.lastIndexOf('/') + 1);
+  const { data, error } = await supabase.storage.from(SONG_AUDIO_BUCKET).list(prefix);
+  if (error || !data) return { exists: false, size: null };
+  const found = data.find((f) => f.name === name);
+  if (!found) return { exists: false, size: null };
+  return { exists: true, size: found.metadata?.size ?? null };
+}

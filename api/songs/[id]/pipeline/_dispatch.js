@@ -13,7 +13,7 @@ import {
   createSongAudioSignedPutUrl,
   signSongAudioDownload,
 } from '../../../_lib/storage.js';
-import { projectCanonicalLines } from '../../../_lib/align.js';
+import { projectCanonicalLines, projectLineSections } from '../../../_lib/align.js';
 import sql from '../../../_lib/db.js';
 
 // Pistas que produce la fase 'stems' agrupadas por sección Modal (mismo shape
@@ -139,25 +139,34 @@ export async function dispatchPhase(phase, run) {
       webhookUrl: webhook,
     });
   }
-  // clips (Task B6): stems/lines ya tienen fuente real (song_stems vía
-  // run.phases.stems.tracks, song_line_timings). lineSections/totalMs
-  // dependen del snapshot de letra aprobado (plan C, aún no existe) — se
-  // dejan vacíos/0 con el shape correcto para que plan C solo tenga que
-  // llenarlos, sin tocar dispatch.js otra vez.
+  // clips (Task B6+plan C): stems/lines vienen de song_stems (vía
+  // run.phases.stems.tracks) y song_line_timings. lineSections/totalMs se
+  // derivan del snapshot de letra ya aprobado (plan C publica songs.sections
+  // + line timings vía sync antes de que ADVANCE_AFTER dispare clips).
   const tracks = run.phases.stems?.tracks || {};
-  const [song, stems, lineTimingsRow] = await Promise.all([
+  const [song, stems, lineTimingsRow, audioRow] = await Promise.all([
     sql`SELECT sections FROM songs WHERE id = ${run.songId}`,
     Promise.all(
       Object.entries(tracks).map(async ([kind, key]) => ({ kind, getUrl: await signSongAudioDownload(key) })),
     ),
     sql`SELECT lines FROM song_line_timings WHERE song_id = ${run.songId}`,
+    sql`SELECT duration_sec AS "durationSec" FROM song_audio WHERE song_id = ${run.songId}`,
   ]);
   const lines = lineTimingsRow[0]?.lines || [];
-  // TODO(plan C): lineSections/totalMs deben derivarse del snapshot de letra
-  // aprobado (mapeo linea->sección + duración total); se dejan vacíos/0 hasta
-  // que plan C los aporte.
-  const lineSections = [];
-  const totalMs = 0;
+  // canonicalSections[i] = índice de sección de la línea canónica i (mismo
+  // orden que usa song_line_timings.lines[].i, ver projectCanonicalLines).
+  // lineSections queda paralelo a `lines` (mismo largo, mismo orden), como
+  // espera modal/clips_app.py: lineSections[k] = sección de lines[k].
+  const canonicalSections = projectLineSections(song[0]?.sections);
+  const lineSections = lines.map((l) => canonicalSections[l.i] ?? 0);
+  // duration_sec es NUMERIC en Postgres → llega como string vía postgres.js.
+  // Puede ser null (caso real observado); ahí se cae a la última línea
+  // conocida (máximo startMs) en vez de dispatchear con 0.
+  const durationSec = audioRow[0]?.durationSec;
+  const totalMs =
+    durationSec !== null && durationSec !== undefined
+      ? Math.round(Number(durationSec) * 1000)
+      : lines.reduce((max, l) => Math.max(max, l.startMs || 0), 0);
   // Rango de secciones conocido hoy sin plan C: `song.sections` (letra
   // actual en DB). Las signed PUT URLs se generan por (kind, sectionIndex)
   // con ese rango — cuando plan C aporte lineSections real, el mismo shape

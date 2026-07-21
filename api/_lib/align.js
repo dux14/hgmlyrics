@@ -26,6 +26,27 @@ export function projectCanonicalLines(sections) {
 }
 
 /**
+ * Mapeo línea canónica → sección, en el mismo orden/regla que
+ * `projectCanonicalLines` (misma iteración: secciones en orden de documento,
+ * `lines:null` no aporta líneas, se saltan las `annotation`). El resultado es
+ * un array paralelo: `result[i]` = índice de la sección (en `sections`, el
+ * mismo espacio de índices que usa `_dispatch.js` para las signed PUT URLs de
+ * clips por sección) a la que pertenece la línea canónica `i`.
+ * @param {Array} sections
+ * @returns {number[]}
+ */
+export function projectLineSections(sections) {
+  const result = [];
+  (sections || []).forEach((section, sectionIndex) => {
+    for (const line of section.lines || []) {
+      if (line.annotation) continue;
+      result.push(sectionIndex);
+    }
+  });
+  return result;
+}
+
+/**
  * Dispara (o re-dispara) el forced alignment en Modal para `songId`.
  * Idempotente: si song_line_timings ya esta en 'processing', no hace nada.
  * @param {string} songId

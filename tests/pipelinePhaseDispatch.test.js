@@ -28,7 +28,7 @@ vi.mock('../api/_lib/db.js', () => ({ default: sqlMock }));
 process.env.PUBLIC_BASE_URL = 'https://hgmlyrics.vercel.app';
 
 const { dispatchPhase } = await import('../api/songs/[id]/pipeline/_dispatch.js');
-const { dispatchTranscribe, dispatchPitch } = await import('../api/_lib/pipeline/dispatch.js');
+const { dispatchTranscribe, dispatchPitch, dispatchClips } = await import('../api/_lib/pipeline/dispatch.js');
 
 const SANTO_SECTIONS = [
   { type: 'verse', lines: [{ text: 'Santo, Santo, Santo' }, { text: '(instrumental)', annotation: true }] },
@@ -103,5 +103,57 @@ describe("dispatchPhase('pitch')", () => {
     await dispatchPhase('pitch', run);
     const args = dispatchPitch.mock.calls[0][0];
     expect(args.snapshotHash).toBeUndefined();
+  });
+});
+
+// Snapshot con un coro repetido (lines:null, no aporta líneas canónicas) para
+// verificar que projectLineSections lo salta igual que projectCanonicalLines.
+const CLIPS_SECTIONS = [
+  { type: 'verse', lines: [{ text: 'A' }, { text: '(instrumental)', annotation: true }, { text: 'B' }] },
+  { type: 'chorus', lines: [{ text: 'C' }] },
+  { type: 'chorus', lines: null },
+  { type: 'verse', lines: [{ text: 'D' }] },
+];
+const CLIPS_LINE_TIMINGS = [
+  { i: 0, startMs: 100 },
+  { i: 1, startMs: 2100 },
+  { i: 2, startMs: 4000 },
+  { i: 3, startMs: 6000 },
+];
+
+describe("dispatchPhase('clips')", () => {
+  it('deriva lineSections de songs.sections (saltando lines:null) y totalMs de song_audio.duration_sec', async () => {
+    sqlResponses.push([{ sections: CLIPS_SECTIONS }]); // SELECT sections FROM songs
+    sqlResponses.push([{ lines: CLIPS_LINE_TIMINGS }]); // SELECT lines FROM song_line_timings
+    sqlResponses.push([{ durationSec: '8.5' }]); // SELECT duration_sec FROM song_audio
+
+    const run = {
+      id: 'run1',
+      songId: 'song1',
+      phases: { stems: { tracks: { vocals: 'song1/stems/vocals.mp3' } } },
+    };
+    await dispatchPhase('clips', run);
+
+    expect(dispatchClips).toHaveBeenCalledTimes(1);
+    const args = dispatchClips.mock.calls[0][0];
+    // sectionIndex 0='verse'(A,B), 1='chorus'(C), 2='chorus repetido'(sin lineas), 3='verse'(D)
+    expect(args.lineSections).toEqual([0, 0, 1, 3]);
+    expect(args.totalMs).toBe(8500);
+  });
+
+  it('duration_sec null → totalMs cae al máximo startMs de los line timings', async () => {
+    sqlResponses.push([{ sections: CLIPS_SECTIONS }]);
+    sqlResponses.push([{ lines: CLIPS_LINE_TIMINGS }]);
+    sqlResponses.push([{ durationSec: null }]);
+
+    const run = {
+      id: 'run1',
+      songId: 'song1',
+      phases: { stems: { tracks: { vocals: 'song1/stems/vocals.mp3' } } },
+    };
+    await dispatchPhase('clips', run);
+
+    const args = dispatchClips.mock.calls[0][0];
+    expect(args.totalMs).toBe(6000);
   });
 });

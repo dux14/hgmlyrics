@@ -419,6 +419,9 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
     expect(insertedAudio).toContain('s1/runs/r1/full.mp3');
     expect(insertedAudio).toContain(187);
 
+    // ambas fases se despachan (en paralelo, ver Promise.all en approveGate):
+    // ninguna debe perderse por el aislamiento de fallos del dispatch.
+    expect(dispatchPhase).toHaveBeenCalledTimes(2);
     expect(dispatchPhase).toHaveBeenCalledWith('sync', expect.objectContaining({ id: 'r1', songId: 's1' }));
     expect(dispatchPhase).toHaveBeenCalledWith('pitch', expect.objectContaining({ id: 'r1', songId: 's1' }));
   });

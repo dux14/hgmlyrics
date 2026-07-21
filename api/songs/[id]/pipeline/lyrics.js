@@ -21,6 +21,12 @@ import { suggestLineBreaks } from '../../../_lib/pipeline/phrasing.js';
 import { applyPhaseEvent, runStatusFromPhases } from '../../../_lib/pipeline/state.js';
 import { dispatchPhase } from './_dispatch.js';
 
+// El default de Vercel (10s) no alcanza para el approve: la tx (steps 1-5) +
+// el dispatch post-commit a Modal (sync+pitch, cold start incluido) pueden
+// superarlo -> 504 con la tx ya commiteada pero sin dispatch. Mismo patron
+// que api/pipeline/webhook.js (300s); acá 60 alcanza de sobra.
+export const config = { maxDuration: 60 };
+
 async function findAwaitingRun(songId) {
   const rows = await sql`
     SELECT id, song_id AS "songId", status, phases, input_path AS "inputPath",
@@ -229,8 +235,14 @@ async function approveGate(res, songId) {
     return;
   }
 
-  await dispatchDerivedPhase('sync', claim.run);
-  await dispatchDerivedPhase('pitch', claim.run);
+  // En paralelo: cada dispatch aisla su propio fallo (dispatchDerivedPhase
+  // nunca rechaza), así que Promise.all no arriesga perder el resultado del
+  // otro. Secuencial duplicaba la latencia hacia Modal (cold start incluido)
+  // y fue la causa real del 504 en el smoke E2E.
+  await Promise.all([
+    dispatchDerivedPhase('sync', claim.run),
+    dispatchDerivedPhase('pitch', claim.run),
+  ]);
 
   res.status(200).json({ success: true });
 }

@@ -84,12 +84,14 @@ describe('LyricsReviewPanel', () => {
     getLyricsReview.mockResolvedValue(pendingResult());
   });
 
-  it('renderiza labels de sección con clase por tipo', async () => {
+  it('renderiza el select de tipo de sección con clase por tipo y el tipo actual preseleccionado', async () => {
     const el = await LyricsReviewPanel({ songId: 'song-1' });
     document.body.appendChild(el);
-    const label = el.querySelector('.section-chorus');
-    expect(label).not.toBeNull();
-    expect(label.textContent).toBe('CORO');
+    const select = el.querySelector('.section-chorus');
+    expect(select).not.toBeNull();
+    expect(select.tagName).toBe('SELECT');
+    expect(select.value).toBe('chorus');
+    expect(select.selectedOptions[0].textContent).toBe('CORO');
   });
 
   it('el conflicto muestra las variantes y 3 botones de acción', async () => {
@@ -289,6 +291,127 @@ describe('LyricsReviewPanel', () => {
       type: 'rejectVocalization',
       index: 0,
     });
+  });
+
+  it('cambiar el tipo de sección llama sendLyricsAction con el payload exacto de setSectionType', async () => {
+    const review = baseReview();
+    getLyricsReview.mockResolvedValue({
+      review,
+      temperature: 1,
+      canApprove: true,
+      suggestions: [],
+    });
+    sendLyricsAction.mockResolvedValue({ review, temperature: 1, canApprove: true });
+
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const select = el.querySelector('.lrp__type-select');
+    expect(select).not.toBeNull();
+    expect(select.value).toBe('chorus');
+    select.value = 'bridge';
+    select.dispatchEvent(new Event('change'));
+    await flush();
+
+    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
+      type: 'setSectionType',
+      section: 0,
+      sectionType: 'bridge',
+    });
+  });
+
+  it('"Unir con la siguiente sección" solo aparece en secciones no-últimas y llama mergeSections', async () => {
+    const review = baseReview();
+    review.sections.push({
+      type: 'verse',
+      label: null,
+      temperature: 0.9,
+      lines: [{ text: 'otra linea', conflict: false, vocalization: false, score: 1, sources: {} }],
+    });
+    getLyricsReview.mockResolvedValue({
+      review,
+      temperature: 1,
+      canApprove: true,
+      suggestions: [],
+    });
+    sendLyricsAction.mockResolvedValue({ review, temperature: 1, canApprove: true });
+
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const sections = el.querySelectorAll('.lrp__section');
+    expect(sections.length).toBe(2);
+    expect(sections[0].querySelector('.lrp__section-merge')).not.toBeNull();
+    expect(sections[1].querySelector('.lrp__section-merge')).toBeNull();
+
+    const mergeBtns = el.querySelectorAll('.lrp__section-merge');
+    expect(mergeBtns.length).toBe(1);
+
+    mergeBtns[0].click();
+    await flush();
+
+    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
+      type: 'mergeSections',
+      section: 0,
+    });
+  });
+
+  it('"Dividir aquí" aparece en cada línea no-última de la sección y llama splitSection', async () => {
+    const review = baseReview();
+    review.sections[0].lines = [
+      { text: 'primer renglon', conflict: false, vocalization: false, score: 1, sources: {} },
+      { text: 'segundo renglon', conflict: false, vocalization: false, score: 1, sources: {} },
+    ];
+    review.vocalizations = [];
+    getLyricsReview.mockResolvedValue({
+      review,
+      temperature: 1,
+      canApprove: true,
+      suggestions: [],
+    });
+    sendLyricsAction.mockResolvedValue({ review, temperature: 1, canApprove: true });
+
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const splitBtns = el.querySelectorAll('.lrp__section-split');
+    expect(splitBtns.length).toBe(1);
+
+    splitBtns[0].click();
+    await flush();
+
+    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
+      type: 'splitSection',
+      section: 0,
+      afterLine: 0,
+    });
+  });
+
+  it('doble click rápido en "Unir con la siguiente sección" no dispara doble llamada a sendLyricsAction', async () => {
+    const review = baseReview();
+    review.sections.push({
+      type: 'verse',
+      label: null,
+      temperature: 0.9,
+      lines: [{ text: 'otra linea', conflict: false, vocalization: false, score: 1, sources: {} }],
+    });
+    getLyricsReview.mockResolvedValue({
+      review,
+      temperature: 1,
+      canApprove: true,
+      suggestions: [],
+    });
+    sendLyricsAction.mockResolvedValue({ review, temperature: 1, canApprove: true });
+
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const mergeBtn = el.querySelector('.lrp__section-merge');
+    mergeBtn.click();
+    mergeBtn.click();
+    await flush();
+
+    expect(sendLyricsAction).toHaveBeenCalledTimes(1);
   });
 
   it('muestra un mensaje de error si falla la carga inicial, sin crashear', async () => {

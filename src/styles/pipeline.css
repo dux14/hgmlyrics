@@ -71,6 +71,44 @@
   margin-bottom: 4px;
 }
 
+.lrp__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+/* El `<select>` de retipado hereda el look del label estático que reemplaza:
+   mismo tamaño/tracking/color por tipo (`.section-*`), sin chrome de <select>. */
+.lrp .lrp__type-select {
+  margin-bottom: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.lrp .lrp__type-select[disabled] {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.lrp .lrp__section-merge {
+  font-size: 0.7rem;
+  padding: 4px 10px;
+  flex-shrink: 0;
+}
+
+.lrp .lrp__section-split {
+  display: block;
+  font-size: 0.7rem;
+  padding: 3px 10px;
+  margin: 2px 0 6px;
+}
+
 .lrp__label.section-verse {
   color: var(--color-section-verse);
 }

@@ -88,6 +88,16 @@ function conflictCardHtml(line, sIdx, lIdx, disabled) {
     </div>`;
 }
 
+/** Opciones del `<select>` de retipado de sección, en el orden de SECTION_TYPE_LABELS. */
+function sectionTypeOptionsHtml(currentType) {
+  return Object.entries(SECTION_TYPE_LABELS)
+    .map(
+      ([slug, label]) =>
+        `<option value="${slug}"${slug === currentType ? ' selected' : ''}>${escapeHtml(label)}</option>`,
+    )
+    .join('');
+}
+
 function vocalizationCardHtml(vocalization, vIdx, disabled) {
   const dis = disabled ? ' disabled' : '';
   return `
@@ -131,12 +141,13 @@ function suggestionsByLine(suggestions) {
  *   marca con `.is-resolved` (motion) la línea recién resuelta, si cae en
  *   esta sección.
  */
-function sectionHtml(section, sIdx, byAnchor, byLine, { disabled, flash } = {}) {
+function sectionHtml(section, sIdx, byAnchor, byLine, { disabled, flash, isLast } = {}) {
   const type = normalizeSectionType(section.type);
   const anchoredHere = byAnchor.get(`${sIdx}:-1`) || [];
   const topVocalizations = anchoredHere.map(({ vocalization, index }) =>
     vocalizationCardHtml(vocalization, index, disabled),
   );
+  const dis = disabled ? ' disabled' : '';
 
   const linesHtml = section.lines
     .map((line, lIdx) => {
@@ -150,15 +161,28 @@ function sectionHtml(section, sIdx, byAnchor, byLine, { disabled, flash } = {}) 
         .join('');
       const mergeHtml =
         lIdx < section.lines.length - 1
-          ? `<button type="button" class="lrp__merge" data-section="${sIdx}" data-line="${lIdx}"${disabled ? ' disabled' : ''}>Unir con el siguiente renglón</button>`
+          ? `<button type="button" class="lrp__merge" data-section="${sIdx}" data-line="${lIdx}"${dis}>Unir con el siguiente renglón</button>`
           : '';
-      return `${lineHtml}${vocsHtml}${mergeHtml}`;
+      const sectionSplitHtml =
+        lIdx < section.lines.length - 1
+          ? `<button type="button" class="btn2 lrp__section-split" data-section="${sIdx}" data-line="${lIdx}"${dis}>Dividir aquí</button>`
+          : '';
+      return `${lineHtml}${vocsHtml}${mergeHtml}${sectionSplitHtml}`;
     })
     .join('');
 
+  const mergeSectionHtml = isLast
+    ? ''
+    : `<button type="button" class="btn2 lrp__section-merge" data-section="${sIdx}"${dis}>Unir con la siguiente sección</button>`;
+
   return `
     <div class="lrp__section">
-      <div class="lrp__label section-${type}">${escapeHtml(SECTION_TYPE_LABELS[type] || type.toUpperCase())}</div>
+      <div class="lrp__section-header">
+        <select class="lrp__label lrp__type-select section-${type}" data-section="${sIdx}" aria-label="Tipo de sección"${dis}>
+          ${sectionTypeOptionsHtml(type)}
+        </select>
+        ${mergeSectionHtml}
+      </div>
       ${topVocalizations.join('')}
       ${linesHtml}
     </div>`;
@@ -198,7 +222,7 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
    */
   function lockControls() {
     el.querySelectorAll(
-      '.lrp__resolve, .lrp__edit-start, .lrp__edit-save, .lrp__edit-cancel, .lrp__split, .lrp__merge, .lrp__voc-accept, .lrp__voc-reject, .lrp__approve',
+      '.lrp__resolve, .lrp__edit-start, .lrp__edit-save, .lrp__edit-cancel, .lrp__split, .lrp__merge, .lrp__voc-accept, .lrp__voc-reject, .lrp__approve, .lrp__type-select, .lrp__section-merge, .lrp__section-split',
     ).forEach((btn) => {
       btn.disabled = true;
     });
@@ -355,6 +379,32 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
         );
     });
 
+    el.querySelectorAll('.lrp__type-select').forEach((select) =>
+      select.addEventListener('change', () =>
+        runAction({
+          type: 'setSectionType',
+          section: Number(select.dataset.section),
+          sectionType: normalizeSectionType(select.value),
+        }),
+      ),
+    );
+
+    el.querySelectorAll('.lrp__section-merge').forEach((btn) =>
+      btn.addEventListener('click', () =>
+        runAction({ type: 'mergeSections', section: Number(btn.dataset.section) }),
+      ),
+    );
+
+    el.querySelectorAll('.lrp__section-split').forEach((btn) =>
+      btn.addEventListener('click', () =>
+        runAction({
+          type: 'splitSection',
+          section: Number(btn.dataset.section),
+          afterLine: Number(btn.dataset.line),
+        }),
+      ),
+    );
+
     el.querySelector('.lrp__approve')?.addEventListener('click', handleApprove);
   }
 
@@ -396,7 +446,13 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
       </div>
       <div class="lrp__body">
         ${state.review.sections
-          .map((s, i) => sectionHtml(s, i, byAnchor, byLine, { disabled, flash }))
+          .map((s, i) =>
+            sectionHtml(s, i, byAnchor, byLine, {
+              disabled,
+              flash,
+              isLast: i === state.review.sections.length - 1,
+            }),
+          )
           .join('')}
       </div>
       <div class="lrp__footer">

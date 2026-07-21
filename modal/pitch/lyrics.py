@@ -38,7 +38,7 @@ def run_lyrics(job_id, webhook, sign_upload_url, inbound_secret, lead_bytes) -> 
             tmp.write(io.BytesIO(lead_bytes).read())
             tmp.flush()
 
-            model = whisperx.load_model("large-v2", device, compute_type=compute_type)
+            model = whisperx.load_model("large-v3", device, compute_type=compute_type)
             audio = whisperx.load_audio(tmp.name)
             result = model.transcribe(audio, batch_size=16)
 

@@ -43,6 +43,7 @@ import modal
 
 from align_mapping import map_words_to_lines
 from sections._common import _extract_vocals_from_path
+from transcribe_diff import line_scores
 
 app = modal.App("hkn-align")
 
@@ -69,8 +70,12 @@ align_image = (
     .apt_install("ffmpeg", "git")
     .pip_install_from_requirements("requirements.txt")
     .pip_install("whisperx==3.3.1", "torch==2.4.1", "torchaudio==2.4.1", "ctc-forced-aligner")
+    # jiwer: CER por linea para el gate de letra (transcribe_diff.line_scores),
+    # sin pines de torch/numpy propios -- no interfiere con el resto de la imagen.
+    .pip_install("jiwer==3.0.4")
     .add_local_python_source("sections")
     .add_local_python_source("align_mapping")
+    .add_local_python_source("transcribe_diff")
 )
 
 # hkn-webhook trae MODAL_INBOUND_SECRET (auth del endpoint web) y
@@ -346,6 +351,156 @@ def start(payload: dict, x_inbound_secret: str = Header(default="")):
 # ──────────────────────────────────────────────────────────────────────────────
 # Smoke local (requiere credenciales/mp3 reales; NO corre en CI)
 # ──────────────────────────────────────────────────────────────────────────────
+
+def _validate_transcribe_payload(payload: dict) -> str | None:
+    """Misma logica que _validate_align_payload, adaptada al contrato de
+    transcribe: { vocalsGetUrl, dbLines, canonicalLines?, runId, webhookUrl,
+    snapshotHash? }. canonicalLines y snapshotHash son opcionales."""
+    if not payload.get("runId"):
+        return "falta runId"
+    if not payload.get("vocalsGetUrl"):
+        return "falta vocalsGetUrl"
+    if not payload.get("webhookUrl"):
+        return "falta webhookUrl"
+    if not payload.get("dbLines"):
+        return "dbLines vacio o ausente"
+    return None
+
+
+@app.function(image=align_image, secrets=_webhook_secrets, gpu="T4", timeout=600)
+def run_transcribe(payload: dict) -> None:
+    """
+    payload: { vocalsGetUrl, dbLines: [str], canonicalLines?: [str], runId,
+    webhookUrl, snapshotHash? }
+
+    Transcripcion VERBATIM (texto libre, SIN pasarle la letra conocida —
+    a diferencia de run_align, que hace forced alignment del texto ya sabido).
+    Sirve de gate: compara lo cantado contra la letra en DB (y la canonica, si
+    llega) linea a linea con jiwer, para detectar drift/erratas antes de
+    publicar. En CUALQUIER excepcion postea { runId, phase: 'transcription',
+    ok: False, error } al webhook — nunca deja el run esperando en silencio.
+    """
+    run_id = payload.get("runId")
+    webhook_url = payload.get("webhookUrl")
+    vocals_get_url = payload.get("vocalsGetUrl")
+    db_lines: list[str] = payload.get("dbLines") or []
+    canonical_lines: list[str] | None = payload.get("canonicalLines")
+    snapshot_hash = payload.get("snapshotHash")
+
+    try:
+        if not run_id or not webhook_url:
+            raise ValueError("payload invalido: faltan runId/webhookUrl")
+        if not vocals_get_url:
+            raise ValueError("payload invalido: falta vocalsGetUrl")
+        if not db_lines:
+            raise ValueError("payload invalido: dbLines vacio")
+
+        import whisperx
+
+        # El stem vocal ya viene separado (a diferencia de run_align, que lo
+        # extrae el mismo del audio completo): aqui solo se descarga y se
+        # transcribe, no hay beat-tracking ni extraccion de voces.
+        vocals_path = _download_audio(vocals_get_url)
+
+        device = "cuda"
+        model = whisperx.load_model("large-v3", device, compute_type="float16")
+        audio = whisperx.load_audio(vocals_path)
+        result = model.transcribe(audio, batch_size=16)
+
+        # Clamp de idioma es/en igual que modal/pitch/lyrics.py: el catalogo es
+        # es/en, y WhisperX a veces detecta lenguas cercanas (ca/gl/pt) en
+        # audio musical corto -- eso degrada tambien la propia transcripcion,
+        # no solo el align model, asi que forzamos es y RE-transcribimos.
+        language = result.get("language")
+        if language not in ("es", "en"):
+            language = "es"
+            result = model.transcribe(audio, batch_size=16, language=language)
+
+        align_model, metadata = whisperx.load_align_model(language_code=language, device=device)
+        aligned = whisperx.align(result["segments"], align_model, metadata, audio, device)
+
+        words: list[dict] = []
+        trans_lines: list[str] = []
+        full_text_parts: list[str] = []
+        for segment in aligned.get("segments", []):
+            seg_text = (segment.get("text") or "").strip()
+            if seg_text:
+                trans_lines.append(seg_text)
+                full_text_parts.append(seg_text)
+            for word in segment.get("words", []):
+                start = word.get("start")
+                end = word.get("end")
+                if start is None or end is None:
+                    continue  # palabra sin timestamp (igual que lyrics.py)
+                words.append({
+                    "word": word.get("word"),
+                    "startMs": int(start * 1000),
+                    "endMs": int(end * 1000),
+                    "score": word.get("score"),
+                })
+
+        per_line = line_scores(trans_lines, db_lines)
+        # canonicalLines es opcional: si llega, se agrega un segundo diff para
+        # comparar tambien contra la letra canonica (no reemplaza el de DB).
+        per_line_canonical = line_scores(trans_lines, canonical_lines) if canonical_lines else None
+
+        payload_out = {
+            "text": " ".join(full_text_parts),
+            "words": words,
+            "perLine": per_line,
+        }
+        if per_line_canonical is not None:
+            payload_out["perLineCanonical"] = per_line_canonical
+
+        _post_align_webhook(
+            webhook_url,
+            {
+                "runId": run_id,
+                "phase": "transcription",
+                "ok": True,
+                "snapshotHash": snapshot_hash,
+                "payload": payload_out,
+            },
+        )
+    except Exception as e:  # noqa: BLE001 — cualquier excepcion se reporta, nunca se silencia
+        if webhook_url:
+            try:
+                _post_align_webhook(
+                    webhook_url,
+                    {
+                        "runId": run_id,
+                        "phase": "transcription",
+                        "ok": False,
+                        "error": _sanitize_error_message(e),
+                    },
+                )
+            except Exception:
+                pass  # el webhook de error tambien puede fallar (red); no hay mas fallback
+        raise
+
+
+@app.function(image=align_image, secrets=_webhook_secrets)
+@modal.fastapi_endpoint(method="POST")
+def transcribe(payload: dict, x_inbound_secret: str = Header(default="")):
+    """
+    Punto de entrada HTTP del gate de letra. Mismo patron que `start` (arriba):
+    verifica x-inbound-secret, valida el payload y lanza run_transcribe async.
+
+    Respuesta: { "callId": "<modal call object_id>" }
+    """
+    if not hmac.compare_digest(
+        x_inbound_secret,
+        os.environ.get("MODAL_INBOUND_SECRET", ""),
+    ):
+        raise HTTPException(status_code=401, detail="bad inbound secret")
+
+    validation_error = _validate_transcribe_payload(payload)
+    if validation_error:
+        raise HTTPException(status_code=400, detail=validation_error)
+
+    call = run_transcribe.spawn(payload)
+    return {"callId": call.object_id}
+
 
 @app.local_entrypoint()
 def main(audio_url: str = "", webhook_url: str = "http://localhost:3000/api/align/webhook"):

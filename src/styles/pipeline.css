@@ -362,6 +362,19 @@
   color: var(--color-text);
 }
 
+/* En movil la columna ocupa todo el content-box, asi que el gutter de
+   .main__content (16px) se apilaria con los gutters internos de esta vista
+   (header sticky + rows), dejando el header como una banda flotante con
+   margen doblado. Cancelamos el gutter del contenedor: la vista sangra hasta
+   el borde y sus paddings internos quedan como el unico gutter de 16px, con
+   el header como app bar edge-to-edge y el contenido alineado a la margen. */
+@media (max-width: 600px) {
+  .pipeline-view {
+    max-width: none;
+    margin-inline: calc(-1 * var(--space-md));
+  }
+}
+
 .pipeline-view__header {
   position: sticky;
   top: 0;

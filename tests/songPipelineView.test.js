@@ -322,6 +322,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     const banner = container.querySelector('.pipeline-view__error');
     expect(banner).toBeTruthy();
     expect(banner.hidden).toBe(false);
+    expect(banner.getAttribute('role')).toBe('alert');
     expect(banner.textContent).toContain('Reintentar');
     expect(container.querySelectorAll('[data-phase]').length).toBe(5);
   });

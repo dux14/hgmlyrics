@@ -179,6 +179,11 @@ export function watchPipelineRun(songId, onChange) {
   let lastReqId = 0;
 
   async function refresh() {
+    // El botón "Reintentar" del banner de error llama a `.refresh()` incluso
+    // después de un unsubscribe (p. ej. click justo cuando se desmonta la
+    // vista): cortamos ANTES del fetch de red para no disparar una petición
+    // que de todos modos se va a descartar.
+    if (stopped) return;
     const reqId = (lastReqId += 1);
     let data;
     try {

@@ -81,7 +81,7 @@ export function renderSongPipelineView(container, songId) {
       <h1 class="pipeline-view__title">Procesamiento</h1>
       <span class="pipeline-view__pill">0 de 5 fases</span>
     </header>
-    <div class="pipeline-view__error" hidden>
+    <div class="pipeline-view__error" role="alert" hidden>
       <p class="pipeline-view__error-text">No se pudo cargar el procesamiento</p>
       <button type="button" class="pipeline-view__error-retry">Reintentar</button>
     </div>
@@ -94,11 +94,12 @@ export function renderSongPipelineView(container, songId) {
   const rowsEl = view.querySelector('.pipeline-view__rows');
   const pillEl = view.querySelector('.pipeline-view__pill');
   const errorEl = view.querySelector('.pipeline-view__error');
-  // El botón se resuelve antes de que `unsub` exista (se asigna al final de
-  // la función), pero el click solo puede ocurrir después de que el montaje
-  // termine, así que `unsub` ya está inicializado en ese momento.
+  // Ref compartida en vez de leer `unsub` (declarada más abajo) desde el
+  // closure: evita depender de que el montaje corra sync antes del primer
+  // click (un `return` temprano futuro en esta función rompería con TDZ).
+  let unsub = null;
   view.querySelector('.pipeline-view__error-retry').addEventListener('click', () => {
-    unsub.refresh?.();
+    unsub?.refresh?.();
   });
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
@@ -310,15 +311,19 @@ export function renderSongPipelineView(container, songId) {
   }
 
   function clearError() {
+    if (destroyed) return;
     errorEl.hidden = true;
   }
 
   // Esqueleto inmediato: las 5 filas se pintan con run=null antes de que el
   // watcher emita nada (primer refresh es async), para que la vista nunca
-  // quede en blanco mientras esa promesa está en vuelo.
+  // quede en blanco mientras esa promesa está en vuelo. Efecto secundario
+  // intencional: esta llamada consume `firstRender`, así que la animación de
+  // entrada `phase--enter` corre UNA sola vez acá, sobre el esqueleto vacío
+  // (tipo skeleton loader) — no cuando llegan los datos reales del run.
   renderPhases(null);
 
-  const unsub = watchPipelineRun(songId, (data) => {
+  unsub = watchPipelineRun(songId, (data) => {
     if (data?.error) {
       renderError();
       return;

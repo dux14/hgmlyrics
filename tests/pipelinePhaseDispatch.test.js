@@ -196,6 +196,7 @@ describe("dispatchPhase('clips')", () => {
     sqlResponses.push([{ sections: CLIPS_SECTIONS }]); // SELECT sections FROM songs
     sqlResponses.push([{ lines: CLIPS_LINE_TIMINGS }]); // SELECT lines FROM song_line_timings
     sqlResponses.push([{ durationSec: '8.5' }]); // SELECT duration_sec FROM song_audio
+    sqlResponses.push([]); // SELECT segments FROM song_structure → sin fila
 
     const run = {
       id: 'run1',
@@ -215,6 +216,7 @@ describe("dispatchPhase('clips')", () => {
     sqlResponses.push([{ sections: CLIPS_SECTIONS }]);
     sqlResponses.push([{ lines: CLIPS_LINE_TIMINGS }]);
     sqlResponses.push([{ durationSec: null }]);
+    sqlResponses.push([]); // SELECT segments FROM song_structure → sin fila
 
     const run = {
       id: 'run1',
@@ -225,5 +227,36 @@ describe("dispatchPhase('clips')", () => {
 
     const args = dispatchClips.mock.calls[0][0];
     expect(args.totalMs).toBe(6000);
+  });
+
+  // Task 8: con fila song_structure (segmentos reales detectados por
+  // SongFormer, ya en ms), lineSections/totalMs se derivan de esos segmentos
+  // en vez de songs.sections/duration_sec — sin song_structure el fallback
+  // de arriba debe seguir byte-idéntico (probado en los dos tests previos).
+  it('con song_structure → lineSections/totalMs derivan de los segmentos detectados', async () => {
+    sqlResponses.push([{ sections: CLIPS_SECTIONS }]); // SELECT sections FROM songs
+    sqlResponses.push([{ lines: CLIPS_LINE_TIMINGS }]); // SELECT lines FROM song_line_timings
+    sqlResponses.push([{ durationSec: '8.5' }]); // SELECT duration_sec FROM song_audio (ignorado)
+    sqlResponses.push([
+      {
+        segments: [
+          { label: 'verse', startMs: 0, endMs: 2000 },
+          { label: 'chorus', startMs: 2000, endMs: 6000 },
+          { label: 'verse', startMs: 6000, endMs: 8500 },
+        ],
+      },
+    ]); // SELECT segments FROM song_structure
+
+    const run = {
+      id: 'run1',
+      songId: 'song1',
+      phases: { stems: { tracks: { vocals: 'song1/stems/vocals.mp3' } } },
+    };
+    await dispatchPhase('clips', run);
+
+    const args = dispatchClips.mock.calls[0][0];
+    // startMs de CLIPS_LINE_TIMINGS: 100, 2100, 4000, 6000 → segmento 0,1,1,2
+    expect(args.lineSections).toEqual([0, 1, 1, 2]);
+    expect(args.totalMs).toBe(8500);
   });
 });

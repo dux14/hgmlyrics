@@ -68,6 +68,7 @@ describe('GET /api/songs/[id]/studio', () => {
     sqlResponses.push([]); // SELECT song_pitch_analysis
     sqlResponses.push([]); // SELECT songs
     sqlResponses.push([]); // SELECT song_line_timings
+    sqlResponses.push([]); // SELECT song_structure
     const res = makeRes();
     await handler(makeReq(), res);
     expect(requireUser).toHaveBeenCalled();
@@ -89,6 +90,7 @@ describe('GET /api/songs/[id]/studio', () => {
     sqlResponses.push([{ analysis: { notes: [1, 2, 3] } }]); // SELECT song_pitch_analysis
     sqlResponses.push([{ sections: [{ id: 's1' }], title: 'Mi canción' }]); // SELECT songs
     sqlResponses.push([{ status: 'ready', lines: [{ i: 0, startMs: 100 }] }]); // SELECT song_line_timings
+    sqlResponses.push([{ segments: [{ label: 'verse', startMs: 0, endMs: 2000 }] }]); // SELECT song_structure
     const res = makeRes();
     await handler(makeReq(), res);
     expect(res._status).toBe(200);
@@ -106,6 +108,7 @@ describe('GET /api/songs/[id]/studio', () => {
       sections: [{ id: 's1' }],
       timings: { status: 'ready', lines: [{ i: 0, startMs: 100 }] },
       title: 'Mi canción',
+      structure: { segments: [{ label: 'verse', startMs: 0, endMs: 2000 }] },
     });
     expect(signSongAudioDownload).toHaveBeenCalledTimes(2);
     expect(signSongAudioDownload).toHaveBeenCalledWith('song-1/vocals.mp3');
@@ -119,12 +122,14 @@ describe('GET /api/songs/[id]/studio', () => {
     sqlResponses.push([]); // SELECT song_pitch_analysis
     sqlResponses.push([{ sections: null, title: 'Mi canción' }]); // SELECT songs
     sqlResponses.push([]); // SELECT song_line_timings
+    sqlResponses.push([]); // SELECT song_structure
     const res = makeRes();
     await handler(makeReq(), res);
     expect(res._status).toBe(200);
     expect(res._body.analysis).toBeNull();
     expect(res._body.sections).toEqual([]);
     expect(res._body.timings).toBeNull();
+    expect(res._body.structure).toBeNull();
   });
 
   it('requireUser exigido: si lanza 401, el handler propaga el error', async () => {

@@ -558,6 +558,51 @@ describe('POST /api/align/webhook — auto-avance sync→clips', () => {
   });
 });
 
+describe('POST /api/align/webhook — contrato del puente sync (spec 2026-07-22 §4.5)', () => {
+  // El pipeline depende de este contrato — ver spec 2026-07-22 §4.5:
+  // notifyPipelineSync (este webhook) es el único puente entre el align
+  // legacy y la fase `sync` del run unificado, y espera del payload de Modal
+  // exactamente {songId, lines|error, snapshotHash?}. Si un cambio futuro
+  // altera ese shape (renombra un campo, deja de mandar snapshotHash, etc.)
+  // este test debe romper con un mensaje claro en vez de dejar `sync` colgado
+  // en 'running' para siempre en silencio.
+  it('éxito: reenvía {phase:sync, ok:true, snapshotHash} tal cual llega del payload legacy', async () => {
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    sqlResponses.push([]); // UPDATE song_line_timings ... status='ready'
+    sqlResponses.push([{ id: 'run-contract-ok', phases: { sync: { status: 'running' } } }]); // SELECT run activo
+    const lines = [{ i: 0, startMs: 0 }];
+    const res = makeRes();
+    await webhookHandler(
+      modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx', snapshotHash: 'hash-contract' }),
+      res,
+    );
+    expect(res.statusCode).toBe(200);
+    expect(applyPipelinePhaseEventMock.mock.calls[0][2]).toEqual({
+      phase: 'sync',
+      ok: true,
+      error: undefined,
+      snapshotHash: 'hash-contract',
+    });
+  });
+
+  it('error: reenvía {phase:sync, ok:false, error, snapshotHash} tal cual llega del payload legacy', async () => {
+    sqlResponses.push([]); // UPDATE song_line_timings ... status='failed'
+    sqlResponses.push([{ id: 'run-contract-error', phases: { sync: { status: 'running' } } }]); // SELECT run activo
+    const res = makeRes();
+    await webhookHandler(
+      modalAlignReq({ songId: 'song-1', error: 'Modal boom', snapshotHash: 'hash-contract' }),
+      res,
+    );
+    expect(res.statusCode).toBe(200);
+    expect(applyPipelinePhaseEventMock.mock.calls[0][2]).toEqual({
+      phase: 'sync',
+      ok: false,
+      error: 'Modal boom',
+      snapshotHash: 'hash-contract',
+    });
+  });
+});
+
 // ── PUT /api/songs/[id] — marca stale al cambiar secciones ─────────────────
 describe('PUT /api/songs/[id] — song_line_timings stale al editar secciones', () => {
   const updateHandler = async (...args) => {

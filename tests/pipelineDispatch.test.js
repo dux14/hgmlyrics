@@ -22,12 +22,35 @@ process.env.MODAL_TRANSCRIBE_ENDPOINT = 'https://modal.example/transcribe';
 process.env.MODAL_INBOUND_SECRET = 'inbound-secret';
 
 const { fetchWithTimeout } = await import('../api/_lib/http.js');
+const { invokeModalPipeline } = await import('../api/_lib/modal.js');
 const { invokePitchPipeline } = await import('../api/pitch/_lib/modal.js');
-const { dispatchTranscribe, dispatchPitch } = await import('../api/_lib/pipeline/dispatch.js');
+const { dispatchStems, dispatchTranscribe, dispatchPitch } = await import('../api/_lib/pipeline/dispatch.js');
 
 beforeEach(() => {
   vi.clearAllMocks();
   fetchWithTimeout.mockResolvedValue({ ok: true, json: async () => ({ callId: 'call1' }) });
+});
+
+describe('dispatchStems', () => {
+  it('pasa enabledSections/uploads del caller sin hardcodearlos (Task 6)', async () => {
+    const enabledSections = ['voiceInstrumental', 'structure', 'leadBacking', 'gender', 'duet'];
+    const uploads = { leadBacking: { lead: 'https://put/lead' } };
+    await dispatchStems({
+      run: { id: 'run1', songId: 'song1', inputGetUrl: 'https://get/input.mp3' },
+      uploads,
+      enabledSections,
+      webhookUrl: 'https://x/webhook',
+    });
+
+    expect(invokeModalPipeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: 'run1',
+        input: { getUrl: 'https://get/input.mp3' },
+        enabledSections,
+        uploads,
+      }),
+    );
+  });
 });
 
 describe('dispatchTranscribe', () => {

@@ -2,11 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { initSections, applySectionResult, deriveJobStatus, validateEnabledSections } from '../api/stems/_sections.js';
 
 describe('sections', () => {
-  it('initSections crea las 4 en pending con gender.enabled=false', () => {
+  it('initSections crea las 5 en pending con gender/duet.enabled=false', () => {
     const s = initSections(['voiceInstrumental','structure','leadBacking']);
-    expect(Object.keys(s)).toEqual(['voiceInstrumental','structure','leadBacking','gender']);
+    expect(Object.keys(s)).toEqual(['voiceInstrumental','structure','leadBacking','gender','duet']);
     expect(s.voiceInstrumental.status).toBe('pending');
     expect(s.gender.enabled).toBe(false);
+    expect(s.duet.enabled).toBe(false);
     expect(s.leadBacking.enabled).toBe(true);
   });
   it('applySectionResult marca done e idempotente', () => {

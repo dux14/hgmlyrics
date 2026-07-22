@@ -145,6 +145,13 @@ const jobWithFailedVI = () => ({
       enabled: false,
       outputs: { male: null, female: null },
     },
+    duet: {
+      status: 'skipped',
+      model: null,
+      error: null,
+      enabled: false,
+      outputs: { voice_a: null, voice_b: null },
+    },
   },
 });
 

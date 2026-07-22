@@ -28,7 +28,7 @@ vi.mock('../api/_lib/db.js', () => ({ default: sqlMock }));
 process.env.PUBLIC_BASE_URL = 'https://hgmlyrics.vercel.app';
 
 const { dispatchPhase } = await import('../api/songs/[id]/pipeline/_dispatch.js');
-const { dispatchTranscribe, dispatchAlign, dispatchPitch, dispatchClips } = await import(
+const { dispatchStems, dispatchTranscribe, dispatchAlign, dispatchPitch, dispatchClips } = await import(
   '../api/_lib/pipeline/dispatch.js'
 );
 
@@ -40,6 +40,60 @@ const SANTO_SECTIONS = [
 beforeEach(() => {
   vi.clearAllMocks();
   sqlResponses = [];
+});
+
+// Task 6: dispatch completo de secciones (12 pistas + duet) — dispatchStems
+// debe recibir las 5 secciones habilitadas y uploads con el shape exacto que
+// esperan las apps Modal (modal/sections/extract.py, lead_backing.py,
+// gender.py, medley_vox.py).
+describe("dispatchPhase('stems')", () => {
+  it('arma uploads para las 5 secciones (12 pistas) y enabledSections completo', async () => {
+    const run = { id: 'run1', songId: 'song1', inputPath: 'song1/input.mp3' };
+    await dispatchPhase('stems', run);
+
+    expect(dispatchStems).toHaveBeenCalledTimes(1);
+    const args = dispatchStems.mock.calls[0][0];
+    expect(args.run).toEqual({
+      id: 'run1',
+      songId: 'song1',
+      inputGetUrl: 'https://signed/get/song1/input.mp3',
+    });
+    expect(args.enabledSections).toEqual([
+      'voiceInstrumental',
+      'structure',
+      'leadBacking',
+      'gender',
+      'duet',
+    ]);
+    // voiceInstrumental sube 7 pistas (incl. vocals, que no se publica en song_stems).
+    expect(args.uploads.voiceInstrumental).toEqual({
+      vocals: 'https://signed/put/song1/stems/vocals.mp3',
+      instrumental: 'https://signed/put/song1/stems/instrumental.mp3',
+      drums: 'https://signed/put/song1/stems/drums.mp3',
+      bass: 'https://signed/put/song1/stems/bass.mp3',
+      guitar: 'https://signed/put/song1/stems/guitar.mp3',
+      piano: 'https://signed/put/song1/stems/piano.mp3',
+      other: 'https://signed/put/song1/stems/other.mp3',
+    });
+    expect(args.uploads.leadBacking).toEqual({
+      lead: 'https://signed/put/song1/stems/lead.mp3',
+      backing: 'https://signed/put/song1/stems/backing.mp3',
+      vocals: 'https://signed/put/song1/stems/vocals.mp3',
+    });
+    // gender anidado por modelo (solo chorus_bs_roformer vigente).
+    expect(args.uploads.gender).toEqual({
+      chorus: {
+        male: 'https://signed/put/song1/stems/male.mp3',
+        female: 'https://signed/put/song1/stems/female.mp3',
+      },
+    });
+    expect(args.uploads.duet).toEqual({
+      voice_a: 'https://signed/put/song1/stems/voice_a.mp3',
+      voice_b: 'https://signed/put/song1/stems/voice_b.mp3',
+    });
+    // structure no sube archivos: no debe aparecer en uploads.
+    expect(args.uploads.structure).toBeUndefined();
+  });
 });
 
 describe("dispatchPhase('transcription')", () => {

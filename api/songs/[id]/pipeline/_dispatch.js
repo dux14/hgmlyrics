@@ -18,11 +18,34 @@ import sql from '../../../_lib/db.js';
 
 // Pistas que produce la fase 'stems' agrupadas por sección Modal (mismo shape
 // {seccion: {pista: url}} que arma api/stems/jobs/[id]/start.js).
-// leadBacking incluye 'vocals': la sección re-extrae el stem vocal intermedio
-// (extract_vocals_stem) antes de separar lead/backing y ahora lo sube también
-// (ver modal/sections/lead_backing.py) — es la única fuente de `tracks.vocals`
-// en el pipeline unificado (voiceInstrumental no sube nada en este modo).
-const STEM_KINDS = { leadBacking: ['lead', 'backing', 'vocals'], gender: ['male', 'female'] };
+// STEM_KINDS = kinds que se PUBLICAN en song_stems por sección (Task 6, cierra
+// las 12 pistas del Estudio). leadBacking incluye 'vocals': la sección
+// re-extrae el stem vocal intermedio (extract_vocals_stem) antes de separar
+// lead/backing y lo sube también (ver modal/sections/lead_backing.py) — es la
+// fuente canónica de `tracks.vocals` en el pipeline unificado. La `vocals` que
+// también sube S1/voiceInstrumental (ver UPLOAD_SLOTS) NO entra acá: S1
+// siempre corre antes que leadBacking en el DAG (modal/stems_app.py
+// run_pipeline), así que el `ON CONFLICT (song_id,kind)` de song_stems queda
+// con el valor de leadBacking como último escritor.
+export const STEM_KINDS = {
+  voiceInstrumental: ['instrumental', 'drums', 'bass', 'guitar', 'piano', 'other'],
+  leadBacking: ['lead', 'backing', 'vocals'],
+  gender: ['male', 'female'],
+  duet: ['voice_a', 'voice_b'],
+};
+
+// UPLOAD_SLOTS = archivos que SUBE cada sección Modal (distinto de STEM_KINDS
+// solo en voiceInstrumental: S1/extract siempre sube las 7 pistas, incl.
+// `vocals`, aunque esa copia no se publique en song_stems, ver nota arriba).
+export const UPLOAD_SLOTS = {
+  ...STEM_KINDS,
+  voiceInstrumental: ['vocals', ...STEM_KINDS.voiceInstrumental],
+};
+
+// Las 5 secciones del DAG Modal (modal/stems_app.py run_pipeline). S1
+// (voiceInstrumental) corre siempre sin importar enabledSections; S2
+// (structure) / S3 (leadBacking) / S4 (gender) / S5 (duet) sí se gatean acá.
+export const ENABLED_SECTIONS = ['voiceInstrumental', 'structure', 'leadBacking', 'gender', 'duet'];
 
 function webhookUrl() {
   return `${process.env.PUBLIC_BASE_URL}/api/pipeline/webhook`;
@@ -57,14 +80,15 @@ async function canonicalLinesFor(songId) {
 
 async function stemsUploads(songId) {
   const entries = await Promise.all(
-    Object.entries(STEM_KINDS).map(async ([section, kinds]) => [
-      section,
-      Object.fromEntries(
-        await Promise.all(
-          kinds.map(async (k) => [k, await createSongAudioSignedPutUrl(pipelineStemKey(songId, k))]),
-        ),
-      ),
-    ]),
+    Object.entries(UPLOAD_SLOTS).map(async ([section, kinds]) => {
+      const signed = await Promise.all(
+        kinds.map(async (k) => [k, await createSongAudioSignedPutUrl(pipelineStemKey(songId, k))]),
+      );
+      // gender usa estructura anidada por modelo (ver modal/sections/gender.py,
+      // solo queda vigente chorus_bs_roformer): uploads.gender.chorus.{male,female}.
+      if (section === 'gender') return [section, { chorus: Object.fromEntries(signed) }];
+      return [section, Object.fromEntries(signed)];
+    }),
   );
   return Object.fromEntries(entries);
 }
@@ -86,6 +110,7 @@ export async function dispatchPhase(phase, run) {
     return dispatchStems({
       run: { id: run.id, songId: run.songId, inputGetUrl },
       uploads,
+      enabledSections: ENABLED_SECTIONS,
       webhookUrl: webhook,
     });
   }

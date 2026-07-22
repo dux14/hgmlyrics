@@ -18,17 +18,19 @@ import { dispatchAlign } from '../align.js';
  * stems: reusa el orquestador hkn-stems (MODAL_STEMS_ENDPOINT) vía
  * invokeModalPipeline — el payload {jobId,input,enabledSections,uploads,webhook}
  * es exactamente el mismo shape que start.js, invokeModalPipeline es agnóstico
- * al llamador. Solo se piden leadBacking + gender: la estructura la da la letra
- * (transcripción), no la separación de audio.
+ * al llamador. `enabledSections` la arma el caller (Task 6: las 5 secciones del
+ * DAG — ver ENABLED_SECTIONS en songs/[id]/pipeline/_dispatch.js), no se
+ * hardcodea acá para que el pipeline unificado y el Estudio manual (start.js)
+ * puedan pedir subconjuntos distintos.
  * @param {{ run:{id:string, songId:string, inputGetUrl:string}, uploads:object,
- *           webhookUrl:string }} args
+ *           enabledSections:string[], webhookUrl:string }} args
  * @returns {Promise<{id:string}>}
  */
-export async function dispatchStems({ run, uploads, webhookUrl }) {
+export async function dispatchStems({ run, uploads, enabledSections, webhookUrl }) {
   return invokeModalPipeline({
     jobId: run.id,
     input: { getUrl: run.inputGetUrl },
-    enabledSections: ['leadBacking', 'gender'],
+    enabledSections,
     uploads,
     webhook: { url: webhookUrl, secret: process.env.MODAL_WEBHOOK_SECRET },
   });

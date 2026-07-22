@@ -4,7 +4,7 @@
  * No tiene dependencias externas; es puro JS funcional para facilitar tests.
  */
 
-export const SECTION_KEYS = ['voiceInstrumental', 'structure', 'leadBacking', 'gender'];
+export const SECTION_KEYS = ['voiceInstrumental', 'structure', 'leadBacking', 'gender', 'duet'];
 export const SECTION_STATUS = ['pending', 'running', 'done', 'failed', 'skipped'];
 export const JOB_STATUS = [
   'created',
@@ -20,6 +20,7 @@ export const SECTION_OUTPUTS = {
   voiceInstrumental: ['vocals', 'instrumental', 'drums', 'bass', 'guitar', 'piano', 'other'],
   leadBacking: ['lead', 'backing'],
   gender: ['male', 'female'],
+  duet: ['voice_a', 'voice_b'],
   // `structure` no genera archivos de audio; el orquestador postea segmentos por webhook.
 };
 

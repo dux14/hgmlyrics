@@ -42,9 +42,9 @@ function flattenOutputs(outputs) {
 
 /**
  * @param {{jobId:string, section:string,
- *          result?:{status:string, model?:string, outputs?:object}, error?:string}} body
+ *          result?:{status:string, model?:string, outputs?:object, durationSec?:number}, error?:string}} body
  * @returns {{runId:string, phase:'stems', ok:boolean, partial?:boolean,
- *            tracks?:object, error?:string} | null}
+ *            tracks?:object, durationSec?:number, error?:string} | null}
  *   Solo se contemplan status 'done'/'failed' (enum cerrado). null si el
  *   evento debe ignorarse: status ausente o desconocido (p.ej. 'running') —
  *   aun no hay resultado, no debe finalizar ni fallar la fase — o sección no
@@ -72,9 +72,30 @@ function sectionResultToStemsEvent(jobId, section, result, error) {
 
   if (result.status !== 'done') return null;
 
+  // durationSec (Task 7): S1/S3 calculan la duracion del audio de entrada
+  // decodificado (len(samples)/sr) y la postean junto a outputs/model. Se
+  // propaga tal cual al phase-event solo si vino en el result — process.js
+  // decide si la persiste (best-effort del browser tiene prioridad si ya
+  // esta seteada, ver applyPipelinePhaseEvent).
+  const durationSec = typeof result.durationSec === 'number' ? result.durationSec : undefined;
+
   return isFinalizer
-    ? { runId: jobId, phase: 'stems', ok: true, partial: false, tracks }
-    : { runId: jobId, phase: 'stems', ok: true, partial: true, tracks };
+    ? {
+        runId: jobId,
+        phase: 'stems',
+        ok: true,
+        partial: false,
+        tracks,
+        ...(durationSec !== undefined && { durationSec }),
+      }
+    : {
+        runId: jobId,
+        phase: 'stems',
+        ok: true,
+        partial: true,
+        tracks,
+        ...(durationSec !== undefined && { durationSec }),
+      };
 }
 
 /**

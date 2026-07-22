@@ -106,8 +106,11 @@ def run_lead_backing(payload: dict) -> None:
 
     En excepción postea webhook failed y re-lanza (Modal registra el fallo).
     """
+    import librosa  # noqa: F401 — solo disponible dentro del contenedor Modal
+
     # Helpers canónicos del orquestador.
     from sections._common import (
+        duration_from_samples,
         extract_storage_key,
         extract_vocals_stem,
         post_webhook,
@@ -122,6 +125,14 @@ def run_lead_backing(payload: dict) -> None:
         # ── 1. Re-extraer stem vocal desde el audio original ─────────────────
         # extract_vocals_stem descarga get_url internamente (ver _common.py).
         vocals_path = extract_vocals_stem(payload["input"]["getUrl"])
+
+        # ── 1.5. Duración del audio de entrada (Task 7, server-side) ─────────
+        # La separación de fuentes no cambia la cantidad de samples, así que
+        # la duración del stem vocal recién extraído es la del audio original
+        # (evita re-descargar get_url solo para esto). Se calcula ANTES del
+        # unlink de vocals_path (paso "Limpiar" más abajo).
+        samples, sr = librosa.load(vocals_path, sr=None, mono=True)
+        duration_sec = duration_from_samples(samples, sr)
 
         # ── 2. Inferencia karaoke (lead/backing por etiqueta del modelo) ─────
         stems = separate_lead_backing(vocals_path)
@@ -156,6 +167,7 @@ def run_lead_backing(payload: dict) -> None:
                 "status": "done",
                 "model": _MODEL_LABEL,
                 "outputs": outputs,
+                "durationSec": duration_sec,
             },
         )
 

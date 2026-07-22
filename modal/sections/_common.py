@@ -146,6 +146,26 @@ def _extract_vocals_from_path(src_path: str) -> str:
     return vocals_path
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Duracion del audio (Task 7: server-side, reemplaza al best-effort del browser)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def duration_from_samples(samples, sr: int) -> float:
+    """
+    Duracion en segundos de un array de audio ya decodificado.
+
+    `samples` puede ser 1D (mono, forma (n,)) o 2D (multicanal, p.ej. lo que
+    devuelve librosa.load con mono=False: forma (canales, n)) — en ambos
+    casos el eje temporal es el ULTIMO eje, por eso se usa `shape[-1]` y no
+    `len()` (que en el caso 2D daria la cantidad de canales, no la duracion).
+    Tambien acepta una lista/tupla plana (sin atributo `shape`), fallback a
+    `len()`. Funcion PURA, sin I/O, para poder testearla sin GPU ni Modal.
+    """
+    n_samples = samples.shape[-1] if hasattr(samples, "shape") else len(samples)
+    return n_samples / sr
+
+
 def upload_put(put_url: str, file_path: str, content_type: str = "audio/mpeg") -> None:
     """HTTP PUT del archivo al signed URL. Lanza en non-2xx."""
     import httpx  # disponible en la imagen Modal (ver nota arriba)

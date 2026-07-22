@@ -11,7 +11,13 @@ import { applyPhaseEvent, runStatusFromPhases } from './state.js';
 // Estados de run donde un evento de fase todavía puede aplicar efectos.
 // Mismo set que el índice único parcial song_pipeline_runs_one_active_per_song
 // y que los filtros WHERE status IN (...) del resto del pipeline.
-const ACTIVE_RUN_STATUSES = new Set(['created', 'uploading', 'processing', 'awaiting_lyrics', 'running']);
+const ACTIVE_RUN_STATUSES = new Set([
+  'created',
+  'uploading',
+  'processing',
+  'awaiting_lyrics',
+  'running',
+]);
 
 // Fases derivadas de la letra aprobada: si llegan con un snapshotHash viejo
 // (el admin editó la letra mientras Modal seguía procesando el run anterior),
@@ -25,14 +31,16 @@ const LYRICS_DERIVED_PHASES = new Set(['sync', 'pitch', 'clips']);
  * @param {import('postgres').Sql} sql
  * @param {string} runId
  * @param {{phase:string, ok:boolean, partial?:boolean, tracks?:object,
- *          artifacts?:object, error?:string, snapshotHash?:string, payload?:object}} event
+ *          artifacts?:object, error?:string, snapshotHash?:string, payload?:object,
+ *          durationSec?:number}} event
  * @returns {Promise<{status:string, next:object, songId:string}
  *   | {ignored:true} | {stale:true} | null>} null si el run no existe.
  */
 export async function applyPipelinePhaseEvent(sql, runId, event) {
   return sql.begin(async (tx) => {
     const rows = await tx`
-      SELECT id, song_id AS "songId", status, phases, lyrics_review AS "lyricsReview"
+      SELECT id, song_id AS "songId", status, phases, lyrics_review AS "lyricsReview",
+        input_meta AS "inputMeta"
       FROM song_pipeline_runs
       WHERE id = ${runId}
       FOR UPDATE
@@ -82,6 +90,23 @@ export async function applyPipelinePhaseEvent(sql, runId, event) {
       }
     }
 
+    // durationSec server-side (Task 7): S1/S3 calculan la duracion real del
+    // audio de entrada (len(samples)/sr) en Modal y la mandan en el result.
+    // Solo se persiste si input_meta.durationSec AUN no esta seteada — el
+    // browser la manda best-effort en confirm.js (D1) y llega primero; ese
+    // valor tiene prioridad, este es solo el fallback cuando el browser falló.
+    if (
+      event.phase === 'stems' &&
+      typeof event.durationSec === 'number' &&
+      run.inputMeta?.durationSec == null
+    ) {
+      await tx`
+        UPDATE song_pipeline_runs
+        SET input_meta = COALESCE(input_meta, '{}'::jsonb) || ${tx.json({ durationSec: event.durationSec })}::jsonb
+        WHERE id = ${runId}
+      `;
+    }
+
     if (event.phase === 'structure' && event.ok && !event.partial && event.payload?.segments) {
       await tx`
         INSERT INTO song_structure (song_id, run_id, segments, model)
@@ -113,7 +138,12 @@ export async function applyPipelinePhaseEvent(sql, runId, event) {
       `;
     }
 
-    if (event.phase === 'clips' && event.ok && !event.partial && Array.isArray(event.payload?.clips)) {
+    if (
+      event.phase === 'clips' &&
+      event.ok &&
+      !event.partial &&
+      Array.isArray(event.payload?.clips)
+    ) {
       for (const clip of event.payload.clips) {
         // ON CONFLICT sobre el mismo índice único de song_section_audio
         // (song_id, section_index, coalesce(voice_scope,'')). El WHERE del

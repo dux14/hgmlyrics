@@ -160,8 +160,14 @@ def run_extract(payload: dict) -> None:
     """
     # Import aquí para evitar que el import-time falle fuera del contenedor Modal.
     import httpx  # noqa: F401 — ya disponible en la imagen
+    import librosa  # noqa: F401 — solo disponible dentro del contenedor Modal
     # Absolute import: cuando Modal ejecuta, `modal/` es el cwd y `sections` es top-level.
-    from sections._common import extract_storage_key, upload_put, post_webhook
+    from sections._common import (
+        duration_from_samples,
+        extract_storage_key,
+        upload_put,
+        post_webhook,
+    )
 
     if S1_EXTRACTOR != "ep_317":
         raise NotImplementedError(
@@ -183,6 +189,13 @@ def run_extract(payload: dict) -> None:
             with open(src_path, "wb") as f:
                 for chunk in r.iter_bytes():
                     f.write(chunk)
+
+        # ── 1.5. Duración del audio de entrada (Task 7, server-side) ─────────
+        # Reemplaza al cálculo best-effort del browser (readAudioDuration):
+        # se decodifica el audio original con librosa y se calcula
+        # len(samples)/sr, la misma cuenta que hace el browser pero confiable.
+        samples, sr = librosa.load(src_path, sr=None, mono=True)
+        duration_sec = duration_from_samples(samples, sr)
 
         # ── 2-3. Separación S1 (ep_317 vocals/instrumental + demucs 6s) ──────
         # Inferencia pura compartida con el smoke full (mismo código que prod).
@@ -206,6 +219,7 @@ def run_extract(payload: dict) -> None:
                 "status": "done",
                 "model": _MODEL_LABEL,
                 "outputs": outputs,
+                "durationSec": duration_sec,
             },
         )
 

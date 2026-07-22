@@ -6,7 +6,11 @@ describe('sectionEventToPhaseEvent', () => {
     const out = sectionEventToPhaseEvent({
       jobId: 'run-1',
       section: 'leadBacking',
-      result: { status: 'done', model: 'karaoke', outputs: { lead: 'k-lead', backing: 'k-back', vocals: 'k-voc' } },
+      result: {
+        status: 'done',
+        model: 'karaoke',
+        outputs: { lead: 'k-lead', backing: 'k-back', vocals: 'k-voc' },
+      },
     });
     expect(out).toEqual({
       runId: 'run-1',
@@ -15,6 +19,42 @@ describe('sectionEventToPhaseEvent', () => {
       partial: false,
       tracks: { lead: 'k-lead', backing: 'k-back', vocals: 'k-voc' },
     });
+  });
+
+  it('leadBacking done con durationSec en el result → el evento lo propaga (Task 7, duracion server-side)', () => {
+    const out = sectionEventToPhaseEvent({
+      jobId: 'run-1',
+      section: 'leadBacking',
+      result: {
+        status: 'done',
+        model: 'karaoke',
+        outputs: { lead: 'k-lead', backing: 'k-back', vocals: 'k-voc' },
+        durationSec: 252.1,
+      },
+    });
+    expect(out.durationSec).toBe(252.1);
+  });
+
+  it('voiceInstrumental done con durationSec en el result → el evento lo propaga aunque no sea finalizadora', () => {
+    const out = sectionEventToPhaseEvent({
+      jobId: 'run-1',
+      section: 'voiceInstrumental',
+      result: { status: 'done', model: 'ep_317+htdemucs_6s', outputs: {}, durationSec: 187.5 },
+    });
+    expect(out.durationSec).toBe(187.5);
+  });
+
+  it('done sin durationSec en el result → el evento no trae la key (no pisa con undefined)', () => {
+    const out = sectionEventToPhaseEvent({
+      jobId: 'run-1',
+      section: 'leadBacking',
+      result: {
+        status: 'done',
+        model: 'karaoke',
+        outputs: { lead: 'k-lead', backing: 'k-back', vocals: 'k-voc' },
+      },
+    });
+    expect(out).not.toHaveProperty('durationSec');
   });
 
   it('leadBacking failed → falla la fase stems', () => {
@@ -52,7 +92,11 @@ describe('sectionEventToPhaseEvent', () => {
     const out = sectionEventToPhaseEvent({
       jobId: 'run-1',
       section: 'gender',
-      result: { status: 'done', model: 'x', outputs: { chorus: { male: null, female: undefined } } },
+      result: {
+        status: 'done',
+        model: 'x',
+        outputs: { chorus: { male: null, female: undefined } },
+      },
     });
     expect(out.tracks).toEqual({});
   });
@@ -170,7 +214,10 @@ describe('sectionEventToPhaseEvent', () => {
       phase: 'structure',
       ok: true,
       partial: false,
-      payload: { segments: [{ label: 'coro', startMs: 64200, endMs: 105800 }], model: 'songformer' },
+      payload: {
+        segments: [{ label: 'coro', startMs: 64200, endMs: 105800 }],
+        model: 'songformer',
+      },
     });
   });
 
@@ -181,7 +228,12 @@ describe('sectionEventToPhaseEvent', () => {
       result: { status: 'failed', model: 'songformer' },
       error: 'timeout de inferencia',
     });
-    expect(out).toEqual({ runId: 'run-1', phase: 'structure', ok: false, error: 'timeout de inferencia' });
+    expect(out).toEqual({
+      runId: 'run-1',
+      phase: 'structure',
+      ok: false,
+      error: 'timeout de inferencia',
+    });
   });
 
   it('structure status running → ignorado (null), aun no hay resultado', () => {

@@ -46,29 +46,7 @@ import { closeGoToSheet } from './components/GoToSheet.js';
 import { getWeeklyWords, warmWeeklyWords } from './lib/weeklyWords.js';
 import { initChromeAutoHide, setChromeAutoHide } from './lib/scrollChrome.js';
 import { initPreloadErrorGuard, clearPreloadErrorGuard } from './lib/preloadErrorGuard.js';
-
-// Motor único de auto-hide por ruta: Grupo C = header + nav; Grupo B = solo
-// nav, headerless (hero a sangre completa, sin header ni su reserva de
-// espacio). `headerless: true` unifica lo que antes era la tabla HEADERLESS
-// aparte — es exactamente el subconjunto nav-only de esta tabla.
-const CHROME_AUTOHIDE = [
-  { re: /^\/$/, header: true, nav: true },
-  { re: /^\/favoritos$/, header: true, nav: true },
-  { re: /^\/listas$/, header: true, nav: true },
-  { re: /^\/albumes$/, header: true, nav: true },
-  { re: /^\/amigos$/, header: true, nav: true },
-  { re: /^\/licencias$/, header: true, nav: true },
-  { re: /^\/lista\/(?!nueva$)[^/]+$/, header: true, nav: true }, // vista, no editor
-  { re: /^\/oracion$/, header: true, nav: true },
-  { re: /^\/song\/[^/]+$/, header: true, nav: true }, // no incluye /song/:id/links
-  { re: /^\/album\/[^/]+$/, nav: true, headerless: true },
-  { re: /^\/u\/[^/]+$/, header: true, nav: true },
-  { re: /^\/voz\/[^/]+$/, header: true, nav: true },
-  { re: /^\/voces$/, nav: true, headerless: true },
-  { re: /^\/perfil$/, header: true, nav: true }, // no incluye /perfil/editar
-];
-const chromeFor = (path) => CHROME_AUTOHIDE.find((c) => c.re.test(path)) ?? {};
-const isHeaderless = (path) => Boolean(chromeFor(path).headerless);
+import { chromeFor, isHeaderless, isNavHidden } from './lib/chromeRoutes.js';
 
 // Initialize theme immediately to avoid flash
 initTheme();
@@ -78,6 +56,27 @@ initPreloadErrorGuard();
 
 /** @type {HTMLElement} */
 let mainContent;
+
+/**
+ * Oculta bottom-nav + sidebar de forma permanente (vistas de tarea del
+ * pipeline, Task 2 — chrome propio, sin nav global). Clase `chrome-hidden`
+ * en body para que pipeline.css cancele la reserva de espacio de `.main`
+ * (margin-left de sidebar, padding-bottom de bottom-nav). Mismo patrón de
+ * `hideHeader`/`showHeader` (Header.js): atributo `hidden`, no display
+ * inline — layout.css ya define `.bottom-nav[hidden]`/`.sidebar[hidden]`.
+ */
+function hideNavChrome() {
+  document.querySelector('.bottom-nav')?.setAttribute('hidden', '');
+  document.querySelector('.sidebar')?.setAttribute('hidden', '');
+  document.body.classList.add('chrome-hidden');
+}
+
+/** Restaura bottom-nav + sidebar. */
+function showNavChrome() {
+  document.querySelector('.bottom-nav')?.removeAttribute('hidden');
+  document.querySelector('.sidebar')?.removeAttribute('hidden');
+  document.body.classList.remove('chrome-hidden');
+}
 
 /**
  * Skeleton neutro instantáneo para rutas con import() diferido. Se pinta de
@@ -457,6 +456,7 @@ async function bootBody() {
     const path = getCurrentPath();
     updateBottomNavActive(path);
     isHeaderless(path) ? hideHeader() : showHeader();
+    isNavHidden(path) ? hideNavChrome() : showNavChrome();
     setChromeAutoHide(chromeFor(path));
   });
 

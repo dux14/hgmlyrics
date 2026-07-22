@@ -6,6 +6,23 @@
  * monta), no vive dentro de la cascada de capas de app.css.
  */
 
+/* Chrome sin fin (Task 2): las 3 vistas del pipeline (procesamiento, estudio,
+   partitura) son inmersivas de tarea con su propio header — main.js oculta
+   header/bottom-nav/sidebar globales (chromeRoutes.js, `nav: false`) y marca
+   `body.chrome-hidden`. `.main` reserva espacio para ese chrome global
+   (padding-top del header, padding-bottom del bottom-nav, margin-left de la
+   sidebar en desktop); sin cancelarlo queda un hueco vacío arriba/abajo
+   detrás del chrome propio de cada vista. */
+body.chrome-hidden .main {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+@media (min-width: 768px) {
+  body.chrome-hidden .main {
+    margin-left: 0;
+  }
+}
+
 .lrp {
   max-width: 480px;
   margin: 0 auto;

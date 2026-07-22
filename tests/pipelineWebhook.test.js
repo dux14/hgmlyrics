@@ -422,6 +422,63 @@ describe('POST /api/pipeline/webhook — sección de stems (adapter hkn-stems)',
     expect(dispatchPhaseMock).not.toHaveBeenCalled();
   });
 
+  it('gender done con outputs.chorus:{male,female} → publica song_stems kind=male y kind=female (no "chorus")', async () => {
+    const phases = initialPhases();
+    phases.stems.status = 'running';
+    sqlResponses.push([runRow({ phases })]); // SELECT FOR UPDATE
+    sqlResponses.push([]); // insert song_stems male
+    sqlResponses.push([]); // insert song_stems female
+    sqlResponses.push([]); // UPDATE song_pipeline_runs
+
+    const res = makeRes();
+    await handler(
+      signedReq({
+        jobId: 'run-1',
+        section: 'gender',
+        result: {
+          status: 'done',
+          model: 'chorus_bs_roformer',
+          outputs: { chorus: { male: 'song-1/stems/male.mp3', female: 'song-1/stems/female.mp3' } },
+        },
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    const inserts = sqlCalls.filter((c) => c.text.includes('INSERT INTO song_stems'));
+    expect(inserts.length).toBe(2);
+    const kinds = inserts.map((c) => c.values[1]).sort();
+    expect(kinds).toEqual(['female', 'male']);
+    expect(kinds).not.toContain('chorus');
+  });
+
+  it("voiceInstrumental done con 'vocals' en outputs → NO publica song_stems.kind='vocals' (filtrado por STEM_KINDS)", async () => {
+    const phases = initialPhases();
+    phases.stems.status = 'running';
+    sqlResponses.push([runRow({ phases })]); // SELECT FOR UPDATE
+    sqlResponses.push([]); // insert song_stems instrumental
+    sqlResponses.push([]); // UPDATE song_pipeline_runs
+
+    const res = makeRes();
+    await handler(
+      signedReq({
+        jobId: 'run-1',
+        section: 'voiceInstrumental',
+        result: {
+          status: 'done',
+          model: 'ep_317+demucs',
+          outputs: { vocals: 'song-1/stems/vocals.mp3', instrumental: 'song-1/stems/instrumental.mp3' },
+        },
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    const inserts = sqlCalls.filter((c) => c.text.includes('INSERT INTO song_stems'));
+    expect(inserts.length).toBe(1);
+    expect(inserts[0].values[1]).toBe('instrumental');
+  });
+
   it('leadBacking failed → fase stems queda failed', async () => {
     const phases = initialPhases();
     phases.stems.status = 'running';

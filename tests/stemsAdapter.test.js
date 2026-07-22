@@ -46,13 +46,72 @@ describe('sectionEventToPhaseEvent', () => {
     expect(out).toBeNull();
   });
 
-  it('filtra entradas null/undefined de outputs (secciones sin upload slot)', () => {
+  it('filtra entradas null/undefined de outputs anidados (gender sin upload slot)', () => {
+    // Shape real de modal/sections/gender.py: outputs.chorus = {male, female}
+    // (anidado por nombre de modelo), no {male, female} flat.
     const out = sectionEventToPhaseEvent({
       jobId: 'run-1',
       section: 'gender',
-      result: { status: 'done', model: 'x', outputs: { male: null, female: undefined } },
+      result: { status: 'done', model: 'x', outputs: { chorus: { male: null, female: undefined } } },
     });
     expect(out.tracks).toEqual({});
+  });
+
+  it('gender done → desanida outputs.chorus:{male,female} a tracks planos (kinds válidos del CHECK de song_stems)', () => {
+    const out = sectionEventToPhaseEvent({
+      jobId: 'run-1',
+      section: 'gender',
+      result: {
+        status: 'done',
+        model: 'chorus_bs_roformer',
+        outputs: { chorus: { male: 'k-male', female: 'k-female' } },
+      },
+    });
+    expect(out).toEqual({
+      runId: 'run-1',
+      phase: 'stems',
+      ok: true,
+      partial: true,
+      tracks: { male: 'k-male', female: 'k-female' },
+    });
+  });
+
+  it("voiceInstrumental done con 'vocals' en outputs → tracks NO incluye vocals (filtrado por STEM_KINDS; fuente canónica es leadBacking)", () => {
+    const out = sectionEventToPhaseEvent({
+      jobId: 'run-1',
+      section: 'voiceInstrumental',
+      result: {
+        status: 'done',
+        model: 'ep_317+demucs',
+        outputs: {
+          vocals: 'k-vocals',
+          instrumental: 'k-instrumental',
+          drums: 'k-drums',
+          bass: 'k-bass',
+          guitar: 'k-guitar',
+          piano: 'k-piano',
+          other: 'k-other',
+        },
+      },
+    });
+    expect(out.tracks).toEqual({
+      instrumental: 'k-instrumental',
+      drums: 'k-drums',
+      bass: 'k-bass',
+      guitar: 'k-guitar',
+      piano: 'k-piano',
+      other: 'k-other',
+    });
+    expect(out.tracks.vocals).toBeUndefined();
+  });
+
+  it('duet done → tracks flat voice_a/voice_b (medley_vox no anida por modelo)', () => {
+    const out = sectionEventToPhaseEvent({
+      jobId: 'run-1',
+      section: 'duet',
+      result: { status: 'done', model: 'medley_vox', outputs: { voice_a: 'k-a', voice_b: 'k-b' } },
+    });
+    expect(out.tracks).toEqual({ voice_a: 'k-a', voice_b: 'k-b' });
   });
 
   it('sin result (ni outputs) → ignorado (null), no revienta leyendo outputs', () => {

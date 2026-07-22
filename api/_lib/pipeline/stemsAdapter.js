@@ -2,15 +2,43 @@
 // (shape { jobId, section, result:{status,model,outputs|segments}, error } —
 // ver post_webhook en modal/sections/_common.py) al phase-event que consume
 // applyPipelinePhaseEvent (api/pipeline/webhook.js). Traduce a DOS fases
-// distintas del DAG: 'stems' (secciones voiceInstrumental/leadBacking/gender)
-// y 'structure' (sección homónima, SongFormer). Función PURA (sin sql/fetch)
-// para poder testear la traducción en unidad.
+// distintas del DAG: 'stems' (secciones voiceInstrumental/leadBacking/gender/
+// duet) y 'structure' (sección homónima, SongFormer). Función PURA (sin sql/
+// fetch) para poder testear la traducción en unidad.
+import { STEM_KINDS } from '../../stems/_sections.js';
 
 // leadBacking es la única sección que carga los tracks críticos del DAG
-// (vocals/lead/backing, ver STEM_KINDS en songs/[id]/pipeline/_dispatch.js):
-// es la finalizadora de la fase stems. El resto (voiceInstrumental, gender)
+// (vocals/lead/backing, ver STEM_KINDS en api/stems/_sections.js): es la
+// finalizadora de la fase stems. El resto (voiceInstrumental, gender, duet)
 // aporta tracks best-effort, sin poder cerrar ni fallar la fase.
 const FINALIZER_SECTION = 'leadBacking';
+
+/**
+ * Aplana un nivel de anidamiento en `outputs` (fix review Task 6: gender.py
+ * postea `outputs.chorus = {male, female}` anidado por nombre de modelo —
+ * sin aplanar, `tracks` quedaba con una sola entrada `kind='chorus'` cuyo
+ * valor era un objeto, y `song_stems.kind` no admite 'chorus' en su CHECK →
+ * INSERT rechazado, rollback de toda la tx, gender nunca publicaba). General
+ * a propósito (no hardcodea "chorus"): cualquier valor-objeto se eleva a
+ * entradas planas kind→storageKey. `duet` (voice_a/voice_b) ya sube flat, no
+ * le afecta.
+ * @param {object} outputs
+ * @returns {object}
+ */
+function flattenOutputs(outputs) {
+  const tracks = {};
+  for (const [kind, value] of Object.entries(outputs)) {
+    if (value === null || value === undefined) continue;
+    if (typeof value === 'object') {
+      for (const [nestedKind, nestedValue] of Object.entries(value)) {
+        if (nestedValue !== null && nestedValue !== undefined) tracks[nestedKind] = nestedValue;
+      }
+    } else {
+      tracks[kind] = value;
+    }
+  }
+  return tracks;
+}
 
 /**
  * @param {{jobId:string, section:string,
@@ -24,8 +52,17 @@ const FINALIZER_SECTION = 'leadBacking';
  *   voiceInstrumental sin slot de upload en modo unificado).
  */
 function sectionResultToStemsEvent(jobId, section, result, error) {
-  const outputs = result.outputs || {};
-  const tracks = Object.fromEntries(Object.entries(outputs).filter(([, v]) => v !== null && v !== undefined));
+  const flat = flattenOutputs(result.outputs || {});
+  // Filtra por STEM_KINDS (fix review Task 6): cada sección solo publica los
+  // kinds que le corresponden en song_stems — p.ej. voiceInstrumental sube
+  // 'vocals' como copia de trabajo (ver UPLOAD_SLOTS en _dispatch.js) pero NO
+  // la publica; la fuente canónica de tracks.vocals es leadBacking. Antes de
+  // este fix, la única barrera contra esa publicación era el orden temporal
+  // S1→S3 del DAG (Task 9 la va a romper al paralelizar).
+  const allowedKinds = STEM_KINDS[section];
+  const tracks = allowedKinds
+    ? Object.fromEntries(Object.entries(flat).filter(([kind]) => allowedKinds.includes(kind)))
+    : flat;
   const isFinalizer = section === FINALIZER_SECTION;
 
   if (result.status === 'failed') {

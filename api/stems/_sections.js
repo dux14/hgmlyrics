@@ -24,6 +24,27 @@ export const SECTION_OUTPUTS = {
   // `structure` no genera archivos de audio; el orquestador postea segmentos por webhook.
 };
 
+/**
+ * STEM_KINDS = kinds que cada sección PUBLICA en `song_stems` (a diferencia de
+ * SECTION_OUTPUTS, que documenta el estado del Estudio DAG por job). La
+ * `vocals` de `voiceInstrumental` (S1) queda afuera a propósito: S1 la sube
+ * como copia de trabajo/scratch, pero la fuente canónica de `tracks.vocals`
+ * en el pipeline unificado es `leadBacking` (re-extrae el stem vocal antes de
+ * separar lead/backing, ver modal/sections/lead_backing.py). `structure` no
+ * tiene entrada acá: no publica kinds de audio, solo segments (fase aparte).
+ * Único hogar de este mapa (usado por api/songs/[id]/pipeline/_dispatch.js
+ * para armar uploads y por api/_lib/pipeline/stemsAdapter.js para filtrar qué
+ * kinds de cada sección llegan a publicarse) — evita que la protección de
+ * orden temporal S1→S3 sea la única barrera contra que voiceInstrumental
+ * pise song_stems.kind='vocals'.
+ */
+export const STEM_KINDS = {
+  voiceInstrumental: ['instrumental', 'drums', 'bass', 'guitar', 'piano', 'other'],
+  leadBacking: ['lead', 'backing', 'vocals'],
+  gender: ['male', 'female'],
+  duet: ['voice_a', 'voice_b'],
+};
+
 export function initSections(enabled) {
   const set = new Set(enabled);
   const mk = (key) => {

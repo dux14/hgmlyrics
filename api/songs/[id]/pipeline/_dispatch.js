@@ -15,37 +15,35 @@ import {
 } from '../../../_lib/storage.js';
 import { projectCanonicalLines, projectLineSections } from '../../../_lib/align.js';
 import sql from '../../../_lib/db.js';
+import { STEM_KINDS, SECTION_KEYS } from '../../../stems/_sections.js';
 
 // Pistas que produce la fase 'stems' agrupadas por sección Modal (mismo shape
-// {seccion: {pista: url}} que arma api/stems/jobs/[id]/start.js).
-// STEM_KINDS = kinds que se PUBLICAN en song_stems por sección (Task 6, cierra
-// las 12 pistas del Estudio). leadBacking incluye 'vocals': la sección
-// re-extrae el stem vocal intermedio (extract_vocals_stem) antes de separar
-// lead/backing y lo sube también (ver modal/sections/lead_backing.py) — es la
-// fuente canónica de `tracks.vocals` en el pipeline unificado. La `vocals` que
-// también sube S1/voiceInstrumental (ver UPLOAD_SLOTS) NO entra acá: S1
-// siempre corre antes que leadBacking en el DAG (modal/stems_app.py
-// run_pipeline), así que el `ON CONFLICT (song_id,kind)` de song_stems queda
-// con el valor de leadBacking como último escritor.
-export const STEM_KINDS = {
-  voiceInstrumental: ['instrumental', 'drums', 'bass', 'guitar', 'piano', 'other'],
-  leadBacking: ['lead', 'backing', 'vocals'],
-  gender: ['male', 'female'],
-  duet: ['voice_a', 'voice_b'],
-};
+// {seccion: {pista: url}} que arma api/stems/jobs/[id]/start.js). STEM_KINDS
+// (kinds que cada sección PUBLICA en song_stems) vive en api/stems/_sections.js
+// — único hogar compartido con api/_lib/pipeline/stemsAdapter.js, que filtra
+// por ese mapa antes de publicar (fix review Task 6: la vocals de S1 llegaba
+// a publicarse igual, protegida solo por el orden temporal S1→S3 del DAG).
 
 // UPLOAD_SLOTS = archivos que SUBE cada sección Modal (distinto de STEM_KINDS
 // solo en voiceInstrumental: S1/extract siempre sube las 7 pistas, incl.
-// `vocals`, aunque esa copia no se publique en song_stems, ver nota arriba).
+// `vocals` — stemsAdapter la descarta al publicar, ver STEM_KINDS).
+// TODO(Task 9 paralelizacion): S1 y S3 suben su `vocals` a la MISMA storage
+// key fisica (pipelineStemKey(songId,'vocals')). Hoy no hay colision real
+// porque S1 termina antes de que S3 arranque (run_pipeline espera s1_call.get()
+// antes de spawnear S3); al paralelizar S1-S5 esa garantia desaparece y el
+// archivo final en esa key queda no-determinista entre S1/S3 (impacto bajo:
+// contenido casi identico, mismo checkpoint de extraccion vocal) — evaluar
+// subir el `vocals` de S1 a una key aparte si se necesita determinismo estricto.
 export const UPLOAD_SLOTS = {
   ...STEM_KINDS,
   voiceInstrumental: ['vocals', ...STEM_KINDS.voiceInstrumental],
 };
 
-// Las 5 secciones del DAG Modal (modal/stems_app.py run_pipeline). S1
-// (voiceInstrumental) corre siempre sin importar enabledSections; S2
-// (structure) / S3 (leadBacking) / S4 (gender) / S5 (duet) sí se gatean acá.
-export const ENABLED_SECTIONS = ['voiceInstrumental', 'structure', 'leadBacking', 'gender', 'duet'];
+// Las 5 secciones del DAG Modal (modal/stems_app.py run_pipeline), mismo orden
+// que SECTION_KEYS. S1 (voiceInstrumental) corre siempre sin importar
+// enabledSections; S2 (structure) / S3 (leadBacking) / S4 (gender) / S5 (duet)
+// sí se gatean acá.
+export const ENABLED_SECTIONS = SECTION_KEYS;
 
 function webhookUrl() {
   return `${process.env.PUBLIC_BASE_URL}/api/pipeline/webhook`;

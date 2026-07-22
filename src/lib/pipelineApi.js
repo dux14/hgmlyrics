@@ -166,8 +166,10 @@ export async function renamePipelineAudio(songId, displayName) {
  * real lo trae getPipelineRun. Un polling de 3s actúa de fallback si el
  * Realtime no conecta. onChange recibe la respuesta del GET ({run} | null).
  * @param {string} songId
- * @param {(data:{run:object}|null)=>void} onChange
- * @returns {()=>void} unsubscribe idempotente.
+ * @param {(data:{run:object}|{error:Error}|null)=>void} onChange
+ * @returns {(()=>void)&{refresh:()=>Promise<void>}} unsubscribe idempotente,
+ *   invocable como función; `.refresh` fuerza un refresh fuera de ciclo (p.
+ *   ej. desde un botón "Reintentar" tras un {error}).
  */
 export function watchPipelineRun(songId, onChange) {
   let stopped = false;
@@ -184,8 +186,12 @@ export function watchPipelineRun(songId, onChange) {
     } catch (err) {
       // No cortamos el watch: el próximo tick de polling reintenta. Se loguea
       // para que un fallo permanente (sesión muerta, admin revocado, 500
-      // persistente) no deje la vista muda sin señal alguna.
+      // persistente) no deje la vista muda sin señal alguna. Además emitimos
+      // un sentinel {error} para que el consumer pinte un estado de error en
+      // vez de quedar en blanco (el catch previo tragaba el error entero).
       console.error('watchPipelineRun: no se pudo refrescar el run', err);
+      if (stopped || reqId !== lastReqId) return;
+      onChange({ error: err });
       return;
     }
     // Descarta respuestas obsoletas o posteriores al unsubscribe. onChange
@@ -206,10 +212,16 @@ export function watchPipelineRun(songId, onChange) {
   const pollId = setInterval(refresh, 3000);
   refresh();
 
-  return function unsubscribe() {
+  function unsubscribe() {
     if (stopped) return;
     stopped = true;
     clearInterval(pollId);
     supabase.removeChannel(channel);
-  };
+  }
+  // Se mantiene el contrato de "función invocable" (único call-site sigue
+  // haciendo unsub()); refresh queda colgado como propiedad para que un
+  // botón "Reintentar" pueda forzar el próximo refresh sin duplicar la
+  // suscripción entera.
+  unsubscribe.refresh = refresh;
+  return unsubscribe;
 }

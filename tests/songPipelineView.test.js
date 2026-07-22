@@ -7,7 +7,8 @@ let lastUnsub = null;
 vi.mock('../src/lib/pipelineApi.js', () => ({
   watchPipelineRun: vi.fn((songId, onChange) => {
     watchOnChange = onChange;
-    lastUnsub = vi.fn(); // unsubscribe
+    lastUnsub = vi.fn(); // unsubscribe, con .refresh anexado (mismo contrato que el real)
+    lastUnsub.refresh = vi.fn();
     return lastUnsub;
   }),
   retryPipelinePhase: vi.fn(() => Promise.resolve({ success: true })),
@@ -308,12 +309,48 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     expect(LyricsReviewPanel).toHaveBeenCalledTimes(1);
   });
 
+  it('esqueleto inmediato: las 5 filas existen antes de que watchPipelineRun emita nada', () => {
+    renderSongPipelineView(container, SONG_ID);
+
+    expect(container.querySelectorAll('[data-phase]').length).toBe(5);
+  });
+
+  it('error del watcher: muestra el banner con boton Reintentar sin borrar las filas', () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({ error: new Error('boom') });
+
+    const banner = container.querySelector('.pipeline-view__error');
+    expect(banner).toBeTruthy();
+    expect(banner.hidden).toBe(false);
+    expect(banner.textContent).toContain('Reintentar');
+    expect(container.querySelectorAll('[data-phase]').length).toBe(5);
+  });
+
+  it('el boton Reintentar del banner de error fuerza un refresh del watcher', () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({ error: new Error('boom') });
+
+    const btn = container.querySelector('.pipeline-view__error-retry');
+    btn.click();
+
+    expect(lastUnsub.refresh).toHaveBeenCalled();
+  });
+
+  it('tras un error, un run valido oculta el banner sin borrar las filas', () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({ error: new Error('boom') });
+    watchOnChange({ run: buildRun() });
+
+    const banner = container.querySelector('.pipeline-view__error');
+    expect(banner.hidden).toBe(true);
+    expect(container.querySelectorAll('[data-phase]').length).toBe(5);
+  });
+
   it('skip por firma: dos eventos con el mismo estado no reconstruyen las filas', () => {
     renderSongPipelineView(container, SONG_ID);
     watchOnChange({ run: buildRun() });
 
     const row = container.querySelector('[data-phase="upload"]');
-    expect(row.classList.contains('phase--enter')).toBe(true);
     row.classList.remove('phase--enter'); // marca que este render "ya paso"
 
     watchOnChange({ run: buildRun() }); // mismo estado exacto

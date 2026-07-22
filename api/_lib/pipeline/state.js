@@ -2,7 +2,7 @@
 // sin fetch, sin Date.now (los timestamps los pone el llamador). Patron
 // hermano de api/pitch/_lib/state.js pero a nivel cancion.
 
-export const PHASES = ['upload','stems','transcription','lyrics_review','sync','pitch','clips'];
+export const PHASES = ['upload','stems','structure','transcription','lyrics_review','sync','pitch','clips'];
 
 export const PHASE_STATUSES = ['pending','running','done','failed','stale'];
 
@@ -24,6 +24,7 @@ export function initialPhases() {
 const DEPS = {
   upload: () => true,
   stems: (p) => p.upload.status === 'done',
+  structure: (p) => p.upload.status === 'done',
   transcription: (p) => p.upload.status === 'done' && Boolean(p.stems.tracks?.vocals),
   lyrics_review: (p) => p.transcription.status === 'done',
   sync: (p) => p.lyrics_review.status === 'done' && Boolean(p.stems.tracks?.vocals),
@@ -44,7 +45,20 @@ export function applyPhaseEvent(phases, event) {
   const { phase, ok, partial = false, tracks, artifacts, error } = event;
   const cur = phases[phase];
   if (!cur) return null;
-  if (TERMINAL.has(cur.status)) return null;
+  if (TERMINAL.has(cur.status)) {
+    // Merge tardio: pistas/artefactos que Modal reporta DESPUES de cerrar la
+    // fase (ej. drums/bass tras lead) no deben perderse. Solo mergea, el
+    // status de la fase terminal queda intacto; eventos no-parciales o
+    // fallidos sobre fase terminal se siguen ignorando (zombie).
+    if (ok && partial && (tracks || artifacts)) {
+      const next = structuredClone(phases);
+      const target = next[phase];
+      if (tracks) target.tracks = { ...(target.tracks ?? {}), ...tracks };
+      if (artifacts) target.artifacts = { ...(target.artifacts ?? {}), ...artifacts };
+      return next;
+    }
+    return null;
+  }
   const next = structuredClone(phases);
   const target = next[phase];
   if (tracks) target.tracks = { ...(target.tracks ?? {}), ...tracks };

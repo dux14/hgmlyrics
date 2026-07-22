@@ -5,8 +5,8 @@ import {
 } from '../api/_lib/pipeline/state.js';
 
 describe('modelo de fases', () => {
-  it('define las 7 fases del DAG en orden', () => {
-    expect(PHASES).toEqual(['upload','stems','transcription','lyrics_review','sync','pitch','clips']);
+  it('define las 8 fases del DAG en orden', () => {
+    expect(PHASES).toEqual(['upload','stems','structure','transcription','lyrics_review','sync','pitch','clips']);
   });
   it('initialPhases arranca todo pending salvo upload running', () => {
     const p = initialPhases();
@@ -63,6 +63,17 @@ describe('applyPhaseEvent (CAS)', () => {
     expect(n2.stems.status).toBe('done');
     expect(Object.keys(n2.stems.tracks).sort()).toEqual(['backing','instrumental','lead','vocals']);
   });
+  it('acepta tracks parciales sobre stems done sin cambiar status', () => {
+    const phases = { ...initialPhases(), stems: { status: 'done', error: null, tracks: { lead: 'k/lead' } } };
+    const next = applyPhaseEvent(phases, { phase: 'stems', ok: true, partial: true, tracks: { drums: 'k/drums' } });
+    expect(next.stems.status).toBe('done');
+    expect(next.stems.tracks).toEqual({ lead: 'k/lead', drums: 'k/drums' });
+  });
+  it('sigue ignorando eventos no-parciales o fallidos sobre fase terminal', () => {
+    const phases = { ...initialPhases(), stems: { status: 'done' } };
+    expect(applyPhaseEvent(phases, { phase: 'stems', ok: false, error: 'x' })).toBeNull();
+    expect(applyPhaseEvent(phases, { phase: 'stems', ok: true, partial: false })).toBeNull();
+  });
 });
 
 describe('invalidacion en cascada', () => {
@@ -92,5 +103,11 @@ describe('runStatusFromPhases', () => {
     const p = initialPhases();
     p.upload.status = 'done'; p.stems.status = 'failed';
     expect(runStatusFromPhases(p)).toBe('processing'); // otras fases siguen
+  });
+  it('runStatusFromPhases ignora structure para done', () => {
+    const p = initialPhases();
+    for (const ph of PHASES) p[ph].status = 'done';
+    p.structure.status = 'failed';
+    expect(runStatusFromPhases(p)).toBe('done');
   });
 });

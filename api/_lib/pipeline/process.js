@@ -82,6 +82,15 @@ export async function applyPipelinePhaseEvent(sql, runId, event) {
       }
     }
 
+    if (event.phase === 'structure' && event.ok && !event.partial && event.payload?.segments) {
+      await tx`
+        INSERT INTO song_structure (song_id, run_id, segments, model)
+        VALUES (${run.songId}, ${runId}, ${tx.json(event.payload.segments)}, ${event.payload.model ?? null})
+        ON CONFLICT (song_id)
+        DO UPDATE SET run_id = EXCLUDED.run_id, segments = EXCLUDED.segments, model = EXCLUDED.model, updated_at = now()
+      `;
+    }
+
     let lyricsReview = run.lyricsReview ?? {};
     if (event.phase === 'transcription' && event.ok && !event.partial && event.payload) {
       // transLines (plan C, gate de letra): lineas de texto transcritas en el

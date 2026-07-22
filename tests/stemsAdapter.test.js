@@ -95,4 +95,42 @@ describe('sectionEventToPhaseEvent', () => {
     });
     expect(out).toBeNull();
   });
+
+  it('structure done → fase structure con segments en ms (conversion de segundos una sola vez)', () => {
+    const out = sectionEventToPhaseEvent({
+      jobId: 'run-1',
+      section: 'structure',
+      result: {
+        status: 'done',
+        model: 'songformer',
+        segments: [{ label: 'coro', start: 64.2, end: 105.8 }],
+      },
+    });
+    expect(out).toEqual({
+      runId: 'run-1',
+      phase: 'structure',
+      ok: true,
+      partial: false,
+      payload: { segments: [{ label: 'coro', startMs: 64200, endMs: 105800 }], model: 'songformer' },
+    });
+  });
+
+  it('structure failed → fase structure falla (NO null: fila visible con retry, aunque no bloquee el run)', () => {
+    const out = sectionEventToPhaseEvent({
+      jobId: 'run-1',
+      section: 'structure',
+      result: { status: 'failed', model: 'songformer' },
+      error: 'timeout de inferencia',
+    });
+    expect(out).toEqual({ runId: 'run-1', phase: 'structure', ok: false, error: 'timeout de inferencia' });
+  });
+
+  it('structure status running → ignorado (null), aun no hay resultado', () => {
+    const out = sectionEventToPhaseEvent({
+      jobId: 'run-1',
+      section: 'structure',
+      result: { status: 'running', model: 'songformer' },
+    });
+    expect(out).toBeNull();
+  });
 });

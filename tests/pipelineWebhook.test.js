@@ -473,6 +473,63 @@ describe('POST /api/pipeline/webhook — sección de stems (adapter hkn-stems)',
   });
 });
 
+describe('POST /api/pipeline/webhook — structure (SongFormer)', () => {
+  it('structure done (payload.segments) → upsert song_structure y fase done', async () => {
+    const phases = initialPhases();
+    phases.upload.status = 'done';
+    phases.structure.status = 'running';
+    sqlResponses.push([runRow({ phases })]); // SELECT FOR UPDATE
+    sqlResponses.push([]); // upsert song_structure
+    sqlResponses.push([]); // UPDATE song_pipeline_runs
+
+    const res = makeRes();
+    await handler(
+      signedReq({
+        runId: 'run-1',
+        phase: 'structure',
+        ok: true,
+        payload: { segments: [{ label: 'coro', startMs: 64200, endMs: 105800 }], model: 'songformer' },
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    const upsert = sqlCalls.find((c) => c.text.includes('INSERT INTO song_structure'));
+    expect(upsert).toBeDefined();
+    expect(upsert.text).toContain('ON CONFLICT');
+    const phasesArg = sqlCalls
+      .find((c) => c.text.includes('UPDATE song_pipeline_runs'))
+      .values.find((v) => v && typeof v === 'object' && v.structure);
+    expect(phasesArg.structure.status).toBe('done');
+  });
+
+  it('structure failed (sección de stems) → fase structure queda failed, sin upsert', async () => {
+    const phases = initialPhases();
+    phases.structure.status = 'running';
+    sqlResponses.push([runRow({ phases })]); // SELECT FOR UPDATE
+    sqlResponses.push([]); // UPDATE song_pipeline_runs
+
+    const res = makeRes();
+    await handler(
+      signedReq({
+        jobId: 'run-1',
+        section: 'structure',
+        result: { status: 'failed', model: 'songformer' },
+        error: 'timeout de inferencia',
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(sqlCalls.some((c) => c.text.includes('INSERT INTO song_structure'))).toBe(false);
+    const phasesArg = sqlCalls
+      .find((c) => c.text.includes('UPDATE song_pipeline_runs'))
+      .values.find((v) => v && typeof v === 'object' && v.structure);
+    expect(phasesArg.structure.status).toBe('failed');
+    expect(phasesArg.structure.error).toBe('timeout de inferencia');
+  });
+});
+
 describe('applyPipelinePhaseEvent — CAS directo (reuso B7)', () => {
   it('run inexistente → null', async () => {
     sqlResponses.push([]);

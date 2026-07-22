@@ -24,20 +24,18 @@ import { STEM_KINDS, SECTION_KEYS } from '../../../stems/_sections.js';
 // por ese mapa antes de publicar (fix review Task 6: la vocals de S1 llegaba
 // a publicarse igual, protegida solo por el orden temporal S1→S3 del DAG).
 
-// UPLOAD_SLOTS = archivos que SUBE cada sección Modal (distinto de STEM_KINDS
-// solo en voiceInstrumental: S1/extract siempre sube las 7 pistas, incl.
-// `vocals` — stemsAdapter la descarta al publicar, ver STEM_KINDS).
-// TODO(Task 9 paralelizacion): S1 y S3 suben su `vocals` a la MISMA storage
-// key fisica (pipelineStemKey(songId,'vocals')). Hoy no hay colision real
-// porque S1 termina antes de que S3 arranque (run_pipeline espera s1_call.get()
-// antes de spawnear S3); al paralelizar S1-S5 esa garantia desaparece y el
-// archivo final en esa key queda no-determinista entre S1/S3 (impacto bajo:
-// contenido casi identico, mismo checkpoint de extraccion vocal) — evaluar
-// subir el `vocals` de S1 a una key aparte si se necesita determinismo estricto.
-export const UPLOAD_SLOTS = {
-  ...STEM_KINDS,
-  voiceInstrumental: ['vocals', ...STEM_KINDS.voiceInstrumental],
-};
+// UPLOAD_SLOTS = archivos que SUBE cada sección Modal. Antes de Task 9
+// (paralelización total) voiceInstrumental (S1) tenía un slot extra `vocals`
+// que STEM_KINDS no publica (S1 la sube como copia de trabajo/scratch, sin
+// consumidor aguas abajo) — pero apuntaba a la MISMA storage key física que
+// leadBacking (S3): pipelineStemKey(songId,'vocals'). Con S1 y S3 en
+// paralelo (ya no hay orden S1→S3 que evite la carrera), dos escritores a la
+// misma key es no-determinista. Fix: S1 ya no recibe slot de upload para
+// `vocals` (sections/extract.py salta la subida si el slot no está en
+// `uploads`, ver `if not put_url: continue`) — la fuente canónica de
+// `vocals` queda exclusivamente en leadBacking (S3), como ya documenta
+// STEM_KINDS. UPLOAD_SLOTS == STEM_KINDS 1:1 ahora.
+export const UPLOAD_SLOTS = STEM_KINDS;
 
 // Las 5 secciones del DAG Modal (modal/stems_app.py run_pipeline), mismo orden
 // que SECTION_KEYS. S1 (voiceInstrumental) corre siempre sin importar

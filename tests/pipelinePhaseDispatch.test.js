@@ -65,9 +65,10 @@ describe("dispatchPhase('stems')", () => {
       'gender',
       'duet',
     ]);
-    // voiceInstrumental sube 7 pistas (incl. vocals, que no se publica en song_stems).
+    // voiceInstrumental sube 6 pistas (Task 9: ya NO incluye vocals -- esa
+    // key la publica leadBacking, evita la carrera de 2 escritores en
+    // paralelo a la misma storage key).
     expect(args.uploads.voiceInstrumental).toEqual({
-      vocals: 'https://signed/put/song1/stems/vocals.mp3',
       instrumental: 'https://signed/put/song1/stems/instrumental.mp3',
       drums: 'https://signed/put/song1/stems/drums.mp3',
       bass: 'https://signed/put/song1/stems/bass.mp3',

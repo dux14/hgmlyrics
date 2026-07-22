@@ -422,6 +422,50 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Banner de error: se superpone sin borrar las filas ya pintadas debajo
+   (esqueleto siempre visible). role="alert" en el markup. */
+.pipeline-view__error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: color-mix(in oklch, var(--color-danger) 8%, var(--color-surface));
+  border: 1px solid color-mix(in oklch, var(--color-danger) 25%, transparent);
+  border-radius: var(--border-radius-md);
+}
+.pipeline-view__error[hidden] {
+  display: none;
+}
+
+.pipeline-view__error-text {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-danger);
+}
+
+.pipeline-view__error-retry {
+  flex: none;
+  background: var(--color-action);
+  color: var(--color-bg);
+  border: none;
+  border-radius: 9px;
+  padding: 7px 13px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    filter 0.15s var(--ease-out),
+    transform 0.12s var(--ease-out);
+}
+.pipeline-view__error-retry:hover {
+  filter: brightness(1.06);
+}
+.pipeline-view__error-retry:active {
+  transform: scale(0.97);
+}
+
 .pipeline-view__rows {
   padding: 0 var(--space-md);
 }

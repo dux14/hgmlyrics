@@ -258,5 +258,44 @@ describe("dispatchPhase('clips')", () => {
     // startMs de CLIPS_LINE_TIMINGS: 100, 2100, 4000, 6000 → segmento 0,1,1,2
     expect(args.lineSections).toEqual([0, 1, 1, 2]);
     expect(args.totalMs).toBe(8500);
+    // Critical del review: sectionCount/uploads/uploadKeys quedan atados a
+    // song.sections.length (4, CLIPS_SECTIONS), NUNCA al conteo de segmentos
+    // detectados (3) — section-audio.js y SongView.js indexan section_index
+    // contra song.sections, y la reconciliación estructura↔letra está
+    // diferida a Task 15. Un uploads con solo 3 entradas dejaría la sección 3
+    // sin clip posible.
+    expect(Object.keys(args.uploads.vocals)).toEqual(['0', '1', '2', '3']);
+    expect(Object.keys(args.uploadKeys.vocals)).toEqual(['0', '1', '2', '3']);
+  });
+
+  it('segments desordenados/con basura → se ordenan por startMs y totalMs es el máximo endMs (Important del review)', async () => {
+    sqlResponses.push([{ sections: CLIPS_SECTIONS }]); // SELECT sections FROM songs
+    sqlResponses.push([{ lines: CLIPS_LINE_TIMINGS }]); // SELECT lines FROM song_line_timings
+    sqlResponses.push([{ durationSec: '8.5' }]); // SELECT duration_sec FROM song_audio (ignorado)
+    sqlResponses.push([
+      {
+        // Desordenados (chorus antes que el primer verse) + un segmento con
+        // endMs no finito que debe descartarse antes de derivar totalMs.
+        segments: [
+          { label: 'chorus', startMs: 2000, endMs: 6000 },
+          { label: 'verse', startMs: 0, endMs: 2000 },
+          { label: 'basura', startMs: NaN, endMs: Infinity },
+          { label: 'verse', startMs: 6000, endMs: 8500 },
+        ],
+      },
+    ]); // SELECT segments FROM song_structure
+
+    const run = {
+      id: 'run1',
+      songId: 'song1',
+      phases: { stems: { tracks: { vocals: 'song1/stems/vocals.mp3' } } },
+    };
+    await dispatchPhase('clips', run);
+
+    const args = dispatchClips.mock.calls[0][0];
+    // Una vez ordenados y filtrados: [verse 0-2000, chorus 2000-6000, verse 6000-8500]
+    // → mismo resultado que el test anterior con los segmentos ya ordenados.
+    expect(args.lineSections).toEqual([0, 1, 1, 2]);
+    expect(args.totalMs).toBe(8500);
   });
 });

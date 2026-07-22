@@ -183,10 +183,17 @@ export async function dispatchPhase(phase, run) {
   ]);
   const lines = lineTimingsRow[0]?.lines || [];
   // Segmentos detectados (ya en ms, ver supabase/migrations/20260722010000_song_structure.sql):
-  // [{label, startMs, endMs}] ordenados y contiguos. Si existen, son la fuente
-  // de verdad de las secciones reales del audio — más preciso que la letra.
-  const detectedSegments = structureRow[0]?.segments;
-  const hasDetectedSegments = Array.isArray(detectedSegments) && detectedSegments.length > 0;
+  // [{label, startMs, endMs}]. Nada garantiza en el productor (stemsAdapter/
+  // process.js no ordenan) que lleguen ordenados/contiguos, así que acá se
+  // ordenan defensivamente por startMs ascendente y se descartan filas con
+  // startMs/endMs no finitos antes de derivar nada (review Task 8, Important).
+  const rawSegments = structureRow[0]?.segments;
+  const detectedSegments = Array.isArray(rawSegments)
+    ? rawSegments
+        .filter((s) => Number.isFinite(s?.startMs) && Number.isFinite(s?.endMs))
+        .sort((a, b) => a.startMs - b.startMs)
+    : [];
+  const hasDetectedSegments = detectedSegments.length > 0;
 
   // canonicalSections[i] = índice de sección de la línea canónica i (mismo
   // orden que usa song_line_timings.lines[].i, ver projectCanonicalLines).
@@ -194,8 +201,7 @@ export async function dispatchPhase(phase, run) {
   // espera modal/clips_app.py: lineSections[k] = sección de lines[k].
   const canonicalSections = projectLineSections(song[0]?.sections);
   // Con segmentos detectados: sección de una línea = índice del último
-  // segmento cuyo startMs no supera el startMs de la línea (segmentos
-  // contiguos y ordenados, así que esto ubica la línea en su segmento real).
+  // segmento (ya ordenado) cuyo startMs no supera el startMs de la línea.
   const lineSections = hasDetectedSegments
     ? lines.map((l) => {
         let idx = 0;
@@ -209,18 +215,23 @@ export async function dispatchPhase(phase, run) {
   // duration_sec es NUMERIC en Postgres → llega como string vía postgres.js.
   // Puede ser null (caso real observado); ahí se cae a la última línea
   // conocida (máximo startMs) en vez de dispatchear con 0. Con segmentos
-  // detectados, totalMs es directo: el endMs del último segmento.
+  // detectados, totalMs es el máximo endMs (no el del último elemento
+  // posicional — ya se ordenó arriba, pero calcularlo así es robusto igual
+  // si algún día conviven segmentos solapados).
   const durationSec = audioRow[0]?.durationSec;
   const totalMs = hasDetectedSegments
-    ? detectedSegments[detectedSegments.length - 1].endMs
+    ? Math.max(...detectedSegments.map((s) => s.endMs))
     : durationSec !== null && durationSec !== undefined
       ? Math.round(Number(durationSec) * 1000)
       : lines.reduce((max, l) => Math.max(max, l.startMs || 0), 0);
-  // Rango de secciones: con segmentos detectados, uno por segmento (las
-  // signed PUT URLs de uploads/uploadKeys deben cubrir cada índice que
-  // lineSections puede producir); sin ellos, `song.sections` (letra actual
-  // en DB) como antes.
-  const sectionCount = hasDetectedSegments ? detectedSegments.length : song[0]?.sections?.length || 0;
+  // sectionCount/uploads/uploadKeys quedan SIEMPRE atados a `song.sections`
+  // (letra actual en DB), nunca al conteo de segmentos detectados: son la
+  // misma columna section_index que usan api/songs/[id]/section-audio.js
+  // (valida contra song.sections.length) y SongView.js (renderiza audio por
+  // .lyrics__section indexado por song.sections). La reconciliación
+  // estructura↔letra está diferida a Task 15 (review Task 8, Critical) — acá
+  // los segmentos detectados solo alimentan lineSections/totalMs arriba.
+  const sectionCount = song[0]?.sections?.length || 0;
   const uploads = {};
   const uploadKeys = {};
   for (const kind of Object.keys(tracks)) {

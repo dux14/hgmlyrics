@@ -74,6 +74,11 @@ describe('applyPhaseEvent (CAS)', () => {
     expect(applyPhaseEvent(phases, { phase: 'stems', ok: false, error: 'x' })).toBeNull();
     expect(applyPhaseEvent(phases, { phase: 'stems', ok: true, partial: false })).toBeNull();
   });
+  it('NO mergea tracks parciales sobre stems failed (evita despachar transcription con stems fallida)', () => {
+    const phases = { ...initialPhases(), stems: { status: 'failed', error: 'boom' } };
+    const next = applyPhaseEvent(phases, { phase: 'stems', ok: true, partial: true, tracks: { vocals: 'k/vocals' } });
+    expect(next).toBeNull();
+  });
 });
 
 describe('invalidacion en cascada', () => {

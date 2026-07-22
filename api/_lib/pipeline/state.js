@@ -2,6 +2,8 @@
 // sin fetch, sin Date.now (los timestamps los pone el llamador). Patron
 // hermano de api/pitch/_lib/state.js pero a nivel cancion.
 
+// 'structure' aquí es la fase del DAG de análisis estructural (SongFormer);
+// distinta de la subsección homónima de stems (api/stems/_sections.js).
 export const PHASES = ['upload','stems','structure','transcription','lyrics_review','sync','pitch','clips'];
 
 export const PHASE_STATUSES = ['pending','running','done','failed','stale'];
@@ -46,11 +48,15 @@ export function applyPhaseEvent(phases, event) {
   const cur = phases[phase];
   if (!cur) return null;
   if (TERMINAL.has(cur.status)) {
-    // Merge tardio: pistas/artefactos que Modal reporta DESPUES de cerrar la
+    // Merge tardío: pistas/artefactos que Modal reporta después de cerrar la
     // fase (ej. drums/bass tras lead) no deben perderse. Solo mergea, el
     // status de la fase terminal queda intacto; eventos no-parciales o
-    // fallidos sobre fase terminal se siguen ignorando (zombie).
-    if (ok && partial && (tracks || artifacts)) {
+    // fallidos sobre fase terminal se siguen ignorando (zombie). Gatea en
+    // 'done' ESTRICTO (no 'failed'): mergear tracks sobre una fase fallida
+    // dejaría stems.tracks.vocals presente pese a stems.status='failed', y
+    // DEPS.transcription solo chequea el track (no el status) -> avanzaría
+    // el run en silencio con una fase crítica fallida.
+    if (cur.status === 'done' && ok && partial && (tracks || artifacts)) {
       const next = structuredClone(phases);
       const target = next[phase];
       if (tracks) target.tracks = { ...(target.tracks ?? {}), ...tracks };

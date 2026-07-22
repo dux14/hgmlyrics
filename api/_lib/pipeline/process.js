@@ -90,16 +90,18 @@ export async function applyPipelinePhaseEvent(sql, runId, event) {
       }
     }
 
-    // durationSec server-side (Task 7): S1/S3 calculan la duracion real del
+    // durationSec server-side (Task 7): S1/S3 calculan la duración real del
     // audio de entrada (len(samples)/sr) en Modal y la mandan en el result.
-    // Solo se persiste si input_meta.durationSec AUN no esta seteada — el
+    // Solo se persiste si input_meta.durationSec aún no está seteada — el
     // browser la manda best-effort en confirm.js (D1) y llega primero; ese
     // valor tiene prioridad, este es solo el fallback cuando el browser falló.
-    if (
-      event.phase === 'stems' &&
+    // Misma validación que confirm.js:54 (finito y no negativo) para que un
+    // durationSec corrupto (NaN/Infinity/negativo) nunca llegue a persistirse.
+    const hasValidDurationSec =
       typeof event.durationSec === 'number' &&
-      run.inputMeta?.durationSec == null
-    ) {
+      Number.isFinite(event.durationSec) &&
+      event.durationSec >= 0;
+    if (event.phase === 'stems' && hasValidDurationSec && run.inputMeta?.durationSec == null) {
       await tx`
         UPDATE song_pipeline_runs
         SET input_meta = COALESCE(input_meta, '{}'::jsonb) || ${tx.json({ durationSec: event.durationSec })}::jsonb

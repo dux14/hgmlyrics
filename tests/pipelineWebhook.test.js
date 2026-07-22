@@ -676,4 +676,29 @@ describe('applyPipelinePhaseEvent — durationSec server-side (Task 7)', () => {
     );
     expect(updateCall).toBeUndefined();
   });
+
+  it.each([
+    ['NaN', NaN],
+    ['Infinity', Infinity],
+    ['negativo', -1],
+  ])(
+    'evento stems con durationSec no valido (%s) → NO lo persiste (misma regla que confirm.js)',
+    async (_label, durationSec) => {
+      sqlResponses.push([runRow({ inputMeta: { filename: 'cancion.mp3' } })]); // SELECT FOR UPDATE
+      sqlResponses.push([]); // UPDATE song_pipeline_runs
+
+      await applyPipelinePhaseEvent(sqlMock, 'run-1', {
+        phase: 'stems',
+        ok: true,
+        partial: false,
+        tracks: {},
+        durationSec,
+      });
+
+      const updateCall = sqlCalls.find(
+        (c) => c.text.includes('UPDATE song_pipeline_runs') && c.text.includes('input_meta'),
+      );
+      expect(updateCall).toBeUndefined();
+    },
+  );
 });

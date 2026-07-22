@@ -127,10 +127,20 @@ def run_lead_backing(payload: dict) -> None:
         vocals_path = extract_vocals_stem(payload["input"]["getUrl"])
 
         # ── 1.5. Duración del audio de entrada (Task 7, server-side) ─────────
-        # La separación de fuentes no cambia la cantidad de samples, así que
-        # la duración del stem vocal recién extraído es la del audio original
-        # (evita re-descargar get_url solo para esto). Se calcula ANTES del
-        # unlink de vocals_path (paso "Limpiar" más abajo).
+        # SUPUESTO (revisado en el review de Task 7): extract_vocals_stem
+        # descarga el mix original a un archivo temporal, lo decodifica para
+        # separar el vocal, y devuelve SOLO vocals_path — no expone el path
+        # del original a este scope. Pedirlo implicaría tocar el contrato de
+        # extract_vocals_stem (compartido con gender.py y medley_vox.py) o
+        # descargar get_url una segunda vez, ambos fuera de alcance de esta
+        # tarea. Por eso se calcula sobre vocals_path (round-trip por MP3 vía
+        # audio-separator: puede diferir en decenas de ms por padding del
+        # encoder LAME). La fuente CANÓNICA de durationSec es S1
+        # (voiceInstrumental/extract.py), que siempre corre y decodifica el
+        # mix original sin ese round-trip; process.js solo persiste el valor
+        # de esta sección (S3) si input_meta.durationSec todavía está ausente
+        # (p.ej. S1 falló o llegó después). Este cálculo es un fallback
+        # best-effort, no la fuente de verdad.
         samples, sr = librosa.load(vocals_path, sr=None, mono=True)
         duration_sec = duration_from_samples(samples, sr)
 

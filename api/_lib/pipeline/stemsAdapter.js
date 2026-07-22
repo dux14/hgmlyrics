@@ -72,11 +72,11 @@ function sectionResultToStemsEvent(jobId, section, result, error) {
 
   if (result.status !== 'done') return null;
 
-  // durationSec (Task 7): S1/S3 calculan la duracion del audio de entrada
+  // durationSec (Task 7): S1/S3 calculan la duración del audio de entrada
   // decodificado (len(samples)/sr) y la postean junto a outputs/model. Se
   // propaga tal cual al phase-event solo si vino en el result — process.js
   // decide si la persiste (best-effort del browser tiene prioridad si ya
-  // esta seteada, ver applyPipelinePhaseEvent).
+  // está seteada, ver applyPipelinePhaseEvent).
   const durationSec = typeof result.durationSec === 'number' ? result.durationSec : undefined;
 
   return isFinalizer

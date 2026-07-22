@@ -227,4 +227,78 @@ describe('watchPipelineRun', () => {
 
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it('cuando refresh() rechaza, emite onChange con {error} (sentinel del catch)', async () => {
+    global.fetch.mockResolvedValue(jsonResponse(500, { error: 'boom' }));
+    const onChange = vi.fn();
+    watchPipelineRun('s1', onChange);
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(onChange).toHaveBeenCalledWith({
+      error: expect.objectContaining({ message: 'boom', status: 500 }),
+    });
+  });
+
+  it('guard stopped: un rechazo que llega despues de unsubscribe no emite {error}', async () => {
+    let rejectFetch;
+    global.fetch = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectFetch = reject;
+        }),
+    );
+    const onChange = vi.fn();
+    const unsubscribe = watchPipelineRun('s1', onChange);
+    await vi.advanceTimersByTimeAsync(0);
+
+    unsubscribe();
+    rejectFetch(new Error('boom'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('guard reqId: un rechazo de un refresh obsoleto no emite {error}', async () => {
+    const pending = [];
+    global.fetch = vi.fn(
+      () =>
+        new Promise((resolve, reject) => {
+          pending.push({ resolve, reject });
+        }),
+    );
+    const onChange = vi.fn();
+    watchPipelineRun('s1', onChange);
+    await vi.advanceTimersByTimeAsync(0); // primer refresh en vuelo (pending[0])
+
+    const broadcastHandler = channelStub.on.mock.calls.find(
+      (call) => call[0] === 'broadcast' && call[1]?.event === 'change',
+    )[2];
+    broadcastHandler(); // dispara un segundo refresh, ahora el mas reciente (pending[1])
+    await vi.advanceTimersByTimeAsync(0);
+
+    pending[0].reject(new Error('viejo')); // resuelve el obsoleto DESPUES del mas nuevo
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(onChange).not.toHaveBeenCalled();
+
+    pending[1].resolve(jsonResponse(200, { run: { id: 'r2' } }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(onChange).toHaveBeenCalledWith({ run: { id: 'r2' } });
+  });
+
+  it('un exito posterior a un error emite {run} normal (sin error)', async () => {
+    global.fetch.mockResolvedValueOnce(jsonResponse(500, { error: 'boom' }));
+    const onChange = vi.fn();
+    watchPipelineRun('s1', onChange);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(onChange).toHaveBeenLastCalledWith({ error: expect.any(Error) });
+
+    global.fetch.mockResolvedValueOnce(jsonResponse(200, { run: { id: 'r1' } }));
+    await vi.advanceTimersByTimeAsync(3000); // siguiente tick del polling
+
+    expect(onChange).toHaveBeenLastCalledWith({ run: { id: 'r1' } });
+  });
 });

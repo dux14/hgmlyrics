@@ -273,6 +273,33 @@ describe('POST /api/pipeline/webhook — sync', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.stale).toBeUndefined();
   });
+
+  it('webhook tardío tras reopen (approvedHash invalidado a "reopened") → sync NO revive a done', async () => {
+    // Simula el estado que deja reopenLyrics: la fase quedó 'stale' por la
+    // cascada de phasesAfterLyricsEdit y approvedHash ya no es el hash viejo
+    // ('h1-vieja') sino el centinela 'reopened' — nunca coincide con un
+    // sha256 hex real, así que el guard SIEMPRE marca stale este evento.
+    const phases = initialPhases();
+    phases.lyrics_review.status = 'pending';
+    phases.sync.status = 'stale';
+    sqlResponses.push([runRow({ phases, lyricsReview: { approvedHash: 'reopened' } })]);
+    sqlResponses.push([]); // UPDATE song_pipeline_runs (marca/mantiene stale)
+
+    const res = makeRes();
+    await handler(
+      signedReq({ runId: 'run-1', phase: 'sync', ok: true, snapshotHash: 'h1-vieja' }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.stale).toBe(true);
+    // La fase sync NO debe quedar 'done' — el guard cortó antes de aplicar
+    // applyPhaseEvent, así que ni siquiera se llega a publicar nada de sync.
+    const upd = sqlCalls.find((c) => c.text.includes('UPDATE song_pipeline_runs'));
+    expect(upd).toBeDefined();
+    const phasesArg = upd.values.find((v) => v && typeof v === 'object' && v.sync);
+    expect(phasesArg.sync.status).toBe('stale');
+  });
 });
 
 describe('POST /api/pipeline/webhook — pitch', () => {

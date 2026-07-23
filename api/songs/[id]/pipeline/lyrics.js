@@ -133,6 +133,20 @@ async function getGate(res, songId) {
   });
 }
 
+// Centinela de invalidacion de approvedHash al reabrir (revisión post-Task
+// 13): NUNCA puede coincidir con un hash real (approvedSnapshot usa sha256
+// hex de 64 caracteres, ver lyricsReview.js). El guard de
+// process.js:57-76 (LYRICS_DERIVED_PHASES) solo marca stale un webhook
+// tardio cuando `approvedHash` es truthy Y distinto del snapshotHash del
+// evento — si lo pusieramos en null/undefined el guard se bypassea entero
+// (`approvedHash &&` corta corto) y CUALQUIER webhook tardio se aplicaria
+// sin chequeo. Con este centinela (truthy, jamas igual a un hash real) todo
+// evento de sync/pitch/clips referido al hash viejo queda atrapado por el
+// guard, incluida la carrera descrita en el review: un webhook tardio con el
+// snapshotHash pre-reopen que antes coincidia con el approvedHash viejo (y
+// por lo tanto NO se marcaba stale) ahora siempre difiere del centinela.
+const REOPENED_HASH_SENTINEL = 'reopened';
+
 // Reabre una letra ya aprobada (Task 13, robustez): invalida en cascada lo
 // que dependia de ella (phasesAfterLyricsEdit, ver state.js) y devuelve el
 // run a awaiting_lyrics para volver a editar el mismo documento. Solo valido
@@ -140,28 +154,50 @@ async function getGate(res, songId) {
 // construccion de runStatusFromPhases, que lyrics_review esta done) — sobre
 // awaiting_lyrics (todavia sin aprobar) o cualquier otro estado, 409.
 async function reopenLyrics(res, songId) {
-  const claim = await sql.begin(async (tx) => {
-    const rows = await tx`
-      SELECT id, song_id AS "songId", status, phases, lyrics_review AS "lyricsReview"
-      FROM song_pipeline_runs
-      WHERE song_id = ${songId} AND status IN ('running', 'done')
-      ORDER BY created_at DESC LIMIT 1
-      FOR UPDATE
-    `;
-    if (rows.length === 0) {
-      return { status: 409, error: 'No hay una letra aprobada para reabrir' };
+  let claim;
+  try {
+    claim = await sql.begin(async (tx) => {
+      const rows = await tx`
+        SELECT id, song_id AS "songId", status, phases, lyrics_review AS "lyricsReview"
+        FROM song_pipeline_runs
+        WHERE song_id = ${songId} AND status IN ('running', 'done')
+        ORDER BY created_at DESC LIMIT 1
+        FOR UPDATE
+      `;
+      if (rows.length === 0) {
+        return { status: 409, error: 'No hay una letra aprobada para reabrir' };
+      }
+      const run = rows[0];
+      const nextPhases = phasesAfterLyricsEdit(run.phases);
+      nextPhases.lyrics_review = { ...nextPhases.lyrics_review, status: 'pending', error: null };
+      const runStatus = runStatusFromPhases(nextPhases);
+      // approvedHash invalidado (ver REOPENED_HASH_SENTINEL arriba): un
+      // webhook tardio de sync/pitch/clips referido al snapshot pre-reopen
+      // ya no puede colarse comparando igual y reviviendo la fase de stale.
+      const nextLyricsReview = { ...run.lyricsReview, approvedHash: REOPENED_HASH_SENTINEL };
+      await tx`
+        UPDATE song_pipeline_runs
+        SET phases = ${tx.json(nextPhases)}, status = ${runStatus},
+          lyrics_review = ${tx.json(nextLyricsReview)}, updated_at = now()
+        WHERE id = ${run.id}
+      `;
+      return { ok: true };
+    });
+  } catch (err) {
+    // Índice único parcial song_pipeline_runs_one_active_per_song: el UPDATE
+    // mueve este run a 'awaiting_lyrics' (estado activo), lo que puede
+    // chocar si YA hay otro run activo para la misma canción (mismo patrón
+    // 23505 que createRun en pipeline.js). Se valida el constraint exacto
+    // para no tragar otras violaciones de unicidad como si fueran esta.
+    if (
+      err?.code === '23505' &&
+      err?.constraint_name === 'song_pipeline_runs_one_active_per_song'
+    ) {
+      res.status(409).json({ error: 'Ya hay otra ejecución activa para esta canción' });
+      return;
     }
-    const run = rows[0];
-    const nextPhases = phasesAfterLyricsEdit(run.phases);
-    nextPhases.lyrics_review = { ...nextPhases.lyrics_review, status: 'pending', error: null };
-    const runStatus = runStatusFromPhases(nextPhases);
-    await tx`
-      UPDATE song_pipeline_runs
-      SET phases = ${tx.json(nextPhases)}, status = ${runStatus}, updated_at = now()
-      WHERE id = ${run.id}
-    `;
-    return { ok: true };
-  });
+    throw err;
+  }
 
   if (!claim.ok) {
     res.status(claim.status).json({ error: claim.error });

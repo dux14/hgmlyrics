@@ -535,6 +535,14 @@ describe('PUT /api/songs/:id/pipeline/lyrics (reopen, Task 13)', () => {
     expect(phasesArg.clips.status).toBe('stale');
     expect(phasesArg.lyrics_review.status).toBe('pending');
     expect(updatedValues).toContain('awaiting_lyrics');
+
+    // Fix de review: approvedHash invalida a un centinela que jamas coincide
+    // con un sha256 real, para que un webhook tardio referido al snapshot
+    // pre-reopen quede stale en el guard de process.js (ver pipelineWebhook.test.js).
+    const lyricsReviewArg = updatedValues.find(
+      (v) => v && typeof v === 'object' && 'approvedHash' in v,
+    );
+    expect(lyricsReviewArg.approvedHash).toBe('reopened');
   });
 
   it('run en done con letra aprobada: mismo resultado (aplica la cascada y vuelve a awaiting_lyrics)', async () => {
@@ -556,6 +564,25 @@ describe('PUT /api/songs/:id/pipeline/lyrics (reopen, Task 13)', () => {
     );
     expect(res.status).toHaveBeenCalledWith(200);
     expect(updatedValues).toContain('awaiting_lyrics');
+  });
+
+  it('409 si el UPDATE choca con otro run activo (23505 song_pipeline_runs_one_active_per_song)', async () => {
+    const dup = new Error('duplicate key value violates unique constraint');
+    dup.code = '23505';
+    dup.constraint_name = 'song_pipeline_runs_one_active_per_song';
+    routeSql([
+      ['status IN (', [runRow({ status: 'running', phases: approvedPhases() })]],
+      ['UPDATE song_pipeline_runs', { __reject: dup }],
+    ]);
+    const res = makeRes();
+    await lyricsHandler(
+      { method: 'PUT', query: { id: 's1' }, body: { action: { type: 'reopen' } } },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Ya hay otra ejecución activa para esta canción',
+    });
   });
 
   it('409 si no hay ningun run en running/done (p.ej. sigue en awaiting_lyrics, letra sin aprobar)', async () => {

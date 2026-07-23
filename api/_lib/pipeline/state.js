@@ -13,10 +13,18 @@ export const RUN_STATUSES = ['created','uploading','processing','awaiting_lyrics
 
 const TERMINAL = new Set(['done','failed']);
 
+// Tope de reintentos por fase (spec robustez): el 1.o, 2.o y 3.er retry se
+// permiten, el 4.o se rechaza. `retries` cuenta reintentos ya hechos.
+export const MAX_RETRIES = 3;
+
+export function retriesLeft(phase) {
+  return MAX_RETRIES - (phase?.retries || 0);
+}
+
 export function initialPhases() {
   const phases = {};
   for (const ph of PHASES) {
-    phases[ph] = { status: 'pending', error: null, tracks: undefined, artifacts: undefined };
+    phases[ph] = { status: 'pending', error: null, tracks: undefined, artifacts: undefined, retries: 0 };
   }
   phases.upload.status = 'running';
   return phases;

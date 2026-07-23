@@ -382,6 +382,37 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
     expect(res.status).toHaveBeenCalledWith(409);
     expect(dispatchPhase).not.toHaveBeenCalled();
   });
+
+  it('permite 3 reintentos (incrementa retries dentro de la tx) y el 4to responde 409 "Reintentos agotados"', async () => {
+    for (let i = 0; i < 3; i += 1) {
+      const phases = activePhasesWithStemsFailed();
+      phases.stems.retries = i;
+      let persisted;
+      routeSql([
+        ["status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')", [{ id: 'r1', songId: 's1', status: 'processing', phases, inputPath: 'p' }]],
+        ['UPDATE song_pipeline_runs SET phases = ', (values) => {
+          persisted = values.find((v) => v && v.stems);
+          return { count: 1 };
+        }],
+      ]);
+      const res = makeRes();
+      await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(persisted.stems.retries).toBe(i + 1);
+    }
+
+    const exhaustedPhases = activePhasesWithStemsFailed();
+    exhaustedPhases.stems.retries = 3;
+    routeSql([
+      ["status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')", [{ id: 'r1', songId: 's1', status: 'processing', phases: exhaustedPhases, inputPath: 'p' }]],
+    ]);
+    const dispatchCallsBefore = dispatchPhase.mock.calls.length;
+    const res = makeRes();
+    await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Reintentos agotados' });
+    expect(dispatchPhase.mock.calls.length).toBe(dispatchCallsBefore);
+  });
 });
 
 describe('PATCH /api/songs/:id/pipeline (renombrar audio)', () => {

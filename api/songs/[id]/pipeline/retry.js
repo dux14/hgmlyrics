@@ -5,7 +5,7 @@
 import sql from '../../../_lib/db.js';
 import { requireAdmin } from '../../../_lib/auth.js';
 import { allowMethods, withErrors } from '../../../_lib/http.js';
-import { canStartPhase } from '../../../_lib/pipeline/state.js';
+import { canStartPhase, retriesLeft } from '../../../_lib/pipeline/state.js';
 import { dispatchPhase } from './_dispatch.js';
 
 const RETRYABLE_PHASES = new Set(['stems', 'transcription', 'sync', 'pitch', 'clips']);
@@ -44,22 +44,31 @@ export default withErrors(async (req, res) => {
     }
     const run = rows[0];
 
-    const current = run.phases[phase]?.status;
+    const currentPhase = run.phases[phase];
+    const current = currentPhase?.status;
     if (current !== 'failed' && current !== 'stale') {
       return { status: 409, error: `La fase '${phase}' no está en failed/stale (está en ${current})` };
+    }
+
+    // Tope de 3 reintentos por fase: chequeo y el incremento de abajo quedan
+    // atómicos bajo el mismo FOR UPDATE (evita el TOCTOU de un incremento
+    // fuera de la tx con requests concurrentes).
+    if (retriesLeft(currentPhase) <= 0) {
+      return { status: 409, error: 'Reintentos agotados' };
     }
 
     // canStartPhase exige status pending|stale — 'failed' se resetea primero, y
     // recién sobre ese estado se valida el DAG (evita re-despachar sin las
     // dependencias listas).
     const pendingPhases = structuredClone(run.phases);
-    pendingPhases[phase] = { status: 'pending', error: null, tracks: undefined, artifacts: undefined };
+    pendingPhases[phase] = { status: 'pending', error: null, tracks: undefined, artifacts: undefined, retries: currentPhase.retries || 0 };
     if (!canStartPhase(pendingPhases, phase)) {
       return { status: 409, error: `Las dependencias de '${phase}' no están listas` };
     }
 
     const runningPhases = structuredClone(pendingPhases);
     runningPhases[phase].status = 'running';
+    runningPhases[phase].retries = (runningPhases[phase].retries || 0) + 1;
 
     await tx`
       UPDATE song_pipeline_runs SET phases = ${tx.json(runningPhases)}, updated_at = now()
@@ -87,7 +96,7 @@ export default withErrors(async (req, res) => {
       const fresh = rows[0].phases;
       if (fresh[phase]?.status !== 'running') return;
       const failedPhases = structuredClone(fresh);
-      failedPhases[phase] = { status: 'failed', error: String(err?.message ?? err).slice(0, 300) };
+      failedPhases[phase] = { status: 'failed', error: String(err?.message ?? err).slice(0, 300), retries: fresh[phase]?.retries || 0 };
       await tx`
         UPDATE song_pipeline_runs SET phases = ${tx.json(failedPhases)}, updated_at = now()
         WHERE id = ${run.id}

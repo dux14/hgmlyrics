@@ -5,7 +5,7 @@
 import sql from '../../../_lib/db.js';
 import { requireAdmin } from '../../../_lib/auth.js';
 import { allowMethods, withErrors } from '../../../_lib/http.js';
-import { canStartPhase, retriesLeft } from '../../../_lib/pipeline/state.js';
+import { canStartPhase, retriesLeft, runStatusFromPhases } from '../../../_lib/pipeline/state.js';
 import { dispatchPhase } from './_dispatch.js';
 
 const RETRYABLE_PHASES = new Set(['stems', 'transcription', 'sync', 'pitch', 'clips']);
@@ -97,8 +97,13 @@ export default withErrors(async (req, res) => {
       if (fresh[phase]?.status !== 'running') return;
       const failedPhases = structuredClone(fresh);
       failedPhases[phase] = { status: 'failed', error: String(err?.message ?? err).slice(0, 300), retries: fresh[phase]?.retries || 0 };
+      // Si esta fase es critica y ya agoto sus reintentos, el run entero debe
+      // quedar 'failed' (Task 11): sin esto un run con una fase critica
+      // muerta seguia 'processing' para siempre, bloqueando la cancion (1
+      // run activo por cancion).
+      const status = runStatusFromPhases(failedPhases);
       await tx`
-        UPDATE song_pipeline_runs SET phases = ${tx.json(failedPhases)}, updated_at = now()
+        UPDATE song_pipeline_runs SET phases = ${tx.json(failedPhases)}, status = ${status}, updated_at = now()
         WHERE id = ${run.id}
       `;
     });

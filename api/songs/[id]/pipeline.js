@@ -74,12 +74,24 @@ async function createRun(req, res, songId) {
 
   let rows;
   try {
-    rows = await sql`
-      INSERT INTO song_pipeline_runs (song_id, created_by, status, phases, input_meta)
-      VALUES (${songId}, ${user.id}, 'created', ${sql.json(initialPhases())},
-        ${sql.json({ filename, size, mime, titleScore })})
-      RETURNING id
-    `;
+    // Un run previo terminal ('failed' o 'done') no debe bloquear una nueva
+    // ejecución con 409: se marca 'superseded' (limpiado luego por el cron,
+    // api/pipeline/cleanup.js) y se crea el nuevo run. Atómico con el INSERT
+    // (misma tx) para que no quede una ventana con dos runs "activos" a la
+    // vez si el INSERT falla. Un run ACTIVO (running/awaiting_lyrics/etc.) NO
+    // entra en este UPDATE y sigue dando 409 vía el índice único parcial.
+    rows = await sql.begin(async (tx) => {
+      await tx`
+        UPDATE song_pipeline_runs SET status = 'superseded', updated_at = now()
+        WHERE song_id = ${songId} AND status IN ('failed', 'done')
+      `;
+      return tx`
+        INSERT INTO song_pipeline_runs (song_id, created_by, status, phases, input_meta)
+        VALUES (${songId}, ${user.id}, 'created', ${tx.json(initialPhases())},
+          ${tx.json({ filename, size, mime, titleScore })})
+        RETURNING id
+      `;
+    });
   } catch (err) {
     // Índice único parcial song_pipeline_runs_one_active_per_song: ya hay un
     // run vivo para esta canción (mismo patrón 23505 de pitch/jobs.js).

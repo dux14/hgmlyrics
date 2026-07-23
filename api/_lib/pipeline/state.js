@@ -6,6 +6,12 @@
 // distinta de la subsección homónima de stems (api/stems/_sections.js).
 export const PHASES = ['upload','stems','structure','transcription','lyrics_review','sync','pitch','clips'];
 
+// Fases criticas del DAG (Task 11, robustez): un fallo terminal con
+// reintentos agotados en cualquiera de estas SI tumba el run entero. 'structure'
+// queda afuera a propósito (best-effort, igual que gender/duet fuera del DAG):
+// su fallo nunca bloquea la canción.
+export const CRITICAL_PHASES = ['upload','stems','transcription','lyrics_review','sync','pitch','clips'];
+
 export const PHASE_STATUSES = ['pending','running','done','failed','stale'];
 
 export const RUN_STATUSES = ['created','uploading','processing','awaiting_lyrics',
@@ -102,6 +108,16 @@ export function phasesAfterLyricsEdit(phases) {
 
 export function runStatusFromPhases(phases) {
   const done = (ph) => phases[ph].status === 'done';
+  // Terminal 'failed': alguna fase CRITICA (no best-effort) fallo y ya agoto
+  // sus reintentos (retriesLeft<=0). Gana sobre running/awaiting_lyrics — un
+  // run con una fase critica muerta no puede seguir bloqueando la cancion
+  // como "activo" (regla de 1 run activo por cancion). No puede colisionar
+  // con el caso 'done' de abajo: una fase no puede estar 'done' y 'failed' a
+  // la vez.
+  const anyCriticalExhausted = CRITICAL_PHASES.some(
+    (ph) => phases[ph].status === 'failed' && retriesLeft(phases[ph]) <= 0,
+  );
+  if (anyCriticalExhausted) return 'failed';
   if (done('sync') && done('pitch') && done('clips')) return 'done';
   if (done('transcription') && phases.lyrics_review.status === 'pending') {
     return 'awaiting_lyrics';

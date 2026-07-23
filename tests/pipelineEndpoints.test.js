@@ -83,9 +83,28 @@ describe('POST /api/songs/:id/pipeline (crear run)', () => {
     expect(res.status).toHaveBeenCalledWith(409);
   });
 
+  it('un run previo failed se marca superseded y NO da 409 (se crea el nuevo)', async () => {
+    let supersededCall;
+    routeSql([
+      ['SELECT id, title FROM songs', [{ id: 's1', title: 'Sion' }]],
+      ["UPDATE song_pipeline_runs SET status = 'superseded'", (values) => {
+        supersededCall = values;
+        return [];
+      }],
+      ['INSERT INTO song_pipeline_runs', [{ id: 'r2' }]],
+      ['UPDATE song_pipeline_runs SET input_path', []],
+    ]);
+    const res = makeRes();
+    await pipelineHandler({ method: 'POST', query: { id: 's1' }, body: { filename: 'sion.mp3' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json.mock.calls[0][0].runId).toBe('r2');
+    expect(supersededCall).toBeDefined();
+  });
+
   it('crea el run en created con titleScore + responde runId/uploadUrl/titleScore/threshold', async () => {
     routeSql([
       ['SELECT id, title FROM songs', [{ id: 's1', title: 'Sion' }]],
+      ["UPDATE song_pipeline_runs SET status = 'superseded'", []],
       ['INSERT INTO song_pipeline_runs', [{ id: 'r1' }]],
       ['UPDATE song_pipeline_runs SET input_path', []],
     ]);
@@ -368,6 +387,36 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
     await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
     expect(res.status).toHaveBeenCalledWith(502);
     expect(finalPhases.stems.status).toBe('failed');
+  });
+
+  it('dispatch falla agotando reintentos: el run deriva a failed (fase critica)', async () => {
+    dispatchPhase.mockRejectedValue(new Error('modal down'));
+    const claimedPhases = activePhasesWithStemsFailed();
+    claimedPhases.stems.retries = 2; // este es el 3er intento -> queda agotado
+    const runningPhases = structuredClone(claimedPhases);
+    runningPhases.stems.status = 'running';
+    runningPhases.stems.retries = 3;
+    let finalPhases;
+    let finalStatus;
+    let call = 0;
+    routeSql([
+      ["status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')", [{ id: 'r1', songId: 's1', status: 'processing', phases: claimedPhases, inputPath: 'p' }]],
+      ['SELECT phases FROM song_pipeline_runs WHERE id = ', [{ phases: runningPhases }]],
+      ['UPDATE song_pipeline_runs SET phases = ', (values) => {
+        call += 1;
+        if (call === 2) {
+          finalPhases = values.find((v) => v && v.stems);
+          finalStatus = values.find((v) => v === 'failed');
+        }
+        return { count: 1 };
+      }],
+    ]);
+    const res = makeRes();
+    await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
+    expect(res.status).toHaveBeenCalledWith(502);
+    expect(finalPhases.stems.status).toBe('failed');
+    expect(finalPhases.stems.retries).toBe(3);
+    expect(finalStatus).toBe('failed');
   });
 
   it('409 si al reintentar la fase ya no está failed/stale (otra sesión ya la retomó)', async () => {

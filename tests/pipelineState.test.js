@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  PHASES, RUN_STATUSES, initialPhases, canStartPhase,
+  PHASES, RUN_STATUSES, CRITICAL_PHASES, initialPhases, canStartPhase,
   applyPhaseEvent, phasesAfterLyricsEdit, runStatusFromPhases,
 } from '../api/_lib/pipeline/state.js';
 
@@ -113,6 +113,28 @@ describe('runStatusFromPhases', () => {
     const p = initialPhases();
     for (const ph of PHASES) p[ph].status = 'done';
     p.structure.status = 'failed';
+    expect(runStatusFromPhases(p)).toBe('done');
+  });
+
+  it('CRITICAL_PHASES excluye structure (best-effort)', () => {
+    expect(CRITICAL_PHASES).toEqual([
+      'upload', 'stems', 'transcription', 'lyrics_review', 'sync', 'pitch', 'clips',
+    ]);
+  });
+
+  it('failed cuando una fase critica agoto los reintentos', () => {
+    const p = initialPhases();
+    p.upload.status = 'done';
+    p.stems.status = 'failed';
+    p.stems.retries = 3; // MAX_RETRIES agotado
+    expect(runStatusFromPhases(p)).toBe('failed');
+  });
+
+  it('structure failed con reintentos agotados NUNCA da run failed (best-effort)', () => {
+    const p = initialPhases();
+    for (const ph of PHASES) p[ph].status = 'done';
+    p.structure.status = 'failed';
+    p.structure.retries = 3;
     expect(runStatusFromPhases(p)).toBe('done');
   });
 });

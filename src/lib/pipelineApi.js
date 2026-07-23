@@ -23,7 +23,7 @@ async function readError(res, fallback) {
 /**
  * Documento de revisión de letra del run en `awaiting_lyrics` de una canción.
  * @param {string} songId
- * @returns {Promise<{review:object, temperature:number, canApprove:boolean, suggestions:Array}>}
+ * @returns {Promise<{review:object, canApprove:boolean, suggestions:Array}>}
  */
 export async function getLyricsReview(songId) {
   const res = await fetch(`/api/songs/${songId}/pipeline/lyrics`, { headers: authHeaders() });
@@ -36,7 +36,7 @@ export async function getLyricsReview(songId) {
  * partir/unir renglón o sección, aceptar/rechazar vocalización).
  * @param {string} songId
  * @param {object} action
- * @returns {Promise<{review:object, temperature:number, canApprove:boolean}>}
+ * @returns {Promise<{review:object, canApprove:boolean}>}
  */
 export async function sendLyricsAction(songId, action) {
   const res = await fetch(`/api/songs/${songId}/pipeline/lyrics`, {
@@ -49,9 +49,10 @@ export async function sendLyricsAction(songId, action) {
 }
 
 /**
- * Aprueba la letra revisada: publica el snapshot a `songs.sections` y
- * dispara las fases derivadas. 409 si todavía quedan conflictos o
- * vocalizaciones sin decidir.
+ * Aprueba la letra revisada: escribe el snapshot al store propio del
+ * pipeline (`song_pipeline_lyrics`, sin tocar `songs.sections`) y dispara
+ * las fases derivadas. 409 si todavía quedan conflictos o vocalizaciones
+ * sin decidir.
  * @param {string} songId
  * @returns {Promise<{success:boolean}>}
  */

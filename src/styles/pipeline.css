@@ -500,6 +500,59 @@ body.chrome-hidden .main {
   transform: scale(0.97);
 }
 
+/* Resumen transversal de baja confianza (Task 17): bloque ámbar bajo el
+   header, sobre el stepper. Mismo token `--color-action` que `.dot.act` /
+   `.phase--action` (es el ámbar "requiere revisión" de la plataforma, no un
+   token separado). [hidden] lo maneja el componente: 0 items -> sin nodo
+   visible ni hueco de layout. */
+.confidence-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  margin: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: color-mix(in oklch, var(--color-action) 10%, var(--color-surface));
+  border-radius: var(--border-radius-md);
+  color: var(--color-text);
+}
+.confidence-summary[hidden] {
+  display: none;
+}
+
+.confidence-summary__icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--color-action);
+}
+
+.confidence-summary__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.confidence-summary__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.15s var(--ease-out);
+}
+.confidence-summary__item:hover {
+  text-decoration-color: currentColor;
+}
+
 .pipeline-view__rows {
   padding: 0 var(--space-md);
 }

@@ -25,6 +25,7 @@ import { createUploadPhaseCard } from './UploadPhaseCard.js';
 import { createStemTracksDetail } from './StemTracksDetail.js';
 import { createSyncFineTuning } from './SyncFineTuning.js';
 import { createStructureDetail } from './StructureDetail.js';
+import { createConfidenceSummary } from './ConfidenceSummary.js';
 
 // Estados de run que el DELETE /api/songs/[id]/pipeline acepta cancelar
 // (mismo WHERE status IN (...) que api/songs/[id]/pipeline.js#cancelRun):
@@ -231,6 +232,21 @@ export function renderSongPipelineView(container, songId) {
     getVocalsUrl: () => lastRun?.phases?.stems?.tracks?.vocals ?? null,
   });
 
+  // Resumen transversal de baja confianza (Task 17): bloque ámbar bajo el
+  // header, sobre el stepper. Conflictos/structureWarning llegan del `onData`
+  // de LyricsReviewPanel (ver ensureLyricsPanel); timings de sync los trae el
+  // propio componente (self-contained, mismo criterio que SyncFineTuning).
+  let lyricsReviewData = { conflictsCount: 0, structureWarning: null };
+  const confidenceSummary = createConfidenceSummary({
+    songId,
+    scrollToPhase: (phase) => {
+      rowsEl
+        .querySelector(`[data-phase="${phase}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    },
+  });
+  view.insertBefore(confidenceSummary.el, rowsEl);
+
   async function ensureLyricsPanel() {
     if (lyricsPanelEl || lyricsPanelLoading) return;
     lyricsPanelLoading = true;
@@ -240,6 +256,13 @@ export function renderSongPipelineView(container, songId) {
         onApproved: () => {
           // El próximo evento del watcher (broadcast o polling) trae
           // lyrics_review en done y renderPhases suelta el panel solo.
+        },
+        onData: (data) => {
+          // Task 17: reenvía conflictos/structureWarning al resumen
+          // transversal en tiempo real (no espera al próximo tick del
+          // polling de renderPhases, que puede saltarse por el guard de sig).
+          lyricsReviewData = data;
+          confidenceSummary.update(lastRun, lyricsReviewData);
         },
       });
     } catch (err) {
@@ -387,6 +410,7 @@ export function renderSongPipelineView(container, songId) {
     stemTracks.update(run);
     structureDetail.update(run);
     syncTuning.update(run);
+    confidenceSummary.update(run, lyricsReviewData);
 
     ROWS.forEach((r, i) => {
       const phase = phases[r.key] || { status: 'pending' };
@@ -472,5 +496,6 @@ export function renderSongPipelineView(container, songId) {
     stemTracks.destroy();
     structureDetail.destroy();
     syncTuning.destroy();
+    confidenceSummary.destroy();
   });
 }

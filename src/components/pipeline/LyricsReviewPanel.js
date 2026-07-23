@@ -53,6 +53,13 @@ function pendingCount(review) {
   return conflicts + undecidedVocalizations;
 }
 
+/** Solo conflictos sin resolver (sin vocalizaciones) — Task 17: fuente del
+ * resumen transversal de baja confianza, a diferencia de pendingCount que
+ * también cuenta vocalizaciones para el contador del footer. */
+function unresolvedConflictsCount(review) {
+  return review.sections.reduce((sum, s) => sum + s.lines.filter((l) => l.conflict).length, 0);
+}
+
 /** Marca de tijera inline en el texto de una línea, en cada punto sugerido de corte. */
 function lineTextWithSplits(text, afterWords, disabled) {
   const words = text.split(/\s+/).filter(Boolean);
@@ -189,10 +196,10 @@ function sectionHtml(section, sIdx, byAnchor, byLine, { disabled, flash, isLast 
 }
 
 /**
- * @param {{songId: string, onApproved?: () => void}} opts
+ * @param {{songId: string, onApproved?: () => void, onData?: (data: {conflictsCount: number, structureWarning: string|null}) => void}} opts
  * @returns {Promise<HTMLElement>}
  */
-export async function LyricsReviewPanel({ songId, onApproved } = {}) {
+export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
   const el = document.createElement('div');
   el.className = 'lrp';
 
@@ -431,6 +438,13 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
     const byAnchor = vocalizationsByAnchor(state.review.vocalizations);
     const byLine = suggestionsByLine(state.suggestions || []);
     const pending = pendingCount(state.review);
+    // Task 17: cada render refleja el documento más reciente (initial load,
+    // resync o acción exitosa) — se reenvía al resumen transversal del
+    // stepper aunque nada haya cambiado (idempotente en el receptor).
+    onData?.({
+      conflictsCount: unresolvedConflictsCount(state.review),
+      structureWarning: state.structureWarning ?? null,
+    });
     const motion = reduceMotion() ? '' : ' lrp--motion';
     const disabled = state.busy;
     const flash = pendingFlash;

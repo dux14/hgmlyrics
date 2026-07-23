@@ -121,4 +121,16 @@ describe('dispatchPitch', () => {
     const call = invokePitchPipeline.mock.calls[0][0];
     expect(call.input.snapshotHash).toBeUndefined();
   });
+
+  it('incluye signUploadUrl apuntando al signer del pipeline', async () => {
+    process.env.PUBLIC_BASE_URL = 'https://app.test';
+    await dispatchPitch({
+      run: { id: 'r1', songId: 's1' },
+      leadGetUrl: 'https://l',
+      backingGetUrl: 'https://b',
+      webhookUrl: 'https://w',
+    });
+    const payload = invokePitchPipeline.mock.calls.at(-1)[0];
+    expect(payload.signUploadUrl).toBe('https://app.test/api/pipeline/sign-upload');
+  });
 });

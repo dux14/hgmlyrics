@@ -94,6 +94,9 @@ export { dispatchAlign };
  * `snapshotHash` (fase derivada de la letra, plan C) viaja dentro de `input`
  * para que `run_pipeline` la re-postee tal cual al webhook — `process.js` la
  * lee top-level del body que postea Modal.
+ * `signUploadUrl` apunta al endpoint `api/pipeline/sign-upload.js` (Task 2):
+ * el orquestador hkn-pitch lo necesita para firmar sus propios uploads, sin
+ * esta clave revienta con KeyError del lado de Modal.
  * @param {{ run:{id:string, songId:string, profile?:string}, leadGetUrl:string,
  *           backingGetUrl:string, snapshotHash?:string, webhookUrl:string }} args
  * @returns {Promise<{id:string}>}
@@ -104,6 +107,7 @@ export async function dispatchPitch({ run, leadGetUrl, backingGetUrl, snapshotHa
     profile: run.profile ?? 'default',
     input: { leadGetUrl, backingGetUrl, snapshotHash },
     uploads: {},
+    signUploadUrl: `${process.env.PUBLIC_BASE_URL}/api/pipeline/sign-upload`,
     webhook: { url: webhookUrl },
   });
 }

@@ -198,6 +198,16 @@ async function patchLineTiming(res, songId, lineTiming) {
     res.status(400).json({ error: shapeErr });
     return;
   }
+
+  // F4: si la cancion tiene letra aprobada del pipeline, esa es la fuente de
+  // verdad del karaoke (ver getAudio arriba) — el offset manual edita
+  // manualStartMs en el store, no song_line_timings directamente. Sin fila
+  // en el store, camino actual intacto.
+  const pipelineLyrics = await getPipelineLyrics(sql, songId);
+  if (pipelineLyrics) {
+    return patchPipelineLineTiming(res, songId, pipelineLyrics, lineTiming);
+  }
+
   const [row] = await sql`
     SELECT status, lines FROM song_line_timings WHERE song_id = ${songId}
   `;
@@ -250,6 +260,44 @@ async function patchLineTiming(res, songId, lineTiming) {
     res.status(409).json({ error: 'La sincronía cambió, recarga el editor' });
     return;
   }
+  res.status(200).json({ success: true });
+}
+
+// Correccion manual del startMs de UNA linea cuando la fuente es el store
+// del pipeline (song_pipeline_lyrics). Misma validacion de monotonia que
+// patchLineTiming, reconstruida sobre timingLinesFromSections (mismos
+// mensajes de error). Escribe manualStartMs en las sections del store Y en
+// el shim song_line_timings (provider='pipeline') en la misma operacion:
+// clips/fallback siguen leyendo esa tabla.
+async function patchPipelineLineTiming(res, songId, pipelineLyrics, lineTiming) {
+  const baseLines = timingLinesFromSections(pipelineLyrics.sections);
+  const idx = baseLines.findIndex((l) => l.i === lineTiming.i);
+  if (idx === -1) {
+    res.status(400).json({ error: `Línea ${lineTiming.i} inexistente` });
+    return;
+  }
+  const prev = baseLines[idx - 1];
+  const next = baseLines[idx + 1];
+  if (prev && lineTiming.startMs <= prev.startMs) {
+    res.status(400).json({ error: 'startMs rompe la monotonía con la línea anterior' });
+    return;
+  }
+  if (next && lineTiming.startMs >= next.startMs) {
+    res.status(400).json({ error: 'startMs rompe la monotonía con la línea siguiente' });
+    return;
+  }
+
+  const sections = structuredClone(pipelineLyrics.sections);
+  const target = sections.flatMap((s) => s.lines)[lineTiming.i];
+  target.manualStartMs = lineTiming.startMs;
+
+  await sql`
+    UPDATE song_pipeline_lyrics SET sections = ${sql.json(sections)} WHERE song_id = ${songId}
+  `;
+  await sql`
+    UPDATE song_line_timings SET lines = ${sql.json(timingLinesFromSections(sections))}
+    WHERE song_id = ${songId} AND provider = 'pipeline'
+  `;
   res.status(200).json({ success: true });
 }
 

@@ -557,6 +557,7 @@ describe('PATCH /api/songs/[id]/audio', () => {
     ];
 
     it('valido → 200; el UPDATE recibe lines con la linea editada shape explicito + manual:true, resto sin manual', async () => {
+      sqlResponses.push([]); // SELECT song_pipeline_lyrics sin fila (camino actual)
       sqlResponses.push([{ status: 'ready', lines: baseLines }]); // SELECT song_line_timings
       sqlResponses.push({ count: 1 }); // UPDATE song_line_timings
       const res = makeRes();
@@ -573,6 +574,7 @@ describe('PATCH /api/songs/[id]/audio', () => {
     });
 
     it('startMs igual al de la linea anterior → 400 "monotonia" con la anterior', async () => {
+      sqlResponses.push([]); // SELECT song_pipeline_lyrics sin fila (camino actual)
       sqlResponses.push([{ status: 'ready', lines: baseLines }]); // SELECT song_line_timings
       const res = makeRes();
       await handler(patchReq({ lineTiming: { i: 1, startMs: 1000 } }), res);
@@ -581,6 +583,7 @@ describe('PATCH /api/songs/[id]/audio', () => {
     });
 
     it('startMs igual al de la linea siguiente → 400 "monotonia" con la siguiente', async () => {
+      sqlResponses.push([]); // SELECT song_pipeline_lyrics sin fila (camino actual)
       sqlResponses.push([{ status: 'ready', lines: baseLines }]); // SELECT song_line_timings
       const res = makeRes();
       await handler(patchReq({ lineTiming: { i: 1, startMs: 9000 } }), res);
@@ -589,6 +592,7 @@ describe('PATCH /api/songs/[id]/audio', () => {
     });
 
     it('primera linea (sin anterior) acepta startMs 0', async () => {
+      sqlResponses.push([]); // SELECT song_pipeline_lyrics sin fila (camino actual)
       sqlResponses.push([{ status: 'ready', lines: baseLines }]); // SELECT song_line_timings
       sqlResponses.push({ count: 1 }); // UPDATE song_line_timings
       const res = makeRes();
@@ -597,6 +601,7 @@ describe('PATCH /api/songs/[id]/audio', () => {
     });
 
     it('ultima linea (sin siguiente) acepta un startMs mayor que la anterior sin techo', async () => {
+      sqlResponses.push([]); // SELECT song_pipeline_lyrics sin fila (camino actual)
       sqlResponses.push([{ status: 'ready', lines: baseLines }]); // SELECT song_line_timings
       sqlResponses.push({ count: 1 }); // UPDATE song_line_timings
       const res = makeRes();
@@ -605,6 +610,7 @@ describe('PATCH /api/songs/[id]/audio', () => {
     });
 
     it('i inexistente en lines → 400', async () => {
+      sqlResponses.push([]); // SELECT song_pipeline_lyrics sin fila (camino actual)
       sqlResponses.push([{ status: 'ready', lines: baseLines }]); // SELECT song_line_timings
       const res = makeRes();
       await handler(patchReq({ lineTiming: { i: 99, startMs: 5000 } }), res);
@@ -620,6 +626,7 @@ describe('PATCH /api/songs/[id]/audio', () => {
     });
 
     it('fila ausente en song_line_timings → 404', async () => {
+      sqlResponses.push([]); // SELECT song_pipeline_lyrics sin fila (camino actual)
       sqlResponses.push([]); // SELECT song_line_timings sin filas
       const res = makeRes();
       await handler(patchReq({ lineTiming: { i: 0, startMs: 500 } }), res);
@@ -627,6 +634,7 @@ describe('PATCH /api/songs/[id]/audio', () => {
     });
 
     it('status distinto de ready (job en vuelo) → 409', async () => {
+      sqlResponses.push([]); // SELECT song_pipeline_lyrics sin fila (camino actual)
       sqlResponses.push([{ status: 'processing', lines: baseLines }]); // SELECT song_line_timings
       const res = makeRes();
       await handler(patchReq({ lineTiming: { i: 0, startMs: 500 } }), res);
@@ -634,6 +642,7 @@ describe('PATCH /api/songs/[id]/audio', () => {
     });
 
     it('UPDATE afecta 0 filas (carrera: status cambio entre SELECT y UPDATE) → 409', async () => {
+      sqlResponses.push([]); // SELECT song_pipeline_lyrics sin fila (camino actual)
       sqlResponses.push([{ status: 'ready', lines: baseLines }]); // SELECT song_line_timings
       sqlResponses.push({ count: 0 }); // UPDATE song_line_timings
       const res = makeRes();
@@ -642,6 +651,7 @@ describe('PATCH /api/songs/[id]/audio', () => {
     });
 
     it('lineTiming junto a bpmManual en el mismo body → rama excluyente: se procesa SOLO lineTiming', async () => {
+      sqlResponses.push([]); // SELECT song_pipeline_lyrics sin fila (camino actual)
       sqlResponses.push([{ status: 'ready', lines: baseLines }]); // SELECT song_line_timings
       sqlResponses.push({ count: 1 }); // UPDATE song_line_timings
       const res = makeRes();
@@ -650,6 +660,128 @@ describe('PATCH /api/songs/[id]/audio', () => {
       // Ningun UPDATE de song_audio se emitio: solo el de song_line_timings.
       expect(sqlCalls.some((c) => c.text.includes('UPDATE song_audio'))).toBe(false);
       expect(sqlCalls.some((c) => c.text.includes('UPDATE song_line_timings'))).toBe(true);
+    });
+  });
+
+  describe('lineTiming — fuente store del pipeline (Task 2 F4)', () => {
+    function pipelineLyricsFixture() {
+      return {
+        songId: 'song-1',
+        runId: 'run-1',
+        sections: [
+          {
+            type: 'verse',
+            label: null,
+            startMs: 0,
+            endMs: 10000,
+            lines: [
+              {
+                text: 'linea 0',
+                startMs: 1000,
+                endMs: 1400,
+                words: [],
+                confidence: 0.9,
+                vocalization: false,
+                breath: false,
+                manualStartMs: null,
+              },
+              {
+                text: 'linea 1',
+                startMs: 4000,
+                endMs: 4400,
+                words: [],
+                confidence: null,
+                vocalization: false,
+                breath: false,
+                manualStartMs: null,
+              },
+              {
+                text: 'linea 2',
+                startMs: 9000,
+                endMs: 9400,
+                words: [],
+                confidence: 0.8,
+                vocalization: false,
+                breath: false,
+                manualStartMs: null,
+              },
+            ],
+          },
+        ],
+        hash: 'h1',
+        approvedAt: '2026-07-23T00:00:00.000Z',
+      };
+    }
+
+    it('con fila en el store → edita manualStartMs de la linea i en sections Y escribe el shim song_line_timings (provider=pipeline)', async () => {
+      sqlResponses.push([pipelineLyricsFixture()]); // SELECT song_pipeline_lyrics
+      sqlResponses.push({ count: 1 }); // UPDATE song_pipeline_lyrics
+      sqlResponses.push({ count: 1 }); // UPDATE song_line_timings
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 1, startMs: 5000 } }), res);
+      expect(res._status).toBe(200);
+      expect(res._body).toEqual({ success: true });
+
+      const storeUpdate = sqlCalls.find((c) => c.text.includes('UPDATE song_pipeline_lyrics'));
+      expect(storeUpdate).toBeTruthy();
+      const updatedSections = storeUpdate.values[0];
+      expect(updatedSections[0].lines[1].manualStartMs).toBe(5000);
+      // Las lineas no editadas quedan intactas.
+      expect(updatedSections[0].lines[0].manualStartMs).toBeNull();
+      expect(updatedSections[0].lines[2].manualStartMs).toBeNull();
+
+      const shimUpdate = sqlCalls.find((c) => c.text.includes('UPDATE song_line_timings'));
+      expect(shimUpdate).toBeTruthy();
+      expect(shimUpdate.text).toContain("provider = 'pipeline'");
+      expect(shimUpdate.values[0]).toEqual([
+        { i: 0, startMs: 1000, score: 0.9, interpolated: false },
+        { i: 1, startMs: 5000, score: null, interpolated: false },
+        { i: 2, startMs: 9000, score: 0.8, interpolated: false },
+      ]);
+    });
+
+    it('startMs igual al de la linea anterior → 400 "monotonia" con la anterior, sin UPDATE', async () => {
+      sqlResponses.push([pipelineLyricsFixture()]); // SELECT song_pipeline_lyrics
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 1, startMs: 1000 } }), res);
+      expect(res._status).toBe(400);
+      expect(res._body.error).toMatch(/monoton/i);
+      expect(sqlCalls.some((c) => c.text.includes('UPDATE'))).toBe(false);
+    });
+
+    it('startMs igual al de la linea siguiente → 400 "monotonia" con la siguiente', async () => {
+      sqlResponses.push([pipelineLyricsFixture()]); // SELECT song_pipeline_lyrics
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 1, startMs: 9000 } }), res);
+      expect(res._status).toBe(400);
+      expect(res._body.error).toMatch(/monoton/i);
+    });
+
+    it('primera linea (sin anterior) acepta startMs 0', async () => {
+      sqlResponses.push([pipelineLyricsFixture()]); // SELECT song_pipeline_lyrics
+      sqlResponses.push({ count: 1 }); // UPDATE song_pipeline_lyrics
+      sqlResponses.push({ count: 1 }); // UPDATE song_line_timings
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 0, startMs: 0 } }), res);
+      expect(res._status).toBe(200);
+    });
+
+    it('ultima linea (sin siguiente) acepta un startMs mayor que la anterior sin techo', async () => {
+      sqlResponses.push([pipelineLyricsFixture()]); // SELECT song_pipeline_lyrics
+      sqlResponses.push({ count: 1 }); // UPDATE song_pipeline_lyrics
+      sqlResponses.push({ count: 1 }); // UPDATE song_line_timings
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 2, startMs: 999999 } }), res);
+      expect(res._status).toBe(200);
+    });
+
+    it('i inexistente → 400, sin UPDATE', async () => {
+      sqlResponses.push([pipelineLyricsFixture()]); // SELECT song_pipeline_lyrics
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 99, startMs: 5000 } }), res);
+      expect(res._status).toBe(400);
+      expect(res._body.error).toMatch(/inexistente/);
+      expect(sqlCalls.some((c) => c.text.includes('UPDATE'))).toBe(false);
     });
   });
 });

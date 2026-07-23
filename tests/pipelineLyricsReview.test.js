@@ -1,607 +1,231 @@
-import { describe, expect, it } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
-  buildReviewDoc, applyReviewAction, reviewTemperature, canApprove,
-  approvedSnapshot, autoSplitLongLines, computeStructureWarning,
+  buildReviewDoc,
+  applyReviewAction,
+  canApprove,
+  approvedSnapshot,
+  autoSplitLongLines,
 } from '../api/_lib/pipeline/lyricsReview.js';
 
-// Fixture de scenario "con words": 14 palabras, gap de respiracion grande
-// (800ms) entre "siete" (idx 6) y "ocho" (idx 7) -- el resto de los gaps son
-// de 50ms (ritmo normal de habla), asi que la unica pausa candidata cae
-// cerca del medio del renglon (36 de 76 caracteres antes del espacio de
-// corte).
-function makeWordsWithPauseAt(tokens, pauseAfterIdx, pauseMs = 800) {
-  let t = 0;
-  return tokens.map((text, i) => {
-    const startMs = t;
-    const endMs = startMs + 200;
-    t = endMs + (i === pauseAfterIdx ? pauseMs : 50);
-    return { text, startMs, endMs };
-  });
+// Transcripcion minima: transLines en orden temporal, words planas
+// concatenadas en el mismo orden (shape real de align_app.py run_transcribe).
+function trans(lines) {
+  // lines: [{text, words:[[startMs,endMs,score], ...]}]
+  const transLines = lines.map((l) => l.text);
+  const words = lines.flatMap((l, i) =>
+    (l.words ?? []).map(([startMs, endMs, score], k) => ({
+      word: transLines[i].split(/\s+/)[k] ?? `w${k}`, startMs, endMs, score,
+    })),
+  );
+  return { text: transLines.join('\n'), transLines, words, perLine: [] };
 }
 
-const dbSections = [
-  { type: 'chorus', lines: [
-    { text: 'Nadie me ama como tu me amas' },
-    { text: 'y en la noche oscura brillara' },
-  ] },
+const SEGS = [
+  { label: 'verso', startMs: 0, endMs: 10000 },
+  { label: 'coro', startMs: 10000, endMs: 20000 },
+  { label: 'instrumental', startMs: 20000, endMs: 30000 },
 ];
-const canonical = { secciones: [
-  { tipo: 'chorus', lineas: [
-    { texto: 'Nadie me ama como tú me amas' },
-    { texto: 'y en la noche oscura brillará tu luz' },
-  ] },
-] };
-const transcription = {
-  text: 'nadie me ama como tu me amas y en la noche oscura brillara tu luz oooh oh',
-  words: [], // timestamps omitidos en estos tests
-  perLine: [
-    { transIndex: 0, dbIndex: 0, score: 1.0 },
-    { transIndex: 1, dbIndex: 1, score: 0.78 },
-    { transIndex: 2, dbIndex: null, score: 0.0 }, // segmento extra (vocalizacion)
-  ],
-  transLines: ['nadie me ama como tu me amas', 'y en la noche oscura brillara tu luz', 'oooh oh'],
-};
 
-describe('buildReviewDoc', () => {
-  it('marca conflicto donde DB y canonica difieren y adjunta las 3 fuentes', () => {
-    const doc = buildReviewDoc({ dbSections, canonical, transcription });
-    const line2 = doc.sections[0].lines[1];
-    expect(line2.conflict).toBe(true);
-    expect(line2.sources.db).toBe('y en la noche oscura brillara');
-    expect(line2.sources.canonical).toBe('y en la noche oscura brillará tu luz');
-  });
-  it('propone vocalizaciones desde segmentos sin match', () => {
-    const doc = buildReviewDoc({ dbSections, canonical, transcription });
-    expect(doc.vocalizations).toHaveLength(1);
-    expect(doc.vocalizations[0].text).toBe('oooh oh');
-    expect(doc.vocalizations[0].accepted).toBe(null);
-  });
-  it('con distinta cantidad de lineas, la que no tiene match exacto queda en conflicto', () => {
-    const dbSectionsExtra = [
-      { type: 'chorus', lines: [
-        { text: 'Nadie me ama como tu me amas' },
-        { text: 'linea extra sin contraparte' },
-      ] },
-    ];
-    const canonicalOneLine = { secciones: [
-      { tipo: 'chorus', lineas: [
-        { texto: 'Nadie me ama como tu me amas' },
-      ] },
-    ] };
+describe('buildReviewDoc v2', () => {
+  it('espina = segmentos mapeables; renglones asignados por mayor solape', () => {
     const doc = buildReviewDoc({
-      dbSections: dbSectionsExtra,
-      canonical: canonicalOneLine,
-      transcription: { text: '', words: [], perLine: [], transLines: [] },
+      transcription: trans([
+        { text: 'hola mundo', words: [[500, 900, 0.9], [1000, 1500, 0.8]] },
+        { text: 'canto fuerte', words: [[11000, 11500, 0.9], [11600, 12000, 0.7]] },
+      ]),
+      structureSegments: SEGS,
     });
-    expect(doc.sections[0].lines[0].conflict).toBe(false); // matcheo exacto
-    const extra = doc.sections[0].lines[1];
-    expect(extra.conflict).toBe(true);
-    expect(extra.sources.canonical).toBe(null);
-  });
-  it('sin canonica trabaja con 2 fuentes y lo marca', () => {
-    const doc = buildReviewDoc({ dbSections, canonical: null, transcription });
-    expect(doc.hasCanonical).toBe(false);
-  });
-  it('tolera shape real de songs.sections: coro repetido con lines null y lineas con chords/voiceRanges', () => {
-    const dbSectionsReal = [
-      { type: 'verse', label: 'Verso 1', lines: [
-        { text: 'Nadie me ama como tu me amas', chords: [{ ch: 'D', pos: 0 }], voiceRanges: [] },
-      ] },
-      { type: 'chorus', label: 'Coro 1', lines: [
-        { text: 'y en la noche oscura brillara', chords: [], voiceRanges: [] },
-      ] },
-      { type: 'chorus', label: 'Coro 2', lines: null }, // coro repetido, sin letra propia
-    ];
-    const build = () => buildReviewDoc({
-      dbSections: dbSectionsReal,
-      canonical: null,
-      transcription: { text: '', words: [], perLine: [], transLines: [] },
+    expect(doc.version).toBe(2);
+    expect(doc.sections.map((s) => s.type)).toEqual(['verse', 'chorus']); // instrumental NO genera seccion
+    expect(doc.sections[0].lines.map((l) => l.text)).toEqual(['hola mundo']);
+    expect(doc.sections[1].lines.map((l) => l.text)).toEqual(['canto fuerte']);
+    expect(doc.sections[0].startMs).toBe(0);
+    expect(doc.sections[0].lines[0]).toMatchObject({
+      startMs: 500, endMs: 1500, vocalization: false, breath: false, manualStartMs: null,
     });
-    expect(build).not.toThrow();
-    const doc = build();
-    expect(doc.sections[2].lines).toEqual([]); // 0 lineas editables, no null
-    expect(doc.sections[0].lines[0].chords).toEqual([{ ch: 'D', pos: 0 }]);
-    expect(doc.sections[0].lines[0].voiceRanges).toEqual([]);
-
-    const snap = approvedSnapshot(doc);
-    expect(snap.sections[2].lines).toBe(null); // round-trip: sigue siendo coro repetido
-    expect(snap.sections[0].lines[0].chords).toEqual([{ ch: 'D', pos: 0 }]);
-    expect(snap.sections[0].lines[0].voiceRanges).toEqual([]);
-  });
-});
-
-describe('applyReviewAction', () => {
-  const doc = () => buildReviewDoc({ dbSections, canonical, transcription });
-  it('resolve con canonical fija el texto y quita el conflicto', () => {
-    const d = applyReviewAction(doc(), { type: 'resolve', section: 0, line: 1, choice: 'canonical' });
-    expect(d.sections[0].lines[1].conflict).toBe(false);
-    expect(d.sections[0].lines[1].text).toBe('y en la noche oscura brillará tu luz');
-  });
-  it('splitLine divide el renglon en el indice de palabra dado', () => {
-    const d = applyReviewAction(doc(), { type: 'splitLine', section: 0, line: 0, afterWord: 4 });
-    expect(d.sections[0].lines[0].text).toBe('Nadie me ama como tu');
-    expect(d.sections[0].lines[1].text).toBe('me amas');
-  });
-  it('mergeLines une dos renglones contiguos', () => {
-    const split = applyReviewAction(doc(), { type: 'splitLine', section: 0, line: 0, afterWord: 4 });
-    const merged = applyReviewAction(split, { type: 'mergeLines', section: 0, line: 0 });
-    expect(merged.sections[0].lines[0].text).toBe('Nadie me ama como tu me amas');
-  });
-  it('splitLine reparte los chords por posicion y reajusta los del segundo renglon', () => {
-    const dbSectionsChords = [
-      { type: 'chorus', lines: [
-        { text: 'Nadie me ama como tu me amas', chords: [{ ch: 'D', pos: 2 }, { ch: 'G', pos: 24 }] },
-      ] },
-    ];
-    const withChords = buildReviewDoc({
-      dbSections: dbSectionsChords,
-      canonical: null,
-      transcription: { text: '', words: [], perLine: [], transLines: [] },
-    });
-    // afterWord:4 -> primer renglon "Nadie me ama como tu" (20 caracteres),
-    // cutOffset = 21. pos:2 cae antes del corte, pos:24 cae despues.
-    const d = applyReviewAction(withChords, { type: 'splitLine', section: 0, line: 0, afterWord: 4 });
-    expect(d.sections[0].lines[0].chords).toEqual([{ ch: 'D', pos: 2 }]);
-    expect(d.sections[0].lines[1].chords).toEqual([{ ch: 'G', pos: 3 }]); // 24 - 21
-  });
-  it('mergeLines fusiona los chords de ambos renglones reajustando los del segundo', () => {
-    const dbSectionsChords = [
-      { type: 'chorus', lines: [
-        { text: 'Nadie me ama como tu', chords: [{ ch: 'D', pos: 2 }] },
-        { text: 'me amas', chords: [{ ch: 'G', pos: 3 }] },
-      ] },
-    ];
-    const withChords = buildReviewDoc({
-      dbSections: dbSectionsChords,
-      canonical: null,
-      transcription: { text: '', words: [], perLine: [], transLines: [] },
-    });
-    // offset = largo del primer texto (20) + separador (1) = 21.
-    const d = applyReviewAction(withChords, { type: 'mergeLines', section: 0, line: 0 });
-    expect(d.sections[0].lines[0].text).toBe('Nadie me ama como tu me amas');
-    expect(d.sections[0].lines[0].chords).toEqual([{ ch: 'D', pos: 2 }, { ch: 'G', pos: 24 }]);
-  });
-  it('mergeLines fusiona voiceRanges reajustando start/end del segundo renglon', () => {
-    const dbSectionsVoice = [
-      { type: 'chorus', lines: [
-        { text: 'Nadie me ama como tu', voiceRanges: [{ start: 0, end: 5 }] },
-        { text: 'me amas', voiceRanges: [{ start: 0, end: 2 }] },
-      ] },
-    ];
-    const withVoice = buildReviewDoc({
-      dbSections: dbSectionsVoice,
-      canonical: null,
-      transcription: { text: '', words: [], perLine: [], transLines: [] },
-    });
-    const d = applyReviewAction(withVoice, { type: 'mergeLines', section: 0, line: 0 });
-    expect(d.sections[0].lines[0].voiceRanges).toEqual([{ start: 0, end: 5 }, { start: 21, end: 23 }]);
-  });
-  it('acceptVocalization la convierte en renglon vocalization tras la linea ancla', () => {
-    const d = applyReviewAction(doc(), { type: 'acceptVocalization', index: 0, section: 0, afterLine: 1 });
-    expect(d.sections[0].lines[2].vocalization).toBe(true);
-    expect(d.vocalizations[0].accepted).toBe(true);
-  });
-  it('acceptVocalization con afterLine -1 (o null) ancla al inicio de la seccion', () => {
-    const d1 = applyReviewAction(doc(), { type: 'acceptVocalization', index: 0, section: 0, afterLine: -1 });
-    expect(d1.sections[0].lines[0].vocalization).toBe(true);
-    expect(d1.sections[0].lines[0].text).toBe('oooh oh');
-    const d2 = applyReviewAction(doc(), { type: 'acceptVocalization', index: 0, section: 0, afterLine: null });
-    expect(d2.sections[0].lines[0].vocalization).toBe(true);
-  });
-  it('rejectVocalization marca accepted:false sin tocar los renglones', () => {
-    const d = applyReviewAction(doc(), { type: 'rejectVocalization', index: 0 });
-    expect(d.vocalizations[0].accepted).toBe(false);
-    expect(d.sections[0].lines).toHaveLength(2);
-  });
-  it('setSectionType normaliza el tipo de la seccion', () => {
-    const d = applyReviewAction(doc(), { type: 'setSectionType', section: 0, sectionType: 'estribillo' });
-    expect(d.sections[0].type).toBe('chorus');
-  });
-  it('splitSection parte la seccion en el indice de linea dado', () => {
-    const d = applyReviewAction(doc(), { type: 'splitSection', section: 0, afterLine: 0 });
-    expect(d.sections).toHaveLength(2);
-    expect(d.sections[0].lines).toHaveLength(1);
-    expect(d.sections[0].lines[0].text).toBe('Nadie me ama como tu me amas');
-    expect(d.sections[1].lines).toHaveLength(1);
-    expect(d.sections[1].lines[0].text).toBe('y en la noche oscura brillara');
-  });
-  it('mergeSections une dos secciones contiguas', () => {
-    const split = applyReviewAction(doc(), { type: 'splitSection', section: 0, afterLine: 0 });
-    const merged = applyReviewAction(split, { type: 'mergeSections', section: 0 });
-    expect(merged.sections).toHaveLength(1);
-    expect(merged.sections[0].lines).toHaveLength(2);
-  });
-  it('accion sobre indice inexistente lanza RangeError', () => {
-    expect(() => applyReviewAction(doc(), { type: 'resolve', section: 5, line: 0, choice: 'db' }))
-      .toThrow(RangeError);
-    expect(() => applyReviewAction(doc(), { type: 'resolve', section: 0, line: 9, choice: 'db' }))
-      .toThrow(RangeError);
-    expect(() => applyReviewAction(doc(), { type: 'rejectVocalization', index: 9 }))
-      .toThrow(RangeError);
-  });
-  it('splitLine fuera de rango (afterWord invalido) lanza RangeError', () => {
-    expect(() => applyReviewAction(doc(), { type: 'splitLine', section: 0, line: 0, afterWord: -1 }))
-      .toThrow(RangeError);
-    expect(() => applyReviewAction(doc(), { type: 'splitLine', section: 0, line: 0, afterWord: 6 }))
-      .toThrow(RangeError); // 7 palabras, indice 6 = ultima -> segundo renglon vacio
-  });
-  it('splitSection en la ultima linea (seccion nueva vacia) lanza RangeError', () => {
-    expect(() => applyReviewAction(doc(), { type: 'splitSection', section: 0, afterLine: 1 }))
-      .toThrow(RangeError);
-  });
-});
-
-// Mapa "seccion-linea" -> words de esa linea, mismo contrato que
-// autoSplitLongLines espera como 2do parametro (ya correlacionado, no un
-// array plano posicional -- ver bug de correlacion temporal mas abajo).
-function wordsMap(entries) {
-  return new Map(Object.entries(entries));
-}
-
-describe('autoSplitLongLines', () => {
-  const longTokens = ['Uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete',
-    'ocho', 'nueve', 'diez', 'once', 'doce', 'trece', 'catorce'];
-  const longText = longTokens.join(' '); // 76 caracteres, > 48
-  const wordsWithPause = makeWordsWithPauseAt(longTokens, 6); // pausa tras "siete"
-
-  function docWithLine(line, { vocalizations = [] } = {}) {
-    return {
-      sections: [{ type: 'verse', label: 'Verso 1', lines: [line], temperature: 1 }],
-      vocalizations,
-      hasCanonical: false,
-      temperature: 1,
-    };
-  }
-
-  it('renglon largo con pausa entre palabras: parte en la pausa mas cercana al medio', () => {
-    const line = {
-      text: longText, conflict: false, vocalization: false, score: null,
-      sources: { db: longText, canonical: null, trans: longText },
-    };
-    const doc = docWithLine(line);
-    const out = autoSplitLongLines(doc, wordsMap({ '0-0': wordsWithPause }));
-    expect(out.sections[0].lines).toHaveLength(2);
-    expect(out.sections[0].lines[0].text).toBe('Uno dos tres cuatro cinco seis siete');
-    expect(out.sections[0].lines[1].text).toBe('ocho nueve diez once doce trece catorce');
-    expect(out.sections[0].lines[0].text.length).toBeLessThan(48);
-    expect(out.sections[0].lines[1].text.length).toBeLessThan(48);
   });
 
-  it('renglon largo sin words (solo canonica): corta en el espacio mas cercano al medio', () => {
-    const text = 'Esta es una linea muy larga que no tiene ninguna transcripcion asociada todavia';
-    const line = {
-      text, conflict: false, vocalization: false, score: null,
-      sources: { db: text, canonical: text, trans: null },
-    };
-    const doc = docWithLine(line);
-    const out = autoSplitLongLines(doc);
-    expect(out.sections[0].lines).toHaveLength(2);
-    expect(out.sections[0].lines[0].text).toBe('Esta es una linea muy larga que no tiene');
-    expect(out.sections[0].lines[1].text).toBe('ninguna transcripcion asociada todavia');
-  });
-
-  it('renglon corto (<=48 chars) queda intacto', () => {
-    const text = 'Nadie me ama como tu me amas de verdad'; // 39 caracteres
-    const line = {
-      text, conflict: false, vocalization: false, score: null,
-      sources: { db: text, canonical: null, trans: null },
-    };
-    const doc = docWithLine(line);
-    const out = autoSplitLongLines(doc);
-    expect(out.sections[0].lines).toHaveLength(1);
-    expect(out.sections[0].lines[0].text).toBe(text);
-  });
-
-  it('reparte chords/voiceRanges por offset al partir (reusa la mecanica de splitLine)', () => {
-    const line = {
-      text: longText,
-      conflict: false,
-      vocalization: false,
-      score: null,
-      sources: { db: longText, canonical: null, trans: longText },
-      chords: [{ ch: 'D', pos: 2 }, { ch: 'G', pos: 40 }],
-      voiceRanges: [{ start: 0, end: 5 }, { start: 40, end: 45 }],
-    };
-    const doc = docWithLine(line);
-    const out = autoSplitLongLines(doc, wordsMap({ '0-0': wordsWithPause }));
-    const [first, second] = out.sections[0].lines;
-    // cutOffset = "Uno dos tres cuatro cinco seis siete".length + 1 = 37
-    expect(first.chords).toEqual([{ ch: 'D', pos: 2 }]);
-    expect(second.chords).toEqual([{ ch: 'G', pos: 3 }]); // 40 - 37
-    expect(first.voiceRanges).toEqual([{ start: 0, end: 5 }]);
-    expect(second.voiceRanges).toEqual([{ start: 3, end: 8 }]); // 40-37, 45-37
-  });
-
-  it('aplicar dos veces es idempotente: no re-parte los hijos ya cortos', () => {
-    const line = {
-      text: longText, conflict: false, vocalization: false, score: null,
-      sources: { db: longText, canonical: null, trans: longText },
-    };
-    const doc = docWithLine(line);
-    const map = wordsMap({ '0-0': wordsWithPause });
-    const once = autoSplitLongLines(doc, map);
-    const twice = autoSplitLongLines(once, map);
-    expect(twice).toEqual(once);
-  });
-
-  it('renglon muy largo con 2 pausas necesita 2 cortes (recursivo)', () => {
-    const tokens = [...longTokens, 'quince', 'dieciseis', 'diecisiete', 'dieciocho'];
-    const text = tokens.join(' '); // > 90 caracteres
-    // primera pausa tras "siete" (idx 6); segunda tras "trece" (idx 12).
-    const words = makeWordsWithPauseAt(tokens, 6);
-    for (let i = 13; i < words.length; i += 1) {
-      words[i] = { ...words[i], startMs: words[i].startMs + 800, endMs: words[i].endMs + 800 };
-    }
-    const line = {
-      text, conflict: false, vocalization: false, score: null,
-      sources: { db: text, canonical: null, trans: text },
-    };
-    const doc = docWithLine(line);
-    const out = autoSplitLongLines(doc, wordsMap({ '0-0': words }));
-    expect(out.sections[0].lines.length).toBeGreaterThanOrEqual(2);
-    for (const l of out.sections[0].lines) {
-      expect(l.text.length).toBeLessThanOrEqual(48);
-    }
-    expect(out.sections[0].lines.map((l) => l.text).join(' ')).toBe(text);
-  });
-
-  it('una sola palabra sin espacios mas larga que 48 chars queda intacta (sin loop infinito)', () => {
-    const text = 'a'.repeat(60);
-    const line = {
-      text, conflict: false, vocalization: false, score: null,
-      sources: { db: text, canonical: null, trans: null },
-    };
-    const doc = docWithLine(line);
-    const out = autoSplitLongLines(doc);
-    expect(out.sections[0].lines).toHaveLength(1);
-    expect(out.sections[0].lines[0].text).toBe(text);
-  });
-
-  it('preserva orden de secciones y metadata (label/type) al partir', () => {
-    const doc = {
-      sections: [
-        { type: 'verse', label: 'Verso 1', lines: [{ text: 'corto', conflict: false, vocalization: false, score: null, sources: { db: 'corto', canonical: null, trans: null } }], temperature: 1 },
-        {
-          type: 'chorus',
-          label: 'Coro 1',
-          lines: [{
-            text: longText, conflict: false, vocalization: false, score: null,
-            sources: { db: longText, canonical: null, trans: longText },
-          }],
-          temperature: 1,
-        },
-      ],
-      vocalizations: [],
-      hasCanonical: false,
-      temperature: 1,
-    };
-    // la linea larga esta en seccion 1, linea 0 -> clave '1-0'.
-    const out = autoSplitLongLines(doc, wordsMap({ '1-0': wordsWithPause }));
-    expect(out.sections).toHaveLength(2);
-    expect(out.sections[0].type).toBe('verse');
-    expect(out.sections[0].lines).toHaveLength(1);
-    expect(out.sections[1].type).toBe('chorus');
-    expect(out.sections[1].label).toBe('Coro 1');
-    expect(out.sections[1].lines).toHaveLength(2);
-  });
-
-  it('buildReviewDoc llama autoSplitLongLines al final: parte renglones largos con match de transcripcion', () => {
-    const dbSectionsLong = [{ type: 'verse', lines: [{ text: longText }] }];
-    const transcriptionLong = {
-      text: longText,
-      words: wordsWithPause,
-      perLine: [{ transIndex: 0, dbIndex: 0, score: 1.0 }],
-      transLines: [longText],
-    };
-    const doc = buildReviewDoc({ dbSections: dbSectionsLong, canonical: null, transcription: transcriptionLong });
-    expect(doc.sections[0].lines).toHaveLength(2);
-    expect(doc.sections[0].lines[0].text).toBe('Uno dos tres cuatro cinco seis siete');
-    expect(doc.sections[0].lines[1].text).toBe('ocho nueve diez once doce trece catorce');
-  });
-
-  // Bug real (review Task 14): el orden del DOCUMENTO no es necesariamente
-  // el orden TEMPORAL del audio. Con coros repetidos, la linea 0 del doc
-  // puede matchear a un segmento transcrito que ocurrio DESPUES en el audio
-  // que el de la linea 1 (transcribe_diff.py matchea cada linea db contra
-  // su mejor candidato global, sin restriccion de orden). Si la correlacion
-  // camina en orden de documento y corta el array de words por conteo
-  // posicional, le asigna a cada linea el timing de OTRA linea -> corte
-  // confiado pero en la pausa equivocada.
-  it('correlaciona por transIndex (orden temporal real), no por orden del documento, con matching cruzado', () => {
-    // segmentX: pausa tras idx 5 (temprana). segmentY: pausa tras idx 8 (tardia).
-    const segmentX = makeWordsWithPauseAt(longTokens, 5);
-    const segmentY = makeWordsWithPauseAt(longTokens, 8);
-    // orden TEMPORAL real (como los devuelve Modal): segmentX primero, luego segmentY.
-    const words = [...segmentX, ...segmentY];
-    const transLines = [longText, longText]; // transIndex 0 = segmentX, transIndex 1 = segmentY
-    // Matching CRUZADO: la linea 0 del doc (dbIndex 0) matchea con el
-    // segmento que en el audio ocurrio SEGUNDO (transIndex 1, segmentY);
-    // la linea 1 del doc (dbIndex 1) matchea con el que ocurrio PRIMERO
-    // (transIndex 0, segmentX). Pasa perfectamente en coros repetidos.
-    const perLine = [
-      { transIndex: 0, dbIndex: 1, score: 1.0 },
-      { transIndex: 1, dbIndex: 0, score: 1.0 },
-    ];
-    const dbSectionsCrossed = [{ type: 'chorus', lines: [{ text: longText }, { text: longText }] }];
+  it('confidence = promedio del score por palabra (round4), ignorando scores null', () => {
     const doc = buildReviewDoc({
-      dbSections: dbSectionsCrossed,
-      canonical: null,
-      transcription: { text: '', words, perLine, transLines },
+      transcription: trans([{ text: 'una dos tres', words: [[0, 100, 0.9], [110, 200, null], [210, 300, 0.6]] }]),
+      structureSegments: [SEGS[0]],
     });
-    // linea 0 (dbIndex 0) matchea transIndex 1 = segmentY -> pausa tras idx 8.
-    expect(doc.sections[0].lines[0].text).toBe('Uno dos tres cuatro cinco seis siete ocho nueve');
-    expect(doc.sections[0].lines[1].text).toBe('diez once doce trece catorce');
-    // linea 1 (dbIndex 1) matchea transIndex 0 = segmentX -> pausa tras idx 5.
-    expect(doc.sections[0].lines[2].text).toBe('Uno dos tres cuatro cinco seis');
-    expect(doc.sections[0].lines[3].text).toBe('siete ocho nueve diez once doce trece catorce');
+    expect(doc.sections[0].lines[0].confidence).toBe(0.75);
   });
-});
 
-describe('temperatura y aprobacion', () => {
-  it('temperatura sube al resolver y canApprove exige 0 conflictos y 0 vocalizaciones sin decidir', () => {
-    let d = buildReviewDoc({ dbSections, canonical, transcription });
-    expect(canApprove(d)).toBe(false);
-    d = applyReviewAction(d, { type: 'resolve', section: 0, line: 1, choice: 'canonical' });
-    expect(reviewTemperature(d)).toBeGreaterThan(0.9);
-    d = applyReviewAction(d, { type: 'rejectVocalization', index: 0 });
-    expect(canApprove(d)).toBe(true);
-  });
-  it('approvedSnapshot produce sections para songs.sections + hash estable', () => {
-    let d = buildReviewDoc({ dbSections, canonical, transcription });
-    d = applyReviewAction(d, { type: 'resolve', section: 0, line: 1, choice: 'canonical' });
-    d = applyReviewAction(d, { type: 'rejectVocalization', index: 0 });
-    const snap = approvedSnapshot(d);
-    expect(snap.sections[0].lines[1].text).toBe('y en la noche oscura brillará tu luz');
-    expect(typeof snap.hash).toBe('string');
-    expect(approvedSnapshot(d).hash).toBe(snap.hash); // determinista
-  });
-});
-
-// Task 15: conciliacion de song_structure.segments (SongFormer) con el gate
-// de letra -- asignacion renglon->segmento por solape mayoritario (a), la
-// letra canonica NUNCA se retipa/reordena por el audio detectado (b), y
-// advertencia informativa de discrepancia de conteo (c).
-describe('asignacion de segmento de estructura (Task 15a/b/c)', () => {
-  const words = [
-    { text: 'nadie', startMs: 0, endMs: 200 },
-    { text: 'me', startMs: 210, endMs: 300 },
-    { text: 'ama', startMs: 310, endMs: 500 },
-    { text: 'como', startMs: 510, endMs: 700 },
-    { text: 'tu', startMs: 710, endMs: 800 },
-    { text: 'me', startMs: 810, endMs: 900 },
-    { text: 'amas', startMs: 910, endMs: 1100 },
-    { text: 'y', startMs: 5000, endMs: 5100 },
-    { text: 'en', startMs: 5110, endMs: 5200 },
-    { text: 'la', startMs: 5210, endMs: 5300 },
-    { text: 'noche', startMs: 5310, endMs: 5500 },
-    { text: 'oscura', startMs: 5510, endMs: 5700 },
-    { text: 'brillara', startMs: 5710, endMs: 6000 },
-  ];
-  const dbSectionsStructure = [
-    { type: 'chorus', lines: [
-      { text: 'Nadie me ama como tu me amas' }, // 0-1100ms
-      { text: 'y en la noche oscura brillara' }, // 5000-6000ms
-    ] },
-  ];
-  const transcriptionStructure = {
-    text: 'nadie me ama como tu me amas y en la noche oscura brillara',
-    words,
-    perLine: [
-      { transIndex: 0, dbIndex: 0, score: 1.0 },
-      { transIndex: 1, dbIndex: 1, score: 1.0 },
-    ],
-    transLines: ['nadie me ama como tu me amas', 'y en la noche oscura brillara'],
-  };
-  const structureSegments = [
-    { label: 'verso', startMs: 0, endMs: 2000 },
-    { label: 'coro', startMs: 2000, endMs: 8000 },
-  ];
-
-  it('asigna a cada renglon el segmento con mayor solape temporal', () => {
+  it('renglon que cruza dos segmentos va al de MAYOR solape', () => {
     const doc = buildReviewDoc({
-      dbSections: dbSectionsStructure, canonical: null,
-      transcription: transcriptionStructure, structureSegments,
+      transcription: trans([{ text: 'cruza aqui', words: [[9000, 9600, 0.9], [9700, 15000, 0.9]] }]),
+      structureSegments: SEGS,
     });
-    expect(doc.sections[0].lines[0].structureSegment)
-      .toEqual({ label: 'verso', startMs: 0, endMs: 2000 });
-    expect(doc.sections[0].lines[1].structureSegment)
-      .toEqual({ label: 'coro', startMs: 2000, endMs: 8000 });
+    // solape verso = 1000ms, coro = 5000ms -> coro
+    expect(doc.sections[1].lines).toHaveLength(1);
+    expect(doc.sections[0].lines).toHaveLength(0); // segmento sin renglones queda vacio
   });
 
-  it('empate exacto de solape entre dos segmentos: gana el primero en orden del array', () => {
-    // Renglon 0-1100ms de dbSectionsStructure; dos segmentos con EXACTAMENTE
-    // el mismo overlap con ese renglon (550ms cada uno) -- comportamiento
-    // determinista esperado: gana el primero, nunca el ultimo que sobreescriba.
-    const tiedSegments = [
-      { label: 'verso', startMs: 0, endMs: 550 },
-      { label: 'coro', startMs: 550, endMs: 1100 },
-    ];
+  it('renglon que solo solapa instrumental cae en la seccion lirica mas cercana', () => {
     const doc = buildReviewDoc({
-      dbSections: dbSectionsStructure, canonical: null,
-      transcription: transcriptionStructure, structureSegments: tiedSegments,
+      transcription: trans([{ text: 'ad lib', words: [[21000, 21500, 0.9], [21600, 22000, 0.9]] }]),
+      structureSegments: SEGS,
     });
-    expect(doc.sections[0].lines[0].structureSegment.label).toBe('verso');
+    expect(doc.sections[1].lines.map((l) => l.text)).toEqual(['ad lib']); // coro (endMs 20000) es la mas cercana
   });
 
-  it('renglon sin words (sin match de transcripcion) queda con structureSegment null', () => {
-    const dbSectionsNoMatch = [
-      { type: 'chorus', lines: [{ text: 'Nadie me ama como tu me amas' }] },
-    ];
+  it('renglon sin words hereda la seccion del renglon anterior, con timing null y vocalization', () => {
     const doc = buildReviewDoc({
-      dbSections: dbSectionsNoMatch, canonical: null,
-      transcription: { text: '', words: [], perLine: [], transLines: [] },
-      structureSegments,
+      transcription: trans([
+        { text: 'con timing', words: [[11000, 11900, 0.9], [12000, 12400, 0.9]] },
+        { text: 'sin timing', words: [] },
+      ]),
+      structureSegments: SEGS,
     });
-    expect(doc.sections[0].lines[0].structureSegment).toBe(null);
+    const [a, b] = doc.sections[1].lines;
+    expect(a.text).toBe('con timing');
+    expect(b).toMatchObject({ text: 'sin timing', startMs: null, endMs: null, confidence: null, vocalization: true });
   });
 
-  it('splitLine descarta el structureSegment stale en ambos renglones hijos', () => {
+  it('confidence < 0.4 marca vocalization automatica', () => {
     const doc = buildReviewDoc({
-      dbSections: dbSectionsStructure, canonical: null,
-      transcription: transcriptionStructure, structureSegments,
+      transcription: trans([{ text: 'mmm ahh', words: [[0, 400, 0.2], [500, 900, 0.3]] }]),
+      structureSegments: [SEGS[0]],
     });
-    expect(doc.sections[0].lines[0].structureSegment).not.toBe(undefined); // precondicion: tiene segmento
-    const split = applyReviewAction(
-      doc, { type: 'splitLine', section: 0, line: 0, afterWord: 4 },
-    );
-    expect(split.sections[0].lines[0].structureSegment).toBe(undefined);
-    expect(split.sections[0].lines[1].structureSegment).toBe(undefined);
+    expect(doc.sections[0].lines[0].vocalization).toBe(true);
   });
 
-  it('mergeLines descarta el structureSegment stale en el renglon resultante', () => {
+  it('fallback sin SongFormer: una sola seccion verse con todos los renglones', () => {
     const doc = buildReviewDoc({
-      dbSections: dbSectionsStructure, canonical: null,
-      transcription: transcriptionStructure, structureSegments,
-    });
-    // Ambas lineas tienen segmento distinto (verso vs coro, ver test de
-    // arriba) -- el merge no debe quedarse con ninguno de los dos.
-    const merged = applyReviewAction(doc, { type: 'mergeLines', section: 0, line: 0 });
-    expect(merged.sections[0].lines[0].structureSegment).toBe(undefined);
-  });
-
-  it('con canonica presente, el tipo/orden de la seccion NO cambia aunque los segmentos digan otra cosa', () => {
-    const canonicalChorus = { secciones: [
-      { tipo: 'chorus', lineas: [
-        { texto: 'Nadie me ama como tu me amas' },
-        { texto: 'y en la noche oscura brillara' },
-      ] },
-    ] };
-    // structureSegments dicen 'verso'/'coro' para lineas de una seccion cuyo
-    // tipo canonico es 'chorus' -- el tipo de seccion no se mueve ni un poco.
-    const doc = buildReviewDoc({
-      dbSections: dbSectionsStructure, canonical: canonicalChorus,
-      transcription: transcriptionStructure, structureSegments,
+      transcription: trans([
+        { text: 'uno', words: [[0, 500, 0.9]] },
+        { text: 'dos', words: [[600, 1100, 0.9]] },
+      ]),
+      structureSegments: [],
     });
     expect(doc.sections).toHaveLength(1);
-    expect(doc.sections[0].type).toBe('chorus');
-    expect(doc.sections[0].lines[0].structureSegment.label).toBe('verso');
+    expect(doc.sections[0]).toMatchObject({ type: 'verse', label: null, startMs: 0, endMs: 1100 });
+    expect(doc.sections[0].lines).toHaveLength(2);
   });
 
-  it('computeStructureWarning es null sin segmentos', () => {
+  it('auto-parte renglones > 48 chars repartiendo las words con el corte', () => {
+    const longText = 'esta es una linea larguisima que definitivamente supera los cuarenta y ocho caracteres';
+    const tokens = longText.split(' ');
+    const words = tokens.map((_, i) => [i * 500, i * 500 + 400, 0.9]);
     const doc = buildReviewDoc({
-      dbSections: dbSectionsStructure, canonical: null, transcription: transcriptionStructure,
+      transcription: trans([{ text: longText, words }]),
+      structureSegments: [{ label: 'verso', startMs: 0, endMs: 60000 }],
     });
-    expect(computeStructureWarning(doc, [])).toBe(null);
+    const lines = doc.sections[0].lines;
+    expect(lines.length).toBeGreaterThan(1);
+    for (const l of lines) {
+      expect(l.text.length).toBeLessThanOrEqual(48);
+      expect(l.startMs).toBe(l.words[0].startMs); // words repartidas, no duplicadas
+    }
+    expect(lines.flatMap((l) => l.words)).toHaveLength(tokens.length);
+  });
+});
+
+describe('canApprove v2 (editor puro)', () => {
+  it('true con al menos un renglon; false con doc vacio', () => {
+    const doc = buildReviewDoc({
+      transcription: trans([{ text: 'uno', words: [[0, 500, 0.9]] }]),
+      structureSegments: [],
+    });
+    expect(canApprove(doc)).toBe(true);
+    expect(canApprove({ version: 2, sections: [] })).toBe(false);
+    expect(canApprove({ version: 2, sections: [{ type: 'verse', label: null, startMs: 0, endMs: 1, lines: [] }] })).toBe(false);
+  });
+});
+
+describe('approvedSnapshot v2', () => {
+  it('devuelve las sections tal cual + hash sha256 deterministico', () => {
+    const doc = buildReviewDoc({
+      transcription: trans([{ text: 'uno dos', words: [[0, 500, 0.9], [600, 900, 0.8]] }]),
+      structureSegments: [],
+    });
+    const a = approvedSnapshot(doc);
+    const b = approvedSnapshot(structuredClone(doc));
+    expect(a.sections).toEqual(doc.sections);
+    expect(a.hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(a.hash).toBe(b.hash);
+  });
+});
+
+describe('applyReviewAction v2', () => {
+  const base = () =>
+    buildReviewDoc({
+      transcription: trans([
+        { text: 'uno dos', words: [[0, 400, 0.9], [500, 900, 0.9]] },
+        { text: 'tres cuatro', words: [[1000, 1400, 0.9], [1500, 1900, 0.9]] },
+        { text: 'coro grande', words: [[11000, 11400, 0.9], [11500, 11900, 0.9]] },
+      ]),
+      structureSegments: SEGS,
+    });
+
+  it('editLine cambia el texto sin mutar el doc original', () => {
+    const doc = base();
+    const next = applyReviewAction(doc, { type: 'editLine', section: 0, line: 0, text: 'uno dos editado' });
+    expect(next.sections[0].lines[0].text).toBe('uno dos editado');
+    expect(doc.sections[0].lines[0].text).toBe('uno dos');
   });
 
-  it('computeStructureWarning detecta discrepancia de conteo por tipo, sin bloquear canApprove', () => {
-    const dbSectionsTwoVerses = [
-      { type: 'verse', lines: [{ text: 'uno' }] },
-      { type: 'verse', lines: [{ text: 'dos' }] },
-    ];
-    const threeVerseSegments = [
-      { label: 'verso', startMs: 0, endMs: 100 },
-      { label: 'verso', startMs: 100, endMs: 200 },
-      { label: 'verso', startMs: 200, endMs: 300 },
-    ];
-    const doc = buildReviewDoc({
-      dbSections: dbSectionsTwoVerses, canonical: null,
-      transcription: { text: '', words: [], perLine: [], transLines: [] },
+  it('editLine con texto vacio lanza RangeError', () => {
+    expect(() => applyReviewAction(base(), { type: 'editLine', section: 0, line: 0, text: '  ' }))
+      .toThrow(RangeError);
+  });
+
+  it('splitLine parte texto y words', () => {
+    const next = applyReviewAction(base(), { type: 'splitLine', section: 0, line: 0, afterWord: 0 });
+    expect(next.sections[0].lines.map((l) => l.text)).toEqual(['uno', 'dos', 'tres cuatro']);
+    expect(next.sections[0].lines[1].startMs).toBe(500);
+  });
+
+  it('mergeLines une texto, words y recalcula timing', () => {
+    const next = applyReviewAction(base(), { type: 'mergeLines', section: 0, line: 0 });
+    const merged = next.sections[0].lines[0];
+    expect(merged.text).toBe('uno dos tres cuatro');
+    expect(merged.words).toHaveLength(4);
+    expect(merged.startMs).toBe(0);
+    expect(merged.endMs).toBe(1900);
+  });
+
+  it('moveLine mueve un renglon entre secciones en la posicion pedida', () => {
+    const next = applyReviewAction(base(), {
+      type: 'moveLine', fromSection: 0, fromLine: 1, toSection: 1, toLine: 0,
     });
-    const warning = computeStructureWarning(doc, threeVerseSegments);
-    expect(warning).toContain('verse');
-    expect(warning).toContain('letra tiene 2');
-    expect(warning).toContain('audio detectó 3');
-    expect(canApprove(doc)).toBe(true); // solo informativo, no bloquea
+    expect(next.sections[0].lines.map((l) => l.text)).toEqual(['uno dos']);
+    expect(next.sections[1].lines.map((l) => l.text)).toEqual(['tres cuatro', 'coro grande']);
+  });
+
+  it('deleteLine elimina el renglon', () => {
+    const next = applyReviewAction(base(), { type: 'deleteLine', section: 0, line: 0 });
+    expect(next.sections[0].lines.map((l) => l.text)).toEqual(['tres cuatro']);
+  });
+
+  it('setSectionType normaliza y retipa; renameSection fija label (null lo limpia)', () => {
+    let next = applyReviewAction(base(), { type: 'setSectionType', section: 0, sectionType: 'estribillo' });
+    expect(next.sections[0].type).toBe('chorus');
+    next = applyReviewAction(next, { type: 'renameSection', section: 0, label: 'Coro final' });
+    expect(next.sections[0].label).toBe('Coro final');
+    next = applyReviewAction(next, { type: 'renameSection', section: 0, label: null });
+    expect(next.sections[0].label).toBeNull();
+  });
+
+  it('setBreath y toggleVocalization', () => {
+    let next = applyReviewAction(base(), { type: 'setBreath', section: 0, line: 0, breath: true });
+    expect(next.sections[0].lines[0].breath).toBe(true);
+    next = applyReviewAction(next, { type: 'toggleVocalization', section: 0, line: 0 });
+    expect(next.sections[0].lines[0].vocalization).toBe(true);
+  });
+
+  it('setLineStart fija manualStartMs y null lo limpia', () => {
+    let next = applyReviewAction(base(), { type: 'setLineStart', section: 0, line: 0, startMs: 250 });
+    expect(next.sections[0].lines[0].manualStartMs).toBe(250);
+    next = applyReviewAction(next, { type: 'setLineStart', section: 0, line: 0, startMs: null });
+    expect(next.sections[0].lines[0].manualStartMs).toBeNull();
+  });
+
+  it('indices invalidos y acciones desconocidas lanzan RangeError', () => {
+    expect(() => applyReviewAction(base(), { type: 'deleteLine', section: 9, line: 0 })).toThrow(RangeError);
+    expect(() => applyReviewAction(base(), { type: 'moveLine', fromSection: 0, fromLine: 0, toSection: 9, toLine: 0 })).toThrow(RangeError);
+    expect(() => applyReviewAction(base(), { type: 'resolve', section: 0, line: 0, choice: 'db' })).toThrow(RangeError);
   });
 });

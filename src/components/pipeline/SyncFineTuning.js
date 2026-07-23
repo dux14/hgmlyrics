@@ -35,7 +35,7 @@ function truncateLineText(text, max = 40) {
 
 /**
  * @param {{ songId: string, getSong?: (() => object|null), getVocalsUrl?: (() => string|null) }} opts
- * @returns {{ el: HTMLElement, refresh: () => Promise<void>, update: (run: object|null) => void, destroy: () => void }}
+ * @returns {{ el: HTMLElement, refresh: () => Promise<void>, update: (run: object|null) => void, syncSongText: () => void, destroy: () => void }}
  */
 export function createSyncFineTuning({ songId, getSong = () => null, getVocalsUrl = () => null }) {
   const el = document.createElement('div');

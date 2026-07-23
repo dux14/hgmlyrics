@@ -9,6 +9,7 @@
  * cada timeupdate).
  */
 import { escapeHtml } from '../../lib/escape.js';
+import { SECTION_TYPE_LABELS, normalizeSectionType } from '../../lib/sectionTypes.js';
 
 // Roles de color por voz: lead siempre nivel 1 (teal). El resto de
 // voices_present, en orden, ocupan nivel 2 (violeta) y nivel 3+ (rosa,
@@ -81,11 +82,27 @@ function renderSylNotes(voiceKeys) {
   return `<span class="tone-syl-notes">${stackedHtml}${moreHtml}</span>`;
 }
 
+// `song.sections` (letra del cancionero, v3) no referencia índices de línea:
+// cada sección trae su propio array `lines`. Para repartir las líneas de
+// `analysis` (pitch) por sección asumimos el mismo orden/cantidad y
+// derivamos el rango [start, end) de cada sección por conteo acumulado de
+// `section.lines.length`.
+function sectionBoundariesFor(sections) {
+  if (!Array.isArray(sections) || sections.length === 0) return [];
+  let acc = 0;
+  return sections.map((s) => {
+    const count = Array.isArray(s?.lines) ? s.lines.length : 0;
+    const start = acc;
+    acc += count;
+    return { type: s?.type, start, end: acc };
+  });
+}
+
 /**
- * @param {{ analysis: object|null, onSeek?: (seconds: number) => void }} opts
+ * @param {{ analysis: object|null, sections?: Array|null, onSeek?: (seconds: number) => void }} opts
  * @returns {{ el: HTMLElement, setActiveTime: (seconds: number) => void, destroy: () => void }}
  */
-export function createToneLyrics({ analysis, onSeek } = {}) {
+export function createToneLyrics({ analysis, sections, onSeek } = {}) {
   const el = document.createElement('div');
   el.className = 'tone-lyrics';
 
@@ -113,6 +130,9 @@ export function createToneLyrics({ analysis, onSeek } = {}) {
     return { key, role, label: ROLE_LABEL[role] };
   });
 
+  const boundaries = sectionBoundariesFor(sections);
+  let currentSectionIdx = -1;
+
   const html = baseLines
     .map((line, li) => {
       const syllables = line.syllables ?? [];
@@ -134,7 +154,20 @@ export function createToneLyrics({ analysis, onSeek } = {}) {
           </span>`;
         })
         .join('');
-      return `<p class="tone-line" data-line="${li}">${sylHtml}</p>`;
+
+      // Encabezado de sección: se emite una sola vez, justo antes de la
+      // primera línea que cae en su rango [start, end). Sin `sections` (o
+      // vacío), `boundaries` queda [] y nunca se pinta ninguno (compat).
+      let headerHtml = '';
+      const idx = boundaries.findIndex((b) => li >= b.start && li < b.end);
+      if (idx !== -1 && idx !== currentSectionIdx) {
+        currentSectionIdx = idx;
+        const slug = normalizeSectionType(boundaries[idx].type);
+        const label = SECTION_TYPE_LABELS[slug] ?? SECTION_TYPE_LABELS.verse;
+        headerHtml = `<div class="tone-lyrics__section-header" style="color: var(--color-section-${slug})">${escapeHtml(label)}</div>`;
+      }
+
+      return `${headerHtml}<p class="tone-line" data-line="${li}">${sylHtml}</p>`;
     })
     .join('');
 

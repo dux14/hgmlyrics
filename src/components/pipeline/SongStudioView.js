@@ -126,11 +126,12 @@ export function renderSongStudioView(container, songId) {
     `;
 
     const tracks = stemsToTracks(data.stems);
-    player = createMultiTrackPlayer({ tracks });
+    player = createMultiTrackPlayer({ tracks, structure: data.structure });
     view.querySelector('.studio-view__player').appendChild(player.el);
 
     tone = createToneLyrics({
       analysis: data.analysis,
+      sections: data.sections,
       onSeek: (sec) => player?.seek(sec),
     });
     view.querySelector('.studio-view__lyrics').appendChild(tone.el);

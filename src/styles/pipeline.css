@@ -1375,6 +1375,41 @@ body.chrome-hidden .main {
   white-space: nowrap;
 }
 
+/* Chips de navegación por sección (estructura SongFormer, Task 19): fila
+   opcional entre el transporte y las pistas, uno por segmento detectado. */
+.mtp__sections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.mtp__section-chip {
+  padding: 0.25rem var(--space-sm);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition:
+    background-color 0.12s,
+    color 0.12s,
+    border-color 0.12s;
+}
+.mtp__section-chip:hover {
+  border-color: var(--color-text-secondary);
+}
+.mtp__section-chip:focus-visible {
+  outline: 2px solid var(--color-action);
+  outline-offset: 2px;
+}
+.mtp__section-chip.is-active {
+  background: var(--color-action);
+  color: #fff;
+  border-color: var(--color-action);
+}
+
 .mtp__tracks {
   display: flex;
   flex-direction: column;
@@ -1481,6 +1516,15 @@ body.chrome-hidden .main {
   padding: var(--space-md);
   color: var(--color-text-secondary);
   text-align: center;
+}
+
+/* Encabezado de sección (Task 19): agrupa la letra por verso/coro/puente,
+   mismo sistema de color que StructureDetail (--color-section-*). */
+.tone-lyrics__section-header {
+  padding: var(--space-xs) var(--space-sm) 0;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .tone-line {

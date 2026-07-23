@@ -20,7 +20,7 @@ async function readError(res, fallback) {
 /**
  * Estudio publicado de una canción (stems, análisis, secciones, timings).
  * @param {string} songId
- * @returns {Promise<{stems:Array, analysis:object|null, sections:Array, timings:object|null, title:string|null}|null>}
+ * @returns {Promise<{stems:Array, analysis:object|null, sections:Array, timings:object|null, title:string|null, structure:{segments:Array}|null}|null>}
  *   null si la canción todavía no tiene estudio publicado (404).
  */
 export async function getSongStudio(songId) {

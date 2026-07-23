@@ -358,6 +358,52 @@ describe('ToneLyrics — analysis vacío', () => {
   });
 });
 
+describe('ToneLyrics — sections (agrupación por encabezado, Task 19)', () => {
+  beforeEach(() => {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: false });
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
+  // makeAnalysis() tiene 2 líneas en la voz base (lead): reparto por índice
+  // 1 línea -> 1a sección, 1 línea -> 2a sección.
+  function makeSections() {
+    return [
+      { type: 'verse', label: 'Verso', lines: [{ text: 'Me he vá la' }] },
+      { type: 'chorus', label: 'Coro', lines: [{ text: 'Oh' }] },
+    ];
+  }
+
+  it('pinta un encabezado por sección con label y color, y reparte las líneas por índice', () => {
+    const { el } = createToneLyrics({ analysis: makeAnalysis(), sections: makeSections() });
+    const headers = el.querySelectorAll('.tone-lyrics__section-header');
+    expect(headers.length).toBe(2);
+    expect(headers[0].textContent).toBe('VERSO');
+    expect(headers[1].textContent).toBe('CORO');
+    expect(headers[0].getAttribute('style')).toContain('--color-section-verse');
+    expect(headers[1].getAttribute('style')).toContain('--color-section-chorus');
+
+    // Orden en el DOM: encabezado 1, línea 0, encabezado 2, línea 1.
+    const children = [...el.children];
+    expect(children[0]).toBe(headers[0]);
+    expect(children[1].className).toBe('tone-line');
+    expect(children[1].dataset.line).toBe('0');
+    expect(children[2]).toBe(headers[1]);
+    expect(children[3].dataset.line).toBe('1');
+  });
+
+  it('sin sections (null o vacío) no pinta ningún encabezado: lista PLANA idéntica a hoy', () => {
+    const withNull = createToneLyrics({ analysis: makeAnalysis(), sections: null });
+    expect(withNull.el.querySelectorAll('.tone-lyrics__section-header').length).toBe(0);
+    expect(withNull.el.querySelectorAll('.tone-line').length).toBe(2);
+
+    const withEmpty = createToneLyrics({ analysis: makeAnalysis(), sections: [] });
+    expect(withEmpty.el.querySelectorAll('.tone-lyrics__section-header').length).toBe(0);
+
+    const withoutParam = createToneLyrics({ analysis: makeAnalysis() });
+    expect(withoutParam.el.querySelectorAll('.tone-lyrics__section-header').length).toBe(0);
+  });
+});
+
 describe('ToneLyrics — voz secundaria más corta que la base', () => {
   it('renderiza la base completa sin crashear cuando una voz tiene menos líneas/sílabas', () => {
     const analysis = {

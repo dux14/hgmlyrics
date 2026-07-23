@@ -8,7 +8,7 @@
  * DRIFT_THRESHOLD_S (syncStep, pura y testeable sin rAF real).
  */
 import { icon } from '../../lib/icons.js';
-import { safeUrl } from '../../lib/escape.js';
+import { safeUrl, escapeHtml } from '../../lib/escape.js';
 import { fmtTime, clamp, timeToPos, posToTime } from '../StudioPlayer.js';
 import '../../styles/pipeline.css';
 
@@ -36,13 +36,26 @@ export function syncStep(audios, masterTime, threshold = DRIFT_THRESHOLD_S) {
 
 /**
  * Crea un reproductor multipista.
- * @param {{ tracks: Array<{kind:string, url:string, label?:string, durationSec?:number}> }} opts
+ * @param {{ tracks: Array<{kind:string, url:string, label?:string, durationSec?:number}>, structure?: {segments: Array<{label:string, startMs:number, endMs:number}>}|null }} opts
  * @returns {{ el: HTMLElement, destroy: () => void }}
  */
-export function createMultiTrackPlayer({ tracks }) {
+export function createMultiTrackPlayer({ tracks, structure }) {
   const ac = new AbortController();
   const root = document.createElement('div');
   root.className = 'mtp';
+
+  // Chips de navegación por sección (estructura detectada por SongFormer,
+  // Task 8). Sin `structure.segments` (o vacío) no aparece la fila — no se
+  // inventa contenido de relleno, mismo criterio que el encabezado de grupo.
+  const segments = Array.isArray(structure?.segments) ? structure.segments : [];
+  const sectionsHtml = segments.length
+    ? `<div class="mtp__sections">${segments
+        .map(
+          (seg, i) =>
+            `<button type="button" class="mtp__section-chip" data-idx="${i}">${escapeHtml(seg.label ?? '')}</button>`,
+        )
+        .join('')}</div>`
+    : '';
 
   // Encabezado de grupo sutil: se inserta antes de la fila cuando `group`
   // cambia respecto de la fila anterior. Sin `group` en los tracks, no
@@ -78,6 +91,7 @@ export function createMultiTrackPlayer({ tracks }) {
       </div>
       <span class="mtp__time" aria-hidden="true">0:00 / 0:00</span>
     </div>
+    ${sectionsHtml}
     <div class="mtp__tracks">${rowsHtml}</div>
     <div class="mtp__audios" hidden></div>
   `;
@@ -87,6 +101,7 @@ export function createMultiTrackPlayer({ tracks }) {
   const fill = root.querySelector('.mtp__fill');
   const thumb = root.querySelector('.mtp__thumb');
   const timeEl = root.querySelector('.mtp__time');
+  const chipEls = Array.from(root.querySelectorAll('.mtp__section-chip'));
   const muteBtns = Array.from(root.querySelectorAll('.mtp__row-btn--mute'));
   const soloBtns = Array.from(root.querySelectorAll('.mtp__row-btn--solo'));
 
@@ -187,12 +202,26 @@ export function createMultiTrackPlayer({ tracks }) {
     timeListeners.forEach((cb) => cb(sec));
   };
 
+  // Resalta el chip de sección cuyo rango [startMs, endMs) (convertido a
+  // segundos) contiene el tiempo maestro actual. `segments` está en ms;
+  // el reloj del player está en segundos — la conversión es la misma que
+  // en el seek de un chip (startMs/1000).
+  const updateActiveChip = (sec) => {
+    chipEls.forEach((btn, i) => {
+      const seg = segments[i];
+      const start = (seg?.startMs ?? 0) / 1000;
+      const end = seg?.endMs !== null && seg?.endMs !== undefined ? seg.endMs / 1000 : Infinity;
+      btn.classList.toggle('is-active', sec >= start && sec < end);
+    });
+  };
+
   const tick = () => {
     const master = masterAudio();
     const masterTime = master ? master.currentTime : 0;
     syncStep(audios, masterTime);
     if (!scrubbing) paintAt(masterTime);
     notifyTime(masterTime);
+    updateActiveChip(masterTime);
     if (master && master.ended) {
       pauseAll();
       return;
@@ -235,7 +264,7 @@ export function createMultiTrackPlayer({ tracks }) {
       if (playing) pauseAll();
       else playAll();
     },
-    { signal: ac.signal }
+    { signal: ac.signal },
   );
 
   // --- Scrubber maestro: commit-on-release, igual patron que StudioPlayer ---
@@ -266,7 +295,7 @@ export function createMultiTrackPlayer({ tracks }) {
       scrubbing = true;
       applyPreviewVisual(posToTime(ratioOf(e.clientX), masterDuration()));
     },
-    { signal: ac.signal }
+    { signal: ac.signal },
   );
 
   bar.addEventListener(
@@ -275,7 +304,7 @@ export function createMultiTrackPlayer({ tracks }) {
       if (!scrubbing) return;
       applyPreviewVisual(posToTime(ratioOf(e.clientX), masterDuration()));
     },
-    { signal: ac.signal }
+    { signal: ac.signal },
   );
 
   const commitScrub = (e) => {
@@ -298,7 +327,7 @@ export function createMultiTrackPlayer({ tracks }) {
       scrubbing = false;
       paintAt(masterAudio() ? masterAudio().currentTime : 0);
     },
-    { signal: ac.signal }
+    { signal: ac.signal },
   );
 
   bar.addEventListener(
@@ -317,14 +346,14 @@ export function createMultiTrackPlayer({ tracks }) {
         seekAll(clamp((masterAudio()?.currentTime || 0) - 1, 0, dur));
       }
     },
-    { signal: ac.signal }
+    { signal: ac.signal },
   );
 
   const onLoadedMetadata = () => {
     if (!playing && !scrubbing) paintAt(masterAudio() ? masterAudio().currentTime : 0);
   };
   audios.forEach((audio) =>
-    audio.addEventListener('loadedmetadata', onLoadedMetadata, { signal: ac.signal })
+    audio.addEventListener('loadedmetadata', onLoadedMetadata, { signal: ac.signal }),
   );
 
   paintAt(0);
@@ -350,7 +379,22 @@ export function createMultiTrackPlayer({ tracks }) {
     const sec = masterAudio() ? masterAudio().currentTime : 0;
     paintAt(sec);
     notifyTime(sec);
+    updateActiveChip(sec);
   };
+
+  // Click en un chip de sección: seek al inicio del segmento. `startMs` está
+  // en milisegundos, `seek()` espera segundos — la división es el punto de
+  // correctness crítico (ver test "nunca en milisegundos").
+  chipEls.forEach((btn, i) => {
+    btn.addEventListener(
+      'click',
+      () => {
+        const seg = segments[i];
+        if (seg) seek((seg.startMs ?? 0) / 1000);
+      },
+      { signal: ac.signal },
+    );
+  });
 
   return { el: root, destroy, onTime, seek };
 }

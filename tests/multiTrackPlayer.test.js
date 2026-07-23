@@ -25,7 +25,7 @@ describe('createMultiTrackPlayer', () => {
     vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     vi.stubGlobal(
       'requestAnimationFrame',
-      vi.fn(() => 1)
+      vi.fn(() => 1),
     );
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
   });
@@ -265,6 +265,72 @@ describe('createMultiTrackPlayer — agrupacion de pistas', () => {
     expect(groups.length).toBe(2);
     expect(groups[0].textContent).toBe('VOCES');
     expect(groups[1].textContent).toBe('INSTRUMENTOS');
+    destroy();
+  });
+});
+
+describe('createMultiTrackPlayer — chips de sección (structure.segments, Task 19)', () => {
+  beforeEach(() => {
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function makeStructure() {
+    return {
+      segments: [
+        { label: 'Intro', startMs: 0, endMs: 5000 },
+        { label: 'Verso', startMs: 5000, endMs: 20000 },
+      ],
+    };
+  }
+
+  it('sin structure (o sin segments) no pinta fila de chips', () => {
+    const { el, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
+    expect(el.querySelectorAll('.mtp__section-chip').length).toBe(0);
+    destroy();
+
+    const { el: el2, destroy: destroy2 } = createMultiTrackPlayer({
+      tracks: makeTracks(),
+      structure: { segments: [] },
+    });
+    expect(el2.querySelectorAll('.mtp__section-chip').length).toBe(0);
+    destroy2();
+  });
+
+  it('con structure.segments pinta un chip clickeable por segmento con su label', () => {
+    const { el, destroy } = createMultiTrackPlayer({
+      tracks: makeTracks(),
+      structure: makeStructure(),
+    });
+    const chips = el.querySelectorAll('.mtp__section-chip');
+    expect(chips.length).toBe(2);
+    expect(chips[0].textContent).toBe('Intro');
+    expect(chips[1].textContent).toBe('Verso');
+    destroy();
+  });
+
+  it('click en un chip hace seek en SEGUNDOS (startMs/1000), nunca en milisegundos', () => {
+    const { el, destroy } = createMultiTrackPlayer({
+      tracks: makeTracks(),
+      structure: makeStructure(),
+    });
+    const audios = el.querySelectorAll('audio');
+    const chips = el.querySelectorAll('.mtp__section-chip');
+
+    chips[1].click();
+
+    // 5000ms / 1000 = 5s. Si se pasara startMs sin convertir, currentTime
+    // quedaría clampeado a masterDuration() (100s) muy por encima de 5.
+    audios.forEach((audio) => expect(audio.currentTime).toBe(5));
     destroy();
   });
 });

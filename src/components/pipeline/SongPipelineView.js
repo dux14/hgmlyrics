@@ -28,11 +28,12 @@ import { createSyncFineTuning } from './SyncFineTuning.js';
 import { createStructureDetail } from './StructureDetail.js';
 import { createConfidenceSummary } from './ConfidenceSummary.js';
 
-// Estados de run que el DELETE /api/songs/[id]/pipeline acepta cancelar
-// (mismo WHERE status IN (...) que api/songs/[id]/pipeline.js#cancelRun):
-// fuera de esta lista el endpoint devuelve 404 "No hay una ejecución activa".
-// El botón de cancelar del header se gatea con este mismo set para no ofrecer
-// una acción destructiva que el backend va a rechazar.
+// Estados de run que dejan algo "cancelable" en curso (mismo WHERE
+// status IN (...) que api/songs/[id]/pipeline.js#purgeRun usa para marcar
+// 'cancelled' en vez de 'superseded'). El endpoint (purgeRun) es idempotente:
+// SIEMPRE responde 200, incluso sin run activo, así que este set solo decide
+// si el botón de cancelar del header se muestra/gatea — no evita un 404 que
+// ya no existe.
 const CANCELABLE_RUN_STATUSES = new Set([
   'created',
   'uploading',

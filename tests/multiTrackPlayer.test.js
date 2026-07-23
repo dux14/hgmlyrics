@@ -333,6 +333,32 @@ describe('createMultiTrackPlayer — chips de sección (structure.segments, Task
     audios.forEach((audio) => expect(audio.currentTime).toBe(5));
     destroy();
   });
+
+  it('resalta el chip activo segun el tiempo actual del player (seek)', () => {
+    const { el, seek, destroy } = createMultiTrackPlayer({
+      tracks: makeTracks(),
+      structure: makeStructure(),
+    });
+    const chips = el.querySelectorAll('.mtp__section-chip');
+
+    // 2s cae dentro de "Intro" [0, 5000ms) -> solo ese chip queda activo.
+    seek(2);
+    expect(chips[0].classList.contains('is-active')).toBe(true);
+    expect(chips[1].classList.contains('is-active')).toBe(false);
+
+    // 10s cae dentro de "Verso" [5000, 20000ms) -> cambia el chip activo.
+    seek(10);
+    expect(chips[0].classList.contains('is-active')).toBe(false);
+    expect(chips[1].classList.contains('is-active')).toBe(true);
+
+    // Caso de borde: tiempo == endMs de "Intro" (5s) es el límite EXCLUSIVO
+    // de "Intro" e INCLUSIVO de "Verso" -> activo el siguiente, nunca ambos.
+    seek(5);
+    expect(chips[0].classList.contains('is-active')).toBe(false);
+    expect(chips[1].classList.contains('is-active')).toBe(true);
+
+    destroy();
+  });
 });
 
 describe('syncStep', () => {

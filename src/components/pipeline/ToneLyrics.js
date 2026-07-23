@@ -87,15 +87,33 @@ function renderSylNotes(voiceKeys) {
 // `analysis` (pitch) por sección asumimos el mismo orden/cantidad y
 // derivamos el rango [start, end) de cada sección por conteo acumulado de
 // `section.lines.length`.
-function sectionBoundariesFor(sections) {
+//
+// OJO: `sections` (cancionero, editado a mano en SongEditor) y `analysis`
+// (partitura de tono, generada en modal/pitch/ a partir de un split ASR por
+// pausas — dominio propio, sin relación con el cancionero) son DOS
+// PIPELINES INDEPENDIENTES sin reconciliación de conteo de líneas entre
+// ambos. Si el cancionero se edita después del análisis, o el corte de ASR
+// no coincide con los cortes del cancionero, el conteo total diverge y un
+// reparto por índice asignaría encabezados a líneas equivocadas — en
+// silencio. Por eso `totalLines` compara el conteo total ANTES de repartir:
+// si no coincide, se descarta el agrupado entero (mejor lista plana que
+// encabezados mal puestos).
+function sectionBoundariesFor(sections, totalLines) {
   if (!Array.isArray(sections) || sections.length === 0) return [];
   let acc = 0;
-  return sections.map((s) => {
+  const boundaries = sections.map((s) => {
     const count = Array.isArray(s?.lines) ? s.lines.length : 0;
     const start = acc;
     acc += count;
     return { type: s?.type, start, end: acc };
   });
+  if (acc !== totalLines) {
+    console.warn(
+      `ToneLyrics: sections (${acc} líneas) y analysis (${totalLines} líneas) desincronizados — se omite el agrupado por sección`,
+    );
+    return [];
+  }
+  return boundaries;
 }
 
 /**
@@ -130,7 +148,7 @@ export function createToneLyrics({ analysis, sections, onSeek } = {}) {
     return { key, role, label: ROLE_LABEL[role] };
   });
 
-  const boundaries = sectionBoundariesFor(sections);
+  const boundaries = sectionBoundariesFor(sections, baseLines.length);
   let currentSectionIdx = -1;
 
   const html = baseLines

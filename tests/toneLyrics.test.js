@@ -402,6 +402,31 @@ describe('ToneLyrics — sections (agrupación por encabezado, Task 19)', () => 
     const withoutParam = createToneLyrics({ analysis: makeAnalysis() });
     expect(withoutParam.el.querySelectorAll('.tone-lyrics__section-header').length).toBe(0);
   });
+
+  it('conteo de líneas desincronizado entre sections y analysis: degrada a lista PLANA (sin encabezados)', () => {
+    // sections (cancionero) y analysis (partitura de tono) son pipelines
+    // independientes sin reconciliación: si el cancionero se editó después
+    // del análisis, o el corte ASR no coincide, el conteo total diverge.
+    // makeAnalysis() tiene 2 líneas en la base; acá las sections suman 3.
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const sectionsDesincronizadas = [
+      { type: 'verse', label: 'Verso', lines: [{ text: 'Me he' }, { text: 'vá la' }] },
+      { type: 'chorus', label: 'Coro', lines: [{ text: 'Oh' }] },
+    ];
+    const { el } = createToneLyrics({
+      analysis: makeAnalysis(),
+      sections: sectionsDesincronizadas,
+    });
+    expect(el.querySelectorAll('.tone-lyrics__section-header').length).toBe(0);
+    expect(el.querySelectorAll('.tone-line').length).toBe(2);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('conteo de líneas sincronizado: sí pinta encabezados (caso feliz, contraste con el anterior)', () => {
+    const { el } = createToneLyrics({ analysis: makeAnalysis(), sections: makeSections() });
+    expect(el.querySelectorAll('.tone-lyrics__section-header').length).toBe(2);
+  });
 });
 
 describe('ToneLyrics — voz secundaria más corta que la base', () => {

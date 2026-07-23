@@ -373,15 +373,61 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
   });
 
   describe('cancelar procesamiento (Task 12)', () => {
-    it('el header tiene un boton overflow para cancelar el procesamiento', () => {
+    it('el header tiene un boton para cancelar el procesamiento cuando el run esta activo', () => {
       renderSongPipelineView(container, SONG_ID);
+      watchOnChange({ run: buildRun() }); // status: 'processing' (cancelable)
 
       const btn = container.querySelector('.pipeline-view__cancel');
       expect(btn).toBeTruthy();
     });
 
-    it('click en overflow abre el ConfirmDialog del sistema con copy de advertencia', async () => {
+    it('el boton dice su accion real, no "mas opciones" (no sugiere un menu)', () => {
       renderSongPipelineView(container, SONG_ID);
+      watchOnChange({ run: buildRun() });
+
+      const btn = container.querySelector('.pipeline-view__cancel');
+      expect(btn.getAttribute('aria-label')).toBe('Cancelar procesamiento');
+    });
+
+    it('sin run activo (null): el boton de cancelar no esta presente', () => {
+      renderSongPipelineView(container, SONG_ID);
+      // Esqueleto inicial: renderPhases(null) ya corrio, sin watchOnChange todavia.
+
+      expect(container.querySelector('.pipeline-view__cancel')).toBeFalsy();
+    });
+
+    it.each(['done', 'failed', 'superseded', 'cancelled'])(
+      'run en estado terminal %s: el boton de cancelar no esta presente',
+      (status) => {
+        renderSongPipelineView(container, SONG_ID);
+        watchOnChange({ run: buildRun({}, { status }) });
+
+        expect(container.querySelector('.pipeline-view__cancel')).toBeFalsy();
+      },
+    );
+
+    it.each(['created', 'uploading', 'processing', 'awaiting_lyrics', 'running'])(
+      'run en estado activo %s: el boton de cancelar esta presente',
+      (status) => {
+        renderSongPipelineView(container, SONG_ID);
+        watchOnChange({ run: buildRun({}, { status }) });
+
+        expect(container.querySelector('.pipeline-view__cancel')).toBeTruthy();
+      },
+    );
+
+    it('el run pasa de activo a terminal via watcher: el boton desaparece en el re-render', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({ run: buildRun() }); // processing: cancelable
+      expect(container.querySelector('.pipeline-view__cancel')).toBeTruthy();
+
+      watchOnChange({ run: buildRun({ upload: { status: 'done' } }, { status: 'done' }) });
+      expect(container.querySelector('.pipeline-view__cancel')).toBeFalsy();
+    });
+
+    it('click en el boton abre el ConfirmDialog del sistema con copy de advertencia', async () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({ run: buildRun() });
 
       container.querySelector('.pipeline-view__cancel').click();
       await flushPromises();
@@ -409,6 +455,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     it('al cancelar el dialogo: NO llama cancelPipelineRun', async () => {
       confirmDialog.mockResolvedValueOnce(false);
       renderSongPipelineView(container, SONG_ID);
+      watchOnChange({ run: buildRun() });
 
       container.querySelector('.pipeline-view__cancel').click();
       await flushPromises();
@@ -419,6 +466,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     it('si cancelPipelineRun falla: muestra toast de error y no rompe la vista', async () => {
       cancelPipelineRun.mockRejectedValueOnce(new Error('boom'));
       renderSongPipelineView(container, SONG_ID);
+      watchOnChange({ run: buildRun() });
 
       container.querySelector('.pipeline-view__cancel').click();
       await flushPromises();

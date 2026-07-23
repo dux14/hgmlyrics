@@ -24,6 +24,19 @@ import { createUploadPhaseCard } from './UploadPhaseCard.js';
 import { createStemTracksDetail } from './StemTracksDetail.js';
 import { createSyncFineTuning } from './SyncFineTuning.js';
 
+// Estados de run que el DELETE /api/songs/[id]/pipeline acepta cancelar
+// (mismo WHERE status IN (...) que api/songs/[id]/pipeline.js#cancelRun):
+// fuera de esta lista el endpoint devuelve 404 "No hay una ejecución activa".
+// El botón de cancelar del header se gatea con este mismo set para no ofrecer
+// una acción destructiva que el backend va a rechazar.
+const CANCELABLE_RUN_STATUSES = new Set([
+  'created',
+  'uploading',
+  'processing',
+  'awaiting_lyrics',
+  'running',
+]);
+
 // Filas visibles del stepper, en orden. lyrics_review es la fase "Letra".
 const ROWS = [
   { key: 'upload', title: 'Audio' },
@@ -86,7 +99,6 @@ export function renderSongPipelineView(container, songId) {
       <button type="button" class="pipeline-view__back" aria-label="Volver">${icon('arrow-left')}</button>
       <h1 class="pipeline-view__title">Procesamiento</h1>
       <span class="pipeline-view__pill">0 de 5 fases</span>
-      <button type="button" class="pipeline-view__cancel" aria-label="Más opciones">${icon('ellipsis-vertical')}</button>
     </header>
     <div class="pipeline-view__error" role="alert" hidden>
       <p class="pipeline-view__error-text">No se pudo cargar el procesamiento</p>
@@ -98,7 +110,19 @@ export function renderSongPipelineView(container, songId) {
 
   view.querySelector('.pipeline-view__back').addEventListener('click', () => goBack());
 
-  view.querySelector('.pipeline-view__cancel').addEventListener('click', async () => {
+  // Botón de cancelar: NO vive en el HTML estático del header porque su
+  // presencia depende del estado del run (CANCELABLE_RUN_STATUSES) — se crea
+  // una sola vez acá y `updateCancelButton` lo inserta/retira del header en
+  // cada render en vez de tocar solo un atributo `hidden`, para que un run ya
+  // terminal no deje ni el botón en el DOM (evita el 404 destructivo del
+  // endpoint si el admin lo clickea igual).
+  const headerEl = view.querySelector('.pipeline-view__header');
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'pipeline-view__cancel';
+  cancelBtn.setAttribute('aria-label', 'Cancelar procesamiento');
+  cancelBtn.innerHTML = icon('ellipsis-vertical');
+  cancelBtn.addEventListener('click', async () => {
     const ok = await confirmDialog({
       title: 'Cancelar procesamiento',
       body: 'Se perderá el progreso de este procesamiento. Esta acción no se puede deshacer.',
@@ -116,6 +140,15 @@ export function renderSongPipelineView(container, songId) {
       showToast(err.message || 'No se pudo cancelar el procesamiento', { type: 'error' });
     }
   });
+
+  function updateCancelButton(run) {
+    const cancelable = Boolean(run) && CANCELABLE_RUN_STATUSES.has(run.status);
+    if (cancelable && !cancelBtn.isConnected) {
+      headerEl.appendChild(cancelBtn);
+    } else if (!cancelable && cancelBtn.isConnected) {
+      cancelBtn.remove();
+    }
+  }
 
   const rowsEl = view.querySelector('.pipeline-view__rows');
   const pillEl = view.querySelector('.pipeline-view__pill');
@@ -258,6 +291,7 @@ export function renderSongPipelineView(container, songId) {
   function renderPhases(run) {
     if (destroyed) return;
     lastRun = run;
+    updateCancelButton(run);
 
     // Firma del estado relevante: si no cambió desde el último render, saltar
     // el rebuild. Evita desprender/reinsertar el nodo del panel de letra (y

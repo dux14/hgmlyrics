@@ -225,6 +225,25 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     expect(retryPipelinePhase).toHaveBeenCalledWith(SONG_ID, 'upload');
   });
 
+  it('fase pitch failed: pinta "Reintentar fase" y reintenta pitch al click', () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({
+      run: buildRun({
+        lyrics_review: { status: 'done' },
+        sync: { status: 'done' },
+        pitch: { status: 'failed', error: 'boom' },
+      }),
+    });
+
+    const row = container.querySelector('[data-phase="pitch"]');
+    const btn = row.querySelector('.phase__action');
+    expect(btn).toBeTruthy();
+    expect(btn.textContent).toBe('Reintentar fase');
+
+    btn.click();
+    expect(retryPipelinePhase).toHaveBeenCalledWith(SONG_ID, 'pitch');
+  });
+
   it('fase stale: boton reprocesa sincronia y tono (sync + pitch)', async () => {
     renderSongPipelineView(container, SONG_ID);
     watchOnChange({

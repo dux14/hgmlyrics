@@ -267,8 +267,9 @@ async function patchLineTiming(res, songId, lineTiming) {
 // del pipeline (song_pipeline_lyrics). Misma validacion de monotonia que
 // patchLineTiming, reconstruida sobre timingLinesFromSections (mismos
 // mensajes de error). Escribe manualStartMs en las sections del store Y en
-// el shim song_line_timings (provider='pipeline') en la misma operacion:
-// clips/fallback siguen leyendo esa tabla.
+// el shim song_line_timings (provider='pipeline') en una misma tx: clips/
+// fallback siguen leyendo esa tabla y no deben divergir del store si una de
+// las dos escrituras falla.
 async function patchPipelineLineTiming(res, songId, pipelineLyrics, lineTiming) {
   const baseLines = timingLinesFromSections(pipelineLyrics.sections);
   const idx = baseLines.findIndex((l) => l.i === lineTiming.i);
@@ -291,13 +292,27 @@ async function patchPipelineLineTiming(res, songId, pipelineLyrics, lineTiming) 
   const target = sections.flatMap((s) => s.lines)[lineTiming.i];
   target.manualStartMs = lineTiming.startMs;
 
-  await sql`
-    UPDATE song_pipeline_lyrics SET sections = ${sql.json(sections)} WHERE song_id = ${songId}
-  `;
-  await sql`
-    UPDATE song_line_timings SET lines = ${sql.json(timingLinesFromSections(sections))}
-    WHERE song_id = ${songId} AND provider = 'pipeline'
-  `;
+  const claim = await sql.begin(async (tx) => {
+    const result = await tx`
+      UPDATE song_pipeline_lyrics SET sections = ${tx.json(sections)} WHERE song_id = ${songId}
+    `;
+    // Carrera SELECT->UPDATE: la fila del store desaparecio entre el fetch
+    // de pipelineLyrics y esta escritura (p.ej. reset del pipeline). Mismo
+    // mensaje que usa el camino song_line_timings para el mismo escenario.
+    if (result.count === 0) {
+      return { status: 409, error: 'La sincronía cambió, recarga el editor' };
+    }
+    await tx`
+      UPDATE song_line_timings SET lines = ${tx.json(timingLinesFromSections(sections))}
+      WHERE song_id = ${songId} AND provider = 'pipeline'
+    `;
+    return { ok: true };
+  });
+
+  if (!claim.ok) {
+    res.status(claim.status).json({ error: claim.error });
+    return;
+  }
   res.status(200).json({ success: true });
 }
 

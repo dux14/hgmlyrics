@@ -18,6 +18,9 @@ function sqlMock(strings, ...values) {
   return Promise.resolve(sqlResponses.shift() ?? []);
 }
 sqlMock.json = (v) => v;
+// patchPipelineLineTiming usa sql.begin (tx store+shim); el mock corre el
+// callback inline con el mismo sqlMock, mismo patron que otros tests de tx.
+sqlMock.begin = async (fn) => fn(sqlMock);
 vi.mock('../api/_lib/db.js', () => ({ default: sqlMock }));
 
 vi.mock('../api/_lib/auth.js', () => ({
@@ -747,6 +750,16 @@ describe('PATCH /api/songs/[id]/audio', () => {
       expect(res._status).toBe(400);
       expect(res._body.error).toMatch(/monoton/i);
       expect(sqlCalls.some((c) => c.text.includes('UPDATE'))).toBe(false);
+    });
+
+    it('UPDATE song_pipeline_lyrics afecta 0 filas (carrera: la fila del store desaparecio entre el SELECT y el UPDATE) → 409, sin escribir el shim', async () => {
+      sqlResponses.push([pipelineLyricsFixture()]); // SELECT song_pipeline_lyrics
+      sqlResponses.push({ count: 0 }); // UPDATE song_pipeline_lyrics (dentro de sql.begin)
+      const res = makeRes();
+      await handler(patchReq({ lineTiming: { i: 1, startMs: 5000 } }), res);
+      expect(res._status).toBe(409);
+      expect(res._body.error).toBe('La sincronía cambió, recarga el editor');
+      expect(sqlCalls.some((c) => c.text.includes('UPDATE song_line_timings'))).toBe(false);
     });
 
     it('startMs igual al de la linea siguiente → 400 "monotonia" con la siguiente', async () => {

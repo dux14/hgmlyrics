@@ -10,6 +10,7 @@ vi.mock('../api/_lib/storage.js', () => ({
   signSongAudioDownload: vi.fn(async (key) => `https://signed/get/${key}`),
   pipelineInputStat: vi.fn(async () => ({ exists: true, size: 1024 })),
   pipelineStemKey: (songId, kind) => `${songId}/stems/${kind}.mp3`,
+  deleteSongAudioObjects: vi.fn(async () => {}),
 }));
 vi.mock('../api/songs/[id]/pipeline/_dispatch.js', () => ({
   dispatchPhase: vi.fn(async () => ({ id: 'call1' })),
@@ -17,6 +18,7 @@ vi.mock('../api/songs/[id]/pipeline/_dispatch.js', () => ({
 
 import sql from '../api/_lib/db.js';
 import { requireAdmin } from '../api/_lib/auth.js';
+import * as storage from '../api/_lib/storage.js';
 import { pipelineInputStat, createSongAudioSignedPutUrl } from '../api/_lib/storage.js';
 import { dispatchPhase } from '../api/songs/[id]/pipeline/_dispatch.js';
 import { initialPhases } from '../api/_lib/pipeline/state.js';
@@ -35,9 +37,15 @@ beforeEach(() => {
   pipelineInputStat.mockResolvedValue({ exists: true, size: 1024 });
 });
 
+// Textos crudos de todas las queries emitidas en el test actual (Task 8:
+// permite asertar por negativo, p.ej. "ninguna query toca songs.sections").
+let capturedQueries = [];
+
 function routeSql(handlers) {
+  capturedQueries = [];
   sql.mockImplementation(async (strings, ...values) => {
     const text = strings.join('?');
+    capturedQueries.push(text);
     for (const [needle, result] of handlers) {
       if (text.includes(needle)) {
         if (typeof result === 'function') return result(values);
@@ -58,14 +66,20 @@ describe('POST /api/songs/:id/pipeline (crear run)', () => {
   it('403 si no es admin', async () => {
     requireAdmin.mockRejectedValueOnce(Object.assign(new Error('Forbidden'), { status: 403 }));
     const res = makeRes();
-    await pipelineHandler({ method: 'POST', query: { id: 's1' }, body: { filename: 'a.mp3' } }, res);
+    await pipelineHandler(
+      { method: 'POST', query: { id: 's1' }, body: { filename: 'a.mp3' } },
+      res,
+    );
     expect(res.status).toHaveBeenCalledWith(403);
   });
 
   it('404 si la canción no existe', async () => {
     routeSql([['SELECT id, title FROM songs', []]]);
     const res = makeRes();
-    await pipelineHandler({ method: 'POST', query: { id: 's1' }, body: { filename: 'a.mp3' } }, res);
+    await pipelineHandler(
+      { method: 'POST', query: { id: 's1' }, body: { filename: 'a.mp3' } },
+      res,
+    );
     expect(res.status).toHaveBeenCalledWith(404);
   });
 
@@ -79,7 +93,10 @@ describe('POST /api/songs/:id/pipeline (crear run)', () => {
       ['INSERT INTO song_pipeline_runs', { __reject: dup }],
     ]);
     const res = makeRes();
-    await pipelineHandler({ method: 'POST', query: { id: 's1' }, body: { filename: 'sion.mp3' } }, res);
+    await pipelineHandler(
+      { method: 'POST', query: { id: 's1' }, body: { filename: 'sion.mp3' } },
+      res,
+    );
     expect(res.status).toHaveBeenCalledWith(409);
   });
 
@@ -87,15 +104,21 @@ describe('POST /api/songs/:id/pipeline (crear run)', () => {
     let supersededCall;
     routeSql([
       ['SELECT id, title FROM songs', [{ id: 's1', title: 'Sion' }]],
-      ["UPDATE song_pipeline_runs SET status = 'superseded'", (values) => {
-        supersededCall = values;
-        return [];
-      }],
+      [
+        "UPDATE song_pipeline_runs SET status = 'superseded'",
+        (values) => {
+          supersededCall = values;
+          return [];
+        },
+      ],
       ['INSERT INTO song_pipeline_runs', [{ id: 'r2' }]],
       ['UPDATE song_pipeline_runs SET input_path', []],
     ]);
     const res = makeRes();
-    await pipelineHandler({ method: 'POST', query: { id: 's1' }, body: { filename: 'sion.mp3' } }, res);
+    await pipelineHandler(
+      { method: 'POST', query: { id: 's1' }, body: { filename: 'sion.mp3' } },
+      res,
+    );
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json.mock.calls[0][0].runId).toBe('r2');
     expect(supersededCall).toBeDefined();
@@ -109,7 +132,14 @@ describe('POST /api/songs/:id/pipeline (crear run)', () => {
       ['UPDATE song_pipeline_runs SET input_path', []],
     ]);
     const res = makeRes();
-    await pipelineHandler({ method: 'POST', query: { id: 's1' }, body: { filename: 'sion.mp3', size: 10, mime: 'audio/mpeg' } }, res);
+    await pipelineHandler(
+      {
+        method: 'POST',
+        query: { id: 's1' },
+        body: { filename: 'sion.mp3', size: 10, mime: 'audio/mpeg' },
+      },
+      res,
+    );
     expect(res.status).toHaveBeenCalledWith(200);
     const body = res.json.mock.calls[0][0];
     expect(body.runId).toBe('r1');
@@ -124,15 +154,22 @@ describe('POST /api/songs/:id/pipeline (crear run)', () => {
     let insertedMeta;
     routeSql([
       ['SELECT id, title FROM songs', [{ id: 's1', title: 'Sion' }]],
-      ['INSERT INTO song_pipeline_runs', (values) => {
-        insertedMeta = values.find((v) => v && typeof v === 'object' && 'titleScore' in v);
-        return [{ id: 'r1' }];
-      }],
+      [
+        'INSERT INTO song_pipeline_runs',
+        (values) => {
+          insertedMeta = values.find((v) => v && typeof v === 'object' && 'titleScore' in v);
+          return [{ id: 'r1' }];
+        },
+      ],
       ['UPDATE song_pipeline_runs SET input_path', []],
     ]);
     const res = makeRes();
     await pipelineHandler(
-      { method: 'POST', query: { id: 's1' }, body: { filename: 'archivo-totalmente-distinto.mp3' } },
+      {
+        method: 'POST',
+        query: { id: 's1' },
+        body: { filename: 'archivo-totalmente-distinto.mp3' },
+      },
       res,
     );
     expect(res.status).toHaveBeenCalledWith(200);
@@ -145,9 +182,17 @@ describe('POST /api/songs/:id/pipeline (crear run)', () => {
 describe('GET /api/songs/:id/pipeline', () => {
   it('devuelve el run activo con phases + urls firmadas de tracks', async () => {
     const phases = initialPhases();
-    phases.stems = { status: 'done', error: null, tracks: { lead: 's1/stems/lead.mp3' }, artifacts: undefined };
+    phases.stems = {
+      status: 'done',
+      error: null,
+      tracks: { lead: 's1/stems/lead.mp3' },
+      artifacts: undefined,
+    };
     routeSql([
-      ['SELECT id, song_id AS "songId"', [{ id: 'r1', songId: 's1', status: 'processing', phases, inputMeta: {}, lyricsReview: {} }]],
+      [
+        'SELECT id, song_id AS "songId"',
+        [{ id: 'r1', songId: 's1', status: 'processing', phases, inputMeta: {}, lyricsReview: {} }],
+      ],
     ]);
     const res = makeRes();
     await pipelineHandler({ method: 'GET', query: { id: 's1' } }, res);
@@ -167,7 +212,10 @@ describe('GET /api/songs/:id/pipeline', () => {
     const phases = initialPhases();
     const segments = [{ label: 'verso', startMs: 0, endMs: 5000 }];
     routeSql([
-      ['SELECT id, song_id AS "songId"', [{ id: 'r1', songId: 's1', status: 'processing', phases, inputMeta: {}, lyricsReview: {} }]],
+      [
+        'SELECT id, song_id AS "songId"',
+        [{ id: 'r1', songId: 's1', status: 'processing', phases, inputMeta: {}, lyricsReview: {} }],
+      ],
       ['SELECT segments FROM song_structure', [{ segments }]],
     ]);
     const res = makeRes();
@@ -179,7 +227,10 @@ describe('GET /api/songs/:id/pipeline', () => {
   it('run.structure es null si todavía no hay song_structure para la canción', async () => {
     const phases = initialPhases();
     routeSql([
-      ['SELECT id, song_id AS "songId"', [{ id: 'r1', songId: 's1', status: 'processing', phases, inputMeta: {}, lyricsReview: {} }]],
+      [
+        'SELECT id, song_id AS "songId"',
+        [{ id: 'r1', songId: 's1', status: 'processing', phases, inputMeta: {}, lyricsReview: {} }],
+      ],
       ['SELECT segments FROM song_structure', []],
     ]);
     const res = makeRes();
@@ -189,20 +240,90 @@ describe('GET /api/songs/:id/pipeline', () => {
   });
 });
 
-describe('DELETE /api/songs/:id/pipeline', () => {
-  it('cancela el run activo', async () => {
-    routeSql([["status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')", { count: 1 }]]);
+describe('DELETE /api/songs/:id/pipeline (A2: purga)', () => {
+  it('purga filas derivadas + storage y marca runs (activo→cancelled, done→superseded)', async () => {
+    routeSql([
+      [
+        'FROM song_stems',
+        [{ storageKey: 's1/stems/lead.mp3' }, { storageKey: 's1/stems/backing.mp3' }],
+      ],
+      ['FROM song_section_audio', [{ storageKey: 's1/clips/0.mp3' }]],
+      [
+        'SELECT id, status, input_path',
+        [
+          { id: 'r-done', status: 'done', input_path: 's1/runs/r-done/full.mp3' },
+          { id: 'r-act', status: 'awaiting_lyrics', input_path: 's1/runs/r-act/full.mp3' },
+        ],
+      ],
+      ['DELETE FROM song_stems', { count: 2 }],
+      ['DELETE FROM song_section_audio', { count: 1 }],
+      ['DELETE FROM song_structure', { count: 1 }],
+      ['DELETE FROM song_pitch_analysis', { count: 1 }],
+      ['DELETE FROM song_line_timings', { count: 1 }],
+      ["SET status = 'cancelled'", { count: 1 }],
+      ["SET status = 'superseded'", { count: 1 }],
+    ]);
     const res = makeRes();
     await pipelineHandler({ method: 'DELETE', query: { id: 's1' } }, res);
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ success: true });
+    const body = res.json.mock.calls[0][0];
+    expect(body.success).toBe(true);
+    expect(storage.deleteSongAudioObjects).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        's1/stems/lead.mp3',
+        's1/stems/backing.mp3',
+        's1/clips/0.mp3',
+        's1/runs/r-done/full.mp3',
+        's1/runs/r-act/full.mp3',
+      ]),
+    );
   });
 
-  it('404 si no hay run activo para cancelar', async () => {
-    routeSql([["status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')", { count: 0 }]]);
+  it('NO borra clips manuales (run_id NULL) ni toca songs.sections', async () => {
+    routeSql([
+      ['FROM song_stems', []],
+      ['FROM song_section_audio', []],
+      ['SELECT id, status, input_path', []],
+      ['DELETE FROM song_stems', { count: 0 }],
+      ['DELETE FROM song_section_audio', { count: 0 }],
+      ['DELETE FROM song_structure', { count: 0 }],
+      ['DELETE FROM song_pitch_analysis', { count: 0 }],
+      ['DELETE FROM song_line_timings', { count: 0 }],
+      ["SET status = 'cancelled'", { count: 0 }],
+      ["SET status = 'superseded'", { count: 0 }],
+    ]);
     const res = makeRes();
     await pipelineHandler({ method: 'DELETE', query: { id: 's1' } }, res);
-    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.status).toHaveBeenCalledWith(200);
+
+    const sectionAudioQueries = capturedQueries.filter((q) => q.includes('song_section_audio'));
+    expect(sectionAudioQueries.length).toBeGreaterThan(0);
+    for (const q of sectionAudioQueries) {
+      expect(q).toContain('run_id IS NOT NULL');
+    }
+    for (const q of capturedQueries) {
+      expect(q).not.toContain('UPDATE songs');
+      expect(q).not.toContain('songs.sections');
+    }
+  });
+
+  it('idempotente: segunda llamada sin nada que borrar responde 200', async () => {
+    routeSql([
+      ['FROM song_stems', []],
+      ['FROM song_section_audio', []],
+      ['SELECT id, status, input_path', []],
+      ['DELETE FROM song_stems', { count: 0 }],
+      ['DELETE FROM song_section_audio', { count: 0 }],
+      ['DELETE FROM song_structure', { count: 0 }],
+      ['DELETE FROM song_pitch_analysis', { count: 0 }],
+      ['DELETE FROM song_line_timings', { count: 0 }],
+      ["SET status = 'cancelled'", { count: 0 }],
+      ["SET status = 'superseded'", { count: 0 }],
+    ]);
+    const res = makeRes();
+    await pipelineHandler({ method: 'DELETE', query: { id: 's1' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json.mock.calls[0][0].success).toBe(true);
   });
 });
 
@@ -217,7 +338,18 @@ describe('POST /api/songs/:id/pipeline/confirm', () => {
   it('422 si el objeto no existe en storage', async () => {
     pipelineInputStat.mockResolvedValueOnce({ exists: false, size: null });
     routeSql([
-      ['SELECT id, song_id AS "songId"', [{ id: 'r1', songId: 's1', status: 'created', phases: initialPhases(), inputPath: 's1/runs/r1/full.mp3' }]],
+      [
+        'SELECT id, song_id AS "songId"',
+        [
+          {
+            id: 'r1',
+            songId: 's1',
+            status: 'created',
+            phases: initialPhases(),
+            inputPath: 's1/runs/r1/full.mp3',
+          },
+        ],
+      ],
     ]);
     const res = makeRes();
     await confirmHandler({ method: 'POST', query: { id: 's1' } }, res);
@@ -227,7 +359,18 @@ describe('POST /api/songs/:id/pipeline/confirm', () => {
   it('422 si el objeto excede el límite de 25MB', async () => {
     pipelineInputStat.mockResolvedValueOnce({ exists: true, size: 26214401 });
     routeSql([
-      ['SELECT id, song_id AS "songId"', [{ id: 'r1', songId: 's1', status: 'created', phases: initialPhases(), inputPath: 's1/runs/r1/full.mp3' }]],
+      [
+        'SELECT id, song_id AS "songId"',
+        [
+          {
+            id: 'r1',
+            songId: 's1',
+            status: 'created',
+            phases: initialPhases(),
+            inputPath: 's1/runs/r1/full.mp3',
+          },
+        ],
+      ],
     ]);
     const res = makeRes();
     await confirmHandler({ method: 'POST', query: { id: 's1' } }, res);
@@ -237,11 +380,25 @@ describe('POST /api/songs/:id/pipeline/confirm', () => {
   it('feliz: marca upload done, status=processing y despacha stems', async () => {
     let updatedRow;
     routeSql([
-      ['SELECT id, song_id AS "songId"', [{ id: 'r1', songId: 's1', status: 'created', phases: initialPhases(), inputPath: 's1/runs/r1/full.mp3' }]],
-      ["UPDATE song_pipeline_runs SET status = 'processing'", (values) => {
-        updatedRow = values;
-        return { count: 1 };
-      }],
+      [
+        'SELECT id, song_id AS "songId"',
+        [
+          {
+            id: 'r1',
+            songId: 's1',
+            status: 'created',
+            phases: initialPhases(),
+            inputPath: 's1/runs/r1/full.mp3',
+          },
+        ],
+      ],
+      [
+        "UPDATE song_pipeline_runs SET status = 'processing'",
+        (values) => {
+          updatedRow = values;
+          return { count: 1 };
+        },
+      ],
     ]);
     const res = makeRes();
     await confirmHandler({ method: 'POST', query: { id: 's1' } }, res);
@@ -255,14 +412,31 @@ describe('POST /api/songs/:id/pipeline/confirm', () => {
   it('feliz con durationSec válida: mergea input_meta en el UPDATE a processing', async () => {
     let updatedRow;
     routeSql([
-      ['SELECT id, song_id AS "songId"', [{ id: 'r1', songId: 's1', status: 'created', phases: initialPhases(), inputPath: 's1/runs/r1/full.mp3' }]],
-      ["UPDATE song_pipeline_runs SET status = 'processing'", (values) => {
-        updatedRow = values;
-        return { count: 1 };
-      }],
+      [
+        'SELECT id, song_id AS "songId"',
+        [
+          {
+            id: 'r1',
+            songId: 's1',
+            status: 'created',
+            phases: initialPhases(),
+            inputPath: 's1/runs/r1/full.mp3',
+          },
+        ],
+      ],
+      [
+        "UPDATE song_pipeline_runs SET status = 'processing'",
+        (values) => {
+          updatedRow = values;
+          return { count: 1 };
+        },
+      ],
     ]);
     const res = makeRes();
-    await confirmHandler({ method: 'POST', query: { id: 's1' }, body: { durationSec: 187.5 } }, res);
+    await confirmHandler(
+      { method: 'POST', query: { id: 's1' }, body: { durationSec: 187.5 } },
+      res,
+    );
     expect(res.status).toHaveBeenCalledWith(200);
     const mergedMeta = updatedRow.find((v) => v && typeof v === 'object' && 'durationSec' in v);
     expect(mergedMeta.durationSec).toBe(187.5);
@@ -271,11 +445,25 @@ describe('POST /api/songs/:id/pipeline/confirm', () => {
   it('durationSec inválida (negativa) no rompe el confirm y no toca input_meta', async () => {
     let updatedRow;
     routeSql([
-      ['SELECT id, song_id AS "songId"', [{ id: 'r1', songId: 's1', status: 'created', phases: initialPhases(), inputPath: 's1/runs/r1/full.mp3' }]],
-      ["UPDATE song_pipeline_runs SET status = 'processing'", (values) => {
-        updatedRow = values;
-        return { count: 1 };
-      }],
+      [
+        'SELECT id, song_id AS "songId"',
+        [
+          {
+            id: 'r1',
+            songId: 's1',
+            status: 'created',
+            phases: initialPhases(),
+            inputPath: 's1/runs/r1/full.mp3',
+          },
+        ],
+      ],
+      [
+        "UPDATE song_pipeline_runs SET status = 'processing'",
+        (values) => {
+          updatedRow = values;
+          return { count: 1 };
+        },
+      ],
     ]);
     const res = makeRes();
     await confirmHandler({ method: 'POST', query: { id: 's1' }, body: { durationSec: -5 } }, res);
@@ -287,11 +475,25 @@ describe('POST /api/songs/:id/pipeline/confirm', () => {
   it('sin durationSec en el body: no rompe el confirm y no toca input_meta', async () => {
     let updatedRow;
     routeSql([
-      ['SELECT id, song_id AS "songId"', [{ id: 'r1', songId: 's1', status: 'created', phases: initialPhases(), inputPath: 's1/runs/r1/full.mp3' }]],
-      ["UPDATE song_pipeline_runs SET status = 'processing'", (values) => {
-        updatedRow = values;
-        return { count: 1 };
-      }],
+      [
+        'SELECT id, song_id AS "songId"',
+        [
+          {
+            id: 'r1',
+            songId: 's1',
+            status: 'created',
+            phases: initialPhases(),
+            inputPath: 's1/runs/r1/full.mp3',
+          },
+        ],
+      ],
+      [
+        "UPDATE song_pipeline_runs SET status = 'processing'",
+        (values) => {
+          updatedRow = values;
+          return { count: 1 };
+        },
+      ],
     ]);
     const res = makeRes();
     await confirmHandler({ method: 'POST', query: { id: 's1' } }, res);
@@ -302,7 +504,18 @@ describe('POST /api/songs/:id/pipeline/confirm', () => {
 
   it('409 si el CAS pierde la carrera (ya confirmado)', async () => {
     routeSql([
-      ['SELECT id, song_id AS "songId"', [{ id: 'r1', songId: 's1', status: 'created', phases: initialPhases(), inputPath: 's1/runs/r1/full.mp3' }]],
+      [
+        'SELECT id, song_id AS "songId"',
+        [
+          {
+            id: 'r1',
+            songId: 's1',
+            status: 'created',
+            phases: initialPhases(),
+            inputPath: 's1/runs/r1/full.mp3',
+          },
+        ],
+      ],
       ["UPDATE song_pipeline_runs SET status = 'processing'", { count: 0 }],
     ]);
     const res = makeRes();
@@ -315,12 +528,26 @@ describe('POST /api/songs/:id/pipeline/confirm', () => {
     dispatchPhase.mockRejectedValue(new Error('modal down'));
     let finalPhases;
     routeSql([
-      ['SELECT id, song_id AS "songId"', [{ id: 'r1', songId: 's1', status: 'created', phases: initialPhases(), inputPath: 's1/runs/r1/full.mp3' }]],
+      [
+        'SELECT id, song_id AS "songId"',
+        [
+          {
+            id: 'r1',
+            songId: 's1',
+            status: 'created',
+            phases: initialPhases(),
+            inputPath: 's1/runs/r1/full.mp3',
+          },
+        ],
+      ],
       ["UPDATE song_pipeline_runs SET status = 'processing'", { count: 1 }],
-      ['UPDATE song_pipeline_runs SET phases = ', (values) => {
-        finalPhases = values.find((v) => v && v.stems);
-        return { count: 1 };
-      }],
+      [
+        'UPDATE song_pipeline_runs SET phases = ',
+        (values) => {
+          finalPhases = values.find((v) => v && v.stems);
+          return { count: 1 };
+        },
+      ],
     ]);
     const res = makeRes();
     await confirmHandler({ method: 'POST', query: { id: 's1' } }, res);
@@ -345,7 +572,9 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
   });
 
   it('404 si no hay run activo', async () => {
-    routeSql([["status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')", []]]);
+    routeSql([
+      ["status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')", []],
+    ]);
     const res = makeRes();
     await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
     expect(res.status).toHaveBeenCalledWith(404);
@@ -356,7 +585,10 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
     phases.upload.status = 'done';
     phases.stems = { status: 'running', error: null, tracks: undefined, artifacts: undefined };
     routeSql([
-      ["status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')", [{ id: 'r1', songId: 's1', status: 'processing', phases, inputPath: 'p' }]],
+      [
+        "status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')",
+        [{ id: 'r1', songId: 's1', status: 'processing', phases, inputPath: 'p' }],
+      ],
     ]);
     const res = makeRes();
     await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
@@ -368,7 +600,10 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
     const phases = initialPhases(); // upload sigue 'running', stems no puede arrancar
     phases.stems = { status: 'failed', error: 'boom', tracks: undefined, artifacts: undefined };
     routeSql([
-      ["status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')", [{ id: 'r1', songId: 's1', status: 'processing', phases, inputPath: 'p' }]],
+      [
+        "status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')",
+        [{ id: 'r1', songId: 's1', status: 'processing', phases, inputPath: 'p' }],
+      ],
     ]);
     const res = makeRes();
     await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
@@ -379,11 +614,25 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
   it('feliz: resetea a pending/running y re-despacha', async () => {
     let persisted;
     routeSql([
-      ["status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')", [{ id: 'r1', songId: 's1', status: 'processing', phases: activePhasesWithStemsFailed(), inputPath: 'p' }]],
-      ['UPDATE song_pipeline_runs SET phases = ', (values) => {
-        persisted = values.find((v) => v && v.stems);
-        return { count: 1 };
-      }],
+      [
+        "status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')",
+        [
+          {
+            id: 'r1',
+            songId: 's1',
+            status: 'processing',
+            phases: activePhasesWithStemsFailed(),
+            inputPath: 'p',
+          },
+        ],
+      ],
+      [
+        'UPDATE song_pipeline_runs SET phases = ',
+        (values) => {
+          persisted = values.find((v) => v && v.stems);
+          return { count: 1 };
+        },
+      ],
     ]);
     const res = makeRes();
     await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
@@ -399,14 +648,28 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
     let finalPhases;
     let call = 0;
     routeSql([
-      ["status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')", [{ id: 'r1', songId: 's1', status: 'processing', phases: activePhasesWithStemsFailed(), inputPath: 'p' }]],
+      [
+        "status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')",
+        [
+          {
+            id: 'r1',
+            songId: 's1',
+            status: 'processing',
+            phases: activePhasesWithStemsFailed(),
+            inputPath: 'p',
+          },
+        ],
+      ],
       // re-lectura FOR UPDATE dentro de la tx del handler de fallo de dispatch.
       ['SELECT phases FROM song_pipeline_runs WHERE id = ', [{ phases: runningPhases }]],
-      ['UPDATE song_pipeline_runs SET phases = ', (values) => {
-        call += 1;
-        if (call === 2) finalPhases = values.find((v) => v && v.stems);
-        return { count: 1 };
-      }],
+      [
+        'UPDATE song_pipeline_runs SET phases = ',
+        (values) => {
+          call += 1;
+          if (call === 2) finalPhases = values.find((v) => v && v.stems);
+          return { count: 1 };
+        },
+      ],
     ]);
     const res = makeRes();
     await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
@@ -425,16 +688,22 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
     let finalStatus;
     let call = 0;
     routeSql([
-      ["status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')", [{ id: 'r1', songId: 's1', status: 'processing', phases: claimedPhases, inputPath: 'p' }]],
+      [
+        "status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')",
+        [{ id: 'r1', songId: 's1', status: 'processing', phases: claimedPhases, inputPath: 'p' }],
+      ],
       ['SELECT phases FROM song_pipeline_runs WHERE id = ', [{ phases: runningPhases }]],
-      ['UPDATE song_pipeline_runs SET phases = ', (values) => {
-        call += 1;
-        if (call === 2) {
-          finalPhases = values.find((v) => v && v.stems);
-          finalStatus = values.find((v) => v === 'failed');
-        }
-        return { count: 1 };
-      }],
+      [
+        'UPDATE song_pipeline_runs SET phases = ',
+        (values) => {
+          call += 1;
+          if (call === 2) {
+            finalPhases = values.find((v) => v && v.stems);
+            finalStatus = values.find((v) => v === 'failed');
+          }
+          return { count: 1 };
+        },
+      ],
     ]);
     const res = makeRes();
     await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
@@ -449,7 +718,10 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
     phases.upload.status = 'done';
     phases.stems = { status: 'done', error: null, tracks: { vocals: 'k1' }, artifacts: undefined };
     routeSql([
-      ["status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')", [{ id: 'r1', songId: 's1', status: 'processing', phases, inputPath: 'p' }]],
+      [
+        "status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')",
+        [{ id: 'r1', songId: 's1', status: 'processing', phases, inputPath: 'p' }],
+      ],
     ]);
     const res = makeRes();
     await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
@@ -463,11 +735,17 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
       phases.stems.retries = i;
       let persisted;
       routeSql([
-        ["status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')", [{ id: 'r1', songId: 's1', status: 'processing', phases, inputPath: 'p' }]],
-        ['UPDATE song_pipeline_runs SET phases = ', (values) => {
-          persisted = values.find((v) => v && v.stems);
-          return { count: 1 };
-        }],
+        [
+          "status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')",
+          [{ id: 'r1', songId: 's1', status: 'processing', phases, inputPath: 'p' }],
+        ],
+        [
+          'UPDATE song_pipeline_runs SET phases = ',
+          (values) => {
+            persisted = values.find((v) => v && v.stems);
+            return { count: 1 };
+          },
+        ],
       ]);
       const res = makeRes();
       await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
@@ -478,7 +756,10 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
     const exhaustedPhases = activePhasesWithStemsFailed();
     exhaustedPhases.stems.retries = 3;
     routeSql([
-      ["status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')", [{ id: 'r1', songId: 's1', status: 'processing', phases: exhaustedPhases, inputPath: 'p' }]],
+      [
+        "status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')",
+        [{ id: 'r1', songId: 's1', status: 'processing', phases: exhaustedPhases, inputPath: 'p' }],
+      ],
     ]);
     const dispatchCallsBefore = dispatchPhase.mock.calls.length;
     const res = makeRes();
@@ -502,7 +783,10 @@ describe('PATCH /api/songs/:id/pipeline (renombrar audio)', () => {
 
   it('400 si displayName está vacío', async () => {
     const res = makeRes();
-    await pipelineHandler({ method: 'PATCH', query: { id: 's1' }, body: { displayName: '   ' } }, res);
+    await pipelineHandler(
+      { method: 'PATCH', query: { id: 's1' }, body: { displayName: '   ' } },
+      res,
+    );
     expect(res.status).toHaveBeenCalledWith(400);
   });
 

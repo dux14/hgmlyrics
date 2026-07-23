@@ -1,11 +1,17 @@
 // Run del pipeline unificado por canción (spec 2026-07-20, Task B2).
 // GET: estado del run activo con URLs firmadas de las pistas ya publicadas.
 // POST: crea un run nuevo + URL de subida firmada del mp3 completo.
-// DELETE: cancela el run activo.
+// DELETE: "reemplazar audio" (Task A2) — purga los artefactos derivados del
+// audio viejo y cierra los runs. Ver purgeRun más abajo.
 import sql from '../../_lib/db.js';
 import { requireAdmin } from '../../_lib/auth.js';
 import { allowMethods, withErrors } from '../../_lib/http.js';
-import { pipelineInputKey, createSongAudioSignedPutUrl, signSongAudioDownload } from '../../_lib/storage.js';
+import {
+  pipelineInputKey,
+  createSongAudioSignedPutUrl,
+  signSongAudioDownload,
+  deleteSongAudioObjects,
+} from '../../_lib/storage.js';
 import { initialPhases } from '../../_lib/pipeline/state.js';
 import { titleSimilarity, TITLE_MATCH_THRESHOLD } from '../../_lib/pipeline/titleMatch.js';
 
@@ -105,7 +111,10 @@ async function createRun(req, res, songId) {
     // run vivo para esta canción (mismo patrón 23505 de pitch/jobs.js).
     // Se valida el constraint exacto para no tragar otras violaciones de
     // unicidad (p.ej. una PK) como si fueran este caso esperado.
-    if (err?.code === '23505' && err?.constraint_name === 'song_pipeline_runs_one_active_per_song') {
+    if (
+      err?.code === '23505' &&
+      err?.constraint_name === 'song_pipeline_runs_one_active_per_song'
+    ) {
       res.status(409).json({ error: 'Ya hay una ejecución activa para esta canción' });
       return;
     }
@@ -116,21 +125,80 @@ async function createRun(req, res, songId) {
   await sql`UPDATE song_pipeline_runs SET input_path = ${inputPath}, updated_at = now() WHERE id = ${runId}`;
 
   const uploadUrl = await createSongAudioSignedPutUrl(inputPath);
-  res.status(200).json({ runId, uploadUrl, titleScore, threshold: TITLE_MATCH_THRESHOLD, songTitle: song.title });
+  res
+    .status(200)
+    .json({
+      runId,
+      uploadUrl,
+      titleScore,
+      threshold: TITLE_MATCH_THRESHOLD,
+      songTitle: song.title,
+    });
 }
 
-async function cancelRun(req, res, songId) {
+/**
+ * DELETE = "reemplazar audio" (Task A2): purga TODOS los artefactos
+ * derivados del audio (stems, clips del pipeline, estructura, pitch,
+ * timings, mp3s de entrada de los runs) y cierra los runs. NUNCA toca
+ * songs.sections (letra manual, independiente del pipeline) ni los clips
+ * manuales de song_section_audio (run_id NULL). Idempotente: responde 200
+ * incluso si no había nada que purgar.
+ */
+async function purgeRun(req, res, songId) {
   await requireAdmin(req, sql);
-  const result = await sql`
-    UPDATE song_pipeline_runs SET status = 'cancelled', updated_at = now()
-    WHERE song_id = ${songId}
-      AND status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')
-  `;
-  if (result.count === 0) {
-    res.status(404).json({ error: 'No hay una ejecución activa para esta canción' });
-    return;
-  }
-  res.status(200).json({ success: true });
+
+  // Storage keys a borrar: se leen ANTES de la transacción porque una vez
+  // borradas las filas ya no hay forma de recuperar las keys.
+  const [stemRows, clipRows, runRows] = await Promise.all([
+    sql`SELECT storage_key AS "storageKey" FROM song_stems WHERE song_id = ${songId}`,
+    sql`
+      SELECT storage_key AS "storageKey" FROM song_section_audio
+      WHERE song_id = ${songId} AND run_id IS NOT NULL
+    `,
+    sql`SELECT id, status, input_path FROM song_pipeline_runs WHERE song_id = ${songId} AND input_path IS NOT NULL`,
+  ]);
+
+  const purged = await sql.begin(async (tx) => {
+    const stems = await tx`DELETE FROM song_stems WHERE song_id = ${songId}`;
+    // Solo los clips del pipeline (run_id NOT NULL): los subidos a mano por
+    // un admin (run_id NULL) sobreviven al reemplazo de audio.
+    const clips = await tx`
+      DELETE FROM song_section_audio WHERE song_id = ${songId} AND run_id IS NOT NULL
+    `;
+    const structure = await tx`DELETE FROM song_structure WHERE song_id = ${songId}`;
+    const pitch = await tx`DELETE FROM song_pitch_analysis WHERE song_id = ${songId}`;
+    const timings = await tx`DELETE FROM song_line_timings WHERE song_id = ${songId}`;
+    const cancelled = await tx`
+      UPDATE song_pipeline_runs SET status = 'cancelled', updated_at = now()
+      WHERE song_id = ${songId}
+        AND status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')
+    `;
+    const superseded = await tx`
+      UPDATE song_pipeline_runs SET status = 'superseded', updated_at = now()
+      WHERE song_id = ${songId} AND status = 'done'
+    `;
+    return {
+      stems: stems.count,
+      clips: clips.count,
+      structure: structure.count,
+      pitch: pitch.count,
+      timings: timings.count,
+      cancelled: cancelled.count,
+      superseded: superseded.count,
+    };
+  });
+
+  // Storage best-effort DESPUÉS del commit: si el borrado de objetos falla,
+  // las filas ya no existen (fuente de verdad) y el cron de limpieza puede
+  // re-barrer keys huérfanas más adelante sin bloquear la respuesta acá.
+  const keys = [
+    ...stemRows.map((r) => r.storageKey),
+    ...clipRows.map((r) => r.storageKey),
+    ...runRows.map((r) => r.input_path),
+  ].filter(Boolean);
+  await deleteSongAudioObjects(keys).catch(() => {});
+
+  res.status(200).json({ success: true, purged });
 }
 
 async function renameRun(req, res, songId) {
@@ -163,7 +231,9 @@ async function renameRun(req, res, songId) {
     res.status(404).json({ error: 'No hay una ejecución activa para esta canción' });
     return;
   }
-  res.status(200).json({ success: true, titleScore, threshold: TITLE_MATCH_THRESHOLD, songTitle: song.title });
+  res
+    .status(200)
+    .json({ success: true, titleScore, threshold: TITLE_MATCH_THRESHOLD, songTitle: song.title });
 }
 
 export default withErrors(async (req, res) => {
@@ -179,5 +249,5 @@ export default withErrors(async (req, res) => {
   }
   if (req.method === 'POST') return createRun(req, res, songId);
   if (req.method === 'PATCH') return renameRun(req, res, songId);
-  return cancelRun(req, res, songId);
+  return purgeRun(req, res, songId);
 });

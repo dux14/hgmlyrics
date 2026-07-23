@@ -80,4 +80,23 @@ describe('advanceNextPhase', () => {
     expect(failedArg.clips.status).toBe('failed');
     expect(failedArg.clips.error).toContain('Modal caido');
   });
+
+  it('dispatchPhase falla → preserva retries de la fase (tope de reintentos manuales no se regala)', async () => {
+    const phases = initialPhases();
+    phases.sync = { status: 'done' };
+    sqlResponses.push([{ phases }]); // SELECT phases FOR UPDATE (claim)
+    sqlResponses.push([]); // UPDATE phases (marca clips 'running')
+    const claimedPhases = structuredClone(phases);
+    claimedPhases.clips = { status: 'running', retries: 2 }; // ya se agotaron 2 de 3 retries manuales
+    sqlResponses.push([{ phases: claimedPhases }]); // SELECT phases FOR UPDATE (tx de error)
+    sqlResponses.push([]); // UPDATE phases (marca clips 'failed')
+    dispatchPhaseMock.mockRejectedValueOnce(new Error('Modal caido'));
+
+    await advanceNextPhase(sqlMock, 'run-1', 'song-1', 'clips');
+
+    const failUpdate = sqlCalls.filter((c) => c.text.includes('UPDATE song_pipeline_runs'));
+    const failedArg = failUpdate[1].values.find((v) => v && typeof v === 'object' && v.clips);
+    expect(failedArg.clips.status).toBe('failed');
+    expect(failedArg.clips.retries).toBe(2);
+  });
 });

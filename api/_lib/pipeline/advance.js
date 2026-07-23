@@ -45,7 +45,7 @@ export async function advanceNextPhase(sql, runId, songId, phase) {
       const fresh = rows[0].phases;
       if (fresh[phase]?.status !== 'running') return;
       const failed = structuredClone(fresh);
-      failed[phase] = { status: 'failed', error: String(err?.message ?? err).slice(0, 300) };
+      failed[phase] = { status: 'failed', error: String(err?.message ?? err).slice(0, 300), retries: fresh[phase]?.retries || 0 };
       await tx`
         UPDATE song_pipeline_runs SET phases = ${tx.json(failed)}, updated_at = now()
         WHERE id = ${runId}

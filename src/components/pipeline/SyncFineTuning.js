@@ -284,8 +284,9 @@ export function createSyncFineTuning({ songId, getSong = () => null, getVocalsUr
       const cur = currentValues();
       const changes = {};
       if (cur.bpmManual !== metronomeBaseline.bpmManual) changes.bpmManual = cur.bpmManual;
-      if (cur.timeSignature !== metronomeBaseline.timeSignature)
+      if (cur.timeSignature !== metronomeBaseline.timeSignature) {
         changes.timeSignature = cur.timeSignature;
+      }
       if (cur.beatAnchor !== metronomeBaseline.beatAnchor) changes.beatAnchor = cur.beatAnchor;
       if (Object.keys(changes).length === 0) return;
       saveBtn.disabled = true;

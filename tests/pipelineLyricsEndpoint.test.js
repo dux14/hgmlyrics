@@ -486,7 +486,7 @@ describe('PUT /api/songs/:id/pipeline/lyrics (publishToSongbook, F4)', () => {
     });
   });
 
-  it('con fila: hace UPDATE songs SET sections solo con texto (label omitido si es null, vocalization solo cuando true)', async () => {
+  it('con fila: hace UPDATE songs SET sections solo con texto (label omitido si es null, vocalización mapeada a spoken)', async () => {
     let updatedSections;
     routeSql([
       ['song_pipeline_lyrics', [storedLyricsRow()]],
@@ -508,7 +508,7 @@ describe('PUT /api/songs/:id/pipeline/lyrics (publishToSongbook, F4)', () => {
     expect(updatedSections).toEqual([
       {
         type: 'chorus',
-        lines: [{ text: 'linea normal' }, { text: 'linea oooh', vocalization: true }],
+        lines: [{ text: 'linea normal' }, { text: 'linea oooh', spoken: true }],
       },
       {
         type: 'verse',

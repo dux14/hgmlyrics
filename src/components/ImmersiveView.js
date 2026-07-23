@@ -295,6 +295,7 @@ function renderLineContent(s, index) {
 
 function updateSectionLabel(s) {
   const cur = s.lines[s.index];
+  if (!cur) return;
   s.els.sectionLabel.textContent = cur.sectionLabel;
   s.els.sectionLabel.className = `imm-v1__section imm-v1__section--${cur.sectionType}`;
 }

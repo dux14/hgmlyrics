@@ -203,7 +203,10 @@ async function publishToSongbook(res, songId) {
     type: section.type,
     ...(section.label ? { label: section.label } : {}),
     lines: section.lines.map((line) =>
-      line.vocalization ? { text: line.text, vocalization: true } : { text: line.text },
+      // El cancionero no entiende `vocalization`: `annotation` se saltea en el
+      // teleprompter (ocultaria la linea) y `spoken` es la representacion mas
+      // cercana disponible (se renderiza, sin atribucion de voz).
+      line.vocalization ? { text: line.text, spoken: true } : { text: line.text },
     ),
   }));
   const result = await sql`UPDATE songs SET sections = ${sql.json(sections)}, updated_at = now() WHERE id = ${songId}`;

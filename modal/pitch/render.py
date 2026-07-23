@@ -104,8 +104,11 @@ def analysis_to_musicxml(analysis: dict) -> bytes:
 
 def run_render(job_id, webhook, sign_upload_url, inbound_secret, analysis):
     """Genera SVG+PNG+MIDI+MusicXML desde analysis (en memoria), los sube por
-    signed PUT y postea el webhook 'render' con ok:true. En fallo: postea
-    ok:false con el error y re-lanza (nunca deja la fase sin reportar)."""
+    signed PUT y postea el webhook 'render' con ok:true. Devuelve la lista de
+    artifacts (modo pipeline la reusa en el evento final, ver run_pipeline).
+    En fallo: postea ok:false con el error y re-lanza (nunca deja la fase sin
+    reportar; re-lanzar tambien deja que el modo pipeline detecte el fallo,
+    ya que en ese modo post_webhook es un no-op)."""
     import io
     try:
         svg = analysis_to_svg(analysis)
@@ -125,6 +128,8 @@ def run_render(job_id, webhook, sign_upload_url, inbound_secret, analysis):
             upload_put(put_url, data, content_type=mime)
             artifacts.append(artifact(kind, extract_storage_key(put_url), mime))
         post_webhook(webhook, job_id, "render", {"ok": True, "artifacts": artifacts})
+        return artifacts
     except Exception as exc:
         post_webhook(webhook, job_id, "render", {"ok": False, "error": str(exc)[:400]})
+        raise
         raise

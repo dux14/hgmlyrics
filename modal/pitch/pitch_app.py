@@ -9,7 +9,7 @@ from __future__ import annotations
 import hmac, os
 from fastapi import Header, HTTPException
 import modal
-from _common import download_bytes, post_webhook
+from _common import download_bytes, post_webhook, post_pipeline_event
 from separation import run_separation
 from f0 import run_f0
 from notes import run_notes
@@ -165,15 +165,24 @@ def n_choir(job_id, webhook, sign_upload_url, inbound_secret, lead_bytes):
 
 @app.function(image=image, secrets=_secrets, timeout=1800)
 def run_pipeline(payload: dict) -> None:
-    """Cadena las 6 fases con .remote() (bloqueante). En cada except, marca
-    ok:false desde la fase que fallo en adelante (skip_rest). Incluye la fase
-    fallida a proposito: si el nodo murio duro (SIGABRT/timeout/OOM) no alcanzo a
-    postear su propio ok:false, y sin esto el job quedaria colgado en running
-    (nunca reporta las 6 requeridas). Si el nodo SI se auto-reporto, el re-post es
-    idempotente (applyPhaseWebhook ignora un mismo estado repetido)."""
+    """Cadena las 6 fases con .remote() (bloqueante). Dos modos, distinguidos por
+    la forma de payload["input"]:
+    - Standalone (pitch_jobs, input.getUrl): en cada except, marca ok:false desde
+      la fase que fallo en adelante (skip_rest). Incluye la fase fallida a
+      proposito: si el nodo murio duro (SIGABRT/timeout/OOM) no alcanzo a postear
+      su propio ok:false, y sin esto el job quedaria colgado en running (nunca
+      reporta las 6 requeridas). Si el nodo SI se auto-reporto, el re-post es
+      idempotente (applyPhaseWebhook ignora un mismo estado repetido).
+    - Pipeline unificado (input.leadGetUrl/backingGetUrl, ya separados por la fase
+      'stems'): NO llama a n_separation ni a los webhooks por-fase de cada nodo
+      (silenciados con un webhook sentinel sin "url" — el contrato {jobId,phase,
+      result} de post_webhook lo rechaza con 400 el webhook unificado, que exige
+      {runId,phase}); postea UN solo evento post_pipeline_event al terminar
+      (exito) o en cualquier fallo intermedio (fail_all), para que la fase
+      'pitch' del run nunca quede 'running' eterna."""
     job_id, webhook = payload["jobId"], payload["webhook"]  # webhook={"url":...} (Design B, sin secret)
-    sign_upload_url = payload["signUploadUrl"]
-    inbound_secret = os.environ["PITCH_MODAL_INBOUND_SECRET"]
+    inp = payload.get("input") or {}
+    pipeline_mode = "leadGetUrl" in inp
 
     def skip_rest(from_idx: int, reason: str) -> None:
         for phase in REQUIRED_PHASES[from_idx:]:
@@ -182,21 +191,55 @@ def run_pipeline(payload: dict) -> None:
             except Exception:
                 pass
 
+    def fail_all(reason: str) -> None:
+        """Senial de fallo best-effort para el modo pipeline: nunca dejar la fase
+        'pitch' del run colgada en running."""
+        try:
+            post_pipeline_event(webhook, job_id, False, error=reason)
+        except Exception:
+            pass
+
     try:
-        audio_bytes = download_bytes(payload["input"]["getUrl"])
+        sign_upload_url = payload["signUploadUrl"]
+        inbound_secret = os.environ["PITCH_MODAL_INBOUND_SECRET"]
     except Exception as exc:
-        skip_rest(0, f"no se pudo descargar el audio: {exc}"[:300]); return
-    try:
-        lead, backing = n_separation.remote(job_id, webhook, sign_upload_url, inbound_secret, audio_bytes)
-    except Exception:
-        skip_rest(0, "separacion fallo"); return
+        reason = f"payload invalido: {exc}"[:300]
+        if pipeline_mode:
+            fail_all(reason)
+        else:
+            skip_rest(0, reason)
+        return
+
+    # En modo pipeline, los nodos reciben un webhook silenciado: sus post_webhook
+    # internos (contrato {jobId,phase,result}) no deben pegarle al webhook
+    # unificado. El evento real de la fase 'pitch' lo postea este orquestador al
+    # final (exito) o en fail_all (fallo), con post_pipeline_event.
+    node_webhook = {"url": None} if pipeline_mode else webhook
+
+    if pipeline_mode:
+        try:
+            lead = download_bytes(inp["leadGetUrl"])
+            backing = download_bytes(inp["backingGetUrl"])
+        except Exception as exc:
+            fail_all(f"no se pudo descargar lead/backing: {exc}"[:300]); return
+    else:
+        try:
+            audio_bytes = download_bytes(inp["getUrl"])
+        except Exception as exc:
+            skip_rest(0, f"no se pudo descargar el audio: {exc}"[:300]); return
+        try:
+            lead, backing = n_separation.remote(job_id, webhook, sign_upload_url, inbound_secret, audio_bytes)
+        except Exception:
+            skip_rest(0, "separacion fallo"); return
 
     # M5 (opcional): con el stem lead ya disponible, lanza genero/coro en paralelo
     # a f0/notes/lyrics. NO bloquean ni propagan error (fases opcionales fuera de
-    # REQUIRED_PHASES); se recogen antes de fusion para aportar voces extra.
+    # REQUIRED_PHASES); se recogen antes de fusion para aportar voces extra. El
+    # pipeline unificado no manda flags.choir hoy, asi que en modo pipeline esto
+    # queda inerte (choir_on=False) sin codigo extra.
     choir_on = bool((payload.get("flags") or {}).get("choir", False))
-    gender_call = n_gender.spawn(job_id, webhook, sign_upload_url, inbound_secret, lead) if choir_on else None
-    choir_call = n_choir.spawn(job_id, webhook, sign_upload_url, inbound_secret, lead) if choir_on else None
+    gender_call = n_gender.spawn(job_id, node_webhook, sign_upload_url, inbound_secret, lead) if choir_on else None
+    choir_call = n_choir.spawn(job_id, node_webhook, sign_upload_url, inbound_secret, lead) if choir_on else None
 
     def cancel_optional():
         # Si una fase REQUERIDA falla y abortamos, cancela los nodos opcionales ya
@@ -210,17 +253,18 @@ def run_pipeline(payload: dict) -> None:
                     pass
 
     try:
-        f0_lead, f0_backing = n_f0.remote(job_id, webhook, sign_upload_url, inbound_secret, lead, backing)
+        f0_lead, f0_backing = n_f0.remote(job_id, node_webhook, sign_upload_url, inbound_secret, lead, backing)
     except Exception:
-        skip_rest(1, "f0 fallo"); cancel_optional(); return
+        (fail_all("f0 fallo") if pipeline_mode else skip_rest(1, "f0 fallo")); cancel_optional(); return
     try:
-        notes_lead, notes_backing = n_notes.remote(job_id, webhook, sign_upload_url, inbound_secret, f0_lead, f0_backing)
+        notes_lead, notes_backing = n_notes.remote(job_id, node_webhook, sign_upload_url, inbound_secret, f0_lead, f0_backing)
     except Exception:
-        skip_rest(2, "notas fallo"); cancel_optional(); return
+        (fail_all("notas fallo") if pipeline_mode else skip_rest(2, "notas fallo")); cancel_optional(); return
     try:
-        lines_words = n_lyrics.remote(job_id, webhook, sign_upload_url, inbound_secret, lead)
+        lines_words = n_lyrics.remote(job_id, node_webhook, sign_upload_url, inbound_secret, lead)
     except Exception:
-        skip_rest(3, "letra fallo"); cancel_optional(); return
+        (fail_all("letra fallo") if pipeline_mode else skip_rest(3, "letra fallo")); cancel_optional(); return
+
     # Recoge las voces opcionales (si el flag estaba activo) antes de fusion. Un
     # nodo caido no bloquea: ya posteo su webhook y no cuenta para el estado final.
     extra_voices = {}
@@ -231,15 +275,30 @@ def run_pipeline(payload: dict) -> None:
             except Exception:
                 pass
     try:
-        analysis = n_fusion.remote(job_id, webhook, sign_upload_url, inbound_secret, notes_lead, notes_backing, lines_words, extra_voices)
+        analysis = n_fusion.remote(job_id, node_webhook, sign_upload_url, inbound_secret, notes_lead, notes_backing, lines_words, extra_voices)
     except Exception:
-        skip_rest(4, "fusion fallo"); return
+        (fail_all("fusion fallo") if pipeline_mode else skip_rest(4, "fusion fallo")); return
     try:
-        n_render.remote(job_id, webhook, sign_upload_url, inbound_secret, analysis)
+        render_artifacts = n_render.remote(job_id, node_webhook, sign_upload_url, inbound_secret, analysis)
     except Exception:
-        # render ya posteo su propio ok:false (mismo patron que fusion); como es
-        # la ultima fase, aqui solo evita que la excepcion suba sin mas.
-        skip_rest(5, "render fallo")
+        if pipeline_mode:
+            fail_all("render fallo")
+        else:
+            # render ya posteo su propio ok:false (mismo patron que fusion); como es
+            # la ultima fase, aqui solo evita que la excepcion suba sin mas.
+            skip_rest(5, "render fallo")
+        return
+
+    if pipeline_mode:
+        try:
+            post_pipeline_event(
+                webhook, job_id, True,
+                payload={"analysis": analysis},
+                artifacts=render_artifacts,
+                snapshot_hash=inp.get("snapshotHash"),
+            )
+        except Exception:
+            pass
 
 
 @app.function(image=image, secrets=_secrets)

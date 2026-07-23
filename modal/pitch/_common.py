@@ -41,15 +41,52 @@ def request_signed_put(sign_upload_url: str, inbound_secret: str, job_id: str, k
     return r.json()["url"]
 
 
-def post_webhook(webhook: dict, job_id: str, phase: str, result: dict) -> None:
+def post_webhook(webhook: dict | None, job_id: str, phase: str, result: dict) -> None:
     """Contrato M1 (INMUTABLE): body={"jobId","phase","result"}.
     result={"ok":bool,"error"?:str,"artifacts"?:[{kind,storage_uri,mime,meta?}],"cost"?:float}.
     Design B: firma con PITCH_MODAL_WEBHOOK_SECRET del entorno (NO del payload).
     Firma: hex(hmac_sha256(secret, f"{ts}.{body_str}")), headers
-    X-Modal-Timestamp/X-Modal-Signature. Lanza en non-2xx."""
+    X-Modal-Timestamp/X-Modal-Signature. Lanza en non-2xx.
+    Si `webhook` es None o no trae "url" (modo pipeline: run_pipeline le pasa un
+    webhook silenciado a los nodos intermedios), no hace nada — el contrato
+    {jobId,phase,result} de este helper NO es el que espera el webhook
+    unificado (api/pipeline/webhook.js exige {runId,phase}) y lo rechaza con
+    400; ver post_pipeline_event para el evento que SI entiende ese webhook."""
+    if not webhook or not webhook.get("url"):
+        return
     import httpx
     secret = os.environ["PITCH_MODAL_WEBHOOK_SECRET"]
     body_str = json.dumps({"jobId": job_id, "phase": phase, "result": result})
+    ts = str(int(time.time()))
+    sig = hmac.new(secret.encode(), f"{ts}.{body_str}".encode(), hashlib.sha256).hexdigest()
+    r = httpx.post(webhook["url"], content=body_str,
+                   headers={"Content-Type": "application/json", "X-Modal-Timestamp": ts,
+                            "X-Modal-Signature": sig}, timeout=30)
+    r.raise_for_status()
+
+
+def post_pipeline_event(webhook: dict, run_id: str, ok: bool, *, payload: dict | None = None,
+                        artifacts: dict | list | None = None, snapshot_hash: str | None = None,
+                        error: str | None = None) -> None:
+    """Evento de fase 'pitch' para el pipeline unificado (api/pipeline/webhook.js
+    + api/_lib/pipeline/process.js), que esperan {runId,phase,ok,...} — shape
+    distinto al contrato M1 de post_webhook ({jobId,phase,result}). Mismo
+    esquema HMAC que post_webhook (mismo secreto PITCH_MODAL_WEBHOOK_SECRET,
+    mismo `hex(hmac_sha256(secret, f"{ts}.{body_str}"))`, mismos headers
+    X-Modal-Timestamp/X-Modal-Signature) para que verifyModalSignature del
+    backend lo acepte tal cual."""
+    import httpx
+    secret = os.environ["PITCH_MODAL_WEBHOOK_SECRET"]
+    body: dict = {"runId": run_id, "phase": "pitch", "ok": ok}
+    if payload is not None:
+        body["payload"] = payload
+    if artifacts is not None:
+        body["artifacts"] = artifacts
+    if snapshot_hash is not None:
+        body["snapshotHash"] = snapshot_hash
+    if error is not None:
+        body["error"] = error[:300]
+    body_str = json.dumps(body)
     ts = str(int(time.time()))
     sig = hmac.new(secret.encode(), f"{ts}.{body_str}".encode(), hashlib.sha256).hexdigest()
     r = httpx.post(webhook["url"], content=body_str,

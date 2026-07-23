@@ -197,6 +197,53 @@ describe('GET /api/songs/:id/pipeline/lyrics', () => {
     const body = res.json.mock.calls[0][0];
     expect(body.suggestions).toEqual([{ section: 0, line: 1, afterWords: [3] }]);
   });
+
+  it('expone structure.segments y structureWarning null cuando el conteo calza (Task 15c)', async () => {
+    const structureSegments = [{ label: 'coro', startMs: 0, endMs: 5000 }];
+    routeSql([
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { transcription } })]],
+      ['SELECT sections FROM songs', [{ sections: dbSections }]],
+      ['SELECT content FROM song_lyrics_canonical', [{ content: canonicalContent }]],
+      ['SELECT segments FROM song_structure', [{ segments: structureSegments }]],
+      ['UPDATE song_pipeline_runs SET lyrics_review', { count: 1 }],
+    ]);
+    const res = makeRes();
+    await lyricsHandler({ method: 'GET', query: { id: 's1' } }, res);
+    const body = res.json.mock.calls[0][0];
+    expect(body.structure).toEqual({ segments: structureSegments });
+    expect(body.structureWarning).toBe(null); // 1 seccion 'chorus' en la letra, 1 segmento 'coro'
+  });
+
+  it('structureWarning describe la discrepancia sin bloquear canApprove (Task 15c)', async () => {
+    // dbSections trae 1 sola seccion 'chorus'; el audio detecto 2 segmentos
+    // 'coro' -- discrepancia de conteo, pero solo informativa.
+    const structureSegments = [
+      { label: 'coro', startMs: 0, endMs: 3000 },
+      { label: 'coro', startMs: 3000, endMs: 6000 },
+    ];
+    routeSql([
+      [
+        'AS "lyricsReview"',
+        [runRow({
+          lyricsReview: {
+            review: {
+              sections: [{ type: 'chorus', label: undefined, temperature: 1, lines: [] }],
+              vocalizations: [],
+              hasCanonical: false,
+              temperature: 1,
+            },
+          },
+        })],
+      ],
+      ['SELECT sections FROM songs', [{ sections: dbSections }]],
+      ['SELECT segments FROM song_structure', [{ segments: structureSegments }]],
+    ]);
+    const res = makeRes();
+    await lyricsHandler({ method: 'GET', query: { id: 's1' } }, res);
+    const body = res.json.mock.calls[0][0];
+    expect(body.structureWarning).toContain('chorus');
+    expect(body.canApprove).toBe(true);
+  });
 });
 
 describe('PUT /api/songs/:id/pipeline/lyrics', () => {

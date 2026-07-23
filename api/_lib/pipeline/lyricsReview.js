@@ -172,15 +172,47 @@ function closestToMiddle(candidateIndices, tokens, textLen) {
   return best;
 }
 
+// Task 15a (gate de estructura): asigna a un renglon el segmento de
+// song_structure.segments (SongFormer) con la MAYOR interseccion temporal
+// con el intervalo [lineStart,lineEnd] del renglon (solape mayoritario). Solo
+// aporta metadata de rango -- nunca retipa ni reordena la letra (ver Task
+// 15b y el header del modulo). Sin `lineWords` (renglon sin match de
+// transcripcion, p.ej. canonica sin contraparte) no hay intervalo que
+// comparar: null, sin forzar ninguna asignacion.
+function assignStructureSegment(lineWords, structureSegments) {
+  if (!Array.isArray(lineWords) || lineWords.length === 0) return null;
+  if (!Array.isArray(structureSegments) || structureSegments.length === 0) return null;
+  const lineStart = lineWords[0].startMs;
+  const lineEnd = lineWords[lineWords.length - 1].endMs;
+  let best = null;
+  let bestOverlap = 0;
+  for (const seg of structureSegments) {
+    const overlap = Math.min(lineEnd, seg.endMs) - Math.max(lineStart, seg.startMs);
+    if (overlap > bestOverlap) {
+      bestOverlap = overlap;
+      best = seg;
+    }
+  }
+  return best ? { label: best.label, startMs: best.startMs, endMs: best.endMs } : null;
+}
+
 // Parte recursivamente una linea larga (> KARAOKE_MAX_CHARS) hasta que
 // todos sus hijos entren, o hasta que no quede ningun punto de corte valido
 // (una sola "palabra" sin espacios: se deja intacta, sin loop infinito).
 // `lineWords` son los timestamps por palabra de ESTA linea (si se conocen y
 // su cantidad calza con la cantidad de tokens de line.text) o undefined.
-function splitLineRecursive(line, lineWords) {
-  if (line.text.length <= KARAOKE_MAX_CHARS) return [line];
+// `structureSegments` (Task 15a) se propaga sin tocar a cada hijo final: el
+// renglon resultante (partido o no) siempre recibe el segmento de mayor
+// solape calculado con SUS propios words (ya acotados por el corte).
+function splitLineRecursive(line, lineWords, structureSegments = []) {
+  if (line.text.length <= KARAOKE_MAX_CHARS) {
+    return [{ ...line, structureSegment: assignStructureSegment(lineWords, structureSegments) }];
+  }
   const tokens = line.text.split(/\s+/).filter(Boolean);
-  if (tokens.length < 2) return [line]; // sin espacio donde cortar
+  if (tokens.length < 2) {
+    // sin espacio donde cortar
+    return [{ ...line, structureSegment: assignStructureSegment(lineWords, structureSegments) }];
+  }
 
   const wordsAligned = Array.isArray(lineWords) && lineWords.length === tokens.length;
   let afterWord;
@@ -199,7 +231,10 @@ function splitLineRecursive(line, lineWords) {
   const [first, second] = splitLineAtWord(line, afterWord);
   const firstWords = wordsAligned ? lineWords.slice(0, afterWord + 1) : undefined;
   const secondWords = wordsAligned ? lineWords.slice(afterWord + 1) : undefined;
-  return [...splitLineRecursive(first, firstWords), ...splitLineRecursive(second, secondWords)];
+  return [
+    ...splitLineRecursive(first, firstWords, structureSegments),
+    ...splitLineRecursive(second, secondWords, structureSegments),
+  ];
 }
 
 /**
@@ -224,13 +259,18 @@ function splitLineRecursive(line, lineWords) {
  * @param {Map<string, Array<{word:string, startMs:number, endMs:number}>>} [lineWordsByKey]
  *   timestamps por palabra de cada renglon (clave `segmentKey(seccion,linea)`),
  *   ya correlacionados por transIndex -- ver buildReviewDoc.
+ * @param {Array<{label:string, startMs:number, endMs:number}>} [structureSegments]
+ *   segmentos de `song_structure.segments` (Task 15a); se le asigna a cada
+ *   renglon final el de mayor solape temporal, o null sin words/segmentos.
  * @returns {object} documento nuevo
  */
-export function autoSplitLongLines(doc, lineWordsByKey = new Map()) {
+export function autoSplitLongLines(doc, lineWordsByKey = new Map(), structureSegments = []) {
   const next = structuredClone(doc);
   next.sections.forEach((section, sIdx) => {
     section.lines = section.lines.flatMap(
-      (line, lIdx) => splitLineRecursive(line, lineWordsByKey.get(segmentKey(sIdx, lIdx))),
+      (line, lIdx) => splitLineRecursive(
+        line, lineWordsByKey.get(segmentKey(sIdx, lIdx)), structureSegments,
+      ),
     );
   });
   recomputeTemperatures(next);
@@ -260,10 +300,13 @@ function wordsByTransIndex(transLines, words) {
  * Construye el documento de revision a partir de las 3 fuentes de un run.
  * @param {{dbSections: Array, canonical: {secciones: Array}|null,
  *   transcription: {text:string, words:Array, perLine:Array,
- *   transLines?: string[]}}} args
+ *   transLines?: string[]}, structureSegments?: Array<{label:string,
+ *   startMs:number, endMs:number}>}} args structureSegments (Task 15a) son
+ *   los segmentos de `song_structure.segments`; se usan SOLO para adjuntar
+ *   metadata de rango por renglon, nunca para retipar/reordenar la letra.
  * @returns {object} documento de revision (editable via applyReviewAction)
  */
-export function buildReviewDoc({ dbSections, canonical, transcription }) {
+export function buildReviewDoc({ dbSections, canonical, transcription, structureSegments = [] }) {
   const transLines = transcription?.transLines ?? [];
   const perLine = transcription?.perLine ?? [];
   const wordsPerTransIndex = wordsByTransIndex(transLines, transcription?.words ?? []);
@@ -355,7 +398,7 @@ export function buildReviewDoc({ dbSections, canonical, transcription }) {
   }
 
   const doc = { sections, vocalizations, hasCanonical: !isNil(canonical), temperature: 1 };
-  return autoSplitLongLines(doc, lineWordsByKey);
+  return autoSplitLongLines(doc, lineWordsByKey, structureSegments);
 }
 
 function requireSection(doc, sectionIdx) {
@@ -629,6 +672,56 @@ export function canApprove(doc) {
   const hasConflict = doc.sections.some((s) => linesOf(s).some((l) => l.conflict));
   const hasUndecidedVocalization = doc.vocalizations.some((v) => v.accepted === null);
   return !hasConflict && !hasUndecidedVocalization;
+}
+
+// Etiqueta ES normalizada (SongFormer, ver _LABEL_MAP de
+// modal/sections/songformer.py) -> tipo de seccion de LETRA. 'instrumental'
+// y 'silencio' no tienen equivalente lirico -- se ignoran en la comparacion,
+// no hay seccion de letra con la que puedan discrepar.
+const STRUCTURE_LABEL_TO_SECTION_TYPE = {
+  intro: 'intro',
+  verso: 'verse',
+  coro: 'chorus',
+  puente: 'bridge',
+  'pre-coro': 'prechorus',
+  outro: 'outro',
+};
+
+/**
+ * Advertencia informativa (Task 15c): si el conteo de secciones de la letra
+ * por tipo no calza con el conteo de segmentos detectados por audio del
+ * mismo tipo (p.ej. 2 versos en la letra vs 3 segmentos 'verso' detectados),
+ * devuelve un string descriptivo. SOLO informativo -- nunca bloquea
+ * canApprove ni retipa/reordena nada (ver Task 15b).
+ * @param {object} doc documento de revision (buildReviewDoc)
+ * @param {Array<{label:string, startMs:number, endMs:number}>} structureSegments
+ * @returns {string|null}
+ */
+export function computeStructureWarning(doc, structureSegments) {
+  if (!Array.isArray(structureSegments) || structureSegments.length === 0) return null;
+
+  const detectedCounts = new Map();
+  for (const seg of structureSegments) {
+    const type = STRUCTURE_LABEL_TO_SECTION_TYPE[seg.label];
+    if (!type) continue;
+    detectedCounts.set(type, (detectedCounts.get(type) || 0) + 1);
+  }
+  if (detectedCounts.size === 0) return null;
+
+  const lyricsCounts = new Map();
+  for (const section of doc.sections) {
+    lyricsCounts.set(section.type, (lyricsCounts.get(section.type) || 0) + 1);
+  }
+
+  const mismatches = [];
+  for (const [type, detected] of detectedCounts) {
+    const inLyrics = lyricsCounts.get(type) || 0;
+    if (inLyrics !== detected) {
+      mismatches.push(`${type}: letra tiene ${inLyrics}, audio detectó ${detected}`);
+    }
+  }
+  if (mismatches.length === 0) return null;
+  return `La estructura detectada por audio no coincide con la letra (${mismatches.join('; ')})`;
 }
 
 function stableStringify(value) {

@@ -15,6 +15,7 @@ import {
   reviewTemperature,
   canApprove,
   approvedSnapshot,
+  computeStructureWarning,
   isNil,
 } from '../../../_lib/pipeline/lyricsReview.js';
 import { suggestLineBreaks } from '../../../_lib/pipeline/phrasing.js';
@@ -30,6 +31,15 @@ import { dispatchPhase } from './_dispatch.js';
 // superarlo -> 504 con la tx ya commiteada pero sin dispatch. Mismo patron
 // que api/pipeline/webhook.js (300s); acá 60 alcanza de sobra.
 export const config = { maxDuration: 60 };
+
+// Segmentos de estructura detectados por SongFormer (Task 15, fase
+// `structure`), si ya corrieron para este run. Sin fila (structure todavia
+// no corrio, o el pipeline es viejo y no la tiene) -> [], mismo criterio que
+// studio.js/_dispatch.js con esta tabla.
+async function fetchStructureSegments(songId) {
+  const [row] = await sql`SELECT segments FROM song_structure WHERE song_id = ${songId}`;
+  return row?.segments ?? [];
+}
 
 async function findAwaitingRun(songId) {
   const rows = await sql`
@@ -63,8 +73,12 @@ async function ensureReview(run, songId) {
     await sql`SELECT content FROM song_lyrics_canonical WHERE song_id = ${songId}`;
   const canonical = canonicalRow?.content ?? null;
   const transcription = lyricsReview.transcription ?? { text: '', words: [], perLine: [] };
+  // Segmentos de estructura (Task 15a): solo aportan metadata de rango por
+  // renglon, nunca retipan/reordenan la letra (buildReviewDoc los pasa tal
+  // cual a autoSplitLongLines).
+  const structureSegments = await fetchStructureSegments(songId);
 
-  const review = buildReviewDoc({ dbSections, canonical, transcription });
+  const review = buildReviewDoc({ dbSections, canonical, transcription, structureSegments });
   const next = { ...lyricsReview, review };
   // CAS: si el run ya no esta en awaiting_lyrics (se aprobo/cancelo entre el
   // findAwaitingRun y este punto) no pisa lyrics_review — mismo criterio que
@@ -118,7 +132,11 @@ function buildSuggestions({ dbSections, transcription }) {
 }
 
 async function getGate(res, songId) {
-  const run = await findAwaitingRun(songId);
+  // Independientes: cada uno lee su propia tabla por songId.
+  const [run, structureSegments] = await Promise.all([
+    findAwaitingRun(songId),
+    fetchStructureSegments(songId),
+  ]);
   if (!run) {
     res.status(404).json({ error: 'No hay una ejecución esperando revisión de letra' });
     return;
@@ -130,6 +148,10 @@ async function getGate(res, songId) {
     temperature: reviewTemperature(lyricsReview.review),
     canApprove: canApprove(lyricsReview.review),
     suggestions,
+    // Task 15c: metadata de rango + advertencia SOLO informativa (nunca
+    // bloquea canApprove) si el conteo por tipo no calza con lo detectado.
+    structure: { segments: structureSegments },
+    structureWarning: computeStructureWarning(lyricsReview.review, structureSegments),
   });
 }
 

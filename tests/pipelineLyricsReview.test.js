@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildReviewDoc, applyReviewAction, reviewTemperature, canApprove,
-  approvedSnapshot, autoSplitLongLines,
+  approvedSnapshot, autoSplitLongLines, computeStructureWarning,
 } from '../api/_lib/pipeline/lyricsReview.js';
 
 // Fixture de scenario "con words": 14 palabras, gap de respiracion grande
@@ -454,5 +454,115 @@ describe('temperatura y aprobacion', () => {
     expect(snap.sections[0].lines[1].text).toBe('y en la noche oscura brillará tu luz');
     expect(typeof snap.hash).toBe('string');
     expect(approvedSnapshot(d).hash).toBe(snap.hash); // determinista
+  });
+});
+
+// Task 15: conciliacion de song_structure.segments (SongFormer) con el gate
+// de letra -- asignacion renglon->segmento por solape mayoritario (a), la
+// letra canonica NUNCA se retipa/reordena por el audio detectado (b), y
+// advertencia informativa de discrepancia de conteo (c).
+describe('asignacion de segmento de estructura (Task 15a/b/c)', () => {
+  const words = [
+    { text: 'nadie', startMs: 0, endMs: 200 },
+    { text: 'me', startMs: 210, endMs: 300 },
+    { text: 'ama', startMs: 310, endMs: 500 },
+    { text: 'como', startMs: 510, endMs: 700 },
+    { text: 'tu', startMs: 710, endMs: 800 },
+    { text: 'me', startMs: 810, endMs: 900 },
+    { text: 'amas', startMs: 910, endMs: 1100 },
+    { text: 'y', startMs: 5000, endMs: 5100 },
+    { text: 'en', startMs: 5110, endMs: 5200 },
+    { text: 'la', startMs: 5210, endMs: 5300 },
+    { text: 'noche', startMs: 5310, endMs: 5500 },
+    { text: 'oscura', startMs: 5510, endMs: 5700 },
+    { text: 'brillara', startMs: 5710, endMs: 6000 },
+  ];
+  const dbSectionsStructure = [
+    { type: 'chorus', lines: [
+      { text: 'Nadie me ama como tu me amas' }, // 0-1100ms
+      { text: 'y en la noche oscura brillara' }, // 5000-6000ms
+    ] },
+  ];
+  const transcriptionStructure = {
+    text: 'nadie me ama como tu me amas y en la noche oscura brillara',
+    words,
+    perLine: [
+      { transIndex: 0, dbIndex: 0, score: 1.0 },
+      { transIndex: 1, dbIndex: 1, score: 1.0 },
+    ],
+    transLines: ['nadie me ama como tu me amas', 'y en la noche oscura brillara'],
+  };
+  const structureSegments = [
+    { label: 'verso', startMs: 0, endMs: 2000 },
+    { label: 'coro', startMs: 2000, endMs: 8000 },
+  ];
+
+  it('asigna a cada renglon el segmento con mayor solape temporal', () => {
+    const doc = buildReviewDoc({
+      dbSections: dbSectionsStructure, canonical: null,
+      transcription: transcriptionStructure, structureSegments,
+    });
+    expect(doc.sections[0].lines[0].structureSegment)
+      .toEqual({ label: 'verso', startMs: 0, endMs: 2000 });
+    expect(doc.sections[0].lines[1].structureSegment)
+      .toEqual({ label: 'coro', startMs: 2000, endMs: 8000 });
+  });
+
+  it('renglon sin words (sin match de transcripcion) queda con structureSegment null', () => {
+    const dbSectionsNoMatch = [
+      { type: 'chorus', lines: [{ text: 'Nadie me ama como tu me amas' }] },
+    ];
+    const doc = buildReviewDoc({
+      dbSections: dbSectionsNoMatch, canonical: null,
+      transcription: { text: '', words: [], perLine: [], transLines: [] },
+      structureSegments,
+    });
+    expect(doc.sections[0].lines[0].structureSegment).toBe(null);
+  });
+
+  it('con canonica presente, el tipo/orden de la seccion NO cambia aunque los segmentos digan otra cosa', () => {
+    const canonicalChorus = { secciones: [
+      { tipo: 'chorus', lineas: [
+        { texto: 'Nadie me ama como tu me amas' },
+        { texto: 'y en la noche oscura brillara' },
+      ] },
+    ] };
+    // structureSegments dicen 'verso'/'coro' para lineas de una seccion cuyo
+    // tipo canonico es 'chorus' -- el tipo de seccion no se mueve ni un poco.
+    const doc = buildReviewDoc({
+      dbSections: dbSectionsStructure, canonical: canonicalChorus,
+      transcription: transcriptionStructure, structureSegments,
+    });
+    expect(doc.sections).toHaveLength(1);
+    expect(doc.sections[0].type).toBe('chorus');
+    expect(doc.sections[0].lines[0].structureSegment.label).toBe('verso');
+  });
+
+  it('computeStructureWarning es null sin segmentos', () => {
+    const doc = buildReviewDoc({
+      dbSections: dbSectionsStructure, canonical: null, transcription: transcriptionStructure,
+    });
+    expect(computeStructureWarning(doc, [])).toBe(null);
+  });
+
+  it('computeStructureWarning detecta discrepancia de conteo por tipo, sin bloquear canApprove', () => {
+    const dbSectionsTwoVerses = [
+      { type: 'verse', lines: [{ text: 'uno' }] },
+      { type: 'verse', lines: [{ text: 'dos' }] },
+    ];
+    const threeVerseSegments = [
+      { label: 'verso', startMs: 0, endMs: 100 },
+      { label: 'verso', startMs: 100, endMs: 200 },
+      { label: 'verso', startMs: 200, endMs: 300 },
+    ];
+    const doc = buildReviewDoc({
+      dbSections: dbSectionsTwoVerses, canonical: null,
+      transcription: { text: '', words: [], perLine: [], transLines: [] },
+    });
+    const warning = computeStructureWarning(doc, threeVerseSegments);
+    expect(warning).toContain('verse');
+    expect(warning).toContain('letra tiene 2');
+    expect(warning).toContain('audio detectó 3');
+    expect(canApprove(doc)).toBe(true); // solo informativo, no bloquea
   });
 });

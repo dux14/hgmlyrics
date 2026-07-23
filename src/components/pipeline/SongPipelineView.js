@@ -99,9 +99,10 @@ function createPublishToSongbookButton(songId) {
   btn.addEventListener('click', async () => {
     const ok = await confirmDialog({
       title: 'Publicar al cancionero',
-      body: '¿Publicar esta letra al cancionero? Se copiará el texto a la canción.',
+      body: '¿Publicar esta letra al cancionero? Se reemplazará la letra actual de la canción con el texto del pipeline.',
       confirmLabel: 'Publicar',
       cancelLabel: 'Cancelar',
+      danger: true,
     });
     if (!ok) return;
     try {

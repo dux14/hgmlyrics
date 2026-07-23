@@ -620,7 +620,11 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
       await flushPromises();
 
       expect(confirmDialog).toHaveBeenCalledWith(
-        expect.objectContaining({ title: expect.stringContaining('Publicar') }),
+        expect.objectContaining({
+          title: expect.stringContaining('Publicar'),
+          body: expect.stringContaining('reemplazará'),
+          danger: true,
+        }),
       );
       expect(publishLyricsToSongbook).toHaveBeenCalledWith(SONG_ID);
       expect(showToast).toHaveBeenCalled();

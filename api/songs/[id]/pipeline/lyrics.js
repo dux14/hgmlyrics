@@ -206,7 +206,14 @@ async function publishToSongbook(res, songId) {
       line.vocalization ? { text: line.text, vocalization: true } : { text: line.text },
     ),
   }));
-  await sql`UPDATE songs SET sections = ${sql.json(sections)}, updated_at = now() WHERE id = ${songId}`;
+  const result = await sql`UPDATE songs SET sections = ${sql.json(sections)}, updated_at = now() WHERE id = ${songId}`;
+  // La canción pudo borrarse concurrentemente entre el read del store y este
+  // UPDATE: si no afecto filas, no reportamos exito (mismo patron TOCTOU que
+  // api/songs/[id].js).
+  if (result.count === 0) {
+    res.status(404).json({ error: 'La canción ya no existe' });
+    return;
+  }
   res.status(200).json({ success: true });
 }
 

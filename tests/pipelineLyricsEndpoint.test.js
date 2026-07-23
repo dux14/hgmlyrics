@@ -518,6 +518,20 @@ describe('PUT /api/songs/:id/pipeline/lyrics (publishToSongbook, F4)', () => {
     ]);
   });
 
+  it('404 si el UPDATE no afecta filas (cancion borrada entre el read y el write)', async () => {
+    routeSql([
+      ['song_pipeline_lyrics', [storedLyricsRow()]],
+      ['UPDATE songs', { count: 0 }],
+    ]);
+    const res = makeRes();
+    await lyricsHandler(
+      { method: 'PUT', query: { id: 's1' }, body: { action: { type: 'publishToSongbook' } } },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({ error: 'La canción ya no existe' });
+  });
+
   it('no requiere run activo: no consulta song_pipeline_runs', async () => {
     let queriedFindAwaiting = false;
     routeSql([

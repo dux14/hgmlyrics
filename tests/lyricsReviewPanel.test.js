@@ -27,51 +27,50 @@ function flush() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function line(text, overrides = {}) {
+  return {
+    text,
+    startMs: null,
+    endMs: null,
+    words: [],
+    confidence: null,
+    vocalization: false,
+    breath: false,
+    manualStartMs: null,
+    ...overrides,
+  };
+}
+
+/** Doc v2: dos secciones, la primera con dos renglones (uno con confidence
+ * conocida) y la segunda con un renglón — suficiente para ejercitar
+ * cruce de sección en moveLine. */
 function baseReview() {
   return {
-    hasCanonical: true,
-    temperature: 0.8,
+    version: 2,
     sections: [
       {
         type: 'chorus',
         label: null,
-        temperature: 0.6,
+        startMs: 0,
+        endMs: 1000,
         lines: [
-          {
-            text: 'y en la noche oscura brillara',
-            conflict: true,
-            vocalization: false,
-            score: 0.6,
-            sources: {
-              db: 'y en la noche oscura brillara',
-              canonical: 'y en la noche oscura brillara tu luz',
-              trans: 'y en la noche oscura brillara tu luz',
-            },
-          },
+          line('y en la noche oscura brillara', { confidence: 0.837 }),
+          line('una linea larga de prueba', { confidence: null }),
         ],
       },
-    ],
-    vocalizations: [
       {
-        text: 'Oooh—oh',
-        anchorAfterLine: { section: 0, line: 0 },
-        accepted: null,
+        type: 'verse',
+        label: null,
+        startMs: 1000,
+        endMs: 2000,
+        lines: [line('otra linea')],
       },
     ],
   };
 }
 
-function pendingResult() {
-  const review = baseReview();
-  return { review, temperature: 0.8, canApprove: false, suggestions: [] };
-}
-
-function resolvedResult() {
-  const review = baseReview();
-  review.sections[0].lines[0].conflict = false;
-  review.sections[0].lines[0].text = review.sections[0].lines[0].sources.canonical;
-  review.vocalizations[0].accepted = true;
-  return { review, temperature: 1, canApprove: true };
+function pendingResult(overrides = {}) {
+  return { review: baseReview(), canApprove: false, suggestions: [], ...overrides };
 }
 
 afterEach(() => {
@@ -82,6 +81,10 @@ afterEach(() => {
 describe('LyricsReviewPanel', () => {
   beforeEach(() => {
     getLyricsReview.mockResolvedValue(pendingResult());
+    sendLyricsAction.mockResolvedValue({
+      review: baseReview(),
+      canApprove: true,
+    });
   });
 
   it('renderiza el select de tipo de sección con clase por tipo y el tipo actual preseleccionado', async () => {
@@ -94,129 +97,19 @@ describe('LyricsReviewPanel', () => {
     expect(select.selectedOptions[0].textContent).toBe('CORO');
   });
 
-  it('el conflicto muestra las variantes y 3 botones de acción', async () => {
+  it('(a) muestra la confianza por renglón: porcentaje redondeado, o — cuando es null', async () => {
     const el = await LyricsReviewPanel({ songId: 'song-1' });
     document.body.appendChild(el);
-    const conf = el.querySelector('.conf');
-    expect(conf).not.toBeNull();
-    expect(conf.querySelector('.old').textContent).toBe('y en la noche oscura brillara');
-    expect(conf.querySelector('.new').textContent).toBe('y en la noche oscura brillara tu luz');
-    const buttons = conf.querySelectorAll('button');
-    expect(buttons.length).toBe(3);
-    expect([...buttons].map((b) => b.textContent)).toEqual([
-      'Usar canónica',
-      'Mantener actual',
-      'Editar línea',
-    ]);
+    const confEls = el.querySelectorAll('.lrp__conf');
+    expect(confEls.length).toBe(3);
+    expect(confEls[0].textContent).toBe('84%');
+    expect(confEls[1].textContent).toBe('—');
   });
 
-  it('Aprobar letra está disabled cuando canApprove es false', async () => {
-    const el = await LyricsReviewPanel({ songId: 'song-1' });
-    document.body.appendChild(el);
-    const approveBtn = el.querySelector('.lrp__approve');
-    expect(approveBtn.disabled).toBe(true);
-    expect(approveBtn.textContent).toBe('Aprobar letra');
-  });
-
-  it('el header sticky muestra el contador de pendientes junto al pill de temperatura', async () => {
-    const el = await LyricsReviewPanel({ songId: 'song-1' });
-    document.body.appendChild(el);
-    const header = el.querySelector('.lrp__header');
-    const headerPending = header.querySelector('.lrp__header-pending');
-    const headerTemp = header.querySelector('.temp');
-    expect(headerPending).not.toBeNull();
-    // 1 conflicto + 1 vocalización sin decidir del fixture base.
-    expect(headerPending.textContent).toBe('2 pendientes');
-    expect(headerTemp.textContent).toBe('80%');
-  });
-
-  it('click en "Usar canónica" llama sendLyricsAction y habilita Aprobar al resolverse todo', async () => {
-    sendLyricsAction.mockResolvedValue(resolvedResult());
-    const el = await LyricsReviewPanel({ songId: 'song-1' });
-    document.body.appendChild(el);
-
-    const useCanonicalBtn = [...el.querySelectorAll('.conf button')].find(
-      (b) => b.textContent === 'Usar canónica',
+  it('(b) click en la tijera de sugerencia despacha splitLine', async () => {
+    getLyricsReview.mockResolvedValue(
+      pendingResult({ suggestions: [{ section: 0, line: 1, afterWords: [1] }] }),
     );
-    useCanonicalBtn.click();
-    await flush();
-
-    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
-      type: 'resolve',
-      section: 0,
-      line: 0,
-      choice: 'canonical',
-    });
-
-    const approveBtn = el.querySelector('.lrp__approve');
-    expect(approveBtn.disabled).toBe(false);
-  });
-
-  it('la tarjeta de vocalización tiene los botones Agregar/Descartar', async () => {
-    const el = await LyricsReviewPanel({ songId: 'song-1' });
-    document.body.appendChild(el);
-    const voc = el.querySelector('.voc');
-    expect(voc).not.toBeNull();
-    expect(voc.querySelector('.lab').textContent).toBe('LA AI ESCUCHÓ ADEMÁS');
-    const buttons = [...voc.querySelectorAll('button')].map((b) => b.textContent);
-    expect(buttons).toEqual(['Agregar como vocalización', 'Descartar']);
-  });
-
-  it('click en Aprobar letra llama approveLyrics y onApproved', async () => {
-    sendLyricsAction.mockResolvedValue(resolvedResult());
-    approveLyrics.mockResolvedValue({ success: true });
-    const onApproved = vi.fn();
-    const el = await LyricsReviewPanel({ songId: 'song-1', onApproved });
-    document.body.appendChild(el);
-
-    const useCanonicalBtn = [...el.querySelectorAll('.conf button')].find(
-      (b) => b.textContent === 'Usar canónica',
-    );
-    useCanonicalBtn.click();
-    await flush();
-
-    el.querySelector('.lrp__approve').click();
-    await flush();
-
-    expect(approveLyrics).toHaveBeenCalledWith('song-1');
-    expect(onApproved).toHaveBeenCalled();
-  });
-
-  it('escapa HTML de una línea con < & " — se renderiza como texto, no como markup', async () => {
-    const review = baseReview();
-    review.sections[0].lines[0].conflict = false;
-    review.sections[0].lines[0].text = '<script>alert("x")</script> & co';
-    getLyricsReview.mockResolvedValue({
-      review,
-      temperature: 1,
-      canApprove: true,
-      suggestions: [],
-    });
-
-    const el = await LyricsReviewPanel({ songId: 'song-1' });
-    document.body.appendChild(el);
-
-    expect(el.querySelector('script')).toBeNull();
-    const line = el.querySelector('.lrp__line');
-    expect(line.textContent).toBe('<script>alert("x")</script> & co');
-  });
-
-  it('click en el tijera de división llama sendLyricsAction con el payload exacto de splitLine', async () => {
-    const review = baseReview();
-    review.sections[0].lines[0].conflict = false;
-    review.sections[0].lines[0].text = 'una linea larga de prueba';
-    getLyricsReview.mockResolvedValue({
-      review,
-      temperature: 1,
-      canApprove: true,
-      suggestions: [{ section: 0, line: 0, afterWords: [1] }],
-    });
-    sendLyricsAction.mockResolvedValue({
-      review,
-      temperature: 1,
-      canApprove: true,
-    });
-
     const el = await LyricsReviewPanel({ songId: 'song-1' });
     document.body.appendChild(el);
 
@@ -228,26 +121,12 @@ describe('LyricsReviewPanel', () => {
     expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
       type: 'splitLine',
       section: 0,
-      line: 0,
+      line: 1,
       afterWord: 1,
     });
   });
 
-  it('click en "Unir con el siguiente renglón" llama sendLyricsAction con el payload exacto de mergeLines', async () => {
-    const review = baseReview();
-    review.sections[0].lines = [
-      { text: 'primer renglon', conflict: false, vocalization: false, score: 1, sources: {} },
-      { text: 'segundo renglon', conflict: false, vocalization: false, score: 1, sources: {} },
-    ];
-    review.vocalizations = [];
-    getLyricsReview.mockResolvedValue({
-      review,
-      temperature: 1,
-      canApprove: true,
-      suggestions: [],
-    });
-    sendLyricsAction.mockResolvedValue({ review, temperature: 1, canApprove: true });
-
+  it('(c) "Unir con el siguiente renglón" despacha mergeLines', async () => {
     const el = await LyricsReviewPanel({ songId: 'song-1' });
     document.body.appendChild(el);
 
@@ -263,52 +142,36 @@ describe('LyricsReviewPanel', () => {
     });
   });
 
-  it('"Agregar como vocalización" llama sendLyricsAction con el payload exacto de acceptVocalization', async () => {
-    sendLyricsAction.mockResolvedValue(resolvedResult());
+  it('(d) editar renglón: lápiz muestra un input, "Guardar" despacha editLine', async () => {
     const el = await LyricsReviewPanel({ songId: 'song-1' });
     document.body.appendChild(el);
 
-    el.querySelector('.lrp__voc-accept').click();
+    const editBtn = el.querySelector('.lrp__line-edit');
+    expect(editBtn).not.toBeNull();
+    editBtn.click();
+
+    const input = el.querySelector('.lrp__edit-input');
+    expect(input).not.toBeNull();
+    expect(input.value).toBe('y en la noche oscura brillara');
+    input.value = 'texto corregido';
+
+    const saveBtn = el.querySelector('.lrp__edit-save');
+    saveBtn.click();
     await flush();
 
     expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
-      type: 'acceptVocalization',
-      index: 0,
+      type: 'editLine',
       section: 0,
-      afterLine: 0,
+      line: 0,
+      text: 'texto corregido',
     });
   });
 
-  it('"Descartar" llama sendLyricsAction con el payload exacto de rejectVocalization', async () => {
-    sendLyricsAction.mockResolvedValue(resolvedResult());
-    const el = await LyricsReviewPanel({ songId: 'song-1' });
-    document.body.appendChild(el);
-
-    el.querySelector('.lrp__voc-reject').click();
-    await flush();
-
-    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
-      type: 'rejectVocalization',
-      index: 0,
-    });
-  });
-
-  it('cambiar el tipo de sección llama sendLyricsAction con el payload exacto de setSectionType', async () => {
-    const review = baseReview();
-    getLyricsReview.mockResolvedValue({
-      review,
-      temperature: 1,
-      canApprove: true,
-      suggestions: [],
-    });
-    sendLyricsAction.mockResolvedValue({ review, temperature: 1, canApprove: true });
-
+  it('(e) el select de tipo de sección despacha setSectionType', async () => {
     const el = await LyricsReviewPanel({ songId: 'song-1' });
     document.body.appendChild(el);
 
     const select = el.querySelector('.lrp__type-select');
-    expect(select).not.toBeNull();
-    expect(select.value).toBe('chorus');
     select.value = 'bridge';
     select.dispatchEvent(new Event('change'));
     await flush();
@@ -320,22 +183,184 @@ describe('LyricsReviewPanel', () => {
     });
   });
 
-  it('"Unir con la siguiente sección" solo aparece en secciones no-últimas y llama mergeSections', async () => {
-    const review = baseReview();
-    review.sections.push({
-      type: 'verse',
-      label: null,
-      temperature: 0.9,
-      lines: [{ text: 'otra linea', conflict: false, vocalization: false, score: 1, sources: {} }],
-    });
-    getLyricsReview.mockResolvedValue({
-      review,
-      temperature: 1,
-      canApprove: true,
-      suggestions: [],
-    });
-    sendLyricsAction.mockResolvedValue({ review, temperature: 1, canApprove: true });
+  it('(f) el botón de vocalización despacha toggleVocalization', async () => {
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
 
+    const vocBtn = el.querySelector('.lrp__line-voc');
+    expect(vocBtn).not.toBeNull();
+    vocBtn.click();
+    await flush();
+
+    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
+      type: 'toggleVocalization',
+      section: 0,
+      line: 0,
+    });
+  });
+
+  it('(g) mover abajo el último renglón de una sección cruza a la siguiente sección con toLine 0', async () => {
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    // Última línea de la sección 0 (índice 1) — segunda de sus dos filas.
+    const lastLineRow = el.querySelectorAll('[data-section="0"].lrp__line-row');
+    const downBtn = lastLineRow[lastLineRow.length - 1].querySelector('.lrp__line-down');
+    expect(downBtn.disabled).toBe(false);
+    downBtn.click();
+    await flush();
+
+    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
+      type: 'moveLine',
+      fromSection: 0,
+      fromLine: 1,
+      toSection: 1,
+      toLine: 0,
+    });
+  });
+
+  it('(g) mover arriba el primer renglón de una sección cruza a fin de la sección anterior', async () => {
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const firstLineOfSecondSection = el.querySelector('[data-section="1"].lrp__line-row');
+    const upBtn = firstLineOfSecondSection.querySelector('.lrp__line-up');
+    expect(upBtn.disabled).toBe(false);
+    upBtn.click();
+    await flush();
+
+    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
+      type: 'moveLine',
+      fromSection: 1,
+      fromLine: 0,
+      toSection: 0,
+      toLine: 2,
+    });
+  });
+
+  it('(g) mover abajo un renglón que no es el último de la sección se queda dentro de la misma sección', async () => {
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const rows = el.querySelectorAll('[data-section="0"].lrp__line-row');
+    const downBtn = rows[0].querySelector('.lrp__line-down');
+    downBtn.click();
+    await flush();
+
+    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
+      type: 'moveLine',
+      fromSection: 0,
+      fromLine: 0,
+      toSection: 0,
+      toLine: 1,
+    });
+  });
+
+  it('(g) el primer renglón de la primera sección no puede moverse arriba (botón deshabilitado)', async () => {
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const firstRow = el.querySelector('[data-section="0"].lrp__line-row');
+    const upBtn = firstRow.querySelector('.lrp__line-up');
+    expect(upBtn.disabled).toBe(true);
+  });
+
+  it('(h) borrar renglón despacha deleteLine tras confirmar', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const deleteBtn = el.querySelector('.lrp__line-delete');
+    deleteBtn.click();
+    await flush();
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
+      type: 'deleteLine',
+      section: 0,
+      line: 0,
+    });
+    confirmSpy.mockRestore();
+  });
+
+  it('(h) borrar renglón NO despacha nada si se cancela la confirmación', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    el.querySelector('.lrp__line-delete').click();
+    await flush();
+
+    expect(sendLyricsAction).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it('(i) "Aprobar letra" está habilitado exactamente cuando canApprove es true', async () => {
+    getLyricsReview.mockResolvedValue(pendingResult({ canApprove: false }));
+    let el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+    expect(el.querySelector('.lrp__approve').disabled).toBe(true);
+
+    document.body.innerHTML = '';
+    getLyricsReview.mockResolvedValue(pendingResult({ canApprove: true }));
+    el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+    expect(el.querySelector('.lrp__approve').disabled).toBe(false);
+  });
+
+  it('click en Aprobar letra llama approveLyrics y onApproved', async () => {
+    getLyricsReview.mockResolvedValue(pendingResult({ canApprove: true }));
+    approveLyrics.mockResolvedValue({ success: true });
+    const onApproved = vi.fn();
+    const el = await LyricsReviewPanel({ songId: 'song-1', onApproved });
+    document.body.appendChild(el);
+
+    el.querySelector('.lrp__approve').click();
+    await flush();
+
+    expect(approveLyrics).toHaveBeenCalledWith('song-1');
+    expect(onApproved).toHaveBeenCalled();
+  });
+
+  it('(j) no existen tarjetas .conf ni .voc en el DOM (contrato v1 eliminado)', async () => {
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+    expect(el.querySelector('.conf')).toBeNull();
+    expect(el.querySelector('.voc')).toBeNull();
+  });
+
+  it('marca la clase lrp__line--vocalization cuando el renglón es vocalización', async () => {
+    const review = baseReview();
+    review.sections[0].lines[0].vocalization = true;
+    getLyricsReview.mockResolvedValue(pendingResult());
+    getLyricsReview.mockResolvedValue({ review, canApprove: false, suggestions: [] });
+
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const firstRow = el.querySelector('[data-section="0"].lrp__line-row');
+    expect(firstRow.classList.contains('lrp__line--vocalization')).toBe(true);
+  });
+
+  it('renombrar sección: el input de label despacha renameSection on-change', async () => {
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const input = el.querySelector('.lrp__rename-input');
+    expect(input).not.toBeNull();
+    expect(input.placeholder).toBe('Nombre opcional');
+    input.value = 'Coro final';
+    input.dispatchEvent(new Event('change'));
+    await flush();
+
+    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
+      type: 'renameSection',
+      section: 0,
+      label: 'Coro final',
+    });
+  });
+
+  it('"Unir con la siguiente sección" solo aparece en secciones no-últimas y llama mergeSections', async () => {
     const el = await LyricsReviewPanel({ songId: 'song-1' });
     document.body.appendChild(el);
 
@@ -357,24 +382,11 @@ describe('LyricsReviewPanel', () => {
   });
 
   it('"Dividir aquí" aparece en cada línea no-última de la sección y llama splitSection', async () => {
-    const review = baseReview();
-    review.sections[0].lines = [
-      { text: 'primer renglon', conflict: false, vocalization: false, score: 1, sources: {} },
-      { text: 'segundo renglon', conflict: false, vocalization: false, score: 1, sources: {} },
-    ];
-    review.vocalizations = [];
-    getLyricsReview.mockResolvedValue({
-      review,
-      temperature: 1,
-      canApprove: true,
-      suggestions: [],
-    });
-    sendLyricsAction.mockResolvedValue({ review, temperature: 1, canApprove: true });
-
     const el = await LyricsReviewPanel({ songId: 'song-1' });
     document.body.appendChild(el);
 
     const splitBtns = el.querySelectorAll('.lrp__section-split');
+    // Sección 0 tiene 2 renglones -> 1 corte posible; sección 1 tiene 1 -> 0.
     expect(splitBtns.length).toBe(1);
 
     splitBtns[0].click();
@@ -388,21 +400,6 @@ describe('LyricsReviewPanel', () => {
   });
 
   it('doble click rápido en "Unir con la siguiente sección" no dispara doble llamada a sendLyricsAction', async () => {
-    const review = baseReview();
-    review.sections.push({
-      type: 'verse',
-      label: null,
-      temperature: 0.9,
-      lines: [{ text: 'otra linea', conflict: false, vocalization: false, score: 1, sources: {} }],
-    });
-    getLyricsReview.mockResolvedValue({
-      review,
-      temperature: 1,
-      canApprove: true,
-      suggestions: [],
-    });
-    sendLyricsAction.mockResolvedValue({ review, temperature: 1, canApprove: true });
-
     const el = await LyricsReviewPanel({ songId: 'song-1' });
     document.body.appendChild(el);
 
@@ -412,6 +409,19 @@ describe('LyricsReviewPanel', () => {
     await flush();
 
     expect(sendLyricsAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('escapa HTML de una línea con < & " — se renderiza como texto, no como markup', async () => {
+    const review = baseReview();
+    review.sections[0].lines[0].text = '<script>alert("x")</script> & co';
+    getLyricsReview.mockResolvedValue({ review, canApprove: true, suggestions: [] });
+
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    expect(el.querySelector('script')).toBeNull();
+    const lineEl = el.querySelector('.lrp__line');
+    expect(lineEl.textContent).toBe('<script>alert("x")</script> & co');
   });
 
   it('muestra un mensaje de error si falla la carga inicial, sin crashear', async () => {
@@ -424,5 +434,13 @@ describe('LyricsReviewPanel', () => {
     expect(errorEl).not.toBeNull();
     expect(errorEl.textContent).toBe('No se pudo cargar la revisión de letra');
     expect(el.querySelector('.lrp__approve')).toBeNull();
+  });
+
+  it('onData siempre emite conflictsCount 0 y structureWarning null (contrato v2)', async () => {
+    const onData = vi.fn();
+    const el = await LyricsReviewPanel({ songId: 'song-1', onData });
+    document.body.appendChild(el);
+
+    expect(onData).toHaveBeenCalledWith({ conflictsCount: 0, structureWarning: null });
   });
 });

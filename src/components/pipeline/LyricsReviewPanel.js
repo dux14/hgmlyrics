@@ -1,11 +1,14 @@
 /**
  * LyricsReviewPanel.js — UI del gate humano de letra (pipeline unificado,
- * plan C, task C3). Consume `api/songs/:id/pipeline/lyrics` (plan C1/C2): el
- * admin ve el diff de 3 fuentes (transcripción AI / letra DB / letra
- * canónica) por sección, resuelve conflictos, decide vocalizaciones, ajusta
- * fraseo (dividir/unir renglones) y aprueba. El plan D (fuera de este scope)
- * monta este panel en la vista admin del run — este módulo no se importa
- * desde main.js/app.js, queda como chunk lazy.
+ * contrato v2, Task 3 del plan de migración). Editor puro sobre la salida de
+ * la IA (transcripción + estructura, `buildReviewDoc`/`applyReviewAction` en
+ * api/_lib/pipeline/lyricsReview.js): sin diff de 3 fuentes, sin conflictos,
+ * sin temperatura — eso se eliminó en F2. El admin edita el documento
+ * (partir/unir/mover/borrar renglones, retipar/renombrar secciones, alternar
+ * vocalización) y aprueba. El pase visual (F5) es una fase posterior: este
+ * componente conserva a propósito el CSS/estilo actual del panel. El plan D
+ * (fuera de este scope) monta este panel en la vista admin del run — este
+ * módulo no se importa desde main.js/app.js, queda como chunk lazy.
  *
  * Factory async: `await LyricsReviewPanel({ songId, onApproved })` trae el
  * documento de revisión y devuelve el nodo ya pintado (sin estado de carga
@@ -43,21 +46,11 @@ function waitForCollapse(elm) {
   });
 }
 
-/** Cantidad de conflictos + vocalizaciones sin decidir del documento. */
-function pendingCount(review) {
-  const conflicts = review.sections.reduce(
-    (sum, s) => sum + s.lines.filter((l) => l.conflict).length,
-    0,
-  );
-  const undecidedVocalizations = review.vocalizations.filter((v) => v.accepted === null).length;
-  return conflicts + undecidedVocalizations;
-}
-
-/** Solo conflictos sin resolver (sin vocalizaciones) — Task 17: fuente del
- * resumen transversal de baja confianza, a diferencia de pendingCount que
- * también cuenta vocalizaciones para el contador del footer. */
-function unresolvedConflictsCount(review) {
-  return review.sections.reduce((sum, s) => sum + s.lines.filter((l) => l.conflict).length, 0);
+/** `Math.round(confidence*100)%`, o `—` sin confidence (renglón sin words
+ * alineadas — típico de vocalizaciones y ediciones manuales). */
+function confidenceLabel(confidence) {
+  if (typeof confidence !== 'number') return '—';
+  return `${Math.round(confidence * 100)}%`;
 }
 
 /** Marca de tijera inline en el texto de una línea, en cada punto sugerido de corte. */
@@ -76,25 +69,6 @@ function lineTextWithSplits(text, afterWords, disabled) {
   return html;
 }
 
-function conflictCardHtml(line, sIdx, lIdx, disabled) {
-  const hasCanonical = line.sources.canonical !== null && line.sources.canonical !== undefined;
-  const dis = disabled ? ' disabled' : '';
-  return `
-    <div class="conf" data-section="${sIdx}" data-line="${lIdx}">
-      <div class="old">${escapeHtml(line.sources.db)}</div>
-      <div class="new">${escapeHtml(line.sources.canonical ?? line.sources.trans ?? '')}</div>
-      <div class="conf__actions">
-        ${
-          hasCanonical
-            ? `<button type="button" class="btn lrp__resolve" data-choice="canonical"${dis}>Usar canónica</button>`
-            : ''
-        }
-        <button type="button" class="btn2 lrp__resolve" data-choice="db"${dis}>Mantener actual</button>
-        <button type="button" class="btn2 lrp__edit-start"${dis}>Editar línea</button>
-      </div>
-    </div>`;
-}
-
 /** Opciones del `<select>` de retipado de sección, en el orden de SECTION_TYPE_LABELS. */
 function sectionTypeOptionsHtml(currentType) {
   return Object.entries(SECTION_TYPE_LABELS)
@@ -105,36 +79,6 @@ function sectionTypeOptionsHtml(currentType) {
     .join('');
 }
 
-function vocalizationCardHtml(vocalization, vIdx, disabled) {
-  const dis = disabled ? ' disabled' : '';
-  return `
-    <div class="voc" data-index="${vIdx}">
-      <div class="lab">LA AI ESCUCHÓ ADEMÁS</div>
-      <div class="voc__text">${escapeHtml(vocalization.text)}</div>
-      <div class="voc__actions">
-        <button type="button" class="btn2 lrp__voc-accept"${dis}>Agregar como vocalización</button>
-        <button type="button" class="btn2 lrp__voc-reject"${dis}>Descartar</button>
-      </div>
-    </div>`;
-}
-
-/**
- * Índice de vocalizaciones pendientes por punto de anclaje ("sección:línea",
- * con línea -1 para "antes de cualquier línea de la sección 0").
- */
-function vocalizationsByAnchor(vocalizations) {
-  const byAnchor = new Map();
-  vocalizations.forEach((v, idx) => {
-    if (v.accepted !== null) return;
-    const section = v.anchorAfterLine?.section ?? 0;
-    const line = v.anchorAfterLine?.line ?? -1;
-    const key = `${section}:${line}`;
-    if (!byAnchor.has(key)) byAnchor.set(key, []);
-    byAnchor.get(key).push({ vocalization: v, index: idx });
-  });
-  return byAnchor;
-}
-
 /** Índice de sugerencias de división por "sección:línea". */
 function suggestionsByLine(suggestions) {
   const byLine = new Map();
@@ -142,30 +86,45 @@ function suggestionsByLine(suggestions) {
   return byLine;
 }
 
-/**
- * @param {{disabled: boolean, flash: {section:number, line:number}|null}} opts
- *   `disabled` bloquea los controles interactivos (acción en vuelo); `flash`
- *   marca con `.is-resolved` (motion) la línea recién resuelta, si cae en
- *   esta sección.
+/** Fila de un renglón: texto (con tijeras de sugerencia) + badge de
+ * confianza + botonera compacta (editar, vocalización, mover, borrar).
+ * `canMoveUp`/`canMoveDown` deshabilitan los extremos globales del
+ * documento (primer renglón de la primera sección, último de la última) —
+ * dentro de eso `moveLine` siempre tiene un destino válido, cruce de
+ * sección incluido (ver bind()).
  */
-function sectionHtml(section, sIdx, byAnchor, byLine, { disabled, flash, isLast } = {}) {
+function lineRowHtml(line, sIdx, lIdx, afterWords, { disabled, canMoveUp, canMoveDown }) {
+  const dis = disabled ? ' disabled' : '';
+  const vocClass = line.vocalization ? ' lrp__line--vocalization' : '';
+  return `
+    <div class="lrp__line-row${vocClass}" data-section="${sIdx}" data-line="${lIdx}">
+      <div class="lrp__line" data-section="${sIdx}" data-line="${lIdx}">${lineTextWithSplits(line.text, afterWords, disabled)}</div>
+      <span class="lrp__conf" title="Confianza de transcripción">${confidenceLabel(line.confidence)}</span>
+      <div class="lrp__line-actions">
+        <button type="button" class="btn2 lrp__line-edit" aria-label="Editar renglón"${dis}>${icon('pencil', { size: 14 })}</button>
+        <button type="button" class="btn2 lrp__line-voc${line.vocalization ? ' is-active' : ''}" aria-label="Alternar vocalización"${dis}>${icon('mic', { size: 14 })}</button>
+        <button type="button" class="btn2 lrp__line-up" aria-label="Mover arriba"${dis}${canMoveUp ? '' : ' disabled'}>${icon('chevron-up', { size: 14 })}</button>
+        <button type="button" class="btn2 lrp__line-down" aria-label="Mover abajo"${dis}${canMoveDown ? '' : ' disabled'}>${icon('chevron-down', { size: 14 })}</button>
+        <button type="button" class="btn2 lrp__line-delete" aria-label="Borrar renglón"${dis}>${icon('trash', { size: 14 })}</button>
+      </div>
+    </div>`;
+}
+
+/**
+ * @param {{disabled: boolean}} opts `disabled` bloquea los controles
+ *   interactivos (acción en vuelo).
+ */
+function sectionHtml(section, sIdx, sectionCount, byLine, { disabled, isLast } = {}) {
   const type = normalizeSectionType(section.type);
-  const anchoredHere = byAnchor.get(`${sIdx}:-1`) || [];
-  const topVocalizations = anchoredHere.map(({ vocalization, index }) =>
-    vocalizationCardHtml(vocalization, index, disabled),
-  );
   const dis = disabled ? ' disabled' : '';
 
   const linesHtml = section.lines
     .map((line, lIdx) => {
-      const isFlash = flash && flash.section === sIdx && flash.line === lIdx;
-      const lineHtml = line.conflict
-        ? conflictCardHtml(line, sIdx, lIdx, disabled)
-        : `<div class="lrp__line${isFlash ? ' is-resolved' : ''}" data-section="${sIdx}" data-line="${lIdx}">${lineTextWithSplits(line.text, byLine.get(`${sIdx}:${lIdx}`), disabled)}</div>`;
-      const anchored = byAnchor.get(`${sIdx}:${lIdx}`) || [];
-      const vocsHtml = anchored
-        .map(({ vocalization, index }) => vocalizationCardHtml(vocalization, index, disabled))
-        .join('');
+      const lineRow = lineRowHtml(line, sIdx, lIdx, byLine.get(`${sIdx}:${lIdx}`), {
+        disabled,
+        canMoveUp: sIdx > 0 || lIdx > 0,
+        canMoveDown: !isLast || lIdx < section.lines.length - 1,
+      });
       const mergeHtml =
         lIdx < section.lines.length - 1
           ? `<button type="button" class="lrp__merge" data-section="${sIdx}" data-line="${lIdx}"${dis}>Unir con el siguiente renglón</button>`
@@ -174,7 +133,7 @@ function sectionHtml(section, sIdx, byAnchor, byLine, { disabled, flash, isLast 
         lIdx < section.lines.length - 1
           ? `<button type="button" class="btn2 lrp__section-split" data-section="${sIdx}" data-line="${lIdx}"${dis}>Dividir aquí</button>`
           : '';
-      return `${lineHtml}${vocsHtml}${mergeHtml}${sectionSplitHtml}`;
+      return `${lineRow}${mergeHtml}${sectionSplitHtml}`;
     })
     .join('');
 
@@ -188,9 +147,9 @@ function sectionHtml(section, sIdx, byAnchor, byLine, { disabled, flash, isLast 
         <select class="lrp__label lrp__type-select section-${type}" data-section="${sIdx}" aria-label="Tipo de sección"${dis}>
           ${sectionTypeOptionsHtml(type)}
         </select>
+        <input type="text" class="lrp__rename-input" data-section="${sIdx}" value="${escapeHtml(section.label ?? '')}" placeholder="Nombre opcional" aria-label="Nombre de la sección"${dis} />
         ${mergeSectionHtml}
       </div>
-      ${topVocalizations.join('')}
       ${linesHtml}
     </div>`;
 }
@@ -212,13 +171,6 @@ export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
     return el;
   }
 
-  // Coordenadas {section, line} de la línea a resaltar con el flash
-  // teal-soft 400ms en el PRÓXIMO render (se consume una sola vez, ver
-  // render()). Solo resolve/acceptVocalization la fijan: son las únicas
-  // acciones que "resuelven una tarjeta" según el spec de motion —
-  // splitLine/mergeLines/rejectVocalization no llevan flash.
-  let pendingFlash = null;
-
   /**
    * Lock instantáneo de los controles interactivos, sin esperar al render()
    * final: mientras hay un PUT/POST en vuelo (o corriendo la animación de
@@ -229,7 +181,7 @@ export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
    */
   function lockControls() {
     el.querySelectorAll(
-      '.lrp__resolve, .lrp__edit-start, .lrp__edit-save, .lrp__edit-cancel, .lrp__split, .lrp__merge, .lrp__voc-accept, .lrp__voc-reject, .lrp__approve, .lrp__type-select, .lrp__section-merge, .lrp__section-split',
+      '.lrp__line-edit, .lrp__edit-save, .lrp__edit-cancel, .lrp__line-voc, .lrp__line-up, .lrp__line-down, .lrp__line-delete, .lrp__split, .lrp__merge, .lrp__approve, .lrp__type-select, .lrp__rename-input, .lrp__section-merge, .lrp__section-split',
     ).forEach((btn) => {
       btn.disabled = true;
     });
@@ -240,9 +192,7 @@ export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
    * aprobación: el admin nunca queda viendo un estado potencialmente viejo
    * sin más salida que recargar la página (mismo criterio que el CAS del
    * backend — si la acción falló porque el run ya no está en
-   * awaiting_lyrics, esto lo refleja). También resuelve la staleness de
-   * índices de startEdit: tras un resync, el documento en memoria vuelve a
-   * estar al día.
+   * awaiting_lyrics, esto lo refleja).
    */
   async function resync() {
     try {
@@ -254,15 +204,13 @@ export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
         type: 'error',
       });
     }
-    pendingFlash = null;
     render();
   }
 
-  async function performAction(action, flashKey) {
+  async function performAction(action) {
     try {
       const result = await sendLyricsAction(songId, action);
       state = { ...state, ...result, busy: false };
-      pendingFlash = flashKey;
       render();
     } catch (err) {
       showToast(err.message || 'No se pudo aplicar el cambio', { type: 'error' });
@@ -272,23 +220,22 @@ export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
 
   /**
    * Punto de entrada único de toda acción de edición: guarda de
-   * concurrencia (`state.busy`), lock instantáneo de controles y — si hay
-   * `cardEl` (tarjeta de conflicto o vocalización) y reduce-motion no está
-   * activo — colapso clip-path+fade 200ms de esa tarjeta antes de pintar el
-   * resultado (spec motion). Sin `cardEl` (splitLine/mergeLines: no son
-   * "tarjetas" que se resuelven) va directo a la acción, sin animar.
+   * concurrencia (`state.busy`) y lock instantáneo de controles antes del
+   * PUT. `rowEl` (fila de renglón que se está editando/borrando) anima un
+   * colapso clip-path+fade 200ms antes de pintar el resultado, si
+   * reduce-motion no está activo — mismo criterio que v1.
    * @param {object} action
-   * @param {{cardEl?: HTMLElement|null, flashKey?: {section:number, line:number}|null}} [opts]
+   * @param {{rowEl?: HTMLElement|null}} [opts]
    */
-  async function runAction(action, { cardEl = null, flashKey = null } = {}) {
+  async function runAction(action, { rowEl = null } = {}) {
     if (state.busy) return;
     state.busy = true;
     lockControls();
-    if (cardEl && !reduceMotion()) {
-      cardEl.classList.add('is-resolving');
-      await waitForCollapse(cardEl);
+    if (rowEl && !reduceMotion()) {
+      rowEl.classList.add('is-resolving');
+      await waitForCollapse(rowEl);
     }
-    await performAction(action, flashKey);
+    await performAction(action);
   }
 
   async function handleApprove() {
@@ -306,44 +253,49 @@ export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
     }
   }
 
-  function startEdit(confEl) {
+  /** Reemplaza el texto de la fila por un input editable + Guardar/Cancelar. */
+  function startEditLine(rowEl) {
     if (state.busy) return;
-    const sIdx = Number(confEl.dataset.section);
-    const lIdx = Number(confEl.dataset.line);
+    const sIdx = Number(rowEl.dataset.section);
+    const lIdx = Number(rowEl.dataset.line);
     const line = state.review.sections[sIdx].lines[lIdx];
-    const actions = confEl.querySelector('.conf__actions');
-    actions.innerHTML = `
-      <input type="text" class="lrp__edit-input" value="${escapeHtml(line.sources.db)}" aria-label="Texto editado de la línea" />
+    const lineEl = rowEl.querySelector('.lrp__line');
+    lineEl.innerHTML = `
+      <input type="text" class="lrp__edit-input" value="${escapeHtml(line.text)}" aria-label="Texto editado del renglón" />
       <button type="button" class="btn lrp__edit-save">Guardar</button>
       <button type="button" class="btn2 lrp__edit-cancel">Cancelar</button>`;
-    actions.querySelector('.lrp__edit-cancel').addEventListener('click', () => render());
-    actions.querySelector('.lrp__edit-save').addEventListener('click', () => {
-      const text = actions.querySelector('.lrp__edit-input').value;
+    lineEl.querySelector('.lrp__edit-cancel').addEventListener('click', () => render());
+    lineEl.querySelector('.lrp__edit-save').addEventListener('click', () => {
+      const text = lineEl.querySelector('.lrp__edit-input').value;
       if (!text.trim()) return;
-      runAction(
-        { type: 'resolve', section: sIdx, line: lIdx, choice: 'edit', text },
-        { cardEl: confEl, flashKey: { section: sIdx, line: lIdx } },
-      );
+      runAction({ type: 'editLine', section: sIdx, line: lIdx, text }, { rowEl });
     });
   }
 
+  /** Payload de moveLine para "mover arriba" — cruza a la sección anterior
+   * (al final de ella) cuando el renglón ya es el primero de la suya. */
+  function moveUpAction(sIdx, lIdx) {
+    if (lIdx > 0) return { type: 'moveLine', fromSection: sIdx, fromLine: lIdx, toSection: sIdx, toLine: lIdx - 1 };
+    const prevSection = state.review.sections[sIdx - 1];
+    return {
+      type: 'moveLine',
+      fromSection: sIdx,
+      fromLine: lIdx,
+      toSection: sIdx - 1,
+      toLine: prevSection.lines.length,
+    };
+  }
+
+  /** Payload de moveLine para "mover abajo" — cruza a la siguiente sección
+   * (al principio de ella) cuando el renglón ya es el último de la suya. */
+  function moveDownAction(sIdx, lIdx, sectionLen) {
+    if (lIdx < sectionLen - 1) {
+      return { type: 'moveLine', fromSection: sIdx, fromLine: lIdx, toSection: sIdx, toLine: lIdx + 1 };
+    }
+    return { type: 'moveLine', fromSection: sIdx, fromLine: lIdx, toSection: sIdx + 1, toLine: 0 };
+  }
+
   function bind() {
-    el.querySelectorAll('.lrp__resolve').forEach((btn) =>
-      btn.addEventListener('click', () => {
-        const conf = btn.closest('.conf');
-        const sIdx = Number(conf.dataset.section);
-        const lIdx = Number(conf.dataset.line);
-        runAction(
-          { type: 'resolve', section: sIdx, line: lIdx, choice: btn.dataset.choice },
-          { cardEl: conf, flashKey: { section: sIdx, line: lIdx } },
-        );
-      }),
-    );
-
-    el.querySelectorAll('.lrp__edit-start').forEach((btn) =>
-      btn.addEventListener('click', () => startEdit(btn.closest('.conf'))),
-    );
-
     el.querySelectorAll('.lrp__split').forEach((btn) =>
       btn.addEventListener('click', () => {
         const lineEl = btn.closest('.lrp__line');
@@ -366,24 +318,36 @@ export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
       ),
     );
 
-    el.querySelectorAll('.voc').forEach((vocEl) => {
-      const idx = Number(vocEl.dataset.index);
-      const vocalization = state.review.vocalizations[idx];
-      const section = vocalization.anchorAfterLine?.section ?? 0;
-      const afterLine = vocalization.anchorAfterLine?.line ?? -1;
-      vocEl
-        .querySelector('.lrp__voc-accept')
+    el.querySelectorAll('.lrp__line-row').forEach((rowEl) => {
+      const sIdx = Number(rowEl.dataset.section);
+      const lIdx = Number(rowEl.dataset.line);
+
+      rowEl
+        .querySelector('.lrp__line-edit')
+        .addEventListener('click', () => startEditLine(rowEl));
+
+      rowEl.querySelector('.lrp__line-voc').addEventListener('click', () =>
+        runAction({ type: 'toggleVocalization', section: sIdx, line: lIdx }, { rowEl }),
+      );
+
+      // El atributo `disabled` (extremos globales del documento, o acción en
+      // vuelo) ya bloquea el click a nivel de browser/jsdom: el listener se
+      // asocia igual, mismo patrón que el resto de los controles del panel.
+      rowEl
+        .querySelector('.lrp__line-up')
+        .addEventListener('click', () => runAction(moveUpAction(sIdx, lIdx), { rowEl }));
+
+      const sectionLen = state.review.sections[sIdx].lines.length;
+      rowEl
+        .querySelector('.lrp__line-down')
         .addEventListener('click', () =>
-          runAction(
-            { type: 'acceptVocalization', index: idx, section, afterLine },
-            { cardEl: vocEl, flashKey: { section, line: afterLine + 1 } },
-          ),
+          runAction(moveDownAction(sIdx, lIdx, sectionLen), { rowEl }),
         );
-      vocEl
-        .querySelector('.lrp__voc-reject')
-        .addEventListener('click', () =>
-          runAction({ type: 'rejectVocalization', index: idx }, { cardEl: vocEl }),
-        );
+
+      rowEl.querySelector('.lrp__line-delete').addEventListener('click', () => {
+        if (!window.confirm('¿Borrar este renglón?')) return;
+        runAction({ type: 'deleteLine', section: sIdx, line: lIdx }, { rowEl });
+      });
     });
 
     el.querySelectorAll('.lrp__type-select').forEach((select) =>
@@ -392,6 +356,16 @@ export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
           type: 'setSectionType',
           section: Number(select.dataset.section),
           sectionType: normalizeSectionType(select.value),
+        }),
+      ),
+    );
+
+    el.querySelectorAll('.lrp__rename-input').forEach((input) =>
+      input.addEventListener('change', () =>
+        runAction({
+          type: 'renameSection',
+          section: Number(input.dataset.section),
+          label: input.value.trim() === '' ? null : input.value,
         }),
       ),
     );
@@ -418,59 +392,39 @@ export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
   /**
    * Restaura el foco tras cada render (el innerHTML completo se reemplaza
    * en cada pintura, así que sin esto el foco cae a <body> — regresión de
-   * teclado). Orden de prioridad, de más a menos "lo próximo que el admin
-   * querría hacer": siguiente conflicto pendiente > siguiente vocalización
-   * pendiente > botón Aprobar (si ya se puede aprobar) > header (contenedor
-   * con tabindex -1, último recurso cuando no queda nada interactivo
-   * relevante — p.ej. recién montado con todo resuelto salvo Aprobar
-   * deshabilitado por una acción en vuelo).
+   * teclado). Orden de prioridad: primer renglón editable > Aprobar (si ya
+   * se puede aprobar) > header (contenedor con tabindex -1, último recurso).
    */
   function restoreFocus() {
     const target =
-      el.querySelector('.conf .lrp__resolve, .conf .btn2') ||
-      el.querySelector('.voc .lrp__voc-accept') ||
+      el.querySelector('.lrp__line-edit') ||
       (state.canApprove ? el.querySelector('.lrp__approve') : null) ||
       el.querySelector('.lrp__header');
     target?.focus();
   }
 
   function render() {
-    const byAnchor = vocalizationsByAnchor(state.review.vocalizations);
     const byLine = suggestionsByLine(state.suggestions || []);
-    const pending = pendingCount(state.review);
-    // Task 17: cada render refleja el documento más reciente (initial load,
-    // resync o acción exitosa) — se reenvía al resumen transversal del
-    // stepper aunque nada haya cambiado (idempotente en el receptor).
-    onData?.({
-      conflictsCount: unresolvedConflictsCount(state.review),
-      structureWarning: state.structureWarning ?? null,
-    });
+    // El contrato con ConfidenceSummary se mantiene hasta F5 (pase visual):
+    // el editor puro v2 no tiene conflictos ni advertencia de estructura.
+    onData?.({ conflictsCount: 0, structureWarning: null });
     const motion = reduceMotion() ? '' : ' lrp--motion';
     const disabled = state.busy;
-    const flash = pendingFlash;
-    pendingFlash = null;
 
     el.className = `lrp${motion}`;
     el.innerHTML = `
-      <div class="lrp__header" tabindex="-1">
-        <span class="lrp__header-pending${pending === 0 ? ' is-done' : ''}">${
-          pending === 0 ? 'Listo' : `${pending} pendiente${pending === 1 ? '' : 's'}`
-        }</span>
-        <span class="temp lrp__temp">${Math.round(state.temperature * 100)}%</span>
-      </div>
+      <div class="lrp__header" tabindex="-1"></div>
       <div class="lrp__body">
         ${state.review.sections
           .map((s, i) =>
-            sectionHtml(s, i, byAnchor, byLine, {
+            sectionHtml(s, i, state.review.sections.length, byLine, {
               disabled,
-              flash,
               isLast: i === state.review.sections.length - 1,
             }),
           )
           .join('')}
       </div>
       <div class="lrp__footer">
-        <span class="lrp__pending">${pending} diferencia${pending === 1 ? '' : 's'} sin resolver</span>
         <button type="button" class="btn lrp__approve"${state.canApprove && !disabled ? '' : ' disabled'}>Aprobar letra</button>
       </div>`;
     bind();

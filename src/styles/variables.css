@@ -162,6 +162,7 @@
   --color-section-prechorus: var(--color-section-prechorus-d);
   --color-section-intro: var(--color-section-intro-d);
   --color-section-outro: var(--color-section-outro-d);
+  --color-section-neutral: var(--color-section-neutral-d);
 
   /* Semantic — no varían por tema */
   --color-success: #4caf50;
@@ -332,6 +333,7 @@
   --color-section-prechorus: var(--color-section-prechorus-l);
   --color-section-intro: var(--color-section-intro-l);
   --color-section-outro: var(--color-section-outro-l);
+  --color-section-neutral: var(--color-section-neutral-l);
 
   /* Alias — variante light */
   --color-brand: #01ccd9;
@@ -391,6 +393,7 @@
     --color-section-prechorus: var(--color-section-prechorus-l);
     --color-section-intro: var(--color-section-intro-l);
     --color-section-outro: var(--color-section-outro-l);
+    --color-section-neutral: var(--color-section-neutral-l);
 
     /* Alias — variante light */
     --color-brand: #01ccd9;

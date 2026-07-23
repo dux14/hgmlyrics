@@ -46,12 +46,12 @@ describe('StructureDetail (Task 16)', () => {
     expect(seg.textContent).toContain('01:15');
   });
 
-  it('usa el color de --color-section-verse para labels sin identidad propia (ej. instrumental)', () => {
+  it('usa el token neutro directo (--color-section-neutral) para labels sin identidad propia (ej. instrumental)', () => {
     const detail = createStructureDetail({ songId: SONG_ID });
     detail.update(buildRun([{ label: 'instrumental', startMs: 0, endMs: 1000 }]));
 
     const seg = detail.el.querySelector('.struct-seg');
-    expect(seg.getAttribute('style')).toContain('--color-section-verse');
+    expect(seg.getAttribute('style')).toContain('--color-section-neutral');
   });
 
   it('sin admin: no muestra editor (select ni botones de nudge)', () => {
@@ -135,6 +135,12 @@ describe('StructureDetail (Task 16)', () => {
     const detail = createStructureDetail({ songId: SONG_ID });
     detail.update(buildRun([{ label: 'verso', startMs: 0, endMs: 1000 }]));
     detail.destroy();
+    expect(detail.el.innerHTML).toBe('');
+
+    // El guard `destroyed` debe cortar el render: un update() tardío (ej.
+    // una promesa de refresh en vuelo tras el teardown) no debe repintar el
+    // nodo ya vaciado.
+    detail.update(buildRun([{ label: 'coro', startMs: 0, endMs: 1000 }]));
     expect(detail.el.innerHTML).toBe('');
   });
 });

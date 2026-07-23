@@ -10,7 +10,6 @@
  */
 import { escapeHtml } from '../../lib/escape.js';
 import { isAdmin } from '../../lib/authStore.js';
-import { normalizeSectionType } from '../../lib/sectionTypes.js';
 import { patchStructure } from '../../lib/pipelineApi.js';
 import { showToast } from '../../lib/toast.js';
 
@@ -27,6 +26,28 @@ const SONGFORMER_LABELS = [
   'silencio',
   'pre-coro',
 ];
+
+// Label de SongFormer -> slug de color de sección. Mapeo EXPLÍCITO (no
+// normalizeSectionType/sectionTypes.js): ese normalizador cae en 'verse'
+// para cualquier tipo que no reconoce (fallback pensado para datos de letra,
+// no para SongFormer), y 'instrumental'/'silencio' terminarían con el color
+// de verso por COINCIDENCIA (hoy ambos son neutros) en vez de por intención.
+// Acá 'instrumental'/'silencio' (y cualquier label inesperado) van directo a
+// 'neutral' (--color-section-neutral, review Task 16 Minor 1).
+const LABEL_TO_SECTION_SLUG = {
+  intro: 'intro',
+  verso: 'verse',
+  coro: 'chorus',
+  puente: 'bridge',
+  instrumental: 'neutral',
+  outro: 'outro',
+  silencio: 'neutral',
+  'pre-coro': 'prechorus',
+};
+
+function sectionColorSlug(label) {
+  return LABEL_TO_SECTION_SLUG[String(label || '').toLowerCase()] || 'neutral';
+}
 
 const NUDGE_MS = 1000;
 
@@ -109,11 +130,7 @@ export function createStructureDetail({ songId, onChanged }) {
 
     const timeline = segments
       .map((seg) => {
-        // normalizeSectionType cae a 'verse' para labels sin identidad
-        // visual propia (instrumental/silencio): --color-section-verse ya es
-        // un gris neutro (ver tokens.css), así que sirve de fallback NEUTRO
-        // sin inventar una var nueva.
-        const slug = normalizeSectionType(seg.label);
+        const slug = sectionColorSlug(seg.label);
         const grow = Math.max(seg.endMs - seg.startMs, 1);
         return `
           <div class="struct-seg" style="flex-grow:${grow}; --seg-color: var(--color-section-${slug})">

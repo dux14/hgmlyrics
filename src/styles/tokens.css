@@ -3,7 +3,7 @@
      (teal menta brillante = identidad Ambient Kinetic, usada byte a byte por
      los mockups F1–F4). F1a = rebranding intencional: las rampas hand-rolled de
      F0 (hue 195, apagadas) se reemplazan por las de Tailwind (hue ~182). ── */
-  --color-teal-50:  oklch(98.4% 0.014 180.72);
+  --color-teal-50: oklch(98.4% 0.014 180.72);
   --color-teal-100: oklch(95.3% 0.051 180.801);
   --color-teal-200: oklch(91% 0.096 180.426);
   --color-teal-300: oklch(85.5% 0.138 181.071);
@@ -17,7 +17,7 @@
 
   /* ── Violet (acento ambient) — rampa OFICIAL Tailwind v4.3.1. Ancla 400 =
      #a78bfa (galería); 300 = #c4b5fd (accent-2 claro, antes pendiente). ── */
-  --color-violet-50:  oklch(96.9% 0.016 293.756);
+  --color-violet-50: oklch(96.9% 0.016 293.756);
   --color-violet-100: oklch(94.3% 0.029 294.588);
   --color-violet-200: oklch(89.4% 0.057 293.283);
   --color-violet-300: oklch(81.1% 0.111 293.571);
@@ -31,7 +31,7 @@
 
   /* ── Amber (acción) — rampa OFICIAL Tailwind v4.3.1. Ancla 500 = #f59e0b
      (galería). Ámbar SOLO en acciones (regla de marca). ── */
-  --color-amber-50:  oklch(98.7% 0.022 95.277);
+  --color-amber-50: oklch(98.7% 0.022 95.277);
   --color-amber-100: oklch(96.2% 0.059 95.617);
   --color-amber-200: oklch(92.4% 0.12 95.746);
   --color-amber-300: oklch(87.9% 0.169 91.605);
@@ -44,48 +44,55 @@
   --color-amber-950: oklch(27.9% 0.077 45.635);
 
   /* ── Neutral — H 255, C casi-cero ── */
-  --color-neutral-50:  oklch(98% 0.004 255);
+  --color-neutral-50: oklch(98% 0.004 255);
   --color-neutral-100: oklch(95% 0.005 255);
   --color-neutral-200: oklch(89% 0.006 255);
   --color-neutral-300: oklch(80% 0.008 255);
-  --color-neutral-400: oklch(68% 0.010 255);
+  --color-neutral-400: oklch(68% 0.01 255);
   --color-neutral-500: oklch(56% 0.012 255);
   --color-neutral-600: oklch(46% 0.012 255);
   --color-neutral-700: oklch(38% 0.011 255);
-  --color-neutral-800: oklch(28% 0.010 255);
-  --color-neutral-900: oklch(20% 0.010 255);
+  --color-neutral-800: oklch(28% 0.01 255);
+  --color-neutral-900: oklch(20% 0.01 255);
   --color-neutral-950: oklch(14% 0.012 255);
 
   /* ── Voces y acordes — valores ACTUALES exactos (no rampa) ── */
   /* light / dark */
-  --color-voice-soprano-l:   #c2185b;
-  --color-voice-soprano-d:   #f48fb1;
+  --color-voice-soprano-l: #c2185b;
+  --color-voice-soprano-d: #f48fb1;
   --color-voice-contralto-l: #6a1b9a;
   --color-voice-contralto-d: #ce93d8;
-  --color-voice-tenor-l:     #b58900;
-  --color-voice-tenor-d:     #ffe082;
-  --color-voice-bass-l:      #1565c0;
-  --color-voice-bass-d:      #90caf9;
-  --color-chord-l:           #2e7d32;
-  --color-chord-d:           #a5d6a7;
+  --color-voice-tenor-l: #b58900;
+  --color-voice-tenor-d: #ffe082;
+  --color-voice-bass-l: #1565c0;
+  --color-voice-bass-d: #90caf9;
+  --color-chord-l: #2e7d32;
+  --color-chord-d: #a5d6a7;
 
   /* ── Secciones de letra — identidad fija por TIPO (spec F1 D1 §3). Se
      reusan las rampas oklch ya definidas arriba, sin inventar hex nuevos. ── */
-  --color-section-verse-l:      var(--color-neutral-600);
-  --color-section-verse-d:      var(--color-neutral-400);
-  --color-section-chorus-l:     var(--color-teal-600);
-  --color-section-chorus-d:     var(--color-teal-400);
-  --color-section-bridge-l:     var(--color-violet-600);
-  --color-section-bridge-d:     var(--color-violet-400);
-  --color-section-prechorus-l:  var(--color-amber-600);
-  --color-section-prechorus-d:  var(--color-amber-400);
-  --color-section-intro-l:      var(--color-neutral-600);
-  --color-section-intro-d:      var(--color-neutral-400);
-  --color-section-outro-l:      var(--color-neutral-600);
-  --color-section-outro-d:      var(--color-neutral-400);
+  --color-section-verse-l: var(--color-neutral-600);
+  --color-section-verse-d: var(--color-neutral-400);
+  --color-section-chorus-l: var(--color-teal-600);
+  --color-section-chorus-d: var(--color-teal-400);
+  --color-section-bridge-l: var(--color-violet-600);
+  --color-section-bridge-d: var(--color-violet-400);
+  --color-section-prechorus-l: var(--color-amber-600);
+  --color-section-prechorus-d: var(--color-amber-400);
+  --color-section-intro-l: var(--color-neutral-600);
+  --color-section-intro-d: var(--color-neutral-400);
+  --color-section-outro-l: var(--color-neutral-600);
+  --color-section-outro-d: var(--color-neutral-400);
+  /* Fallback neutro DIRECTO (Task 16 review): para tipos sin identidad de
+     color propia (ej. instrumental/silencio de SongFormer). No reusar
+     --color-section-verse para esto -- ahí el neutro es una COINCIDENCIA
+     (verse también es neutro hoy), y un futuro cambio de color de verso
+     arrastraría a estos tipos por acoplamiento accidental. */
+  --color-section-neutral-l: var(--color-neutral-600);
+  --color-section-neutral-d: var(--color-neutral-400);
 
   /* ── Acentos de galería (decorativos, no-acción) — AUDIT-360 §5.1 ── */
-  --color-rose-300: #f9a8d4;   /* acento rosa usado por F2–F4 (chips, detalles) */
+  --color-rose-300: #f9a8d4; /* acento rosa usado por F2–F4 (chips, detalles) */
   /* violet claro de galería (#c4b5fd) = --color-violet-300 (rampa oficial). */
 }
 

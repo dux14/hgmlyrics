@@ -1,8 +1,8 @@
 // tests/pipelineLyricsStore.test.js
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { upsertPipelineLyrics, getPipelineLyrics } from '../api/_lib/pipeline/lyricsStore.js';
 
-// Fake minimo del template tag de postgres.js: captura strings+valores y
+// Fake mínimo del template tag de postgres.js: captura strings+valores y
 // devuelve lo programado. sql.json marca el valor (como el driver real).
 function fakeSql(rows = []) {
   const calls = [];

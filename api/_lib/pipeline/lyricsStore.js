@@ -1,4 +1,3 @@
-// api/_lib/pipeline/lyricsStore.js
 /**
  * lyricsStore.js — acceso a song_pipeline_lyrics (letra IA-independiente del
  * pipeline, spec 2026-07-23). Los helpers reciben el cliente postgres.js

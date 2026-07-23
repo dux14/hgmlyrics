@@ -1,25 +1,25 @@
 /**
  * lyricsReview.js — Dominio del gate humano de letra (doc v2, editor puro).
- * Ensambla el documento de revision SOLO desde la IA: transcripcion +
+ * Ensambla el documento de revisión SOLO desde la IA: transcripción +
  * segmentos de estructura (SongFormer). Sin `songs.sections`, sin letra
- * canonica, sin diff/conflictos/temperatura (esa maquinaria de reconciliacion
- * se elimino a proposito en F2, ver spec 2026-07-23). El admin edita el
+ * canónica, sin diff/conflictos/temperatura (esa maquinaria de reconciliación
+ * se eliminó a propósito en F2, ver spec 2026-07-23). El admin edita el
  * documento con `applyReviewAction` (partir/unir/mover/borrar renglones,
- * retipar/renombrar secciones, marcar respiro/vocalizacion, offset manual).
- * Dominio PURO: sin sql, sin fetch, sin Date.now. Patron hermano de state.js
+ * retipar/renombrar secciones, marcar respiro/vocalización, offset manual).
+ * Dominio PURO: sin sql, sin fetch, sin Date.now. Patrón hermano de state.js
  * y phrasing.js en este mismo directorio.
  */
 import { createHash } from 'node:crypto';
 import { suggestLineBreaks } from './phrasing.js';
 
-// Umbral de largo para el gate karaoke (Task 14): un renglon mas largo que
+// Umbral de largo para el gate karaoke (Task 14): un renglón más largo que
 // esto no cabe bien en el roll de letra sincronizada y se auto-parte.
 const KARAOKE_MAX_CHARS = 48;
 
-// Normalizacion minima de tipo de seccion, DUPLICADA a proposito (ver header
-// de src/lib/sectionTypes.js: la logica se duplica ahi mismo para que
-// ImmersiveView no dependa de SongView; misma razon aplica aca al reves,
-// api/_lib no debe acoplarse al arbol de src/). Solo lo que este modulo
+// Normalización mínima de tipo de sección, DUPLICADA a propósito (ver header
+// de src/lib/sectionTypes.js: la lógica se duplica ahí mismo para que
+// ImmersiveView no dependa de SongView; misma razón aplica acá al revés,
+// api/_lib no debe acoplarse al árbol de src/). Solo lo que este módulo
 // necesita: agrupar por tipo y validar/normalizar el tipo de setSectionType.
 const KNOWN_SECTION_TYPES = ['verse', 'chorus', 'bridge', 'prechorus', 'intro', 'outro'];
 const SECTION_TYPE_ALIASES = {
@@ -41,14 +41,14 @@ function round4(n) {
   return Math.round(n * 10000) / 10000;
 }
 
-// eqeqeq del repo no admite `!= null`; helper explicito para null/undefined.
+// eqeqeq del repo no admite `!= null`; helper explícito para null/undefined.
 // Exportado: lo reusa api/songs/[id]/pipeline/lyrics.js (evita duplicarlo).
 export function isNil(value) {
   return value === null || value === undefined;
 }
 
-// Entre los indices de corte candidatos (afterWord, 0-based), elige el que
-// deja el offset de caracter mas cercano a la mitad del texto del renglon.
+// Entre los índices de corte candidatos (afterWord, 0-based), elige el que
+// deja el offset de carácter más cercano a la mitad del texto del renglón.
 function closestToMiddle(candidateIndices, tokens, textLen) {
   const middle = textLen / 2;
   let best = candidateIndices[0];
@@ -66,29 +66,29 @@ function closestToMiddle(candidateIndices, tokens, textLen) {
 
 function requireSection(doc, sectionIdx) {
   const section = doc.sections[sectionIdx];
-  if (!section) throw new RangeError(`Seccion fuera de rango: ${sectionIdx}`);
+  if (!section) throw new RangeError(`Sección fuera de rango: ${sectionIdx}`);
   return section;
 }
 
 function requireLine(section, lineIdx) {
   const line = section.lines[lineIdx];
-  if (!line) throw new RangeError(`Renglon fuera de rango: ${lineIdx}`);
+  if (!line) throw new RangeError(`Renglón fuera de rango: ${lineIdx}`);
   return line;
 }
 
-// Los indices de accion (afterWord, etc.) se usan tanto como indice de array
-// (donde undefined/NaN/no-entero simplemente no calzan y ya revientan via
-// requireSection/Line) como en comparaciones aritmeticas (`< 0`, `>= len-1`)
-// que con undefined/NaN dan siempre `false` y DEJAN PASAR el valor invalido
-// — ahi hace falta esta guarda explicita.
+// Los índices de acción (afterWord, etc.) se usan tanto como índice de array
+// (donde undefined/NaN/no-entero simplemente no calzan y ya revientan vía
+// requireSection/Line) como en comparaciones aritméticas (`< 0`, `>= len-1`)
+// que con undefined/NaN dan siempre `false` y DEJAN PASAR el valor inválido
+// — ahí hace falta esta guarda explícita.
 function requireInt(value, name) {
-  if (!Number.isInteger(value)) throw new RangeError(`${name} invalido: ${value}`);
+  if (!Number.isInteger(value)) throw new RangeError(`${name} inválido: ${value}`);
   return value;
 }
 
 // Etiqueta ES normalizada (SongFormer, ver _LABEL_MAP de
-// modal/sections/songformer.py) -> tipo de seccion de LETRA. 'instrumental'
-// y 'silencio' no tienen equivalente lirico -- no generan seccion de letra.
+// modal/sections/songformer.py) -> tipo de sección de LETRA. 'instrumental'
+// y 'silencio' no tienen equivalente lírico -- no generan sección de letra.
 const STRUCTURE_LABEL_TO_SECTION_TYPE = {
   intro: 'intro',
   verso: 'verse',
@@ -121,19 +121,19 @@ function wordsByTransIndex(transLines, words) {
   return map;
 }
 
-// Umbral de confianza bajo el cual un renglon se marca vocalizacion
-// automatica (segmento sin palabras claras, spec 2026-07-23).
+// Umbral de confianza bajo el cual un renglón se marca vocalización
+// automática (segmento sin palabras claras, spec 2026-07-23).
 const VOCALIZATION_CONFIDENCE_THRESHOLD = 0.4;
 
-/** Promedio round4 del score por palabra; null sin scores numericos. */
+/** Promedio round4 del score por palabra; null sin scores numéricos. */
 function lineConfidence(words) {
   const scores = (words ?? []).map((w) => w.score).filter((s) => typeof s === 'number');
   if (scores.length === 0) return null;
   return round4(scores.reduce((a, b) => a + b, 0) / scores.length);
 }
 
-// Secciones liricas desde los segmentos SongFormer: solo labels mapeables
-// (instrumental/silencio no generan seccion de letra).
+// Secciones líricas desde los segmentos SongFormer: solo labels mapeables
+// (instrumental/silencio no generan sección de letra).
 function lyricSectionsFromSegments(structureSegments) {
   const sections = [];
   for (const seg of structureSegments ?? []) {
@@ -144,8 +144,8 @@ function lyricSectionsFromSegments(structureSegments) {
   return sections;
 }
 
-// Indice de la seccion con MAYOR solape temporal con [startMs, endMs]; sin
-// solape (el renglon cae en un tramo instrumental), la lirica mas CERCANA.
+// Índice de la sección con MAYOR solape temporal con [startMs, endMs]; sin
+// solape (el renglón cae en un tramo instrumental), la lírica más CERCANA.
 function bestSectionIndex(sections, startMs, endMs) {
   let best = -1;
   let bestOverlap = 0;
@@ -164,10 +164,21 @@ function bestSectionIndex(sections, startMs, endMs) {
   return nearest;
 }
 
+// Envelope temporal [startMs,endMs] de una sección desde sus renglones con
+// timing; si ninguno tiene timing usa el fallback (el envelope previo).
+function sectionEnvelope(lines, fallback) {
+  const timed = lines.filter((l) => l.startMs !== null && l.endMs !== null);
+  if (timed.length === 0) return { startMs: fallback.startMs, endMs: fallback.endMs };
+  return {
+    startMs: Math.min(...timed.map((l) => l.startMs)),
+    endMs: Math.max(...timed.map((l) => l.endMs)),
+  };
+}
+
 /**
- * Construye el documento de revision v2 SOLO desde la IA: secciones =
+ * Construye el documento de revisión v2 SOLO desde la IA: secciones =
  * segmentos SongFormer, renglones = transLines asignados por solape temporal.
- * Sin songs.sections, sin canonica, sin conflictos (spec 2026-07-23).
+ * Sin songs.sections, sin canónica, sin conflictos (spec 2026-07-23).
  * @param {{transcription: {transLines?: string[], words?: Array}, structureSegments?: Array}} args
  * @returns {object} doc v2 (ver plan de decisiones transversales)
  */
@@ -193,8 +204,8 @@ export function buildReviewDoc({ transcription, structureSegments = [] }) {
     const startMs = words.length ? words[0].startMs : null;
     const endMs = words.length ? words[words.length - 1].endMs : null;
     const confidence = lineConfidence(words);
-    // Sin word-timing no hay intervalo que solapar: hereda la seccion del
-    // renglon anterior (mantiene el orden temporal de transLines).
+    // Sin word-timing no hay intervalo que solapar: hereda la sección del
+    // renglón anterior (mantiene el orden temporal de transLines).
     const sIdx = startMs === null ? lastSectionIdx : bestSectionIndex(sections, startMs, endMs);
     lastSectionIdx = sIdx;
     sections[sIdx].lines.push({
@@ -214,8 +225,8 @@ export function buildReviewDoc({ transcription, structureSegments = [] }) {
   return autoSplitLongLines({ version: 2, sections });
 }
 
-// Parte una linea v2 en la palabra `afterWord` (0-based, ultima del primer
-// renglon), repartiendo las words y recalculando timing/confidence de cada
+// Parte una línea v2 en la palabra `afterWord` (0-based, última del primer
+// renglón), repartiendo las words y recalculando timing/confidence de cada
 // mitad. Words desalineadas con los tokens (texto editado a mano): ambas
 // mitades salen sin words (timing heredado nulo) — ausente es mejor que stale.
 function splitLineAtWord(line, afterWord) {
@@ -224,22 +235,30 @@ function splitLineAtWord(line, afterWord) {
     throw new RangeError(`afterWord fuera de rango: ${afterWord}`);
   }
   const aligned = Array.isArray(line.words) && line.words.length === tokens.length;
-  const mk = (text, words) => ({
-    text,
-    startMs: words.length ? words[0].startMs : null,
-    endMs: words.length ? words[words.length - 1].endMs : null,
-    words,
-    confidence: lineConfidence(words),
-    vocalization: line.vocalization,
-    breath: false,
-    manualStartMs: null,
-  });
+  const mk = (text, words) => {
+    const confidence = lineConfidence(words);
+    return {
+      text,
+      startMs: words.length ? words[0].startMs : null,
+      endMs: words.length ? words[words.length - 1].endMs : null,
+      words,
+      confidence,
+      // Vocalización se RE-DERIVA por mitad (no se hereda del padre): tras el
+      // corte cada renglón tiene su propio confidence y puede cruzar el
+      // umbral en distinto sentido que el original (spec 2026-07-23).
+      vocalization:
+        words.length === 0 ||
+        (confidence !== null && confidence < VOCALIZATION_CONFIDENCE_THRESHOLD),
+      breath: false,
+      manualStartMs: null,
+    };
+  };
   const first = mk(tokens.slice(0, afterWord + 1).join(' '), aligned ? line.words.slice(0, afterWord + 1) : []);
   const second = mk(tokens.slice(afterWord + 1).join(' '), aligned ? line.words.slice(afterWord + 1) : []);
   // El primero conserva el respiro/offset manual del original solo si aplica
-  // al inicio (manualStartMs ancla el ARRANQUE del renglon).
+  // al inicio (manualStartMs ancla el ARRANQUE del renglón).
   first.manualStartMs = line.manualStartMs;
-  second.breath = line.breath; // el respiro estaba DESPUES del renglon original
+  second.breath = line.breath; // el respiro estaba DESPUES del renglón original
   first.breath = false;
   return [first, second];
 }
@@ -264,7 +283,7 @@ function splitLineRecursive(line) {
 
 /**
  * Auto-parte renglones > KARAOKE_MAX_CHARS (doc v2: las words viven en cada
- * renglon, la correlacion ya no necesita mapa externo). Pura e idempotente.
+ * renglón, la correlación ya no necesita mapa externo). Pura e idempotente.
  */
 export function autoSplitLongLines(doc) {
   const next = structuredClone(doc);
@@ -274,14 +293,14 @@ export function autoSplitLongLines(doc) {
   return next;
 }
 
-/** Editor puro: aprobable con al menos un renglon en alguna seccion. */
+/** Editor puro: aprobable con al menos un renglón en alguna sección. */
 export function canApprove(doc) {
   return Array.isArray(doc?.sections) && doc.sections.some((s) => (s.lines ?? []).length > 0);
 }
 
 /**
  * Snapshot aprobado para el store song_pipeline_lyrics: las sections v2 tal
- * cual + hash sha256 deterministico (stableStringify se conserva de v1).
+ * cual + hash sha256 determinístico (stableStringify se conserva de v1).
  */
 export function approvedSnapshot(doc) {
   const sections = structuredClone(doc.sections);
@@ -290,19 +309,24 @@ export function approvedSnapshot(doc) {
 }
 
 /**
- * Aplica una accion de revision sobre el documento y devuelve un documento
- * NUEVO (no muta `doc`). Accion sobre un indice inexistente lanza RangeError.
- * @param {object} doc documento previo (de buildReviewDoc o de una accion anterior)
+ * Aplica una acción de revisión sobre el documento y devuelve un documento
+ * NUEVO (no muta `doc`). Acción sobre un índice inexistente lanza RangeError.
+ * @param {object} doc documento previo (de buildReviewDoc o de una acción anterior)
  * @param {object} action
  * @returns {object} documento nuevo
  */
 export function applyReviewAction(doc, action) {
   const next = structuredClone(doc);
   switch (action.type) {
+    // editLine cambia SOLO el texto: conserva words/timing/confidence/
+    // vocalización a propósito (una corrección menor no debe destruir el
+    // timing de karaoke por un typo). Re-derivar confidence/vocalización tras
+    // una edición mayor es decisión de F4 (resolución de fuente del karaoke),
+    // cuando exista el store; no se resuelve en F2.
     case 'editLine': {
       const line = requireLine(requireSection(next, action.section), action.line);
       if (typeof action.text !== 'string' || action.text.trim() === '') {
-        throw new RangeError(`text invalido: ${action.text}`);
+        throw new RangeError(`text inválido: ${action.text}`);
       }
       line.text = action.text;
       break;
@@ -358,7 +382,7 @@ export function applyReviewAction(doc, action) {
     case 'renameSection': {
       const section = requireSection(next, action.section);
       if (action.label !== null && typeof action.label !== 'string') {
-        throw new RangeError(`label invalido: ${action.label}`);
+        throw new RangeError(`label inválido: ${action.label}`);
       }
       section.label = action.label === null ? null : action.label.trim() || null;
       break;
@@ -381,31 +405,48 @@ export function applyReviewAction(doc, action) {
     case 'splitSection': {
       const section = requireSection(next, action.section);
       requireLine(section, action.afterLine);
-      // Ultima linea como corte dejaria la seccion nueva vacia: invalido.
+      // Ultima línea como corte dejaría la sección nueva vacía: inválido.
       if (action.afterLine === section.lines.length - 1) {
-        throw new RangeError(`afterLine deja la seccion nueva vacia: ${action.afterLine}`);
+        throw new RangeError(`afterLine deja la sección nueva vacía: ${action.afterLine}`);
       }
+      const origEnv = { startMs: section.startMs, endMs: section.endMs };
       const remainder = section.lines.splice(action.afterLine + 1);
-      const newSection = { type: section.type, label: section.label, lines: remainder };
-      next.sections.splice(action.section + 1, 0, newSection);
+      const firstEnv = sectionEnvelope(section.lines, origEnv);
+      section.startMs = firstEnv.startMs;
+      section.endMs = firstEnv.endMs;
+      const newEnv = sectionEnvelope(remainder, origEnv);
+      next.sections.splice(action.section + 1, 0, {
+        type: section.type,
+        label: section.label,
+        startMs: newEnv.startMs,
+        endMs: newEnv.endMs,
+        lines: remainder,
+      });
       break;
     }
     case 'mergeSections': {
       const section = requireSection(next, action.section);
       const nextSection = requireSection(next, action.section + 1);
+      const fallback = {
+        startMs: Math.min(section.startMs, nextSection.startMs),
+        endMs: Math.max(section.endMs, nextSection.endMs),
+      };
       section.lines.push(...nextSection.lines);
+      const env = sectionEnvelope(section.lines, fallback);
+      section.startMs = env.startMs;
+      section.endMs = env.endMs;
       next.sections.splice(action.section + 1, 1);
       break;
     }
     default:
-      throw new RangeError(`Accion de revision desconocida: ${action.type}`);
+      throw new RangeError(`Acción de revisión desconocida: ${action.type}`);
   }
   return next;
 }
 
-// F3: remover — el endpoint aun los importa; F3 migra el endpoint y estos
-// mueren junto con la maquinaria de reconciliacion/temperatura que
-// reemplazaba. Stubs minimos solo para no romper `pnpm build` (ver hazard
+// F3: remover — el endpoint aún los importa; F3 migra el endpoint y estos
+// mueren junto con la maquinaria de reconciliación/temperatura que
+// reemplazaba. Stubs mínimos solo para no romper `pnpm build` (ver hazard
 // documentado en el plan de F2).
 export function reviewTemperature() {
   return 1;

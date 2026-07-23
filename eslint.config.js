@@ -128,6 +128,7 @@ export default [
         KeyboardEvent: 'readonly',
         queueMicrotask: 'readonly',
         getComputedStyle: 'readonly',
+        structuredClone: 'readonly',
       },
     },
   },

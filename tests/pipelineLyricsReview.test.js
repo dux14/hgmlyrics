@@ -4,10 +4,9 @@ import {
   applyReviewAction,
   canApprove,
   approvedSnapshot,
-  autoSplitLongLines,
 } from '../api/_lib/pipeline/lyricsReview.js';
 
-// Transcripcion minima: transLines en orden temporal, words planas
+// Transcripción mínima: transLines en orden temporal, words planas
 // concatenadas en el mismo orden (shape real de align_app.py run_transcribe).
 function trans(lines) {
   // lines: [{text, words:[[startMs,endMs,score], ...]}]
@@ -36,7 +35,7 @@ describe('buildReviewDoc v2', () => {
       structureSegments: SEGS,
     });
     expect(doc.version).toBe(2);
-    expect(doc.sections.map((s) => s.type)).toEqual(['verse', 'chorus']); // instrumental NO genera seccion
+    expect(doc.sections.map((s) => s.type)).toEqual(['verse', 'chorus']); // instrumental NO genera sección
     expect(doc.sections[0].lines.map((l) => l.text)).toEqual(['hola mundo']);
     expect(doc.sections[1].lines.map((l) => l.text)).toEqual(['canto fuerte']);
     expect(doc.sections[0].startMs).toBe(0);
@@ -53,25 +52,25 @@ describe('buildReviewDoc v2', () => {
     expect(doc.sections[0].lines[0].confidence).toBe(0.75);
   });
 
-  it('renglon que cruza dos segmentos va al de MAYOR solape', () => {
+  it('renglón que cruza dos segmentos va al de MAYOR solape', () => {
     const doc = buildReviewDoc({
       transcription: trans([{ text: 'cruza aqui', words: [[9000, 9600, 0.9], [9700, 15000, 0.9]] }]),
       structureSegments: SEGS,
     });
     // solape verso = 1000ms, coro = 5000ms -> coro
     expect(doc.sections[1].lines).toHaveLength(1);
-    expect(doc.sections[0].lines).toHaveLength(0); // segmento sin renglones queda vacio
+    expect(doc.sections[0].lines).toHaveLength(0); // segmento sin renglones queda vacío
   });
 
-  it('renglon que solo solapa instrumental cae en la seccion lirica mas cercana', () => {
+  it('renglón que solo solapa instrumental cae en la sección lírica más cercana', () => {
     const doc = buildReviewDoc({
       transcription: trans([{ text: 'ad lib', words: [[21000, 21500, 0.9], [21600, 22000, 0.9]] }]),
       structureSegments: SEGS,
     });
-    expect(doc.sections[1].lines.map((l) => l.text)).toEqual(['ad lib']); // coro (endMs 20000) es la mas cercana
+    expect(doc.sections[1].lines.map((l) => l.text)).toEqual(['ad lib']); // coro (endMs 20000) es la más cercana
   });
 
-  it('renglon sin words hereda la seccion del renglon anterior, con timing null y vocalization', () => {
+  it('renglón sin words hereda la sección del renglón anterior, con timing null y vocalization', () => {
     const doc = buildReviewDoc({
       transcription: trans([
         { text: 'con timing', words: [[11000, 11900, 0.9], [12000, 12400, 0.9]] },
@@ -84,7 +83,7 @@ describe('buildReviewDoc v2', () => {
     expect(b).toMatchObject({ text: 'sin timing', startMs: null, endMs: null, confidence: null, vocalization: true });
   });
 
-  it('confidence < 0.4 marca vocalization automatica', () => {
+  it('confidence < 0.4 marca vocalization automática', () => {
     const doc = buildReviewDoc({
       transcription: trans([{ text: 'mmm ahh', words: [[0, 400, 0.2], [500, 900, 0.3]] }]),
       structureSegments: [SEGS[0]],
@@ -92,7 +91,7 @@ describe('buildReviewDoc v2', () => {
     expect(doc.sections[0].lines[0].vocalization).toBe(true);
   });
 
-  it('fallback sin SongFormer: una sola seccion verse con todos los renglones', () => {
+  it('fallback sin SongFormer: una sola sección verse con todos los renglones', () => {
     const doc = buildReviewDoc({
       transcription: trans([
         { text: 'uno', words: [[0, 500, 0.9]] },
@@ -121,10 +120,36 @@ describe('buildReviewDoc v2', () => {
     }
     expect(lines.flatMap((l) => l.words)).toHaveLength(tokens.length);
   });
+
+  it('auto-split re-deriva vocalization por mitad según el confidence de cada una', () => {
+    const tokens = ['alfa', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'iota'];
+    const text = tokens.join(' '); // > 48 chars -> se auto-parte
+    const words = tokens.map((_, i) => [i * 500, i * 500 + 400, i < 5 ? 0.9 : 0.1]);
+    const doc = buildReviewDoc({
+      transcription: trans([{ text, words }]),
+      structureSegments: [{ label: 'verso', startMs: 0, endMs: 60000 }],
+    });
+    const lines = doc.sections[0].lines;
+    const low = lines.find((l) => l.confidence !== null && l.confidence < 0.4);
+    expect(low).toBeTruthy();
+    expect(low.vocalization).toBe(true);
+  });
+
+  it('sin word-timing en toda la transcripción, los renglones caen en la primera sección y quedan vocalization', () => {
+    const doc = buildReviewDoc({
+      transcription: trans([
+        { text: 'uno', words: [] },
+        { text: 'dos', words: [] },
+      ]),
+      structureSegments: SEGS,
+    });
+    expect(doc.sections[0].lines.map((l) => l.text)).toEqual(['uno', 'dos']);
+    expect(doc.sections[0].lines.every((l) => l.vocalization)).toBe(true);
+  });
 });
 
 describe('canApprove v2 (editor puro)', () => {
-  it('true con al menos un renglon; false con doc vacio', () => {
+  it('true con al menos un renglón; false con doc vacío', () => {
     const doc = buildReviewDoc({
       transcription: trans([{ text: 'uno', words: [[0, 500, 0.9]] }]),
       structureSegments: [],
@@ -136,7 +161,7 @@ describe('canApprove v2 (editor puro)', () => {
 });
 
 describe('approvedSnapshot v2', () => {
-  it('devuelve las sections tal cual + hash sha256 deterministico', () => {
+  it('devuelve las sections tal cual + hash sha256 determinístico', () => {
     const doc = buildReviewDoc({
       transcription: trans([{ text: 'uno dos', words: [[0, 500, 0.9], [600, 900, 0.8]] }]),
       structureSegments: [],
@@ -167,7 +192,7 @@ describe('applyReviewAction v2', () => {
     expect(doc.sections[0].lines[0].text).toBe('uno dos');
   });
 
-  it('editLine con texto vacio lanza RangeError', () => {
+  it('editLine con texto vacío lanza RangeError', () => {
     expect(() => applyReviewAction(base(), { type: 'editLine', section: 0, line: 0, text: '  ' }))
       .toThrow(RangeError);
   });
@@ -187,7 +212,7 @@ describe('applyReviewAction v2', () => {
     expect(merged.endMs).toBe(1900);
   });
 
-  it('moveLine mueve un renglon entre secciones en la posicion pedida', () => {
+  it('moveLine mueve un renglón entre secciones en la posición pedida', () => {
     const next = applyReviewAction(base(), {
       type: 'moveLine', fromSection: 0, fromLine: 1, toSection: 1, toLine: 0,
     });
@@ -195,7 +220,19 @@ describe('applyReviewAction v2', () => {
     expect(next.sections[1].lines.map((l) => l.text)).toEqual(['tres cuatro', 'coro grande']);
   });
 
-  it('deleteLine elimina el renglon', () => {
+  it('moveLine dentro de la misma sección reordena los renglones', () => {
+    const doc = buildReviewDoc({
+      transcription: trans([
+        { text: 'a', words: [[0, 100, 0.9]] },
+        { text: 'b', words: [[200, 300, 0.9]] },
+      ]),
+      structureSegments: [SEGS[0]],
+    });
+    const next = applyReviewAction(doc, { type: 'moveLine', fromSection: 0, fromLine: 0, toSection: 0, toLine: 1 });
+    expect(next.sections[0].lines.map((l) => l.text)).toEqual(['b', 'a']);
+  });
+
+  it('deleteLine elimina el renglón', () => {
     const next = applyReviewAction(base(), { type: 'deleteLine', section: 0, line: 0 });
     expect(next.sections[0].lines.map((l) => l.text)).toEqual(['tres cuatro']);
   });
@@ -223,9 +260,32 @@ describe('applyReviewAction v2', () => {
     expect(next.sections[0].lines[0].manualStartMs).toBeNull();
   });
 
-  it('indices invalidos y acciones desconocidas lanzan RangeError', () => {
+  it('índices inválidos y acciones desconocidas lanzan RangeError', () => {
     expect(() => applyReviewAction(base(), { type: 'deleteLine', section: 9, line: 0 })).toThrow(RangeError);
     expect(() => applyReviewAction(base(), { type: 'moveLine', fromSection: 0, fromLine: 0, toSection: 9, toLine: 0 })).toThrow(RangeError);
     expect(() => applyReviewAction(base(), { type: 'resolve', section: 0, line: 0, choice: 'db' })).toThrow(RangeError);
+  });
+
+  it('splitSection y mergeSections mantienen startMs/endMs coherentes por sección', () => {
+    const doc = buildReviewDoc({
+      transcription: trans([
+        { text: 'uno', words: [[0, 500, 0.9]] },
+        { text: 'dos', words: [[1000, 1500, 0.9]] },
+        { text: 'tres', words: [[2000, 2500, 0.9]] },
+      ]),
+      structureSegments: [{ label: 'verso', startMs: 0, endMs: 30000 }],
+    });
+    const split = applyReviewAction(doc, { type: 'splitSection', section: 0, afterLine: 0 });
+    expect(split.sections).toHaveLength(2);
+    for (const s of split.sections) {
+      expect(typeof s.startMs).toBe('number');
+      expect(typeof s.endMs).toBe('number');
+    }
+    expect(split.sections[0].lines.map((l) => l.text)).toEqual(['uno']);
+    expect(split.sections[1].lines.map((l) => l.text)).toEqual(['dos', 'tres']);
+    expect(split.sections[1].endMs).toBe(2500);
+    const merged = applyReviewAction(split, { type: 'mergeSections', section: 0 });
+    expect(merged.sections).toHaveLength(1);
+    expect(merged.sections[0].endMs).toBe(2500);
   });
 });

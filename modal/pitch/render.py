@@ -132,4 +132,3 @@ def run_render(job_id, webhook, sign_upload_url, inbound_secret, analysis):
     except Exception as exc:
         post_webhook(webhook, job_id, "render", {"ok": False, "error": str(exc)[:400]})
         raise
-        raise

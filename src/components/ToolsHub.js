@@ -1,7 +1,7 @@
 /**
  * ToolsHub.js — Hub de Herramientas.
  *
- * 3 tiles tappables → Afinador · Recomendador · Estudio.
+ * 3 tiles tappables → Afinador · Recomendador · Separador rápido / Partitura rápida.
  * Iconos via helper icon() — sin emojis.
  */
 
@@ -32,8 +32,8 @@ const TOOLS = [
   },
   {
     id: 'estudio',
-    label: 'Estudio de pistas',
-    desc: 'Separa voces y descarga stems',
+    label: 'Separador rápido',
+    desc: 'Sin canción · se borra a las 48 horas',
     path: '/estudio',
     iconKey: 'layers',
     tone: 'amber',
@@ -42,8 +42,8 @@ const TOOLS = [
   },
   {
     id: 'partitura',
-    label: 'Partitura vocal',
-    desc: 'La nota de cada sílaba de la letra',
+    label: 'Partitura rápida',
+    desc: 'Sin canción · se borra a las 48 horas',
     path: '/partitura',
     iconKey: 'music',
     tone: 'rose',

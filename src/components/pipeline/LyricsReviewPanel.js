@@ -114,7 +114,7 @@ function lineRowHtml(line, sIdx, lIdx, afterWords, { disabled, canMoveUp, canMov
  * @param {{disabled: boolean}} opts `disabled` bloquea los controles
  *   interactivos (acción en vuelo).
  */
-function sectionHtml(section, sIdx, sectionCount, byLine, { disabled, isLast } = {}) {
+function sectionHtml(section, sIdx, byLine, { disabled, isLast } = {}) {
   const type = normalizeSectionType(section.type);
   const dis = disabled ? ' disabled' : '';
 
@@ -275,7 +275,15 @@ export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
   /** Payload de moveLine para "mover arriba" — cruza a la sección anterior
    * (al final de ella) cuando el renglón ya es el primero de la suya. */
   function moveUpAction(sIdx, lIdx) {
-    if (lIdx > 0) return { type: 'moveLine', fromSection: sIdx, fromLine: lIdx, toSection: sIdx, toLine: lIdx - 1 };
+    if (lIdx > 0) {
+      return {
+        type: 'moveLine',
+        fromSection: sIdx,
+        fromLine: lIdx,
+        toSection: sIdx,
+        toLine: lIdx - 1,
+      };
+    }
     const prevSection = state.review.sections[sIdx - 1];
     return {
       type: 'moveLine',
@@ -290,7 +298,13 @@ export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
    * (al principio de ella) cuando el renglón ya es el último de la suya. */
   function moveDownAction(sIdx, lIdx, sectionLen) {
     if (lIdx < sectionLen - 1) {
-      return { type: 'moveLine', fromSection: sIdx, fromLine: lIdx, toSection: sIdx, toLine: lIdx + 1 };
+      return {
+        type: 'moveLine',
+        fromSection: sIdx,
+        fromLine: lIdx,
+        toSection: sIdx,
+        toLine: lIdx + 1,
+      };
     }
     return { type: 'moveLine', fromSection: sIdx, fromLine: lIdx, toSection: sIdx + 1, toLine: 0 };
   }
@@ -322,13 +336,13 @@ export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
       const sIdx = Number(rowEl.dataset.section);
       const lIdx = Number(rowEl.dataset.line);
 
-      rowEl
-        .querySelector('.lrp__line-edit')
-        .addEventListener('click', () => startEditLine(rowEl));
+      rowEl.querySelector('.lrp__line-edit').addEventListener('click', () => startEditLine(rowEl));
 
-      rowEl.querySelector('.lrp__line-voc').addEventListener('click', () =>
-        runAction({ type: 'toggleVocalization', section: sIdx, line: lIdx }, { rowEl }),
-      );
+      rowEl
+        .querySelector('.lrp__line-voc')
+        .addEventListener('click', () =>
+          runAction({ type: 'toggleVocalization', section: sIdx, line: lIdx }, { rowEl }),
+        );
 
       // El atributo `disabled` (extremos globales del documento, o acción en
       // vuelo) ya bloquea el click a nivel de browser/jsdom: el listener se
@@ -365,7 +379,7 @@ export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
         runAction({
           type: 'renameSection',
           section: Number(input.dataset.section),
-          label: input.value.trim() === '' ? null : input.value,
+          label: input.value.trim() === '' ? null : input.value.trim(),
         }),
       ),
     );
@@ -417,7 +431,7 @@ export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
       <div class="lrp__body">
         ${state.review.sections
           .map((s, i) =>
-            sectionHtml(s, i, state.review.sections.length, byLine, {
+            sectionHtml(s, i, byLine, {
               disabled,
               isLast: i === state.review.sections.length - 1,
             }),

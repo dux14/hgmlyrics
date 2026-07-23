@@ -265,6 +265,15 @@ describe('LyricsReviewPanel', () => {
     expect(upBtn.disabled).toBe(true);
   });
 
+  it('(g) el último renglón de la última sección no puede moverse abajo (botón deshabilitado)', async () => {
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const lastLineRow = el.querySelectorAll('[data-section="1"].lrp__line-row');
+    const downBtn = lastLineRow[lastLineRow.length - 1].querySelector('.lrp__line-down');
+    expect(downBtn.disabled).toBe(true);
+  });
+
   it('(h) borrar renglón despacha deleteLine tras confirmar', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const el = await LyricsReviewPanel({ songId: 'song-1' });

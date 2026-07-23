@@ -291,12 +291,18 @@ describe('SyncFineTuning', () => {
 
     detail.el.querySelector('.lineRow__header').click();
     expect(detail.el.querySelector('.lineRow__editor')).toBeTruthy();
+    expect(detail.el.querySelector('.lineRow__label').textContent).toBe('Línea 1');
 
     song = { sections: [{ type: 'verse', lines: [{ text: 'Primero el cielo' }] }] };
     detail.syncSongText();
 
-    // Sigue expandida: el guard expandedI === null bloqueó el repintado.
+    // Sigue expandida: el guard expandedI === null bloqueó el repintado. El
+    // assert que realmente distingue "guard funcionó" de "guard ausente" es
+    // el del label: sin el guard, render() volvería a leer getSong() y
+    // pintaría el texto nuevo igual (con la línea expandida o no).
     expect(detail.el.querySelector('.lineRow__editor')).toBeTruthy();
+    expect(detail.el.querySelector('.lineRow__label').textContent).toBe('Línea 1');
+    expect(detail.el.querySelector('.lineRow__label').textContent).not.toBe('Primero el cielo');
 
     detail.destroy();
   });

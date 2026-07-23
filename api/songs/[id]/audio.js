@@ -31,8 +31,15 @@ async function getAudio(_req, res, songId) {
     res.status(200).json({ audio: null, timings: null });
     return;
   }
+  // Signing (red a storage) y lectura del store del pipeline (round-trip DB)
+  // son independientes entre si: en paralelo para no serializar dos idas de
+  // red en un endpoint caliente (cada carga de ImmersiveView/karaoke).
+  const [audioUrl, pipelineLyrics] = await Promise.all([
+    signSongAudioDownload(audio.storageKey),
+    getPipelineLyrics(sql, songId),
+  ]);
   const audioOut = {
-    url: await signSongAudioDownload(audio.storageKey),
+    url: audioUrl,
     // NUMERIC llega como string del driver pg; el contrato del GET es number
     // (Number.isFinite en el editor no coacciona strings, p. ej. el clamp de
     // la ultima linea en la correccion manual usa durationSec * 1000).
@@ -48,14 +55,13 @@ async function getAudio(_req, res, songId) {
   // canonica del karaoke cuando existe — texto y timing salen del store, no
   // de songs.sections. bpmDetected/beats siguen viniendo de
   // song_line_timings: el metronomo no cambia de fuente (F3).
-  const pipelineLyrics = await getPipelineLyrics(sql, songId);
   if (pipelineLyrics) {
     const flat = pipelineLyrics.sections.flatMap((s) => s.lines);
     const baseLines = timingLinesFromSections(pipelineLyrics.sections);
-    const lines = baseLines.map((l, k) => ({
+    const lines = baseLines.map((l) => ({
       ...l,
-      text: flat[k]?.text ?? null,
-      manual: flat[k]?.manualStartMs != null,
+      text: flat[l.i]?.text ?? null,
+      manual: flat[l.i]?.manualStartMs != null,
     }));
     res.status(200).json({
       audio: audioOut,

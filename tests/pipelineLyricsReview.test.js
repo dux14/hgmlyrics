@@ -1,8 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildReviewDoc, applyReviewAction, reviewTemperature, canApprove,
-  approvedSnapshot,
+  approvedSnapshot, autoSplitLongLines,
 } from '../api/_lib/pipeline/lyricsReview.js';
+
+// Fixture de scenario "con words": 14 palabras, gap de respiracion grande
+// (800ms) entre "siete" (idx 6) y "ocho" (idx 7) -- el resto de los gaps son
+// de 50ms (ritmo normal de habla), asi que la unica pausa candidata cae
+// cerca del medio del renglon (36 de 76 caracteres antes del espacio de
+// corte).
+function makeWordsWithPauseAt(tokens, pauseAfterIdx, pauseMs = 800) {
+  let t = 0;
+  return tokens.map((text, i) => {
+    const startMs = t;
+    const endMs = startMs + 200;
+    t = endMs + (i === pauseAfterIdx ? pauseMs : 50);
+    return { text, startMs, endMs };
+  });
+}
 
 const dbSections = [
   { type: 'chorus', lines: [
@@ -213,6 +228,166 @@ describe('applyReviewAction', () => {
   it('splitSection en la ultima linea (seccion nueva vacia) lanza RangeError', () => {
     expect(() => applyReviewAction(doc(), { type: 'splitSection', section: 0, afterLine: 1 }))
       .toThrow(RangeError);
+  });
+});
+
+describe('autoSplitLongLines', () => {
+  const longTokens = ['Uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete',
+    'ocho', 'nueve', 'diez', 'once', 'doce', 'trece', 'catorce'];
+  const longText = longTokens.join(' '); // 76 caracteres, > 48
+  const wordsWithPause = makeWordsWithPauseAt(longTokens, 6); // pausa tras "siete"
+
+  function docWithLine(line, { vocalizations = [] } = {}) {
+    return {
+      sections: [{ type: 'verse', label: 'Verso 1', lines: [line], temperature: 1 }],
+      vocalizations,
+      hasCanonical: false,
+      temperature: 1,
+    };
+  }
+
+  it('renglon largo con pausa entre palabras: parte en la pausa mas cercana al medio', () => {
+    const line = {
+      text: longText, conflict: false, vocalization: false, score: null,
+      sources: { db: longText, canonical: null, trans: longText },
+    };
+    const doc = docWithLine(line);
+    const out = autoSplitLongLines(doc, wordsWithPause);
+    expect(out.sections[0].lines).toHaveLength(2);
+    expect(out.sections[0].lines[0].text).toBe('Uno dos tres cuatro cinco seis siete');
+    expect(out.sections[0].lines[1].text).toBe('ocho nueve diez once doce trece catorce');
+    expect(out.sections[0].lines[0].text.length).toBeLessThan(48);
+    expect(out.sections[0].lines[1].text.length).toBeLessThan(48);
+  });
+
+  it('renglon largo sin words (solo canonica): corta en el espacio mas cercano al medio', () => {
+    const text = 'Esta es una linea muy larga que no tiene ninguna transcripcion asociada todavia';
+    const line = {
+      text, conflict: false, vocalization: false, score: null,
+      sources: { db: text, canonical: text, trans: null },
+    };
+    const doc = docWithLine(line);
+    const out = autoSplitLongLines(doc, []);
+    expect(out.sections[0].lines).toHaveLength(2);
+    expect(out.sections[0].lines[0].text).toBe('Esta es una linea muy larga que no tiene');
+    expect(out.sections[0].lines[1].text).toBe('ninguna transcripcion asociada todavia');
+  });
+
+  it('renglon corto (<=48 chars) queda intacto', () => {
+    const text = 'Nadie me ama como tu me amas de verdad'; // 39 caracteres
+    const line = {
+      text, conflict: false, vocalization: false, score: null,
+      sources: { db: text, canonical: null, trans: null },
+    };
+    const doc = docWithLine(line);
+    const out = autoSplitLongLines(doc, []);
+    expect(out.sections[0].lines).toHaveLength(1);
+    expect(out.sections[0].lines[0].text).toBe(text);
+  });
+
+  it('reparte chords/voiceRanges por offset al partir (reusa la mecanica de splitLine)', () => {
+    const line = {
+      text: longText,
+      conflict: false,
+      vocalization: false,
+      score: null,
+      sources: { db: longText, canonical: null, trans: longText },
+      chords: [{ ch: 'D', pos: 2 }, { ch: 'G', pos: 40 }],
+      voiceRanges: [{ start: 0, end: 5 }, { start: 40, end: 45 }],
+    };
+    const doc = docWithLine(line);
+    const out = autoSplitLongLines(doc, wordsWithPause);
+    const [first, second] = out.sections[0].lines;
+    // cutOffset = "Uno dos tres cuatro cinco seis siete".length + 1 = 37
+    expect(first.chords).toEqual([{ ch: 'D', pos: 2 }]);
+    expect(second.chords).toEqual([{ ch: 'G', pos: 3 }]); // 40 - 37
+    expect(first.voiceRanges).toEqual([{ start: 0, end: 5 }]);
+    expect(second.voiceRanges).toEqual([{ start: 3, end: 8 }]); // 40-37, 45-37
+  });
+
+  it('aplicar dos veces es idempotente: no re-parte los hijos ya cortos', () => {
+    const line = {
+      text: longText, conflict: false, vocalization: false, score: null,
+      sources: { db: longText, canonical: null, trans: longText },
+    };
+    const doc = docWithLine(line);
+    const once = autoSplitLongLines(doc, wordsWithPause);
+    const twice = autoSplitLongLines(once, wordsWithPause);
+    expect(twice).toEqual(once);
+  });
+
+  it('renglon muy largo con 2 pausas necesita 2 cortes (recursivo)', () => {
+    const tokens = [...longTokens, 'quince', 'dieciseis', 'diecisiete', 'dieciocho'];
+    const text = tokens.join(' '); // > 90 caracteres
+    // primera pausa tras "siete" (idx 6); segunda tras "trece" (idx 12).
+    const words = makeWordsWithPauseAt(tokens, 6);
+    for (let i = 13; i < words.length; i += 1) {
+      words[i] = { ...words[i], startMs: words[i].startMs + 800, endMs: words[i].endMs + 800 };
+    }
+    const line = {
+      text, conflict: false, vocalization: false, score: null,
+      sources: { db: text, canonical: null, trans: text },
+    };
+    const doc = docWithLine(line);
+    const out = autoSplitLongLines(doc, words);
+    expect(out.sections[0].lines.length).toBeGreaterThanOrEqual(2);
+    for (const l of out.sections[0].lines) {
+      expect(l.text.length).toBeLessThanOrEqual(48);
+    }
+    expect(out.sections[0].lines.map((l) => l.text).join(' ')).toBe(text);
+  });
+
+  it('una sola palabra sin espacios mas larga que 48 chars queda intacta (sin loop infinito)', () => {
+    const text = 'a'.repeat(60);
+    const line = {
+      text, conflict: false, vocalization: false, score: null,
+      sources: { db: text, canonical: null, trans: null },
+    };
+    const doc = docWithLine(line);
+    const out = autoSplitLongLines(doc, []);
+    expect(out.sections[0].lines).toHaveLength(1);
+    expect(out.sections[0].lines[0].text).toBe(text);
+  });
+
+  it('preserva orden de secciones y metadata (label/type) al partir', () => {
+    const doc = {
+      sections: [
+        { type: 'verse', label: 'Verso 1', lines: [{ text: 'corto', conflict: false, vocalization: false, score: null, sources: { db: 'corto', canonical: null, trans: null } }], temperature: 1 },
+        {
+          type: 'chorus',
+          label: 'Coro 1',
+          lines: [{
+            text: longText, conflict: false, vocalization: false, score: null,
+            sources: { db: longText, canonical: null, trans: longText },
+          }],
+          temperature: 1,
+        },
+      ],
+      vocalizations: [],
+      hasCanonical: false,
+      temperature: 1,
+    };
+    const out = autoSplitLongLines(doc, wordsWithPause);
+    expect(out.sections).toHaveLength(2);
+    expect(out.sections[0].type).toBe('verse');
+    expect(out.sections[0].lines).toHaveLength(1);
+    expect(out.sections[1].type).toBe('chorus');
+    expect(out.sections[1].label).toBe('Coro 1');
+    expect(out.sections[1].lines).toHaveLength(2);
+  });
+
+  it('buildReviewDoc llama autoSplitLongLines al final: parte renglones largos con match de transcripcion', () => {
+    const dbSectionsLong = [{ type: 'verse', lines: [{ text: longText }] }];
+    const transcriptionLong = {
+      text: longText,
+      words: wordsWithPause,
+      perLine: [{ transIndex: 0, dbIndex: 0, score: 1.0 }],
+      transLines: [longText],
+    };
+    const doc = buildReviewDoc({ dbSections: dbSectionsLong, canonical: null, transcription: transcriptionLong });
+    expect(doc.sections[0].lines).toHaveLength(2);
+    expect(doc.sections[0].lines[0].text).toBe('Uno dos tres cuatro cinco seis siete');
+    expect(doc.sections[0].lines[1].text).toBe('ocho nueve diez once doce trece catorce');
   });
 });
 

@@ -9,10 +9,15 @@
  * y phrasing.js en este mismo directorio.
  */
 import { createHash } from 'node:crypto';
+import { suggestLineBreaks } from './phrasing.js';
 
 // Score por defecto cuando una linea en conflicto no tiene score de trans
 // (p.ej. lineas nacidas de un splitLine, sin contraparte en perLine).
 const FALLBACK_CONFLICT_SCORE = 0.5;
+
+// Umbral de largo para el gate karaoke (Task 14): un renglon mas largo que
+// esto no cabe bien en el roll de letra sincronizada y se auto-parte.
+const KARAOKE_MAX_CHARS = 48;
 
 // Normalizacion minima de tipo de seccion, DUPLICADA a proposito (ver header
 // de src/lib/sectionTypes.js: la logica se duplica ahi mismo para que
@@ -146,6 +151,120 @@ function recomputeTemperatures(doc) {
   doc.temperature = count ? round4(sum / count) : 1;
 }
 
+function segmentKey(sectionIdx, lineIdx) {
+  return `${sectionIdx}-${lineIdx}`;
+}
+
+// Reconstruye, para cada linea del doc que tiene contraparte transcrita
+// (`line.sources.trans` no nulo), su tramo de `words` (timestamps por
+// palabra de TODA la cancion, en el mismo orden que produjo Modal). Camina
+// doc.sections + doc.vocalizations intercalados por `anchorAfterLine`
+// (mismo orden en que aparecieron originalmente en la transcripcion) para
+// que las vocalizaciones consuman su tramo de `words` y no corran el cursor
+// de las lineas siguientes. Lineas sin contraparte (sources.trans nulo) no
+// consumen nada -> no quedan en el mapa devuelto.
+function buildLineWordsMap(doc, words) {
+  const vocsByAnchor = new Map();
+  doc.vocalizations.forEach((v, idx) => {
+    const key = v.anchorAfterLine ? segmentKey(v.anchorAfterLine.section, v.anchorAfterLine.line) : 'start';
+    if (!vocsByAnchor.has(key)) vocsByAnchor.set(key, []);
+    vocsByAnchor.get(key).push(idx);
+  });
+
+  const map = new Map();
+  let cursor = 0;
+  const consume = (text) => {
+    const count = (text || '').split(/\s+/).filter(Boolean).length;
+    const slice = words.slice(cursor, cursor + count);
+    cursor += count;
+    return slice;
+  };
+
+  for (const idx of vocsByAnchor.get('start') ?? []) consume(doc.vocalizations[idx].text);
+  doc.sections.forEach((section, sIdx) => {
+    section.lines.forEach((line, lIdx) => {
+      const slice = consume(line.sources?.trans ?? '');
+      if (line.sources?.trans) map.set(segmentKey(sIdx, lIdx), slice);
+      for (const idx of vocsByAnchor.get(segmentKey(sIdx, lIdx)) ?? []) {
+        consume(doc.vocalizations[idx].text);
+      }
+    });
+  });
+  return map;
+}
+
+// Entre los indices de corte candidatos (afterWord, 0-based), elige el que
+// deja el offset de caracter mas cercano a la mitad del texto del renglon.
+function closestToMiddle(candidateIndices, tokens, textLen) {
+  const middle = textLen / 2;
+  let best = candidateIndices[0];
+  let bestDist = Infinity;
+  for (const i of candidateIndices) {
+    const offset = tokens.slice(0, i + 1).join(' ').length + 1;
+    const dist = Math.abs(offset - middle);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = i;
+    }
+  }
+  return best;
+}
+
+// Parte recursivamente una linea larga (> KARAOKE_MAX_CHARS) hasta que
+// todos sus hijos entren, o hasta que no quede ningun punto de corte valido
+// (una sola "palabra" sin espacios: se deja intacta, sin loop infinito).
+// `lineWords` son los timestamps por palabra de ESTA linea (si se conocen y
+// su cantidad calza con la cantidad de tokens de line.text) o undefined.
+function splitLineRecursive(line, lineWords) {
+  if (line.text.length <= KARAOKE_MAX_CHARS) return [line];
+  const tokens = line.text.split(/\s+/).filter(Boolean);
+  if (tokens.length < 2) return [line]; // sin espacio donde cortar
+
+  const wordsAligned = Array.isArray(lineWords) && lineWords.length === tokens.length;
+  let afterWord;
+  if (wordsAligned) {
+    // Criterio de pausa (respiracion), mismo helper que buildSuggestions.
+    const breaks = suggestLineBreaks(lineWords);
+    if (breaks.length > 0) afterWord = closestToMiddle(breaks, tokens, line.text.length);
+  }
+  if (afterWord === undefined) {
+    // Sin words (o sin pausa clara): corte en el espacio mas cercano al
+    // medio del renglon, nunca en medio de una palabra.
+    const allIndices = tokens.slice(0, -1).map((_, i) => i);
+    afterWord = closestToMiddle(allIndices, tokens, line.text.length);
+  }
+
+  const [first, second] = splitLineAtWord(line, afterWord);
+  const firstWords = wordsAligned ? lineWords.slice(0, afterWord + 1) : undefined;
+  const secondWords = wordsAligned ? lineWords.slice(afterWord + 1) : undefined;
+  return [...splitLineRecursive(first, firstWords), ...splitLineRecursive(second, secondWords)];
+}
+
+/**
+ * Auto-parte los renglones mas largos que KARAOKE_MAX_CHARS (Task 14, gate
+ * de letra karaoke): renglones muy largos no caben bien en el roll
+ * sincronizado. Doble criterio: con timestamps por palabra disponibles,
+ * corta en la pausa de respiracion mas cercana al medio del renglon (mismo
+ * criterio que buildSuggestions/phrasing.js); sin ellos, corta en el
+ * espacio mas cercano al medio. Recursiva (un renglon puede necesitar 2+
+ * cortes) e idempotente (renglones ya cortos no se tocan). Funcion PURA:
+ * no muta `doc`.
+ * @param {object} doc documento de buildReviewDoc
+ * @param {Array<{text:string, startMs:number, endMs:number}>} [words] timestamps por palabra de toda la cancion
+ * @returns {object} documento nuevo
+ */
+export function autoSplitLongLines(doc, words = []) {
+  const next = structuredClone(doc);
+  const lineWordsMap = buildLineWordsMap(next, words);
+  next.sections.forEach((section, sIdx) => {
+    section.lines = section.lines.flatMap(
+      (line, lIdx) => splitLineRecursive(line, lineWordsMap.get(segmentKey(sIdx, lIdx))),
+    );
+  });
+  recomputeTemperatures(next);
+  return next;
+}
+
 /**
  * Construye el documento de revision a partir de las 3 fuentes de un run.
  * @param {{dbSections: Array, canonical: {secciones: Array}|null,
@@ -234,8 +353,7 @@ export function buildReviewDoc({ dbSections, canonical, transcription }) {
   }
 
   const doc = { sections, vocalizations, hasCanonical: !isNil(canonical), temperature: 1 };
-  recomputeTemperatures(doc);
-  return doc;
+  return autoSplitLongLines(doc, transcription?.words ?? []);
 }
 
 function requireSection(doc, sectionIdx) {
@@ -324,6 +442,52 @@ function stripPositionalFields(line) {
   return base;
 }
 
+// Parte una linea en la palabra `afterWord` (0-based, ultima palabra que
+// queda en el primer renglon) y reparte chords/voiceRanges por offset de
+// caracter. Reusada por el case 'splitLine' de applyReviewAction (afterWord
+// elegido por el admin) y por autoSplitLongLines (afterWord elegido por
+// longitud+pausa). No valida que afterWord venga de una accion externa
+// (eso lo hace el llamador con requireInt); aca solo valida el rango contra
+// la cantidad de palabras.
+function splitLineAtWord(line, afterWord) {
+  const words = line.text.split(/\s+/).filter(Boolean);
+  // afterWord fuera de [0, len-2] dejaria un renglon vacio: invalido.
+  if (afterWord < 0 || afterWord >= words.length - 1) {
+    throw new RangeError(`afterWord fuera de rango: ${afterWord}`);
+  }
+  const first = words.slice(0, afterWord + 1).join(' ');
+  const second = words.slice(afterWord + 1).join(' ');
+  // Offset de corte en el texto: largo del prefijo + el separador (un
+  // espacio) usado para unir las palabras del primer renglon. chords y
+  // voiceRanges estan anclados por posicion de caracter en el texto
+  // ORIGINAL — hay que repartirlos segun ese corte, no copiarlos enteros
+  // a las dos mitades (eso invalidaria sus posiciones).
+  const cutOffset = first.length + 1;
+  const [chordsFirst, chordsSecond] = splitPositional(line.chords, cutOffset, ['pos']);
+  const [voiceRangesFirst, voiceRangesSecond] = splitPositional(
+    line.voiceRanges, cutOffset, ['start', 'end'],
+  );
+  // `groups` no tiene confirmado un unico campo de posicion como chords
+  // (`pos`) o voiceRanges (`start`/`end`): ante la duda, conservador —
+  // se queda entero en el primer renglon (no se duplica ni se pierde,
+  // pero tampoco se reubica a ciegas sin saber su shape).
+  const base = stripPositionalFields(line);
+  const firstLine = {
+    ...base,
+    text: first,
+    ...withOptionalField('chords', chordsFirst),
+    ...withOptionalField('voiceRanges', voiceRangesFirst),
+    ...withOptionalField('groups', line.groups),
+  };
+  const secondLine = {
+    ...base,
+    text: second,
+    ...withOptionalField('chords', chordsSecond),
+    ...withOptionalField('voiceRanges', voiceRangesSecond),
+  };
+  return [firstLine, secondLine];
+}
+
 /**
  * Aplica una accion de revision sobre el documento y devuelve un documento
  * NUEVO (no muta `doc`). Accion sobre un indice inexistente lanza RangeError.
@@ -355,44 +519,8 @@ export function applyReviewAction(doc, action) {
     case 'splitLine': {
       const section = requireSection(next, action.section);
       const line = requireLine(section, action.line);
-      const words = line.text.split(/\s+/).filter(Boolean);
       const afterWord = requireInt(action.afterWord, 'afterWord');
-      // afterWord es el indice (0-based) de la ultima palabra que queda en
-      // el primer renglon; el resto pasa al segundo. Fuera de [0, len-2]
-      // dejaria un renglon vacio: invalido.
-      if (afterWord < 0 || afterWord >= words.length - 1) {
-        throw new RangeError(`afterWord fuera de rango: ${afterWord}`);
-      }
-      const first = words.slice(0, afterWord + 1).join(' ');
-      const second = words.slice(afterWord + 1).join(' ');
-      // Offset de corte en el texto: largo del prefijo + el separador (un
-      // espacio) usado para unir las palabras del primer renglon. chords y
-      // voiceRanges estan anclados por posicion de caracter en el texto
-      // ORIGINAL — hay que repartirlos segun ese corte, no copiarlos enteros
-      // a las dos mitades (eso invalidaria sus posiciones).
-      const cutOffset = first.length + 1;
-      const [chordsFirst, chordsSecond] = splitPositional(line.chords, cutOffset, ['pos']);
-      const [voiceRangesFirst, voiceRangesSecond] = splitPositional(
-        line.voiceRanges, cutOffset, ['start', 'end'],
-      );
-      // `groups` no tiene confirmado un unico campo de posicion como chords
-      // (`pos`) o voiceRanges (`start`/`end`): ante la duda, conservador —
-      // se queda entero en el primer renglon (no se duplica ni se pierde,
-      // pero tampoco se reubica a ciegas sin saber su shape).
-      const base = stripPositionalFields(line);
-      const firstLine = {
-        ...base,
-        text: first,
-        ...withOptionalField('chords', chordsFirst),
-        ...withOptionalField('voiceRanges', voiceRangesFirst),
-        ...withOptionalField('groups', line.groups),
-      };
-      const secondLine = {
-        ...base,
-        text: second,
-        ...withOptionalField('chords', chordsSecond),
-        ...withOptionalField('voiceRanges', voiceRangesSecond),
-      };
+      const [firstLine, secondLine] = splitLineAtWord(line, afterWord);
       section.lines.splice(action.line, 1, firstLine, secondLine);
       break;
     }

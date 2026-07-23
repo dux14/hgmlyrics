@@ -12,12 +12,20 @@ vi.mock('@supabase/supabase-js', () => ({
 
 let sqlResponses = [];
 const sqlCalls = [];
+let beginCalls = 0;
 function sqlMock(strings, ...values) {
   if (!strings?.raw) return strings;
   sqlCalls.push({ text: strings.join('?').replace(/\s+/g, ' ').trim(), values });
   return Promise.resolve(sqlResponses.shift() ?? []);
 }
 sqlMock.json = (v) => v;
+// patchStructure usa sql.begin (FOR UPDATE) para el lost-update fix; el mock
+// no distingue tx boundaries (mismo patron que pipelineEndpoints.test.js),
+// solo cuenta invocaciones para verificar que el UPDATE ocurre dentro de la tx.
+sqlMock.begin = async (cb) => {
+  beginCalls += 1;
+  return cb(sqlMock);
+};
 vi.mock('../api/_lib/db.js', () => ({ default: sqlMock }));
 
 vi.mock('../api/_lib/auth.js', () => ({
@@ -60,6 +68,7 @@ beforeEach(() => {
   requireAdmin.mockResolvedValue({ id: 'admin-1' });
   sqlResponses = [];
   sqlCalls.length = 0;
+  beginCalls = 0;
 });
 
 describe('PATCH /api/songs/[id]/structure', () => {
@@ -149,5 +158,18 @@ describe('PATCH /api/songs/[id]/structure', () => {
     await handler(makeReq({ body: { segmentIndex: 1, startMs: 2500, endMs: 7500 } }), res);
     expect(res._status).toBe(200);
     expect(res._body.segments[1]).toEqual({ label: 'verso', startMs: 2500, endMs: 7500 });
+  });
+
+  it('lee y actualiza dentro de una transaccion con SELECT ... FOR UPDATE (evita lost-update entre PATCH concurrentes)', async () => {
+    sqlResponses.push([{ segments }]); // SELECT FOR UPDATE
+    sqlResponses.push({ count: 1 }); // UPDATE
+    const res = makeRes();
+    await handler(makeReq({ body: { segmentIndex: 1, label: 'pre-coro' } }), res);
+    expect(res._status).toBe(200);
+    expect(beginCalls).toBe(1);
+    const selectCall = sqlCalls.find((c) => c.text.startsWith('SELECT segments FROM song_structure'));
+    expect(selectCall.text).toMatch(/FOR UPDATE/);
+    const updateCall = sqlCalls.find((c) => c.text.includes('UPDATE song_structure'));
+    expect(updateCall).toBeDefined();
   });
 });

@@ -64,34 +64,45 @@ export function validateStructurePatch(body, segments) {
 async function patchStructure(req, res, songId) {
   await requireAdmin(req, sql);
 
-  const [row] = await sql`SELECT segments FROM song_structure WHERE song_id = ${songId}`;
-  if (!row) {
-    res.status(404).json({ error: 'Estructura no encontrada' });
+  // Lost-update fix (code review formal): SELECT + validacion + UPDATE en una
+  // sola tx con FOR UPDATE, mismo patron CAS que retry.js/lyrics.js. Sin esto,
+  // dos PATCH concurrentes sobre la misma cancion (aunque editen segmentos
+  // distintos) se pisaban -- el segundo UPDATE sobreescribia el array entero
+  // con su snapshot viejo, perdiendo la edicion del primero en silencio.
+  const result = await sql.begin(async (tx) => {
+    const [row] = await tx`SELECT segments FROM song_structure WHERE song_id = ${songId} FOR UPDATE`;
+    if (!row) {
+      return { status: 404, error: 'Estructura no encontrada' };
+    }
+    const segments = Array.isArray(row.segments) ? row.segments : [];
+
+    const err = validateStructurePatch(req.body ?? null, segments);
+    if (err) {
+      return { status: 400, error: err };
+    }
+
+    const { segmentIndex, label, startMs, endMs } = req.body;
+    const nextSegments = segments.map((seg, i) => (i === segmentIndex
+      ? {
+          ...seg,
+          ...(label !== undefined ? { label } : {}),
+          ...(startMs !== undefined ? { startMs } : {}),
+          ...(endMs !== undefined ? { endMs } : {}),
+        }
+      : seg));
+
+    await tx`
+      UPDATE song_structure SET segments = ${tx.json(nextSegments)}, updated_at = now()
+      WHERE song_id = ${songId}
+    `;
+    return { ok: true, segments: nextSegments };
+  });
+
+  if (!result.ok) {
+    res.status(result.status).json({ error: result.error });
     return;
   }
-  const segments = Array.isArray(row.segments) ? row.segments : [];
-
-  const err = validateStructurePatch(req.body ?? null, segments);
-  if (err) {
-    res.status(400).json({ error: err });
-    return;
-  }
-
-  const { segmentIndex, label, startMs, endMs } = req.body;
-  const nextSegments = segments.map((seg, i) => (i === segmentIndex
-    ? {
-        ...seg,
-        ...(label !== undefined ? { label } : {}),
-        ...(startMs !== undefined ? { startMs } : {}),
-        ...(endMs !== undefined ? { endMs } : {}),
-      }
-    : seg));
-
-  await sql`
-    UPDATE song_structure SET segments = ${sql.json(nextSegments)}, updated_at = now()
-    WHERE song_id = ${songId}
-  `;
-  res.status(200).json({ segments: nextSegments });
+  res.status(200).json({ segments: result.segments });
 }
 
 export default withErrors(async (req, res) => {

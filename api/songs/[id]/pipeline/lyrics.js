@@ -323,8 +323,12 @@ async function approveGate(res, songId) {
     // api/align/webhook.js (notifyPipelineSync) exige sync.status==='running'
     // para aplicar el evento de exito del align, lo descartaba en silencio, y
     // el run quedaba 'running' para siempre (clips nunca arranca).
-    nextPhases.sync = { ...nextPhases.sync, status: 'running' };
-    nextPhases.pitch = { ...nextPhases.pitch, status: 'running' };
+    // retries: 0 (fix Important code review): dispatch fresco de un ciclo
+    // nuevo, mismo criterio que phasesAfterLyricsEdit (state.js) -- sin esto
+    // el retries acumulado de ciclos reopen/approve previos podia agotar el
+    // tope de esta fase en lo que es, para el admin, su primer intento.
+    nextPhases.sync = { ...nextPhases.sync, status: 'running', retries: 0 };
+    nextPhases.pitch = { ...nextPhases.pitch, status: 'running', retries: 0 };
     const runStatus = runStatusFromPhases(nextPhases);
     const nextLyricsReview = { ...run.lyricsReview, approvedHash: snapshot.hash };
     // input_meta.durationSec la persiste confirm.js (best-effort, D1); jsonb

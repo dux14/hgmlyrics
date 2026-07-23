@@ -96,11 +96,18 @@ export function applyPhaseEvent(phases, event) {
 }
 
 // Cascada al editar la letra aprobada: lo derivado de la letra queda stale.
+// `retries` se resetea a 0 (fix Important code review): estas fases se van a
+// RE-EJECUTAR en un ciclo nuevo tras el proximo approve, y MAX_RETRIES cuenta
+// por ciclo, no acumulado sobre toda la vida del run -- sin el reset, varios
+// ciclos reopen->approve con algun fallo transitorio podian agotar el
+// presupuesto de un ciclo anterior y tumbar el run a 'failed' terminal en lo
+// que el admin percibe como su primer intento del nuevo ciclo.
 export function phasesAfterLyricsEdit(phases) {
   const next = structuredClone(phases);
   for (const ph of ['sync','pitch','clips']) {
     if (next[ph].status === 'done' || next[ph].status === 'running') {
       next[ph].status = 'stale';
+      next[ph].retries = 0;
     }
   }
   return next;

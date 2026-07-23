@@ -91,6 +91,18 @@ describe('invalidacion en cascada', () => {
     expect(next.clips.status).toBe('stale');
     expect(next.stems.status).toBe('done');
   });
+
+  it('resetea retries a 0 en las fases que quedan stale (fix Important: presupuesto fresco por ciclo reopen)', () => {
+    const p = initialPhases();
+    for (const ph of PHASES) p[ph].status = 'done';
+    p.sync.retries = 2;
+    p.pitch.retries = 3;
+    p.clips.retries = 1;
+    const next = phasesAfterLyricsEdit(p);
+    expect(next.sync.retries).toBe(0);
+    expect(next.pitch.retries).toBe(0);
+    expect(next.clips.retries).toBe(0);
+  });
 });
 
 describe('runStatusFromPhases', () => {

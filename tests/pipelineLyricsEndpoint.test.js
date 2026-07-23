@@ -775,6 +775,8 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
 
     expect(insertedAudio).toContain('s1/runs/r1/full.mp3');
     expect(insertedAudio).toContain(187);
+    expect(phasesArg.sync.retries).toBe(0);
+    expect(phasesArg.pitch.retries).toBe(0);
 
     // ambas fases se despachan (en paralelo, ver Promise.all en approveGate):
     // ninguna debe perderse por el aislamiento de fallos del dispatch.
@@ -787,6 +789,37 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
       'pitch',
       expect.objectContaining({ id: 'r1', songId: 's1' }),
     );
+  });
+
+  it('resetea retries de sync/pitch a 0 al re-aprobar aunque vengan de un ciclo previo con retries>0 (fix Important MAX_RETRIES acumulativo)', async () => {
+    let mainRunUpdateValues;
+    const phasesWithStaleRetries = awaitingPhases();
+    phasesWithStaleRetries.sync = { status: 'stale', error: null, tracks: undefined, artifacts: undefined, retries: 2 };
+    phasesWithStaleRetries.pitch = { status: 'stale', error: null, tracks: undefined, artifacts: undefined, retries: 3 };
+    routeSql([
+      [
+        'AS "lyricsReview"',
+        [runRow({ phases: phasesWithStaleRetries, lyricsReview: { review: approvableReview() } })],
+      ],
+      ['UPDATE songs SET sections', { count: 1 }],
+      [
+        'status = ',
+        (values) => {
+          mainRunUpdateValues = values;
+          return { count: 1 };
+        },
+      ],
+      ['INSERT INTO song_audio', { count: 1 }],
+    ]);
+    const res = makeRes();
+    await lyricsHandler({ method: 'POST', query: { id: 's1' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+
+    const phasesArg = mainRunUpdateValues.find((v) => v && typeof v === 'object' && v.lyrics_review);
+    expect(phasesArg.sync.status).toBe('running');
+    expect(phasesArg.pitch.status).toBe('running');
+    expect(phasesArg.sync.retries).toBe(0);
+    expect(phasesArg.pitch.retries).toBe(0);
   });
 
   it('sin durationSec en input_meta: el swap de audio queda con duration_sec null', async () => {

@@ -96,9 +96,15 @@ async function stemsUploads(songId) {
  * comentarios en dispatch.js) — fallan igual con un 500 claro, sin guard especial.
  * @param {'stems'|'transcription'|'sync'|'pitch'|'clips'} phase
  * @param {{id:string, songId:string, inputPath:string, phases:object}} run
+ * @param {{isRetry?:boolean}} [opts] `isRetry` solo lo pasa retry.js (acción
+ *   deliberada del admin sobre una fase failed/stale) — hoy únicamente lo
+ *   consume `pitch`: sin esto, el jobId (=run.id) ya visto por hkn-pitch en
+ *   un dispatch anterior (aprobación de letra) hace que `start()` del lado
+ *   Modal devuelva el callId cacheado (dedup) en vez de relanzar
+ *   `run_pipeline`, dejando la fase colgada en 'running' sin webhook ni logs.
  * @returns {Promise<{id:string}>}
  */
-export async function dispatchPhase(phase, run) {
+export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
   const webhook = webhookUrl();
   if (phase === 'stems') {
     const inputGetUrl = await signSongAudioDownload(run.inputPath);
@@ -160,6 +166,7 @@ export async function dispatchPhase(phase, run) {
       // confirm.js/retry.js, undefined por ahora si no hay aprobación.
       snapshotHash: run.lyricsReview?.approvedHash,
       webhookUrl: webhook,
+      reset: isRetry,
     });
   }
   // clips (Task B6+plan C, Task 8 song_structure): stems/lines vienen de

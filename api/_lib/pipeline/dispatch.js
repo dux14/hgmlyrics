@@ -97,11 +97,20 @@ export { dispatchAlign };
  * `signUploadUrl` apunta al endpoint `api/pipeline/sign-upload.js` (Task 2):
  * el orquestador hkn-pitch lo necesita para firmar sus propios uploads, sin
  * esta clave revienta con KeyError del lado de Modal.
+ * `reset`: jobId = run.id, estable entre el dispatch inicial (aprobación de
+ * letra, lyrics.js) y un reintento explícito (retry.js) — sin `reset:true`,
+ * `start()` de pitch_app.py encuentra el jobId ya en su Dict de idempotencia
+ * (`_seen`) y devuelve el callId cacheado sin relanzar `run_pipeline`
+ * (dedup:true), dejando la fase colgada en 'running' para siempre aunque el
+ * job original ya haya muerto. Solo retry.js debe pasar `reset:true` (acción
+ * deliberada del admin); el dispatch inicial deja el default `false` para
+ * seguir protegiendo el doble-approve accidental de una facturación GPU doble.
  * @param {{ run:{id:string, songId:string, profile?:string}, leadGetUrl:string,
- *           backingGetUrl:string, snapshotHash?:string, webhookUrl:string }} args
+ *           backingGetUrl:string, snapshotHash?:string, webhookUrl:string,
+ *           reset?:boolean }} args
  * @returns {Promise<{id:string}>}
  */
-export async function dispatchPitch({ run, leadGetUrl, backingGetUrl, snapshotHash, webhookUrl }) {
+export async function dispatchPitch({ run, leadGetUrl, backingGetUrl, snapshotHash, webhookUrl, reset = false }) {
   return invokePitchPipeline({
     jobId: run.id,
     profile: run.profile ?? 'default',
@@ -109,6 +118,7 @@ export async function dispatchPitch({ run, leadGetUrl, backingGetUrl, snapshotHa
     uploads: {},
     signUploadUrl: `${process.env.PUBLIC_BASE_URL}/api/pipeline/sign-upload`,
     webhook: { url: webhookUrl },
+    reset,
   });
 }
 

@@ -85,7 +85,10 @@ export default withErrors(async (req, res) => {
   const { run, runningPhases } = claim;
 
   try {
-    await dispatchPhase(phase, { ...run, phases: runningPhases });
+    // isRetry:true -> pitch fuerza reset:true hacia hkn-pitch (ver
+    // _dispatch.js): sin esto el jobId (=run.id) ya visto por Modal en el
+    // dispatch inicial devuelve el callId cacheado en vez de relanzar.
+    await dispatchPhase(phase, { ...run, phases: runningPhases }, { isRetry: true });
   } catch (err) {
     // Mismo criterio que confirm.js: solo la fase queda failed, el run sigue
     // 'processing' (retry-able de nuevo). Transaccional con FOR UPDATE por si

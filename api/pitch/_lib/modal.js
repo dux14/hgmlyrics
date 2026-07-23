@@ -3,7 +3,7 @@ import { fetchWithTimeout } from '../../_lib/http.js';
 /**
  * Invoca run_pipeline del app Modal hkn-pitch. Secrets propios de Partitura.
  * @param {{ jobId:string, profile:string, input:{getUrl:string}, uploads:object,
- *           webhook:{url:string} }} payload
+ *           webhook:{url:string}, reset?:boolean }} payload
  * @returns {Promise<{ id:string }>}
  */
 export async function invokePitchPipeline(payload) {

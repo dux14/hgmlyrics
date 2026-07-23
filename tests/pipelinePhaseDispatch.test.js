@@ -161,6 +161,26 @@ describe("dispatchPhase('pitch')", () => {
     const args = dispatchPitch.mock.calls[0][0];
     expect(args.snapshotHash).toBeUndefined();
   });
+
+  it('dispatch inicial (sin isRetry) pasa reset:false — no debe pisar un jobId ya en curso', async () => {
+    const run = {
+      id: 'run1',
+      songId: 'song1',
+      phases: { stems: { tracks: { lead: 'l', backing: 'b' } } },
+    };
+    await dispatchPhase('pitch', run);
+    expect(dispatchPitch).toHaveBeenCalledWith(expect.objectContaining({ reset: false }));
+  });
+
+  it('retry.js (isRetry:true) fuerza reset:true — sin esto Modal devuelve el callId cacheado y el job queda colgado', async () => {
+    const run = {
+      id: 'run1',
+      songId: 'song1',
+      phases: { stems: { tracks: { lead: 'l', backing: 'b' } } },
+    };
+    await dispatchPhase('pitch', run, { isRetry: true });
+    expect(dispatchPitch).toHaveBeenCalledWith(expect.objectContaining({ reset: true }));
+  });
 });
 
 describe("dispatchPhase('sync')", () => {

@@ -645,7 +645,11 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
     const res = makeRes();
     await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(dispatchPhase).toHaveBeenCalledWith('stems', expect.objectContaining({ id: 'r1' }));
+    expect(dispatchPhase).toHaveBeenCalledWith(
+      'stems',
+      expect.objectContaining({ id: 'r1' }),
+      { isRetry: true },
+    );
     expect(persisted.stems.status).toBe('running');
   });
 

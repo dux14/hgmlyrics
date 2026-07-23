@@ -133,4 +133,27 @@ describe('dispatchPitch', () => {
     const payload = invokePitchPipeline.mock.calls.at(-1)[0];
     expect(payload.signUploadUrl).toBe('https://app.test/api/pipeline/sign-upload');
   });
+
+  it('reset por defecto es false (dispatch inicial no debe re-lanzar un jobId ya visto)', async () => {
+    await dispatchPitch({
+      run: { id: 'r1', songId: 's1' },
+      leadGetUrl: 'https://l',
+      backingGetUrl: 'https://b',
+      webhookUrl: 'https://w',
+    });
+    const payload = invokePitchPipeline.mock.calls.at(-1)[0];
+    expect(payload.reset).toBe(false);
+  });
+
+  it('reset:true se propaga al payload de Modal (retry explícito)', async () => {
+    await dispatchPitch({
+      run: { id: 'r1', songId: 's1' },
+      leadGetUrl: 'https://l',
+      backingGetUrl: 'https://b',
+      webhookUrl: 'https://w',
+      reset: true,
+    });
+    const payload = invokePitchPipeline.mock.calls.at(-1)[0];
+    expect(payload.reset).toBe(true);
+  });
 });

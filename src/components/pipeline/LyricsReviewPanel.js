@@ -427,7 +427,9 @@ export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
 
     el.className = `lrp${motion}`;
     el.innerHTML = `
-      <div class="lrp__header" tabindex="-1"></div>
+      <div class="lrp__header" tabindex="-1">
+        <h4 class="lrp__header-title">Revisión de letra</h4>
+      </div>
       <div class="lrp__body">
         ${state.review.sections
           .map((s, i) =>

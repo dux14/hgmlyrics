@@ -40,36 +40,17 @@ body.chrome-hidden .main {
   z-index: 1;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-sm);
   padding: var(--space-md);
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
 
-.lrp__header-pending {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  font-variant-numeric: tabular-nums;
-  transition: color 0.2s var(--ease-out);
-}
-.lrp__header-pending.is-done {
-  color: var(--color-success);
-}
-
-.lrp .temp {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: color-mix(in oklch, var(--color-brand) 12%, transparent);
-  color: var(--color-brand);
-  border-radius: 999px;
-  padding: 3px 11px;
-  font-size: 0.78rem;
+.lrp__header-title {
+  flex: 1;
+  font-size: 1.05rem;
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  transition: background-color 0.3s var(--ease-out);
+  margin: 0;
 }
 
 .lrp__body {
@@ -77,7 +58,7 @@ body.chrome-hidden .main {
 }
 
 .lrp__section {
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-lg);
 }
 
 .lrp__label {
@@ -94,7 +75,7 @@ body.chrome-hidden .main {
   justify-content: space-between;
   gap: var(--space-sm);
   flex-wrap: wrap;
-  margin-bottom: 4px;
+  margin-bottom: var(--space-sm);
 }
 
 /* El `<select>` de retipado hereda el look del label estático que reemplaza:
@@ -111,6 +92,25 @@ body.chrome-hidden .main {
 .lrp .lrp__type-select[disabled] {
   opacity: 0.38;
   cursor: default;
+}
+
+.lrp .lrp__rename-input {
+  flex: 1;
+  min-width: 80px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  padding: 2px 0;
+  transition: border-color 0.15s var(--ease-out);
+}
+.lrp .lrp__rename-input:hover,
+.lrp .lrp__rename-input:focus {
+  border-bottom-color: var(--color-border);
+}
+.lrp .lrp__rename-input[disabled] {
+  opacity: 0.38;
 }
 
 .lrp .lrp__section-merge {
@@ -145,7 +145,42 @@ body.chrome-hidden .main {
   color: var(--color-section-outro);
 }
 
+/* Renglón: fila protagonista (texto + confianza + acciones). Colapsa
+   clip-path+fade 200ms al resolverse una acción (`is-resolving`, agregada
+   por runAction() en el JS a esta misma fila). */
+.lrp__line-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  margin: 0 calc(-1 * var(--space-sm));
+  padding: 2px var(--space-sm);
+  border-radius: var(--border-radius-sm);
+  clip-path: inset(0 round var(--border-radius-sm));
+  overflow: hidden;
+  transition:
+    clip-path 0.2s var(--ease-out),
+    opacity 0.2s var(--ease-out),
+    background-color var(--motion-micro) var(--ease-out);
+}
+.lrp__line-row:hover,
+.lrp__line-row:focus-within {
+  background: var(--color-surface-hover);
+}
+.lrp__line-row.is-resolving {
+  clip-path: inset(50% 0 50% 0 round var(--border-radius-sm));
+  opacity: 0;
+}
+
+/* Vocalización: hallazgo de la IA, tratamiento sutil en el propio texto
+   (itálica + tono secundario), nunca una tarjeta aparte ni color de error. */
+.lrp__line--vocalization .lrp__line {
+  font-style: italic;
+  color: var(--color-text-secondary);
+}
+
 .lrp__line {
+  flex: 1;
+  min-width: 0;
   font-size: 0.92rem;
   padding: 6px 0;
   position: relative;
@@ -170,6 +205,59 @@ body.chrome-hidden .main {
   background: color-mix(in oklch, var(--color-brand) 10%, transparent);
 }
 
+/* Badge de confianza: pill discreto (nunca un % gigante) — hueco cuando no
+   hay confidence (vocalización o edición manual). */
+.lrp__conf {
+  flex: none;
+  margin-top: 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+  background: color-mix(in oklch, var(--color-text) 8%, transparent);
+  border-radius: var(--border-radius-full);
+  padding: 2px 8px;
+}
+
+/* Botonera por renglón: compacta, sin ruido permanente. Aparece en
+   hover/focus-within (mouse/trackpad); en táctil (`pointer: coarse`) queda
+   siempre visible — nunca se esconde una acción detrás de un hover que no
+   existe. */
+.lrp__line-actions {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity var(--motion-micro) var(--ease-out);
+}
+.lrp__line-row:hover .lrp__line-actions,
+.lrp__line-row:focus-within .lrp__line-actions {
+  opacity: 1;
+}
+@media (pointer: coarse) {
+  .lrp__line-actions {
+    opacity: 1;
+  }
+}
+
+.lrp .lrp__line-actions .btn2 {
+  padding: 6px;
+  border-color: transparent;
+}
+.lrp .lrp__line-actions .btn2:hover {
+  border-color: var(--color-border);
+}
+.lrp .lrp__line-voc.is-active {
+  color: var(--color-accent-2);
+  border-color: color-mix(in oklch, var(--color-accent-2) 40%, transparent);
+}
+/* Misma especificidad que `.btn2:hover` (0,4,0 con `:hover`): sin esto el
+   hover del botón genérico pisa el tinte de "vocalización activa". */
+.lrp .lrp__line-voc.is-active:hover {
+  border-color: color-mix(in oklch, var(--color-accent-2) 40%, transparent);
+}
+
 .lrp .lrp__merge {
   display: block;
   width: 100%;
@@ -187,48 +275,10 @@ body.chrome-hidden .main {
 .lrp .lrp__merge:focus-visible {
   opacity: 1;
 }
-
-/* Colapso de tarjeta al resolver (conflicto o vocalización): clip-path+fade
-   200ms --ease-out, compartido entre `.conf` y `.voc` (misma coreografía). */
-.lrp .conf,
-.lrp .voc {
-  clip-path: inset(0 round var(--border-radius-md));
-  overflow: hidden;
-  transition:
-    clip-path 0.2s var(--ease-out),
-    opacity 0.2s var(--ease-out);
-}
-.lrp .conf.is-resolving,
-.lrp .voc.is-resolving {
-  clip-path: inset(50% 0 50% 0 round var(--border-radius-md));
-  opacity: 0;
-}
-
-/* Tarjeta de conflicto: NUNCA border-left de acento (regla de plataforma). */
-.lrp .conf {
-  background: color-mix(in oklch, var(--color-danger) 7%, var(--color-surface));
-  border: 1px solid color-mix(in oklch, var(--color-danger) 25%, transparent);
-  border-radius: var(--border-radius-md);
-  padding: 10px 12px;
-  margin: 8px 0;
-}
-
-.lrp .old {
-  color: var(--color-danger);
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-  font-size: 0.88rem;
-}
-.lrp .new {
-  color: var(--color-success);
-  font-size: 0.88rem;
-}
-
-.lrp .conf__actions {
-  display: flex;
-  gap: 6px;
-  margin-top: 8px;
-  flex-wrap: wrap;
+@media (pointer: coarse) {
+  .lrp .lrp__merge {
+    opacity: 1;
+  }
 }
 
 .lrp .lrp__edit-input {
@@ -240,32 +290,6 @@ body.chrome-hidden .main {
   border-radius: 8px;
   padding: 6px 8px;
   font-size: 0.85rem;
-}
-
-/* Vocalización: hallazgo de la AI, violeta, nunca color de error. */
-.lrp .voc {
-  background: color-mix(in oklch, var(--color-accent-2) 14%, transparent);
-  border: 1px solid color-mix(in oklch, var(--color-accent-2) 30%, transparent);
-  border-radius: var(--border-radius-md);
-  padding: 9px 12px;
-  margin: 8px 0;
-  font-size: 0.85rem;
-}
-.lrp .voc .lab {
-  font-size: 0.68rem;
-  color: var(--color-accent-2);
-  font-weight: 700;
-  letter-spacing: 0.05em;
-}
-.lrp .voc__text {
-  margin-top: 3px;
-  font-style: italic;
-}
-.lrp .voc__actions {
-  display: flex;
-  gap: 6px;
-  margin-top: 7px;
-  flex-wrap: wrap;
 }
 
 .lrp .btn {
@@ -329,45 +353,24 @@ body.chrome-hidden .main {
   bottom: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-md);
   padding: var(--space-md);
   background: var(--color-surface);
   border-top: 1px solid var(--color-border);
 }
-
-.lrp__pending {
-  font-size: 0.8rem;
-  color: var(--color-text-secondary);
-}
-
-/* Flash de confirmación teal-soft 400ms en la línea resultante (renglón
-   normal o el nuevo renglón de una vocalización aceptada) — no en la
-   tarjeta, que ya colapsó y desapareció del documento. */
-.lrp--motion .lrp__line.is-resolved {
-  animation: lrp-flash 0.4s var(--ease-out);
-}
-@keyframes lrp-flash {
-  0% {
-    background: color-mix(in oklch, var(--color-brand) 20%, transparent);
-  }
-  100% {
-    background: transparent;
-  }
+.lrp__footer .lrp__approve {
+  flex: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lrp .conf,
-  .lrp .voc,
+  .lrp__line-row,
+  .lrp__line-actions,
   .lrp .lrp__split,
   .lrp .lrp__merge,
+  .lrp .lrp__rename-input,
   .lrp .btn,
-  .lrp .btn2,
-  .lrp .temp {
+  .lrp .btn2 {
     transition-duration: 0.001ms !important;
-  }
-  .lrp--motion .lrp__line.is-resolved {
-    animation: none;
   }
 }
 

@@ -18,6 +18,7 @@ import {
   reopenLyrics,
 } from '../../lib/pipelineApi.js';
 import { showToast } from '../../lib/toast.js';
+import { fetchSongDetail } from '../../lib/store.js';
 import { confirmDialog } from '../ConfirmDialog.js';
 import { LyricsReviewPanel } from './LyricsReviewPanel.js';
 import { PhaseRow } from './PhaseRow.js';
@@ -185,6 +186,13 @@ export function renderSongPipelineView(container, songId) {
   let destroyed = false;
   let lastSig = null;
   let firstRender = true;
+  // A7: la letra aprobada vive en songs.sections (approveGate la escribe ahí
+  // tras el auto-split), así que projectLines sobre esta copia calza 1:1 con
+  // los índices de song_line_timings.lines[].i. lastLyricsDone detecta el
+  // flanco pending→done del gate para refrescar la copia (queda stale tras
+  // aprobar, porque el approve reescribe sections en el backend).
+  let lastSong = null;
+  let lastLyricsDone = null;
 
   // Tarjeta de subida (D3b): mount-once igual que el panel de letra, para
   // no perder su máquina de estados local (validando/advertencia/subiendo)
@@ -223,14 +231,27 @@ export function renderSongPipelineView(container, songId) {
   });
 
   // Detalle de Sincronía (D3d): mount-once, mismo motivo (estado local de
-  // línea expandida + mini-player propio del stem de voz). Esta vista no
-  // tiene acceso a la canción proyectada, así que getSong cae al fallback
-  // "Línea N"; getVocalsUrl lee siempre el run más reciente.
+  // línea expandida + mini-player propio del stem de voz). getSong lee
+  // lastSong (canción fetcheada por refreshSong); getVocalsUrl lee siempre
+  // el run más reciente.
   const syncTuning = createSyncFineTuning({
     songId,
-    getSong: () => null,
+    getSong: () => lastSong,
     getVocalsUrl: () => lastRun?.phases?.stems?.tracks?.vocals ?? null,
   });
+
+  // A7: fetchea la canción (con sections) para que SyncFineTuning pueda
+  // proyectar el texto real por línea en vez del fallback "Línea N". Se
+  // dispara al montar y de nuevo cada vez que el gate de letra pasa a done
+  // (ver renderPhases), porque el approve reescribe songs.sections.
+  function refreshSong() {
+    fetchSongDetail(songId).then((song) => {
+      if (destroyed || !song) return;
+      lastSong = song;
+      syncTuning.update(lastRun);
+    });
+  }
+  refreshSong();
 
   // Resumen transversal de baja confianza (Task 17): bloque ámbar bajo el
   // header, sobre el stepper. Conflictos/structureWarning llegan del `onData`
@@ -381,6 +402,14 @@ export function renderSongPipelineView(container, songId) {
     if (destroyed) return;
     lastRun = run;
     updateCancelButton(run);
+
+    // A7: el approve del gate de letra reescribe songs.sections en el
+    // backend — la copia local (lastSong) queda stale justo en el momento en
+    // que sync más la necesita (arranca al aprobar). Detecta el flanco
+    // pending→done y refetchea.
+    const lyricsDone = run?.phases?.lyrics_review?.status === 'done';
+    if (lyricsDone && lastLyricsDone === false) refreshSong();
+    lastLyricsDone = lyricsDone;
 
     // Firma del estado relevante: si no cambió desde el último render, saltar
     // el rebuild. Evita desprender/reinsertar el nodo del panel de letra (y

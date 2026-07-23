@@ -66,9 +66,11 @@ vi.mock('../src/components/pipeline/StemTracksDetail.js', () => ({
 // caja negra, igual que UploadPhaseCard y StemTracksDetail.
 let lastSyncTuningDestroy = null;
 let lastSyncTuningUpdate = null;
+let lastSyncTuningArgs = null;
 
 vi.mock('../src/components/pipeline/SyncFineTuning.js', () => ({
-  createSyncFineTuning: vi.fn(() => {
+  createSyncFineTuning: vi.fn((args) => {
+    lastSyncTuningArgs = args;
     lastSyncTuningDestroy = vi.fn();
     lastSyncTuningUpdate = vi.fn();
     return {
@@ -107,6 +109,13 @@ vi.mock('../src/router.js', () => ({
   }),
 }));
 
+// A7: la vista necesita fetchear la cancion (con sections) para pasarle un
+// getSong real a SyncFineTuning — sin esto la fila de sync degrada a
+// "Línea N" (root cause del bug). Se mockea junto al resto de store.js.
+vi.mock('../src/lib/store.js', () => ({
+  fetchSongDetail: vi.fn(),
+}));
+
 import { renderSongPipelineView } from '../src/components/pipeline/SongPipelineView.js';
 import {
   watchPipelineRun,
@@ -117,6 +126,7 @@ import {
 import { LyricsReviewPanel } from '../src/components/pipeline/LyricsReviewPanel.js';
 import { confirmDialog } from '../src/components/ConfirmDialog.js';
 import { showToast } from '../src/lib/toast.js';
+import { fetchSongDetail } from '../src/lib/store.js';
 
 const SONG_ID = 'song-1';
 
@@ -158,11 +168,16 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     lastStemTracksUpdate = null;
     lastSyncTuningDestroy = null;
     lastSyncTuningUpdate = null;
+    lastSyncTuningArgs = null;
     lastStructureDetailDestroy = null;
     lastStructureDetailUpdate = null;
     vi.clearAllMocks();
     confirmDialog.mockResolvedValue(true);
     cancelPipelineRun.mockResolvedValue({ success: true });
+    fetchSongDetail.mockResolvedValue({
+      id: SONG_ID,
+      sections: [{ type: 'verse', lines: [{ text: 'Hola' }] }],
+    });
   });
 
   afterEach(() => {
@@ -334,6 +349,20 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     routeCb();
 
     expect(lastStemTracksDestroy).toHaveBeenCalled();
+  });
+
+  it('A7: fetchea la cancion al montar y le pasa a SyncFineTuning un getSong con la letra real', async () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({ run: buildRun({ sync: { status: 'running' } }) });
+    await flushPromises();
+
+    expect(fetchSongDetail).toHaveBeenCalledWith(SONG_ID);
+    expect(lastSyncTuningArgs.getSong()).toEqual(
+      expect.objectContaining({
+        id: SONG_ID,
+        sections: [{ type: 'verse', lines: [{ text: 'Hola' }] }],
+      }),
+    );
   });
 
   it('fila Sincronía monta el detalle de SyncFineTuning y lo actualiza en cada render', () => {

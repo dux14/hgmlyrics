@@ -13,7 +13,13 @@ const VOCALS_URL = 'https://x/vocals.mp3';
 
 function mockReady(lines, overrides = {}) {
   songAudioApi.getSongAudio.mockResolvedValue({
-    audio: { url: 'https://x/full.mp3', durationSec: 100, bpmManual: null, timeSignature: '4/4', beatAnchor: null },
+    audio: {
+      url: 'https://x/full.mp3',
+      durationSec: 100,
+      bpmManual: null,
+      timeSignature: '4/4',
+      beatAnchor: null,
+    },
     timings: { status: 'ready', lines, bpmDetected: 112.35 },
     ...overrides,
   });
@@ -217,9 +223,35 @@ describe('SyncFineTuning', () => {
 
     // max = next.startMs - 1 = 1049, proposed 1000+100=1100 clampeado a 1049.
     expect(detail.el.querySelector('.lineRow__ms').textContent).toBe('0:01.05');
-    expect(
-      detail.el.querySelector('[data-action="line-nudge"][data-delta="100"]').disabled,
-    ).toBe(true);
+    expect(detail.el.querySelector('[data-action="line-nudge"][data-delta="100"]').disabled).toBe(
+      true,
+    );
+
+    detail.destroy();
+  });
+
+  it('con getSong real: cada fila muestra el texto del renglon + su tiempo de entrada (A7)', async () => {
+    mockReady([
+      { i: 0, startMs: 1200, score: 0.9, interpolated: false },
+      { i: 1, startMs: 4800, score: 0.9, interpolated: false },
+    ]);
+    const song = {
+      id: 'song-1',
+      sections: [
+        {
+          type: 'verse',
+          lines: [{ text: 'Primero el cielo' }, { text: 'Luego la tierra' }],
+        },
+      ],
+    };
+    const detail = createSyncFineTuning({ songId: 'song-1', getSong: () => song });
+    container.appendChild(detail.el);
+
+    await vi.waitFor(() => expect(detail.el.querySelectorAll('.lineRow').length).toBe(2));
+
+    const labels = [...detail.el.querySelectorAll('.lineRow__label')].map((n) => n.textContent);
+    expect(labels).toEqual(['Primero el cielo', 'Luego la tierra']);
+    expect(detail.el.querySelector('.lineRow__label').textContent).not.toMatch(/^Línea \d/);
 
     detail.destroy();
   });

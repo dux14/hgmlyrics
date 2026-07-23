@@ -44,6 +44,7 @@ const { isAdmin } = await import('../src/lib/authStore.js');
 const { getPipelineRun } = await import('../src/lib/pipelineApi.js');
 const { getSongStudio } = await import('../src/lib/studioApi.js');
 const { navigate } = await import('../src/router.js');
+const { closeSongActionsSheet } = await import('../src/components/SongActionsSheet.js');
 
 // jsdom no implementa matchMedia ni IntersectionObserver.
 window.matchMedia =
@@ -82,20 +83,21 @@ function buildSong(id) {
 }
 
 // Espera a que el fetch async de getSongStudio (dentro de una IIFE en
-// renderSongView) resuelva y pinte el acceso.
+// renderSongView) resuelva y actualice el estado que lee el sheet de acciones.
 async function flushMicrotasks() {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
 }
 
-describe('SongView — acceso al Estudio publico desde la vista de cancion (D4e)', () => {
+describe('SongView — Estudio/Partitura en el sheet de acciones (Task 18)', () => {
   afterEach(() => {
+    closeSongActionsSheet();
     document.body.innerHTML = '';
     vi.clearAllMocks();
   });
 
-  it('no admin + estudio publicado con stems: el acceso existe y navega al hacer click', async () => {
+  it('no admin + estudio publicado con stems: el item Estudio existe en el sheet y navega al hacer click', async () => {
     isAdmin.mockReturnValue(false);
     getPipelineRun.mockResolvedValue(null);
     getSongStudio.mockResolvedValue({ stems: [{ kind: 'vocals' }] });
@@ -105,7 +107,8 @@ describe('SongView — acceso al Estudio publico desde la vista de cancion (D4e)
     await renderSongView(container, 'song-studio-1');
     await flushMicrotasks();
 
-    const btn = container.querySelector('#open-studio-btn');
+    container.querySelector('#open-song-actions-btn').click();
+    const btn = document.querySelector('[data-sasheet-item="studio"]');
     expect(btn).toBeTruthy();
     expect(btn.textContent).toContain('Estudio');
 
@@ -113,7 +116,7 @@ describe('SongView — acceso al Estudio publico desde la vista de cancion (D4e)
     expect(navigate).toHaveBeenCalledWith('/song/song-studio-1/estudio');
   });
 
-  it('no admin + sin estudio publicado (null): el acceso no aparece', async () => {
+  it('no admin + sin estudio publicado (null): el item Estudio no aparece', async () => {
     isAdmin.mockReturnValue(false);
     getPipelineRun.mockResolvedValue(null);
     getSongStudio.mockResolvedValue(null);
@@ -123,10 +126,11 @@ describe('SongView — acceso al Estudio publico desde la vista de cancion (D4e)
     await renderSongView(container, 'song-studio-2');
     await flushMicrotasks();
 
-    expect(container.querySelector('#open-studio-btn')).toBeNull();
+    container.querySelector('#open-song-actions-btn').click();
+    expect(document.querySelector('[data-sasheet-item="studio"]')).toBeNull();
   });
 
-  it('analysis con voces con letra: el chip Partitura existe y navega al hacer click', async () => {
+  it('analysis con voces con letra: el item Partitura existe en el sheet y navega al hacer click', async () => {
     isAdmin.mockReturnValue(false);
     getPipelineRun.mockResolvedValue(null);
     getSongStudio.mockResolvedValue({
@@ -139,7 +143,8 @@ describe('SongView — acceso al Estudio publico desde la vista de cancion (D4e)
     await renderSongView(container, 'song-partitura-1');
     await flushMicrotasks();
 
-    const btn = container.querySelector('#open-partitura-btn');
+    container.querySelector('#open-song-actions-btn').click();
+    const btn = document.querySelector('[data-sasheet-item="partitura"]');
     expect(btn).toBeTruthy();
     expect(btn.textContent).toContain('Partitura');
 
@@ -147,7 +152,7 @@ describe('SongView — acceso al Estudio publico desde la vista de cancion (D4e)
     expect(navigate).toHaveBeenCalledWith('/song/song-partitura-1/partitura');
   });
 
-  it('sin analysis: el chip Partitura no aparece', async () => {
+  it('sin analysis: el item Partitura no aparece', async () => {
     isAdmin.mockReturnValue(false);
     getPipelineRun.mockResolvedValue(null);
     getSongStudio.mockResolvedValue({ stems: [{ kind: 'vocals' }], analysis: null });
@@ -157,10 +162,11 @@ describe('SongView — acceso al Estudio publico desde la vista de cancion (D4e)
     await renderSongView(container, 'song-partitura-2');
     await flushMicrotasks();
 
-    expect(container.querySelector('#open-partitura-btn')).toBeNull();
+    container.querySelector('#open-song-actions-btn').click();
+    expect(document.querySelector('[data-sasheet-item="partitura"]')).toBeNull();
   });
 
-  it('analysis con solo voces sin letra ({notes}): el chip Partitura no aparece', async () => {
+  it('analysis con solo voces sin letra ({notes}): el item Partitura no aparece', async () => {
     isAdmin.mockReturnValue(false);
     getPipelineRun.mockResolvedValue(null);
     getSongStudio.mockResolvedValue({
@@ -173,6 +179,7 @@ describe('SongView — acceso al Estudio publico desde la vista de cancion (D4e)
     await renderSongView(container, 'song-partitura-3');
     await flushMicrotasks();
 
-    expect(container.querySelector('#open-partitura-btn')).toBeNull();
+    container.querySelector('#open-song-actions-btn').click();
+    expect(document.querySelector('[data-sasheet-item="partitura"]')).toBeNull();
   });
 });

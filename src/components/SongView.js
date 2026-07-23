@@ -37,6 +37,7 @@ import { isFavorite, toggleFavorite } from '../lib/favorites.js';
 import { recordVisit } from '../lib/recentVisits.js';
 import '../styles/favorites.css';
 import { openOptionsSheet } from './OptionsSheet.js';
+import { openSongActionsSheet } from './SongActionsSheet.js';
 import { openFloatingTuner } from './FloatingTuner.js';
 import {
   presetToSpeed,
@@ -439,7 +440,10 @@ async function _renderSongBody(container, songId, isPreview, song) {
            apaga el otro; tap sobre el activo vuelve a Letra), exclusividad
            impuesta por layerStore. El mic del afinador vive acá, siempre
            visible (afinador libre si no hay voz elegida). A−/A+ y transpose
-           viven solo en el sheet de opciones (#open-options-sheet). -->
+           viven solo en el sheet de opciones (#open-options-sheet). Solo
+           acciones de CANTAR quedan acá — Editar canción / Procesamiento /
+           Estudio / Partitura se movieron al sheet de #open-song-actions-btn
+           (Task 18, decisión 6 opción A): toolbar estable, sin pop-in async. -->
       <div class="song-toolbar">
         ${hasChords ? `<button class="layer-toggle" id="layer-chords" aria-pressed="${layers.chords}">Acordes</button>` : ''}
         ${tonoAvailable ? `<button class="layer-toggle" id="layer-tono" aria-pressed="${layers.tono}">Tono</button>` : ''}
@@ -447,8 +451,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
         <button class="song-toolbar__icon" id="hero-tuner-mic" aria-label="Afinar mi voz">${icon('mic', { size: 18 })}</button>
         <button class="song-toolbar__icon" id="enter-stage-btn" aria-label="Modo escenario">${icon('maximize', { size: 18 })}</button>
         <button class="song-toolbar__icon" id="open-options-sheet" aria-label="Opciones">${icon('sliders', { size: 18 })}</button>
-        ${isAdmin() ? `<a href="#/admin/edit/${song.id}?from=${song.id}" class="song-toolbar__icon" aria-label="Editar">${icon('pencil', { size: 16 })}</a>` : ''}
-        ${isAdmin() ? `<button class="song-toolbar__icon" id="open-pipeline-btn" aria-label="Procesamiento de audio">${icon('activity', { size: 18 })}<span class="pipeline-badge" hidden aria-hidden="true"></span></button>` : ''}
+        <button class="song-toolbar__icon" id="open-song-actions-btn" aria-label="Más acciones">${icon('ellipsis-vertical', { size: 18 })}<span class="song-actions-badge" hidden aria-hidden="true"></span></button>
       </div>
 
       ${
@@ -992,13 +995,85 @@ async function _renderSongBody(container, songId, isPreview, song) {
     }
   });
 
-  container.querySelector('#open-pipeline-btn')?.addEventListener('click', () => {
-    navigate(`/song/${song.id}/procesamiento`);
+  // Sheet de acciones (Task 18, decisión 6 opción A): reemplaza los botones
+  // sueltos de gestión de la toolbar (Editar canción / Procesamiento /
+  // Estudio / Partitura). `songActionsState` guarda lo que van resolviendo
+  // los fetches de abajo (run del pipeline, stems, voces con letra) — el
+  // sheet lee este mismo estado al abrirse, así que nunca pinta un item
+  // vencido y la toolbar nunca reflowea por un pop-in async.
+  const songActionsState = { pipelineStatus: null, hasStems: false, hasPartitura: false };
+
+  function pipelineStatusLabel(status) {
+    if (status === 'awaiting_lyrics') return 'Esperando letra';
+    if (status === 'failed') return 'Con errores';
+    if (status === 'done') return 'Completado';
+    if (['created', 'uploading', 'processing', 'running'].includes(status)) return 'En proceso';
+    return 'Sin iniciar';
+  }
+
+  function updateSongActionsBadge() {
+    const btn = container.querySelector('#open-song-actions-btn');
+    const badge = btn?.querySelector('.song-actions-badge');
+    if (!badge) return;
+    const status = songActionsState.pipelineStatus;
+    if (!status || status === 'done') {
+      badge.hidden = true;
+      badge.className = 'song-actions-badge';
+      return;
+    }
+    if (status === 'awaiting_lyrics' || status === 'failed') {
+      badge.className = 'song-actions-badge need';
+      badge.hidden = false;
+    } else if (['created', 'uploading', 'processing', 'running'].includes(status)) {
+      badge.className = 'song-actions-badge proc';
+      badge.hidden = false;
+    }
+  }
+
+  function buildSongActionsItems() {
+    const items = [];
+    if (isAdmin()) {
+      items.push({
+        id: 'edit-song',
+        icon: 'pencil',
+        label: 'Editar canción',
+        onClick: () => navigate(`/admin/edit/${song.id}?from=${song.id}`),
+      });
+      items.push({
+        id: 'pipeline',
+        icon: 'activity',
+        label: 'Procesamiento',
+        subLabel: pipelineStatusLabel(songActionsState.pipelineStatus),
+        onClick: () => navigate(`/song/${song.id}/procesamiento`),
+      });
+    }
+    if (songActionsState.hasStems) {
+      items.push({
+        id: 'studio',
+        icon: 'audio-lines',
+        label: 'Estudio',
+        onClick: () => navigate(`/song/${song.id}/estudio`),
+      });
+    }
+    if (songActionsState.hasPartitura) {
+      items.push({
+        id: 'partitura',
+        icon: 'music',
+        label: 'Partitura',
+        onClick: () => navigate(`/song/${song.id}/partitura`),
+      });
+    }
+    return items;
+  }
+
+  container.querySelector('#open-song-actions-btn')?.addEventListener('click', () => {
+    openSongActionsSheet({ items: buildSongActionsItems() });
   });
 
-  // Badge de estado del pipeline (sin Realtime, una sola llamada al montar):
-  // ámbar = requiere acción del admin, cyan pulsante = en proceso, sin badge
-  // si no hay run activo o ya está 'done'.
+  // Estado del run del pipeline (sin Realtime, una sola llamada al montar):
+  // ámbar = requiere acción del admin, cyan pulsante = en proceso, sin punto
+  // si no hay run activo o ya está 'done'. Alimenta tanto el punto sobre el
+  // botón "más" como el sub-label de "Procesamiento" dentro del sheet.
   if (isAdmin()) {
     (async () => {
       let data;
@@ -1007,21 +1082,8 @@ async function _renderSongBody(container, songId, isPreview, song) {
       } catch {
         return;
       }
-      const btn = container.querySelector('#open-pipeline-btn');
-      const badge = btn?.querySelector('.pipeline-badge');
-      if (!badge) return;
-      const status = data?.run?.status;
-      if (!status || status === 'done') {
-        badge.hidden = true;
-        return;
-      }
-      if (status === 'awaiting_lyrics' || status === 'failed') {
-        badge.className = 'pipeline-badge need';
-        badge.hidden = false;
-      } else if (['created', 'uploading', 'processing', 'running'].includes(status)) {
-        badge.className = 'pipeline-badge proc';
-        badge.hidden = false;
-      }
+      songActionsState.pipelineStatus = data?.run?.status ?? null;
+      updateSongActionsBadge();
     })();
   }
 
@@ -1221,8 +1283,10 @@ async function _renderSongBody(container, songId, isPreview, song) {
 
   // ── Acceso a Estudio (D4e) + Partitura (D5b): visibles a TODOS los
   // usuarios (no gateados por isAdmin), condicionados a lo que trae el
-  // MISMO fetch de getSongStudio (un solo request, dos chips posibles).
-  // Mismo patrón de guard de teardown que el chip BPM. ──
+  // MISMO fetch de getSongStudio (un solo request, dos items posibles).
+  // Mismo patrón de guard de teardown que el chip BPM. Con el sheet de
+  // acciones (Task 18) esto ya NO pinta botones en la toolbar — solo
+  // actualiza `songActionsState`, que el sheet lee al abrirse. ──
   if (songId) {
     let estudioDestroyed = false;
     const unsubscribeEstudioRoute = onRouteChange(() => {
@@ -1233,35 +1297,10 @@ async function _renderSongBody(container, songId, isPreview, song) {
       .then((result) => {
         unsubscribeEstudioRoute();
         if (estudioDestroyed) return;
-        const toolbar = container.querySelector('.song-toolbar');
-        if (!toolbar) return;
-        if (result?.stems?.length) {
-          const btn = document.createElement('button');
-          btn.className = 'song-toolbar__btn';
-          btn.id = 'open-studio-btn';
-          btn.type = 'button';
-          btn.setAttribute('aria-label', 'Abrir Estudio de la canción');
-          btn.innerHTML = `${icon('audio-lines', { size: 16 })}<span>Estudio</span>`;
-          btn.addEventListener('click', () => {
-            navigate(`/song/${song.id}/estudio`);
-          });
-          toolbar.appendChild(btn);
-        }
-        const tieneVocesConLetra = Object.values(result?.analysis?.voices ?? {}).some(
+        songActionsState.hasStems = !!result?.stems?.length;
+        songActionsState.hasPartitura = Object.values(result?.analysis?.voices ?? {}).some(
           (v) => v?.lines?.length,
         );
-        if (tieneVocesConLetra) {
-          const btn = document.createElement('button');
-          btn.className = 'song-toolbar__btn';
-          btn.id = 'open-partitura-btn';
-          btn.type = 'button';
-          btn.setAttribute('aria-label', 'Abrir Partitura de la canción');
-          btn.innerHTML = `${icon('music', { size: 16 })}<span>Partitura</span>`;
-          btn.addEventListener('click', () => {
-            navigate(`/song/${song.id}/partitura`);
-          });
-          toolbar.appendChild(btn);
-        }
       })
       .catch(() => {
         unsubscribeEstudioRoute();

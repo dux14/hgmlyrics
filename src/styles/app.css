@@ -25,6 +25,7 @@
 @import './auth.css' layer(components);
 @import './offline-chip.css' layer(components);
 @import './options-sheet.css' layer(components);
+@import './song-actions-sheet.css' layer(components);
 @import './go-to-sheet.css' layer(components);
 @import './search.css' layer(components);
 @import './section-player.css' layer(components);

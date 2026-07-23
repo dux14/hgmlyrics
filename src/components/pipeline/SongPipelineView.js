@@ -14,7 +14,6 @@ import {
   watchPipelineRun,
   retryPipelinePhase,
   getPipelineRun,
-  cancelPipelineRun,
   reopenLyrics,
 } from '../../lib/pipelineApi.js';
 import { showToast } from '../../lib/toast.js';
@@ -27,20 +26,6 @@ import { createStemTracksDetail } from './StemTracksDetail.js';
 import { createSyncFineTuning } from './SyncFineTuning.js';
 import { createStructureDetail } from './StructureDetail.js';
 import { createConfidenceSummary } from './ConfidenceSummary.js';
-
-// Estados de run que dejan algo "cancelable" en curso (mismo WHERE
-// status IN (...) que api/songs/[id]/pipeline.js#purgeRun usa para marcar
-// 'cancelled' en vez de 'superseded'). El endpoint (purgeRun) es idempotente:
-// SIEMPRE responde 200, incluso sin run activo, así que este set solo decide
-// si el botón de cancelar del header se muestra/gatea — no evita un 404 que
-// ya no existe.
-const CANCELABLE_RUN_STATUSES = new Set([
-  'created',
-  'uploading',
-  'processing',
-  'awaiting_lyrics',
-  'running',
-]);
 
 // Filas visibles del stepper, en orden. lyrics_review es la fase "Letra".
 // 'structure' (Task 16) es best-effort (ver CRITICAL_PHASES en
@@ -124,46 +109,6 @@ export function renderSongPipelineView(container, songId) {
   container.appendChild(view);
 
   view.querySelector('.pipeline-view__back').addEventListener('click', () => goBack());
-
-  // Botón de cancelar: NO vive en el HTML estático del header porque su
-  // presencia depende del estado del run (CANCELABLE_RUN_STATUSES) — se crea
-  // una sola vez acá y `updateCancelButton` lo inserta/retira del header en
-  // cada render en vez de tocar solo un atributo `hidden`, para que un run ya
-  // terminal no deje ni el botón en el DOM (evita el 404 destructivo del
-  // endpoint si el admin lo clickea igual).
-  const headerEl = view.querySelector('.pipeline-view__header');
-  const cancelBtn = document.createElement('button');
-  cancelBtn.type = 'button';
-  cancelBtn.className = 'pipeline-view__cancel';
-  cancelBtn.setAttribute('aria-label', 'Cancelar procesamiento');
-  cancelBtn.innerHTML = icon('ellipsis-vertical');
-  cancelBtn.addEventListener('click', async () => {
-    const ok = await confirmDialog({
-      title: 'Cancelar procesamiento',
-      body: 'Se perderá el progreso de este procesamiento. Esta acción no se puede deshacer.',
-      confirmLabel: 'Cancelar procesamiento',
-      cancelLabel: 'Volver',
-      danger: true,
-    });
-    if (!ok) return;
-    try {
-      await cancelPipelineRun(songId);
-      showToast('Procesamiento cancelado');
-      unsub?.refresh?.();
-    } catch (err) {
-      console.error('SongPipelineView: no se pudo cancelar el procesamiento', err);
-      showToast(err.message || 'No se pudo cancelar el procesamiento', { type: 'error' });
-    }
-  });
-
-  function updateCancelButton(run) {
-    const cancelable = Boolean(run) && CANCELABLE_RUN_STATUSES.has(run.status);
-    if (cancelable && !cancelBtn.isConnected) {
-      headerEl.appendChild(cancelBtn);
-    } else if (!cancelable && cancelBtn.isConnected) {
-      cancelBtn.remove();
-    }
-  }
 
   const rowsEl = view.querySelector('.pipeline-view__rows');
   const pillEl = view.querySelector('.pipeline-view__pill');
@@ -408,7 +353,6 @@ export function renderSongPipelineView(container, songId) {
   function renderPhases(run) {
     if (destroyed) return;
     lastRun = run;
-    updateCancelButton(run);
 
     // A7: el approve del gate de letra reescribe songs.sections en el
     // backend — la copia local (lastSong) queda stale justo en el momento en

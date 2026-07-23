@@ -32,8 +32,9 @@ export async function getLyricsReview(songId) {
 }
 
 /**
- * Aplica una acción de edición sobre el documento (resolver conflicto,
- * partir/unir renglón o sección, aceptar/rechazar vocalización).
+ * Aplica una acción de edición sobre el documento (editar renglón,
+ * partir/unir renglón o sección, mover o borrar renglón, alternar
+ * vocalización, renombrar o retipar sección).
  * @param {string} songId
  * @param {object} action
  * @returns {Promise<{review:object, canApprove:boolean}>}
@@ -51,8 +52,8 @@ export async function sendLyricsAction(songId, action) {
 /**
  * Aprueba la letra revisada: escribe el snapshot al store propio del
  * pipeline (`song_pipeline_lyrics`, sin tocar `songs.sections`) y dispara
- * las fases derivadas. 409 si todavía quedan conflictos o vocalizaciones
- * sin decidir.
+ * las fases derivadas. 409 si el documento no tiene renglones aprobables
+ * (`canApprove` false).
  * @param {string} songId
  * @returns {Promise<{success:boolean}>}
  */

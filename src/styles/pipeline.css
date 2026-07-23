@@ -662,6 +662,19 @@ body.chrome-hidden .main {
   transform: scale(0.97);
 }
 
+/* Publicar al cancionero (F4): accion secundaria junto al boton primario de
+   la fila (ej. "Editar letra"), sin competir visualmente con el. */
+.phase__action--secondary {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}
+.phase__action--secondary:hover {
+  filter: none;
+  color: var(--color-text);
+  border-color: var(--color-text-secondary);
+}
+
 .phase__detail:empty {
   display: none;
 }

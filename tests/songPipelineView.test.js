@@ -14,6 +14,7 @@ vi.mock('../src/lib/pipelineApi.js', () => ({
   retryPipelinePhase: vi.fn(() => Promise.resolve({ success: true })),
   getPipelineRun: vi.fn(() => Promise.resolve(null)),
   reopenLyrics: vi.fn(() => Promise.resolve({ success: true })),
+  publishLyricsToSongbook: vi.fn(() => Promise.resolve({ success: true })),
 }));
 
 vi.mock('../src/components/ConfirmDialog.js', () => ({
@@ -119,7 +120,12 @@ vi.mock('../src/lib/store.js', () => ({
 }));
 
 import { renderSongPipelineView } from '../src/components/pipeline/SongPipelineView.js';
-import { watchPipelineRun, retryPipelinePhase, reopenLyrics } from '../src/lib/pipelineApi.js';
+import {
+  watchPipelineRun,
+  retryPipelinePhase,
+  reopenLyrics,
+  publishLyricsToSongbook,
+} from '../src/lib/pipelineApi.js';
 import { LyricsReviewPanel } from '../src/components/pipeline/LyricsReviewPanel.js';
 import { confirmDialog } from '../src/components/ConfirmDialog.js';
 import { showToast } from '../src/lib/toast.js';
@@ -559,6 +565,88 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
       });
 
       container.querySelector('[data-phase="lyrics_review"] .phase__action').click();
+      await flushPromises();
+
+      expect(showToast).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ type: 'error' }),
+      );
+      expect(container.querySelector('.pipeline-view')).toBeTruthy();
+    });
+  });
+
+  describe('publicar al cancionero (F4)', () => {
+    beforeEach(() => {
+      publishLyricsToSongbook.mockResolvedValue({ success: true });
+    });
+
+    it('fila Letra en done: muestra el boton "Publicar al cancionero"', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' } }, { status: 'running' }),
+      });
+
+      const row = container.querySelector('[data-phase="lyrics_review"]');
+      const btn = row.querySelector('.phase__publish-songbook');
+      expect(btn).toBeTruthy();
+      expect(btn.textContent).toBe('Publicar al cancionero');
+    });
+
+    it('fila Letra sin aprobar (awaiting_lyrics): NO muestra el boton de publicar', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'pending' } }, { status: 'awaiting_lyrics' }),
+      });
+
+      const row = container.querySelector('[data-phase="lyrics_review"]');
+      expect(row.querySelector('.phase__publish-songbook')).toBeFalsy();
+    });
+
+    it('otras fases done (ej. stems) no muestran el boton de publicar', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({ run: buildRun({ stems: { status: 'done' } }) });
+
+      const row = container.querySelector('[data-phase="stems"]');
+      expect(row.querySelector('.phase__publish-songbook')).toBeFalsy();
+    });
+
+    it('click abre el ConfirmDialog y al confirmar llama publishLyricsToSongbook + toast de exito', async () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' } }, { status: 'running' }),
+      });
+
+      container.querySelector('[data-phase="lyrics_review"] .phase__publish-songbook').click();
+      await flushPromises();
+
+      expect(confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ title: expect.stringContaining('Publicar') }),
+      );
+      expect(publishLyricsToSongbook).toHaveBeenCalledWith(SONG_ID);
+      expect(showToast).toHaveBeenCalled();
+    });
+
+    it('al cancelar el dialogo: NO llama publishLyricsToSongbook', async () => {
+      confirmDialog.mockResolvedValueOnce(false);
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' } }, { status: 'running' }),
+      });
+
+      container.querySelector('[data-phase="lyrics_review"] .phase__publish-songbook').click();
+      await flushPromises();
+
+      expect(publishLyricsToSongbook).not.toHaveBeenCalled();
+    });
+
+    it('si publishLyricsToSongbook falla (404): muestra toast de error y no rompe la vista', async () => {
+      publishLyricsToSongbook.mockRejectedValueOnce(new Error('boom'));
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' } }, { status: 'running' }),
+      });
+
+      container.querySelector('[data-phase="lyrics_review"] .phase__publish-songbook').click();
       await flushPromises();
 
       expect(showToast).toHaveBeenCalledWith(

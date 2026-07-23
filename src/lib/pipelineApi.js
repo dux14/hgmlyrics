@@ -84,6 +84,24 @@ export async function reopenLyrics(songId) {
 }
 
 /**
+ * Publica la letra del pipeline al cancionero (solo texto, one-way, admin).
+ * Copia `song_pipeline_lyrics` a `songs.sections` sin correr alignment: el
+ * karaoke ya consume el store del pipeline directamente. 404 si la canción
+ * no tiene letra de pipeline aprobada.
+ * @param {string} songId
+ * @returns {Promise<{success:boolean}>}
+ */
+export async function publishLyricsToSongbook(songId) {
+  const res = await fetch(`/api/songs/${songId}/pipeline/lyrics`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ action: { type: 'publishToSongbook' } }),
+  });
+  if (!res.ok) throw await readError(res, 'No se pudo publicar la letra al cancionero');
+  return res.json();
+}
+
+/**
  * Estado del run activo del pipeline de una canción.
  * @param {string} songId
  * @returns {Promise<{run:object}|null>} null si no hay run activo (404).

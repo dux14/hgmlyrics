@@ -35,6 +35,7 @@ import {
   retryPipelinePhase,
   cancelPipelineRun,
   renamePipelineAudio,
+  publishLyricsToSongbook,
   watchPipelineRun,
 } from '../src/lib/pipelineApi.js';
 
@@ -139,6 +140,29 @@ describe('renamePipelineAudio', () => {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer tok' },
       body: JSON.stringify({ displayName: 'Voz principal' }),
+    });
+  });
+});
+
+describe('publishLyricsToSongbook', () => {
+  it('PUT con action publishToSongbook y header Bearer', async () => {
+    global.fetch.mockResolvedValue(jsonResponse(200, { success: true }));
+    const result = await publishLyricsToSongbook('s1');
+    expect(result).toEqual({ success: true });
+    expect(global.fetch).toHaveBeenCalledWith('/api/songs/s1/pipeline/lyrics', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer tok' },
+      body: JSON.stringify({ action: { type: 'publishToSongbook' } }),
+    });
+  });
+
+  it('error lanza con el mensaje del backend', async () => {
+    global.fetch.mockResolvedValue(
+      jsonResponse(404, { error: 'Esta canción no tiene letra de pipeline aprobada' }),
+    );
+    await expect(publishLyricsToSongbook('s1')).rejects.toMatchObject({
+      status: 404,
+      message: 'Esta canción no tiene letra de pipeline aprobada',
     });
   });
 });

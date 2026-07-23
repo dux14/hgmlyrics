@@ -15,6 +15,7 @@ import {
   retryPipelinePhase,
   getPipelineRun,
   reopenLyrics,
+  publishLyricsToSongbook,
 } from '../../lib/pipelineApi.js';
 import { showToast } from '../../lib/toast.js';
 import { fetchSongDetail } from '../../lib/store.js';
@@ -83,6 +84,37 @@ const SUBTITLES = {
     stale: 'Desactualizado respecto a la letra',
   },
 };
+
+/** Boton "Publicar al cancionero" (F4): copia SOLO el texto de la letra
+ * aprobada del pipeline a songs.sections (one-way, sin correr alignment — el
+ * karaoke ya consume el store del pipeline directamente). Vive en el slot de
+ * detalle de la fila Letra, separado del boton "Editar letra" (que usa el
+ * unico `actionLabel`/`onRetry` de PhaseRow). */
+function createPublishToSongbookButton(songId) {
+  const wrap = document.createElement('div');
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'phase__action phase__action--secondary phase__publish-songbook';
+  btn.textContent = 'Publicar al cancionero';
+  btn.addEventListener('click', async () => {
+    const ok = await confirmDialog({
+      title: 'Publicar al cancionero',
+      body: '¿Publicar esta letra al cancionero? Se copiará el texto a la canción.',
+      confirmLabel: 'Publicar',
+      cancelLabel: 'Cancelar',
+    });
+    if (!ok) return;
+    try {
+      await publishLyricsToSongbook(songId);
+      showToast('Letra publicada al cancionero');
+    } catch (err) {
+      console.error('SongPipelineView: no se pudo publicar la letra al cancionero', err);
+      showToast(err.message || 'No se pudo publicar la letra al cancionero', { type: 'error' });
+    }
+  });
+  wrap.appendChild(btn);
+  return wrap;
+}
 
 /**
  * @param {HTMLElement} container
@@ -412,6 +444,7 @@ export function renderSongPipelineView(container, songId) {
         } else {
           // Letra aprobada (u otro estado): soltar la referencia del panel.
           lyricsPanelEl = null;
+          if (phase.status === 'done') detail = createPublishToSongbookButton(songId);
         }
       }
 

@@ -20,7 +20,7 @@ import {
   isNil,
 } from '../../../_lib/pipeline/lyricsReview.js';
 import { suggestLineBreaks } from '../../../_lib/pipeline/phrasing.js';
-import { upsertPipelineLyrics } from '../../../_lib/pipeline/lyricsStore.js';
+import { upsertPipelineLyrics, getPipelineLyrics } from '../../../_lib/pipeline/lyricsStore.js';
 import {
   applyPhaseEvent,
   phasesAfterLyricsEdit,
@@ -190,6 +190,26 @@ async function reopenLyrics(res, songId) {
   res.status(200).json({ success: true });
 }
 
+/** Copia SOLO el texto de la letra del pipeline al cancionero (one-way,
+ * accion explicita del admin, spec §6). No corre alignment: el karaoke ya
+ * consume el store directamente. */
+async function publishToSongbook(res, songId) {
+  const stored = await getPipelineLyrics(sql, songId);
+  if (!stored) {
+    res.status(404).json({ error: 'Esta canción no tiene letra de pipeline aprobada' });
+    return;
+  }
+  const sections = stored.sections.map((section) => ({
+    type: section.type,
+    ...(section.label ? { label: section.label } : {}),
+    lines: section.lines.map((line) =>
+      line.vocalization ? { text: line.text, vocalization: true } : { text: line.text },
+    ),
+  }));
+  await sql`UPDATE songs SET sections = ${sql.json(sections)}, updated_at = now() WHERE id = ${songId}`;
+  res.status(200).json({ success: true });
+}
+
 async function putGate(req, res, songId) {
   const action = req.body?.action;
   if (!action || typeof action !== 'object' || typeof action.type !== 'string') {
@@ -197,6 +217,7 @@ async function putGate(req, res, songId) {
     return;
   }
   if (action.type === 'reopen') return reopenLyrics(res, songId);
+  if (action.type === 'publishToSongbook') return publishToSongbook(res, songId);
 
   const run = await findAwaitingRun(songId);
   if (!run) {

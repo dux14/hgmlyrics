@@ -443,6 +443,125 @@ describe('PUT /api/songs/:id/pipeline/lyrics (reopen, Task 13)', () => {
   });
 });
 
+describe('PUT /api/songs/:id/pipeline/lyrics (publishToSongbook, F4)', () => {
+  function storedLyricsRow(overrides = {}) {
+    return {
+      songId: 's1',
+      runId: 'r1',
+      hash: 'h1',
+      approvedAt: '2026-07-23T00:00:00.000Z',
+      sections: [
+        {
+          type: 'chorus',
+          label: null,
+          startMs: 0,
+          endMs: 900,
+          lines: [
+            { text: 'linea normal', startMs: 0, endMs: 400, confidence: 0.9, vocalization: false },
+            { text: 'linea oooh', startMs: 410, endMs: 900, confidence: 0.2, vocalization: true },
+          ],
+        },
+        {
+          type: 'verse',
+          label: 'Segunda parte',
+          startMs: 900,
+          endMs: 1500,
+          lines: [{ text: 'otra linea', startMs: 900, endMs: 1500, confidence: null }],
+        },
+      ],
+      ...overrides,
+    };
+  }
+
+  it('404 sin fila en song_pipeline_lyrics', async () => {
+    routeSql([['song_pipeline_lyrics', []]]);
+    const res = makeRes();
+    await lyricsHandler(
+      { method: 'PUT', query: { id: 's1' }, body: { action: { type: 'publishToSongbook' } } },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Esta canción no tiene letra de pipeline aprobada',
+    });
+  });
+
+  it('con fila: hace UPDATE songs SET sections solo con texto (label omitido si es null, vocalization solo cuando true)', async () => {
+    let updatedSections;
+    routeSql([
+      ['song_pipeline_lyrics', [storedLyricsRow()]],
+      [
+        'UPDATE songs',
+        (values) => {
+          updatedSections = values.find((v) => Array.isArray(v));
+          return { count: 1 };
+        },
+      ],
+    ]);
+    const res = makeRes();
+    await lyricsHandler(
+      { method: 'PUT', query: { id: 's1' }, body: { action: { type: 'publishToSongbook' } } },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ success: true });
+    expect(updatedSections).toEqual([
+      {
+        type: 'chorus',
+        lines: [{ text: 'linea normal' }, { text: 'linea oooh', vocalization: true }],
+      },
+      {
+        type: 'verse',
+        label: 'Segunda parte',
+        lines: [{ text: 'otra linea' }],
+      },
+    ]);
+  });
+
+  it('no requiere run activo: no consulta song_pipeline_runs', async () => {
+    let queriedFindAwaiting = false;
+    routeSql([
+      [
+        'awaiting_lyrics',
+        () => {
+          queriedFindAwaiting = true;
+          return [];
+        },
+      ],
+      ['song_pipeline_lyrics', [storedLyricsRow()]],
+      ['UPDATE songs', { count: 1 }],
+    ]);
+    const res = makeRes();
+    await lyricsHandler(
+      { method: 'PUT', query: { id: 's1' }, body: { action: { type: 'publishToSongbook' } } },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(queriedFindAwaiting).toBe(false);
+  });
+
+  it('idempotente: dos llamadas seguidas devuelven el mismo resultado', async () => {
+    routeSql([
+      ['song_pipeline_lyrics', [storedLyricsRow()]],
+      ['UPDATE songs', { count: 1 }],
+    ]);
+    const res1 = makeRes();
+    await lyricsHandler(
+      { method: 'PUT', query: { id: 's1' }, body: { action: { type: 'publishToSongbook' } } },
+      res1,
+    );
+    const res2 = makeRes();
+    await lyricsHandler(
+      { method: 'PUT', query: { id: 's1' }, body: { action: { type: 'publishToSongbook' } } },
+      res2,
+    );
+    expect(res1.status).toHaveBeenCalledWith(200);
+    expect(res2.status).toHaveBeenCalledWith(200);
+    expect(res1.json).toHaveBeenCalledWith({ success: true });
+    expect(res2.json).toHaveBeenCalledWith({ success: true });
+  });
+});
+
 describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
   // Doc v2 aprobable con 3 renglones: el del medio sin timing (interpola en
   // el shim de song_line_timings), los otros dos con timing real.

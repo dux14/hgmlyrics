@@ -54,7 +54,10 @@ describe('POST /api/pipeline/sign-upload', () => {
 
   it('409 si la fase pitch no está running', async () => {
     routeSql([
-      ['song_pipeline_runs', [{ id: 'r1', songId: 's1', phases: { pitch: { status: 'done' } } }]],
+      [
+        'song_pipeline_runs',
+        [{ id: 'r1', songId: 's1', status: 'running', phases: { pitch: { status: 'done' } } }],
+      ],
     ]);
     const res = makeRes();
     await handler(
@@ -68,11 +71,31 @@ describe('POST /api/pipeline/sign-upload', () => {
     expect(res.status).toHaveBeenCalledWith(409);
   });
 
+  it('409 si el run no está activo (purgado) aunque phases.pitch siga running', async () => {
+    routeSql([
+      [
+        'song_pipeline_runs',
+        [{ id: 'r1', songId: 's1', status: 'cancelled', phases: { pitch: { status: 'running' } } }],
+      ],
+    ]);
+    const res = makeRes();
+    await handler(
+      {
+        method: 'POST',
+        headers: { 'x-inbound-secret': SECRET },
+        body: { jobId: 'r1', key: 'f0/lead.json' },
+      },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(createPitchSignedPutUrl).not.toHaveBeenCalled();
+  });
+
   it('400 con key inválida (traversal)', async () => {
     routeSql([
       [
         'song_pipeline_runs',
-        [{ id: 'r1', songId: 's1', phases: { pitch: { status: 'running' } } }],
+        [{ id: 'r1', songId: 's1', status: 'running', phases: { pitch: { status: 'running' } } }],
       ],
     ]);
     const res = makeRes();
@@ -92,7 +115,7 @@ describe('POST /api/pipeline/sign-upload', () => {
     routeSql([
       [
         'song_pipeline_runs',
-        [{ id: 'r1', songId: 's1', phases: { pitch: { status: 'running' } } }],
+        [{ id: 'r1', songId: 's1', status: 'running', phases: { pitch: { status: 'running' } } }],
       ],
     ]);
     const res = makeRes();

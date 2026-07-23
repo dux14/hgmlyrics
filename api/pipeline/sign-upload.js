@@ -2,6 +2,7 @@ import sql from '../_lib/db.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { timingSafeEqualStr } from '../_lib/crypto.js';
 import { createPitchSignedPutUrl } from '../pitch/_lib/storage.js';
+import { ACTIVE_RUN_STATUSES } from '../_lib/pipeline/process.js';
 
 // Espejo de api/pitch/sign-upload.js para RUNS del pipeline unificado: el
 // orquestador Modal hkn-pitch, cuando corre dentro de un run del pipeline,
@@ -25,10 +26,19 @@ export default withErrors(async (req, res) => {
   }
 
   const rows = await sql`
-    SELECT id, song_id AS "songId", phases FROM song_pipeline_runs WHERE id = ${jobId}
+    SELECT id, song_id AS "songId", status, phases FROM song_pipeline_runs WHERE id = ${jobId}
   `;
   if (rows.length === 0) {
     res.status(404).json({ error: 'Run no encontrado' });
+    return;
+  }
+
+  // Un run purgado (cancelled/superseded/done/failed) puede haber dejado
+  // phases.pitch.status en 'running' si la purga corrió mientras Modal seguía
+  // procesando (review holístico): sin este gate el signer seguía firmando
+  // uploads para un run huérfano, agravando el leak de storage.
+  if (!ACTIVE_RUN_STATUSES.has(rows[0].status)) {
+    res.status(409).json({ error: 'El run no está activo' });
     return;
   }
 

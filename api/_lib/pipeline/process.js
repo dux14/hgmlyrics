@@ -11,7 +11,7 @@ import { applyPhaseEvent, runStatusFromPhases } from './state.js';
 // Estados de run donde un evento de fase todavía puede aplicar efectos.
 // Mismo set que el índice único parcial song_pipeline_runs_one_active_per_song
 // y que los filtros WHERE status IN (...) del resto del pipeline.
-const ACTIVE_RUN_STATUSES = new Set([
+export const ACTIVE_RUN_STATUSES = new Set([
   'created',
   'uploading',
   'processing',

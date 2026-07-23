@@ -445,11 +445,4 @@ describe('LyricsReviewPanel', () => {
     expect(el.querySelector('.lrp__approve')).toBeNull();
   });
 
-  it('onData siempre emite conflictsCount 0 y structureWarning null (contrato v2)', async () => {
-    const onData = vi.fn();
-    const el = await LyricsReviewPanel({ songId: 'song-1', onData });
-    document.body.appendChild(el);
-
-    expect(onData).toHaveBeenCalledWith({ conflictsCount: 0, structureWarning: null });
-  });
 });

@@ -1,21 +1,18 @@
 /**
  * ConfidenceSummary.js — resumen transversal de baja confianza del stepper de
- * procesamiento (pipeline unificado, Task 17). Agrega, bajo el header, los
- * avisos de las 3 fases que producen resultados que el admin debería revisar:
- * conflictos sin resolver en el review doc de la letra (Task 15c/C1), líneas
- * de sincronía con timing `interpolated` o `score` bajo (persistidos por el
- * webhook de align, api/align/webhook.js), y la discrepancia de estructura
- * vs. letra (`structureWarning`, Task 15c). Cero items -> NO se renderiza
+ * procesamiento (pipeline unificado, Task 17). Agrega, bajo el header, el
+ * aviso de la única fase que hoy produce un resultado que el admin debería
+ * revisar: líneas de sincronía con timing `interpolated` o `score` bajo
+ * (persistidos por el webhook de align, api/align/webhook.js). Post-F3 el
+ * gate de letra es un editor puro (LyricsReviewPanel), sin conflictos ni
+ * discrepancia de estructura que reportar. Cero items -> NO se renderiza
  * nada (ni contenedor vacío): el bloque ámbar solo existe cuando hay algo que
- * revisar. Click en un item hace scroll a la fila del stepper de esa fase
+ * revisar. Click en el item hace scroll a la fila del stepper de esa fase
  * (PhaseRow ya expone `data-phase`, Task D3a).
  *
  * Fuente de la sincronía: fetch propio (mismo `getSongAudio` que consume
  * SyncFineTuning) — self-contained, sin wiring compartido entre componentes
- * hermanos del stepper. Fuente de conflictos/structureWarning: `lyricsData`
- * que SongPipelineView reenvía desde el `onData` de LyricsReviewPanel (mismo
- * documento que ya carga el gate de letra, sin fetch aparte) — solo se
- * actualiza mientras el panel de letra está montado (awaiting_lyrics).
+ * hermanos del stepper.
  */
 import { escapeHtml } from '../../lib/escape.js';
 import { icon } from '../../lib/icons.js';
@@ -43,7 +40,7 @@ function lowConfidenceLineCount(lines) {
  * @param {{ songId: string, scrollToPhase: (phase: string) => void }} opts
  * @returns {{
  *   el: HTMLElement,
- *   update: (run: object|null, lyricsData?: {conflictsCount?: number, structureWarning?: string|null}) => void,
+ *   update: (run: object|null) => void,
  *   destroy: () => void,
  * }}
  */
@@ -56,7 +53,6 @@ export function createConfidenceSummary({ songId, scrollToPhase }) {
   let timings = null;
   let timingsLoading = false;
   let lastSyncStatus = null;
-  let lastLyricsData = { conflictsCount: 0, structureWarning: null };
 
   // Delegación sobre `el` (nodo estable, no se recrea): un solo listener para
   // toda la vida del componente, sin importar cuántas veces render() rearma
@@ -83,17 +79,6 @@ export function createConfidenceSummary({ songId, scrollToPhase }) {
   function computeItems() {
     const items = [];
 
-    const conflicts = lastLyricsData.conflictsCount || 0;
-    if (conflicts > 0) {
-      items.push({
-        phase: 'lyrics_review',
-        label:
-          conflicts === 1
-            ? 'Conflicto sin resolver en la letra'
-            : `${conflicts} conflictos sin resolver en la letra`,
-      });
-    }
-
     const lowConfidence = lowConfidenceLineCount(timings?.lines);
     if (lowConfidence > 0) {
       items.push({
@@ -103,10 +88,6 @@ export function createConfidenceSummary({ songId, scrollToPhase }) {
             ? '1 línea con sincronía de baja confianza'
             : `${lowConfidence} líneas con sincronía de baja confianza`,
       });
-    }
-
-    if (lastLyricsData.structureWarning) {
-      items.push({ phase: 'structure', label: lastLyricsData.structureWarning });
     }
 
     return items;
@@ -138,11 +119,9 @@ export function createConfidenceSummary({ songId, scrollToPhase }) {
 
   /**
    * @param {object|null} run
-   * @param {{conflictsCount?: number, structureWarning?: string|null}} [lyricsData]
    */
-  function update(run, lyricsData) {
+  function update(run) {
     if (destroyed) return;
-    if (lyricsData) lastLyricsData = lyricsData;
 
     // Fetch de timings solo cuando sync recién termina (pending/running/stale
     // -> done): evita refetch en cada tick del polling de 3s mientras sync ya

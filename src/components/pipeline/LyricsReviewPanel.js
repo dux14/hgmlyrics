@@ -155,10 +155,10 @@ function sectionHtml(section, sIdx, byLine, { disabled, isLast } = {}) {
 }
 
 /**
- * @param {{songId: string, onApproved?: () => void, onData?: (data: {conflictsCount: number, structureWarning: string|null}) => void}} opts
+ * @param {{songId: string, onApproved?: () => void}} opts
  * @returns {Promise<HTMLElement>}
  */
-export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
+export async function LyricsReviewPanel({ songId, onApproved } = {}) {
   const el = document.createElement('div');
   el.className = 'lrp';
 
@@ -419,9 +419,6 @@ export async function LyricsReviewPanel({ songId, onApproved, onData } = {}) {
 
   function render() {
     const byLine = suggestionsByLine(state.suggestions || []);
-    // El contrato con ConfidenceSummary se mantiene hasta F5 (pase visual):
-    // el editor puro v2 no tiene conflictos ni advertencia de estructura.
-    onData?.({ conflictsCount: 0, structureWarning: null });
     const motion = reduceMotion() ? '' : ' lrp--motion';
     const disabled = state.busy;
 

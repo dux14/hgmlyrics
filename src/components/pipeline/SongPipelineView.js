@@ -239,10 +239,9 @@ export function renderSongPipelineView(container, songId) {
   refreshSong();
 
   // Resumen transversal de baja confianza (Task 17): bloque ámbar bajo el
-  // header, sobre el stepper. Conflictos/structureWarning llegan del `onData`
-  // de LyricsReviewPanel (ver ensureLyricsPanel); timings de sync los trae el
-  // propio componente (self-contained, mismo criterio que SyncFineTuning).
-  let lyricsReviewData = { conflictsCount: 0, structureWarning: null };
+  // header, sobre el stepper. Post-F3 la única fuente de items es la
+  // sincronía; el propio componente la trae self-contained (mismo criterio
+  // que SyncFineTuning).
   const confidenceSummary = createConfidenceSummary({
     songId,
     scrollToPhase: (phase) => {
@@ -262,13 +261,6 @@ export function renderSongPipelineView(container, songId) {
         onApproved: () => {
           // El próximo evento del watcher (broadcast o polling) trae
           // lyrics_review en done y renderPhases suelta el panel solo.
-        },
-        onData: (data) => {
-          // Task 17: reenvía conflictos/structureWarning al resumen
-          // transversal en tiempo real (no espera al próximo tick del
-          // polling de renderPhases, que puede saltarse por el guard de sig).
-          lyricsReviewData = data;
-          confidenceSummary.update(lastRun, lyricsReviewData);
         },
       });
     } catch (err) {
@@ -423,7 +415,7 @@ export function renderSongPipelineView(container, songId) {
     stemTracks.update(run);
     structureDetail.update(run);
     syncTuning.update(run);
-    confidenceSummary.update(run, lyricsReviewData);
+    confidenceSummary.update(run);
 
     ROWS.forEach((r, i) => {
       const phase = phases[r.key] || { status: 'pending' };

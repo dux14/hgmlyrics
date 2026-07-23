@@ -281,6 +281,166 @@ describe('GET /api/songs/[id]/audio', () => {
   });
 });
 
+describe('GET /api/songs/[id]/audio — fuente store del pipeline (F4)', () => {
+  function pushAudioAndTimings() {
+    sqlResponses.push([
+      { storageKey: 'song-1/full.mp3', durationSec: 210, bpmManual: null, timeSignature: null, beatAnchor: null },
+    ]); // SELECT song_audio
+    sqlResponses.push([{ status: 'ready', lines: [], bpmDetected: 126.4, beats: { bpm: 126.4, beatsMs: [0, 476] } }]); // SELECT song_line_timings
+  }
+
+  it('con fila en song_pipeline_lyrics → arma lines desde el store con texto+timing resuelto+manual', async () => {
+    pushAudioAndTimings();
+    sqlResponses.push([
+      {
+        songId: 'song-1',
+        runId: 'run-1',
+        sections: [
+          {
+            type: 'verse',
+            label: null,
+            startMs: 0,
+            endMs: 5000,
+            lines: [
+              {
+                text: 'primera linea',
+                startMs: 100,
+                endMs: 900,
+                words: [],
+                confidence: 0.9,
+                vocalization: false,
+                breath: false,
+                manualStartMs: null,
+              },
+              {
+                text: 'segunda linea',
+                startMs: null,
+                endMs: null,
+                words: [],
+                confidence: null,
+                vocalization: false,
+                breath: false,
+                manualStartMs: 5000,
+              },
+            ],
+          },
+        ],
+        hash: 'h1',
+        approvedAt: '2026-07-23T00:00:00.000Z',
+      },
+    ]); // SELECT song_pipeline_lyrics
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body.timings).toEqual({
+      status: 'ready',
+      lines: [
+        { i: 0, startMs: 100, score: 0.9, interpolated: false, text: 'primera linea', manual: false },
+        { i: 1, startMs: 5000, score: null, interpolated: false, text: 'segunda linea', manual: true },
+      ],
+      // bpmDetected/beats siguen viniendo de song_line_timings (el metronomo no cambia de fuente).
+      bpmDetected: 126.4,
+      beats: [0, 476],
+    });
+  });
+
+  it('renglon sin timing (ni startMs ni manualStartMs) → interpolated:true, manual:false', async () => {
+    pushAudioAndTimings();
+    sqlResponses.push([
+      {
+        songId: 'song-1',
+        runId: 'run-1',
+        sections: [
+          {
+            type: 'verse',
+            label: null,
+            startMs: 0,
+            endMs: 5000,
+            lines: [
+              {
+                text: 'con timing',
+                startMs: 100,
+                endMs: 900,
+                words: [],
+                confidence: 0.8,
+                vocalization: false,
+                breath: false,
+                manualStartMs: null,
+              },
+              {
+                text: 'sin timing',
+                startMs: null,
+                endMs: null,
+                words: [],
+                confidence: null,
+                vocalization: false,
+                breath: false,
+                manualStartMs: null,
+              },
+              {
+                text: 'con timing otra vez',
+                startMs: 3000,
+                endMs: 3500,
+                words: [],
+                confidence: 0.7,
+                vocalization: false,
+                breath: false,
+                manualStartMs: null,
+              },
+            ],
+          },
+        ],
+        hash: 'h1',
+        approvedAt: '2026-07-23T00:00:00.000Z',
+      },
+    ]); // SELECT song_pipeline_lyrics
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body.timings.lines[1]).toEqual({
+      i: 1,
+      startMs: 1550, // punto medio entre 100 y 3000 (reparto proporcional de timingLinesFromSections)
+      score: null,
+      interpolated: true,
+      text: 'sin timing',
+      manual: false,
+    });
+  });
+
+  it('sin fila en song_pipeline_lyrics → shape identico al camino actual (regresion)', async () => {
+    pushAudioAndTimings();
+    sqlResponses.push([]); // SELECT song_pipeline_lyrics sin filas
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({
+      audio: {
+        url: 'https://get/song-1/full.mp3',
+        durationSec: 210,
+        bpmManual: null,
+        timeSignature: null,
+        beatAnchor: null,
+      },
+      timings: {
+        status: 'ready',
+        lines: [],
+        bpmDetected: 126.4,
+        beats: [0, 476],
+      },
+    });
+  });
+
+  it('audio:null corta antes → no consulta song_pipeline_lyrics', async () => {
+    sqlResponses.push([]); // SELECT song_audio sin filas
+    sqlResponses.push([{ status: 'ready', lines: [], bpmDetected: null, beats: null }]); // SELECT song_line_timings (ya corre en el Promise.all)
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ audio: null, timings: null });
+    expect(sqlCalls.some((c) => c.text.includes('song_pipeline_lyrics'))).toBe(false);
+  });
+});
+
 describe('POST /api/songs/[id]/audio', () => {
   function postReq(body) {
     return makeReq({ method: 'POST', body });

@@ -8,6 +8,8 @@ import {
 } from '../../_lib/storage.js';
 import { dispatchAlign } from '../../_lib/align.js';
 import { validatePatchBody, validateLineTimingShape } from '../../_lib/beats.js';
+import { getPipelineLyrics } from '../../_lib/pipeline/lyricsStore.js';
+import { timingLinesFromSections } from './pipeline/lyrics.js';
 
 // GET: audio completo + estado de timings para la vista inmersiva.
 async function getAudio(_req, res, songId) {
@@ -29,25 +31,49 @@ async function getAudio(_req, res, songId) {
     res.status(200).json({ audio: null, timings: null });
     return;
   }
+  const audioOut = {
+    url: await signSongAudioDownload(audio.storageKey),
+    // NUMERIC llega como string del driver pg; el contrato del GET es number
+    // (Number.isFinite en el editor no coacciona strings, p. ej. el clamp de
+    // la ultima linea en la correccion manual usa durationSec * 1000).
+    durationSec: audio.durationSec == null ? null : Number(audio.durationSec),
+    bpmManual: audio.bpmManual == null ? null : Number(audio.bpmManual),
+    timeSignature: audio.timeSignature,
+    beatAnchor: audio.beatAnchor,
+  };
+  const bpmDetected = timings?.bpmDetected == null ? null : Number(timings.bpmDetected);
+  const beats = Array.isArray(timings?.beats?.beatsMs) ? timings.beats.beatsMs : null;
+
+  // F4: la letra aprobada del pipeline (song_pipeline_lyrics) es la fuente
+  // canonica del karaoke cuando existe — texto y timing salen del store, no
+  // de songs.sections. bpmDetected/beats siguen viniendo de
+  // song_line_timings: el metronomo no cambia de fuente (F3).
+  const pipelineLyrics = await getPipelineLyrics(sql, songId);
+  if (pipelineLyrics) {
+    const flat = pipelineLyrics.sections.flatMap((s) => s.lines);
+    const baseLines = timingLinesFromSections(pipelineLyrics.sections);
+    const lines = baseLines.map((l, k) => ({
+      ...l,
+      text: flat[k]?.text ?? null,
+      manual: flat[k]?.manualStartMs != null,
+    }));
+    res.status(200).json({
+      audio: audioOut,
+      timings: { status: 'ready', lines, bpmDetected, beats },
+    });
+    return;
+  }
+
   res.status(200).json({
-    audio: {
-      url: await signSongAudioDownload(audio.storageKey),
-      // NUMERIC llega como string del driver pg; el contrato del GET es number
-      // (Number.isFinite en el editor no coacciona strings, p. ej. el clamp de
-      // la ultima linea en la correccion manual usa durationSec * 1000).
-      durationSec: audio.durationSec == null ? null : Number(audio.durationSec),
-      bpmManual: audio.bpmManual == null ? null : Number(audio.bpmManual),
-      timeSignature: audio.timeSignature,
-      beatAnchor: audio.beatAnchor,
-    },
+    audio: audioOut,
     // beats se guarda como JSONB { bpm, beatsMs } (shape explícito del webhook);
     // el contrato del GET es la rejilla plana en ms — lo que consume el front
     // (setupMetronome exige Array). bpm ya viaja aparte como bpmDetected.
     timings: timings
       ? {
           ...timings,
-          bpmDetected: timings.bpmDetected == null ? null : Number(timings.bpmDetected),
-          beats: Array.isArray(timings.beats?.beatsMs) ? timings.beats.beatsMs : null,
+          bpmDetected,
+          beats,
           // score/interpolated: filas persistidas antes de la Task 5.2 no los
           // traen en el JSONB — se rellenan con defaults (patrón defensivo
           // igual a bpmDetected arriba).

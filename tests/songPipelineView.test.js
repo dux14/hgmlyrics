@@ -13,6 +13,15 @@ vi.mock('../src/lib/pipelineApi.js', () => ({
   }),
   retryPipelinePhase: vi.fn(() => Promise.resolve({ success: true })),
   getPipelineRun: vi.fn(() => Promise.resolve(null)),
+  cancelPipelineRun: vi.fn(() => Promise.resolve({ success: true })),
+}));
+
+vi.mock('../src/components/ConfirmDialog.js', () => ({
+  confirmDialog: vi.fn(() => Promise.resolve(true)),
+}));
+
+vi.mock('../src/lib/toast.js', () => ({
+  showToast: vi.fn(),
 }));
 
 vi.mock('../src/components/pipeline/LyricsReviewPanel.js', () => ({
@@ -81,8 +90,10 @@ vi.mock('../src/router.js', () => ({
 }));
 
 import { renderSongPipelineView } from '../src/components/pipeline/SongPipelineView.js';
-import { watchPipelineRun, retryPipelinePhase } from '../src/lib/pipelineApi.js';
+import { watchPipelineRun, retryPipelinePhase, cancelPipelineRun } from '../src/lib/pipelineApi.js';
 import { LyricsReviewPanel } from '../src/components/pipeline/LyricsReviewPanel.js';
+import { confirmDialog } from '../src/components/ConfirmDialog.js';
+import { showToast } from '../src/lib/toast.js';
 
 const SONG_ID = 'song-1';
 
@@ -125,6 +136,8 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     lastSyncTuningDestroy = null;
     lastSyncTuningUpdate = null;
     vi.clearAllMocks();
+    confirmDialog.mockResolvedValue(true);
+    cancelPipelineRun.mockResolvedValue({ success: true });
   });
 
   afterEach(() => {
@@ -158,9 +171,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     watchOnChange({ run: buildRun({}, { status: 'awaiting_lyrics' }) });
     await flushPromises();
 
-    expect(LyricsReviewPanel).toHaveBeenCalledWith(
-      expect.objectContaining({ songId: SONG_ID }),
-    );
+    expect(LyricsReviewPanel).toHaveBeenCalledWith(expect.objectContaining({ songId: SONG_ID }));
     const row = container.querySelector('[data-phase="lyrics_review"]');
     expect(row.querySelector('.dot.act')).toBeTruthy();
     expect(row.querySelector('.phase__detail').children.length).toBeGreaterThan(0);
@@ -359,5 +370,64 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     const rowAfter = container.querySelector('[data-phase="upload"]');
     expect(rowAfter).toBe(row); // mismo nodo: no se recreo la fila
     expect(rowAfter.classList.contains('phase--enter')).toBe(false); // no se re-animo
+  });
+
+  describe('cancelar procesamiento (Task 12)', () => {
+    it('el header tiene un boton overflow para cancelar el procesamiento', () => {
+      renderSongPipelineView(container, SONG_ID);
+
+      const btn = container.querySelector('.pipeline-view__cancel');
+      expect(btn).toBeTruthy();
+    });
+
+    it('click en overflow abre el ConfirmDialog del sistema con copy de advertencia', async () => {
+      renderSongPipelineView(container, SONG_ID);
+
+      container.querySelector('.pipeline-view__cancel').click();
+      await flushPromises();
+
+      expect(confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: expect.stringContaining('Cancelar'),
+          danger: true,
+        }),
+      );
+    });
+
+    it('al confirmar: llama cancelPipelineRun, muestra toast y refresca la vista', async () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({ run: buildRun() });
+
+      container.querySelector('.pipeline-view__cancel').click();
+      await flushPromises();
+
+      expect(cancelPipelineRun).toHaveBeenCalledWith(SONG_ID);
+      expect(showToast).toHaveBeenCalled();
+      expect(lastUnsub.refresh).toHaveBeenCalled();
+    });
+
+    it('al cancelar el dialogo: NO llama cancelPipelineRun', async () => {
+      confirmDialog.mockResolvedValueOnce(false);
+      renderSongPipelineView(container, SONG_ID);
+
+      container.querySelector('.pipeline-view__cancel').click();
+      await flushPromises();
+
+      expect(cancelPipelineRun).not.toHaveBeenCalled();
+    });
+
+    it('si cancelPipelineRun falla: muestra toast de error y no rompe la vista', async () => {
+      cancelPipelineRun.mockRejectedValueOnce(new Error('boom'));
+      renderSongPipelineView(container, SONG_ID);
+
+      container.querySelector('.pipeline-view__cancel').click();
+      await flushPromises();
+
+      expect(showToast).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ type: 'error' }),
+      );
+      expect(container.querySelector('.pipeline-view')).toBeTruthy();
+    });
   });
 });

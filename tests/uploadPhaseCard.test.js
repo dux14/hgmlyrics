@@ -16,6 +16,10 @@ vi.mock('../src/lib/toast.js', () => ({
   showToast: vi.fn(),
 }));
 
+vi.mock('../src/components/ConfirmDialog.js', () => ({
+  confirmDialog: vi.fn(() => Promise.resolve(true)),
+}));
+
 import { createUploadPhaseCard } from '../src/components/pipeline/UploadPhaseCard.js';
 import {
   createPipelineRun,
@@ -24,6 +28,7 @@ import {
   cancelPipelineRun,
 } from '../src/lib/pipelineApi.js';
 import { readAudioDuration } from '../src/lib/stemsApi.js';
+import { confirmDialog } from '../src/components/ConfirmDialog.js';
 
 const SONG_ID = 'song-1';
 
@@ -52,6 +57,7 @@ describe('UploadPhaseCard — subida del audio (Task D3b)', () => {
     confirmPipelineUpload.mockResolvedValue({ success: true });
     renamePipelineAudio.mockResolvedValue({ success: true });
     cancelPipelineRun.mockResolvedValue({ success: true });
+    confirmDialog.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -155,6 +161,40 @@ describe('UploadPhaseCard — subida del audio (Task D3b)', () => {
     await flush();
 
     expect(renamePipelineAudio).toHaveBeenCalledWith(SONG_ID, 'Nuevo nombre');
+  });
+
+  it('confirmed → Reemplazar: usa el ConfirmDialog del sistema (no window.confirm) y cancela el run', async () => {
+    const { el, update } = createUploadPhaseCard({ songId: SONG_ID });
+    update({
+      status: 'done',
+      phases: { upload: { status: 'done' } },
+      inputMeta: { filename: 'original.mp3' },
+    });
+
+    el.querySelector('.upload-card__replace').click();
+    await flush();
+
+    expect(confirmDialog).toHaveBeenCalledWith(
+      expect.objectContaining({ title: expect.stringContaining('Reemplazar'), danger: true }),
+    );
+    expect(cancelPipelineRun).toHaveBeenCalledWith(SONG_ID);
+    expect(el.querySelector('.upload-card__drop')).toBeTruthy(); // vuelve a empty
+  });
+
+  it('confirmed → Reemplazar: si se cancela el dialogo, NO cancela el run ni cambia de estado', async () => {
+    confirmDialog.mockResolvedValueOnce(false);
+    const { el, update } = createUploadPhaseCard({ songId: SONG_ID });
+    update({
+      status: 'done',
+      phases: { upload: { status: 'done' } },
+      inputMeta: { filename: 'original.mp3' },
+    });
+
+    el.querySelector('.upload-card__replace').click();
+    await flush();
+
+    expect(cancelPipelineRun).not.toHaveBeenCalled();
+    expect(el.querySelector('.upload-card__confirmed')).toBeTruthy(); // sigue en confirmed
   });
 
   it('update(run) no pisa un flujo local en curso (validating/warning/uploading)', async () => {

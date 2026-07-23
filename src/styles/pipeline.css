@@ -420,6 +420,23 @@ body.chrome-hidden .main {
   background: var(--color-surface-hover);
 }
 
+.pipeline-view__cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+  transition: background-color 0.15s var(--ease-out);
+}
+.pipeline-view__cancel:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
 .pipeline-view__title {
   flex: 1;
   font-size: 1.05rem;

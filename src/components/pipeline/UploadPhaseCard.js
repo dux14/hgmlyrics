@@ -10,6 +10,7 @@
 import { icon } from '../../lib/icons.js';
 import { escapeHtml } from '../../lib/escape.js';
 import { showToast } from '../../lib/toast.js';
+import { confirmDialog } from '../ConfirmDialog.js';
 import { readAudioDuration } from '../../lib/stemsApi.js';
 import {
   createPipelineRun,
@@ -322,13 +323,21 @@ export function createUploadPhaseCard({ songId, onAfterConfirm }) {
       await finalizeConfirm();
     } catch (err) {
       console.error('UploadPhaseCard: no se pudo confirmar la subida', err);
-      showToast(err.message || 'El audio se subió pero no se pudo iniciar el procesamiento.', { type: 'error' });
+      showToast(err.message || 'El audio se subió pero no se pudo iniciar el procesamiento.', {
+        type: 'error',
+      });
       // Se queda en confirmError: el admin puede reintentar de nuevo.
     }
   }
 
   async function replaceAudio() {
-    if (!window.confirm('Esto inicia un procesamiento nuevo. ¿Reemplazar el audio?')) return;
+    const ok = await confirmDialog({
+      title: 'Reemplazar audio',
+      body: 'Esto inicia un procesamiento nuevo. ¿Reemplazar el audio?',
+      confirmLabel: 'Reemplazar',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await cancelPipelineRun(songId);
     } catch (err) {

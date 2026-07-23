@@ -10,8 +10,14 @@
 import '../../styles/pipeline.css';
 import { icon } from '../../lib/icons.js';
 import { goBack, onRouteChange } from '../../router.js';
-import { watchPipelineRun, retryPipelinePhase, getPipelineRun } from '../../lib/pipelineApi.js';
+import {
+  watchPipelineRun,
+  retryPipelinePhase,
+  getPipelineRun,
+  cancelPipelineRun,
+} from '../../lib/pipelineApi.js';
 import { showToast } from '../../lib/toast.js';
+import { confirmDialog } from '../ConfirmDialog.js';
 import { LyricsReviewPanel } from './LyricsReviewPanel.js';
 import { PhaseRow } from './PhaseRow.js';
 import { createUploadPhaseCard } from './UploadPhaseCard.js';
@@ -80,6 +86,7 @@ export function renderSongPipelineView(container, songId) {
       <button type="button" class="pipeline-view__back" aria-label="Volver">${icon('arrow-left')}</button>
       <h1 class="pipeline-view__title">Procesamiento</h1>
       <span class="pipeline-view__pill">0 de 5 fases</span>
+      <button type="button" class="pipeline-view__cancel" aria-label="Más opciones">${icon('ellipsis-vertical')}</button>
     </header>
     <div class="pipeline-view__error" role="alert" hidden>
       <p class="pipeline-view__error-text">No se pudo cargar el procesamiento</p>
@@ -90,6 +97,25 @@ export function renderSongPipelineView(container, songId) {
   container.appendChild(view);
 
   view.querySelector('.pipeline-view__back').addEventListener('click', () => goBack());
+
+  view.querySelector('.pipeline-view__cancel').addEventListener('click', async () => {
+    const ok = await confirmDialog({
+      title: 'Cancelar procesamiento',
+      body: 'Se perderá el progreso de este procesamiento. Esta acción no se puede deshacer.',
+      confirmLabel: 'Cancelar procesamiento',
+      cancelLabel: 'Volver',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await cancelPipelineRun(songId);
+      showToast('Procesamiento cancelado');
+      unsub?.refresh?.();
+    } catch (err) {
+      console.error('SongPipelineView: no se pudo cancelar el procesamiento', err);
+      showToast(err.message || 'No se pudo cancelar el procesamiento', { type: 'error' });
+    }
+  });
 
   const rowsEl = view.querySelector('.pipeline-view__rows');
   const pillEl = view.querySelector('.pipeline-view__pill');

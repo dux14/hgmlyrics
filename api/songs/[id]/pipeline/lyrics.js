@@ -1,24 +1,26 @@
-// Gate humano de letra del pipeline unificado (spec 2026-07-20, Task C2).
-// GET: documento de revision (diff de 3 fuentes), construido bajo demanda y
-// persistido en lyrics_review.review. PUT: aplica una accion de edicion
-// sobre el documento (resolver conflicto, partir/unir renglon o seccion,
-// aceptar/rechazar vocalizacion). POST: aprueba (si no quedan conflictos ni
-// vocalizaciones pendientes) — publica la letra a songs.sections, hace el
-// snapshot con hash, hace swap del audio del run al oficial y dispara
-// sync+pitch.
+// Gate humano de letra del pipeline unificado (spec 2026-07-23, contrato v2).
+// GET: documento de revision v2 (solo IA: transcripcion + estructura),
+// construido bajo demanda y persistido en lyrics_review.review. PUT: aplica
+// una accion de edicion sobre el documento (partir/unir renglon o seccion,
+// mover/borrar renglon, retipar/renombrar seccion, marcar respiro/
+// vocalizacion, offset manual). POST: aprueba (si el doc tiene al menos un
+// renglon) — publica la letra al store propio song_pipeline_lyrics (NUNCA
+// pisa songs.sections), escribe un shim a song_line_timings para los
+// consumidores aguas abajo, marca sync=done (no se despacha en este path),
+// deja pitch/clips corriendo, hace swap del audio del run al oficial y
+// dispara pitch+clips.
 import sql from '../../../_lib/db.js';
 import { requireAdmin } from '../../../_lib/auth.js';
 import { allowMethods, withErrors } from '../../../_lib/http.js';
 import {
   buildReviewDoc,
   applyReviewAction,
-  reviewTemperature,
   canApprove,
   approvedSnapshot,
-  computeStructureWarning,
   isNil,
 } from '../../../_lib/pipeline/lyricsReview.js';
 import { suggestLineBreaks } from '../../../_lib/pipeline/phrasing.js';
+import { upsertPipelineLyrics } from '../../../_lib/pipeline/lyricsStore.js';
 import {
   applyPhaseEvent,
   phasesAfterLyricsEdit,
@@ -53,32 +55,28 @@ async function findAwaitingRun(songId) {
 }
 
 /**
- * Devuelve lyrics_review con `review` garantizado (si ya existe lo reusa tal
- * cual, si no lo construye desde transcripcion+sections+canonica y lo
- * persiste, para no reconstruirlo en cada GET/PUT siguiente) junto con
- * `dbSections`, en UN solo round-trip a `songs` (lo necesita tanto el build
- * como las suggestions del GET — se evita pedirlo dos veces).
+ * Devuelve lyrics_review con `review` v2 garantizado: si ya existe un doc v2
+ * lo reusa tal cual, si no (sin doc, o un doc v1 en vuelo de antes de F3) lo
+ * reconstruye desde transcripcion+song_structure y lo persiste, para no
+ * reconstruirlo en cada GET/PUT siguiente.
  * @param {{id:string, lyricsReview:object|null}} run
  * @param {string} songId
- * @returns {Promise<{lyricsReview:object, dbSections:Array}>}
+ * @returns {Promise<{lyricsReview:object}>}
  */
 async function ensureReview(run, songId) {
-  const [songRow] = await sql`SELECT sections FROM songs WHERE id = ${songId}`;
-  const dbSections = songRow?.sections ?? [];
-
   const lyricsReview = run.lyricsReview ?? {};
-  if (lyricsReview.review) return { lyricsReview, dbSections };
+  // Docs v1 persistidos (sin version) se descartan y reconstruyen: la
+  // transcripcion y song_structure siguen en el run, no se pierde nada.
+  if (lyricsReview.review?.version === 2) return { lyricsReview };
 
-  const [canonicalRow] =
-    await sql`SELECT content FROM song_lyrics_canonical WHERE song_id = ${songId}`;
-  const canonical = canonicalRow?.content ?? null;
-  const transcription = lyricsReview.transcription ?? { text: '', words: [], perLine: [] };
-  // Segmentos de estructura (Task 15a): solo aportan metadata de rango por
-  // renglon, nunca retipan/reordenan la letra (buildReviewDoc los pasa tal
-  // cual a autoSplitLongLines).
+  const transcription = lyricsReview.transcription ?? {
+    text: '',
+    words: [],
+    perLine: [],
+    transLines: [],
+  };
   const structureSegments = await fetchStructureSegments(songId);
-
-  const review = buildReviewDoc({ dbSections, canonical, transcription, structureSegments });
+  const review = buildReviewDoc({ transcription, structureSegments });
   const next = { ...lyricsReview, review };
   // CAS: si el run ya no esta en awaiting_lyrics (se aprobo/cancelo entre el
   // findAwaitingRun y este punto) no pisa lyrics_review — mismo criterio que
@@ -87,71 +85,35 @@ async function ensureReview(run, songId) {
     UPDATE song_pipeline_runs SET lyrics_review = ${sql.json(next)}, updated_at = now()
     WHERE id = ${run.id} AND status = 'awaiting_lyrics'
   `;
-  return { lyricsReview: next, dbSections };
+  return { lyricsReview: next };
 }
 
-/**
- * Sugerencias de division por respiracion (spec decision 11, phrasing.js),
- * una por cada renglon db con transcripcion emparejada. Los `words` de la
- * transcripcion vienen en un solo array plano SIN limite de renglon; se
- * reconstruye el limite asumiendo el mismo orden que produce align_app.py
- * (las palabras de cada segmento se anexan en el mismo orden que
- * `transLines`), cortando por cantidad de palabras de cada linea transcrita.
- * @param {{dbSections:Array, transcription:object|undefined}} args
- * @returns {Array<{section:number, line:number, afterWords:number[]}>}
- */
-function buildSuggestions({ dbSections, transcription }) {
-  const perLine = transcription?.perLine ?? [];
-  const transLines = transcription?.transLines ?? [];
-  const words = transcription?.words ?? [];
-  if (transLines.length === 0 || words.length === 0) return [];
-
-  const flatDbLines = [];
-  dbSections.forEach((section, sIdx) => {
-    (section.lines || []).forEach((_line, lIdx) => flatDbLines.push({ section: sIdx, line: lIdx }));
-  });
-
+/** Sugerencias de division por respiracion sobre el doc v2: un renglon con
+ * words alineadas a sus tokens puede ofrecer puntos de corte (phrasing.js). */
+function buildSuggestions(review) {
   const suggestions = [];
-  let cursor = 0;
-  transLines.forEach((lineText, transIndex) => {
-    const wordCount = (lineText || '').split(/\s+/).filter(Boolean).length;
-    const lineWords = words.slice(cursor, cursor + wordCount);
-    cursor += wordCount;
-
-    const entry = perLine.find((p) => p.transIndex === transIndex);
-    if (!entry || isNil(entry.dbIndex)) return;
-    const coord = flatDbLines[entry.dbIndex];
-    if (!coord) return;
-
-    const breaks = suggestLineBreaks(lineWords);
-    if (breaks.length > 0) {
-      suggestions.push({ section: coord.section, line: coord.line, afterWords: breaks });
-    }
+  review.sections.forEach((section, sIdx) => {
+    section.lines.forEach((line, lIdx) => {
+      const tokens = line.text.split(/\s+/).filter(Boolean);
+      if (!Array.isArray(line.words) || line.words.length !== tokens.length) return;
+      const breaks = suggestLineBreaks(line.words);
+      if (breaks.length > 0) suggestions.push({ section: sIdx, line: lIdx, afterWords: breaks });
+    });
   });
   return suggestions;
 }
 
 async function getGate(res, songId) {
-  // Independientes: cada uno lee su propia tabla por songId.
-  const [run, structureSegments] = await Promise.all([
-    findAwaitingRun(songId),
-    fetchStructureSegments(songId),
-  ]);
+  const run = await findAwaitingRun(songId);
   if (!run) {
     res.status(404).json({ error: 'No hay una ejecución esperando revisión de letra' });
     return;
   }
-  const { lyricsReview, dbSections } = await ensureReview(run, songId);
-  const suggestions = buildSuggestions({ dbSections, transcription: lyricsReview.transcription });
+  const { lyricsReview } = await ensureReview(run, songId);
   res.status(200).json({
     review: lyricsReview.review,
-    temperature: reviewTemperature(lyricsReview.review),
     canApprove: canApprove(lyricsReview.review),
-    suggestions,
-    // Task 15c: metadata de rango + advertencia SOLO informativa (nunca
-    // bloquea canApprove) si el conteo por tipo no calza con lo detectado.
-    structure: { segments: structureSegments },
-    structureWarning: computeStructureWarning(lyricsReview.review, structureSegments),
+    suggestions: buildSuggestions(lyricsReview.review),
   });
 }
 
@@ -261,9 +223,37 @@ async function putGate(req, res, songId) {
     UPDATE song_pipeline_runs SET lyrics_review = ${sql.json(nextLyricsReview)}, updated_at = now()
     WHERE id = ${run.id} AND status = 'awaiting_lyrics'
   `;
-  res
-    .status(200)
-    .json({ review: next, temperature: reviewTemperature(next), canApprove: canApprove(next) });
+  res.status(200).json({ review: next, canApprove: canApprove(next) });
+}
+
+/** Proyeccion plana {i, startMs, score, interpolated} de las sections del
+ * store para el shim song_line_timings. i = posicion plana (misma semantica
+ * incremental que projectLines). Renglon sin timing: punto medio entre la
+ * vecina anterior y la siguiente con timing (monotonia estricta). */
+export function timingLinesFromSections(sections) {
+  const flat = sections.flatMap((s) => s.lines);
+  const known = flat.map((l) => l.manualStartMs ?? l.startMs);
+  const lines = [];
+  flat.forEach((line, i) => {
+    let startMs = known[i];
+    let interpolated = false;
+    if (startMs === null || startMs === undefined) {
+      interpolated = true;
+      const prev = [...known.slice(0, i)].reverse().find((v) => !isNil(v)) ?? 0;
+      const nextKnown = known.slice(i + 1).find((v) => !isNil(v));
+      startMs = nextKnown === undefined ? prev + 1 : Math.floor((prev + nextKnown) / 2);
+    }
+    // Monotonia estricta: nunca <= a la anterior emitida.
+    const prevEmitted = lines[lines.length - 1];
+    if (prevEmitted && startMs <= prevEmitted.startMs) startMs = prevEmitted.startMs + 1;
+    lines.push({
+      i,
+      startMs,
+      score: typeof line.confidence === 'number' ? line.confidence : null,
+      interpolated,
+    });
+  });
+  return lines;
 }
 
 // Fases derivadas de la letra recien aprobada. Fallo de dispatch NO debe
@@ -308,27 +298,21 @@ async function approveGate(res, songId) {
     const run = rows[0];
     const review = run.lyricsReview?.review;
     if (!review || !canApprove(review)) {
-      return {
-        status: 409,
-        error: 'La letra todavía tiene conflictos o vocalizaciones sin resolver',
-      };
+      return { status: 409, error: 'La letra no tiene renglones para aprobar' };
     }
 
     const snapshot = approvedSnapshot(review);
     const nextPhases = applyPhaseEvent(run.phases, { phase: 'lyrics_review', ok: true });
-    // Fix bug critico E2E: las derivadas que se despachan mas abajo (Promise.all
-    // post-commit) tienen que quedar 'running' YA en esta misma escritura
-    // atomica, mismo CAS que advanceNextPhase (advance.js:30). Sin esto, sync
-    // quedaba 'pending' pese a despacharse -> el guard de
-    // api/align/webhook.js (notifyPipelineSync) exige sync.status==='running'
-    // para aplicar el evento de exito del align, lo descartaba en silencio, y
-    // el run quedaba 'running' para siempre (clips nunca arranca).
-    // retries: 0 (fix Important code review): dispatch fresco de un ciclo
-    // nuevo, mismo criterio que phasesAfterLyricsEdit (state.js) -- sin esto
-    // el retries acumulado de ciclos reopen/approve previos podia agotar el
-    // tope de esta fase en lo que es, para el admin, su primer intento.
-    nextPhases.sync = { ...nextPhases.sync, status: 'running', retries: 0 };
+    // El timing ya viene del store (word-timing de la transcripcion): sync no se
+    // despacha nunca en el path pipeline — se marca done en esta misma escritura.
+    nextPhases.sync = { ...nextPhases.sync, status: 'done', error: null };
+    // retries: 0 (fix Important code review, conservado del contrato v1): dispatch
+    // fresco de un ciclo nuevo, mismo criterio que phasesAfterLyricsEdit (state.js)
+    // -- sin esto el retries acumulado de ciclos reopen/approve previos podia
+    // agotar el tope de esta fase en lo que es, para el admin, su primer intento.
     nextPhases.pitch = { ...nextPhases.pitch, status: 'running', retries: 0 };
+    // clips ya no espera al webhook de sync: arranca directo desde el approve.
+    nextPhases.clips = { ...nextPhases.clips, status: 'running', retries: 0 };
     const runStatus = runStatusFromPhases(nextPhases);
     const nextLyricsReview = { ...run.lyricsReview, approvedHash: snapshot.hash };
     // input_meta.durationSec la persiste confirm.js (best-effort, D1); jsonb
@@ -337,7 +321,23 @@ async function approveGate(res, songId) {
     const numDuration = rawDuration == null ? NaN : Number(rawDuration);
     const durationSec = Number.isFinite(numDuration) ? numDuration : null;
 
-    await tx`UPDATE songs SET sections = ${tx.json(snapshot.sections)}, updated_at = now() WHERE id = ${songId}`;
+    // Store propio: la letra manual del cancionero (songs.sections) queda intacta.
+    await upsertPipelineLyrics(tx, {
+      songId,
+      runId: run.id,
+      sections: snapshot.sections,
+      hash: snapshot.hash,
+    });
+    // Shim de compatibilidad: los consumidores actuales de song_line_timings
+    // (clips, SyncFineTuning, ImmersiveView hasta F4) reciben el timing del
+    // store. Renglones sin word-timing interpolan el punto medio entre vecinas
+    // (monotonia estricta que exige validateLines/seekSyncToLine).
+    await tx`
+      INSERT INTO song_line_timings (song_id, status, lines, provider, error)
+      VALUES (${songId}, 'ready', ${tx.json(timingLinesFromSections(snapshot.sections))}, 'pipeline', NULL)
+      ON CONFLICT (song_id) DO UPDATE
+        SET status = 'ready', lines = EXCLUDED.lines, provider = 'pipeline', error = NULL
+    `;
     await tx`
       UPDATE song_pipeline_runs
       SET phases = ${tx.json(nextPhases)}, lyrics_review = ${tx.json(nextLyricsReview)},
@@ -345,8 +345,8 @@ async function approveGate(res, songId) {
       WHERE id = ${run.id}
     `;
     // Swap de audio: el mp3 completo del run (ya validado en confirm.js) pasa
-    // a ser el oficial de la canción — dispatchAlign/dispatchPitch (mas
-    // abajo, post-commit) leen song_audio, no el run.
+    // a ser el oficial de la canción — dispatchPitch/dispatchClips (mas abajo,
+    // post-commit) leen song_audio, no el run.
     await tx`
       INSERT INTO song_audio (song_id, storage_key, duration_sec)
       VALUES (${songId}, ${run.inputPath}, ${durationSec})
@@ -363,11 +363,10 @@ async function approveGate(res, songId) {
 
   // En paralelo: cada dispatch aisla su propio fallo (dispatchDerivedPhase
   // nunca rechaza), así que Promise.all no arriesga perder el resultado del
-  // otro. Secuencial duplicaba la latencia hacia Modal (cold start incluido)
-  // y fue la causa real del 504 en el smoke E2E.
+  // otro. sync NUNCA se despacha en este path (queda done desde la propia tx).
   await Promise.all([
-    dispatchDerivedPhase('sync', claim.run),
     dispatchDerivedPhase('pitch', claim.run),
+    dispatchDerivedPhase('clips', claim.run),
   ]);
 
   res.status(200).json({ success: true });

@@ -443,14 +443,3 @@ export function applyReviewAction(doc, action) {
   }
   return next;
 }
-
-// F3: remover — el endpoint aún los importa; F3 migra el endpoint y estos
-// mueren junto con la maquinaria de reconciliación/temperatura que
-// reemplazaba. Stubs mínimos solo para no romper `pnpm build` (ver hazard
-// documentado en el plan de F2).
-export function reviewTemperature() {
-  return 1;
-}
-export function computeStructureWarning() {
-  return null;
-}

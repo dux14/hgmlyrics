@@ -68,6 +68,23 @@ describe('StemTracksDetail multipista', () => {
     expect(d.el.querySelector('.track--clips')).toBeTruthy();
   });
 
+  it('recrea el player cuando la estructura llega después con los mismos kinds', () => {
+    const d = createStemTracksDetail({ songId: 's1' });
+    d.update({ phases: { stems: { status: 'done', tracks: { lead: 'u1' } } }, structure: { segments: [] } });
+    const first = createMultiTrackPlayer.mock.results[0].value;
+    d.update({ phases: { stems: { status: 'done', tracks: { lead: 'u1' } } }, structure: { segments: [{ label: 'coro', startMs: 0, endMs: 1000 }] } });
+    expect(first.destroy).toHaveBeenCalledTimes(1);
+    expect(createMultiTrackPlayer).toHaveBeenCalledTimes(2);
+    expect(createMultiTrackPlayer.mock.calls[1][0].structure.segments).toHaveLength(1);
+  });
+
+  it('tolera update(null) y update(undefined) sin lanzar', () => {
+    const d = createStemTracksDetail({ songId: 's1' });
+    expect(() => d.update(null)).not.toThrow();
+    expect(() => d.update(undefined)).not.toThrow();
+    expect(createMultiTrackPlayer).not.toHaveBeenCalled();
+  });
+
   it('destroy() destruye el player montado', () => {
     const d = createStemTracksDetail({ songId: 's1' });
     d.update(runWith({ lead: 'u1' }));

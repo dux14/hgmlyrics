@@ -1,13 +1,13 @@
 /**
  * StemTracksDetail.js — detalle de la fila Pistas del stepper de
  * procesamiento. Monta el MultiTrackPlayer sincronizado (mismo componente
- * que el Estudio publico, SongStudioView): todas las pistas suenan a la vez
- * con mute/solo por pista, scrubber maestro y chips de seccion. El player
- * recibe sus pistas al crearse, asi que se RECREA cuando cambia el conjunto
+ * que el Estudio público, SongStudioView): todas las pistas suenan a la vez
+ * con mute/solo por pista, scrubber maestro y chips de sección. El player
+ * recibe sus pistas al crearse, así que se RECREA cuando cambia el conjunto
  * de kinds separados (firma por kinds, nunca por URL: las URLs firmadas se
- * regeneran en cada poll y no deben resetear la reproduccion). Mientras
+ * regeneran en cada poll y no deben resetear la reproducción). Mientras
  * stems separa lead/coros se muestra un indicador de ecualizador; cuando
- * clips termina, una sub-linea informativa al final.
+ * clips termina, una sub-línea informativa al final.
  */
 import { icon } from '../../lib/icons.js';
 import { createMultiTrackPlayer } from './MultiTrackPlayer.js';
@@ -77,7 +77,15 @@ export function createStemTracksDetail({ songId: _songId }) {
     const extra = Object.keys(tracksObj).filter((k) => tracksObj[k] && !known.includes(k));
     const kinds = [...known, ...extra];
 
-    const sig = kinds.join('|');
+    // La firma combina el conjunto de kinds con la cantidad de segmentos de
+    // la estructura (SongFormer corre en un job separado y puede terminar
+    // después de lead/backing): si solo mirara kinds, la llegada tardía de
+    // la estructura nunca dispararía una recreación y los chips de sección
+    // no aparecerían hasta recargar la página. El count (no la identidad
+    // del objeto structure, que se re-crea en cada poll) es estable una vez
+    // que SongFormer terminó, así que no recrea de más en polls sucesivos.
+    const segCount = run?.structure?.segments?.length ?? 0;
+    const sig = `${kinds.join('|')}#${segCount}`;
     if (sig !== signature) {
       signature = sig;
       player?.destroy();

@@ -35,23 +35,23 @@ describe('StructureDetail (Task 16)', () => {
     expect(detail.el.textContent).toContain('Aún no hay secciones detectadas');
   });
 
-  it('pinta un segmento por rango con label y mm:ss', () => {
+  it('pinta un segmento por rango con label y m:ss', () => {
     const detail = createStructureDetail({ songId: SONG_ID });
     detail.update(buildRun([{ label: 'verso', startMs: 0, endMs: 75000 }]));
 
-    const seg = detail.el.querySelector('.struct-seg');
-    expect(seg).toBeTruthy();
-    expect(seg.textContent).toContain('Verso');
-    expect(seg.textContent).toContain('00:00');
-    expect(seg.textContent).toContain('01:15');
+    const row = detail.el.querySelector('.struct-row');
+    expect(row).toBeTruthy();
+    expect(row.textContent).toContain('Verso');
+    expect(row.textContent).toContain('0:00');
+    expect(row.textContent).toContain('1:15');
   });
 
   it('usa el token neutro directo (--color-section-neutral) para labels sin identidad propia (ej. instrumental)', () => {
     const detail = createStructureDetail({ songId: SONG_ID });
     detail.update(buildRun([{ label: 'instrumental', startMs: 0, endMs: 1000 }]));
 
-    const seg = detail.el.querySelector('.struct-seg');
-    expect(seg.getAttribute('style')).toContain('--color-section-neutral');
+    const row = detail.el.querySelector('.struct-row');
+    expect(row.getAttribute('style')).toContain('--color-section-neutral');
   });
 
   it('sin admin: no muestra editor (select ni botones de nudge)', () => {
@@ -74,7 +74,14 @@ describe('StructureDetail (Task 16)', () => {
     expect(select).toBeTruthy();
     const values = Array.from(select.options).map((o) => o.value);
     expect(values).toEqual([
-      'intro', 'verso', 'coro', 'puente', 'instrumental', 'outro', 'silencio', 'pre-coro',
+      'intro',
+      'verso',
+      'coro',
+      'puente',
+      'instrumental',
+      'outro',
+      'silencio',
+      'pre-coro',
     ]);
 
     select.value = 'coro';
@@ -114,7 +121,7 @@ describe('StructureDetail (Task 16)', () => {
     await Promise.resolve();
 
     expect(showToast).toHaveBeenCalled();
-    expect(detail.el.querySelector('.struct-seg')).toBeTruthy();
+    expect(detail.el.querySelector('.struct-row')).toBeTruthy();
   });
 
   it('onChanged: se invoca tras un PATCH exitoso', async () => {
@@ -142,5 +149,45 @@ describe('StructureDetail (Task 16)', () => {
     // nodo ya vaciado.
     detail.update(buildRun([{ label: 'coro', startMs: 0, endMs: 1000 }]));
     expect(detail.el.innerHTML).toBe('');
+  });
+});
+
+describe('A1: ribbon + filas', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    isAdminMock = vi.fn(() => false);
+    patchStructure.mockResolvedValue({ segments: [] });
+  });
+
+  it('no-admin: ve ribbon sin texto y filas con label + rango', () => {
+    const detail = createStructureDetail({ songId: SONG_ID, onChanged: () => {} });
+    detail.update(
+      buildRun([
+        { label: 'verso', startMs: 0, endMs: 30000 },
+        { label: 'coro', startMs: 30000, endMs: 60000 },
+      ]),
+    );
+
+    const bars = detail.el.querySelectorAll('.structure-detail__ribbon .struct-bar');
+    expect(bars.length).toBe(2);
+    bars.forEach((b) => expect(b.textContent.trim()).toBe(''));
+
+    const rows = detail.el.querySelectorAll('.struct-row');
+    expect(rows.length).toBe(2);
+    expect(rows[0].querySelector('.struct-row__label').textContent).toMatch(/verso/i);
+    expect(rows[0].querySelector('.struct-row__range').textContent).toBe('0:00–0:30');
+    expect(detail.el.querySelector('.struct-edit__label')).toBeNull();
+    expect(detail.el.querySelector('[data-nudge]')).toBeNull();
+  });
+
+  it('admin: cada fila trae select de tipo y nudge ±1s (contrato de delegación intacto)', () => {
+    isAdminMock = vi.fn(() => true);
+    const detail = createStructureDetail({ songId: SONG_ID, onChanged: () => {} });
+    detail.update(buildRun([{ label: 'verso', startMs: 0, endMs: 30000 }]));
+
+    const row = detail.el.querySelector('.struct-row');
+    expect(row.dataset.segIndex).toBe('0');
+    expect(row.querySelector('.struct-edit__label')).not.toBeNull();
+    expect(row.querySelectorAll('[data-nudge]').length).toBe(4);
   });
 });

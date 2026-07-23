@@ -1689,57 +1689,54 @@ body.chrome-hidden .main {
   padding: 4px 0;
 }
 
-/* Timeline horizontal: cada segmento es un tramo proporcional a su duración
-   (flex-grow inline, calculado en JS), coloreado por --seg-color (var
-   inline que apunta a --color-section-*). */
-.structure-detail__timeline {
+/* Ribbon fino: barra proporcional (flex-grow inline, calculado en JS) SIN
+   texto, coloreada por --seg-color (var inline que apunta a
+   --color-section-*). El detalle legible vive en .structure-detail__rows. */
+.structure-detail__ribbon {
   display: flex;
+  height: 8px;
   overflow: hidden;
-  border-radius: 6px;
-  border: 1px solid var(--color-border);
+  border-radius: 999px;
 }
 
-.struct-seg {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 6px;
-  padding: 6px 8px;
-  background: color-mix(in oklch, var(--seg-color) 16%, transparent);
-  border-left: 2px solid var(--seg-color);
-  overflow: hidden;
-}
-.struct-seg:first-child {
-  border-left: none;
+.struct-bar {
+  min-width: 3px;
+  background: var(--seg-color);
 }
 
-.struct-seg__label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--seg-color);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.struct-seg__range {
-  font-size: 0.7rem;
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-}
-
-.structure-detail__editor {
+/* Filas: chip + label + rango, visibles para todos; controles de edición
+   admin-only se agregan dentro de cada fila (clase .struct-edit). */
+.structure-detail__rows {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.struct-edit {
+.struct-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   font-size: 0.8rem;
+  padding: 4px 0;
+}
+
+.struct-row__chip {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--seg-color);
+  flex-shrink: 0;
+}
+
+.struct-row__label {
+  font-weight: 600;
+  color: var(--seg-color);
+}
+
+.struct-row__range {
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .struct-edit__label {

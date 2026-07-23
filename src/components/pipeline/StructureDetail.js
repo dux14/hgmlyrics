@@ -55,11 +55,12 @@ function pad2(n) {
   return String(n).padStart(2, '0');
 }
 
-/** mm:ss desde ms. No cappea minutos: un segmento de >60min mostraría "75:00"
- * en vez de romper (Task 16, nota de correctness). */
+/** m:ss desde ms (minutos sin cero a la izquierda). No cappea minutos: un
+ * segmento de >60min mostraría "75:00" en vez de romper (Task 16, nota de
+ * correctness). */
 function formatMmSs(ms) {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
-  return `${pad2(Math.floor(totalSec / 60))}:${pad2(totalSec % 60)}`;
+  return `${Math.floor(totalSec / 60)}:${pad2(totalSec % 60)}`;
 }
 
 function displayLabel(label) {
@@ -128,24 +129,26 @@ export function createStructureDetail({ songId, onChanged }) {
       return;
     }
 
-    const timeline = segments
+    // Ribbon: barra fina y sin texto, solo proporción (flex-grow) y color por
+    // segmento. El detalle legible (label + rango) vive en las filas de abajo.
+    const ribbon = segments
       .map((seg) => {
         const slug = sectionColorSlug(seg.label);
         const grow = Math.max(seg.endMs - seg.startMs, 1);
-        return `
-          <div class="struct-seg" style="flex-grow:${grow}; --seg-color: var(--color-section-${slug})">
-            <span class="struct-seg__label">${escapeHtml(displayLabel(seg.label))}</span>
-            <span class="struct-seg__range">${formatMmSs(seg.startMs)}–${formatMmSs(seg.endMs)}</span>
-          </div>
-        `;
+        return `<div class="struct-bar" style="flex-grow:${grow}; --seg-color: var(--color-section-${slug})"></div>`;
       })
       .join('');
 
-    const editor = isAdmin()
-      ? segments
-          .map(
-            (seg, i) => `
-          <div class="struct-edit" data-seg-index="${i}">
+    const admin = isAdmin();
+    // Filas: visibles para todos (chip + label + rango); los controles de
+    // edición (select + nudge) son admin-only, dentro de cada fila, para que
+    // la delegación de eventos siga resolviendo el índice vía
+    // closest('[data-seg-index]') sin cambios.
+    const rows = segments
+      .map((seg, i) => {
+        const slug = sectionColorSlug(seg.label);
+        const controls = admin
+          ? `
             <select class="struct-edit__label" aria-label="Tipo de sección">${segmentOptions(seg.label)}</select>
             <div class="struct-edit__nudge">
               <span class="struct-edit__nudge-label">Inicio</span>
@@ -154,16 +157,22 @@ export function createStructureDetail({ songId, onChanged }) {
               <span class="struct-edit__nudge-label">Fin</span>
               <button type="button" class="struct-edit__btn" data-nudge="end:dec" aria-label="Adelantar fin 1 segundo">−1s</button>
               <button type="button" class="struct-edit__btn" data-nudge="end:inc" aria-label="Atrasar fin 1 segundo">+1s</button>
-            </div>
+            </div>`
+          : '';
+        return `
+          <div class="struct-row${admin ? ' struct-edit' : ''}" data-seg-index="${i}" style="--seg-color: var(--color-section-${slug})">
+            <span class="struct-row__chip" aria-hidden="true"></span>
+            <span class="struct-row__label">${escapeHtml(displayLabel(seg.label))}</span>
+            <span class="struct-row__range">${formatMmSs(seg.startMs)}–${formatMmSs(seg.endMs)}</span>
+            ${controls}
           </div>
-        `,
-          )
-          .join('')
-      : '';
+        `;
+      })
+      .join('');
 
     el.innerHTML = `
-      <div class="structure-detail__timeline">${timeline}</div>
-      ${editor ? `<div class="structure-detail__editor">${editor}</div>` : ''}
+      <div class="structure-detail__ribbon" aria-hidden="true">${ribbon}</div>
+      <div class="structure-detail__rows">${rows}</div>
     `;
   }
 

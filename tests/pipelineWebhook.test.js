@@ -108,6 +108,38 @@ describe('POST /api/pipeline/webhook — firma HMAC', () => {
     await handler(req, res);
     expect(res.statusCode).toBe(401);
   });
+
+  it('acepta eventos firmados con PITCH_MODAL_WEBHOOK_SECRET (fase pitch)', async () => {
+    process.env.PITCH_MODAL_WEBHOOK_SECRET = 'secret-pitch';
+
+    const phases = initialPhases();
+    phases.lyrics_review.status = 'done';
+    phases.pitch.status = 'running';
+    sqlResponses.push([runRow({ phases, lyricsReview: { approvedHash: 'h1' } })]);
+    sqlResponses.push([]); // insert song_pitch_analysis
+    sqlResponses.push([]); // UPDATE song_pipeline_runs
+
+    const bodyObj = {
+      runId: 'run-1',
+      phase: 'pitch',
+      ok: true,
+      snapshotHash: 'h1',
+      payload: { analysis: {} },
+    };
+    const body = JSON.stringify(bodyObj);
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const sig = createHmac('sha256', 'secret-pitch').update(`${timestamp}.${body}`).digest('hex');
+    const req = Readable.from([Buffer.from(body)]);
+    req.method = 'POST';
+    req.headers = { 'x-modal-timestamp': timestamp, 'x-modal-signature': sig };
+    req.query = {};
+    req.url = '/api/pipeline/webhook';
+
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res.statusCode).not.toBe(401);
+  });
 });
 
 describe('POST /api/pipeline/webhook — stems parcial y final', () => {

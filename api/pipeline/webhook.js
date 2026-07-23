@@ -37,12 +37,20 @@ export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['POST'])) return;
 
   const body = await readRawBody(req);
-  const okSignature = verifyModalSignature({
-    timestamp: req.headers['x-modal-timestamp'],
-    signature: req.headers['x-modal-signature'],
-    body,
-    secret: process.env.MODAL_WEBHOOK_SECRET,
-  });
+  // hkn-pitch firma con su propio secreto (PITCH_MODAL_WEBHOOK_SECRET, ver
+  // modal/pitch/_common.py); stems/align/transcription/clips firman con
+  // MODAL_WEBHOOK_SECRET. Se acepta cualquiera de los dos: la fase se valida
+  // después contra PHASES, así que aceptar ambos no debilita la autorización.
+  const okSignature = [process.env.MODAL_WEBHOOK_SECRET, process.env.PITCH_MODAL_WEBHOOK_SECRET]
+    .filter(Boolean)
+    .some((secret) =>
+      verifyModalSignature({
+        timestamp: req.headers['x-modal-timestamp'],
+        signature: req.headers['x-modal-signature'],
+        body,
+        secret,
+      }),
+    );
   if (!okSignature) {
     res.status(401).json({ error: 'Firma de webhook inválida' });
     return;

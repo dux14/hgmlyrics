@@ -256,6 +256,37 @@ describe('SyncFineTuning', () => {
     detail.destroy();
   });
 
+  it('con text en timings.lines (fuente store): usa ese texto incluso sin getSong (F4)', async () => {
+    mockReady([
+      { i: 0, startMs: 1200, score: 0.9, interpolated: false, text: 'Primero el cielo' },
+      { i: 1, startMs: 4800, score: 0.9, interpolated: false, text: 'Luego la tierra' },
+    ]);
+    const detail = createSyncFineTuning({ songId: 'song-1', getSong: () => null });
+    container.appendChild(detail.el);
+
+    await vi.waitFor(() => expect(detail.el.querySelectorAll('.lineRow').length).toBe(2));
+
+    const labels = [...detail.el.querySelectorAll('.lineRow__label')].map((n) => n.textContent);
+    expect(labels).toEqual(['Primero el cielo', 'Luego la tierra']);
+
+    detail.destroy();
+  });
+
+  it('sin text en timings.lines (fuente v1): sigue usando textByI de getSong, con fallback Línea N', async () => {
+    mockReady([{ i: 0, startMs: 1200, score: 0.9, interpolated: false }]);
+    const song = {
+      id: 'song-1',
+      sections: [{ type: 'verse', lines: [{ text: 'Primero el cielo' }] }],
+    };
+    const detail = createSyncFineTuning({ songId: 'song-1', getSong: () => song });
+    container.appendChild(detail.el);
+
+    await vi.waitFor(() => expect(detail.el.querySelectorAll('.lineRow').length).toBe(1));
+    expect(detail.el.querySelector('.lineRow__label').textContent).toBe('Primero el cielo');
+
+    detail.destroy();
+  });
+
   it('syncSongText() repinta con el texto real tras perder la carrera de becameDone (A7 fix)', async () => {
     mockReady([{ i: 0, startMs: 1200, score: 0.9, interpolated: false }]);
     let song = null;

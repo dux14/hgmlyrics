@@ -145,7 +145,7 @@ export function createSyncFineTuning({ songId, getSong = () => null, getVocalsUr
       .map((l) => {
         const i = l.i ?? 0;
         const cls = dotClass(l);
-        const labelText = truncateLineText(textByI.get(i) ?? null) ?? `Línea ${i + 1}`;
+        const labelText = truncateLineText(l.text ?? textByI.get(i) ?? null) ?? `Línea ${i + 1}`;
         const rowClasses = ['lineRow'];
         if (playingI === i) rowClasses.push('lineRow--playing');
         if (flashI === i) rowClasses.push('lineRow--flash');

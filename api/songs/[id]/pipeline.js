@@ -125,15 +125,13 @@ async function createRun(req, res, songId) {
   await sql`UPDATE song_pipeline_runs SET input_path = ${inputPath}, updated_at = now() WHERE id = ${runId}`;
 
   const uploadUrl = await createSongAudioSignedPutUrl(inputPath);
-  res
-    .status(200)
-    .json({
-      runId,
-      uploadUrl,
-      titleScore,
-      threshold: TITLE_MATCH_THRESHOLD,
-      songTitle: song.title,
-    });
+  res.status(200).json({
+    runId,
+    uploadUrl,
+    titleScore,
+    threshold: TITLE_MATCH_THRESHOLD,
+    songTitle: song.title,
+  });
 }
 
 /**
@@ -173,9 +171,12 @@ async function purgeRun(req, res, songId) {
       WHERE song_id = ${songId}
         AND status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')
     `;
+    // 'failed' se trata como terminal equivalente a 'done' (mismo criterio
+    // que createRun más arriba): si no, un run failed queda con status
+    // intacto pero input_path apuntando a un objeto ya borrado del storage.
     const superseded = await tx`
       UPDATE song_pipeline_runs SET status = 'superseded', updated_at = now()
-      WHERE song_id = ${songId} AND status = 'done'
+      WHERE song_id = ${songId} AND status IN ('done', 'failed')
     `;
     return {
       stems: stems.count,

@@ -241,7 +241,7 @@ describe('GET /api/songs/:id/pipeline', () => {
 });
 
 describe('DELETE /api/songs/:id/pipeline (A2: purga)', () => {
-  it('purga filas derivadas + storage y marca runs (activo→cancelled, done→superseded)', async () => {
+  it('purga filas derivadas + storage y marca runs (activo→cancelled, done/failed→superseded)', async () => {
     routeSql([
       [
         'FROM song_stems',
@@ -253,6 +253,10 @@ describe('DELETE /api/songs/:id/pipeline (A2: purga)', () => {
         [
           { id: 'r-done', status: 'done', input_path: 's1/runs/r-done/full.mp3' },
           { id: 'r-act', status: 'awaiting_lyrics', input_path: 's1/runs/r-act/full.mp3' },
+          // Run failed con input_path colgado (follow-up del database review):
+          // debe superseder-se igual que 'done', si no queda apuntando a un
+          // objeto de storage ya borrado.
+          { id: 'r-failed', status: 'failed', input_path: 's1/runs/r-failed/full.mp3' },
         ],
       ],
       ['DELETE FROM song_stems', { count: 2 }],
@@ -261,7 +265,7 @@ describe('DELETE /api/songs/:id/pipeline (A2: purga)', () => {
       ['DELETE FROM song_pitch_analysis', { count: 1 }],
       ['DELETE FROM song_line_timings', { count: 1 }],
       ["SET status = 'cancelled'", { count: 1 }],
-      ["SET status = 'superseded'", { count: 1 }],
+      ["SET status = 'superseded'", { count: 2 }],
     ]);
     const res = makeRes();
     await pipelineHandler({ method: 'DELETE', query: { id: 's1' } }, res);
@@ -275,8 +279,12 @@ describe('DELETE /api/songs/:id/pipeline (A2: purga)', () => {
         's1/clips/0.mp3',
         's1/runs/r-done/full.mp3',
         's1/runs/r-act/full.mp3',
+        's1/runs/r-failed/full.mp3',
       ]),
     );
+    // Contrato: el UPDATE a superseded también cubre 'failed', no solo 'done'.
+    const supersedeQuery = capturedQueries.find((q) => q.includes("SET status = 'superseded'"));
+    expect(supersedeQuery).toContain('failed');
   });
 
   it('NO borra clips manuales (run_id NULL) ni toca songs.sections', async () => {

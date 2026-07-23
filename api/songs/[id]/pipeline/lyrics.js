@@ -18,7 +18,11 @@ import {
   isNil,
 } from '../../../_lib/pipeline/lyricsReview.js';
 import { suggestLineBreaks } from '../../../_lib/pipeline/phrasing.js';
-import { applyPhaseEvent, runStatusFromPhases } from '../../../_lib/pipeline/state.js';
+import {
+  applyPhaseEvent,
+  phasesAfterLyricsEdit,
+  runStatusFromPhases,
+} from '../../../_lib/pipeline/state.js';
 import { dispatchPhase } from './_dispatch.js';
 
 // El default de Vercel (10s) no alcanza para el approve: la tx (steps 1-5) +
@@ -55,7 +59,8 @@ async function ensureReview(run, songId) {
   const lyricsReview = run.lyricsReview ?? {};
   if (lyricsReview.review) return { lyricsReview, dbSections };
 
-  const [canonicalRow] = await sql`SELECT content FROM song_lyrics_canonical WHERE song_id = ${songId}`;
+  const [canonicalRow] =
+    await sql`SELECT content FROM song_lyrics_canonical WHERE song_id = ${songId}`;
   const canonical = canonicalRow?.content ?? null;
   const transcription = lyricsReview.transcription ?? { text: '', words: [], perLine: [] };
 
@@ -105,7 +110,9 @@ function buildSuggestions({ dbSections, transcription }) {
     if (!coord) return;
 
     const breaks = suggestLineBreaks(lineWords);
-    if (breaks.length > 0) suggestions.push({ section: coord.section, line: coord.line, afterWords: breaks });
+    if (breaks.length > 0) {
+      suggestions.push({ section: coord.section, line: coord.line, afterWords: breaks });
+    }
   });
   return suggestions;
 }
@@ -126,12 +133,51 @@ async function getGate(res, songId) {
   });
 }
 
+// Reabre una letra ya aprobada (Task 13, robustez): invalida en cascada lo
+// que dependia de ella (phasesAfterLyricsEdit, ver state.js) y devuelve el
+// run a awaiting_lyrics para volver a editar el mismo documento. Solo valido
+// sobre un run que YA paso el gate (status running/done implica, por
+// construccion de runStatusFromPhases, que lyrics_review esta done) — sobre
+// awaiting_lyrics (todavia sin aprobar) o cualquier otro estado, 409.
+async function reopenLyrics(res, songId) {
+  const claim = await sql.begin(async (tx) => {
+    const rows = await tx`
+      SELECT id, song_id AS "songId", status, phases, lyrics_review AS "lyricsReview"
+      FROM song_pipeline_runs
+      WHERE song_id = ${songId} AND status IN ('running', 'done')
+      ORDER BY created_at DESC LIMIT 1
+      FOR UPDATE
+    `;
+    if (rows.length === 0) {
+      return { status: 409, error: 'No hay una letra aprobada para reabrir' };
+    }
+    const run = rows[0];
+    const nextPhases = phasesAfterLyricsEdit(run.phases);
+    nextPhases.lyrics_review = { ...nextPhases.lyrics_review, status: 'pending', error: null };
+    const runStatus = runStatusFromPhases(nextPhases);
+    await tx`
+      UPDATE song_pipeline_runs
+      SET phases = ${tx.json(nextPhases)}, status = ${runStatus}, updated_at = now()
+      WHERE id = ${run.id}
+    `;
+    return { ok: true };
+  });
+
+  if (!claim.ok) {
+    res.status(claim.status).json({ error: claim.error });
+    return;
+  }
+  res.status(200).json({ success: true });
+}
+
 async function putGate(req, res, songId) {
   const action = req.body?.action;
   if (!action || typeof action !== 'object' || typeof action.type !== 'string') {
     res.status(400).json({ error: 'action es obligatoria' });
     return;
   }
+  if (action.type === 'reopen') return reopenLyrics(res, songId);
+
   const run = await findAwaitingRun(songId);
   if (!run) {
     res.status(404).json({ error: 'No hay una ejecución esperando revisión de letra' });
@@ -157,7 +203,9 @@ async function putGate(req, res, songId) {
     UPDATE song_pipeline_runs SET lyrics_review = ${sql.json(nextLyricsReview)}, updated_at = now()
     WHERE id = ${run.id} AND status = 'awaiting_lyrics'
   `;
-  res.status(200).json({ review: next, temperature: reviewTemperature(next), canApprove: canApprove(next) });
+  res
+    .status(200)
+    .json({ review: next, temperature: reviewTemperature(next), canApprove: canApprove(next) });
 }
 
 // Fases derivadas de la letra recien aprobada. Fallo de dispatch NO debe
@@ -202,7 +250,10 @@ async function approveGate(res, songId) {
     const run = rows[0];
     const review = run.lyricsReview?.review;
     if (!review || !canApprove(review)) {
-      return { status: 409, error: 'La letra todavía tiene conflictos o vocalizaciones sin resolver' };
+      return {
+        status: 409,
+        error: 'La letra todavía tiene conflictos o vocalizaciones sin resolver',
+      };
     }
 
     const snapshot = approvedSnapshot(review);

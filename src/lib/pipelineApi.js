@@ -65,6 +65,23 @@ export async function approveLyrics(songId) {
 }
 
 /**
+ * Reabre una letra ya aprobada (`lyrics_review` done, run running/done) para
+ * volver a editarla: invalida en cascada sync/pitch/clips y devuelve el run
+ * a `awaiting_lyrics`. 409 si el run no está en un estado que lo permita.
+ * @param {string} songId
+ * @returns {Promise<{success:boolean}>}
+ */
+export async function reopenLyrics(songId) {
+  const res = await fetch(`/api/songs/${songId}/pipeline/lyrics`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ action: { type: 'reopen' } }),
+  });
+  if (!res.ok) throw await readError(res, 'No se pudo reabrir la letra');
+  return res.json();
+}
+
+/**
  * Estado del run activo del pipeline de una canción.
  * @param {string} songId
  * @returns {Promise<{run:object}|null>} null si no hay run activo (404).

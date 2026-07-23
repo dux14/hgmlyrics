@@ -15,6 +15,7 @@ import {
   retryPipelinePhase,
   getPipelineRun,
   cancelPipelineRun,
+  reopenLyrics,
 } from '../../lib/pipelineApi.js';
 import { showToast } from '../../lib/toast.js';
 import { confirmDialog } from '../ConfirmDialog.js';
@@ -274,6 +275,33 @@ export function renderSongPipelineView(container, songId) {
     }
 
     if (status === 'done') {
+      // Letra aprobada: unica fase 'done' que admite reabrirse (Task 13,
+      // robustez) — invalida en cascada sync/pitch/clips en el backend.
+      if (key === 'lyrics_review') {
+        return {
+          state: 'done',
+          subtitle: table.done,
+          actionLabel: 'Editar letra',
+          onRetry: async () => {
+            const ok = await confirmDialog({
+              title: 'Editar letra aprobada',
+              body: 'Se recalcularán sincronía y tono por sílaba a partir de la letra editada. Esta acción no se puede deshacer.',
+              confirmLabel: 'Editar letra',
+              cancelLabel: 'Volver',
+              danger: true,
+            });
+            if (!ok) return;
+            try {
+              await reopenLyrics(songId);
+              showToast('Letra reabierta para edición');
+              unsub?.refresh?.();
+            } catch (err) {
+              console.error('SongPipelineView: no se pudo reabrir la letra', err);
+              showToast(err.message || 'No se pudo reabrir la letra', { type: 'error' });
+            }
+          },
+        };
+      }
       return { state: 'done', subtitle: table.done };
     }
 

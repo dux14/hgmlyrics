@@ -67,7 +67,11 @@ export function PhaseRow({
   onRetry,
 }) {
   const dotClass = DOT_CLASS[state] || 'wait';
-  const showsAction = state === 'failed' || state === 'stale';
+  // failed/stale siempre ofrecen su accion (reintentar/re-procesar); 'done'
+  // tambien puede traer una (ej. lyrics_review: "Editar letra", Task 13) si
+  // el llamador pasa un onRetry explicito — el resto de los estados nunca lo
+  // hace, asi que esta condicion no les agrega un boton que no pidieron.
+  const showsAction = state === 'failed' || state === 'stale' || typeof onRetry === 'function';
 
   const row = document.createElement('div');
   row.className = `phase${dotClass === 'act' ? ' phase--action' : ''}`;

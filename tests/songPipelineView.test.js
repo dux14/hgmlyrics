@@ -14,6 +14,7 @@ vi.mock('../src/lib/pipelineApi.js', () => ({
   retryPipelinePhase: vi.fn(() => Promise.resolve({ success: true })),
   getPipelineRun: vi.fn(() => Promise.resolve(null)),
   cancelPipelineRun: vi.fn(() => Promise.resolve({ success: true })),
+  reopenLyrics: vi.fn(() => Promise.resolve({ success: true })),
 }));
 
 vi.mock('../src/components/ConfirmDialog.js', () => ({
@@ -90,7 +91,12 @@ vi.mock('../src/router.js', () => ({
 }));
 
 import { renderSongPipelineView } from '../src/components/pipeline/SongPipelineView.js';
-import { watchPipelineRun, retryPipelinePhase, cancelPipelineRun } from '../src/lib/pipelineApi.js';
+import {
+  watchPipelineRun,
+  retryPipelinePhase,
+  cancelPipelineRun,
+  reopenLyrics,
+} from '../src/lib/pipelineApi.js';
 import { LyricsReviewPanel } from '../src/components/pipeline/LyricsReviewPanel.js';
 import { confirmDialog } from '../src/components/ConfirmDialog.js';
 import { showToast } from '../src/lib/toast.js';
@@ -370,6 +376,90 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     const rowAfter = container.querySelector('[data-phase="upload"]');
     expect(rowAfter).toBe(row); // mismo nodo: no se recreo la fila
     expect(rowAfter.classList.contains('phase--enter')).toBe(false); // no se re-animo
+  });
+
+  describe('reabrir letra aprobada (Task 13)', () => {
+    beforeEach(() => {
+      reopenLyrics.mockResolvedValue({ success: true });
+    });
+
+    it('fila Letra en done: muestra el boton "Editar letra"', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' } }, { status: 'running' }),
+      });
+
+      const row = container.querySelector('[data-phase="lyrics_review"]');
+      const btn = row.querySelector('.phase__action');
+      expect(btn).toBeTruthy();
+      expect(btn.textContent).toBe('Editar letra');
+    });
+
+    it('otras fases done (ej. stems) no muestran boton de accion', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({ run: buildRun({ stems: { status: 'done' } }) });
+
+      const row = container.querySelector('[data-phase="stems"]');
+      expect(row.querySelector('.phase__action')).toBeFalsy();
+    });
+
+    it('click en "Editar letra" abre el ConfirmDialog de advertencia', async () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' } }, { status: 'running' }),
+      });
+
+      container.querySelector('[data-phase="lyrics_review"] .phase__action').click();
+      await flushPromises();
+
+      expect(confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ title: expect.stringContaining('Editar'), danger: true }),
+      );
+    });
+
+    it('al confirmar: llama reopenLyrics, muestra toast y refresca la vista', async () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' } }, { status: 'running' }),
+      });
+
+      container.querySelector('[data-phase="lyrics_review"] .phase__action').click();
+      await flushPromises();
+
+      expect(reopenLyrics).toHaveBeenCalledWith(SONG_ID);
+      expect(showToast).toHaveBeenCalled();
+      expect(lastUnsub.refresh).toHaveBeenCalled();
+    });
+
+    it('al cancelar el dialogo: NO llama reopenLyrics', async () => {
+      confirmDialog.mockResolvedValueOnce(false);
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' } }, { status: 'running' }),
+      });
+
+      container.querySelector('[data-phase="lyrics_review"] .phase__action').click();
+      await flushPromises();
+
+      expect(reopenLyrics).not.toHaveBeenCalled();
+    });
+
+    it('si reopenLyrics falla (409): muestra toast de error y no rompe la vista', async () => {
+      reopenLyrics.mockRejectedValueOnce(new Error('boom'));
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' } }, { status: 'running' }),
+      });
+
+      container.querySelector('[data-phase="lyrics_review"] .phase__action').click();
+      await flushPromises();
+
+      expect(showToast).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ type: 'error' }),
+      );
+      expect(container.querySelector('.pipeline-view')).toBeTruthy();
+    });
   });
 
   describe('cancelar procesamiento (Task 12)', () => {

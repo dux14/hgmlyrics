@@ -155,44 +155,6 @@ function segmentKey(sectionIdx, lineIdx) {
   return `${sectionIdx}-${lineIdx}`;
 }
 
-// Reconstruye, para cada linea del doc que tiene contraparte transcrita
-// (`line.sources.trans` no nulo), su tramo de `words` (timestamps por
-// palabra de TODA la cancion, en el mismo orden que produjo Modal). Camina
-// doc.sections + doc.vocalizations intercalados por `anchorAfterLine`
-// (mismo orden en que aparecieron originalmente en la transcripcion) para
-// que las vocalizaciones consuman su tramo de `words` y no corran el cursor
-// de las lineas siguientes. Lineas sin contraparte (sources.trans nulo) no
-// consumen nada -> no quedan en el mapa devuelto.
-function buildLineWordsMap(doc, words) {
-  const vocsByAnchor = new Map();
-  doc.vocalizations.forEach((v, idx) => {
-    const key = v.anchorAfterLine ? segmentKey(v.anchorAfterLine.section, v.anchorAfterLine.line) : 'start';
-    if (!vocsByAnchor.has(key)) vocsByAnchor.set(key, []);
-    vocsByAnchor.get(key).push(idx);
-  });
-
-  const map = new Map();
-  let cursor = 0;
-  const consume = (text) => {
-    const count = (text || '').split(/\s+/).filter(Boolean).length;
-    const slice = words.slice(cursor, cursor + count);
-    cursor += count;
-    return slice;
-  };
-
-  for (const idx of vocsByAnchor.get('start') ?? []) consume(doc.vocalizations[idx].text);
-  doc.sections.forEach((section, sIdx) => {
-    section.lines.forEach((line, lIdx) => {
-      const slice = consume(line.sources?.trans ?? '');
-      if (line.sources?.trans) map.set(segmentKey(sIdx, lIdx), slice);
-      for (const idx of vocsByAnchor.get(segmentKey(sIdx, lIdx)) ?? []) {
-        consume(doc.vocalizations[idx].text);
-      }
-    });
-  });
-  return map;
-}
-
 // Entre los indices de corte candidatos (afterWord, 0-based), elige el que
 // deja el offset de caracter mas cercano a la mitad del texto del renglon.
 function closestToMiddle(candidateIndices, tokens, textLen) {
@@ -249,20 +211,49 @@ function splitLineRecursive(line, lineWords) {
  * espacio mas cercano al medio. Recursiva (un renglon puede necesitar 2+
  * cortes) e idempotente (renglones ya cortos no se tocan). Funcion PURA:
  * no muta `doc`.
+ *
+ * IMPORTANTE (bug real corregido en review): esta funcion NO intenta
+ * correlacionar palabras con renglones por si sola -- el orden del
+ * documento NO es el orden temporal del audio (transcribe_diff.py matchea
+ * cada linea db contra su mejor candidato global, sin restriccion de orden;
+ * con coros repetidos la linea 0 del doc puede matchear a un segmento que
+ * ocurrio DESPUES en el audio que el de la linea 1). Por eso recibe
+ * `lineWordsByKey` YA resuelto por `buildReviewDoc` (que si conoce el
+ * mapeo transIndex->dbIndex real via `perLine`), clave "seccion-linea".
  * @param {object} doc documento de buildReviewDoc
- * @param {Array<{text:string, startMs:number, endMs:number}>} [words] timestamps por palabra de toda la cancion
+ * @param {Map<string, Array<{word:string, startMs:number, endMs:number}>>} [lineWordsByKey]
+ *   timestamps por palabra de cada renglon (clave `segmentKey(seccion,linea)`),
+ *   ya correlacionados por transIndex -- ver buildReviewDoc.
  * @returns {object} documento nuevo
  */
-export function autoSplitLongLines(doc, words = []) {
+export function autoSplitLongLines(doc, lineWordsByKey = new Map()) {
   const next = structuredClone(doc);
-  const lineWordsMap = buildLineWordsMap(next, words);
   next.sections.forEach((section, sIdx) => {
     section.lines = section.lines.flatMap(
-      (line, lIdx) => splitLineRecursive(line, lineWordsMap.get(segmentKey(sIdx, lIdx))),
+      (line, lIdx) => splitLineRecursive(line, lineWordsByKey.get(segmentKey(sIdx, lIdx))),
     );
   });
   recomputeTemperatures(next);
   return next;
+}
+
+// Timestamps por palabra de CADA segmento transcrito, indexados por
+// transIndex (no por dbIndex ni por posicion en el documento). Mismo cursor
+// secuencial que usa buildSuggestions (api/songs/[id]/pipeline/lyrics.js)
+// sobre `transcription.words`: los words vienen concatenados en el mismo
+// orden que `transLines`, que es el orden TEMPORAL real del audio. Ese
+// orden NO tiene por que coincidir con el orden del documento (ver
+// autoSplitLongLines): por eso la correlacion linea<->words se hace SIEMPRE
+// por transIndex, nunca por posicion.
+function wordsByTransIndex(transLines, words) {
+  const map = new Map();
+  let cursor = 0;
+  transLines.forEach((lineText, transIndex) => {
+    const count = (lineText || '').split(/\s+/).filter(Boolean).length;
+    map.set(transIndex, words.slice(cursor, cursor + count));
+    cursor += count;
+  });
+  return map;
 }
 
 /**
@@ -275,6 +266,7 @@ export function autoSplitLongLines(doc, words = []) {
 export function buildReviewDoc({ dbSections, canonical, transcription }) {
   const transLines = transcription?.transLines ?? [];
   const perLine = transcription?.perLine ?? [];
+  const wordsPerTransIndex = wordsByTransIndex(transLines, transcription?.words ?? []);
 
   // Flatten de lineas db (orden documento) para casar contra perLine.dbIndex,
   // que indexa sobre el flat de todas las lineas db del run.
@@ -294,6 +286,12 @@ export function buildReviewDoc({ dbSections, canonical, transcription }) {
 
   const canonicalPerSection = matchCanonicalSections(dbSections, canonical);
 
+  // Words por renglon para autoSplitLongLines, resueltos aca (donde si se
+  // conoce el mapeo transIndex->dbIndex real via perLine) y no adentro de
+  // esa funcion (que es pura y no puede asumir orden temporal == orden
+  // documento — ver su comentario).
+  const lineWordsByKey = new Map();
+
   const sections = dbSections.map((section, sIdx) => {
     const canonSection = canonicalPerSection[sIdx];
     const hadCanonicalSection = !isNil(canonSection);
@@ -305,6 +303,10 @@ export function buildReviewDoc({ dbSections, canonical, transcription }) {
       const flatIndex = flatDbLines.findIndex((f) => f.section === sIdx && f.line === lIdx);
       const perLineEntry = perLineByDbIndex.get(flatIndex) ?? null;
       const transText = perLineEntry ? (transLines[perLineEntry.transIndex] ?? null) : null;
+      if (perLineEntry) {
+        const lineWords = wordsPerTransIndex.get(perLineEntry.transIndex);
+        if (lineWords) lineWordsByKey.set(segmentKey(sIdx, lIdx), lineWords);
+      }
       const canonicalText = matchedCanon[lIdx];
       // Con seccion canonica presente: conflicto si no hubo match (canonica
       // de distinta cantidad, sin exacta -> necesita atencion humana) o si
@@ -353,7 +355,7 @@ export function buildReviewDoc({ dbSections, canonical, transcription }) {
   }
 
   const doc = { sections, vocalizations, hasCanonical: !isNil(canonical), temperature: 1 };
-  return autoSplitLongLines(doc, transcription?.words ?? []);
+  return autoSplitLongLines(doc, lineWordsByKey);
 }
 
 function requireSection(doc, sectionIdx) {

@@ -231,6 +231,13 @@ describe('applyReviewAction', () => {
   });
 });
 
+// Mapa "seccion-linea" -> words de esa linea, mismo contrato que
+// autoSplitLongLines espera como 2do parametro (ya correlacionado, no un
+// array plano posicional -- ver bug de correlacion temporal mas abajo).
+function wordsMap(entries) {
+  return new Map(Object.entries(entries));
+}
+
 describe('autoSplitLongLines', () => {
   const longTokens = ['Uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete',
     'ocho', 'nueve', 'diez', 'once', 'doce', 'trece', 'catorce'];
@@ -252,7 +259,7 @@ describe('autoSplitLongLines', () => {
       sources: { db: longText, canonical: null, trans: longText },
     };
     const doc = docWithLine(line);
-    const out = autoSplitLongLines(doc, wordsWithPause);
+    const out = autoSplitLongLines(doc, wordsMap({ '0-0': wordsWithPause }));
     expect(out.sections[0].lines).toHaveLength(2);
     expect(out.sections[0].lines[0].text).toBe('Uno dos tres cuatro cinco seis siete');
     expect(out.sections[0].lines[1].text).toBe('ocho nueve diez once doce trece catorce');
@@ -267,7 +274,7 @@ describe('autoSplitLongLines', () => {
       sources: { db: text, canonical: text, trans: null },
     };
     const doc = docWithLine(line);
-    const out = autoSplitLongLines(doc, []);
+    const out = autoSplitLongLines(doc);
     expect(out.sections[0].lines).toHaveLength(2);
     expect(out.sections[0].lines[0].text).toBe('Esta es una linea muy larga que no tiene');
     expect(out.sections[0].lines[1].text).toBe('ninguna transcripcion asociada todavia');
@@ -280,7 +287,7 @@ describe('autoSplitLongLines', () => {
       sources: { db: text, canonical: null, trans: null },
     };
     const doc = docWithLine(line);
-    const out = autoSplitLongLines(doc, []);
+    const out = autoSplitLongLines(doc);
     expect(out.sections[0].lines).toHaveLength(1);
     expect(out.sections[0].lines[0].text).toBe(text);
   });
@@ -296,7 +303,7 @@ describe('autoSplitLongLines', () => {
       voiceRanges: [{ start: 0, end: 5 }, { start: 40, end: 45 }],
     };
     const doc = docWithLine(line);
-    const out = autoSplitLongLines(doc, wordsWithPause);
+    const out = autoSplitLongLines(doc, wordsMap({ '0-0': wordsWithPause }));
     const [first, second] = out.sections[0].lines;
     // cutOffset = "Uno dos tres cuatro cinco seis siete".length + 1 = 37
     expect(first.chords).toEqual([{ ch: 'D', pos: 2 }]);
@@ -311,8 +318,9 @@ describe('autoSplitLongLines', () => {
       sources: { db: longText, canonical: null, trans: longText },
     };
     const doc = docWithLine(line);
-    const once = autoSplitLongLines(doc, wordsWithPause);
-    const twice = autoSplitLongLines(once, wordsWithPause);
+    const map = wordsMap({ '0-0': wordsWithPause });
+    const once = autoSplitLongLines(doc, map);
+    const twice = autoSplitLongLines(once, map);
     expect(twice).toEqual(once);
   });
 
@@ -329,7 +337,7 @@ describe('autoSplitLongLines', () => {
       sources: { db: text, canonical: null, trans: text },
     };
     const doc = docWithLine(line);
-    const out = autoSplitLongLines(doc, words);
+    const out = autoSplitLongLines(doc, wordsMap({ '0-0': words }));
     expect(out.sections[0].lines.length).toBeGreaterThanOrEqual(2);
     for (const l of out.sections[0].lines) {
       expect(l.text.length).toBeLessThanOrEqual(48);
@@ -344,7 +352,7 @@ describe('autoSplitLongLines', () => {
       sources: { db: text, canonical: null, trans: null },
     };
     const doc = docWithLine(line);
-    const out = autoSplitLongLines(doc, []);
+    const out = autoSplitLongLines(doc);
     expect(out.sections[0].lines).toHaveLength(1);
     expect(out.sections[0].lines[0].text).toBe(text);
   });
@@ -367,7 +375,8 @@ describe('autoSplitLongLines', () => {
       hasCanonical: false,
       temperature: 1,
     };
-    const out = autoSplitLongLines(doc, wordsWithPause);
+    // la linea larga esta en seccion 1, linea 0 -> clave '1-0'.
+    const out = autoSplitLongLines(doc, wordsMap({ '1-0': wordsWithPause }));
     expect(out.sections).toHaveLength(2);
     expect(out.sections[0].type).toBe('verse');
     expect(out.sections[0].lines).toHaveLength(1);
@@ -388,6 +397,43 @@ describe('autoSplitLongLines', () => {
     expect(doc.sections[0].lines).toHaveLength(2);
     expect(doc.sections[0].lines[0].text).toBe('Uno dos tres cuatro cinco seis siete');
     expect(doc.sections[0].lines[1].text).toBe('ocho nueve diez once doce trece catorce');
+  });
+
+  // Bug real (review Task 14): el orden del DOCUMENTO no es necesariamente
+  // el orden TEMPORAL del audio. Con coros repetidos, la linea 0 del doc
+  // puede matchear a un segmento transcrito que ocurrio DESPUES en el audio
+  // que el de la linea 1 (transcribe_diff.py matchea cada linea db contra
+  // su mejor candidato global, sin restriccion de orden). Si la correlacion
+  // camina en orden de documento y corta el array de words por conteo
+  // posicional, le asigna a cada linea el timing de OTRA linea -> corte
+  // confiado pero en la pausa equivocada.
+  it('correlaciona por transIndex (orden temporal real), no por orden del documento, con matching cruzado', () => {
+    // segmentX: pausa tras idx 5 (temprana). segmentY: pausa tras idx 8 (tardia).
+    const segmentX = makeWordsWithPauseAt(longTokens, 5);
+    const segmentY = makeWordsWithPauseAt(longTokens, 8);
+    // orden TEMPORAL real (como los devuelve Modal): segmentX primero, luego segmentY.
+    const words = [...segmentX, ...segmentY];
+    const transLines = [longText, longText]; // transIndex 0 = segmentX, transIndex 1 = segmentY
+    // Matching CRUZADO: la linea 0 del doc (dbIndex 0) matchea con el
+    // segmento que en el audio ocurrio SEGUNDO (transIndex 1, segmentY);
+    // la linea 1 del doc (dbIndex 1) matchea con el que ocurrio PRIMERO
+    // (transIndex 0, segmentX). Pasa perfectamente en coros repetidos.
+    const perLine = [
+      { transIndex: 0, dbIndex: 1, score: 1.0 },
+      { transIndex: 1, dbIndex: 0, score: 1.0 },
+    ];
+    const dbSectionsCrossed = [{ type: 'chorus', lines: [{ text: longText }, { text: longText }] }];
+    const doc = buildReviewDoc({
+      dbSections: dbSectionsCrossed,
+      canonical: null,
+      transcription: { text: '', words, perLine, transLines },
+    });
+    // linea 0 (dbIndex 0) matchea transIndex 1 = segmentY -> pausa tras idx 8.
+    expect(doc.sections[0].lines[0].text).toBe('Uno dos tres cuatro cinco seis siete ocho nueve');
+    expect(doc.sections[0].lines[1].text).toBe('diez once doce trece catorce');
+    // linea 1 (dbIndex 1) matchea transIndex 0 = segmentX -> pausa tras idx 5.
+    expect(doc.sections[0].lines[2].text).toBe('Uno dos tres cuatro cinco seis');
+    expect(doc.sections[0].lines[3].text).toBe('siete ocho nueve diez once doce trece catorce');
   });
 });
 

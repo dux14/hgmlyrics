@@ -12,6 +12,7 @@ import {
   signSongAudioDownload,
   deleteSongAudioObjects,
 } from '../../_lib/storage.js';
+import { deletePitchPrefix } from '../../pitch/_lib/storage.js';
 import { initialPhases } from '../../_lib/pipeline/state.js';
 import { titleSimilarity, TITLE_MATCH_THRESHOLD } from '../../_lib/pipeline/titleMatch.js';
 
@@ -198,6 +199,17 @@ async function purgeRun(req, res, songId) {
     ...runRows.map((r) => r.input_path),
   ].filter(Boolean);
   await deleteSongAudioObjects(keys).catch(() => {});
+
+  // Artefactos del pitch en el bucket pitch-jobs (deletePitchPrefix.js): el
+  // signer del pipeline (api/pipeline/sign-upload.js) los sube bajo
+  // pipeline/${songId}/${runId}/... . deletePitchPrefix solo lista subcarpetas
+  // fijas bajo un prefijo EXACTO (no hace listado recursivo por prefijo
+  // parcial), así que no alcanza con pipeline/${songId}/: hay que borrar
+  // run por run. runRows ya trae todos los runs con input_path (único caso en
+  // que la fase pitch pudo haber llegado a correr).
+  await Promise.all(
+    runRows.map((r) => deletePitchPrefix(`pipeline/${songId}/${r.id}`).catch(() => {})),
+  );
 
   res.status(200).json({ success: true, purged });
 }

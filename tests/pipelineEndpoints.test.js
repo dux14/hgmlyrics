@@ -12,6 +12,9 @@ vi.mock('../api/_lib/storage.js', () => ({
   pipelineStemKey: (songId, kind) => `${songId}/stems/${kind}.mp3`,
   deleteSongAudioObjects: vi.fn(async () => {}),
 }));
+vi.mock('../api/pitch/_lib/storage.js', () => ({
+  deletePitchPrefix: vi.fn(async () => {}),
+}));
 vi.mock('../api/songs/[id]/pipeline/_dispatch.js', () => ({
   dispatchPhase: vi.fn(async () => ({ id: 'call1' })),
 }));
@@ -20,6 +23,7 @@ import sql from '../api/_lib/db.js';
 import { requireAdmin } from '../api/_lib/auth.js';
 import * as storage from '../api/_lib/storage.js';
 import { pipelineInputStat, createSongAudioSignedPutUrl } from '../api/_lib/storage.js';
+import { deletePitchPrefix } from '../api/pitch/_lib/storage.js';
 import { dispatchPhase } from '../api/songs/[id]/pipeline/_dispatch.js';
 import { initialPhases } from '../api/_lib/pipeline/state.js';
 import pipelineHandler from '../api/songs/[id]/pipeline.js';
@@ -282,6 +286,12 @@ describe('DELETE /api/songs/:id/pipeline (A2: purga)', () => {
         's1/runs/r-failed/full.mp3',
       ]),
     );
+    // Fix 1 (review holístico): la purga también borra los artefactos de
+    // pitch en el bucket pitch-jobs, run por run (deletePitchPrefix no lista
+    // por prefijo parcial de song, solo por prefijo exacto de run).
+    expect(deletePitchPrefix).toHaveBeenCalledWith('pipeline/s1/r-done');
+    expect(deletePitchPrefix).toHaveBeenCalledWith('pipeline/s1/r-act');
+    expect(deletePitchPrefix).toHaveBeenCalledWith('pipeline/s1/r-failed');
     // Contrato: el UPDATE a superseded también cubre 'failed', no solo 'done'.
     const supersedeQuery = capturedQueries.find((q) => q.includes("SET status = 'superseded'"));
     expect(supersedeQuery).toContain('failed');

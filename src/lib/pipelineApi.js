@@ -177,6 +177,25 @@ export async function renamePipelineAudio(songId, displayName) {
 }
 
 /**
+ * Edita el label y/o los bordes (startMs/endMs) de UN segmento de la
+ * estructura detectada (SongFormer, `song_structure.segments`). Admin-only
+ * en el backend; el backend valida label contra las 8 clases de SongFormer y
+ * que los bordes no se solapen con los segmentos vecinos (400 si no).
+ * @param {string} songId
+ * @param {{segmentIndex:number, label?:string, startMs?:number, endMs?:number}} patch
+ * @returns {Promise<{segments:Array}>}
+ */
+export async function patchStructure(songId, patch) {
+  const res = await fetch(`/api/songs/${songId}/structure`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw await readError(res, 'No se pudo actualizar la sección');
+  return res.json();
+}
+
+/**
  * Suscribe el estado del run de una canción. El Realtime Broadcast (canal
  * 'pipeline:run:{songId}', evento 'change' que emite el trigger
  * song_pipeline_runs_broadcast_status) es solo la señal "algo cambió": el dato

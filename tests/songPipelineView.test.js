@@ -80,6 +80,23 @@ vi.mock('../src/components/pipeline/SyncFineTuning.js', () => ({
   }),
 }));
 
+// StructureDetail (Task 16) tiene su propio test dedicado: acá se mockea
+// como caja negra, igual que StemTracksDetail y SyncFineTuning.
+let lastStructureDetailDestroy = null;
+let lastStructureDetailUpdate = null;
+
+vi.mock('../src/components/pipeline/StructureDetail.js', () => ({
+  createStructureDetail: vi.fn(() => {
+    lastStructureDetailDestroy = vi.fn();
+    lastStructureDetailUpdate = vi.fn();
+    return {
+      el: document.createElement('div'),
+      update: lastStructureDetailUpdate,
+      destroy: lastStructureDetailDestroy,
+    };
+  }),
+}));
+
 let routeCb = null;
 
 vi.mock('../src/router.js', () => ({
@@ -141,6 +158,8 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     lastStemTracksUpdate = null;
     lastSyncTuningDestroy = null;
     lastSyncTuningUpdate = null;
+    lastStructureDetailDestroy = null;
+    lastStructureDetailUpdate = null;
     vi.clearAllMocks();
     confirmDialog.mockResolvedValue(true);
     cancelPipelineRun.mockResolvedValue({ success: true });
@@ -247,7 +266,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     });
 
     const pill = container.querySelector('.pipeline-view__pill');
-    expect(pill.textContent).toBe('3 de 5 fases');
+    expect(pill.textContent).toBe('3 de 6 fases');
   });
 
   it('suscribe watchPipelineRun al montar', () => {
@@ -268,7 +287,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     watchOnChange({ run: buildRun({ upload: { status: 'done' } }) });
     expect(container.querySelector('.pipeline-view')).toBe(view);
     const pill = container.querySelector('.pipeline-view__pill');
-    expect(pill.textContent).toBe('0 de 5 fases');
+    expect(pill.textContent).toBe('0 de 6 fases');
   });
 
   it('teardown: llama uploadCard.dispose() para limpiar runs huérfanos', () => {
@@ -316,6 +335,44 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     expect(lastSyncTuningDestroy).toHaveBeenCalled();
   });
 
+  it('fila Secciones monta el detalle de StructureDetail y lo actualiza en cada render', () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({ run: buildRun({ structure: { status: 'running' } }) });
+
+    const row = container.querySelector('[data-phase="structure"]');
+    expect(row).toBeTruthy();
+    expect(row.querySelector('.phase__detail').children.length).toBeGreaterThan(0);
+    expect(lastStructureDetailUpdate).toHaveBeenCalled();
+  });
+
+  it('fila Secciones va entre Pistas y Letra', () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({ run: buildRun() });
+
+    const rows = Array.from(container.querySelectorAll('.phase')).map((r) => r.dataset.phase);
+    expect(rows.indexOf('structure')).toBeGreaterThan(rows.indexOf('stems'));
+    expect(rows.indexOf('structure')).toBeLessThan(rows.indexOf('lyrics_review'));
+  });
+
+  it('fase structure failed: no ofrece reintento (best-effort, no bloquea el run)', () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({ run: buildRun({ structure: { status: 'failed', error: 'boom' } }) });
+
+    const row = container.querySelector('[data-phase="structure"]');
+    expect(row.querySelector('.dot.act')).toBeFalsy();
+    expect(row.querySelector('.phase__action')).toBeFalsy();
+    expect(row.textContent).toContain('No se pudo detectar la estructura');
+  });
+
+  it('teardown: llama structureDetail.destroy()', () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({ run: buildRun() });
+
+    routeCb();
+
+    expect(lastStructureDetailDestroy).toHaveBeenCalled();
+  });
+
   it('mount-once bajo carrera async real: dos eventos sin await entre ellos montan el panel una sola vez', async () => {
     renderSongPipelineView(container, SONG_ID);
 
@@ -329,7 +386,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
   it('esqueleto inmediato: las 5 filas existen antes de que watchPipelineRun emita nada', () => {
     renderSongPipelineView(container, SONG_ID);
 
-    expect(container.querySelectorAll('[data-phase]').length).toBe(5);
+    expect(container.querySelectorAll('[data-phase]').length).toBe(6);
   });
 
   it('error del watcher: muestra el banner con boton Reintentar sin borrar las filas', () => {
@@ -341,7 +398,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     expect(banner.hidden).toBe(false);
     expect(banner.getAttribute('role')).toBe('alert');
     expect(banner.textContent).toContain('Reintentar');
-    expect(container.querySelectorAll('[data-phase]').length).toBe(5);
+    expect(container.querySelectorAll('[data-phase]').length).toBe(6);
   });
 
   it('el boton Reintentar del banner de error fuerza un refresh del watcher', () => {
@@ -361,7 +418,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
 
     const banner = container.querySelector('.pipeline-view__error');
     expect(banner.hidden).toBe(true);
-    expect(container.querySelectorAll('[data-phase]').length).toBe(5);
+    expect(container.querySelectorAll('[data-phase]').length).toBe(6);
   });
 
   it('skip por firma: dos eventos con el mismo estado no reconstruyen las filas', () => {

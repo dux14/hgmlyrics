@@ -1577,3 +1577,103 @@ body.chrome-hidden .main {
 .partitura-view__voice {
   margin-top: var(--space-md);
 }
+
+/* ---- Detalle de Secciones / SongFormer (Task 16) ----------------------- */
+
+.structure-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.structure-detail__empty {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  padding: 4px 0;
+}
+
+/* Timeline horizontal: cada segmento es un tramo proporcional a su duración
+   (flex-grow inline, calculado en JS), coloreado por --seg-color (var
+   inline que apunta a --color-section-*). */
+.structure-detail__timeline {
+  display: flex;
+  overflow: hidden;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+}
+
+.struct-seg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 6px;
+  padding: 6px 8px;
+  background: color-mix(in oklch, var(--seg-color) 16%, transparent);
+  border-left: 2px solid var(--seg-color);
+  overflow: hidden;
+}
+.struct-seg:first-child {
+  border-left: none;
+}
+
+.struct-seg__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--seg-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.struct-seg__range {
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.structure-detail__editor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.struct-edit {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.8rem;
+}
+
+.struct-edit__label {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.8rem;
+}
+
+.struct-edit__nudge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-secondary);
+}
+
+.struct-edit__nudge-label {
+  font-size: 0.72rem;
+}
+
+.struct-edit__btn {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.struct-edit__btn:hover {
+  border-color: var(--color-brand);
+}

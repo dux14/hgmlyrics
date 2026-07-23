@@ -47,8 +47,16 @@ async function getRun(_req, res, songId) {
     res.status(404).json({ error: 'No hay una ejecución activa para esta canción' });
     return;
   }
-  const phases = await signTracks(run.phases);
-  res.status(200).json({ run: { ...run, phases } });
+  // structure (Task 16): song_structure.segments no vive en phases.structure
+  // (solo status/error, ver applyPhaseEvent en process.js) sino en su propia
+  // tabla — se adjunta acá para que StructureDetail no necesite un fetch
+  // aparte del mismo run que ya consume el stepper.
+  const [phases, [structureRow]] = await Promise.all([
+    signTracks(run.phases),
+    sql`SELECT segments FROM song_structure WHERE song_id = ${songId}`,
+  ]);
+  const structure = structureRow ? { segments: structureRow.segments } : null;
+  res.status(200).json({ run: { ...run, phases, structure } });
 }
 
 async function createRun(req, res, songId) {

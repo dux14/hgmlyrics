@@ -24,6 +24,7 @@ import { PhaseRow } from './PhaseRow.js';
 import { createUploadPhaseCard } from './UploadPhaseCard.js';
 import { createStemTracksDetail } from './StemTracksDetail.js';
 import { createSyncFineTuning } from './SyncFineTuning.js';
+import { createStructureDetail } from './StructureDetail.js';
 
 // Estados de run que el DELETE /api/songs/[id]/pipeline acepta cancelar
 // (mismo WHERE status IN (...) que api/songs/[id]/pipeline.js#cancelRun):
@@ -39,9 +40,13 @@ const CANCELABLE_RUN_STATUSES = new Set([
 ]);
 
 // Filas visibles del stepper, en orden. lyrics_review es la fase "Letra".
+// 'structure' (Task 16) es best-effort (ver CRITICAL_PHASES en
+// api/_lib/pipeline/state.js): nunca bloquea el run, así que no participa
+// del gate de sync/pitch ni ofrece reintento (describePhase la trata aparte).
 const ROWS = [
   { key: 'upload', title: 'Audio' },
   { key: 'stems', title: 'Pistas' },
+  { key: 'structure', title: 'Secciones' },
   { key: 'lyrics_review', title: 'Letra' },
   { key: 'sync', title: 'Sincronía' },
   { key: 'pitch', title: 'Tono por sílaba' },
@@ -59,6 +64,12 @@ const SUBTITLES = {
     running: 'Separando pistas...',
     done: 'Pistas separadas',
     failed: 'No se pudo separar las pistas',
+  },
+  structure: {
+    pending: 'En espera',
+    running: 'Detectando secciones...',
+    done: 'Secciones detectadas',
+    failed: 'No se pudo detectar la estructura',
   },
   lyrics_review: {
     pending: 'En espera',
@@ -99,7 +110,7 @@ export function renderSongPipelineView(container, songId) {
     <header class="pipeline-view__header">
       <button type="button" class="pipeline-view__back" aria-label="Volver">${icon('arrow-left')}</button>
       <h1 class="pipeline-view__title">Procesamiento</h1>
-      <span class="pipeline-view__pill">0 de 5 fases</span>
+      <span class="pipeline-view__pill">0 de ${ROWS.length} fases</span>
     </header>
     <div class="pipeline-view__error" role="alert" hidden>
       <p class="pipeline-view__error-text">No se pudo cargar el procesamiento</p>
@@ -192,6 +203,24 @@ export function renderSongPipelineView(container, songId) {
   // recrear el gestor de audio único (y su <audio> real) en cada re-render.
   const stemTracks = createStemTracksDetail({ songId });
 
+  // Detalle de Secciones (Task 16): mount-once, mismo motivo (no perder el
+  // <select>/foco del editor admin en cada re-render de filas). onChanged
+  // refresca el run completo tras un PATCH exitoso, igual que
+  // uploadCard.onAfterConfirm.
+  const structureDetail = createStructureDetail({
+    songId,
+    onChanged: () => {
+      getPipelineRun(songId)
+        .then((data) => renderPhases(data?.run ?? null))
+        .catch((err) => {
+          console.error(
+            'SongPipelineView: no se pudo refrescar el run tras editar la estructura',
+            err,
+          );
+        });
+    },
+  });
+
   // Detalle de Sincronía (D3d): mount-once, mismo motivo (estado local de
   // línea expandida + mini-player propio del stem de voz). Esta vista no
   // tiene acceso a la canción proyectada, así que getSong cae al fallback
@@ -236,6 +265,15 @@ export function renderSongPipelineView(container, songId) {
   function describePhase(key, phase, runStatus, lyricsApproved) {
     const status = phase.status;
     const table = SUBTITLES[key];
+
+    // 'structure' es best-effort (Task 16): un failed acá NUNCA ofrece
+    // reintento (el endpoint api/songs/[id]/pipeline/retry.js ni siquiera lo
+    // acepta, ver RETRYABLE_PHASES) — se pinta como 'pending' con el copy de
+    // fallo para no alarmar con un dot ámbar que promete una acción que no
+    // existe.
+    if (key === 'structure' && status === 'failed') {
+      return { state: 'pending', subtitle: table.failed };
+    }
 
     if (status === 'stale') {
       return {
@@ -327,10 +365,11 @@ export function renderSongPipelineView(container, songId) {
     // único que cambió fue contenido interno del documento de revisión.
     const sig = JSON.stringify({
       st: run?.status ?? null,
-      ph: ['upload', 'stems', 'lyrics_review', 'sync', 'pitch', 'clips'].map(
+      ph: ['upload', 'stems', 'structure', 'lyrics_review', 'sync', 'pitch', 'clips'].map(
         (k) => run?.phases?.[k]?.status ?? null,
       ),
       tr: Object.keys(run?.phases?.stems?.tracks ?? {}).sort(),
+      stc: (run?.structure?.segments ?? []).length,
     });
     if (sig === lastSig) return;
     lastSig = sig;
@@ -342,10 +381,11 @@ export function renderSongPipelineView(container, songId) {
     const phases = run?.phases || {};
     const lyricsApproved = phases.lyrics_review?.status === 'done';
     const doneCount = ROWS.filter((r) => phases[r.key]?.status === 'done').length;
-    pillEl.textContent = `${doneCount} de 5 fases`;
+    pillEl.textContent = `${doneCount} de ${ROWS.length} fases`;
 
     uploadCard.update(run);
     stemTracks.update(run);
+    structureDetail.update(run);
     syncTuning.update(run);
 
     ROWS.forEach((r, i) => {
@@ -357,6 +397,8 @@ export function renderSongPipelineView(container, songId) {
         detail = uploadCard.el;
       } else if (r.key === 'stems') {
         detail = stemTracks.el;
+      } else if (r.key === 'structure') {
+        detail = structureDetail.el;
       } else if (r.key === 'sync') {
         detail = syncTuning.el;
       } else if (r.key === 'lyrics_review') {
@@ -428,6 +470,7 @@ export function renderSongPipelineView(container, songId) {
     uploadCard.dispose?.();
     uploadCard.el.remove();
     stemTracks.destroy();
+    structureDetail.destroy();
     syncTuning.destroy();
   });
 }

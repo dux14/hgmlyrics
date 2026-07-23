@@ -162,6 +162,31 @@ describe('GET /api/songs/:id/pipeline', () => {
     await pipelineHandler({ method: 'GET', query: { id: 's1' } }, res);
     expect(res.status).toHaveBeenCalledWith(404);
   });
+
+  it('adjunta run.structure.segments desde song_structure (Task 16)', async () => {
+    const phases = initialPhases();
+    const segments = [{ label: 'verso', startMs: 0, endMs: 5000 }];
+    routeSql([
+      ['SELECT id, song_id AS "songId"', [{ id: 'r1', songId: 's1', status: 'processing', phases, inputMeta: {}, lyricsReview: {} }]],
+      ['SELECT segments FROM song_structure', [{ segments }]],
+    ]);
+    const res = makeRes();
+    await pipelineHandler({ method: 'GET', query: { id: 's1' } }, res);
+    const body = res.json.mock.calls[0][0];
+    expect(body.run.structure).toEqual({ segments });
+  });
+
+  it('run.structure es null si todavía no hay song_structure para la canción', async () => {
+    const phases = initialPhases();
+    routeSql([
+      ['SELECT id, song_id AS "songId"', [{ id: 'r1', songId: 's1', status: 'processing', phases, inputMeta: {}, lyricsReview: {} }]],
+      ['SELECT segments FROM song_structure', []],
+    ]);
+    const res = makeRes();
+    await pipelineHandler({ method: 'GET', query: { id: 's1' } }, res);
+    const body = res.json.mock.calls[0][0];
+    expect(body.run.structure).toBeNull();
+  });
 });
 
 describe('DELETE /api/songs/:id/pipeline', () => {

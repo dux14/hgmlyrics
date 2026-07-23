@@ -316,6 +316,15 @@ async function approveGate(res, songId) {
 
     const snapshot = approvedSnapshot(review);
     const nextPhases = applyPhaseEvent(run.phases, { phase: 'lyrics_review', ok: true });
+    // Fix bug critico E2E: las derivadas que se despachan mas abajo (Promise.all
+    // post-commit) tienen que quedar 'running' YA en esta misma escritura
+    // atomica, mismo CAS que advanceNextPhase (advance.js:30). Sin esto, sync
+    // quedaba 'pending' pese a despacharse -> el guard de
+    // api/align/webhook.js (notifyPipelineSync) exige sync.status==='running'
+    // para aplicar el evento de exito del align, lo descartaba en silencio, y
+    // el run quedaba 'running' para siempre (clips nunca arranca).
+    nextPhases.sync = { ...nextPhases.sync, status: 'running' };
+    nextPhases.pitch = { ...nextPhases.pitch, status: 'running' };
     const runStatus = runStatusFromPhases(nextPhases);
     const nextLyricsReview = { ...run.lyricsReview, approvedHash: snapshot.hash };
     // input_meta.durationSec la persiste confirm.js (best-effort, D1); jsonb

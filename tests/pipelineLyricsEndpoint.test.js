@@ -761,6 +761,12 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
       (v) => v && typeof v === 'object' && v.lyrics_review,
     );
     expect(phasesArg.lyrics_review.status).toBe('done');
+    // Bug critico E2E: sync/pitch deben quedar 'running' YA en esta misma
+    // escritura atomica (no 'pending') — si no, el webhook legacy de align
+    // (api/align/webhook.js) descarta el evento de exito (guard status!=='running')
+    // y sync queda pending para siempre pese a que el align SI termino.
+    expect(phasesArg.sync.status).toBe('running');
+    expect(phasesArg.pitch.status).toBe('running');
 
     const lyricsReviewArg = mainRunUpdateValues.find(
       (v) => v && typeof v === 'object' && 'approvedHash' in v,

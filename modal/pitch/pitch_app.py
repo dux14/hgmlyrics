@@ -7,6 +7,7 @@ el cron). Idempotencia por jobId (modal.Dict) para que el reintento de approve
 (~16s) no lance 2 corridas GPU facturadas."""
 from __future__ import annotations
 import hmac, os
+from pathlib import Path
 from fastapi import Header, HTTPException
 import modal
 from _common import download_bytes, post_webhook, post_pipeline_event
@@ -22,13 +23,23 @@ from choir_basicpitch import run_choir
 REQUIRED_PHASES = ["separation", "f0", "notes", "lyrics", "fusion", "render"]
 app = modal.App("hkn-pitch")
 
+# Ruta absoluta a requirements.txt, independiente del cwd de deploy. El resto de
+# apps Modal (stems_app.py, align_app.py) viven en modal/ y deployan con
+# `cd modal && modal deploy <archivo>.py`, asi que "requirements.txt" relativo al
+# cwd les acierta por casualidad de layout. pitch_app.py vive en modal/pitch/: con
+# ese mismo comando, un path relativo resolvia contra modal/requirements.txt (el
+# de stems, sin torchcrepe/torchfcpe/whisperx) en vez de modal/pitch/requirements.txt
+# -> imagen de n_f0/n_separation silenciosamente incompleta (confirmado con repro:
+# ModuleNotFoundError para los 3 modulos al buildear con cwd=modal/).
+_REQUIREMENTS_TXT = str(Path(__file__).parent / "requirements.txt")
+
 # Imagen GPU: separation (BS-RoFormer via audio-separator + MedleyVox via asteroid),
 # f0 (torchcrepe), lyrics (WhisperX). SIN clones (torchcrepe reemplaza RMVPE;
 # MedleyVox se corre via asteroid directo).
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("ffmpeg", "git")
-    .pip_install_from_requirements("requirements.txt")
+    .pip_install_from_requirements(_REQUIREMENTS_TXT)
     .add_local_python_source(
         "core", "_common", "separation", "f0", "notes", "lyrics", "fusion", "render",
         "gender", "choir_basicpitch"

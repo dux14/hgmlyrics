@@ -256,6 +256,51 @@ describe('SyncFineTuning', () => {
     detail.destroy();
   });
 
+  it('syncSongText() repinta con el texto real tras perder la carrera de becameDone (A7 fix)', async () => {
+    mockReady([{ i: 0, startMs: 1200, score: 0.9, interpolated: false }]);
+    let song = null;
+    const detail = createSyncFineTuning({ songId: 'song-1', getSong: () => song });
+    container.appendChild(detail.el);
+    await vi.waitFor(() => expect(detail.el.querySelectorAll('.lineRow').length).toBe(1));
+
+    // El watcher del run gana la carrera: consume la transición
+    // pending→done de update() ANTES de que getSong() tenga la canción.
+    detail.update({ phases: { sync: { status: 'done' } } });
+    expect(detail.el.querySelector('.lineRow__label').textContent).toBe('Línea 1');
+
+    // La canción llega tarde. update() ya no re-pinta: becameDone es false
+    // porque lastSyncStatus ya quedó en 'done' tras la llamada anterior.
+    song = { sections: [{ type: 'verse', lines: [{ text: 'Primero el cielo' }] }] };
+    detail.update({ phases: { sync: { status: 'done' } } });
+    expect(detail.el.querySelector('.lineRow__label').textContent).toBe('Línea 1');
+
+    // syncSongText() es el camino adicional: repinta sin depender de esa
+    // transición.
+    detail.syncSongText();
+    expect(detail.el.querySelector('.lineRow__label').textContent).toBe('Primero el cielo');
+
+    detail.destroy();
+  });
+
+  it('syncSongText() no pisa una línea expandida (respeta el guard de edición local)', async () => {
+    mockReady([{ i: 0, startMs: 1200, score: 0.9, interpolated: false }]);
+    let song = null;
+    const detail = createSyncFineTuning({ songId: 'song-1', getSong: () => song });
+    container.appendChild(detail.el);
+    await vi.waitFor(() => expect(detail.el.querySelectorAll('.lineRow').length).toBe(1));
+
+    detail.el.querySelector('.lineRow__header').click();
+    expect(detail.el.querySelector('.lineRow__editor')).toBeTruthy();
+
+    song = { sections: [{ type: 'verse', lines: [{ text: 'Primero el cielo' }] }] };
+    detail.syncSongText();
+
+    // Sigue expandida: el guard expandedI === null bloqueó el repintado.
+    expect(detail.el.querySelector('.lineRow__editor')).toBeTruthy();
+
+    detail.destroy();
+  });
+
   it('destroy() pausa el mini-player si estaba sonando', async () => {
     mockReady([{ i: 0, startMs: 0, score: 0.9, interpolated: false }]);
     const detail = createSyncFineTuning({ songId: 'song-1', getVocalsUrl: () => VOCALS_URL });

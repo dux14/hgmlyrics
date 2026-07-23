@@ -67,16 +67,19 @@ vi.mock('../src/components/pipeline/StemTracksDetail.js', () => ({
 let lastSyncTuningDestroy = null;
 let lastSyncTuningUpdate = null;
 let lastSyncTuningArgs = null;
+let lastSyncTuningSyncSongText = null;
 
 vi.mock('../src/components/pipeline/SyncFineTuning.js', () => ({
   createSyncFineTuning: vi.fn((args) => {
     lastSyncTuningArgs = args;
     lastSyncTuningDestroy = vi.fn();
     lastSyncTuningUpdate = vi.fn();
+    lastSyncTuningSyncSongText = vi.fn();
     return {
       el: document.createElement('div'),
       refresh: vi.fn(),
       update: lastSyncTuningUpdate,
+      syncSongText: lastSyncTuningSyncSongText,
       destroy: lastSyncTuningDestroy,
     };
   }),
@@ -169,6 +172,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     lastSyncTuningDestroy = null;
     lastSyncTuningUpdate = null;
     lastSyncTuningArgs = null;
+    lastSyncTuningSyncSongText = null;
     lastStructureDetailDestroy = null;
     lastStructureDetailUpdate = null;
     vi.clearAllMocks();
@@ -363,6 +367,11 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
         sections: [{ type: 'verse', lines: [{ text: 'Hola' }] }],
       }),
     );
+    // Repinta con syncSongText() (no update()): la transición pending→done
+    // de update() puede haberse consumido antes de que este fetch resuelva
+    // (carrera con el watcher del run), así que el fetch necesita un camino
+    // propio para forzar el repintado.
+    expect(lastSyncTuningSyncSongText).toHaveBeenCalled();
   });
 
   it('fila Sincronía monta el detalle de SyncFineTuning y lo actualiza en cada render', () => {

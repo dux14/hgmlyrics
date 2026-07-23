@@ -248,7 +248,13 @@ export function renderSongPipelineView(container, songId) {
     fetchSongDetail(songId).then((song) => {
       if (destroyed || !song) return;
       lastSong = song;
-      syncTuning.update(lastRun);
+      // syncSongText() (no update()): el watcher del run suele ganar esta
+      // carrera y consumir la transición pending→done de sync ANTES de que
+      // este fetch resuelva, dejando update() sin nada que disparar (ver
+      // becameDone en SyncFineTuning.js). syncSongText() repinta
+      // incondicionalmente (respetando el guard de edición local) en vez de
+      // depender de esa transición.
+      syncTuning.syncSongText();
     });
   }
   refreshSong();

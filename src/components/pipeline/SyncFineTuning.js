@@ -284,7 +284,8 @@ export function createSyncFineTuning({ songId, getSong = () => null, getVocalsUr
       const cur = currentValues();
       const changes = {};
       if (cur.bpmManual !== metronomeBaseline.bpmManual) changes.bpmManual = cur.bpmManual;
-      if (cur.timeSignature !== metronomeBaseline.timeSignature) changes.timeSignature = cur.timeSignature;
+      if (cur.timeSignature !== metronomeBaseline.timeSignature)
+        changes.timeSignature = cur.timeSignature;
       if (cur.beatAnchor !== metronomeBaseline.beatAnchor) changes.beatAnchor = cur.beatAnchor;
       if (Object.keys(changes).length === 0) return;
       saveBtn.disabled = true;
@@ -446,6 +447,19 @@ export function createSyncFineTuning({ songId, getSong = () => null, getVocalsUr
       // refresh() disparado por un evento real (guardar, descartar) ya
       // trae la sincronía al día.
       if (becameDone && expandedI === null && !metronomeDirty) refresh();
+    },
+    // A7 fix: la carrera SongPipelineView vs. este componente — el watcher
+    // del run puede consumir la transición pending→done de `update()` ANTES
+    // de que `getSong()` tenga la canción (fetch async más lento), dejando
+    // `lastSyncStatus` en 'done' para siempre y sin otro disparador que
+    // vuelva a leer `getSong()`. syncSongText() es el camino adicional: lo
+    // llama SongPipelineView cuando su fetch de la canción resuelve, para
+    // forzar un repintado incondicional (sin depender de una transición de
+    // status) que sí re-lee getSong()/projectedTextMap(). Mismo guard que
+    // update() para no pisar una edición local en curso.
+    syncSongText() {
+      if (destroyed) return;
+      if (expandedI === null && !metronomeDirty) render();
     },
     destroy() {
       destroyed = true;

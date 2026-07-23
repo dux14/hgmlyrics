@@ -267,6 +267,7 @@ describe('DELETE /api/songs/:id/pipeline (A2: purga)', () => {
       ['DELETE FROM song_section_audio', { count: 1 }],
       ['DELETE FROM song_structure', { count: 1 }],
       ['DELETE FROM song_pitch_analysis', { count: 1 }],
+      ['DELETE FROM song_pipeline_lyrics', { count: 1 }],
       ['DELETE FROM song_line_timings', { count: 1 }],
       ["SET status = 'cancelled'", { count: 1 }],
       ["SET status = 'superseded'", { count: 2 }],
@@ -295,6 +296,16 @@ describe('DELETE /api/songs/:id/pipeline (A2: purga)', () => {
     // Contrato: el UPDATE a superseded también cubre 'failed', no solo 'done'.
     const supersedeQuery = capturedQueries.find((q) => q.includes("SET status = 'superseded'"));
     expect(supersedeQuery).toContain('failed');
+    // Task 4: la purga borra el store propio de letra IA...
+    const pipelineLyricsQuery = capturedQueries.find((q) => q.includes('song_pipeline_lyrics'));
+    expect(pipelineLyricsQuery).toContain('DELETE FROM song_pipeline_lyrics');
+    // ...y el shim de song_line_timings queda filtrado al provider del
+    // pipeline: un align standalone (provider 'whisperx', ver
+    // modal/align_app.py) no debe perderse al reemplazar el audio.
+    const timingsQuery = capturedQueries.find(
+      (q) => q.includes('DELETE FROM song_line_timings'),
+    );
+    expect(timingsQuery).toContain("provider = 'pipeline'");
   });
 
   it('NO borra clips manuales (run_id NULL) ni toca songs.sections', async () => {

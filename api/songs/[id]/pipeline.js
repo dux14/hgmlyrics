@@ -166,7 +166,16 @@ async function purgeRun(req, res, songId) {
     `;
     const structure = await tx`DELETE FROM song_structure WHERE song_id = ${songId}`;
     const pitch = await tx`DELETE FROM song_pitch_analysis WHERE song_id = ${songId}`;
-    const timings = await tx`DELETE FROM song_line_timings WHERE song_id = ${songId}`;
+    // Store propio de letra IA (Task 4): la letra manual del cancionero
+    // (songs.sections) nunca se toca acá, solo el store del pipeline.
+    const pipelineLyrics = await tx`DELETE FROM song_pipeline_lyrics WHERE song_id = ${songId}`;
+    // Filtrado a provider='pipeline': song_line_timings es 1:1 por canción y
+    // ese mismo registro lo puede ocupar un align standalone (provider
+    // 'whisperx', ver modal/align_app.py) que no es un artefacto derivado de
+    // este audio de pipeline y por lo tanto sobrevive al reemplazo.
+    const timings = await tx`
+      DELETE FROM song_line_timings WHERE song_id = ${songId} AND provider = 'pipeline'
+    `;
     const cancelled = await tx`
       UPDATE song_pipeline_runs SET status = 'cancelled', updated_at = now()
       WHERE song_id = ${songId}
@@ -184,6 +193,7 @@ async function purgeRun(req, res, songId) {
       clips: clips.count,
       structure: structure.count,
       pitch: pitch.count,
+      pipelineLyrics: pipelineLyrics.count,
       timings: timings.count,
       cancelled: cancelled.count,
       superseded: superseded.count,

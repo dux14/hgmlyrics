@@ -508,6 +508,21 @@ describe('asignacion de segmento de estructura (Task 15a/b/c)', () => {
       .toEqual({ label: 'coro', startMs: 2000, endMs: 8000 });
   });
 
+  it('empate exacto de solape entre dos segmentos: gana el primero en orden del array', () => {
+    // Renglon 0-1100ms de dbSectionsStructure; dos segmentos con EXACTAMENTE
+    // el mismo overlap con ese renglon (550ms cada uno) -- comportamiento
+    // determinista esperado: gana el primero, nunca el ultimo que sobreescriba.
+    const tiedSegments = [
+      { label: 'verso', startMs: 0, endMs: 550 },
+      { label: 'coro', startMs: 550, endMs: 1100 },
+    ];
+    const doc = buildReviewDoc({
+      dbSections: dbSectionsStructure, canonical: null,
+      transcription: transcriptionStructure, structureSegments: tiedSegments,
+    });
+    expect(doc.sections[0].lines[0].structureSegment.label).toBe('verso');
+  });
+
   it('renglon sin words (sin match de transcripcion) queda con structureSegment null', () => {
     const dbSectionsNoMatch = [
       { type: 'chorus', lines: [{ text: 'Nadie me ama como tu me amas' }] },
@@ -518,6 +533,30 @@ describe('asignacion de segmento de estructura (Task 15a/b/c)', () => {
       structureSegments,
     });
     expect(doc.sections[0].lines[0].structureSegment).toBe(null);
+  });
+
+  it('splitLine descarta el structureSegment stale en ambos renglones hijos', () => {
+    const doc = buildReviewDoc({
+      dbSections: dbSectionsStructure, canonical: null,
+      transcription: transcriptionStructure, structureSegments,
+    });
+    expect(doc.sections[0].lines[0].structureSegment).not.toBe(undefined); // precondicion: tiene segmento
+    const split = applyReviewAction(
+      doc, { type: 'splitLine', section: 0, line: 0, afterWord: 4 },
+    );
+    expect(split.sections[0].lines[0].structureSegment).toBe(undefined);
+    expect(split.sections[0].lines[1].structureSegment).toBe(undefined);
+  });
+
+  it('mergeLines descarta el structureSegment stale en el renglon resultante', () => {
+    const doc = buildReviewDoc({
+      dbSections: dbSectionsStructure, canonical: null,
+      transcription: transcriptionStructure, structureSegments,
+    });
+    // Ambas lineas tienen segmento distinto (verso vs coro, ver test de
+    // arriba) -- el merge no debe quedarse con ninguno de los dos.
+    const merged = applyReviewAction(doc, { type: 'mergeLines', section: 0, line: 0 });
+    expect(merged.sections[0].lines[0].structureSegment).toBe(undefined);
   });
 
   it('con canonica presente, el tipo/orden de la seccion NO cambia aunque los segmentos digan otra cosa', () => {

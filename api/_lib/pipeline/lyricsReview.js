@@ -478,12 +478,18 @@ function concatOptional(a, b) {
 
 // Quita chords/voiceRanges/groups de una linea para reconstruir esos campos
 // a mano (evita que el spread `...line` arrastre el array completo del
-// original con posiciones invalidas para el renglon nuevo).
+// original con posiciones invalidas para el renglon nuevo). Tambien quita
+// structureSegment (Task 15a): esa metadata de solape solo es confiable en
+// el build inicial (assignStructureSegment sobre timestamps reales); tras un
+// split/merge manual el renglon resultante ya no calza con ese solape
+// (splitLine heredaria el mismo segmento en ambos hijos, mergeLines se
+// quedaria solo con el de la primera linea) — ausente es mejor que stale.
 function stripPositionalFields(line) {
   const base = { ...line };
   delete base.chords;
   delete base.voiceRanges;
   delete base.groups;
+  delete base.structureSegment;
   return base;
 }
 

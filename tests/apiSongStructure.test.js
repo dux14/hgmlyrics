@@ -45,6 +45,7 @@ function makeRes() {
     res._body = b;
     return res;
   };
+  res.setHeader = () => res;
   return res;
 }
 
@@ -62,6 +63,12 @@ beforeEach(() => {
 });
 
 describe('PATCH /api/songs/[id]/structure', () => {
+  it('405 con un metodo distinto de PATCH', async () => {
+    const res = makeRes();
+    await handler(makeReq({ method: 'GET' }), res);
+    expect(res._status).toBe(405);
+  });
+
   it('403 si no es admin (withErrors traduce el throw de requireAdmin)', async () => {
     requireAdmin.mockRejectedValueOnce(Object.assign(new Error('Forbidden'), { status: 403 }));
     const res = makeRes();

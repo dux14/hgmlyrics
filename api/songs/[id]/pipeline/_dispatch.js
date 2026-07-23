@@ -14,6 +14,7 @@ import {
   signSongAudioDownload,
 } from '../../../_lib/storage.js';
 import { projectCanonicalLines, projectLineSections } from '../../../_lib/align.js';
+import { getPipelineLyrics } from '../../../_lib/pipeline/lyricsStore.js';
 import sql from '../../../_lib/db.js';
 import { STEM_KINDS, SECTION_KEYS } from '../../../stems/_sections.js';
 
@@ -177,7 +178,7 @@ export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
   // aprobado (plan C publica songs.sections + line timings vía sync antes de
   // que ADVANCE_AFTER dispare clips).
   const tracks = run.phases.stems?.tracks || {};
-  const [song, stems, lineTimingsRow, audioRow, structureRow] = await Promise.all([
+  const [song, stems, lineTimingsRow, audioRow, structureRow, pipelineLyrics] = await Promise.all([
     sql`SELECT sections FROM songs WHERE id = ${run.songId}`,
     Promise.all(
       Object.entries(tracks).map(async ([kind, key]) => ({ kind, getUrl: await signSongAudioDownload(key) })),
@@ -185,7 +186,14 @@ export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
     sql`SELECT lines FROM song_line_timings WHERE song_id = ${run.songId}`,
     sql`SELECT duration_sec AS "durationSec" FROM song_audio WHERE song_id = ${run.songId}`,
     sql`SELECT segments FROM song_structure WHERE song_id = ${run.songId}`,
+    getPipelineLyrics(sql, run.songId),
   ]);
+  // El approve del pipeline (F3) ya NO escribe songs.sections: para una
+  // canción pipeline esa columna queda vacía. Si hay fila en el store propio
+  // (song_pipeline_lyrics) manda ella como fuente de secciones; sin fila
+  // (canción standalone/manual, letra editada a mano en el cancionero) se
+  // conserva el fallback anterior a songs.sections.
+  const sectionSource = pipelineLyrics?.sections ?? song[0]?.sections;
   const lines = lineTimingsRow[0]?.lines || [];
   // Segmentos detectados (ya en ms, ver supabase/migrations/20260722010000_song_structure.sql):
   // [{label, startMs, endMs}]. Nada garantiza en el productor (stemsAdapter/
@@ -204,7 +212,8 @@ export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
   // orden que usa song_line_timings.lines[].i, ver projectCanonicalLines).
   // lineSections queda paralelo a `lines` (mismo largo, mismo orden), como
   // espera modal/clips_app.py: lineSections[k] = sección de lines[k].
-  const canonicalSections = projectLineSections(song[0]?.sections);
+  // Fuente = sectionSource (store propio si existe, sino songs.sections).
+  const canonicalSections = projectLineSections(sectionSource);
   // Con segmentos detectados: sección de una línea = índice del último
   // segmento (ya ordenado) cuyo startMs no supera el startMs de la línea.
   const lineSections = hasDetectedSegments
@@ -229,14 +238,15 @@ export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
     : durationSec !== null && durationSec !== undefined
       ? Math.round(Number(durationSec) * 1000)
       : lines.reduce((max, l) => Math.max(max, l.startMs || 0), 0);
-  // sectionCount/uploads/uploadKeys quedan SIEMPRE atados a `song.sections`
-  // (letra actual en DB), nunca al conteo de segmentos detectados: son la
-  // misma columna section_index que usan api/songs/[id]/section-audio.js
-  // (valida contra song.sections.length) y SongView.js (renderiza audio por
-  // .lyrics__section indexado por song.sections). La reconciliación
-  // estructura↔letra está diferida a Task 15 (review Task 8, Critical) — acá
-  // los segmentos detectados solo alimentan lineSections/totalMs arriba.
-  const sectionCount = song[0]?.sections?.length || 0;
+  // sectionCount/uploads/uploadKeys quedan SIEMPRE atados a `sectionSource`
+  // (letra actual: store propio si existe, sino songs.sections), nunca al
+  // conteo de segmentos detectados: son la misma columna section_index que
+  // usan api/songs/[id]/section-audio.js (valida contra song.sections.length,
+  // canciones standalone) y SongView.js (renderiza audio por .lyrics__section
+  // indexado por song.sections). La reconciliación estructura↔letra está
+  // diferida a Task 15 (review Task 8, Critical) — acá los segmentos
+  // detectados solo alimentan lineSections/totalMs arriba.
+  const sectionCount = sectionSource?.length || 0;
   const uploads = {};
   const uploadKeys = {};
   for (const kind of Object.keys(tracks)) {

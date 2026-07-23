@@ -228,32 +228,58 @@ async function putGate(req, res, songId) {
 
 /** Proyeccion plana {i, startMs, score, interpolated} de las sections del
  * store para el shim song_line_timings. i = posicion plana (misma semantica
- * incremental que projectLines). Renglon sin timing: punto medio entre la
- * vecina anterior y la siguiente con timing (monotonia estricta). */
+ * incremental que projectLines). Renglon sin timing: reparte proporcional
+ * dentro del hueco entre la vecina anterior conocida (`prev`/`nextKnown`,
+ * vecinos en `known[]`) y la siguiente; monotonia estricta (nunca <=
+ * `prevEmitted`, el ULTIMO valor YA EMITIDO) se aplica despues como red de
+ * seguridad — son dos marcos de referencia distintos a proposito: uno mira
+ * los datos crudos, el otro lo que ya se decidio emitir. */
 export function timingLinesFromSections(sections) {
   const flat = sections.flatMap((s) => s.lines);
   const known = flat.map((l) => l.manualStartMs ?? l.startMs);
   const lines = [];
-  flat.forEach((line, i) => {
-    let startMs = known[i];
-    let interpolated = false;
-    if (startMs === null || startMs === undefined) {
-      interpolated = true;
-      const prev = [...known.slice(0, i)].reverse().find((v) => !isNil(v)) ?? 0;
-      const nextKnown = known.slice(i + 1).find((v) => !isNil(v));
-      startMs = nextKnown === undefined ? prev + 1 : Math.floor((prev + nextKnown) / 2);
+  let i = 0;
+  while (i < flat.length) {
+    if (!isNil(known[i])) {
+      let startMs = known[i];
+      // Monotonia estricta: nunca <= al ULTIMO valor ya emitido (prevEmitted),
+      // aplica igual a renglones con timing real (ej. dos startMs iguales).
+      const prevEmitted = lines[lines.length - 1];
+      if (prevEmitted && startMs <= prevEmitted.startMs) startMs = prevEmitted.startMs + 1;
+      lines.push({ i, startMs, score: clampScore(flat[i]), interpolated: false });
+      i += 1;
+      continue;
     }
-    // Monotonia estricta: nunca <= a la anterior emitida.
-    const prevEmitted = lines[lines.length - 1];
-    if (prevEmitted && startMs <= prevEmitted.startMs) startMs = prevEmitted.startMs + 1;
-    lines.push({
-      i,
-      startMs,
-      score: typeof line.confidence === 'number' ? line.confidence : null,
-      interpolated,
-    });
-  });
+    // Hueco: [i, gapEnd) son todos nulos. gapEnd es el primer índice conocido
+    // (o flat.length si el hueco llega hasta el final).
+    let gapEnd = i;
+    while (gapEnd < flat.length && isNil(known[gapEnd])) gapEnd += 1;
+    const gapLen = gapEnd - i;
+    const prev = i > 0 ? known[i - 1] : 0;
+    const nextKnown = gapEnd < flat.length ? known[gapEnd] : undefined;
+    for (let k = 0; k < gapLen; k += 1) {
+      const idx = i + k;
+      // Interior (hay endpoint real a ambos lados): reparto proporcional del
+      // hueco. Final (sin nextKnown, ej. el outro): no hay endpoint real,
+      // incrementos monotonicos simples desde prev.
+      let startMs =
+        nextKnown === undefined
+          ? prev + k + 1
+          : prev + Math.round(((nextKnown - prev) * (k + 1)) / (gapLen + 1));
+      const prevEmitted = lines[lines.length - 1];
+      if (prevEmitted && startMs <= prevEmitted.startMs) startMs = prevEmitted.startMs + 1;
+      lines.push({ i: idx, startMs, score: clampScore(flat[idx]), interpolated: true });
+    }
+    i = gapEnd;
+  }
   return lines;
+}
+
+// Score valido solo si es number Y cae en [0,1] (mismo criterio que
+// api/align/webhook.js:177); fuera de rango o no-numerico -> null.
+function clampScore(line) {
+  const c = line.confidence;
+  return typeof c === 'number' && c >= 0 && c <= 1 ? c : null;
 }
 
 // Fases derivadas de la letra recien aprobada. Fallo de dispatch NO debe
@@ -332,11 +358,15 @@ async function approveGate(res, songId) {
     // (clips, SyncFineTuning, ImmersiveView hasta F4) reciben el timing del
     // store. Renglones sin word-timing interpolan el punto medio entre vecinas
     // (monotonia estricta que exige validateLines/seekSyncToLine).
+    // bpm_detected/beats se resetean en el swap (mismo criterio que
+    // api/songs/[id]/audio.js:100): el audio nuevo del run no puede heredar la
+    // rejilla de un align standalone previo (metronomo quedaria stale).
     await tx`
       INSERT INTO song_line_timings (song_id, status, lines, provider, error)
       VALUES (${songId}, 'ready', ${tx.json(timingLinesFromSections(snapshot.sections))}, 'pipeline', NULL)
       ON CONFLICT (song_id) DO UPDATE
-        SET status = 'ready', lines = EXCLUDED.lines, provider = 'pipeline', error = NULL
+        SET status = 'ready', lines = EXCLUDED.lines, provider = 'pipeline', error = NULL,
+          bpm_detected = NULL, beats = NULL
     `;
     await tx`
       UPDATE song_pipeline_runs

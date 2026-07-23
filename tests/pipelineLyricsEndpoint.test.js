@@ -26,7 +26,9 @@ function routeSql(handlers) {
     const text = strings.join('?');
     for (const [needle, result] of handlers) {
       if (text.includes(needle)) {
-        if (typeof result === 'function') return result(values);
+        // `text` extra (2do arg) solo lo usan los tests que necesitan
+        // inspeccionar literales SQL fuera de los binds (ej. FIX 3, review F3).
+        if (typeof result === 'function') return result(values, text);
         if (result && result.__reject) return Promise.reject(result.__reject);
         return result;
       }
@@ -506,12 +508,14 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
     const res = makeRes();
     await lyricsHandler({ method: 'POST', query: { id: 's1' } }, res);
     expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith({ error: 'La letra no tiene renglones para aprobar' });
   });
 
   it('feliz: escribe al store propio (song_pipeline_lyrics), NO pisa songs.sections, shim de timing a song_line_timings, sync=done, pitch/clips=running, y despacha SOLO pitch+clips', async () => {
     let songsSectionsTouched = false;
     let pipelineLyricsUpsert;
     let timingShimInsert;
+    let timingShimText;
     let mainRunUpdate;
     routeSql([
       ['AS "lyricsReview"', [runRow({ lyricsReview: { review: approvableReviewV2() } })]],
@@ -531,8 +535,9 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
       ],
       [
         'INSERT INTO song_line_timings',
-        (values) => {
+        (values, text) => {
           timingShimInsert = values;
+          timingShimText = text;
           return { count: 1 };
         },
       ],
@@ -565,6 +570,10 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
     // 'ready'/'pipeline' son literales inline en el INSERT (no placeholders),
     // ya verificados por lectura del código; acá solo importan los binds.
     expect(timingShimInsert).toContain('s1');
+    // Fix Important (review F3): el swap de audio nuevo no debe heredar
+    // bpm_detected/beats de un align standalone previo (metronomo stale) —
+    // mismo criterio de reset que api/songs/[id]/audio.js:100.
+    expect(timingShimText).toContain('bpm_detected = NULL, beats = NULL');
 
     const phasesArg = mainRunUpdate.find((v) => v && typeof v === 'object' && v.lyrics_review);
     expect(phasesArg.sync.status).toBe('done');
@@ -715,5 +724,37 @@ describe('timingLinesFromSections', () => {
     expect(lines[0].interpolated).toBe(true);
     expect(lines[1].interpolated).toBe(true);
     expect(lines[1].startMs).toBeGreaterThan(lines[0].startMs);
+  });
+
+  // Fix Important (review F3): un hueco INTERIOR de 2+ renglones sin timing
+  // debe repartir proporcionalmente entre las vecinas conocidas, no colapsar
+  // al mismo punto medio (que el clamp de monotonia solo desempataba en +1ms).
+  it('hueco interior de 3 renglones: reparte proporcionalmente entre prev y nextKnown (no colapsa)', () => {
+    const sections = [
+      mkSection([mkLine(0), mkLine(null), mkLine(null), mkLine(null), mkLine(1000)]),
+    ];
+    const lines = timingLinesFromSections(sections);
+    expect(lines[0].startMs).toBe(0);
+    expect(lines[1]).toMatchObject({ startMs: 250, interpolated: true });
+    expect(lines[2]).toMatchObject({ startMs: 500, interpolated: true });
+    expect(lines[3]).toMatchObject({ startMs: 750, interpolated: true });
+    expect(lines[4].startMs).toBe(1000);
+  });
+
+  it('hueco final de 3 renglones (sin nextKnown): incrementos monotonicos simples desde prev', () => {
+    const sections = [mkSection([mkLine(100), mkLine(null), mkLine(null), mkLine(null)])];
+    const lines = timingLinesFromSections(sections);
+    expect(lines[0].startMs).toBe(100);
+    expect(lines[1]).toMatchObject({ startMs: 101, interpolated: true });
+    expect(lines[2]).toMatchObject({ startMs: 102, interpolated: true });
+    expect(lines[3]).toMatchObject({ startMs: 103, interpolated: true });
+  });
+
+  it('score se clampea a [0,1]: fuera de rango o no-numerico queda null (mismo criterio que align/webhook.js)', () => {
+    const sections = [mkSection([mkLine(0, 1.5), mkLine(100, -0.2), mkLine(200, 0.8)])];
+    const lines = timingLinesFromSections(sections);
+    expect(lines[0].score).toBe(null);
+    expect(lines[1].score).toBe(null);
+    expect(lines[2].score).toBe(0.8);
   });
 });

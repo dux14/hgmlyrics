@@ -319,4 +319,59 @@ describe("dispatchPhase('clips')", () => {
     expect(args.lineSections).toEqual([0, 1, 1, 2]);
     expect(args.totalMs).toBe(8500);
   });
+
+  // Review F3 (fix Critical): el approve del pipeline ya NO escribe
+  // songs.sections — para una canción pipeline esa columna queda vacía, y
+  // sin este fix lineSections/sectionCount colapsaban a 0 (clips no subía
+  // nada). Con fila en song_pipeline_lyrics (store propio) y SIN segmentos
+  // detectados, el fallback debe leer las secciones del store.
+  const STORE_SECTIONS = [
+    { type: 'verse', label: null, startMs: 0, endMs: 2000, lines: [{ text: 'A' }, { text: 'B' }] },
+    { type: 'chorus', label: null, startMs: 2000, endMs: 4000, lines: [{ text: 'C' }] },
+    { type: 'verse', label: null, startMs: 4000, endMs: 6000, lines: [{ text: 'D' }] },
+  ];
+
+  it('con fila en song_pipeline_lyrics y sin song_structure: lineSections/sectionCount derivan del store, NO de songs.sections', async () => {
+    sqlResponses.push([{ sections: [] }]); // SELECT sections FROM songs -- pipeline: vacío
+    sqlResponses.push([{ lines: CLIPS_LINE_TIMINGS }]); // SELECT lines FROM song_line_timings
+    sqlResponses.push([{ durationSec: '8.5' }]); // SELECT duration_sec FROM song_audio
+    sqlResponses.push([]); // SELECT segments FROM song_structure → sin fila
+    sqlResponses.push([{ sections: STORE_SECTIONS }]); // getPipelineLyrics → SELECT ... FROM song_pipeline_lyrics
+
+    const run = {
+      id: 'run1',
+      songId: 'song1',
+      phases: { stems: { tracks: { vocals: 'song1/stems/vocals.mp3' } } },
+    };
+    await dispatchPhase('clips', run);
+
+    const args = dispatchClips.mock.calls[0][0];
+    // STORE_SECTIONS aplana a 4 líneas (A,B,C,D), mismo orden que
+    // CLIPS_LINE_TIMINGS (i:0..3): sectionIndex 0='verse'(A,B), 1='chorus'(C),
+    // 2='verse'(D). sectionCount = 3 (STORE_SECTIONS.length), NO 0.
+    expect(args.lineSections).toEqual([0, 0, 1, 2]);
+    expect(args.totalMs).toBe(8500);
+    expect(Object.keys(args.uploads.vocals)).toEqual(['0', '1', '2']);
+    expect(Object.keys(args.uploadKeys.vocals)).toEqual(['0', '1', '2']);
+  });
+
+  it('sin fila en song_pipeline_lyrics: cae a songs.sections como antes (fallback intacto)', async () => {
+    sqlResponses.push([{ sections: CLIPS_SECTIONS }]); // SELECT sections FROM songs
+    sqlResponses.push([{ lines: CLIPS_LINE_TIMINGS }]); // SELECT lines FROM song_line_timings
+    sqlResponses.push([{ durationSec: '8.5' }]); // SELECT duration_sec FROM song_audio
+    sqlResponses.push([]); // SELECT segments FROM song_structure → sin fila
+    sqlResponses.push([]); // getPipelineLyrics → sin fila en song_pipeline_lyrics
+
+    const run = {
+      id: 'run1',
+      songId: 'song1',
+      phases: { stems: { tracks: { vocals: 'song1/stems/vocals.mp3' } } },
+    };
+    await dispatchPhase('clips', run);
+
+    const args = dispatchClips.mock.calls[0][0];
+    expect(args.lineSections).toEqual([0, 0, 1, 3]);
+    expect(args.totalMs).toBe(8500);
+    expect(Object.keys(args.uploads.vocals)).toEqual(['0', '1', '2', '3']);
+  });
 });

@@ -168,6 +168,11 @@ async function purgeRun(req, res, songId) {
     sql`SELECT id, status, input_path FROM song_pipeline_runs WHERE song_id = ${songId} AND input_path IS NOT NULL`,
   ]);
 
+  // Inputs de los runs: son las keys que se van a borrar del Storage más abajo
+  // y, si el approve hizo el swap de audio, también las que song_audio está
+  // referenciando.
+  const inputPaths = runRows.map((r) => r.input_path).filter(Boolean);
+
   const purged = await sql.begin(async (tx) => {
     const stems = await tx`DELETE FROM song_stems WHERE song_id = ${songId}`;
     // Solo los clips del pipeline (run_id NOT NULL): los subidos a mano por
@@ -187,6 +192,18 @@ async function purgeRun(req, res, songId) {
     const timings = await tx`
       DELETE FROM song_line_timings WHERE song_id = ${songId} AND provider = 'pipeline'
     `;
+    // H6 (auditoría del 24-jul): el approve apunta song_audio.storage_key al
+    // runs/<runId>/full.mp3 del run, y ese objeto se borra del Storage unas
+    // líneas más abajo. Dejar la fila viva deja la canción con un audio 404.
+    // Se borra SOLO si la key es el input de un run purgado: si el audio vino
+    // del flujo manual (<songId>/full.mp3, api/songs/[id]/audio.js) sobrevive
+    // al reemplazo, igual que los clips manuales de song_section_audio.
+    const audio = inputPaths.length
+      ? await tx`
+          DELETE FROM song_audio
+          WHERE song_id = ${songId} AND storage_key IN ${tx(inputPaths)}
+        `
+      : { count: 0 };
     const cancelled = await tx`
       UPDATE song_pipeline_runs SET status = 'cancelled', updated_at = now()
       WHERE song_id = ${songId}
@@ -206,6 +223,7 @@ async function purgeRun(req, res, songId) {
       pitch: pitch.count,
       pipelineLyrics: pipelineLyrics.count,
       timings: timings.count,
+      audio: audio.count,
       cancelled: cancelled.count,
       superseded: superseded.count,
     };

@@ -370,6 +370,74 @@ describe('DELETE /api/songs/:id/pipeline (A2: purga)', () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json.mock.calls[0][0].success).toBe(true);
   });
+
+  it('borra la fila song_audio si apunta al input de un run purgado (H6)', async () => {
+    routeSql([
+      ['FROM song_stems', []],
+      ['FROM song_section_audio', []],
+      [
+        'SELECT id, status, input_path',
+        [{ id: 'r1', status: 'done', input_path: 'runs/r1/full.mp3' }],
+      ],
+      ['DELETE FROM song_stems', { count: 0 }],
+      ['DELETE FROM song_section_audio', { count: 0 }],
+      ['DELETE FROM song_structure', { count: 0 }],
+      ['DELETE FROM song_pitch_analysis', { count: 0 }],
+      ['DELETE FROM song_pipeline_lyrics', { count: 0 }],
+      ['DELETE FROM song_line_timings', { count: 0 }],
+      // song_audio.storage_key apunta justo al input del run que se purga
+      // (el approve hizo el swap): la fila queda huérfana si no se borra acá.
+      ['DELETE FROM song_audio', { count: 1 }],
+      ["SET status = 'cancelled'", { count: 0 }],
+      ["SET status = 'superseded'", { count: 1 }],
+    ]);
+    const res = makeRes();
+    await pipelineHandler({ method: 'DELETE', query: { id: 's1' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    const body = res.json.mock.calls[0][0];
+    expect(body.purged.audio).toBe(1);
+    // El predicado del DELETE se arma con los input_path de los runs purgados
+    // (postgres.js expande `IN ${tx(inputPaths)}` llamando a tx con el array).
+    expect(
+      sql.mock.calls.some((call) => Array.isArray(call[0]) && call[0].includes('runs/r1/full.mp3')),
+    ).toBe(true);
+  });
+
+  it('no borra song_audio si su storage_key no es el input de ningún run (audio manual, H6)', async () => {
+    routeSql([
+      ['FROM song_stems', []],
+      ['FROM song_section_audio', []],
+      [
+        'SELECT id, status, input_path',
+        [{ id: 'r1', status: 'done', input_path: 'runs/r1/full.mp3' }],
+      ],
+      ['DELETE FROM song_stems', { count: 0 }],
+      ['DELETE FROM song_section_audio', { count: 0 }],
+      ['DELETE FROM song_structure', { count: 0 }],
+      ['DELETE FROM song_pitch_analysis', { count: 0 }],
+      ['DELETE FROM song_pipeline_lyrics', { count: 0 }],
+      ['DELETE FROM song_line_timings', { count: 0 }],
+      // song_audio.storage_key = 's1/full.mp3' es del flujo manual
+      // (api/songs/[id]/audio.js), no del run que se purga: el predicado no
+      // matchea nada y el DELETE afecta 0 filas.
+      ['DELETE FROM song_audio', { count: 0 }],
+      ["SET status = 'cancelled'", { count: 0 }],
+      ["SET status = 'superseded'", { count: 1 }],
+    ]);
+    const res = makeRes();
+    await pipelineHandler({ method: 'DELETE', query: { id: 's1' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    const body = res.json.mock.calls[0][0];
+    expect(body.purged.audio).toBe(0);
+    // El predicado sigue construido con los input_path de los runs, nunca con
+    // la storage_key manual del audio subido a mano.
+    expect(
+      sql.mock.calls.some((call) => Array.isArray(call[0]) && call[0].includes('runs/r1/full.mp3')),
+    ).toBe(true);
+    expect(
+      sql.mock.calls.some((call) => Array.isArray(call[0]) && call[0].includes('s1/full.mp3')),
+    ).toBe(false);
+  });
 });
 
 describe('POST /api/songs/:id/pipeline/confirm', () => {

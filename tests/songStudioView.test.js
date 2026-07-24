@@ -348,6 +348,98 @@ describe('SongStudioView', () => {
     expect(managerStub.play).toHaveBeenCalledWith(clipTrack);
   });
 
+  it('con clips: el multitrack arranca -> pausa el clip (exclusión inversa)', async () => {
+    isAdmin.mockReturnValue(false);
+    const playerStub = makePlayerStub();
+    const toneStub = makeToneStub();
+    const clipTrack = {
+      id: 'clip-0',
+      sectionIndex: 0,
+      url: 'https://x/c0.mp3',
+      label: null,
+      durationSec: 12,
+      voiceScope: null,
+    };
+    const managerStub = {
+      tracksFor: vi.fn(() => [clipTrack]),
+      play: vi.fn(),
+      pause: vi.fn(),
+      destroy: vi.fn(),
+    };
+    createSectionAudioManager.mockReturnValue(managerStub);
+    createMultiTrackPlayer.mockReturnValue(playerStub);
+    createToneLyrics.mockReturnValue(toneStub);
+    getSongStudio.mockResolvedValue(
+      makeStudioData({
+        structure: { segments: [{ label: 'verso', startMs: 0, endMs: 12000 }] },
+        clips: [clipTrack],
+      }),
+    );
+    renderSongStudioView(container, 's1');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(playerStub.onPlay).toHaveBeenCalledTimes(1);
+    const playCb = playerStub.onPlay.mock.calls[0][0];
+    playCb();
+    expect(managerStub.pause).toHaveBeenCalled();
+  });
+
+  it('recompute del botón disabled en onTime: sección sin clip lo deshabilita, con clip lo habilita', async () => {
+    isAdmin.mockReturnValue(false);
+    const playerStub = makePlayerStub();
+    const toneStub = makeToneStub();
+    const clipTrack = {
+      id: 'clip-0',
+      sectionIndex: 0,
+      url: 'https://x/c0.mp3',
+      label: null,
+      durationSec: 12,
+      voiceScope: null,
+    };
+    const managerStub = {
+      tracksFor: vi.fn(() => []),
+      play: vi.fn(),
+      pause: vi.fn(),
+      destroy: vi.fn(),
+    };
+    createSectionAudioManager.mockReturnValue(managerStub);
+    // Sección activa sin clip al momento del recompute (tracksFor -> []).
+    playerStub.getActiveSection = vi.fn(() => 1);
+    createMultiTrackPlayer.mockReturnValue(playerStub);
+    createToneLyrics.mockReturnValue(toneStub);
+    getSongStudio.mockResolvedValue(
+      makeStudioData({
+        structure: {
+          segments: [
+            { label: 'verso', startMs: 0, endMs: 12000 },
+            { label: 'coro', startMs: 12000, endMs: 24000 },
+          ],
+        },
+        clips: [clipTrack],
+      }),
+    );
+    renderSongStudioView(container, 's1');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const clipBtn = container.querySelector('.studio-view__clip');
+    expect(clipBtn.disabled).toBe(true);
+
+    // El segundo registro de onTime (el primero es el wiring de tone) es el
+    // refresh del botón de clip — invocarlo recalcula disabled.
+    expect(playerStub.onTime.mock.calls.length).toBeGreaterThanOrEqual(2);
+    const refreshCb = playerStub.onTime.mock.calls[1][0];
+
+    managerStub.tracksFor.mockReturnValue([clipTrack]);
+    refreshCb(5);
+    expect(clipBtn.disabled).toBe(false);
+
+    managerStub.tracksFor.mockReturnValue([]);
+    refreshCb(5);
+    expect(clipBtn.disabled).toBe(true);
+  });
+
   it('sin clips: no se pinta el botón', async () => {
     isAdmin.mockReturnValue(false);
     const playerStub = makePlayerStub();

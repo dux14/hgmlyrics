@@ -73,8 +73,10 @@ export default withErrors(async (req, res) => {
     // 'structure' (SongFormer) viaja en el mismo dispatch que 'stems': si se
     // reintenta stems, SongFormer se vuelve a ejecutar, así que la fase tiene
     // que salir de su estado terminal o applyPhaseEvent descartaría el webhook
-    // por fase terminal y la canción quedaría sin estructura detectada.
-    if (phase === 'stems') {
+    // por fase terminal y la canción quedaría sin estructura detectada. Si ya
+    // había completado bien, se respeta: el UPSERT de song_structure no
+    // necesita recomputarse y volver a 'running' solo haría parpadear la UI.
+    if (phase === 'stems' && runningPhases.structure?.status !== 'done') {
       runningPhases.structure = { ...runningPhases.structure, status: 'running', error: null };
     }
 
@@ -108,6 +110,16 @@ export default withErrors(async (req, res) => {
       if (fresh[phase]?.status !== 'running') return;
       const failedPhases = structuredClone(fresh);
       failedPhases[phase] = { status: 'failed', error: String(err?.message ?? err).slice(0, 300), retries: fresh[phase]?.retries || 0 };
+      // Mismo criterio que confirm.js: si el reintento era de 'stems' y
+      // 'structure' quedó en 'running' (mismo dispatch, nunca se disparó),
+      // se marca failed en vez de dejarla colgada hasta el cron de zombis.
+      if (phase === 'stems' && fresh.structure?.status === 'running') {
+        failedPhases.structure = {
+          ...fresh.structure,
+          status: 'failed',
+          error: 'No se pudo iniciar la detección de secciones',
+        };
+      }
       // Si esta fase es critica y ya agoto sus reintentos, el run entero debe
       // quedar 'failed' (Task 11): sin esto un run con una fase critica
       // muerta seguia 'processing' para siempre, bloqueando la cancion (1

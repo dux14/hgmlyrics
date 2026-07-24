@@ -913,6 +913,68 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
     expect(finalPhases.stems.status).toBe('failed');
   });
 
+  it('si el redespacho de stems falla, structure tampoco queda en running (review holistico)', async () => {
+    dispatchPhase.mockRejectedValue(new Error('modal down'));
+    const runningPhases = activePhasesWithStemsFailed();
+    runningPhases.stems.status = 'running';
+    runningPhases.structure = { ...runningPhases.structure, status: 'running' };
+    let finalPhases;
+    let call = 0;
+    routeSql([
+      [
+        "status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')",
+        [
+          {
+            id: 'r1',
+            songId: 's1',
+            status: 'processing',
+            phases: activePhasesWithStemsFailed(),
+            inputPath: 'p',
+          },
+        ],
+      ],
+      // re-lectura FOR UPDATE dentro de la tx del handler de fallo de dispatch.
+      ['SELECT phases FROM song_pipeline_runs WHERE id = ', [{ phases: runningPhases }]],
+      [
+        'UPDATE song_pipeline_runs SET phases = ',
+        (values) => {
+          call += 1;
+          if (call === 2) finalPhases = values.find((v) => v && v.stems);
+          return { count: 1 };
+        },
+      ],
+    ]);
+    const res = makeRes();
+    await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
+    expect(res.status).toHaveBeenCalledWith(502);
+    expect(finalPhases.stems.status).toBe('failed');
+    expect(finalPhases.structure.status).toBe('failed');
+  });
+
+  it('el reintento de stems no pisa una structure ya completada (review holistico)', async () => {
+    let persisted;
+    const phases = activePhasesWithStemsFailed();
+    phases.structure = { ...phases.structure, status: 'done' };
+    routeSql([
+      [
+        "status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')",
+        [{ id: 'r1', songId: 's1', status: 'processing', phases, inputPath: 'p' }],
+      ],
+      [
+        'UPDATE song_pipeline_runs SET phases = ',
+        (values) => {
+          persisted = values.find((v) => v && v.stems);
+          return { count: 1 };
+        },
+      ],
+    ]);
+    const res = makeRes();
+    await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(persisted.stems.status).toBe('running');
+    expect(persisted.structure.status).toBe('done');
+  });
+
   it('dispatch falla agotando reintentos: el run deriva a failed (fase critica)', async () => {
     dispatchPhase.mockRejectedValue(new Error('modal down'));
     const claimedPhases = activePhasesWithStemsFailed();

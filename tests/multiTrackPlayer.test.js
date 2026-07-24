@@ -467,6 +467,65 @@ describe('createMultiTrackPlayer — chips de sección (structure.segments, Task
   });
 });
 
+describe('createMultiTrackPlayer — tira de práctica (Task 4)', () => {
+  beforeEach(() => {
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('velocidad: aplica playbackRate y preservesPitch a TODAS las pistas', () => {
+    const p = createMultiTrackPlayer({ tracks: makeTracks(), structure: null });
+    document.body.appendChild(p.el);
+    p.els.practice.querySelector('[data-rate="0.75"]').click();
+    p.els.audios.querySelectorAll('audio').forEach((a) => {
+      expect(a.playbackRate).toBe(0.75);
+      expect(a.preservesPitch).toBe(true);
+    });
+    p.destroy();
+  });
+
+  it('loop: togglear en la tira marca el chip de la sección activa con estado de loop', () => {
+    const structure = { segments: [{ label: 'verso', startMs: 0, endMs: 30000 }] };
+    const p = createMultiTrackPlayer({ tracks: makeTracks(), structure });
+    document.body.appendChild(p.el);
+    p.els.practice.querySelector('.mtp__loop').click();
+    expect(p.els.sections.querySelector('.mtp__section-chip').classList.contains('is-loop')).toBe(
+      true,
+    );
+    p.destroy();
+  });
+
+  it('metrónomo: sin beats no se pinta el toggle', () => {
+    const p = createMultiTrackPlayer({ tracks: makeTracks(), structure: null, beats: null });
+    expect(p.els.practice.querySelector('.mtp__metro')).toBeNull();
+    p.destroy();
+  });
+
+  it('metrónomo: con beats se pinta el toggle con BPM y compás', () => {
+    const p = createMultiTrackPlayer({
+      tracks: makeTracks(),
+      structure: null,
+      beats: [0, 500, 1000],
+      bpm: 96,
+      timeSignature: '3/4',
+    });
+    const metro = p.els.practice.querySelector('.mtp__metro');
+    expect(metro).not.toBeNull();
+    expect(metro.textContent).toContain('96');
+    expect(metro.textContent).toContain('3/4');
+    p.destroy();
+  });
+});
+
 describe('syncStep', () => {
   it('corrige una pista desviada mas del umbral a masterTime', () => {
     const audios = [{ currentTime: 10.1 }, { currentTime: 10.0 }];

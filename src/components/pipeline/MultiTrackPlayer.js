@@ -10,7 +10,9 @@
 import { icon } from '../../lib/icons.js';
 import { safeUrl, escapeHtml } from '../../lib/escape.js';
 import { fmtTime, clamp, timeToPos, posToTime } from '../StudioPlayer.js';
-import { isTrackAudible, nowSoundLabel } from '../../lib/studioPractice.js';
+import { isTrackAudible, nowSoundLabel, loopSeekTarget } from '../../lib/studioPractice.js';
+import { createBeatClock } from '../../lib/beatClock.js';
+import { createMetronomeClick } from '../../lib/metronomeClick.js';
 import '../../styles/pipeline.css';
 
 const LONG_PRESS_MS = 500;
@@ -47,10 +49,17 @@ export function syncStep(audios, masterTime, threshold = DRIFT_THRESHOLD_S) {
 
 /**
  * Crea un reproductor multipista.
- * @param {{ tracks: Array<{kind:string, url:string, label?:string, durationSec?:number}>, structure?: {segments: Array<{label:string, startMs:number, endMs:number}>}|null }} opts
+ * @param {{ tracks: Array<{kind:string, url:string, label?:string, durationSec?:number}>, structure?: {segments: Array<{label:string, startMs:number, endMs:number}>}|null, beats?: number[]|null, bpm?: number|null, timeSignature?: string, beatAnchor?: number }} opts
  * @returns {{ el: HTMLElement, els: { transport: HTMLElement, practice: HTMLElement, sections: HTMLElement, nowSound: HTMLElement, mixer: HTMLElement, audios: HTMLElement }, destroy: () => void, onTime: (cb: (sec:number)=>void) => (() => void), seek: (time:number) => void, pause: () => void }}
  */
-export function createMultiTrackPlayer({ tracks, structure }) {
+export function createMultiTrackPlayer({
+  tracks,
+  structure,
+  beats = null,
+  bpm = null,
+  timeSignature = '4/4',
+  beatAnchor = 1,
+}) {
   const ac = new AbortController();
   const root = buildEl('div', 'mtp');
 
@@ -69,12 +78,25 @@ export function createMultiTrackPlayer({ tracks, structure }) {
   `,
   );
 
-  // Tira de práctica (loop de sección + velocidad) — la llena Task 4, vacía
-  // por ahora: solo se reserva el sub-elemento del layout. Oculta para no
-  // sumar gap del flex del root con un hijo sin contenido (Task 4 la
-  // des-oculta al llenarla).
-  const practice = buildEl('div', 'mtp__practice');
-  practice.hidden = true;
+  // Tira de práctica: loop de sección, velocidad y metrónomo (opcional, solo
+  // con `beats`). Siempre visible — la velocidad se renderiza sin condición.
+  const metroHtml =
+    Array.isArray(beats) && beats.length
+      ? `<button type="button" class="mtp__metro" aria-pressed="false">${icon('music-2', { size: 16 })}<span>${bpm ? `${Math.round(bpm)} BPM · ${timeSignature}` : 'Metrónomo'}</span></button>`
+      : '';
+  const practice = buildEl(
+    'div',
+    'mtp__practice',
+    `
+    <button type="button" class="mtp__loop" aria-pressed="false">${icon('repeat', { size: 16 })}<span>Loop de sección</span></button>
+    <div class="mtp__rates" role="group" aria-label="Velocidad">
+      <button type="button" data-rate="1" class="is-active">1×</button>
+      <button type="button" data-rate="0.75">0.75×</button>
+      <button type="button" data-rate="0.5">0.5×</button>
+    </div>
+    ${metroHtml}
+  `,
+  );
 
   // Chips de navegación por sección (estructura detectada por SongFormer,
   // Task 8). Sin `structure.segments` (o vacío) el contenedor queda vacío —
@@ -141,6 +163,8 @@ export function createMultiTrackPlayer({ tracks, structure }) {
   const thumb = transport.querySelector('.mtp__thumb');
   const timeEl = transport.querySelector('.mtp__time');
   const chipEls = Array.from(sections.querySelectorAll('.mtp__section-chip'));
+  const loopBtn = practice.querySelector('.mtp__loop');
+  const rateBtns = Array.from(practice.querySelectorAll('.mtp__rates button'));
   const rowEls = Array.from(mixer.querySelectorAll('.mtp__row'));
   const toggleBtns = Array.from(mixer.querySelectorAll('.mtp__row-toggle'));
   const soloBtns = Array.from(mixer.querySelectorAll('.mtp__row-btn--solo'));
@@ -247,6 +271,39 @@ export function createMultiTrackPlayer({ tracks, structure }) {
     rowLongPressCancels.push(cancel);
   });
 
+  // --- Tira de práctica: velocidad ---
+  // El reloj maestro (tick) lee currentTime real de la pista, así que
+  // syncStep sigue funcionando a cualquier rate — no requiere tocarlo.
+  const setRate = (rate) => {
+    audios.forEach((audio) => {
+      audio.preservesPitch = true;
+      audio.playbackRate = rate;
+    });
+    rateBtns.forEach((b) => b.classList.toggle('is-active', Number(b.dataset.rate) === rate));
+  };
+  rateBtns.forEach((btn) => {
+    btn.addEventListener('click', () => setRate(Number(btn.dataset.rate)), { signal: ac.signal });
+  });
+
+  // --- Tira de práctica: loop de sección ---
+  // El candidato de loop es siempre el chip de sección ACTIVO (activeChipIdx,
+  // actualizado en updateActiveChip); togglear el loop lo fija/libera.
+  let activeChipIdx = null;
+  let loopSegIdx = null;
+  const paintLoopChips = () => {
+    chipEls.forEach((chip, i) => chip.classList.toggle('is-loop', i === loopSegIdx));
+  };
+  loopBtn.addEventListener(
+    'click',
+    () => {
+      loopSegIdx = loopSegIdx === null ? activeChipIdx : null;
+      loopBtn.setAttribute('aria-pressed', String(loopSegIdx !== null));
+      loopBtn.classList.toggle('is-active', loopSegIdx !== null);
+      paintLoopChips();
+    },
+    { signal: ac.signal },
+  );
+
   // --- Duracion / tiempo maestro ---
   const durationOf = (i) => {
     const audio = audios[i];
@@ -297,11 +354,14 @@ export function createMultiTrackPlayer({ tracks, structure }) {
   // el reloj del player está en segundos — la conversión es la misma que
   // en el seek de un chip (startMs/1000).
   const updateActiveChip = (sec) => {
+    activeChipIdx = null;
     chipEls.forEach((btn, i) => {
       const seg = segments[i];
       const start = (seg?.startMs ?? 0) / 1000;
       const end = seg?.endMs !== null && seg?.endMs !== undefined ? seg.endMs / 1000 : Infinity;
-      btn.classList.toggle('is-active', sec >= start && sec < end);
+      const active = sec >= start && sec < end;
+      btn.classList.toggle('is-active', active);
+      if (active) activeChipIdx = i;
     });
   };
 
@@ -312,6 +372,13 @@ export function createMultiTrackPlayer({ tracks, structure }) {
     if (!scrubbing) paintAt(masterTime);
     notifyTime(masterTime);
     updateActiveChip(masterTime);
+    // Loop de sección: si el master pasó el final del segmento fijado,
+    // vuelve a su inicio (todas las pistas, vía seekAll).
+    const loopTarget = loopSeekTarget(
+      masterTime,
+      loopSegIdx !== null ? segments[loopSegIdx] : null,
+    );
+    if (loopTarget !== null) seekAll(loopTarget);
     if (master && master.ended) {
       pauseAll();
       return;
@@ -447,12 +514,37 @@ export function createMultiTrackPlayer({ tracks, structure }) {
   );
 
   paintAt(0);
+  updateActiveChip(0);
+
+  // --- Tira de práctica: metrónomo (opcional, solo con `beats`) ---
+  // AudioContext lazy dentro de metronomeClick — se crea recién al primer
+  // unmute (gesto de usuario, iOS Safari), nunca al montar el player.
+  let metronome = null;
+  if (Array.isArray(beats) && beats.length) {
+    const clock = createBeatClock({ beatsMs: beats, timeSignature, beatAnchor });
+    metronome = createMetronomeClick({
+      clock,
+      getTimeMs: () => (masterAudio()?.currentTime ?? 0) * 1000,
+    });
+    const metroBtn = practice.querySelector('.mtp__metro');
+    metroBtn.addEventListener(
+      'click',
+      () => {
+        const on = metroBtn.getAttribute('aria-pressed') !== 'true';
+        metroBtn.setAttribute('aria-pressed', String(on));
+        metroBtn.classList.toggle('is-active', on);
+        metronome.setMuted(!on);
+      },
+      { signal: ac.signal },
+    );
+  }
 
   let destroyed = false;
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
     stopLoop();
+    metronome?.stop();
     timeListeners.clear();
     rowLongPressCancels.forEach((cancel) => cancel());
     ac.abort();

@@ -1379,6 +1379,86 @@ body.chrome-hidden .main {
   border-color: var(--color-action);
 }
 
+/* Tira de práctica (Task 4): loop de sección, velocidad, metrónomo. Mismo
+   idioma visual que los chips de sección — estados activos en --color-action. */
+.mtp__practice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mtp__loop,
+.mtp__metro {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.25rem var(--space-sm);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition:
+    background-color 0.12s,
+    color 0.12s,
+    border-color 0.12s;
+}
+.mtp__loop:hover,
+.mtp__metro:hover {
+  border-color: var(--color-text-secondary);
+}
+.mtp__loop:focus-visible,
+.mtp__metro:focus-visible {
+  outline: 2px solid var(--color-action);
+  outline-offset: 2px;
+}
+.mtp__loop[aria-pressed='true'],
+.mtp__metro.is-active {
+  background: var(--color-action);
+  color: #fff;
+  border-color: var(--color-action);
+}
+
+.mtp__rates {
+  display: inline-flex;
+  gap: 2px;
+}
+.mtp__rates button {
+  padding: 0.25rem var(--space-sm);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition:
+    background-color 0.12s,
+    color 0.12s,
+    border-color 0.12s;
+}
+.mtp__rates button:hover {
+  border-color: var(--color-text-secondary);
+}
+.mtp__rates button:focus-visible {
+  outline: 2px solid var(--color-action);
+  outline-offset: 2px;
+}
+.mtp__rates button.is-active {
+  background: var(--color-action);
+  color: #fff;
+  border-color: var(--color-action);
+}
+
+/* Chip de sección fijado como loop: marca tipográfica, no emoji (U+27F2). */
+.mtp__section-chip.is-loop::after {
+  content: ' ⟲';
+}
+
 .mtp__mixer {
   display: flex;
   flex-direction: column;

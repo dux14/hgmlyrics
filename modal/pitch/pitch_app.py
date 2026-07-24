@@ -272,7 +272,7 @@ def run_pipeline(payload: dict) -> None:
     except Exception:
         (fail_all("notas fallo") if pipeline_mode else skip_rest(2, "notas fallo")); cancel_optional(); return
     try:
-        lines_words = n_lyrics.remote(job_id, node_webhook, sign_upload_url, inbound_secret, lead, inp.get("lines"), inp.get("language"))
+        lines_words = n_lyrics.remote(job_id, node_webhook, sign_upload_url, inbound_secret, lead, lines=inp.get("lines"), language=inp.get("language"))
     except Exception:
         (fail_all("letra fallo") if pipeline_mode else skip_rest(3, "letra fallo")); cancel_optional(); return
 

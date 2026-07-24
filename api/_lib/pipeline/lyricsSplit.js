@@ -43,6 +43,28 @@ function closestToMiddle(candidateIndices, tokens, textLen) {
   return best;
 }
 
+// Arma una pieza de renglón (text + words) recalculando timing/confidence.
+// Compartido por splitLineAtWord y splitLineByText: mismo criterio de
+// vocalización re-derivada (no heredada) en ambos.
+function mkPiece(text, words) {
+  const confidence = lineConfidence(words);
+  return {
+    text,
+    startMs: words.length ? words[0].startMs : null,
+    endMs: words.length ? words[words.length - 1].endMs : null,
+    words,
+    confidence,
+    // Vocalización se RE-DERIVA por pieza (no se hereda del padre): tras el
+    // corte cada renglón tiene su propio confidence y puede cruzar el
+    // umbral en distinto sentido que el original (spec 2026-07-23).
+    vocalization:
+      words.length === 0 ||
+      (confidence !== null && confidence < VOCALIZATION_CONFIDENCE_THRESHOLD),
+    breath: false,
+    manualStartMs: null,
+  };
+}
+
 // Parte una línea v2 en la palabra `afterWord` (0-based, última del primer
 // renglón), repartiendo las words y recalculando timing/confidence de cada
 // mitad. Words desalineadas con los tokens (texto editado a mano): ambas
@@ -53,26 +75,8 @@ export function splitLineAtWord(line, afterWord) {
     throw new RangeError(`afterWord fuera de rango: ${afterWord}`);
   }
   const aligned = Array.isArray(line.words) && line.words.length === tokens.length;
-  const mk = (text, words) => {
-    const confidence = lineConfidence(words);
-    return {
-      text,
-      startMs: words.length ? words[0].startMs : null,
-      endMs: words.length ? words[words.length - 1].endMs : null,
-      words,
-      confidence,
-      // Vocalización se RE-DERIVA por mitad (no se hereda del padre): tras el
-      // corte cada renglón tiene su propio confidence y puede cruzar el
-      // umbral en distinto sentido que el original (spec 2026-07-23).
-      vocalization:
-        words.length === 0 ||
-        (confidence !== null && confidence < VOCALIZATION_CONFIDENCE_THRESHOLD),
-      breath: false,
-      manualStartMs: null,
-    };
-  };
-  const first = mk(tokens.slice(0, afterWord + 1).join(' '), aligned ? line.words.slice(0, afterWord + 1) : []);
-  const second = mk(tokens.slice(afterWord + 1).join(' '), aligned ? line.words.slice(afterWord + 1) : []);
+  const first = mkPiece(tokens.slice(0, afterWord + 1).join(' '), aligned ? line.words.slice(0, afterWord + 1) : []);
+  const second = mkPiece(tokens.slice(afterWord + 1).join(' '), aligned ? line.words.slice(afterWord + 1) : []);
   // El primero conserva el respiro/offset manual del original solo si aplica
   // al inicio (manualStartMs ancla el ARRANQUE del renglón).
   first.manualStartMs = line.manualStartMs;
@@ -98,93 +102,96 @@ export function splitWordAtChar(word, charOffset) {
 }
 
 /**
- * Aplica el texto editado por el admin a un renglón. Sin `\n`, equivale a
- * `editLine`: cambia solo `text`, conserva words/timing/confidence/
- * vocalización (se devuelve un renglón, no un arreglo). Con `\n`, parte en
- * tantas piezas como saltos queden tras colapsar saltos consecutivos y
- * espacios (nunca se crea una pieza vacía). El reparto de `words` sigue el
- * mismo criterio que splitLineAtWord: si el conteo de tokens del texto sin
- * saltos coincide con `words.length`, cada pieza se lleva sus words por
- * posición, y un corte que cae DENTRO de una palabra la divide con
- * splitWordAtChar. Si el conteo no coincide (texto editado a mano), todas
- * las piezas van sin words/confidence, con vocalización derivada.
+ * Aplica el texto editado por el admin a un renglón. Devuelve SIEMPRE un
+ * arreglo: sin `\n`, un arreglo de una pieza que equivale a `editLine`
+ * (cambia solo `text`, conserva words/timing/confidence/vocalización); con
+ * `\n`, tantas piezas como saltos queden tras colapsar saltos consecutivos y
+ * espacios (nunca se crea una pieza vacía).
+ *
+ * El reparto de `words` prueba dos hipótesis de tokenización, en orden:
+ * 1) frontera — cada `\n` es un separador más (un `\n` YA es whitespace para
+ *    el regex, sobreviva o no un espacio real al lado: cubre espacio antes,
+ *    espacio después, `\r\n` y el caso en que el `\n` se comió el espacio).
+ *    Si el conteo de tokens así calculado coincide con `words.length`,
+ *    ningún corte cae dentro de una palabra: cada pieza se lleva sus words
+ *    por conteo propio, sin partir ninguna.
+ * 2) intra-palabra — solo si la hipótesis de frontera no reproduce el
+ *    conteo: se eliminan los `\n` SIN dejar separador (pegan lo que separan)
+ *    y, si así el conteo coincide, el corte cayó dentro de una palabra; esa
+ *    word se divide proporcional a caracteres con splitWordAtChar.
+ * Si ninguna hipótesis reproduce `words.length` (el admin agregó/quitó
+ * palabras), todas las piezas van sin words, confidence null, vocalización
+ * derivada (words.length === 0 → true).
  * @param {object} line renglón v2
  * @param {string} text texto nuevo, admite `\n` como separador de piezas
- * @returns {object|object[]}
+ * @returns {object[]}
  */
 export function splitLineByText(line, text) {
   if (typeof text !== 'string' || text.trim() === '') {
     throw new RangeError(`text inválido: ${text}`);
   }
   if (!text.includes('\n')) {
-    return { ...line, text };
+    return [{ ...line, text }];
   }
 
   const rawTexts = text.split('\n');
-  // tokens del texto SIN saltos (\n eliminado, no reemplazado por espacio):
-  // un corte de frontera no cambia el conteo (ya había espacio ahí), uno
-  // intra-palabra sí lo cambiaría si no se reconstruyera así.
-  const collapsedTokens = text.replace(/\n/g, '').split(/\s+/).filter(Boolean);
-  const aligned = Array.isArray(line.words) && line.words.length === collapsedTokens.length;
+  const hasWords = Array.isArray(line.words);
+  const tokensFrontier = text.split(/\s+/).filter(Boolean);
+  const tokensGlued = text.replace(/\n/g, '').split(/\s+/).filter(Boolean);
+  const frontierAligned = hasWords && line.words.length === tokensFrontier.length;
+  const gluedAligned = !frontierAligned && hasWords && line.words.length === tokensGlued.length;
 
-  const wordsCopy = aligned ? line.words.map((w) => ({ ...w })) : [];
-  const wordSpans = [];
-  if (aligned) {
+  const rawWords = rawTexts.map(() => []);
+  if (frontierAligned) {
+    // Ningún \n cae dentro de una palabra: cada pieza se lleva sus words por
+    // conteo de tokens propio (sin tocar spans de carácter).
+    let wordCursor = 0;
+    rawTexts.forEach((raw, i) => {
+      const count = raw.split(/\s+/).filter(Boolean).length;
+      rawWords[i] = line.words.slice(wordCursor, wordCursor + count);
+      wordCursor += count;
+    });
+  } else if (gluedAligned) {
+    const wordsCopy = line.words.map((w) => ({ ...w }));
     const collapsed = text.replace(/\n/g, '');
+    const wordSpans = [];
     const re = /\S+/g;
     let m = re.exec(collapsed);
     while (m) {
       wordSpans.push({ start: m.index, end: m.index + m[0].length });
       m = re.exec(collapsed);
     }
-  }
-
-  // Asigna cada word (o su mitad) al segmento crudo (entre saltos) donde cae,
-  // en la coordenada del texto colapsado -- los segmentos no tienen \n
-  // interno, así que su longitud coincide 1:1 con esa coordenada.
-  const rawWords = rawTexts.map(() => []);
-  let collapsedPos = 0;
-  let wordCursor = 0;
-  for (let i = 0; i < rawTexts.length; i += 1) {
-    const segEnd = collapsedPos + rawTexts[i].length;
-    while (aligned && wordCursor < wordSpans.length && wordSpans[wordCursor].start < segEnd) {
-      const span = wordSpans[wordCursor];
-      if (span.end <= segEnd) {
-        rawWords[i].push(wordsCopy[wordCursor]);
-        wordCursor += 1;
-      } else {
-        const localOffset = segEnd - span.start;
-        const [firstHalf, secondHalf] = splitWordAtChar(wordsCopy[wordCursor], localOffset);
-        rawWords[i].push(firstHalf);
-        wordsCopy[wordCursor] = secondHalf;
-        wordSpans[wordCursor] = { start: segEnd, end: span.end };
-        break;
+    // Asigna cada word (o su mitad) al segmento crudo (entre saltos) donde
+    // cae, en la coordenada del texto colapsado -- los segmentos no tienen
+    // \n interno, así que su longitud coincide 1:1 con esa coordenada.
+    let collapsedPos = 0;
+    let wordCursor = 0;
+    for (let i = 0; i < rawTexts.length; i += 1) {
+      const segEnd = collapsedPos + rawTexts[i].length;
+      while (wordCursor < wordSpans.length && wordSpans[wordCursor].start < segEnd) {
+        const span = wordSpans[wordCursor];
+        if (span.end <= segEnd) {
+          rawWords[i].push(wordsCopy[wordCursor]);
+          wordCursor += 1;
+        } else {
+          const localOffset = segEnd - span.start;
+          const [firstHalf, secondHalf] = splitWordAtChar(wordsCopy[wordCursor], localOffset);
+          rawWords[i].push(firstHalf);
+          wordsCopy[wordCursor] = secondHalf;
+          wordSpans[wordCursor] = { start: segEnd, end: span.end };
+          break;
+        }
       }
+      collapsedPos = segEnd;
     }
-    collapsedPos = segEnd;
   }
 
-  const mk = (pieceText, words) => {
-    const confidence = lineConfidence(words);
-    return {
-      text: pieceText,
-      startMs: words.length ? words[0].startMs : null,
-      endMs: words.length ? words[words.length - 1].endMs : null,
-      words,
-      confidence,
-      vocalization:
-        words.length === 0 ||
-        (confidence !== null && confidence < VOCALIZATION_CONFIDENCE_THRESHOLD),
-      breath: false,
-      manualStartMs: null,
-    };
-  };
-
+  const aligned = frontierAligned || gluedAligned;
   const pieces = [];
   rawTexts.forEach((raw, i) => {
     const trimmed = raw.trim();
     if (trimmed === '') return; // saltos consecutivos / solo espacios: colapsan
-    pieces.push(mk(trimmed, aligned ? rawWords[i] : []));
+    pieces.push(mkPiece(trimmed, aligned ? rawWords[i] : []));
   });
 
   pieces[0].manualStartMs = line.manualStartMs;

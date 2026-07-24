@@ -128,12 +128,12 @@ describe('splitWordAtChar', () => {
 });
 
 describe('splitLineByText', () => {
-  it('sin \\n equivale a editLine: cambia solo el texto, conserva lo demás', () => {
+  it('sin \\n equivale a editLine (arreglo de una pieza): cambia solo el texto, conserva lo demás', () => {
     const l = line('primero el cielo', [[1200, 1450], [1500, 1700], [1800, 2100]]);
     l.manualStartMs = 900;
     l.breath = true;
     const editLineEquivalent = { ...l, text: 'primero el cielo y lo demás' };
-    expect(splitLineByText(l, 'primero el cielo y lo demás')).toEqual(editLineEquivalent);
+    expect(splitLineByText(l, 'primero el cielo y lo demás')).toEqual([editLineEquivalent]);
   });
 
   it('sin \\n con texto solo espacios lanza RangeError (setLineText vacío)', () => {
@@ -141,15 +141,30 @@ describe('splitLineByText', () => {
     expect(() => splitLineByText(l, '   ')).toThrow(RangeError);
   });
 
-  it('un \\n en frontera de palabra es idéntico a splitLineAtWord', () => {
+  describe('un \\n en frontera de palabra es idéntico a splitLineAtWord', () => {
     const l = line('primero el cielo y lo demás', [
       [1200, 1450], [1500, 1700], [1800, 2100], [2200, 2400], [2500, 2600], [2700, 3000],
     ]);
-    // El \n reemplaza el espacio de frontera SIN comerse el espacio (así
-    // edita un textarea real): la palabra previa conserva su espacio final.
-    const viaText = splitLineByText(l, 'primero el cielo \ny lo demás');
     const viaWord = splitLineAtWord(l, 2);
-    expect(viaText).toEqual(viaWord);
+
+    it('con espacio antes del \\n', () => {
+      expect(splitLineByText(l, 'primero el cielo \ny lo demás')).toEqual(viaWord);
+    });
+
+    it('con espacio después del \\n', () => {
+      expect(splitLineByText(l, 'primero el cielo\n y lo demás')).toEqual(viaWord);
+    });
+
+    it('con \\r\\n (sin espacio real adyacente)', () => {
+      expect(splitLineByText(l, 'primero el cielo\r\ny lo demás')).toEqual(viaWord);
+    });
+
+    it('con \\n que se come el espacio de frontera (sin espacio real en ningún lado)', () => {
+      // Sin espacio adyacente, la hipótesis de frontera igual gana porque el
+      // \n ya es whitespace para el regex y el conteo de tokens da igual que
+      // words.length -- no hace falta que sobreviva un espacio literal.
+      expect(splitLineByText(l, 'primero el cielo\ny lo demás')).toEqual(viaWord);
+    });
   });
 
   it('un \\n dentro de una palabra reparte proporcional a caracteres', () => {
@@ -202,5 +217,21 @@ describe('splitLineByText', () => {
     expect(out[0].breath).toBe(false);
     expect(out[1].breath).toBe(false);
     expect(out[2].breath).toBe(true);
+  });
+
+  it('\\n al inicio colapsa a una sola pieza (arreglo de longitud 1)', () => {
+    const l = line('primero el cielo', [[1200, 1450], [1500, 1700], [1800, 2100]]);
+    const out = splitLineByText(l, '\nprimero el cielo');
+    expect(out).toHaveLength(1);
+    expect(out[0].text).toBe('primero el cielo');
+    expect(out[0].words).toEqual(l.words);
+  });
+
+  it('\\n al final colapsa a una sola pieza (arreglo de longitud 1)', () => {
+    const l = line('primero el cielo', [[1200, 1450], [1500, 1700], [1800, 2100]]);
+    const out = splitLineByText(l, 'primero el cielo\n');
+    expect(out).toHaveLength(1);
+    expect(out[0].text).toBe('primero el cielo');
+    expect(out[0].words).toEqual(l.words);
   });
 });

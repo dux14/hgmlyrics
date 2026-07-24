@@ -323,8 +323,7 @@ export function applyReviewAction(doc, action) {
       if (typeof action.text !== 'string' || action.text.trim() === '') {
         throw new RangeError(`text inválido: ${action.text}`);
       }
-      const result = splitLineByText(line, action.text);
-      const pieces = Array.isArray(result) ? result : [result];
+      const pieces = splitLineByText(line, action.text);
       section.lines.splice(action.line, 1, ...pieces);
       break;
     }

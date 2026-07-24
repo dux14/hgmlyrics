@@ -752,6 +752,63 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
     expect(persisted.stems.status).toBe('running');
   });
 
+  it('H5: reintentar stems con structure en failed pone structure en running también (mismo dispatch)', async () => {
+    let persisted;
+    const phases = activePhasesWithStemsFailed();
+    phases.structure.status = 'failed';
+    routeSql([
+      [
+        "status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')",
+        [{ id: 'r1', songId: 's1', status: 'processing', phases, inputPath: 'p' }],
+      ],
+      [
+        'UPDATE song_pipeline_runs SET phases = ',
+        (values) => {
+          persisted = values.find((v) => v && v.stems);
+          return { count: 1 };
+        },
+      ],
+    ]);
+    const res = makeRes();
+    await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(persisted.stems.status).toBe('running');
+    expect(persisted.structure.status).toBe('running');
+  });
+
+  it('H5: reintentar una fase distinta de stems deja structure intacta', async () => {
+    let persisted;
+    const phases = initialPhases();
+    phases.upload.status = 'done';
+    phases.lyrics_review.status = 'done';
+    phases.stems = {
+      status: 'done',
+      error: null,
+      tracks: { lead: 'k1', backing: 'k2', vocals: 'k3' },
+      artifacts: undefined,
+    };
+    phases.structure = { status: 'failed', error: 'boom', tracks: undefined, artifacts: undefined, retries: 0 };
+    phases.pitch = { status: 'failed', error: 'boom', tracks: undefined, artifacts: undefined, retries: 0 };
+    routeSql([
+      [
+        "status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')",
+        [{ id: 'r1', songId: 's1', status: 'processing', phases, inputPath: 'p' }],
+      ],
+      [
+        'UPDATE song_pipeline_runs SET phases = ',
+        (values) => {
+          persisted = values.find((v) => v && v.pitch);
+          return { count: 1 };
+        },
+      ],
+    ]);
+    const res = makeRes();
+    await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'pitch' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(persisted.pitch.status).toBe('running');
+    expect(persisted.structure.status).toBe('failed');
+  });
+
   it('dispatch falla: la fase vuelve a failed (run retry-able), 502', async () => {
     dispatchPhase.mockRejectedValue(new Error('modal down'));
     const runningPhases = activePhasesWithStemsFailed();

@@ -70,6 +70,14 @@ export default withErrors(async (req, res) => {
     runningPhases[phase].status = 'running';
     runningPhases[phase].retries = (runningPhases[phase].retries || 0) + 1;
 
+    // 'structure' (SongFormer) viaja en el mismo dispatch que 'stems': si se
+    // reintenta stems, SongFormer se vuelve a ejecutar, así que la fase tiene
+    // que salir de su estado terminal o applyPhaseEvent descartaría el webhook
+    // por fase terminal y la canción quedaría sin estructura detectada.
+    if (phase === 'stems') {
+      runningPhases.structure = { ...runningPhases.structure, status: 'running', error: null };
+    }
+
     await tx`
       UPDATE song_pipeline_runs SET phases = ${tx.json(runningPhases)}, updated_at = now()
       WHERE id = ${run.id}

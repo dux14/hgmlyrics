@@ -119,7 +119,7 @@ function createPublishToSongbookButton(songId) {
   return wrap;
 }
 
-/** m:ss de un extremo de tramo huerfano (Task 4.3), redondeado al segundo. */
+/** m:ss de un extremo de tramo huérfano (Task 4.3), redondeado al segundo. */
 function formatSpanTime(ms) {
   const totalSec = Math.round((ms ?? 0) / 1000);
   const m = Math.floor(totalSec / 60);
@@ -127,10 +127,26 @@ function formatSpanTime(ms) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-/** Texto del aviso de audio huerfano (Task 4.3): duracion total en segundos
- * enteros (suma de los tramos) + el rango m:ss de cada tramo. Con mas de un
- * tramo, los rangos van separados por coma para que se entienda cuantos son
- * y donde esta cada uno. */
+/** Filtra tramos malformados (fix review d6741d5, hallazgo 4): el dato viene
+ * best-effort desde Modal, así que puede llegar con un elemento no-objeto
+ * (rompería con TypeError al leer span.startMs) o con endMs < startMs
+ * (se mostraría invertido, «2:22–2:10»). Descarta ambos casos. */
+function getValidOrphanSpans(spans) {
+  if (!Array.isArray(spans)) return [];
+  return spans.filter(
+    (span) =>
+      span &&
+      typeof span === 'object' &&
+      Number.isFinite(span.startMs) &&
+      Number.isFinite(span.endMs) &&
+      span.endMs >= span.startMs,
+  );
+}
+
+/** Texto del aviso de audio huérfano (Task 4.3): duración total en segundos
+ * enteros (suma de los tramos) + el rango m:ss de cada tramo. Con más de un
+ * tramo, los rangos van separados por coma para que se entienda cuántos son
+ * y dónde está cada uno. */
 function formatOrphanSpansWarning(spans) {
   const totalSec = Math.round(
     spans.reduce((sum, span) => sum + Math.max(0, (span.endMs ?? 0) - (span.startMs ?? 0)), 0) /
@@ -142,12 +158,12 @@ function formatOrphanSpansWarning(spans) {
   return `Hay ${totalSec} s con notas y sin letra aprobada (${ranges})`;
 }
 
-/** Aviso de audio huerfano (Task 4.3): tramos con notas cantadas sin letra
+/** Aviso de audio huérfano (Task 4.3): tramos con notas cantadas sin letra
  * aprobada que los cubra, detectados best-effort por la app de pitch
- * (`analysis.warnings.orphanSpans`). Informa nada mas -- la accion de
+ * (`analysis.warnings.orphanSpans`). Informa nada más -- la acción de
  * reabrir el gate de letra es la MISMA que ya define describePhase para la
  * fila Letra en estado 'done' ("Editar letra"), pasada por el llamador en
- * vez de duplicar su confirmacion/reintento/toast. */
+ * vez de duplicar su confirmación/reintento/toast. */
 function createOrphanSpansWarning(spans, onReopenLyrics) {
   const wrap = document.createElement('div');
   wrap.className = 'phase__orphan-warning';
@@ -231,17 +247,24 @@ export function renderSongPipelineView(container, songId) {
   // que ConfidenceSummary con timings.
   let orphanSpans = null;
   let lastPitchDone = null;
+  // Fix review d6741d5, hallazgo 2: contador de generación para descartar
+  // respuestas obsoletas. Dos flancos pending->done de pitch en la misma
+  // sesión (reabrir y re-aprobar el gate dos veces) pueden disparar dos
+  // fetches solapados; sin esto, uno viejo que resuelve después del más
+  // nuevo pisaría orphanSpans con datos superados.
+  let pitchAnalysisGen = 0;
 
   function refreshPitchAnalysis() {
+    const gen = ++pitchAnalysisGen;
     getSongStudio(songId)
       .then((data) => {
-        if (destroyed) return;
+        if (destroyed || gen !== pitchAnalysisGen) return;
         orphanSpans = data?.analysis?.warnings?.orphanSpans ?? null;
         lastSig = null;
         renderPhases(lastRun);
       })
       .catch((err) => {
-        console.error('SongPipelineView: no se pudo cargar el analisis de tono', err);
+        console.error('SongPipelineView: no se pudo cargar el análisis de tono', err);
       });
   }
 
@@ -495,10 +518,10 @@ export function renderSongPipelineView(container, songId) {
     syncTuning.update(run);
     confidenceSummary.update(run);
 
-    // Task 4.3: la fila Letra (procesada antes que Tono en ROWS) es la unica
+    // Task 4.3: la fila Letra (procesada antes que Tono en ROWS) es la única
     // que define el onRetry "Editar letra" de describePhase — se guarda para
-    // reusarlo en el aviso de audio huerfano de la fila pitch, sin duplicar
-    // confirmacion/reopenLyrics/toast.
+    // reusarlo en el aviso de audio huérfano de la fila pitch, sin duplicar
+    // confirmación/reopenLyrics/toast.
     let lyricsReopenAction = null;
 
     ROWS.forEach((r, i) => {
@@ -515,7 +538,15 @@ export function renderSongPipelineView(container, songId) {
       } else if (r.key === 'sync') {
         detail = syncTuning.el;
       } else if (r.key === 'lyrics_review') {
-        if (typeof info.onRetry === 'function') lyricsReopenAction = info.onRetry;
+        // Fix review d6741d5, hallazgo 1: capturar el onRetry SOLO cuando
+        // lyrics_review está 'done' (única rama de describePhase que arma
+        // "Editar letra" con confirmDialog + reopenLyrics + toast). Si el
+        // estado es otro (p. ej. 'failed' por una carrera de webhook con
+        // pitch todavía en 'done'), el onRetry sería el de reintentar la
+        // fase — no depende del orden de ROWS, chequea phase.status directo.
+        if (phase.status === 'done' && typeof info.onRetry === 'function') {
+          lyricsReopenAction = info.onRetry;
+        }
         if (run?.status === 'awaiting_lyrics' && phase.status !== 'done') {
           if (!lyricsPanelEl && !lyricsPanelLoading) ensureLyricsPanel();
           detail = lyricsPanelEl;
@@ -524,8 +555,10 @@ export function renderSongPipelineView(container, songId) {
           lyricsPanelEl = null;
           if (phase.status === 'done') detail = createPublishToSongbookButton(songId);
         }
-      } else if (r.key === 'pitch' && Array.isArray(orphanSpans) && orphanSpans.length > 0) {
-        detail = createOrphanSpansWarning(orphanSpans, lyricsReopenAction);
+      } else if (r.key === 'pitch') {
+        const validSpans = getValidOrphanSpans(orphanSpans);
+        if (validSpans.length > 0)
+          detail = createOrphanSpansWarning(validSpans, lyricsReopenAction);
       }
 
       const row = PhaseRow({

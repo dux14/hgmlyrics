@@ -788,5 +788,112 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
       );
       expect(reopenLyrics).toHaveBeenCalledWith(SONG_ID);
     });
+
+    // Fix review d6741d5, hallazgo 1: lyrics_review en 'failed' (carrera de
+    // webhook) mientras pitch sigue en 'done' NO debe capturar el onRetry de
+    // "Reintentar fase" para el boton del aviso — el aviso se muestra sin
+    // boton en vez de llamar retryPipelinePhase por error.
+    it('lyrics_review failed con pitch done: el aviso se muestra sin boton', async () => {
+      getSongStudio.mockResolvedValue({
+        analysis: { warnings: { orphanSpans: [{ startMs: 0, endMs: 3000 }] } },
+      });
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'failed' }, pitch: { status: 'done' } }),
+      });
+      await flushPromises();
+
+      const row = container.querySelector('[data-phase="pitch"]');
+      const warning = row.querySelector('.phase__orphan-warning');
+      expect(warning).toBeTruthy();
+      expect(warning.querySelector('.phase__action')).toBeFalsy();
+    });
+
+    // Fix review d6741d5, hallazgo 2: dos flancos pending->done de pitch en
+    // la misma sesión disparan dos fetches solapados; el que resuelve tarde
+    // (respuesta vieja) no debe pisar el estado que dejó el más nuevo.
+    it('respuesta vieja del analisis no pisa una mas nueva (guarda de generacion)', async () => {
+      let resolveFirst;
+      getSongStudio
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveFirst = resolve;
+            }),
+        )
+        .mockImplementationOnce(() =>
+          Promise.resolve({
+            analysis: { warnings: { orphanSpans: [{ startMs: 200000, endMs: 205000 }] } },
+          }),
+        );
+
+      renderSongPipelineView(container, SONG_ID);
+
+      // Primer flanco pending->done de pitch: dispara el primer fetch (lento).
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' }, pitch: { status: 'done' } }),
+      });
+      await flushPromises();
+
+      // Segundo flanco (reabrir y re-aprobar el gate): pitch vuelve a pending
+      // y a done, disparando el segundo fetch (rapido, resuelve primero).
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' }, pitch: { status: 'pending' } }),
+      });
+      await flushPromises();
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' }, pitch: { status: 'done' } }),
+      });
+      await flushPromises();
+
+      // La respuesta vieja del primer fetch resuelve tarde: no debe pisar.
+      resolveFirst({
+        analysis: { warnings: { orphanSpans: [{ startMs: 130000, endMs: 142000 }] } },
+      });
+      await flushPromises();
+
+      const warning = container.querySelector('[data-phase="pitch"] .phase__orphan-warning');
+      expect(warning.textContent).toContain('3:20–3:25');
+      expect(warning.textContent).not.toContain('2:10–2:22');
+    });
+
+    // Hallazgo 4: el dato es best-effort desde Modal, puede llegar deforme.
+    it('filtra tramos malformados (null, invertido) y solo muestra los validos', async () => {
+      getSongStudio.mockResolvedValue({
+        analysis: {
+          warnings: {
+            orphanSpans: [
+              null,
+              { startMs: 200000, endMs: 190000 }, // invertido: descartado
+              { startMs: 130000, endMs: 142000 }, // valido
+            ],
+          },
+        },
+      });
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' }, pitch: { status: 'done' } }),
+      });
+      await flushPromises();
+
+      const row = container.querySelector('[data-phase="pitch"]');
+      const warning = row.querySelector('.phase__orphan-warning');
+      expect(warning).toBeTruthy();
+      expect(warning.textContent).toContain('Hay 12 s con notas y sin letra aprobada (2:10–2:22)');
+    });
+
+    it('solo tramos malformados: no renderiza el aviso', async () => {
+      getSongStudio.mockResolvedValue({
+        analysis: { warnings: { orphanSpans: [null, { startMs: 500, endMs: 100 }] } },
+      });
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' }, pitch: { status: 'done' } }),
+      });
+      await flushPromises();
+
+      const row = container.querySelector('[data-phase="pitch"]');
+      expect(row.querySelector('.phase__orphan-warning')).toBeFalsy();
+    });
   });
 });

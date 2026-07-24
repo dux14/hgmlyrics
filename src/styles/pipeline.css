@@ -824,7 +824,7 @@ body.chrome-hidden .main {
   margin-top: 8px;
 }
 
-/* Aviso de audio huerfano (Task 4.3): mismo ambar de "requiere revision" que
+/* Aviso de audio huérfano (Task 4.3): mismo ámbar de "requiere revisión" que
    .confidence-summary, pero contenido en el detail de la fila pitch (sin
    margen propio, .phase__detail ya aporta el espaciado). */
 .phase__orphan-warning {

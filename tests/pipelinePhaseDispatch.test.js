@@ -250,11 +250,10 @@ describe("dispatchPhase('clips')", () => {
     expect(args.totalMs).toBe(6000);
   });
 
-  // Task 8: con fila song_structure (segmentos reales detectados por
-  // SongFormer, ya en ms), lineSections/totalMs se derivan de esos segmentos
-  // en vez de songs.sections/duration_sec — sin song_structure el fallback
-  // de arriba debe seguir byte-idéntico (probado en los dos tests previos).
-  it('con song_structure → lineSections/totalMs derivan de los segmentos detectados', async () => {
+  // Task 6 (H9): con fila song_structure (segmentos reales detectados por
+  // SongFormer, ya en ms), esos segmentos alimentan SOLO totalMs — lineSections
+  // y uploads siguen atados al documento (sectionSource), el eje único.
+  it('con song_structure → totalMs deriva de los segmentos detectados, lineSections sigue el documento', async () => {
     sqlResponses.push([{ sections: CLIPS_SECTIONS }]); // SELECT sections FROM songs
     sqlResponses.push([{ lines: CLIPS_LINE_TIMINGS }]); // SELECT lines FROM song_line_timings
     sqlResponses.push([{ durationSec: '8.5' }]); // SELECT duration_sec FROM song_audio (ignorado)
@@ -267,6 +266,7 @@ describe("dispatchPhase('clips')", () => {
         ],
       },
     ]); // SELECT segments FROM song_structure
+    sqlResponses.push([]); // getPipelineLyrics → sin fila, cae a songs.sections
 
     const run = {
       id: 'run1',
@@ -276,17 +276,14 @@ describe("dispatchPhase('clips')", () => {
     await dispatchPhase('clips', run);
 
     const args = dispatchClips.mock.calls[0][0];
-    // startMs de CLIPS_LINE_TIMINGS: 100, 2100, 4000, 6000 → segmento 0,1,1,2
-    expect(args.lineSections).toEqual([0, 1, 1, 2]);
+    // Eje único = CLIPS_SECTIONS (documento): sectionIndex 0='verse'(A,B),
+    // 1='chorus'(C), 3='verse'(D) — igual que sin song_structure.
+    expect(args.lineSections).toEqual([0, 0, 1, 3]);
     expect(args.totalMs).toBe(8500);
-    // Critical del review: sectionCount/uploads/uploadKeys quedan atados a
-    // song.sections.length (4, CLIPS_SECTIONS), NUNCA al conteo de segmentos
-    // detectados (3) — section-audio.js y SongView.js indexan section_index
-    // contra song.sections, y la reconciliación estructura↔letra está
-    // diferida a Task 15. Un uploads con solo 3 entradas dejaría la sección 3
-    // sin clip posible.
-    expect(Object.keys(args.uploads.vocals)).toEqual(['0', '1', '2', '3']);
-    expect(Object.keys(args.uploadKeys.vocals)).toEqual(['0', '1', '2', '3']);
+    // uploads/uploadKeys quedan acotados a las secciones con líneas (0,1,3):
+    // la sección 2 ('chorus repetido', sin líneas) no recibe upload.
+    expect(Object.keys(args.uploads.vocals)).toEqual(['0', '1', '3']);
+    expect(Object.keys(args.uploadKeys.vocals)).toEqual(['0', '1', '3']);
   });
 
   it('segments desordenados/con basura → se ordenan por startMs y totalMs es el máximo endMs (Important del review)', async () => {
@@ -305,6 +302,7 @@ describe("dispatchPhase('clips')", () => {
         ],
       },
     ]); // SELECT segments FROM song_structure
+    sqlResponses.push([]); // getPipelineLyrics → sin fila, cae a songs.sections
 
     const run = {
       id: 'run1',
@@ -314,9 +312,9 @@ describe("dispatchPhase('clips')", () => {
     await dispatchPhase('clips', run);
 
     const args = dispatchClips.mock.calls[0][0];
-    // Una vez ordenados y filtrados: [verse 0-2000, chorus 2000-6000, verse 6000-8500]
-    // → mismo resultado que el test anterior con los segmentos ya ordenados.
-    expect(args.lineSections).toEqual([0, 1, 1, 2]);
+    // lineSections sigue el documento (CLIPS_SECTIONS), no los segmentos
+    // detectados; totalMs usa el máximo endMs una vez ordenados y filtrados.
+    expect(args.lineSections).toEqual([0, 0, 1, 3]);
     expect(args.totalMs).toBe(8500);
   });
 
@@ -372,6 +370,56 @@ describe("dispatchPhase('clips')", () => {
     const args = dispatchClips.mock.calls[0][0];
     expect(args.lineSections).toEqual([0, 0, 1, 3]);
     expect(args.totalMs).toBe(8500);
-    expect(Object.keys(args.uploads.vocals)).toEqual(['0', '1', '2', '3']);
+    // La sección 2 ('chorus repetido', sin líneas) no recibe upload.
+    expect(Object.keys(args.uploads.vocals)).toEqual(['0', '1', '3']);
+  });
+
+  // Task 6 (H9): antes lineSections salía de los segmentos detectados
+  // (song_structure) mientras uploads salía del documento aprobado —
+  // dos ejes distintos para la misma columna section_index. Si el admin
+  // une secciones que SongFormer partió, el eje único debe ser el
+  // documento: los segmentos detectados solo alimentan totalMs.
+  it('lineSections y uploads comparten eje: el documento aprobado (H9)', async () => {
+    // Documento con 2 secciones (el admin unió lo que SongFormer partió en 3)
+    // y song_structure con 3 segmentos: el eje debe ser el documento.
+    const doc = {
+      sections: [
+        { type: 'intro', label: null, startMs: 0, endMs: 3400, lines: [] },
+        {
+          type: 'chorus',
+          label: null,
+          startMs: 10000,
+          endMs: 38000,
+          lines: [{ text: 'canto uno' }, { text: 'canto dos' }],
+        },
+      ],
+    };
+    sqlResponses.push([{ sections: [] }]); // SELECT sections FROM songs -- pipeline: vacío
+    sqlResponses.push([{ lines: [{ i: 0, startMs: 11000 }, { i: 1, startMs: 25000 }] }]); // SELECT lines FROM song_line_timings
+    sqlResponses.push([{ durationSec: '40' }]); // SELECT duration_sec FROM song_audio
+    sqlResponses.push([
+      {
+        segments: [
+          { label: 'coro', startMs: 10000, endMs: 24000 },
+          { label: 'coro', startMs: 24000, endMs: 31000 },
+          { label: 'coro', startMs: 31000, endMs: 38000 },
+        ],
+      },
+    ]); // SELECT segments FROM song_structure -- 3 segmentos detectados por SongFormer
+    sqlResponses.push([{ sections: doc.sections }]); // getPipelineLyrics -- documento aprobado con 2 secciones
+
+    const run = {
+      id: 'run1',
+      songId: 'song1',
+      phases: { stems: { tracks: { vocals: 'song1/stems/vocals.mp3' } } },
+    };
+    await dispatchPhase('clips', run);
+
+    const args = dispatchClips.mock.calls[0][0];
+    // Ambas líneas viven en la sección 1 del documento, no en 0/1/2 de la
+    // estructura detectada.
+    expect(args.lineSections).toEqual([1, 1]);
+    // La intro no tiene líneas: no se firma upload para ella.
+    expect(Object.keys(args.uploads.vocals)).toEqual(['1']);
   });
 });

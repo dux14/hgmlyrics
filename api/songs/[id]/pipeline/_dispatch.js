@@ -208,24 +208,21 @@ export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
     : [];
   const hasDetectedSegments = detectedSegments.length > 0;
 
-  // canonicalSections[i] = índice de sección de la línea canónica i (mismo
-  // orden que usa song_line_timings.lines[].i, ver projectCanonicalLines).
-  // lineSections queda paralelo a `lines` (mismo largo, mismo orden), como
-  // espera modal/clips_app.py: lineSections[k] = sección de lines[k].
-  // Fuente = sectionSource (store propio si existe, sino songs.sections).
+  // Eje ÚNICO de secciones: el documento aprobado (`sectionSource`). Antes
+  // lineSections salía de los segmentos detectados mientras uploads salía del
+  // documento — dos ejes para la misma columna section_index, que es el
+  // desfase clip↔letra del run del 24-jul (H9). Los segmentos detectados solo
+  // alimentan totalMs. canonicalSections[i] = índice de sección de la línea
+  // canónica i (mismo orden que usa song_line_timings.lines[].i, ver
+  // projectCanonicalLines); lineSections queda paralelo a `lines` (mismo
+  // largo, mismo orden), como espera modal/clips_app.py.
   const canonicalSections = projectLineSections(sectionSource);
-  // Con segmentos detectados: sección de una línea = índice del último
-  // segmento (ya ordenado) cuyo startMs no supera el startMs de la línea.
-  const lineSections = hasDetectedSegments
-    ? lines.map((l) => {
-        let idx = 0;
-        for (let s = 0; s < detectedSegments.length; s += 1) {
-          if (detectedSegments[s].startMs <= (l.startMs || 0)) idx = s;
-          else break;
-        }
-        return idx;
-      })
-    : lines.map((l) => canonicalSections[l.i] ?? 0);
+  const lineSections = lines.map((l) => canonicalSections[l.i] ?? 0);
+  // Secciones que efectivamente tienen líneas: son las únicas para las que
+  // clips_app.py produce un rango (section_ranges recorre lineSections), así
+  // que firmar el resto sería firmar URLs muertas — 208 firmas para 195 clips
+  // en el run auditado.
+  const sectionsWithLines = [...new Set(lineSections)].sort((a, b) => a - b);
   // duration_sec es NUMERIC en Postgres → llega como string vía postgres.js.
   // Puede ser null (caso real observado); ahí se cae a la última línea
   // conocida (máximo startMs) en vez de dispatchear con 0. Con segmentos
@@ -238,21 +235,16 @@ export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
     : durationSec !== null && durationSec !== undefined
       ? Math.round(Number(durationSec) * 1000)
       : lines.reduce((max, l) => Math.max(max, l.startMs || 0), 0);
-  // sectionCount/uploads/uploadKeys quedan SIEMPRE atados a `sectionSource`
-  // (letra actual: store propio si existe, sino songs.sections), nunca al
-  // conteo de segmentos detectados: son la misma columna section_index que
-  // usan api/songs/[id]/section-audio.js (valida contra song.sections.length,
-  // canciones standalone) y SongView.js (renderiza audio por .lyrics__section
-  // indexado por song.sections). La reconciliación estructura↔letra está
-  // diferida a Task 15 (review Task 8, Critical) — acá los segmentos
-  // detectados solo alimentan lineSections/totalMs arriba.
-  const sectionCount = sectionSource?.length || 0;
+  // uploads/uploadKeys quedan atados a `sectionsWithLines` (eje único, ver
+  // arriba): son la misma columna section_index que usan
+  // api/songs/[id]/section-audio.js y SongView.js, pero acotada a las
+  // secciones que clips_app.py efectivamente produce.
   const uploads = {};
   const uploadKeys = {};
   for (const kind of Object.keys(tracks)) {
     uploads[kind] = {};
     uploadKeys[kind] = {};
-    for (let sectionIndex = 0; sectionIndex < sectionCount; sectionIndex += 1) {
+    for (const sectionIndex of sectionsWithLines) {
       const key = `${run.songId}/clips/${kind}/section-${sectionIndex}.mp3`;
       // Volumen bajo (secciones de una canción): claridad > paralelismo aquí.
       uploads[kind][String(sectionIndex)] = await createSongAudioSignedPutUrl(key);

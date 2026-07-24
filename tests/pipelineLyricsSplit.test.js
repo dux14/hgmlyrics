@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { splitAtSectionBoundaries, splitBySeed, SEED_INHERIT_MIN_SCORE } from '../api/_lib/pipeline/lyricsSplit.js';
+import {
+  splitAtSectionBoundaries,
+  splitBySeed,
+  splitLineAtWord,
+  splitWordAtChar,
+  splitLineByText,
+  SEED_INHERIT_MIN_SCORE,
+} from '../api/_lib/pipeline/lyricsSplit.js';
 
 const line = (text, words) => ({
   text,
@@ -97,5 +104,101 @@ describe('splitBySeed', () => {
     const out = splitBySeed(l, { dbIndex: 0, score: 0.9 }, seedTwoSections);
     expect(out.map((p) => p.text)).toEqual(['primero el cielo', 'y lo demás está de mar']);
     expect(out.map((p) => p.seedSectionIdx)).toEqual([0, 1]);
+  });
+});
+
+describe('splitWordAtChar', () => {
+  it('reparte proporcional a caracteres y hereda el score en ambas mitades', () => {
+    // Caso del spec: "primero" 1200->1550 (350ms), corte tras "prime" (5 de 7).
+    const word = { word: 'primero', startMs: 1200, endMs: 1550, score: 0.87 };
+    const [first, second] = splitWordAtChar(word, 5);
+    expect(first).toEqual({ word: 'prime', startMs: 1200, endMs: 1450, score: 0.87 });
+    expect(second).toEqual({ word: 'ro', startMs: 1450, endMs: 1550, score: 0.87 });
+  });
+
+  it('offset 0 lanza RangeError', () => {
+    const word = { word: 'primero', startMs: 1200, endMs: 1550, score: 0.87 };
+    expect(() => splitWordAtChar(word, 0)).toThrow(RangeError);
+  });
+
+  it('offset al final de la palabra lanza RangeError', () => {
+    const word = { word: 'primero', startMs: 1200, endMs: 1550, score: 0.87 };
+    expect(() => splitWordAtChar(word, 7)).toThrow(RangeError);
+  });
+});
+
+describe('splitLineByText', () => {
+  it('sin \\n equivale a editLine: cambia solo el texto, conserva lo demás', () => {
+    const l = line('primero el cielo', [[1200, 1450], [1500, 1700], [1800, 2100]]);
+    l.manualStartMs = 900;
+    l.breath = true;
+    const editLineEquivalent = { ...l, text: 'primero el cielo y lo demás' };
+    expect(splitLineByText(l, 'primero el cielo y lo demás')).toEqual(editLineEquivalent);
+  });
+
+  it('sin \\n con texto solo espacios lanza RangeError (setLineText vacío)', () => {
+    const l = line('primero el cielo', [[1200, 1450], [1500, 1700], [1800, 2100]]);
+    expect(() => splitLineByText(l, '   ')).toThrow(RangeError);
+  });
+
+  it('un \\n en frontera de palabra es idéntico a splitLineAtWord', () => {
+    const l = line('primero el cielo y lo demás', [
+      [1200, 1450], [1500, 1700], [1800, 2100], [2200, 2400], [2500, 2600], [2700, 3000],
+    ]);
+    const viaText = splitLineByText(l, 'primero el cielo\ny lo demás');
+    const viaWord = splitLineAtWord(l, 2);
+    expect(viaText).toEqual(viaWord);
+  });
+
+  it('un \\n dentro de una palabra reparte proporcional a caracteres', () => {
+    // Mismo caso del spec: "primero" 1200->1550, corte tras "prime".
+    const l = line('primero', [[1200, 1550]]);
+    const out = splitLineByText(l, 'prime\nro');
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({ text: 'prime', startMs: 1200, endMs: 1450 });
+    expect(out[0].words).toEqual([{ word: 'prime', startMs: 1200, endMs: 1450, score: 0.9 }]);
+    expect(out[1]).toMatchObject({ text: 'ro', startMs: 1450, endMs: 1550 });
+    expect(out[1].words).toEqual([{ word: 'ro', startMs: 1450, endMs: 1550, score: 0.9 }]);
+  });
+
+  it('N saltos en una operación producen N+1 piezas', () => {
+    const l = line('uno dos tres cuatro', [
+      [1000, 1100], [1200, 1300], [1400, 1500], [1600, 1700],
+    ]);
+    const out = splitLineByText(l, 'uno\ndos\ntres\ncuatro');
+    expect(out).toHaveLength(4);
+    expect(out.map((p) => p.text)).toEqual(['uno', 'dos', 'tres', 'cuatro']);
+  });
+
+  it('conteo de tokens distinto al de words: piezas sin words, confidence null, vocalización derivada', () => {
+    const l = line('primero el cielo', [[1200, 1450], [1500, 1700], [1800, 2100]]);
+    const out = splitLineByText(l, 'primero el gran\ncielo azul');
+    expect(out).toHaveLength(2);
+    for (const piece of out) {
+      expect(piece.words).toEqual([]);
+      expect(piece.confidence).toBeNull();
+      expect(piece.vocalization).toBe(true);
+    }
+  });
+
+  it('saltos consecutivos y espacios colapsan: nunca se crea una pieza vacía', () => {
+    const l = line('primero el cielo', [[1200, 1450], [1500, 1700], [1800, 2100]]);
+    const out = splitLineByText(l, 'primero\n\n  \nel cielo');
+    expect(out).toHaveLength(2);
+    expect(out.map((p) => p.text)).toEqual(['primero', 'el cielo']);
+    expect(out.every((p) => p.text.length > 0)).toBe(true);
+  });
+
+  it('manualStartMs va a la primera pieza, breath a la última, el resto en false/null', () => {
+    const l = line('uno dos tres', [[1000, 1100], [1200, 1300], [1400, 1500]]);
+    l.manualStartMs = 950;
+    l.breath = true;
+    const out = splitLineByText(l, 'uno\ndos\ntres');
+    expect(out[0].manualStartMs).toBe(950);
+    expect(out[1].manualStartMs).toBeNull();
+    expect(out[2].manualStartMs).toBeNull();
+    expect(out[0].breath).toBe(false);
+    expect(out[1].breath).toBe(false);
+    expect(out[2].breath).toBe(true);
   });
 });

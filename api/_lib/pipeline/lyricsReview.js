@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import { collapseSegments } from './structureShape.js';
 import {
   autoSplitLongLines,
+  splitAtSectionBoundaries,
   splitLineAtWord,
   lineConfidence,
   VOCALIZATION_CONFIDENCE_THRESHOLD,
@@ -165,8 +166,8 @@ export function buildReviewDoc({ transcription, structureSegments = [] }) {
     sections = [{ type: 'verse', label: null, startMs: 0, endMs: lastWord?.endMs ?? 0, lines: [] }];
   }
 
-  let lastSectionIdx = 0;
-  transLines.forEach((text, transIndex) => {
+  // Fase 1: un renglón por segmento transcrito, sin asignar todavía.
+  const rawLines = transLines.map((text, transIndex) => {
     const words = (wordsPerTransIndex.get(transIndex) ?? []).map((w) => ({
       word: w.word ?? '',
       startMs: w.startMs,
@@ -176,11 +177,7 @@ export function buildReviewDoc({ transcription, structureSegments = [] }) {
     const startMs = words.length ? words[0].startMs : null;
     const endMs = words.length ? words[words.length - 1].endMs : null;
     const confidence = lineConfidence(words);
-    // Sin word-timing no hay intervalo que solapar: hereda la sección del
-    // renglón anterior (mantiene el orden temporal de transLines).
-    const sIdx = startMs === null ? lastSectionIdx : bestSectionIndex(sections, startMs, endMs);
-    lastSectionIdx = sIdx;
-    sections[sIdx].lines.push({
+    return {
       text,
       startMs,
       endMs,
@@ -191,10 +188,36 @@ export function buildReviewDoc({ transcription, structureSegments = [] }) {
         (confidence !== null && confidence < VOCALIZATION_CONFIDENCE_THRESHOLD),
       breath: false,
       manualStartMs: null,
-    });
+    };
   });
 
-  return autoSplitLongLines({ version: 2, sections });
+  // Fase 2: cortar en frontera de sección, después por largo/respiración, y
+  // recién ahí asignar cada renglón RESULTANTE por solape (H1: antes se
+  // asignaba el segmento entero y el split posterior no volvía a repartir).
+  let lastSectionIdx = 0;
+  for (const raw of rawLines) {
+    const pieces = splitAtSectionBoundaries(raw, sections).flatMap((p) =>
+      autoSplitLongLines({ version: 2, sections: [{ lines: [p] }] }).sections[0].lines,
+    );
+    for (const piece of pieces) {
+      const sIdx =
+        piece.startMs === null
+          ? lastSectionIdx
+          : bestSectionIndex(sections, piece.startMs, piece.endMs);
+      lastSectionIdx = sIdx;
+      sections[sIdx].lines.push(piece);
+    }
+  }
+
+  // Envelope real de cada sección desde sus renglones (sectionEnvelope ya
+  // existía pero solo lo usaba applyReviewAction).
+  for (const section of sections) {
+    const env = sectionEnvelope(section.lines, { startMs: section.startMs, endMs: section.endMs });
+    section.startMs = env.startMs;
+    section.endMs = env.endMs;
+  }
+
+  return { version: 2, sections };
 }
 
 /** Editor puro: aprobable con al menos un renglón en alguna sección. */

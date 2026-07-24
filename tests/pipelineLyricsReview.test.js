@@ -38,7 +38,9 @@ describe('buildReviewDoc v2', () => {
     expect(doc.sections.map((s) => s.type)).toEqual(['verse', 'chorus']); // instrumental NO genera sección
     expect(doc.sections[0].lines.map((l) => l.text)).toEqual(['hola mundo']);
     expect(doc.sections[1].lines.map((l) => l.text)).toEqual(['canto fuerte']);
-    expect(doc.sections[0].startMs).toBe(0);
+    // H1 parte 2: el envelope de la sección ahora se recalcula desde sus
+    // renglones reales, no queda en el límite declarado por SongFormer (0).
+    expect(doc.sections[0].startMs).toBe(500);
     expect(doc.sections[0].lines[0]).toMatchObject({
       startMs: 500, endMs: 1500, vocalization: false, breath: false, manualStartMs: null,
     });
@@ -134,6 +136,41 @@ describe('buildReviewDoc v2', () => {
       expect(l.startMs).toBe(l.words[0].startMs); // words repartidas, no duplicadas
     }
     expect(lines.flatMap((l) => l.words)).toHaveLength(tokens.length);
+  });
+
+  it('los pedazos de un segmento largo caen cada uno en su sección (H1)', () => {
+    // Segmento único 31.7→44.4 s que solapa más con la sección 2 pero cuyas
+    // primeras palabras caen enteras dentro de la 1.
+    const doc = buildReviewDoc({
+      transcription: trans([
+        {
+          text: 'el cielo y lo demás está de más sé que tú me cuidarás quiero escuchar tu voz',
+          words: [
+            [31660, 32000, 0.9], [32100, 32400, 0.9], [32500, 32700, 0.9],
+            [32800, 33100, 0.9], [33200, 33800, 0.9], [34000, 34300, 0.9],
+            [34400, 34700, 0.9], [34800, 35400, 0.9], [39000, 39300, 0.9],
+            [39400, 39700, 0.9], [39800, 40000, 0.9], [40100, 40300, 0.9],
+            [40400, 41000, 0.9], [42500, 42900, 0.9], [43000, 43600, 0.9],
+            [43700, 43900, 0.9], [44000, 44400, 0.9],
+          ],
+        },
+      ]),
+      structureSegments: [
+        { label: 'coro', startMs: 28200, endMs: 42100 },
+        { label: 'verso', startMs: 42100, endMs: 58200 },
+      ],
+    });
+    // Ninguna sección con canto queda vacía.
+    expect(doc.sections[0].lines.length).toBeGreaterThan(0);
+    expect(doc.sections[1].lines.length).toBeGreaterThan(0);
+    // Ningún renglón mezcla palabras de las dos secciones.
+    for (const [i, section] of doc.sections.entries()) {
+      for (const l of section.lines) {
+        expect(l.startMs).toBeGreaterThanOrEqual(i === 0 ? 28200 : 42100);
+      }
+    }
+    // El envelope de cada sección refleja sus renglones reales.
+    expect(doc.sections[0].endMs).toBeLessThanOrEqual(42100);
   });
 
   it('auto-split re-deriva vocalization por mitad según el confidence de cada una', () => {

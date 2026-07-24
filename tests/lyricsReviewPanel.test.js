@@ -250,7 +250,7 @@ describe('LyricsReviewPanel', () => {
     });
   });
 
-  it('(d) editar renglón: lápiz muestra un input, "Guardar" despacha editLine', async () => {
+  it('(d) editar renglón: lápiz muestra un textarea, "Guardar" despacha setLineText', async () => {
     const el = await LyricsReviewPanel({ songId: 'song-1' });
     document.body.appendChild(el);
 
@@ -268,7 +268,7 @@ describe('LyricsReviewPanel', () => {
     await flush();
 
     expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
-      type: 'editLine',
+      type: 'setLineText',
       section: 0,
       line: 0,
       text: 'texto corregido',
@@ -643,6 +643,59 @@ describe('LyricsReviewPanel', () => {
     expect(el.querySelector('script')).toBeNull();
     const lineEl = el.querySelector('.lrp__line');
     expect(lineEl.textContent).toBe('<script>alert("x")</script> & co');
+  });
+
+  it('editar renglón con textarea: Cmd/Ctrl+Enter despacha setLineText una sola vez con el texto multilínea completo', async () => {
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    el.querySelector('.lrp__line-edit').click();
+    const textarea = el.querySelector('.lrp__edit-input');
+    expect(textarea.tagName).toBe('TEXTAREA');
+    textarea.value = 'primera parte\nsegunda parte';
+
+    textarea.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true }),
+    );
+    await flush();
+
+    expect(sendLyricsAction).toHaveBeenCalledTimes(1);
+    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
+      type: 'setLineText',
+      section: 0,
+      line: 0,
+      text: 'primera parte\nsegunda parte',
+    });
+  });
+
+  it('editar renglón: Enter solo (sin modificador) no guarda', async () => {
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    el.querySelector('.lrp__line-edit').click();
+    const textarea = el.querySelector('.lrp__edit-input');
+    textarea.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
+    await flush();
+
+    expect(sendLyricsAction).not.toHaveBeenCalled();
+    expect(el.querySelector('.lrp__edit-input')).not.toBeNull();
+  });
+
+  it('editar renglón: Escape cancela sin despachar', async () => {
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    el.querySelector('.lrp__line-edit').click();
+    const textarea = el.querySelector('.lrp__edit-input');
+    textarea.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+    );
+    await flush();
+
+    expect(sendLyricsAction).not.toHaveBeenCalled();
+    expect(el.querySelector('.lrp__edit-input')).toBeNull();
   });
 
   it('muestra un mensaje de error si falla la carga inicial, sin crashear', async () => {

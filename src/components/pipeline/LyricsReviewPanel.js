@@ -321,7 +321,17 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
     }
   }
 
-  /** Reemplaza el texto de la fila por un input editable + Guardar/Cancelar. */
+  /** Autogrow del textarea de edición: arranca en un renglón exacto y crece
+   * con el contenido (incluidos los `\n` que el admin tipea para partir). */
+  function autogrow(textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }
+
+  /** Reemplaza el texto de la fila por un textarea editable + Guardar/Cancelar.
+   * El textarea acepta `\n`: Enter lo inserta (comportamiento nativo, sin
+   * guardar), Cmd/Ctrl+Enter guarda, Escape cancela. Un solo `setLineText`
+   * con el texto completo — el dominio reparte el timing entre las piezas. */
   function startEditLine(rowEl) {
     if (state.busy || state.previewOpen) return;
     const sIdx = Number(rowEl.dataset.section);
@@ -329,15 +339,29 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
     const line = state.review.sections[sIdx].lines[lIdx];
     const lineEl = rowEl.querySelector('.lrp__line');
     lineEl.innerHTML = `
-      <input type="text" class="lrp__edit-input" value="${escapeHtml(line.text)}" aria-label="Texto editado del renglón" />
+      <textarea class="lrp__edit-input" rows="1" aria-label="Texto editado del renglón">${escapeHtml(line.text)}</textarea>
       <button type="button" class="btn lrp__edit-save">Guardar</button>
       <button type="button" class="btn2 lrp__edit-cancel">Cancelar</button>`;
-    lineEl.querySelector('.lrp__edit-cancel').addEventListener('click', () => render());
-    lineEl.querySelector('.lrp__edit-save').addEventListener('click', () => {
-      const text = lineEl.querySelector('.lrp__edit-input').value;
+    const textarea = lineEl.querySelector('.lrp__edit-input');
+    const save = () => {
+      const text = textarea.value;
       if (!text.trim()) return;
-      runAction({ type: 'editLine', section: sIdx, line: lIdx, text }, { rowEl });
+      runAction({ type: 'setLineText', section: sIdx, line: lIdx, text }, { rowEl });
+    };
+    lineEl.querySelector('.lrp__edit-cancel').addEventListener('click', () => render());
+    lineEl.querySelector('.lrp__edit-save').addEventListener('click', save);
+    textarea.addEventListener('input', () => autogrow(textarea));
+    textarea.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        render();
+      } else if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) {
+        ev.preventDefault();
+        save();
+      }
     });
+    autogrow(textarea);
+    textarea.focus();
   }
 
   /** Payload de moveLine para "mover arriba" — cruza a la sección anterior

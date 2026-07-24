@@ -600,6 +600,70 @@ describe('POST /api/songs/:id/pipeline/confirm', () => {
     expect(finalPhases.stems.status).toBe('failed');
     expect(res.status).toHaveBeenCalledWith(502);
   });
+
+  it('marca stems y structure en running al despachar (H5)', async () => {
+    let updatedRow;
+    routeSql([
+      [
+        'SELECT id, song_id AS "songId"',
+        [
+          {
+            id: 'r1',
+            songId: 's1',
+            status: 'created',
+            phases: initialPhases(),
+            inputPath: 's1/runs/r1/full.mp3',
+          },
+        ],
+      ],
+      [
+        "UPDATE song_pipeline_runs SET status = 'processing'",
+        (values) => {
+          updatedRow = values;
+          return { count: 1 };
+        },
+      ],
+    ]);
+    const res = makeRes();
+    await confirmHandler({ method: 'POST', query: { id: 's1' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    const persistedPhases = updatedRow.find((v) => v && v.upload);
+    expect(persistedPhases.upload.status).toBe('done');
+    expect(persistedPhases.stems.status).toBe('running');
+    expect(persistedPhases.structure.status).toBe('running');
+  });
+
+  it('deja stems y structure en failed si el dispatch falla dos veces (H5)', async () => {
+    dispatchPhase.mockRejectedValue(new Error('modal down'));
+    let finalPhases;
+    routeSql([
+      [
+        'SELECT id, song_id AS "songId"',
+        [
+          {
+            id: 'r1',
+            songId: 's1',
+            status: 'created',
+            phases: initialPhases(),
+            inputPath: 's1/runs/r1/full.mp3',
+          },
+        ],
+      ],
+      ["UPDATE song_pipeline_runs SET status = 'processing'", { count: 1 }],
+      [
+        'UPDATE song_pipeline_runs SET phases = ',
+        (values) => {
+          finalPhases = values.find((v) => v && v.stems);
+          return { count: 1 };
+        },
+      ],
+    ]);
+    const res = makeRes();
+    await confirmHandler({ method: 'POST', query: { id: 's1' } }, res);
+    expect(res.status).toHaveBeenCalledWith(502);
+    expect(finalPhases.stems.status).toBe('failed');
+    expect(finalPhases.structure.status).toBe('failed');
+  });
 });
 
 describe('POST /api/songs/:id/pipeline/retry', () => {

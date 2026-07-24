@@ -47,6 +47,14 @@ export default withErrors(async (req, res) => {
   // este punto, así que applyPhaseEvent nunca devuelve null aquí.
   const phases = applyPhaseEvent(run.phases, { phase: 'upload', ok: true });
 
+  // El dispatch de 'stems' arranca en Modal las 4 secciones de separación Y
+  // SongFormer (fase 'structure'): ambas quedan 'running' en el mismo CAS,
+  // igual que hace advanceNextPhase con las fases que dispara. Sin esto la UI
+  // pintaba "En espera" durante los ~3 minutos de GPU (H5 de la auditoría del
+  // 24-jul) y el cron de zombis no podía detectarlas colgadas.
+  phases.stems = { ...phases.stems, status: 'running' };
+  phases.structure = { ...phases.structure, status: 'running' };
+
   // La duración se lee en el browser (readAudioDuration) y viaja best-effort:
   // si falta o es inválida no tumba el confirm, solo se pierde el dato (el
   // swap del approve queda con duration_sec null, igual que hoy).
@@ -88,6 +96,14 @@ export default withErrors(async (req, res) => {
         ok: false,
         error: String(err2?.message ?? err2).slice(0, 300),
       });
+      // 'structure' viajaba en el mismo dispatch: si este no salió, tampoco se
+      // ejecuta. Se marca failed (es best-effort: la UI la pinta como pending y
+      // retry.js no la acepta) para no dejarla en 'running' eternamente.
+      failedPhases.structure = {
+        ...failedPhases.structure,
+        status: 'failed',
+        error: 'No se pudo iniciar la detección de secciones',
+      };
       await sql`
         UPDATE song_pipeline_runs SET phases = ${sql.json(failedPhases)}, updated_at = now()
         WHERE id = ${run.id}

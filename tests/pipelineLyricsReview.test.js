@@ -163,10 +163,15 @@ describe('buildReviewDoc v2', () => {
     // Ninguna sección con canto queda vacía.
     expect(doc.sections[0].lines.length).toBeGreaterThan(0);
     expect(doc.sections[1].lines.length).toBeGreaterThan(0);
-    // Ningún renglón mezcla palabras de las dos secciones.
+    // Ningún renglón mezcla palabras de las dos secciones: cota inferior Y
+    // superior por sección (solo la inferior no detecta un renglón que cruzó
+    // a la sección siguiente).
+    const bounds = [[28200, 42100], [42100, 58200]];
     for (const [i, section] of doc.sections.entries()) {
+      const [lo, hi] = bounds[i];
       for (const l of section.lines) {
-        expect(l.startMs).toBeGreaterThanOrEqual(i === 0 ? 28200 : 42100);
+        expect(l.startMs).toBeGreaterThanOrEqual(lo);
+        expect(l.startMs).toBeLessThan(hi);
       }
     }
     // El envelope de cada sección refleja sus renglones reales.

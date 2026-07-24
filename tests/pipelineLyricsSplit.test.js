@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { splitAtSectionBoundaries } from '../api/_lib/pipeline/lyricsSplit.js';
+import { splitAtSectionBoundaries, splitBySeed, SEED_INHERIT_MIN_SCORE } from '../api/_lib/pipeline/lyricsSplit.js';
 
 const line = (text, words) => ({
   text,
@@ -46,5 +46,38 @@ describe('splitAtSectionBoundaries', () => {
     const l = line('texto editado a mano', [[39000, 39300], [39400, 39700]]);
     l.text = 'texto editado a mano por el admin';
     expect(splitAtSectionBoundaries(l, SECTIONS)).toHaveLength(1);
+  });
+});
+
+describe('splitBySeed', () => {
+  const seed = [
+    { dbIndex: 0, sectionIdx: 0, lineIdx: 0, text: 'Primero el cielo' },
+    { dbIndex: 1, sectionIdx: 0, lineIdx: 1, text: 'y lo demás está de más' },
+  ];
+
+  it('parte el renglón en la frontera entre dos líneas de la semilla', () => {
+    // 9 tokens -> 9 words alineadas (la mismatch words/tokens desactiva el corte).
+    const l = line('primero el cielo y lo demás está de mar', [
+      [1000, 1300], [1400, 1600], [1700, 2000], [2100, 2300], [2400, 2600],
+      [2700, 2900], [3000, 3300], [3400, 3900], [4000, 4300],
+    ]);
+    const out = splitBySeed(l, { dbIndex: 0, score: 0.9 }, seed);
+    expect(out.map((x) => x.text)).toEqual([
+      'primero el cielo',
+      'y lo demás está de mar',
+    ]);
+  });
+
+  it('bajo el umbral de score no hereda nada', () => {
+    const l = line('algo que no se parece', [
+      [1000, 1300], [1400, 1600], [1700, 2000], [2100, 2300], [2400, 2600],
+    ]);
+    const out = splitBySeed(l, { dbIndex: 0, score: SEED_INHERIT_MIN_SCORE - 0.1 }, seed);
+    expect(out).toHaveLength(1);
+  });
+
+  it('sin semilla devuelve el renglón intacto', () => {
+    const l = line('primero el cielo', [[1000, 1300], [1400, 1600], [1700, 2000]]);
+    expect(splitBySeed(l, null, [])).toHaveLength(1);
   });
 });

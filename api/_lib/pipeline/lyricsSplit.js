@@ -146,6 +146,49 @@ export function splitAtSectionBoundaries(line, sections) {
   return pieces;
 }
 
+// Bajo este score, el match contra la semilla no es confiable para heredar
+// cortes. Valor inicial derivado del run del 24-jul (erratas reales al
+// 57-66%); calibrable con el primer run posterior a esta tanda.
+export const SEED_INHERIT_MIN_SCORE = 0.6;
+
+/**
+ * Hereda los cortes de renglón de la semilla: si el renglón transcrito cubre
+ * varias líneas consecutivas del cancionero a partir de `match.dbIndex`, se
+ * parte en esas fronteras, ubicando el punto por conteo acumulado de palabras.
+ * @param {object} line renglón v2
+ * @param {{dbIndex:number,score:number}|null} match del alineamiento monótono
+ * @param {Array<{dbIndex:number,text:string}>} seed salida de seedIndex
+ * @returns {object[]}
+ */
+export function splitBySeed(line, match, seed) {
+  if (!match || match.score < SEED_INHERIT_MIN_SCORE) return [line];
+  const tokens = line.text.split(/\s+/).filter(Boolean);
+  if (!Array.isArray(line.words) || line.words.length !== tokens.length) return [line];
+
+  // Cuántas palabras aporta cada línea de la semilla desde el match, mientras
+  // quepan en el renglón transcrito.
+  const cuts = [];
+  let consumed = 0;
+  for (let d = match.dbIndex; d < seed.length; d += 1) {
+    const count = seed[d].text.split(/\s+/).filter(Boolean).length;
+    consumed += count;
+    if (consumed >= tokens.length) break;
+    cuts.push(consumed - 1); // afterWord absoluto
+  }
+  if (cuts.length === 0) return [line];
+
+  let pieces = [line];
+  for (const afterWord of [...cuts].reverse()) {
+    const last = pieces[pieces.length - 1];
+    const before = pieces.slice(0, -1).reduce(
+      (n, p) => n + p.text.split(/\s+/).filter(Boolean).length, 0,
+    );
+    const [first, second] = splitLineAtWord(last, afterWord - before);
+    pieces = [...pieces.slice(0, -1), first, second];
+  }
+  return pieces;
+}
+
 /**
  * Auto-parte renglones > KARAOKE_MAX_CHARS (doc v2: las words viven en cada
  * renglón, la correlación ya no necesita mapa externo). Pura e idempotente.

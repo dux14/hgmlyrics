@@ -77,7 +77,12 @@ async function ensureReview(run, songId) {
     transLines: [],
   };
   const structureSegments = await fetchStructureSegments(songId);
-  const review = buildReviewDoc({ transcription, structureSegments });
+  const [song] = await sql`SELECT sections FROM songs WHERE id = ${songId}`;
+  const review = buildReviewDoc({
+    transcription,
+    structureSegments,
+    seedSections: song?.sections ?? null,
+  });
   const next = { ...lyricsReview, review };
   // CAS: si el run ya no esta en awaiting_lyrics (se aprobo/cancelo entre el
   // findAwaitingRun y este punto) no pisa lyrics_review — mismo criterio que

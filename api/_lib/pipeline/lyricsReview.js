@@ -11,9 +11,11 @@
  */
 import { createHash } from 'node:crypto';
 import { collapseSegments } from './structureShape.js';
+import { seedIndex, monotonicAlign } from './seedLyrics.js';
 import {
   autoSplitLongLines,
   splitAtSectionBoundaries,
+  splitBySeed,
   splitLineAtWord,
   lineConfidence,
   VOCALIZATION_CONFIDENCE_THRESHOLD,
@@ -152,13 +154,19 @@ function sectionEnvelope(lines, fallback) {
  * Construye el documento de revisión v2 SOLO desde la IA: secciones =
  * segmentos SongFormer, renglones = transLines asignados por solape temporal.
  * Sin songs.sections, sin canónica, sin conflictos (spec 2026-07-23).
- * @param {{transcription: {transLines?: string[], words?: Array}, structureSegments?: Array}} args
+ * @param {{transcription: {transLines?: string[], words?: Array, perLine?: Array}, structureSegments?: Array, seedSections?: Array|null}} args
  * @returns {object} doc v2 (ver plan de decisiones transversales)
  */
-export function buildReviewDoc({ transcription, structureSegments = [] }) {
+export function buildReviewDoc({ transcription, structureSegments = [], seedSections = null }) {
   const transLines = transcription?.transLines ?? [];
   const allWords = transcription?.words ?? [];
   const wordsPerTransIndex = wordsByTransIndex(transLines, allWords);
+  // Semilla del cancionero: índice plano + alineamiento monótono contra
+  // perLine, único punto donde el transIndex todavía existe (H3).
+  const seed = seedIndex(seedSections);
+  const alignment = new Map(
+    monotonicAlign(transcription?.perLine ?? []).map((p) => [p.transIndex, p]),
+  );
 
   let sections = lyricSectionsFromSegments(collapseSegments(structureSegments));
   if (sections.length === 0) {
@@ -191,14 +199,16 @@ export function buildReviewDoc({ transcription, structureSegments = [] }) {
     };
   });
 
-  // Fase 2: cortar en frontera de sección, después por largo/respiración, y
-  // recién ahí asignar cada renglón RESULTANTE por solape (H1: antes se
-  // asignaba el segmento entero y el split posterior no volvía a repartir).
+  // Fase 2: cortar en frontera de sección, heredar cortes de la semilla,
+  // después por largo/respiración, y recién ahí asignar cada renglón
+  // RESULTANTE por solape (H1: antes se asignaba el segmento entero y el
+  // split posterior no volvía a repartir).
   let lastSectionIdx = 0;
-  for (const raw of rawLines) {
-    const pieces = splitAtSectionBoundaries(raw, sections).flatMap((p) =>
-      autoSplitLongLines({ version: 2, sections: [{ lines: [p] }] }).sections[0].lines,
-    );
+  for (const [transIndex, raw] of rawLines.entries()) {
+    const match = seed.length ? (alignment.get(transIndex) ?? null) : null;
+    const pieces = splitAtSectionBoundaries(raw, sections)
+      .flatMap((p) => splitBySeed(p, match, seed))
+      .flatMap((p) => autoSplitLongLines({ version: 2, sections: [{ lines: [p] }] }).sections[0].lines);
     for (const piece of pieces) {
       const sIdx =
         piece.startMs === null

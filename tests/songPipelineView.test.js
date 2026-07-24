@@ -187,6 +187,13 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     container.remove();
   });
 
+  it('header tiene link Ver en Estudio hacia /song/:id/estudio', () => {
+    renderSongPipelineView(container, SONG_ID);
+    const link = container.querySelector('.pipeline-view__studio-link');
+    expect(link).toBeTruthy();
+    expect(link.getAttribute('href')).toBe(`#/song/${SONG_ID}/estudio`);
+  });
+
   it('fases pending con letra no aprobada: sync/pitch quedan bloqueadas (.wait)', () => {
     renderSongPipelineView(container, SONG_ID);
     watchOnChange({ run: buildRun() });

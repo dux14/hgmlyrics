@@ -232,6 +232,11 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   container.innerHTML = `
     <div class="editor fade-in">
       <h1 class="editor__title">${existingSong ? 'Editar canción' : 'Nueva canción'}</h1>
+      ${
+        existingSong
+          ? `<a class="editor__studio-link" href="#/song/${existingSong.id}/estudio">${icon('audio-lines', { size: 16 })}<span>Ver en Estudio</span></a>`
+          : ''
+      }
 
       <!-- Basic Info -->
       <div class="editor__section">

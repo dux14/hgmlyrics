@@ -6,15 +6,20 @@ const getSongStudio = vi.fn();
 vi.mock('../src/lib/studioApi.js', () => ({ getSongStudio: (...args) => getSongStudio(...args) }));
 
 const goBack = vi.fn();
+const navigate = vi.fn();
 let routeChangeCb = null;
 const offRouteChange = vi.fn();
 vi.mock('../src/router.js', () => ({
   goBack: (...args) => goBack(...args),
+  navigate: (...args) => navigate(...args),
   onRouteChange: (cb) => {
     routeChangeCb = cb;
     return offRouteChange;
   },
 }));
+
+const isAdmin = vi.fn();
+vi.mock('../src/lib/authStore.js', () => ({ isAdmin: (...args) => isAdmin(...args) }));
 
 const createMultiTrackPlayer = vi.fn();
 vi.mock('../src/components/pipeline/MultiTrackPlayer.js', () => ({
@@ -29,11 +34,25 @@ vi.mock('../src/components/pipeline/ToneLyrics.js', () => ({
 import { renderSongStudioView } from '../src/components/pipeline/SongStudioView.js';
 
 function makePlayerStub() {
+  const el = (c) => {
+    const d = document.createElement('div');
+    d.className = c;
+    return d;
+  };
   return {
     el: document.createElement('div'),
+    els: {
+      transport: el('mtp__transport'),
+      practice: el('mtp__practice'),
+      sections: el('mtp__sections'),
+      nowSound: el('mtp__nowsound'),
+      mixer: el('mtp__tracks'),
+      audios: el('mtp__audios'),
+    },
     destroy: vi.fn(),
     onTime: vi.fn(),
     seek: vi.fn(),
+    pause: vi.fn(),
   };
 }
 function makeToneStub(voices = []) {
@@ -66,6 +85,7 @@ function makeStudioData(overrides = {}) {
       },
     },
     sections: [],
+    structure: null,
     timings: null,
     ...overrides,
   };
@@ -78,9 +98,12 @@ describe('SongStudioView', () => {
     container = document.createElement('div');
     getSongStudio.mockReset();
     goBack.mockReset();
+    navigate.mockReset();
     offRouteChange.mockReset();
     createMultiTrackPlayer.mockReset();
     createToneLyrics.mockReset();
+    isAdmin.mockReset();
+    isAdmin.mockReturnValue(false);
     routeChangeCb = null;
   });
 
@@ -126,7 +149,8 @@ describe('SongStudioView', () => {
     ]);
 
     expect(createToneLyrics).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('.studio-view__player').contains(playerStub.el)).toBe(true);
+    const body = container.querySelector('.studio-view__body');
+    expect(body.contains(playerStub.els.transport)).toBe(true);
     expect(container.querySelector('.studio-view__lyrics').contains(toneStub.el)).toBe(true);
 
     // Wiring de tiempo: onTime(cb) -> cb(sec) debe llamar setActiveTime.
@@ -204,5 +228,77 @@ describe('SongStudioView', () => {
 
     const { tracks } = createMultiTrackPlayer.mock.calls[0][0];
     expect(tracks).toEqual([]);
+  });
+
+  it('layout B: transporte, práctica, chips, roll, nowsound, mixer — en ese orden', async () => {
+    isAdmin.mockReturnValue(false);
+    const playerStub = makePlayerStub();
+    const toneStub = makeToneStub();
+    createMultiTrackPlayer.mockReturnValue(playerStub);
+    createToneLyrics.mockReturnValue(toneStub);
+    getSongStudio.mockResolvedValue(makeStudioData());
+    renderSongStudioView(container, 's1');
+    await Promise.resolve();
+    await Promise.resolve();
+    const body = container.querySelector('.studio-view__body');
+    const order = [...body.children].map((n) => n.className.split(' ')[0]);
+    expect(order).toEqual([
+      'mtp__transport',
+      'mtp__practice',
+      'mtp__sections',
+      'studio-view__legend',
+      'studio-view__lyrics',
+      'mtp__nowsound',
+      'mtp__tracks',
+      'mtp__audios',
+    ]);
+  });
+
+  it('botón Editar solo para admin y navega a procesamiento', async () => {
+    isAdmin.mockReturnValue(true);
+    const playerStub = makePlayerStub();
+    const toneStub = makeToneStub();
+    createMultiTrackPlayer.mockReturnValue(playerStub);
+    createToneLyrics.mockReturnValue(toneStub);
+    getSongStudio.mockResolvedValue(makeStudioData());
+    renderSongStudioView(container, 's1');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(container.querySelector('.studio-view__edit')).not.toBeNull();
+
+    container.querySelector('.studio-view__edit').click();
+    expect(navigate).toHaveBeenCalledWith('/song/s1/procesamiento');
+  });
+
+  it('sin admin: no muestra el botón Editar', async () => {
+    isAdmin.mockReturnValue(false);
+    const playerStub = makePlayerStub();
+    const toneStub = makeToneStub();
+    createMultiTrackPlayer.mockReturnValue(playerStub);
+    createToneLyrics.mockReturnValue(toneStub);
+    getSongStudio.mockResolvedValue(makeStudioData());
+    renderSongStudioView(container, 's1');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(container.querySelector('.studio-view__edit')).toBeNull();
+  });
+
+  it('pasa structure y timings a ToneLyrics (headers + confianza cableados)', async () => {
+    isAdmin.mockReturnValue(false);
+    const playerStub = makePlayerStub();
+    const toneStub = makeToneStub();
+    createMultiTrackPlayer.mockReturnValue(playerStub);
+    createToneLyrics.mockReturnValue(toneStub);
+    const data = makeStudioData({
+      structure: { segments: [{ label: 'verso', startMs: 0, endMs: 1000 }] },
+      timings: { status: 'ready', lines: [] },
+    });
+    getSongStudio.mockResolvedValue(data);
+    renderSongStudioView(container, 's1');
+    await Promise.resolve();
+    await Promise.resolve();
+    const arg = createToneLyrics.mock.calls[0][0];
+    expect(arg.structure).toEqual(data.structure);
+    expect(arg.timings).toEqual(data.timings);
   });
 });

@@ -430,6 +430,16 @@ body.chrome-hidden .main {
   margin: 0;
 }
 
+.pipeline-view__studio-link,
+.editor__studio-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--color-brand);
+  margin-left: auto;
+}
+
 .pipeline-view__pill {
   display: inline-flex;
   align-items: center;
@@ -1770,6 +1780,31 @@ body.chrome-hidden .main {
 .studio-view__empty {
   padding: var(--space-md) 0;
   color: var(--color-text-secondary);
+}
+
+.studio-view__body > .mtp__transport {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-bg);
+  padding-block: 8px;
+}
+
+.studio-view__edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--color-text);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: var(--font-size-sm);
+  transition: background-color 0.15s var(--ease-out);
+}
+.studio-view__edit:hover {
+  background: var(--color-surface-hover);
 }
 
 .studio-view__legend {

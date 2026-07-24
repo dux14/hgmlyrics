@@ -12,7 +12,8 @@
  */
 import '../../styles/pipeline.css';
 import { icon } from '../../lib/icons.js';
-import { goBack, onRouteChange } from '../../router.js';
+import { goBack, navigate, onRouteChange } from '../../router.js';
+import { isAdmin } from '../../lib/authStore.js';
 import { getSongStudio } from '../../lib/studioApi.js';
 import { createMultiTrackPlayer } from './MultiTrackPlayer.js';
 import { createToneLyrics } from './ToneLyrics.js';
@@ -74,6 +75,11 @@ export function renderSongStudioView(container, songId) {
     <header class="pipeline-view__header">
       <button type="button" class="pipeline-view__back" aria-label="Volver">${icon('arrow-left')}</button>
       <h1 class="pipeline-view__title">Estudio</h1>
+      ${
+        isAdmin()
+          ? `<button type="button" class="studio-view__edit">${icon('pencil', { size: 18 })}<span>Editar</span></button>`
+          : ''
+      }
     </header>
     <div class="studio-view__body">
       <p class="studio-view__loading">Cargando estudio...</p>
@@ -81,6 +87,9 @@ export function renderSongStudioView(container, songId) {
   `;
   container.appendChild(view);
   view.querySelector('.pipeline-view__back').addEventListener('click', () => goBack());
+  view
+    .querySelector('.studio-view__edit')
+    ?.addEventListener('click', () => navigate(`/song/${songId}/procesamiento`));
 
   const bodyEl = view.querySelector('.studio-view__body');
 
@@ -119,29 +128,47 @@ export function renderSongStudioView(container, songId) {
     const titleEl = view.querySelector('.pipeline-view__title');
     if (data.title) titleEl.textContent = data.title;
 
-    bodyEl.innerHTML = `
-      <div class="studio-view__player"></div>
-      <div class="studio-view__legend"></div>
-      <div class="studio-view__lyrics"></div>
-    `;
-
     const tracks = stemsToTracks(data.stems);
-    player = createMultiTrackPlayer({ tracks, structure: data.structure });
-    view.querySelector('.studio-view__player').appendChild(player.el);
+    player = createMultiTrackPlayer({
+      tracks,
+      structure: data.structure,
+      beats: data.timings?.beats ?? null,
+      bpm: data.audio?.bpmManual ?? data.timings?.bpmDetected ?? null,
+      timeSignature: data.audio?.timeSignature ?? '4/4',
+      beatAnchor: data.audio?.beatAnchor ?? 1,
+    });
 
     tone = createToneLyrics({
       analysis: data.analysis,
+      structure: data.structure,
+      timings: data.timings,
       sections: data.sections,
       onSeek: (sec) => player?.seek(sec),
     });
-    view.querySelector('.studio-view__lyrics').appendChild(tone.el);
-
     player.onTime((sec) => tone.setActiveTime(sec));
+
+    const legendEl = document.createElement('div');
+    legendEl.className = 'studio-view__legend';
+
+    const lyricsWrap = document.createElement('div');
+    lyricsWrap.className = 'studio-view__lyrics';
+    lyricsWrap.appendChild(tone.el);
+
+    bodyEl.innerHTML = '';
+    bodyEl.append(
+      player.els.transport,
+      player.els.practice,
+      player.els.sections,
+      legendEl,
+      lyricsWrap,
+      player.els.nowSound,
+      player.els.mixer,
+      player.els.audios,
+    );
 
     // Leyenda: un ítem por voz que ToneLyrics efectivamente pinta
     // (tone.voices), no por posición en voices_present.
     const legendItems = Array.isArray(tone.voices) ? tone.voices : [];
-    const legendEl = view.querySelector('.studio-view__legend');
     if (legendItems.length) {
       const dimmed = new Set();
       legendEl.innerHTML = legendItems

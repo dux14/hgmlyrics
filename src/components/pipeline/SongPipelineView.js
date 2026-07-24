@@ -131,6 +131,7 @@ export function renderSongPipelineView(container, songId) {
     <header class="pipeline-view__header">
       <button type="button" class="pipeline-view__back" aria-label="Volver">${icon('arrow-left')}</button>
       <h1 class="pipeline-view__title">Procesamiento</h1>
+      <a class="pipeline-view__studio-link" href="#/song/${songId}/estudio">${icon('audio-lines', { size: 16 })}<span>Ver en Estudio</span></a>
       <span class="pipeline-view__pill">0 de ${ROWS.length} fases</span>
     </header>
     <div class="pipeline-view__error" role="alert" hidden>

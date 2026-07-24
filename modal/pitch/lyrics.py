@@ -72,12 +72,20 @@ def _resolve_gaps(timings: list, line_start: float, line_end: float) -> list:
     return resolved
 
 
+_MATCH_LOOKAHEAD = 2
+
+
 def _match_tokens_to_words(tokens: list, words: list) -> list:
     """Empareja los tokens del texto APROBADO contra las `words` que devolvio
     el align, en orden, por texto normalizado -- nunca por posicion ciega.
     Si align dropeo un token (no esta en su diccionario), ese token no
-    consume ninguna word y queda sin timing (se interpola despues); nunca se
-    descarta ni se corre el resto de la linea."""
+    consume ninguna word y queda sin timing (se interpola despues); el
+    puntero `wi` no avanza y se autocura solo con el proximo token. Si en
+    cambio la salida del align trae una word espuria que no corresponde a
+    ningun token (align dividio distinto de nuestro `tokens`), un match
+    ciego contra `words[wi]` estancaria el resto de la linea entera; por eso
+    ante un desencuentro se mira hasta `_MATCH_LOOKAHEAD` words mas adelante
+    antes de dar el token por no alineado, saltando la word espuria."""
     timings: list = [None] * len(tokens)
     wi = 0
     for ti, tok in enumerate(tokens):
@@ -89,6 +97,17 @@ def _match_tokens_to_words(tokens: list, words: list) -> list:
             if w.get("start") is not None and w.get("end") is not None:
                 timings[ti] = (w["start"], w["end"], w.get("score"))
             wi += 1
+            continue
+        for skip in range(1, _MATCH_LOOKAHEAD + 1):
+            wj = wi + skip
+            if wj < len(words) and _normalize_word(words[wj].get("word") or "") == norm_tok:
+                w = words[wj]
+                if w.get("start") is not None and w.get("end") is not None:
+                    timings[ti] = (w["start"], w["end"], w.get("score"))
+                wi = wj + 1
+                break
+        # sin match en el lookahead: token sin timing, wi no avanza (mismo
+        # tratamiento que un token dropeado por el diccionario del align)
     return timings
 
 
@@ -133,10 +152,18 @@ def _lines_words_from_given_lines(align_fn, align_model, meta, audio, device, li
             # Sin esto, whisperx.align recibe un tramo vacio y la linea sale
             # sin words (backtrack falla sobre 0 samples).
             line_end = audio_duration
+        line_end = max(line_end, line_start)  # guarda: offset manual mas alla del audio real no debe invertir las cotas
 
         words: list = []
         if tokens:
-            segment = [{"text": text, "start": line_start, "end": line_end}]
+            # " ".join(tokens), no `text` crudo: whisperx corta las words SOLO
+            # por " " (alignment.py), pero tokens = text.split() corta por
+            # CUALQUIER whitespace (tab, NBSP, letra pegada de un doc). Si los
+            # criterios de corte no coinciden, el align emite una word de mas
+            # o de menos y el emparejador se degrada a interpolacion para toda
+            # la linea. Normalizar el separador antes de mandarlo mata la
+            # discrepancia en la fuente en vez de tolerarla en el matching.
+            segment = [{"text": " ".join(tokens), "start": line_start, "end": line_end}]
             aligned = align_fn(segment, align_model, meta, audio, device)
             for seg in aligned.get("segments") or []:
                 words.extend(seg.get("words") or [])

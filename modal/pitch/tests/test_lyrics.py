@@ -166,6 +166,54 @@ def test_align_dropea_un_token_igual_no_se_descarta_ni_se_corre(fake_deps):
     assert 1.0 <= line[1]["start"] < line[1]["end"] <= 2.0
 
 
+def test_texto_con_nbsp_y_tab_no_estanca_el_emparejador(fake_deps):
+    """text.split() (nuestro lado) parte por CUALQUIER whitespace -- tab, NBSP
+    (U+00A0) pegado desde un documento -- mientras que whisperx solo corta
+    por " ". Sin normalizar el separador antes de mandarlo al align, esto
+    producia un token de mas de nuestro lado y estancaba toda la linea."""
+    whisperx_mod, _ = fake_deps
+    text = "hola mundo\tcruel"  # NBSP entre "hola" y "mundo", tab antes de "cruel"
+    lines = [{"text": text, "startMs": 0, "endMs": 3000}]
+
+    def align_side_effect(segment, model, meta, audio, device):
+        # el texto que le mandamos al align debe estar normalizado a " ",
+        # exactamente los tokens que separamos de nuestro lado.
+        assert segment[0]["text"] == "hola mundo cruel"
+        return _segments([_word("hola", 0.0, 1.0, 0.9), _word("mundo", 1.0, 2.0, 0.8),
+                           _word("cruel", 2.0, 3.0, 0.7)])
+
+    whisperx_mod.align.side_effect = align_side_effect
+
+    result = _run(lines=lines, language="es")
+    line = result[0]
+
+    assert [syl["text"] for syl in line] == ["hola", "mundo", "cruel"]
+    assert line[0]["score"] == 0.9 and line[1]["score"] == 0.8 and line[2]["score"] == 0.7
+
+
+def test_word_espuria_en_el_align_no_estanca_los_tokens_posteriores(fake_deps):
+    """Si la salida del align trae una word que no corresponde a ningun
+    token (align dividio distinto de `tokens`), un match ciego contra
+    words[wi] estancaria el resto de la linea entera en interpolacion. El
+    emparejador debe saltarla y seguir alineando los tokens siguientes."""
+    whisperx_mod, _ = fake_deps
+    lines = [{"text": "uno dos tres", "startMs": 0, "endMs": 3000}]
+    # "ruido" no corresponde a ningun token aprobado -- se intercala entre
+    # "uno" y "dos".
+    whisperx_mod.align.return_value = _segments([
+        _word("uno", 0.0, 0.5, 0.9), _word("ruido", 0.5, 0.6, 0.5),
+        _word("dos", 1.0, 2.0, 0.8), _word("tres", 2.0, 3.0, 0.7),
+    ])
+
+    result = _run(lines=lines, language="es")
+    line = result[0]
+
+    assert [syl["text"] for syl in line] == ["uno", "dos", "tres"]
+    assert line[0]["score"] == 0.9
+    assert line[1]["score"] == 0.8  # "dos" no se estanca por la word espuria
+    assert line[2]["score"] == 0.7  # "tres" tampoco
+
+
 def test_linea_entera_sin_timestamps_se_reparte_uniforme_en_las_cotas(fake_deps):
     whisperx_mod, _ = fake_deps
     lines = [{"text": "x y", "startMs": 1000, "endMs": 3000}]

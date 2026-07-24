@@ -120,19 +120,36 @@ function buildSuggestions(review) {
   return suggestions;
 }
 
+/** Sugerencias de texto (semilla) sobre el doc v2: mismo cálculo para
+ * GET y PUT — el PUT también debe devolverlas recalculadas contra el
+ * documento resultante, si no una acción que reordena índices (splitLine,
+ * mergeLines, moveLine, deleteLine, splitSection, mergeSections) deja las
+ * sugerencias del último GET apuntando a renglones equivocados (BLOCKER
+ * review tanda C). */
+function buildGateSuggestions(review, songSections) {
+  return {
+    suggestions: buildSuggestions(review),
+    textSuggestions: buildTextSuggestions(review, seedIndex(songSections)),
+  };
+}
+
+async function fetchSongSections(songId) {
+  const [song] = await sql`SELECT sections FROM songs WHERE id = ${songId}`;
+  return song?.sections ?? null;
+}
+
 async function getGate(res, songId) {
   const run = await findAwaitingRun(songId);
   if (!run) {
     res.status(404).json({ error: 'No hay una ejecución esperando revisión de letra' });
     return;
   }
-  const [song] = await sql`SELECT sections FROM songs WHERE id = ${songId}`;
-  const { lyricsReview } = await ensureReview(run, songId, song?.sections ?? null);
+  const songSections = await fetchSongSections(songId);
+  const { lyricsReview } = await ensureReview(run, songId, songSections);
   res.status(200).json({
     review: lyricsReview.review,
     canApprove: canApprove(lyricsReview.review),
-    suggestions: buildSuggestions(lyricsReview.review),
-    textSuggestions: buildTextSuggestions(lyricsReview.review, seedIndex(song?.sections)),
+    ...buildGateSuggestions(lyricsReview.review, songSections),
   });
 }
 
@@ -253,7 +270,8 @@ async function putGate(req, res, songId) {
     res.status(404).json({ error: 'No hay una ejecución esperando revisión de letra' });
     return;
   }
-  const { lyricsReview } = await ensureReview(run, songId);
+  const songSections = await fetchSongSections(songId);
+  const { lyricsReview } = await ensureReview(run, songId, songSections);
 
   let next;
   try {
@@ -273,7 +291,9 @@ async function putGate(req, res, songId) {
     UPDATE song_pipeline_runs SET lyrics_review = ${sql.json(nextLyricsReview)}, updated_at = now()
     WHERE id = ${run.id} AND status = 'awaiting_lyrics'
   `;
-  res.status(200).json({ review: next, canApprove: canApprove(next) });
+  res
+    .status(200)
+    .json({ review: next, canApprove: canApprove(next), ...buildGateSuggestions(next, songSections) });
 }
 
 /** Proyeccion plana {i, startMs, score, interpolated} de las sections del

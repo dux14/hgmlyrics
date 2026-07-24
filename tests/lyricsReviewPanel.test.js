@@ -153,6 +153,87 @@ describe('LyricsReviewPanel', () => {
     });
   });
 
+  // BLOCKER review tanda C: performAction hace `state = {...state, ...result}`
+  // — si el PUT de una acción que reordena índices (acá deleteLine) no trae
+  // suggestions/textSuggestions recalculadas, el spread conserva las del
+  // último GET (indexadas contra el documento VIEJO) y `render()` las pinta
+  // sobre la fila equivocada del documento NUEVO. Este test reproduce el
+  // escenario real completo: borrar un renglón corre la textSuggestion de la
+  // línea 1 a la línea 0, y aceptarla ahí debe escribir el texto correcto en
+  // esa fila (no arrastrar la propuesta vieja).
+  it('aceptar una propuesta después de deleteLine (reordena índices) escribe el texto correcto en el renglón correcto', async () => {
+    // Documento inicial: sección 0 con 2 renglones; el segundo (índice 1)
+    // tiene una propuesta de texto.
+    getLyricsReview.mockResolvedValue(
+      pendingResult({
+        textSuggestions: [
+          { section: 0, line: 1, text: 'texto correcto de la semilla', score: 0.6 },
+        ],
+      }),
+    );
+    // El PUT de deleteLine borra el renglón 0: el que era línea 1 pasa a ser
+    // línea 0. El backend (ya con el fix) recalcula la propuesta contra el
+    // documento resultante — ahora apunta a section:0/line:0.
+    const afterDelete = {
+      version: 2,
+      sections: [
+        {
+          type: 'chorus',
+          label: null,
+          startMs: 0,
+          endMs: 1000,
+          lines: [line('una linea larga de prueba', { confidence: null })],
+        },
+        {
+          type: 'verse',
+          label: null,
+          startMs: 1000,
+          endMs: 2000,
+          lines: [line('otra linea')],
+        },
+      ],
+    };
+    sendLyricsAction.mockResolvedValue({
+      review: afterDelete,
+      canApprove: true,
+      suggestions: [],
+      textSuggestions: [{ section: 0, line: 0, text: 'texto correcto de la semilla', score: 0.6 }],
+    });
+
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    // Borra el primer renglón de la sección 0 (window.confirm mockeado en true).
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const firstRow = el.querySelector('[data-section="0"].lrp__line-row');
+    firstRow.querySelector('.lrp__line-delete').click();
+    await flush();
+
+    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
+      type: 'deleteLine',
+      section: 0,
+      line: 0,
+    });
+
+    // Tras el render con el resultado del PUT, la propuesta debe aparecer en
+    // la fila que ahora es section:0/line:0 (el renglón sobreviviente).
+    const proposalRow = el.querySelector('[data-section="0"][data-line="0"].lrp__line-row');
+    expect(proposalRow.textContent).toContain('texto correcto de la semilla');
+
+    proposalRow.querySelector('.lrp__suggest-accept').click();
+    await flush();
+
+    // El accept debe escribir sobre section:0/line:0 (el renglón que la fila
+    // representa en el documento NUEVO), con el texto correcto — no sobre un
+    // índice viejo ni con un texto stale de antes del borrado.
+    expect(sendLyricsAction).toHaveBeenLastCalledWith('song-1', {
+      type: 'editLine',
+      section: 0,
+      line: 0,
+      text: 'texto correcto de la semilla',
+    });
+  });
+
   it('(c) "Unir con el siguiente renglón" despacha mergeLines', async () => {
     const el = await LyricsReviewPanel({ songId: 'song-1' });
     document.body.appendChild(el);

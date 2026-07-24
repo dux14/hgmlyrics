@@ -356,6 +356,123 @@ describe('PUT /api/songs/:id/pipeline/lyrics', () => {
     expect(res.status).toHaveBeenCalledWith(422);
   });
 
+  // BLOCKER review tanda C: a diferencia de getGate, putGate no recalculaba
+  // suggestions/textSuggestions — el front las congelaba en lo del último GET
+  // y, tras una acción que reordena índices (deleteLine acá), "Usar este
+  // texto" podía escribir el texto correcto sobre el renglón equivocado.
+  it('splitLine devuelve suggestions/textSuggestions recalculadas contra el documento resultante', async () => {
+    const songSections = [{ type: 'verse', lines: [{ text: 'linea de la semilla' }] }];
+    const reviewWithBreak = {
+      version: 2,
+      sections: [
+        {
+          type: 'chorus',
+          label: null,
+          startMs: 0,
+          endMs: 900,
+          lines: [
+            {
+              // Gap >= BREATH_GAP_MS entre 'dos' y 'tres': sugiere partir aca.
+              text: 'linea de la semilla mas texto',
+              startMs: 0,
+              endMs: 2900,
+              words: [
+                { word: 'linea', startMs: 0, endMs: 200, score: 0.9 },
+                { word: 'de', startMs: 210, endMs: 300, score: 0.9 },
+                { word: 'la', startMs: 310, endMs: 400, score: 0.9 },
+                { word: 'semilla', startMs: 410, endMs: 900, score: 0.9 },
+                // gap 400ms
+                { word: 'mas', startMs: 1300, endMs: 1500, score: 0.9 },
+                { word: 'texto', startMs: 1510, endMs: 1700, score: 0.9 },
+              ],
+              confidence: 0.9,
+              vocalization: false,
+              breath: false,
+              manualStartMs: null,
+            },
+          ],
+        },
+      ],
+    };
+    routeSql([
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { review: reviewWithBreak } })]],
+      ['SELECT sections FROM songs', [{ sections: songSections }]],
+      ['UPDATE song_pipeline_runs SET lyrics_review', { count: 1 }],
+    ]);
+    const res = makeRes();
+    await lyricsHandler(
+      {
+        method: 'PUT',
+        query: { id: 's1' },
+        body: { action: { type: 'setBreath', section: 0, line: 0, breath: true } },
+      },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    const body = res.json.mock.calls[0][0];
+    expect(body.suggestions).toEqual([{ section: 0, line: 0, afterWords: [3] }]);
+  });
+
+  it('deleteLine reordena índices y las textSuggestions del PUT apuntan al renglón correcto (no al último GET)', async () => {
+    const songSections = [{ type: 'verse', lines: [{ text: 'texto correcto de la semilla' }] }];
+    const twoLineReview = {
+      version: 2,
+      sections: [
+        {
+          type: 'chorus',
+          label: null,
+          startMs: 0,
+          endMs: 900,
+          lines: [
+            {
+              text: 'renglon a borrar',
+              startMs: 0,
+              endMs: 400,
+              words: [],
+              confidence: null,
+              vocalization: false,
+              breath: false,
+              manualStartMs: null,
+            },
+            {
+              text: 'texto parecido semilla',
+              startMs: 410,
+              endMs: 900,
+              words: [],
+              confidence: null,
+              vocalization: false,
+              breath: false,
+              manualStartMs: null,
+            },
+          ],
+        },
+      ],
+    };
+    routeSql([
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { review: twoLineReview } })]],
+      ['SELECT sections FROM songs', [{ sections: songSections }]],
+      ['UPDATE song_pipeline_runs SET lyrics_review', { count: 1 }],
+    ]);
+    const res = makeRes();
+    await lyricsHandler(
+      {
+        method: 'PUT',
+        query: { id: 's1' },
+        body: { action: { type: 'deleteLine', section: 0, line: 0 } },
+      },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    const body = res.json.mock.calls[0][0];
+    // Documento resultante tiene UN solo renglón (el segundo, ahora en el
+    // índice 0): la textSuggestion debe apuntar a section:0/line:0, no al
+    // índice 1 (posición que ocupaba antes de borrar).
+    expect(body.review.sections[0].lines).toHaveLength(1);
+    expect(body.textSuggestions).toEqual([
+      { section: 0, line: 0, text: 'texto correcto de la semilla', score: expect.any(Number) },
+    ]);
+  });
+
   it('422 si splitLine trae afterWord NaN', async () => {
     routeSql([['AS "lyricsReview"', [runRow({ lyricsReview: { review: existingReviewV2() } })]]]);
     const res = makeRes();

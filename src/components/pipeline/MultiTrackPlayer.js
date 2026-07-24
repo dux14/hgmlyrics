@@ -90,9 +90,9 @@ export function createMultiTrackPlayer({
     `
     <button type="button" class="mtp__loop" aria-pressed="false">${icon('rotate-ccw', { size: 16 })}<span>Loop de sección</span></button>
     <div class="mtp__rates" role="group" aria-label="Velocidad">
-      <button type="button" data-rate="1" class="is-active">1×</button>
-      <button type="button" data-rate="0.75">0.75×</button>
-      <button type="button" data-rate="0.5">0.5×</button>
+      <button type="button" data-rate="1" class="is-active" aria-pressed="true">1×</button>
+      <button type="button" data-rate="0.75" aria-pressed="false">0.75×</button>
+      <button type="button" data-rate="0.5" aria-pressed="false">0.5×</button>
     </div>
     ${metroHtml}
   `,
@@ -164,6 +164,10 @@ export function createMultiTrackPlayer({
   const timeEl = transport.querySelector('.mtp__time');
   const chipEls = Array.from(sections.querySelectorAll('.mtp__section-chip'));
   const loopBtn = practice.querySelector('.mtp__loop');
+  // Sin structure.segments no hay chip activo posible -> el loop nunca
+  // haría nada; se oculta (solo el botón, no toda la tira: velocidad y
+  // metrónomo siguen útiles sin estructura).
+  loopBtn.hidden = segments.length === 0;
   const rateBtns = Array.from(practice.querySelectorAll('.mtp__rates button'));
   const rowEls = Array.from(mixer.querySelectorAll('.mtp__row'));
   const toggleBtns = Array.from(mixer.querySelectorAll('.mtp__row-toggle'));
@@ -279,7 +283,11 @@ export function createMultiTrackPlayer({
       audio.preservesPitch = true;
       audio.playbackRate = rate;
     });
-    rateBtns.forEach((b) => b.classList.toggle('is-active', Number(b.dataset.rate) === rate));
+    rateBtns.forEach((b) => {
+      const active = Number(b.dataset.rate) === rate;
+      b.classList.toggle('is-active', active);
+      b.setAttribute('aria-pressed', String(active));
+    });
   };
   rateBtns.forEach((btn) => {
     btn.addEventListener('click', () => setRate(Number(btn.dataset.rate)), { signal: ac.signal });

@@ -1,5 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createMultiTrackPlayer, syncStep } from '../src/components/pipeline/MultiTrackPlayer.js';
+import { createMetronomeClick } from '../src/lib/metronomeClick.js';
+
+// Mockeado para verificar destroy()->stop() sin construir un AudioContext real
+// (jsdom no lo implementa). El resto de tests del archivo no pasan `beats`,
+// así que nunca invocan este mock — no afecta ninguna otra suite.
+vi.mock('../src/lib/metronomeClick.js', () => ({
+  createMetronomeClick: vi.fn(() => ({
+    setMuted: vi.fn(),
+    isMuted: vi.fn(() => true),
+    stop: vi.fn(),
+  })),
+}));
 
 function makeTracks() {
   return [
@@ -523,6 +535,45 @@ describe('createMultiTrackPlayer — tira de práctica (Task 4)', () => {
     expect(metro.textContent).toContain('96');
     expect(metro.textContent).toContain('3/4');
     p.destroy();
+  });
+
+  it('loop: dentro de tick(), al pasar endMs vuelve TODAS las pistas a startMs; dentro del rango no hace seek', () => {
+    const structure = { segments: [{ label: 'verso', startMs: 0, endMs: 30000 }] };
+    const p = createMultiTrackPlayer({ tracks: makeTracks(), structure });
+    document.body.appendChild(p.el);
+    const audios = p.el.querySelectorAll('audio');
+
+    // Chip del segmento 0 ya activo por el updateActiveChip(0) de init.
+    p.els.practice.querySelector('.mtp__loop').click();
+    p.el.querySelector('.mtp__play').click();
+    const tickFn = window.requestAnimationFrame.mock.calls[0][0];
+
+    // Control: dentro del segmento, el tick no reescribe currentTime.
+    audios.forEach((a) => {
+      a.currentTime = 15;
+    });
+    tickFn();
+    audios.forEach((a) => expect(a.currentTime).toBe(15));
+
+    // Pasó endMs (30s): loopSeekTarget dispara seekAll a startMs/1000 (0).
+    audios[0].currentTime = 30.5;
+    tickFn();
+    audios.forEach((a) => expect(a.currentTime).toBe(0));
+
+    p.destroy();
+  });
+
+  it('destroy() detiene el metrónomo (metronome.stop())', () => {
+    const p = createMultiTrackPlayer({
+      tracks: makeTracks(),
+      structure: null,
+      beats: [0, 500, 1000],
+    });
+    const instance = createMetronomeClick.mock.results.at(-1).value;
+
+    p.destroy();
+
+    expect(instance.stop).toHaveBeenCalled();
   });
 });
 

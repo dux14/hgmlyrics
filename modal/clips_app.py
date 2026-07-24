@@ -199,7 +199,7 @@ def _cut_clip(src_path: str, start_ms: int, end_ms: int) -> str:
         "-t", f"{dur_s:.3f}",
         "-i", src_path,
         "-af",
-        f"afade=t=in:st=0:d={fade_s:.3f},afade=t=out:st={fade_out_start:.3f}:d={fade_s:.3f}",
+        f"afade=t=in:st=0:d={fade_s:.4f},afade=t=out:st={fade_out_start:.4f}:d={fade_s:.4f}",
         "-c:a", "libmp3lame", "-b:a", "192k",
         out_path,
     ]

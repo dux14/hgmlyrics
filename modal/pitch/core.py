@@ -177,6 +177,12 @@ def note_events_from_f0(times, f0, conf, *, conf_threshold=0.5, min_note_sec=0.0
     return result
 
 
+# Umbral de cobertura compartido (30%) entre fuse_syllables_notes (fraccion de
+# la SILABA cubierta por la mejor nota) y orphan_note_spans (fraccion de la
+# NOTA cubierta por la union de silabas) — mismo valor, bases distintas.
+_COVERAGE_MIN_FRACTION = 0.3
+
+
 def fuse_syllables_notes(syllables, note_events, use_flats=False):
     """
     syllables: [{"text","start","end"}] en orden temporal (in-place: añade
@@ -202,7 +208,7 @@ def fuse_syllables_notes(syllables, note_events, use_flats=False):
                 best_overlap = overlap
                 best_ev = ev
 
-        if best_ev is None or (dur > 0 and best_overlap < 0.3 * dur):
+        if best_ev is None or (dur > 0 and best_overlap < _COVERAGE_MIN_FRACTION * dur):
             syl["blank"] = True
             syl["note"] = None
             syl["midi"] = None
@@ -264,20 +270,40 @@ def orphan_note_spans(note_events, syllables, min_s=3.0) -> list:
     """Tramos [startMs,endMs] con eventos de nota que ninguna sílaba cubre y
     duran al menos min_s. Puro, sin I/O.
 
-    Un evento esta "cubierto" si solapa (overlap>0) con alguna silaba. Los
-    eventos no cubiertos se funden en tramos contiguos (por start ascendente,
-    fundiendo eventos que se solapan o se tocan entre si); cada tramo final se
-    reporta solo si su duracion >= min_s. `note_events`/`syllables` estan en
-    segundos; la salida convierte a ms.
+    Un evento esta "cubierto" si la UNION de sus solapamientos con todas las
+    silabas alcanza al menos _COVERAGE_MIN_FRACTION de la duracion del evento
+    (union, no el maximo de un solo solapamiento: varias silabas cortas
+    consecutivas si cubren una nota larga). Los eventos no cubiertos se funden
+    en tramos contiguos (por start ascendente, fundiendo eventos que se
+    solapan o se tocan entre si); cada tramo final se reporta solo si su
+    duracion >= min_s. `note_events`/`syllables` estan en segundos; la salida
+    convierte a ms.
     """
     if not note_events:
         return []
 
     def _covered(ev):
+        dur = ev["end"] - ev["start"]
+        if dur <= 0:
+            return False
+        intervals = []
         for syl in syllables:
-            if min(ev["end"], syl["end"]) - max(ev["start"], syl["start"]) > 0:
-                return True
-        return False
+            lo = max(ev["start"], syl["start"])
+            hi = min(ev["end"], syl["end"])
+            if hi > lo:
+                intervals.append((lo, hi))
+        if not intervals:
+            return False
+        intervals.sort()
+        merged = [intervals[0]]
+        for lo, hi in intervals[1:]:
+            plo, phi = merged[-1]
+            if lo <= phi:
+                merged[-1] = (plo, max(phi, hi))
+            else:
+                merged.append((lo, hi))
+        covered = sum(hi - lo for lo, hi in merged)
+        return covered >= _COVERAGE_MIN_FRACTION * dur
 
     spans = []
     cur_start = cur_end = None

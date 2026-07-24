@@ -11,6 +11,7 @@
  */
 import { createHash } from 'node:crypto';
 import { suggestLineBreaks } from './phrasing.js';
+import { collapseSegments } from './structureShape.js';
 
 // Umbral de largo para el gate karaoke (Task 14): un renglón más largo que
 // esto no cabe bien en el roll de letra sincronizada y se auto-parte.
@@ -187,7 +188,7 @@ export function buildReviewDoc({ transcription, structureSegments = [] }) {
   const allWords = transcription?.words ?? [];
   const wordsPerTransIndex = wordsByTransIndex(transLines, allWords);
 
-  let sections = lyricSectionsFromSegments(structureSegments);
+  let sections = lyricSectionsFromSegments(collapseSegments(structureSegments));
   if (sections.length === 0) {
     const lastWord = allWords[allWords.length - 1];
     sections = [{ type: 'verse', label: null, startMs: 0, endMs: lastWord?.endMs ?? 0, lines: [] }];

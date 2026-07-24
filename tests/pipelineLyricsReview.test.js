@@ -44,6 +44,21 @@ describe('buildReviewDoc v2', () => {
     });
   });
 
+  it('colapsa la sobre-segmentación antes de armar las secciones', () => {
+    const doc = buildReviewDoc({
+      transcription: trans([
+        { text: 'canto uno', words: [[11000, 11500, 0.9], [11600, 12000, 0.9]] },
+        { text: 'canto dos', words: [[25000, 25500, 0.9], [25600, 26000, 0.9]] },
+      ]),
+      structureSegments: [
+        { label: 'coro', startMs: 10000, endMs: 24000 },
+        { label: 'coro', startMs: 24000, endMs: 38000 },
+      ],
+    });
+    expect(doc.sections).toHaveLength(1);
+    expect(doc.sections[0].lines.map((l) => l.text)).toEqual(['canto uno', 'canto dos']);
+  });
+
   it('confidence = promedio del score por palabra (round4), ignorando scores null', () => {
     const doc = buildReviewDoc({
       transcription: trans([{ text: 'una dos tres', words: [[0, 100, 0.9], [110, 200, null], [210, 300, 0.6]] }]),

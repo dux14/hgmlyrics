@@ -260,6 +260,50 @@ def detect_modulations(note_events, *, window_sec=4.0, threshold_semitones=3, us
     return mods
 
 
+def orphan_note_spans(note_events, syllables, min_s=3.0) -> list:
+    """Tramos [startMs,endMs] con eventos de nota que ninguna sílaba cubre y
+    duran al menos min_s. Puro, sin I/O.
+
+    Un evento esta "cubierto" si solapa (overlap>0) con alguna silaba. Los
+    eventos no cubiertos se funden en tramos contiguos (por start ascendente,
+    fundiendo eventos que se solapan o se tocan entre si); cada tramo final se
+    reporta solo si su duracion >= min_s. `note_events`/`syllables` estan en
+    segundos; la salida convierte a ms.
+    """
+    if not note_events:
+        return []
+
+    def _covered(ev):
+        for syl in syllables:
+            if min(ev["end"], syl["end"]) - max(ev["start"], syl["start"]) > 0:
+                return True
+        return False
+
+    spans = []
+    cur_start = cur_end = None
+    for ev in sorted(note_events, key=lambda e: e["start"]):
+        if _covered(ev):
+            if cur_start is not None:
+                spans.append((cur_start, cur_end))
+                cur_start = cur_end = None
+            continue
+        if cur_start is None:
+            cur_start, cur_end = ev["start"], ev["end"]
+        elif ev["start"] <= cur_end:
+            cur_end = max(cur_end, ev["end"])
+        else:
+            spans.append((cur_start, cur_end))
+            cur_start, cur_end = ev["start"], ev["end"]
+    if cur_start is not None:
+        spans.append((cur_start, cur_end))
+
+    return [
+        {"startMs": round(start * 1000), "endMs": round(end * 1000)}
+        for start, end in spans
+        if end - start >= min_s
+    ]
+
+
 # ── M5: ensamblado de voces sin letra (genero/coro) ─────────────────────────
 # Orden canonico para voices_present: fijo, no depende del orden de llegada de
 # los webhooks (gender y choir corren en paralelo).

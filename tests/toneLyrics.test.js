@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../src/lib/icons.js', () => ({ icon: vi.fn(() => '') }));
 
@@ -247,6 +247,38 @@ describe('ToneLyrics — setActiveTime', () => {
     window.matchMedia = vi.fn().mockReturnValue({ matches: true });
     const { setActiveTime } = createToneLyrics({ analysis: makeAnalysis() });
     expect(() => setActiveTime(0.35)).not.toThrow();
+  });
+});
+
+describe('ToneLyrics — cleanup del rAF (spring del roll)', () => {
+  beforeEach(() => {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: false });
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('destroy() cancela el rAF pendiente del loop del spring, sin dejarlo huérfano', () => {
+    const { setActiveTime, destroy } = createToneLyrics({ analysis: makeAnalysis() });
+    setActiveTime(0.6);
+    expect(window.requestAnimationFrame).toHaveBeenCalled();
+    destroy();
+    expect(window.cancelAnimationFrame).toHaveBeenCalled();
+  });
+
+  it('tras destroy(), setActiveTime no lanza ni toca el DOM', () => {
+    const { setActiveTime, destroy, el } = createToneLyrics({ analysis: makeAnalysis() });
+    setActiveTime(0.6);
+    destroy();
+    const htmlBefore = el.innerHTML;
+    expect(() => setActiveTime(31)).not.toThrow();
+    expect(el.innerHTML).toBe(htmlBefore);
   });
 });
 

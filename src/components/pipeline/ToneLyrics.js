@@ -106,6 +106,13 @@ export function createToneLyrics({
   const ac = new AbortController();
   let destroyed = false;
   let lastActiveLineEl = null;
+  let lastActiveIdx = -1;
+
+  // Se consulta una sola vez al crear el componente: si el usuario cambia la
+  // preferencia en vivo (raro) el roll no reacciona hasta el próximo mount —
+  // aceptable, evita re-consultar matchMedia en cada retargetScroll (~4Hz).
+  const prefersReducedMotion =
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
   const voicesPresent = Array.isArray(analysis?.voices_present) ? analysis.voices_present : [];
   const baseKey = voicesPresent.find((k) => analysis?.voices?.[k]?.lines?.length);
@@ -216,8 +223,6 @@ export function createToneLyrics({
   // camino. En jsdom (tests) clientHeight/offsetTop son 0 → targetY termina
   // en 0, no crashea, solo no hay animación real que verificar.
   function retargetScroll(lineEl) {
-    const prefersReducedMotion =
-      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     const viewportH = el.clientHeight;
     const centerY = lineEl.offsetTop + lineEl.offsetHeight / 2;
     const targetY = viewportH * 0.4 - centerY;
@@ -280,19 +285,26 @@ export function createToneLyrics({
     // no tocamos clases de distancia ni el scroll, el roll queda donde está.
     if (activeIdx === -1) return;
 
-    lineCache.forEach(({ lineEl }, idx) => {
-      lineEl.classList.remove(...DIST_CLASSES);
-      const d = Math.abs(idx - activeIdx);
-      lineEl.classList.add(
-        d === 0
-          ? DIST_CLASSES[0]
-          : d === 1
-            ? DIST_CLASSES[1]
-            : d === 2
-              ? DIST_CLASSES[2]
-              : DIST_CLASSES[3],
-      );
-    });
+    // La distancia relativa de todas las líneas solo cambia cuando cambia la
+    // línea activa: sin este gate, setActiveTime (llamada ~4Hz en cada
+    // timeupdate) re-escribiría classList en TODAS las líneas en cada tick
+    // aunque la activa siga siendo la misma.
+    if (activeIdx !== lastActiveIdx) {
+      lastActiveIdx = activeIdx;
+      lineCache.forEach(({ lineEl }, idx) => {
+        lineEl.classList.remove(...DIST_CLASSES);
+        const d = Math.abs(idx - activeIdx);
+        lineEl.classList.add(
+          d === 0
+            ? DIST_CLASSES[0]
+            : d === 1
+              ? DIST_CLASSES[1]
+              : d === 2
+                ? DIST_CLASSES[2]
+                : DIST_CLASSES[3],
+        );
+      });
+    }
 
     if (activeLineEl !== lastActiveLineEl) {
       lastActiveLineEl = activeLineEl;

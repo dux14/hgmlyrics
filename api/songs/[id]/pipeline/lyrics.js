@@ -27,6 +27,7 @@ import {
   runStatusFromPhases,
 } from '../../../_lib/pipeline/state.js';
 import { dispatchPhase } from './_dispatch.js';
+import { deleteSongAudioObject } from '../../../_lib/storage.js';
 
 // El default de Vercel (10s) no alcanza para el approve: la tx (steps 1-5) +
 // el dispatch post-commit a Modal (sync+pitch, cold start incluido) pueden
@@ -405,6 +406,15 @@ async function approveGate(res, songId) {
         status = ${runStatus}, updated_at = now()
       WHERE id = ${run.id}
     `;
+    // Key que este swap va a pisar: si apunta a otro objeto (el caso típico es
+    // <songId>/full.mp3, del flujo manual de audio) queda sin ninguna
+    // referencia y ninguna ruta de purga la alcanza — ni el DELETE del
+    // pipeline ni el cron de limpieza (H7 de la auditoría del 24-jul).
+    const prevAudio = await tx`
+      SELECT storage_key AS "storageKey" FROM song_audio WHERE song_id = ${songId}
+    `;
+    const prevAudioKey = prevAudio[0]?.storageKey ?? null;
+
     // Swap de audio: el mp3 completo del run (ya validado en confirm.js) pasa
     // a ser el oficial de la canción — dispatchPitch/dispatchClips (mas abajo,
     // post-commit) leen song_audio, no el run.
@@ -414,12 +424,22 @@ async function approveGate(res, songId) {
       ON CONFLICT (song_id) DO UPDATE SET storage_key = EXCLUDED.storage_key, duration_sec = EXCLUDED.duration_sec
     `;
 
-    return { ok: true, run: { ...run, phases: nextPhases, lyricsReview: nextLyricsReview } };
+    return {
+      ok: true,
+      prevAudioKey,
+      run: { ...run, phases: nextPhases, lyricsReview: nextLyricsReview },
+    };
   });
 
   if (!claim.ok) {
     res.status(claim.status).json({ error: claim.error });
     return;
+  }
+
+  // Best-effort post-commit: un fallo borrando el objeto viejo no puede tumbar
+  // un approve ya commiteado (mismo criterio que la purga del pipeline).
+  if (claim.prevAudioKey && claim.prevAudioKey !== claim.run.inputPath) {
+    await deleteSongAudioObject(claim.prevAudioKey).catch(() => {});
   }
 
   // En paralelo: cada dispatch aisla su propio fallo (dispatchDerivedPhase

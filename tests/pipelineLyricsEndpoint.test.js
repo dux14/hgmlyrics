@@ -7,10 +7,14 @@ vi.mock('../api/_lib/auth.js', () => ({
 vi.mock('../api/songs/[id]/pipeline/_dispatch.js', () => ({
   dispatchPhase: vi.fn(async () => ({ id: 'call1' })),
 }));
+vi.mock('../api/_lib/storage.js', () => ({
+  deleteSongAudioObject: vi.fn(async () => {}),
+}));
 
 import sql from '../api/_lib/db.js';
 import { requireAdmin } from '../api/_lib/auth.js';
 import { dispatchPhase } from '../api/songs/[id]/pipeline/_dispatch.js';
+import { deleteSongAudioObject } from '../api/_lib/storage.js';
 import { initialPhases } from '../api/_lib/pipeline/state.js';
 import lyricsHandler, { timingLinesFromSections } from '../api/songs/[id]/pipeline/lyrics.js';
 import { makeRes } from './helpers/makeRes.js';
@@ -19,6 +23,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   requireAdmin.mockResolvedValue({ id: 'admin1', email: 'a@a.com' });
   dispatchPhase.mockResolvedValue({ id: 'call1' });
+  deleteSongAudioObject.mockResolvedValue(undefined);
 });
 
 function routeSql(handlers) {
@@ -787,6 +792,69 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(insertedAudio).toContain('s1/runs/r1/full.mp3');
     expect(insertedAudio).toContain(null);
+  });
+
+  it('borra del storage el audio anterior al hacer el swap (H7)', async () => {
+    routeSql([
+      [
+        'AS "lyricsReview"',
+        [
+          runRow({
+            inputPath: 'runs/r1/full.mp3',
+            lyricsReview: { review: approvableReviewV2() },
+          }),
+        ],
+      ],
+      ['SELECT storage_key AS "storageKey"', [{ storageKey: 's1/full.mp3' }]],
+      ['lyrics_review = ', { count: 1 }],
+      ['INSERT INTO song_audio', { count: 1 }],
+    ]);
+    const res = makeRes();
+    await lyricsHandler({ method: 'POST', query: { id: 's1' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(deleteSongAudioObject).toHaveBeenCalledWith('s1/full.mp3');
+  });
+
+  it('no borra nada si el audio anterior ya era el input de este run (H7)', async () => {
+    routeSql([
+      [
+        'AS "lyricsReview"',
+        [
+          runRow({
+            inputPath: 'runs/r1/full.mp3',
+            lyricsReview: { review: approvableReviewV2() },
+          }),
+        ],
+      ],
+      ['SELECT storage_key AS "storageKey"', [{ storageKey: 'runs/r1/full.mp3' }]],
+      ['lyrics_review = ', { count: 1 }],
+      ['INSERT INTO song_audio', { count: 1 }],
+    ]);
+    const res = makeRes();
+    await lyricsHandler({ method: 'POST', query: { id: 's1' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(deleteSongAudioObject).not.toHaveBeenCalled();
+  });
+
+  it('sin fila previa en song_audio no borra nada (H7)', async () => {
+    routeSql([
+      [
+        'AS "lyricsReview"',
+        [
+          runRow({
+            inputPath: 'runs/r1/full.mp3',
+            lyricsReview: { review: approvableReviewV2() },
+          }),
+        ],
+      ],
+      ['SELECT storage_key AS "storageKey"', []],
+      ['lyrics_review = ', { count: 1 }],
+      ['INSERT INTO song_audio', { count: 1 }],
+    ]);
+    const res = makeRes();
+    await lyricsHandler({ method: 'POST', query: { id: 's1' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(deleteSongAudioObject).not.toHaveBeenCalled();
   });
 
   it('el fallo de dispatch (pitch) NO rompe la respuesta 200; la fase queda failed', async () => {

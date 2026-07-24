@@ -259,7 +259,7 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
    * @param {{rowEl?: HTMLElement|null}} [opts]
    */
   async function runAction(action, { rowEl = null } = {}) {
-    if (state.busy) return;
+    if (state.busy || state.previewOpen) return;
     state.busy = true;
     lockControls();
     if (rowEl && !reduceMotion()) {
@@ -269,25 +269,44 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
     await performAction(action);
   }
 
+  /** Pausa el `<audio>` del preview antes de quitarlo del DOM: sacar un
+   * <audio> del árbol no detiene la reproducción por sí solo (mismo patrón
+   * que `destroy()` en MultiTrackPlayer.js). */
+  function pausePreviewAudio(preview) {
+    preview?.querySelector('.lps__audio')?.pause();
+  }
+
   /** Abre el paso de confirmación (Task 13): el approve nunca se dispara
-   * directo desde el botón del panel, siempre pasa por el reparto final. */
+   * directo desde el botón del panel, siempre pasa por el reparto final.
+   * Bloquea el panel mientras el preview está abierto (`previewOpen`, leído
+   * por runAction/startEditLine) para que editar detrás no lo destruya al
+   * reemplazar `el.innerHTML` en el próximo render(); también evita abrir
+   * un segundo `.lps` si ya hay uno montado. */
   function openPreview() {
-    if (!state.canApprove) return;
+    if (!state.canApprove || state.busy || state.previewOpen) return;
+    state.previewOpen = true;
+    lockControls();
     const preview = LyricsPreviewStep({
       doc: state.review,
       vocalsUrl: state.vocalsUrl ?? null,
       onConfirm: confirmApprove,
       onBack: () => {
+        pausePreviewAudio(preview);
         preview.remove();
+        state.previewOpen = false;
         el.querySelector('.lrp__approve')?.focus();
       },
     });
     el.append(preview);
     preview.scrollIntoView?.({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' });
+    preview.focus?.();
   }
 
   async function confirmApprove() {
-    el.querySelector('.lps')?.remove();
+    const preview = el.querySelector('.lps');
+    pausePreviewAudio(preview);
+    preview?.remove();
+    state.previewOpen = false;
     if (state.busy) return;
     state.busy = true;
     lockControls();
@@ -304,7 +323,7 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
 
   /** Reemplaza el texto de la fila por un input editable + Guardar/Cancelar. */
   function startEditLine(rowEl) {
-    if (state.busy) return;
+    if (state.busy || state.previewOpen) return;
     const sIdx = Number(rowEl.dataset.section);
     const lIdx = Number(rowEl.dataset.line);
     const line = state.review.sections[sIdx].lines[lIdx];

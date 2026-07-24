@@ -377,6 +377,77 @@ describe('LyricsReviewPanel', () => {
     await vi.waitFor(() => expect(approveLyrics).toHaveBeenCalledTimes(1));
   });
 
+  it('con el preview abierto, el panel queda bloqueado: togglear vocalización no lo destruye ni despacha la acción', async () => {
+    getLyricsReview.mockResolvedValue(pendingResult({ canApprove: true }));
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    el.querySelector('.lrp__approve').click();
+    expect(el.querySelector('.lps')).toBeTruthy();
+
+    el.querySelector('.lrp__line-voc').click();
+    await flush();
+
+    expect(el.querySelector('.lps')).toBeTruthy();
+    expect(sendLyricsAction).not.toHaveBeenCalled();
+  });
+
+  it('clicks repetidos en Aprobar letra no apilan varias confirmaciones', async () => {
+    getLyricsReview.mockResolvedValue(pendingResult({ canApprove: true }));
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const approveBtn = el.querySelector('.lrp__approve');
+    approveBtn.click();
+    approveBtn.click();
+
+    expect(el.querySelectorAll('.lps').length).toBe(1);
+  });
+
+  it('el audio del preview se pausa al volver a editar', async () => {
+    getLyricsReview.mockResolvedValue(
+      pendingResult({ canApprove: true, vocalsUrl: 'https://example.com/vocals.mp3' }),
+    );
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    el.querySelector('.lrp__approve').click();
+    const audio = el.querySelector('.lps__audio');
+    const pauseSpy = vi.spyOn(audio, 'pause');
+
+    el.querySelector('.lps__back').click();
+
+    expect(pauseSpy).toHaveBeenCalled();
+  });
+
+  it('el audio del preview se pausa al confirmar el approve', async () => {
+    getLyricsReview.mockResolvedValue(
+      pendingResult({ canApprove: true, vocalsUrl: 'https://example.com/vocals.mp3' }),
+    );
+    approveLyrics.mockResolvedValue({ success: true });
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    el.querySelector('.lrp__approve').click();
+    const audio = el.querySelector('.lps__audio');
+    const pauseSpy = vi.spyOn(audio, 'pause');
+
+    el.querySelector('.lps__confirm').click();
+    await flush();
+
+    expect(pauseSpy).toHaveBeenCalled();
+  });
+
+  it('abrir la confirmación mueve el foco dentro de ella', async () => {
+    getLyricsReview.mockResolvedValue(pendingResult({ canApprove: true }));
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    el.querySelector('.lrp__approve').click();
+
+    expect(document.activeElement).toBe(el.querySelector('.lps'));
+  });
+
   it('volver a editar cierra la confirmación sin aprobar', async () => {
     getLyricsReview.mockResolvedValue(pendingResult({ canApprove: true }));
 

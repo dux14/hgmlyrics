@@ -150,6 +150,7 @@ body.chrome-hidden .main {
    por runAction() en el JS a esta misma fila). */
 .lrp__line-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--space-sm);
   margin: 0 calc(-1 * var(--space-sm));
@@ -258,11 +259,13 @@ body.chrome-hidden .main {
   border-color: color-mix(in oklch, var(--color-accent-2) 40%, transparent);
 }
 
+/* `.lrp__line-row` es flex con wrap (no grid): esta fila cae debajo del
+   texto/confianza/acciones forzando su propio ancho de línea completo. */
 .lrp__suggest {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  grid-column: 1 / -1;
+  flex-basis: 100%;
   font-size: 0.875rem;
   color: var(--color-text-secondary);
 }

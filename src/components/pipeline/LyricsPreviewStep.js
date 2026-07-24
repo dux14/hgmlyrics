@@ -5,16 +5,8 @@
  * para editar se vuelve al panel. Sin fase nueva en la máquina de estados.
  */
 import { icon } from '../../lib/icons.js';
-import { escapeHtml } from '../../lib/escape.js';
-
-const SECTION_LABELS = {
-  intro: 'Intro',
-  verse: 'Verso',
-  chorus: 'Estribillo',
-  bridge: 'Puente',
-  prechorus: 'Pre-estribillo',
-  outro: 'Outro',
-};
+import { escapeHtml, safeUrl } from '../../lib/escape.js';
+import { SECTION_TYPE_LABELS, normalizeSectionType } from '../../lib/sectionTypes.js';
 
 function secondsLabel(startMs, endMs) {
   if (startMs === null || endMs === null) return '';
@@ -28,6 +20,9 @@ function secondsLabel(startMs, endMs) {
 export function LyricsPreviewStep({ doc, vocalsUrl, onConfirm, onBack }) {
   const el = document.createElement('section');
   el.className = 'lps';
+  // Foco programático al abrir el paso (regresión de teclado/lector de
+  // pantalla si el approve monta esto y no mueve el foco a ningún lado).
+  el.setAttribute('tabindex', '-1');
 
   const sectionsHtml = (doc?.sections ?? [])
     .map((section, sIdx) => {
@@ -35,13 +30,13 @@ export function LyricsPreviewStep({ doc, vocalsUrl, onConfirm, onBack }) {
       const linesHtml = (section.lines ?? [])
         .map(
           (line, lIdx) =>
-            `<p class="lps__line" data-section="${sIdx}" data-line="${lIdx}" data-start="${line.startMs ?? ''}" data-end="${line.endMs ?? ''}">${escapeHtml(line.text)}</p>`
+            `<p class="lps__line" data-section="${sIdx}" data-line="${lIdx}" data-start="${line.startMs ?? ''}" data-end="${line.endMs ?? ''}">${escapeHtml(line.text)}</p>`,
         )
         .join('');
       return `
         <div class="lps__section${instrumental ? ' lps__section--instrumental' : ''}">
           <h3 class="lps__section-title">
-            ${escapeHtml(section.label || SECTION_LABELS[section.type] || 'Sección')}
+            ${escapeHtml(section.label || SECTION_TYPE_LABELS[normalizeSectionType(section.type)] || 'Sección')}
             <span class="lps__section-meta">${secondsLabel(section.startMs, section.endMs)}</span>
           </h3>
           ${instrumental ? '<p class="lps__instrumental">Sin letra — tramo instrumental</p>' : linesHtml}
@@ -54,7 +49,7 @@ export function LyricsPreviewStep({ doc, vocalsUrl, onConfirm, onBack }) {
       <h2 class="lps__title">Confirmar el reparto de la letra</h2>
       <p class="lps__hint">Revisa secciones, cortes y tiempos antes de aprobar.</p>
     </header>
-    ${vocalsUrl ? `<audio class="lps__audio" controls preload="metadata" src="${escapeHtml(vocalsUrl)}"></audio>` : ''}
+    ${vocalsUrl ? `<audio class="lps__audio" controls preload="metadata" src="${escapeHtml(safeUrl(vocalsUrl) || '')}"></audio>` : ''}
     <div class="lps__sections">${sectionsHtml}</div>
     <footer class="lps__actions">
       <button type="button" class="btn2 lps__back">${icon('arrow-left', { size: 14 })} Volver a editar</button>

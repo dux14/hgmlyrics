@@ -212,7 +212,7 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
    */
   function lockControls() {
     el.querySelectorAll(
-      '.lrp__line-edit, .lrp__edit-save, .lrp__edit-cancel, .lrp__line-voc, .lrp__line-up, .lrp__line-down, .lrp__line-delete, .lrp__split, .lrp__merge, .lrp__approve, .lrp__type-select, .lrp__rename-input, .lrp__section-merge, .lrp__section-split, .lrp__suggest-accept',
+      '.lrp__line-edit, .lrp__edit-save, .lrp__edit-cancel, .lrp__line-voc, .lrp__line-up, .lrp__line-down, .lrp__line-delete, .lrp__split, .lrp__merge, .lrp__approve, .lrp__type-select, .lrp__rename-input, .lrp__section-merge, .lrp__section-split, .lrp__suggest-accept, .lrp__language-select',
     ).forEach((btn) => {
       btn.disabled = true;
     });
@@ -503,6 +503,10 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
     });
 
     el.querySelector('.lrp__approve')?.addEventListener('click', openPreview);
+
+    el.querySelector('.lrp__language-select')?.addEventListener('change', (ev) =>
+      runAction({ type: 'setLanguage', language: ev.target.value }),
+    );
   }
 
   /**
@@ -541,6 +545,10 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
           .join('')}
       </div>
       <div class="lrp__footer">
+        <select class="lrp__language-select" aria-label="Idioma de la letra"${disabled ? ' disabled' : ''}>
+          <option value="es"${(state.review.language ?? 'es') === 'es' ? ' selected' : ''}>Español</option>
+          <option value="en"${state.review.language === 'en' ? ' selected' : ''}>Inglés</option>
+        </select>
         <button type="button" class="btn lrp__approve"${state.canApprove && !disabled ? '' : ' disabled'}>Aprobar letra</button>
       </div>`;
     bind();

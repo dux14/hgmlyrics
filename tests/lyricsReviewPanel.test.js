@@ -698,6 +698,31 @@ describe('LyricsReviewPanel', () => {
     expect(el.querySelector('.lrp__edit-input')).toBeNull();
   });
 
+  it('el selector de idioma despacha setLanguage con "en" y refleja el valor del doc', async () => {
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const select = el.querySelector('.lrp__language-select');
+    expect(select).not.toBeNull();
+    expect(select.value).toBe('es');
+
+    select.value = 'en';
+    select.dispatchEvent(new Event('change'));
+    await flush();
+
+    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
+      type: 'setLanguage',
+      language: 'en',
+    });
+
+    const review = baseReview();
+    review.language = 'en';
+    getLyricsReview.mockResolvedValue({ review, canApprove: false, suggestions: [] });
+    const el2 = await LyricsReviewPanel({ songId: 'song-2' });
+    document.body.appendChild(el2);
+    expect(el2.querySelector('.lrp__language-select').value).toBe('en');
+  });
+
   it('muestra un mensaje de error si falla la carga inicial, sin crashear', async () => {
     getLyricsReview.mockRejectedValueOnce(new Error('No se pudo cargar la revisión de letra'));
 

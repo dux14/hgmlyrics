@@ -2,21 +2,29 @@
  * lyricsStore.js — acceso a song_pipeline_lyrics (letra IA-independiente del
  * pipeline, spec 2026-07-23). Los helpers reciben el cliente postgres.js
  * (sql o tx) como primer argumento: approveGate los usa dentro de su
- * transacción y los tests inyectan un fake. Sin lógica de dominio acá.
+ * transacción y los tests inyectan un fake. También vive acá la proyección
+ * pura del snapshot del store (timingLinesFromSections/pipelineLinesFor):
+ * es su hogar natural (proyectan lo que este módulo persiste) y ponerla acá
+ * evita un ciclo de imports con api/songs/[id]/pipeline/lyrics.js, que
+ * también consume upsertPipelineLyrics/getPipelineLyrics (Task 2.2).
  */
+import { isNil } from './lyricsReview.js';
 
 /**
- * Upsert de la letra aprobada del pipeline (una fila por canción).
+ * Upsert de la letra aprobada del pipeline (una fila por canción). `language`
+ * cae a 'es' si el documento no lo trae (columna con default 'es', pero el
+ * INSERT explícito no puede depender del default de la tabla si algún día
+ * cambia).
  * @param {Function} sql cliente postgres.js (sql o tx)
- * @param {{songId:string, runId:string|null, sections:Array, hash:string}} args
+ * @param {{songId:string, runId:string|null, sections:Array, hash:string, language?:string}} args
  */
-export function upsertPipelineLyrics(sql, { songId, runId, sections, hash }) {
+export function upsertPipelineLyrics(sql, { songId, runId, sections, hash, language }) {
   return sql`
-    INSERT INTO song_pipeline_lyrics (song_id, run_id, sections, hash, approved_at)
-    VALUES (${songId}, ${runId}, ${sql.json(sections)}, ${hash}, now())
+    INSERT INTO song_pipeline_lyrics (song_id, run_id, sections, hash, language, approved_at)
+    VALUES (${songId}, ${runId}, ${sql.json(sections)}, ${hash}, ${language ?? 'es'}, now())
     ON CONFLICT (song_id) DO UPDATE
       SET run_id = EXCLUDED.run_id, sections = EXCLUDED.sections,
-        hash = EXCLUDED.hash, approved_at = EXCLUDED.approved_at
+        hash = EXCLUDED.hash, language = EXCLUDED.language, approved_at = EXCLUDED.approved_at
   `;
 }
 
@@ -33,4 +41,92 @@ export async function getPipelineLyrics(sql, songId) {
     FROM song_pipeline_lyrics WHERE song_id = ${songId}
   `;
   return rows[0] ?? null;
+}
+
+// Score valido solo si es number Y cae en [0,1] (mismo criterio que
+// api/align/webhook.js:177); fuera de rango o no-numerico -> null.
+function clampScore(line) {
+  const c = line.confidence;
+  return typeof c === 'number' && c >= 0 && c <= 1 ? c : null;
+}
+
+/** Proyeccion plana {i, startMs, score, interpolated} de las sections del
+ * store para el shim song_line_timings. i = posicion plana (misma semantica
+ * incremental que projectLines). Renglon sin timing: reparte proporcional
+ * dentro del hueco entre la vecina anterior conocida (`prev`/`nextKnown`,
+ * vecinos en `known[]`) y la siguiente; monotonia estricta (nunca <=
+ * `prevEmitted`, el ULTIMO valor YA EMITIDO) se aplica despues como red de
+ * seguridad — son dos marcos de referencia distintos a proposito: uno mira
+ * los datos crudos, el otro lo que ya se decidio emitir.
+ * (Task 2.2: movida acá desde api/songs/[id]/pipeline/lyrics.js para que
+ * pipelineLinesFor la reuse sin ciclo de imports; lyrics.js y audio.js la
+ * importan de acá.) */
+export function timingLinesFromSections(sections) {
+  const flat = sections.flatMap((s) => s.lines);
+  const known = flat.map((l) => l.manualStartMs ?? l.startMs);
+  const lines = [];
+  let i = 0;
+  while (i < flat.length) {
+    if (!isNil(known[i])) {
+      let startMs = known[i];
+      // Monotonia estricta: nunca <= al ULTIMO valor ya emitido (prevEmitted),
+      // aplica igual a renglones con timing real (ej. dos startMs iguales).
+      const prevEmitted = lines[lines.length - 1];
+      if (prevEmitted && startMs <= prevEmitted.startMs) startMs = prevEmitted.startMs + 1;
+      lines.push({ i, startMs, score: clampScore(flat[i]), interpolated: false });
+      i += 1;
+      continue;
+    }
+    // Hueco: [i, gapEnd) son todos nulos. gapEnd es el primer índice conocido
+    // (o flat.length si el hueco llega hasta el final).
+    let gapEnd = i;
+    while (gapEnd < flat.length && isNil(known[gapEnd])) gapEnd += 1;
+    const gapLen = gapEnd - i;
+    const prev = i > 0 ? known[i - 1] : 0;
+    const nextKnown = gapEnd < flat.length ? known[gapEnd] : undefined;
+    for (let k = 0; k < gapLen; k += 1) {
+      const idx = i + k;
+      // Interior (hay endpoint real a ambos lados): reparto proporcional del
+      // hueco. Final (sin nextKnown, ej. el outro): no hay endpoint real,
+      // incrementos monotonicos simples desde prev.
+      let startMs =
+        nextKnown === undefined
+          ? prev + k + 1
+          : prev + Math.round(((nextKnown - prev) * (k + 1)) / (gapLen + 1));
+      const prevEmitted = lines[lines.length - 1];
+      if (prevEmitted && startMs <= prevEmitted.startMs) startMs = prevEmitted.startMs + 1;
+      lines.push({ i: idx, startMs, score: clampScore(flat[idx]), interpolated: true });
+    }
+    i = gapEnd;
+  }
+  return lines;
+}
+
+/**
+ * Aplana el snapshot aprobado del gate a `[{text, startMs, endMs}]` en orden
+ * de documento — el contrato que la fase pitch va a consumir como fuente
+ * única de la letra (Task 2.2; el dispatch que la enchufa es otra tarea).
+ * Pura: reusa timingLinesFromSections para el startMs de los renglones sin
+ * timing propio (mismo punto medio/monotonia estricta que ya exige
+ * validateLines). endMs sale de la última word del renglón; sin words (o sin
+ * endMs finito en la última), del startMs de la línea siguiente; en la
+ * última línea del documento, su propio startMs (el consumidor lo acota
+ * contra la duración del audio).
+ * @param {Array} sections snapshot de `song_pipeline_lyrics.sections`
+ * @returns {Array<{text:string, startMs:number, endMs:number}>}
+ */
+export function pipelineLinesFor(sections) {
+  const flat = sections.flatMap((s) => s.lines);
+  const timed = timingLinesFromSections(sections);
+  return timed.map((t, idx) => {
+    const line = flat[t.i];
+    const words = Array.isArray(line.words) ? line.words : [];
+    const lastWord = words[words.length - 1];
+    const endMs = Number.isFinite(lastWord?.endMs)
+      ? lastWord.endMs
+      : idx + 1 < timed.length
+        ? timed[idx + 1].startMs
+        : t.startMs;
+    return { text: line.text, startMs: t.startMs, endMs };
+  });
 }

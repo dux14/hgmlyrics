@@ -8,8 +8,7 @@ import {
 } from '../../_lib/storage.js';
 import { dispatchAlign } from '../../_lib/align.js';
 import { validatePatchBody, validateLineTimingShape } from '../../_lib/beats.js';
-import { getPipelineLyrics } from '../../_lib/pipeline/lyricsStore.js';
-import { timingLinesFromSections } from './pipeline/lyrics.js';
+import { getPipelineLyrics, timingLinesFromSections } from '../../_lib/pipeline/lyricsStore.js';
 
 // GET: audio completo + estado de timings para la vista inmersiva.
 async function getAudio(_req, res, songId) {

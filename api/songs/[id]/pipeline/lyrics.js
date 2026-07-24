@@ -17,11 +17,19 @@ import {
   applyReviewAction,
   canApprove,
   approvedSnapshot,
-  isNil,
 } from '../../../_lib/pipeline/lyricsReview.js';
 import { suggestLineBreaks } from '../../../_lib/pipeline/phrasing.js';
 import { seedIndex, buildTextSuggestions } from '../../../_lib/pipeline/seedLyrics.js';
-import { upsertPipelineLyrics, getPipelineLyrics } from '../../../_lib/pipeline/lyricsStore.js';
+import {
+  upsertPipelineLyrics,
+  getPipelineLyrics,
+  timingLinesFromSections,
+} from '../../../_lib/pipeline/lyricsStore.js';
+
+// Re-exportada para no romper a quien la importaba de acá (mismo símbolo,
+// movido a lyricsStore.js en Task 2.2 — ver ese módulo para la implementación
+// y el porqué del movimiento).
+export { timingLinesFromSections };
 import {
   applyPhaseEvent,
   phasesAfterLyricsEdit,
@@ -294,62 +302,6 @@ async function putGate(req, res, songId) {
   res
     .status(200)
     .json({ review: next, canApprove: canApprove(next), ...buildGateSuggestions(next, songSections) });
-}
-
-/** Proyeccion plana {i, startMs, score, interpolated} de las sections del
- * store para el shim song_line_timings. i = posicion plana (misma semantica
- * incremental que projectLines). Renglon sin timing: reparte proporcional
- * dentro del hueco entre la vecina anterior conocida (`prev`/`nextKnown`,
- * vecinos en `known[]`) y la siguiente; monotonia estricta (nunca <=
- * `prevEmitted`, el ULTIMO valor YA EMITIDO) se aplica despues como red de
- * seguridad — son dos marcos de referencia distintos a proposito: uno mira
- * los datos crudos, el otro lo que ya se decidio emitir. */
-export function timingLinesFromSections(sections) {
-  const flat = sections.flatMap((s) => s.lines);
-  const known = flat.map((l) => l.manualStartMs ?? l.startMs);
-  const lines = [];
-  let i = 0;
-  while (i < flat.length) {
-    if (!isNil(known[i])) {
-      let startMs = known[i];
-      // Monotonia estricta: nunca <= al ULTIMO valor ya emitido (prevEmitted),
-      // aplica igual a renglones con timing real (ej. dos startMs iguales).
-      const prevEmitted = lines[lines.length - 1];
-      if (prevEmitted && startMs <= prevEmitted.startMs) startMs = prevEmitted.startMs + 1;
-      lines.push({ i, startMs, score: clampScore(flat[i]), interpolated: false });
-      i += 1;
-      continue;
-    }
-    // Hueco: [i, gapEnd) son todos nulos. gapEnd es el primer índice conocido
-    // (o flat.length si el hueco llega hasta el final).
-    let gapEnd = i;
-    while (gapEnd < flat.length && isNil(known[gapEnd])) gapEnd += 1;
-    const gapLen = gapEnd - i;
-    const prev = i > 0 ? known[i - 1] : 0;
-    const nextKnown = gapEnd < flat.length ? known[gapEnd] : undefined;
-    for (let k = 0; k < gapLen; k += 1) {
-      const idx = i + k;
-      // Interior (hay endpoint real a ambos lados): reparto proporcional del
-      // hueco. Final (sin nextKnown, ej. el outro): no hay endpoint real,
-      // incrementos monotonicos simples desde prev.
-      let startMs =
-        nextKnown === undefined
-          ? prev + k + 1
-          : prev + Math.round(((nextKnown - prev) * (k + 1)) / (gapLen + 1));
-      const prevEmitted = lines[lines.length - 1];
-      if (prevEmitted && startMs <= prevEmitted.startMs) startMs = prevEmitted.startMs + 1;
-      lines.push({ i: idx, startMs, score: clampScore(flat[idx]), interpolated: true });
-    }
-    i = gapEnd;
-  }
-  return lines;
-}
-
-// Score valido solo si es number Y cae en [0,1] (mismo criterio que
-// api/align/webhook.js:177); fuera de rango o no-numerico -> null.
-function clampScore(line) {
-  const c = line.confidence;
-  return typeof c === 'number' && c >= 0 && c <= 1 ? c : null;
 }
 
 // Fases derivadas de la letra recien aprobada. Fallo de dispatch NO debe

@@ -824,6 +824,20 @@ body.chrome-hidden .main {
   margin-top: 8px;
 }
 
+/* Aviso de audio huerfano (Task 4.3): mismo ambar de "requiere revision" que
+   .confidence-summary, pero contenido en el detail de la fila pitch (sin
+   margen propio, .phase__detail ya aporta el espaciado). */
+.phase__orphan-warning {
+  padding: var(--space-sm) var(--space-md);
+  background: color-mix(in oklch, var(--color-action) 10%, var(--color-surface));
+  border-radius: var(--border-radius-md);
+}
+.phase__orphan-warning-text {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  color: var(--color-text);
+}
+
 /* Loaders inline por fase, junto al subtitulo mientras corre. */
 .ph-loader {
   display: inline-flex;

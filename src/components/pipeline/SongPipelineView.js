@@ -20,6 +20,7 @@ import {
 } from '../../lib/pipelineApi.js';
 import { showToast } from '../../lib/toast.js';
 import { fetchSongDetail } from '../../lib/store.js';
+import { getSongStudio } from '../../lib/studioApi.js';
 import { confirmDialog } from '../ConfirmDialog.js';
 import { LyricsReviewPanel } from './LyricsReviewPanel.js';
 import { PhaseRow } from './PhaseRow.js';
@@ -118,6 +119,53 @@ function createPublishToSongbookButton(songId) {
   return wrap;
 }
 
+/** m:ss de un extremo de tramo huerfano (Task 4.3), redondeado al segundo. */
+function formatSpanTime(ms) {
+  const totalSec = Math.round((ms ?? 0) / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/** Texto del aviso de audio huerfano (Task 4.3): duracion total en segundos
+ * enteros (suma de los tramos) + el rango m:ss de cada tramo. Con mas de un
+ * tramo, los rangos van separados por coma para que se entienda cuantos son
+ * y donde esta cada uno. */
+function formatOrphanSpansWarning(spans) {
+  const totalSec = Math.round(
+    spans.reduce((sum, span) => sum + Math.max(0, (span.endMs ?? 0) - (span.startMs ?? 0)), 0) /
+      1000,
+  );
+  const ranges = spans
+    .map((span) => `${formatSpanTime(span.startMs)}–${formatSpanTime(span.endMs)}`)
+    .join(', ');
+  return `Hay ${totalSec} s con notas y sin letra aprobada (${ranges})`;
+}
+
+/** Aviso de audio huerfano (Task 4.3): tramos con notas cantadas sin letra
+ * aprobada que los cubra, detectados best-effort por la app de pitch
+ * (`analysis.warnings.orphanSpans`). Informa nada mas -- la accion de
+ * reabrir el gate de letra es la MISMA que ya define describePhase para la
+ * fila Letra en estado 'done' ("Editar letra"), pasada por el llamador en
+ * vez de duplicar su confirmacion/reintento/toast. */
+function createOrphanSpansWarning(spans, onReopenLyrics) {
+  const wrap = document.createElement('div');
+  wrap.className = 'phase__orphan-warning';
+  const text = document.createElement('p');
+  text.className = 'phase__orphan-warning-text';
+  text.textContent = formatOrphanSpansWarning(spans);
+  wrap.appendChild(text);
+  if (typeof onReopenLyrics === 'function') {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'phase__action phase__action--secondary';
+    btn.textContent = 'Editar letra';
+    btn.addEventListener('click', () => onReopenLyrics('lyrics_review'));
+    wrap.appendChild(btn);
+  }
+  return wrap;
+}
+
 /**
  * @param {HTMLElement} container
  * @param {string} songId
@@ -174,6 +222,28 @@ export function renderSongPipelineView(container, songId) {
   // aprobar, porque el approve reescribe sections en el backend).
   let lastSong = null;
   let lastLyricsDone = null;
+
+  // Task 4.3: tramos de audio con notas cantadas sin letra aprobada,
+  // best-effort desde song_pitch_analysis.analysis.warnings.orphanSpans (el
+  // GET del run no trae `analysis`, self-contained como confidenceSummary).
+  // Se refetchea en el flanco pending/running/stale -> done de pitch y se
+  // descarta si pitch deja de estar 'done' (run superado), mismo criterio
+  // que ConfidenceSummary con timings.
+  let orphanSpans = null;
+  let lastPitchDone = null;
+
+  function refreshPitchAnalysis() {
+    getSongStudio(songId)
+      .then((data) => {
+        if (destroyed) return;
+        orphanSpans = data?.analysis?.warnings?.orphanSpans ?? null;
+        lastSig = null;
+        renderPhases(lastRun);
+      })
+      .catch((err) => {
+        console.error('SongPipelineView: no se pudo cargar el analisis de tono', err);
+      });
+  }
 
   // Tarjeta de subida (D3b): mount-once igual que el panel de letra, para
   // no perder su máquina de estados local (validando/advertencia/subiendo)
@@ -389,6 +459,12 @@ export function renderSongPipelineView(container, songId) {
     if (lyricsDone && lastLyricsDone === false) refreshSong();
     lastLyricsDone = lyricsDone;
 
+    // Task 4.3: mismo flanco para el analisis de tono (orphanSpans).
+    const pitchDone = run?.phases?.pitch?.status === 'done';
+    if (pitchDone && lastPitchDone === false) refreshPitchAnalysis();
+    if (!pitchDone) orphanSpans = null;
+    lastPitchDone = pitchDone;
+
     // Firma del estado relevante: si no cambió desde el último render, saltar
     // el rebuild. Evita desprender/reinsertar el nodo del panel de letra (y
     // que el input pierda foco) en cada tick del polling de 3s cuando lo
@@ -419,6 +495,12 @@ export function renderSongPipelineView(container, songId) {
     syncTuning.update(run);
     confidenceSummary.update(run);
 
+    // Task 4.3: la fila Letra (procesada antes que Tono en ROWS) es la unica
+    // que define el onRetry "Editar letra" de describePhase — se guarda para
+    // reusarlo en el aviso de audio huerfano de la fila pitch, sin duplicar
+    // confirmacion/reopenLyrics/toast.
+    let lyricsReopenAction = null;
+
     ROWS.forEach((r, i) => {
       const phase = phases[r.key] || { status: 'pending' };
       const info = describePhase(r.key, phase, run?.status, lyricsApproved);
@@ -433,6 +515,7 @@ export function renderSongPipelineView(container, songId) {
       } else if (r.key === 'sync') {
         detail = syncTuning.el;
       } else if (r.key === 'lyrics_review') {
+        if (typeof info.onRetry === 'function') lyricsReopenAction = info.onRetry;
         if (run?.status === 'awaiting_lyrics' && phase.status !== 'done') {
           if (!lyricsPanelEl && !lyricsPanelLoading) ensureLyricsPanel();
           detail = lyricsPanelEl;
@@ -441,6 +524,8 @@ export function renderSongPipelineView(container, songId) {
           lyricsPanelEl = null;
           if (phase.status === 'done') detail = createPublishToSongbookButton(songId);
         }
+      } else if (r.key === 'pitch' && Array.isArray(orphanSpans) && orphanSpans.length > 0) {
+        detail = createOrphanSpansWarning(orphanSpans, lyricsReopenAction);
       }
 
       const row = PhaseRow({

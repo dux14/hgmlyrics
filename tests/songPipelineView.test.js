@@ -119,6 +119,13 @@ vi.mock('../src/lib/store.js', () => ({
   fetchSongDetail: vi.fn(),
 }));
 
+// Task 4.3: analysis.warnings.orphanSpans llega via el GET del Estudio
+// (no via el run del pipeline), self-contained igual que ConfidenceSummary
+// con getSongAudio.
+vi.mock('../src/lib/studioApi.js', () => ({
+  getSongStudio: vi.fn(() => Promise.resolve({ analysis: null })),
+}));
+
 import { renderSongPipelineView } from '../src/components/pipeline/SongPipelineView.js';
 import {
   watchPipelineRun,
@@ -130,6 +137,7 @@ import { LyricsReviewPanel } from '../src/components/pipeline/LyricsReviewPanel.
 import { confirmDialog } from '../src/components/ConfirmDialog.js';
 import { showToast } from '../src/lib/toast.js';
 import { fetchSongDetail } from '../src/lib/store.js';
+import { getSongStudio } from '../src/lib/studioApi.js';
 
 const SONG_ID = 'song-1';
 
@@ -688,5 +696,97 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     watchOnChange({ run: buildRun() });
 
     expect(container.querySelector('.pipeline-view__cancel')).toBeFalsy();
+  });
+
+  describe('aviso de audio huerfano (Task 4.3)', () => {
+    beforeEach(() => {
+      getSongStudio.mockResolvedValue({ analysis: null });
+    });
+
+    it('sin warnings en el analisis: no renderiza el aviso', async () => {
+      getSongStudio.mockResolvedValue({ analysis: {} });
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' }, pitch: { status: 'done' } }),
+      });
+      await flushPromises();
+
+      const row = container.querySelector('[data-phase="pitch"]');
+      expect(row.querySelector('.phase__orphan-warning')).toBeFalsy();
+    });
+
+    it('orphanSpans vacio: no renderiza el aviso', async () => {
+      getSongStudio.mockResolvedValue({ analysis: { warnings: { orphanSpans: [] } } });
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' }, pitch: { status: 'done' } }),
+      });
+      await flushPromises();
+
+      const row = container.querySelector('[data-phase="pitch"]');
+      expect(row.querySelector('.phase__orphan-warning')).toBeFalsy();
+    });
+
+    it('un tramo: muestra duracion y rango m:ss junto al boton de reabrir', async () => {
+      getSongStudio.mockResolvedValue({
+        analysis: { warnings: { orphanSpans: [{ startMs: 130000, endMs: 142000 }] } },
+      });
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' }, pitch: { status: 'done' } }),
+      });
+      await flushPromises();
+
+      const row = container.querySelector('[data-phase="pitch"]');
+      const warning = row.querySelector('.phase__orphan-warning');
+      expect(warning).toBeTruthy();
+      expect(warning.textContent).toContain('Hay 12 s con notas y sin letra aprobada (2:10–2:22)');
+    });
+
+    it('dos tramos: suma la duracion de ambos', async () => {
+      getSongStudio.mockResolvedValue({
+        analysis: {
+          warnings: {
+            orphanSpans: [
+              { startMs: 130000, endMs: 142000 },
+              { startMs: 200000, endMs: 205000 },
+            ],
+          },
+        },
+      });
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' }, pitch: { status: 'done' } }),
+      });
+      await flushPromises();
+
+      const warning = container.querySelector('[data-phase="pitch"] .phase__orphan-warning');
+      expect(warning.textContent).toContain('Hay 17 s con notas y sin letra aprobada');
+      expect(warning.textContent).toContain('2:10–2:22');
+      expect(warning.textContent).toContain('3:20–3:25');
+    });
+
+    it('el boton del aviso reusa la accion de reabrir el gate de letra (reopenLyrics)', async () => {
+      getSongStudio.mockResolvedValue({
+        analysis: { warnings: { orphanSpans: [{ startMs: 0, endMs: 3000 }] } },
+      });
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' }, pitch: { status: 'done' } }),
+      });
+      await flushPromises();
+
+      const btn = container.querySelector(
+        '[data-phase="pitch"] .phase__orphan-warning .phase__action',
+      );
+      expect(btn).toBeTruthy();
+      btn.click();
+      await flushPromises();
+
+      expect(confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ title: expect.stringContaining('Editar letra') }),
+      );
+      expect(reopenLyrics).toHaveBeenCalledWith(SONG_ID);
+    });
   });
 });

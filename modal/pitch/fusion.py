@@ -9,6 +9,7 @@ import json
 from core import (
     fuse_syllables_notes, detect_modulations, merge_voices_present,
     detect_key, key_uses_flats, midi_to_name, NOTE_NAMES_FLAT, NOTE_NAMES_SHARP,
+    orphan_note_spans,
 )
 from _common import request_signed_put, upload_put, post_webhook, artifact, extract_storage_key
 
@@ -79,6 +80,14 @@ def run_fusion(job_id, webhook, sign_upload_url, inbound_secret, notes_lead, not
             "mode": mode,
             "use_flats": use_flats,
         }
+
+        # Aviso best-effort de tramos de canto sin cobertura en la letra
+        # aprobada (Tarea 3.3): una excepcion aqui no puede tumbar la fusion.
+        try:
+            lead_syllables = [syl for line in base_voices["lead"]["lines"] for syl in line["syllables"]]
+            analysis["warnings"] = {"orphanSpans": orphan_note_spans(notes_lead, lead_syllables)}
+        except Exception:
+            pass
 
         put_url = request_signed_put(sign_upload_url, inbound_secret, job_id, "export/analysis.json")
         upload_put(put_url, json.dumps(analysis, ensure_ascii=False).encode("utf-8"), content_type="application/json")

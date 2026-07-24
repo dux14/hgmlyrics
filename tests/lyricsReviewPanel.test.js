@@ -344,7 +344,7 @@ describe('LyricsReviewPanel', () => {
     expect(el.querySelector('.lrp__approve').disabled).toBe(false);
   });
 
-  it('click en Aprobar letra llama approveLyrics y onApproved', async () => {
+  it('click en Aprobar letra abre la confirmación y, al confirmar, llama approveLyrics y onApproved', async () => {
     getLyricsReview.mockResolvedValue(pendingResult({ canApprove: true }));
     approveLyrics.mockResolvedValue({ success: true });
     const onApproved = vi.fn();
@@ -352,10 +352,43 @@ describe('LyricsReviewPanel', () => {
     document.body.appendChild(el);
 
     el.querySelector('.lrp__approve').click();
+    expect(el.querySelector('.lps')).toBeTruthy();
+    expect(approveLyrics).not.toHaveBeenCalled();
+
+    el.querySelector('.lps__confirm').click();
     await flush();
 
     expect(approveLyrics).toHaveBeenCalledWith('song-1');
     expect(onApproved).toHaveBeenCalled();
+  });
+
+  it('Aprobar abre la confirmación y no llama al backend hasta confirmar', async () => {
+    getLyricsReview.mockResolvedValue(pendingResult({ canApprove: true }));
+    approveLyrics.mockResolvedValue({ success: true });
+
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.append(el);
+
+    el.querySelector('.lrp__approve').click();
+    await vi.waitFor(() => expect(el.querySelector('.lps')).toBeTruthy());
+    expect(approveLyrics).not.toHaveBeenCalled();
+
+    el.querySelector('.lps__confirm').click();
+    await vi.waitFor(() => expect(approveLyrics).toHaveBeenCalledTimes(1));
+  });
+
+  it('volver a editar cierra la confirmación sin aprobar', async () => {
+    getLyricsReview.mockResolvedValue(pendingResult({ canApprove: true }));
+
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.append(el);
+
+    el.querySelector('.lrp__approve').click();
+    await vi.waitFor(() => expect(el.querySelector('.lps')).toBeTruthy());
+    el.querySelector('.lps__back').click();
+
+    expect(el.querySelector('.lps')).toBeNull();
+    expect(approveLyrics).not.toHaveBeenCalled();
   });
 
   it('(j) no existen tarjetas .conf ni .voc en el DOM (contrato v1 eliminado)', async () => {

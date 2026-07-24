@@ -21,6 +21,7 @@ import { icon } from '../../lib/icons.js';
 import { showToast } from '../../lib/toast.js';
 import { SECTION_TYPE_LABELS, normalizeSectionType } from '../../lib/sectionTypes.js';
 import { getLyricsReview, sendLyricsAction, approveLyrics } from '../../lib/pipelineApi.js';
+import { LyricsPreviewStep } from './LyricsPreviewStep.js';
 
 const REDUCE_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 // Fallback si `transitionend` no llega (jsdom no corre transiciones, o el
@@ -268,7 +269,25 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
     await performAction(action);
   }
 
-  async function handleApprove() {
+  /** Abre el paso de confirmación (Task 13): el approve nunca se dispara
+   * directo desde el botón del panel, siempre pasa por el reparto final. */
+  function openPreview() {
+    if (!state.canApprove) return;
+    const preview = LyricsPreviewStep({
+      doc: state.review,
+      vocalsUrl: state.vocalsUrl ?? null,
+      onConfirm: confirmApprove,
+      onBack: () => {
+        preview.remove();
+        el.querySelector('.lrp__approve')?.focus();
+      },
+    });
+    el.append(preview);
+    preview.scrollIntoView?.({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' });
+  }
+
+  async function confirmApprove() {
+    el.querySelector('.lps')?.remove();
     if (state.busy) return;
     state.busy = true;
     lockControls();
@@ -440,7 +459,7 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
       });
     });
 
-    el.querySelector('.lrp__approve')?.addEventListener('click', handleApprove);
+    el.querySelector('.lrp__approve')?.addEventListener('click', openPreview);
   }
 
   /**

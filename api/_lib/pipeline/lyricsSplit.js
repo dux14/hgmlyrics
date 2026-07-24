@@ -100,6 +100,53 @@ export function splitLineRecursive(line) {
 }
 
 /**
+ * Parte un renglón cada vez que sus palabras cruzan una frontera de sección.
+ * El corte va ANTES de la primera palabra que arranca dentro de la sección
+ * siguiente, usando el word-timing. Sin words alineadas a los tokens (texto
+ * editado a mano) no parte: mismo criterio conservador que splitLineAtWord.
+ * @param {object} line renglón v2
+ * @param {Array<{startMs:number,endMs:number}>} sections secciones líricas
+ * @returns {object[]} uno o más renglones, en orden temporal
+ */
+export function splitAtSectionBoundaries(line, sections) {
+  const tokens = line.text.split(/\s+/).filter(Boolean);
+  if (!Array.isArray(line.words) || line.words.length !== tokens.length) return [line];
+  if (!sections || sections.length < 2) return [line];
+
+  const sectionOf = (startMs) => {
+    let idx = 0;
+    sections.forEach((sec, i) => {
+      if (sec.startMs <= startMs) idx = i;
+    });
+    return idx;
+  };
+
+  // Índices de palabra donde cambia la sección respecto de la anterior.
+  const cuts = [];
+  let current = sectionOf(line.words[0].startMs);
+  for (let i = 1; i < line.words.length; i += 1) {
+    const s = sectionOf(line.words[i].startMs);
+    if (s !== current) {
+      cuts.push(i - 1); // afterWord: última palabra del trozo previo
+      current = s;
+    }
+  }
+  if (cuts.length === 0) return [line];
+
+  // Se parte de atrás hacia adelante para que los índices no se corran.
+  let pieces = [line];
+  for (const afterWord of [...cuts].reverse()) {
+    const last = pieces[pieces.length - 1];
+    const consumedBefore = pieces.slice(0, -1).reduce(
+      (n, p) => n + p.text.split(/\s+/).filter(Boolean).length, 0,
+    );
+    const [first, second] = splitLineAtWord(last, afterWord - consumedBefore);
+    pieces = [...pieces.slice(0, -1), first, second];
+  }
+  return pieces;
+}
+
+/**
  * Auto-parte renglones > KARAOKE_MAX_CHARS (doc v2: las words viven en cada
  * renglón, la correlación ya no necesita mapa externo). Pura e idempotente.
  */

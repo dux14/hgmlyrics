@@ -82,13 +82,13 @@ export function createMultiTrackPlayer({
   // con `beats`). Siempre visible — la velocidad se renderiza sin condición.
   const metroHtml =
     Array.isArray(beats) && beats.length
-      ? `<button type="button" class="mtp__metro" aria-pressed="false">${icon('music-2', { size: 16 })}<span>${bpm ? `${Math.round(bpm)} BPM · ${timeSignature}` : 'Metrónomo'}</span></button>`
+      ? `<button type="button" class="mtp__metro" aria-pressed="false">${icon('timer', { size: 16 })}<span>${bpm ? `${Math.round(bpm)} BPM · ${timeSignature}` : 'Metrónomo'}</span></button>`
       : '';
   const practice = buildEl(
     'div',
     'mtp__practice',
     `
-    <button type="button" class="mtp__loop" aria-pressed="false">${icon('repeat', { size: 16 })}<span>Loop de sección</span></button>
+    <button type="button" class="mtp__loop" aria-pressed="false">${icon('rotate-ccw', { size: 16 })}<span>Loop de sección</span></button>
     <div class="mtp__rates" role="group" aria-label="Velocidad">
       <button type="button" data-rate="1" class="is-active">1×</button>
       <button type="button" data-rate="0.75">0.75×</button>

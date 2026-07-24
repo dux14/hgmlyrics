@@ -164,6 +164,37 @@ describe('GET /api/songs/:id/pipeline/lyrics', () => {
     expect(updateCalled).toBe(true);
   });
 
+  it('ordena por startMs y descarta segmentos no finitos de song_structure antes de construir el review (fix review Task 8)', async () => {
+    routeSql([
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { transcription } })]],
+      [
+        'SELECT segments FROM song_structure',
+        [
+          {
+            segments: [
+              // Desordenados y con un segmento invalido, tal como puede llegar
+              // sin garantia de orden desde el productor (stemsAdapter/process.js).
+              { label: 'coro', startMs: 1500, endMs: 3000 },
+              { label: 'malo', startMs: NaN, endMs: 100 },
+              { label: 'verso', startMs: 0, endMs: 1500 },
+            ],
+          },
+        ],
+      ],
+      ['UPDATE song_pipeline_runs SET lyrics_review', () => ({ count: 1 })],
+    ]);
+    const res = makeRes();
+    await lyricsHandler({ method: 'GET', query: { id: 's1' } }, res);
+    const body = res.json.mock.calls[0][0];
+    // Si no se hubiera ordenado, 'coro' (1500-3000) llegaria antes que 'verso'
+    // (0-1500) y splitAtSectionBoundaries/bestSectionIndex asignarian mal los
+    // renglones tempranos; el segmento invalido tampoco genera seccion propia.
+    expect(body.review.sections.map((s) => s.type)).toEqual(['verse', 'chorus']);
+    expect(body.review.sections[0].lines.map((l) => l.text)).toEqual([
+      'nadie me ama como tu me amas',
+    ]);
+  });
+
   it('descarta un doc v1 en vuelo (sin version:2) y reconstruye desde la transcripcion', async () => {
     const v1Doc = { sections: [{ type: 'verse', lines: [{ text: 'viejo' }] }] };
     let updateCalled = false;

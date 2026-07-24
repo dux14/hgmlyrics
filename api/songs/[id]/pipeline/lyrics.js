@@ -38,10 +38,18 @@ export const config = { maxDuration: 60 };
 // Segmentos de estructura detectados por SongFormer (Task 15, fase
 // `structure`), si ya corrieron para este run. Sin fila (structure todavia
 // no corrio, o el pipeline es viejo y no la tiene) -> [], mismo criterio que
-// studio.js/_dispatch.js con esta tabla.
+// studio.js/_dispatch.js con esta tabla. Nada garantiza en el productor
+// (stemsAdapter/process.js no ordena) que lleguen ordenados/contiguos, asi
+// que se ordenan defensivamente por startMs ascendente y se descartan filas
+// con startMs/endMs no finitos antes de pasarlos a buildReviewDoc
+// (collapseSegments y splitAtSectionBoundaries asumen orden ascendente),
+// mismo criterio que api/songs/[id]/pipeline/_dispatch.js.
 async function fetchStructureSegments(songId) {
   const [row] = await sql`SELECT segments FROM song_structure WHERE song_id = ${songId}`;
-  return row?.segments ?? [];
+  const segments = Array.isArray(row?.segments) ? row.segments : [];
+  return segments
+    .filter((s) => Number.isFinite(s?.startMs) && Number.isFinite(s?.endMs))
+    .sort((a, b) => a.startMs - b.startMs);
 }
 
 async function findAwaitingRun(songId) {

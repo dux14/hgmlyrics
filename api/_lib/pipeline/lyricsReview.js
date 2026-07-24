@@ -21,8 +21,6 @@ import {
   VOCALIZATION_CONFIDENCE_THRESHOLD,
 } from './lyricsSplit.js';
 
-export { autoSplitLongLines } from './lyricsSplit.js';
-
 // Normalización mínima de tipo de sección, DUPLICADA a propósito (ver header
 // de src/lib/sectionTypes.js: la lógica se duplica ahí mismo para que
 // ImmersiveView no dependa de SongView; misma razón aplica acá al revés,

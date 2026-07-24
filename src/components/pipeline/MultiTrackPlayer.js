@@ -485,8 +485,7 @@ export function createMultiTrackPlayer({
   const commitScrub = (e) => {
     if (!scrubbing) return;
     scrubbing = false;
-    seekAll(previewTime);
-    paintAt(previewTime);
+    seek(previewTime);
     if (e) {
       try {
         bar.releasePointerCapture(e.pointerId);
@@ -508,17 +507,16 @@ export function createMultiTrackPlayer({
   bar.addEventListener(
     'keydown',
     (e) => {
-      const dur = masterDuration();
       if (e.key === ' ' || e.key === 'Enter') {
         e.preventDefault();
         if (playing) pauseAll();
         else playAll();
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
-        seekAll(clamp((masterAudio()?.currentTime || 0) + 1, 0, dur));
+        seek((masterAudio()?.currentTime || 0) + 1);
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        seekAll(clamp((masterAudio()?.currentTime || 0) - 1, 0, dur));
+        seek((masterAudio()?.currentTime || 0) - 1);
       }
     },
     { signal: ac.signal },

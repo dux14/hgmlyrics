@@ -593,6 +593,78 @@ describe('createMultiTrackPlayer — tira de práctica (Task 4)', () => {
   });
 });
 
+describe('createMultiTrackPlayer — scrub/flechas en pausa sincronizan sección y letra', () => {
+  beforeEach(() => {
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function tracksOf20s() {
+    return [
+      { kind: 'vocals', url: 'https://x/v.mp3', label: 'Voz', durationSec: 20 },
+      { kind: 'drums', url: 'https://x/d.mp3', label: 'Batería', durationSec: 20 },
+    ];
+  }
+
+  function structureIntroCoro() {
+    return {
+      segments: [
+        { label: 'intro', startMs: 0, endMs: 10000 },
+        { label: 'coro', startMs: 10000, endMs: 20000 },
+      ],
+    };
+  }
+
+  it('commitScrub en pausa actualiza getActiveSection() y notifica onTime (no solo currentTime)', () => {
+    const p = createMultiTrackPlayer({ tracks: tracksOf20s(), structure: structureIntroCoro() });
+    const bar = p.el.querySelector('.mtp__bar');
+    vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      width: 200,
+      top: 0,
+      height: 0,
+      right: 200,
+      bottom: 0,
+    });
+    const cb = vi.fn();
+    p.onTime(cb);
+
+    // Player pausado. Drag al 90% del ancho -> 18s (dentro de "coro").
+    bar.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 180 }));
+    bar.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 180 }));
+
+    expect(p.getActiveSection()).toBe(1); // coro
+    expect(cb).toHaveBeenCalledWith(18);
+    p.destroy();
+  });
+
+  it('ArrowRight en pausa actualiza getActiveSection() y notifica onTime', () => {
+    const p = createMultiTrackPlayer({ tracks: tracksOf20s(), structure: structureIntroCoro() });
+    const bar = p.el.querySelector('.mtp__bar');
+    const audios = p.el.querySelectorAll('audio');
+    audios.forEach((a) => {
+      a.currentTime = 9.5;
+    });
+    const cb = vi.fn();
+    p.onTime(cb);
+
+    bar.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+
+    expect(p.getActiveSection()).toBe(1); // 9.5 + 1 = 10.5s -> coro
+    expect(cb).toHaveBeenCalledWith(10.5);
+    p.destroy();
+  });
+});
+
 describe('syncStep', () => {
   it('corrige una pista desviada mas del umbral a masterTime', () => {
     const audios = [{ currentTime: 10.1 }, { currentTime: 10.0 }];

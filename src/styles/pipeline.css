@@ -1361,6 +1361,13 @@ body.chrome-hidden .main {
   flex-wrap: wrap;
   gap: 4px;
 }
+/* Guard [hidden]: `display: flex` de arriba gana la cascada sobre el
+   `[hidden] { display: none }` del user-agent (misma regla de author, sin
+   !important) — el atributo `hidden` de MultiTrackPlayer.js quedaría
+   cosméticamente anulado sin este guard (mismo patrón que .confidence-summary). */
+.mtp__sections[hidden] {
+  display: none;
+}
 
 .mtp__section-chip {
   padding: 0.25rem var(--space-sm);
@@ -1430,6 +1437,11 @@ body.chrome-hidden .main {
   background: var(--color-action);
   color: #fff;
   border-color: var(--color-action);
+}
+/* Guard [hidden]: mismo motivo que .mtp__sections[hidden] — `.mtp__loop` se
+   oculta con el atributo `hidden` cuando no hay `structure.segments`. */
+.mtp__loop[hidden] {
+  display: none;
 }
 
 .mtp__rates {

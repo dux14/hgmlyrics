@@ -9,7 +9,9 @@
  * cada timeupdate).
  */
 import { escapeHtml } from '../../lib/escape.js';
-import { SECTION_TYPE_LABELS, normalizeSectionType } from '../../lib/sectionTypes.js';
+import { lineSegmentIndex } from '../../lib/studioPractice.js';
+import { sectionColorSlug, displayLabel } from '../../lib/structureLabels.js';
+import { createSpring } from '../../lib/spring.js';
 
 // Roles de color por voz: lead siempre nivel 1 (teal). El resto de
 // voices_present, en orden, ocupan nivel 2 (violeta) y nivel 3+ (rosa,
@@ -82,45 +84,22 @@ function renderSylNotes(voiceKeys) {
   return `<span class="tone-syl-notes">${stackedHtml}${moreHtml}</span>`;
 }
 
-// `song.sections` (letra del cancionero, v3) no referencia índices de línea:
-// cada sección trae su propio array `lines`. Para repartir las líneas de
-// `analysis` (pitch) por sección asumimos el mismo orden/cantidad y
-// derivamos el rango [start, end) de cada sección por conteo acumulado de
-// `section.lines.length`.
-//
-// OJO: `sections` (cancionero, editado a mano en SongEditor) y `analysis`
-// (partitura de tono, generada en modal/pitch/ a partir de un split ASR por
-// pausas — dominio propio, sin relación con el cancionero) son DOS
-// PIPELINES INDEPENDIENTES sin reconciliación de conteo de líneas entre
-// ambos. Si el cancionero se edita después del análisis, o el corte de ASR
-// no coincide con los cortes del cancionero, el conteo total diverge y un
-// reparto por índice asignaría encabezados a líneas equivocadas — en
-// silencio. Por eso `totalLines` compara el conteo total ANTES de repartir:
-// si no coincide, se descarta el agrupado entero (mejor lista plana que
-// encabezados mal puestos).
-function sectionBoundariesFor(sections, totalLines) {
-  if (!Array.isArray(sections) || sections.length === 0) return [];
-  let acc = 0;
-  const boundaries = sections.map((s) => {
-    const count = Array.isArray(s?.lines) ? s.lines.length : 0;
-    const start = acc;
-    acc += count;
-    return { type: s?.type, start, end: acc };
-  });
-  if (acc !== totalLines) {
-    console.warn(
-      `ToneLyrics: sections (${acc} líneas) y analysis (${totalLines} líneas) desincronizados — se omite el agrupado por sección`,
-    );
-    return [];
-  }
-  return boundaries;
-}
-
 /**
- * @param {{ analysis: object|null, sections?: Array|null, onSeek?: (seconds: number) => void }} opts
+ * @param {{ analysis: object|null, structure?: object|null, timings?: object|null, sections?: Array|null, onSeek?: (seconds: number) => void }} opts
+ *   `structure` (song_structure, SongFormer) alimenta los encabezados de
+ *   sección — `sections` (cancionero) se sigue aceptando por compat de
+ *   firma pero ya NO se usa para agrupar (dos pipelines independientes sin
+ *   reconciliación de conteo de líneas, ver Task 5). `timings` (alignment)
+ *   alimenta las marcas de confianza por línea.
  * @returns {{ el: HTMLElement, setActiveTime: (seconds: number) => void, destroy: () => void }}
  */
-export function createToneLyrics({ analysis, sections, onSeek } = {}) {
+export function createToneLyrics({
+  analysis,
+  structure = null,
+  timings = null,
+  sections: _sections,
+  onSeek,
+} = {}) {
   const el = document.createElement('div');
   el.className = 'tone-lyrics';
 
@@ -148,8 +127,18 @@ export function createToneLyrics({ analysis, sections, onSeek } = {}) {
     return { key, role, label: ROLE_LABEL[role] };
   });
 
-  const boundaries = sectionBoundariesFor(sections, baseLines.length);
-  let currentSectionIdx = -1;
+  // Headers de sección: vienen de `structure` (song_structure, SongFormer),
+  // no del cancionero. La línea pertenece al segmento que contiene el
+  // `start` (segundos) de su primera sílaba; se pinta un encabezado una sola
+  // vez, justo antes de la primera línea de cada segmento nuevo. Sin
+  // `structure` (o sin segments), `segments` queda [] y nunca se pinta
+  // ninguno (compat con el plano).
+  const segments = Array.isArray(structure?.segments) ? structure.segments : [];
+  let currentSegIdx = -1;
+
+  // Confianza por línea (alignment, `timings.lines[].{interpolated,score,manual}`):
+  // indexado por `i` (índice de línea), no por posición del array.
+  const timingByI = new Map((timings?.lines ?? []).map((l) => [l.i, l]));
 
   const html = baseLines
     .map((line, li) => {
@@ -173,23 +162,34 @@ export function createToneLyrics({ analysis, sections, onSeek } = {}) {
         })
         .join('');
 
-      // Encabezado de sección: se emite una sola vez, justo antes de la
-      // primera línea que cae en su rango [start, end). Sin `sections` (o
-      // vacío), `boundaries` queda [] y nunca se pinta ninguno (compat).
       let headerHtml = '';
-      const idx = boundaries.findIndex((b) => li >= b.start && li < b.end);
-      if (idx !== -1 && idx !== currentSectionIdx) {
-        currentSectionIdx = idx;
-        const slug = normalizeSectionType(boundaries[idx].type);
-        const label = SECTION_TYPE_LABELS[slug] ?? SECTION_TYPE_LABELS.verse;
-        headerHtml = `<div class="tone-lyrics__section-header" style="color: var(--color-section-${slug})">${escapeHtml(label)}</div>`;
+      const lineStart = Number.isFinite(line.syllables?.[0]?.start)
+        ? line.syllables[0].start
+        : null;
+      const segIdx = lineStart === null ? -1 : lineSegmentIndex(lineStart, segments);
+      if (segIdx !== -1 && segIdx !== currentSegIdx) {
+        currentSegIdx = segIdx;
+        const slug = sectionColorSlug(segments[segIdx].label);
+        headerHtml = `<div class="tone-lyrics__section-header" style="color: var(--color-section-${slug})">${escapeHtml(displayLabel(segments[segIdx].label))}</div>`;
       }
 
-      return `${headerHtml}<p class="tone-line" data-line="${li}">${sylHtml}</p>`;
+      const t = timingByI.get(li);
+      const score = typeof t?.score === 'string' ? Number(t.score) : t?.score;
+      const confClasses = [];
+      if (t?.interpolated === true || (Number.isFinite(score) && score < 0.6)) {
+        confClasses.push('tone-line--lowconf');
+      }
+      if (t?.manual === true) confClasses.push('tone-line--manual');
+      const lineClass = ['tone-line', ...confClasses].join(' ');
+
+      return `${headerHtml}<p class="${lineClass}" data-line="${li}">${sylHtml}</p>`;
     })
     .join('');
 
-  el.innerHTML = html;
+  // `el` es el viewport (overflow: hidden); `.tone-lyrics__roll` es el nodo
+  // que se traslada con el spring en setActiveTime.
+  el.innerHTML = `<div class="tone-lyrics__roll">${html}</div>`;
+  const rollEl = el.querySelector('.tone-lyrics__roll');
 
   // Cache de nodos para setActiveTime (se llama ~4Hz en cada timeupdate del
   // player): evita re-consultar el DOM completo con querySelectorAll en cada
@@ -206,6 +206,38 @@ export function createToneLyrics({ analysis, sections, onSeek } = {}) {
     }));
   }
   rebuildLineCache();
+
+  const spring = createSpring();
+  let rafId = null;
+  let lastTs = null;
+
+  // Retarget continuo del roll hacia la línea activa: sin teleport, el
+  // spring reacomoda desde donde esté aunque cambie de línea a mitad de
+  // camino. En jsdom (tests) clientHeight/offsetTop son 0 → targetY termina
+  // en 0, no crashea, solo no hay animación real que verificar.
+  function retargetScroll(lineEl) {
+    const prefersReducedMotion =
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    const viewportH = el.clientHeight;
+    const centerY = lineEl.offsetTop + lineEl.offsetHeight / 2;
+    const targetY = viewportH * 0.4 - centerY;
+    if (prefersReducedMotion) {
+      spring.snap(targetY);
+      rollEl.style.transform = `translateY(${targetY}px)`;
+      return;
+    }
+    spring.setTarget(targetY);
+    if (rafId !== null) return;
+    lastTs = null;
+    const loop = (ts) => {
+      if (lastTs === null) lastTs = ts;
+      const moving = spring.step(ts - lastTs);
+      lastTs = ts;
+      rollEl.style.transform = `translateY(${spring.getValue()}px)`;
+      rafId = moving ? requestAnimationFrame(loop) : null;
+    };
+    rafId = requestAnimationFrame(loop);
+  }
 
   el.addEventListener(
     'click',
@@ -227,24 +259,44 @@ export function createToneLyrics({ analysis, sections, onSeek } = {}) {
     { signal: ac.signal },
   );
 
+  const DIST_CLASSES = ['tone-line--active', 'tone-line--d1', 'tone-line--d2', 'tone-line--far'];
+
   function setActiveTime(seconds) {
     if (destroyed) return;
     let activeLineEl = null;
-    for (const { lineEl, syls } of lineCache) {
+    let activeIdx = -1;
+    lineCache.forEach(({ lineEl, syls }, idx) => {
       for (const { sylEl, start, end } of syls) {
         const isHot = seconds >= start && seconds < end;
-        if (isHot) activeLineEl = lineEl;
+        if (isHot) {
+          activeLineEl = lineEl;
+          activeIdx = idx;
+        }
         sylEl.classList.toggle('hot', isHot);
       }
-    }
-    if (activeLineEl && activeLineEl !== lastActiveLineEl) {
+    });
+
+    // Sin línea activa (fuera de rango, p.ej. antes de la primera sílaba):
+    // no tocamos clases de distancia ni el scroll, el roll queda donde está.
+    if (activeIdx === -1) return;
+
+    lineCache.forEach(({ lineEl }, idx) => {
+      lineEl.classList.remove(...DIST_CLASSES);
+      const d = Math.abs(idx - activeIdx);
+      lineEl.classList.add(
+        d === 0
+          ? DIST_CLASSES[0]
+          : d === 1
+            ? DIST_CLASSES[1]
+            : d === 2
+              ? DIST_CLASSES[2]
+              : DIST_CLASSES[3],
+      );
+    });
+
+    if (activeLineEl !== lastActiveLineEl) {
       lastActiveLineEl = activeLineEl;
-      const prefersReducedMotion =
-        window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-      activeLineEl.scrollIntoView({
-        block: 'center',
-        behavior: prefersReducedMotion ? 'auto' : 'smooth',
-      });
+      retargetScroll(activeLineEl);
     }
   }
 
@@ -267,6 +319,7 @@ export function createToneLyrics({ analysis, sections, onSeek } = {}) {
       if (destroyed) return;
       destroyed = true;
       ac.abort();
+      if (rafId !== null) cancelAnimationFrame(rafId);
     },
     voices,
   };

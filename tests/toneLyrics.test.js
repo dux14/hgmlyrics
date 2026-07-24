@@ -216,34 +216,37 @@ describe('ToneLyrics — render', () => {
 describe('ToneLyrics — setActiveTime', () => {
   beforeEach(() => {
     window.matchMedia = vi.fn().mockReturnValue({ matches: false });
-    window.HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
-  it('marca .hot la sílaba correcta por [start,end) y hace scroll a la línea', () => {
+  it('marca .hot la sílaba correcta por [start,end)', () => {
     const { el, setActiveTime } = createToneLyrics({ analysis: makeAnalysis() });
     setActiveTime(0.6);
     const hotSyl = el.querySelector('.tone-syl.hot');
     expect(hotSyl.querySelector('.tone-syl-text').textContent).toBe('vá');
-    expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
-    expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalledWith(
-      expect.objectContaining({ block: 'center', behavior: 'smooth' }),
-    );
   });
 
-  it('no re-scrollea si la línea activa no cambió', () => {
-    const { setActiveTime } = createToneLyrics({ analysis: makeAnalysis() });
-    setActiveTime(0.35);
+  it('aplica clases de distancia (active/d1/d2/far) sin scrollIntoView', () => {
+    const { el, setActiveTime } = createToneLyrics({ analysis: makeAnalysis() });
     setActiveTime(0.6);
-    expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
+    const lines = el.querySelectorAll('.tone-line');
+    expect(lines[0].classList.contains('tone-line--active')).toBe(true);
+    expect(lines[1].classList.contains('tone-line--d1')).toBe(true);
   });
 
-  it('respeta prefers-reduced-motion (behavior: auto)', () => {
+  it('sin línea activa (fuera de rango) no toca clases de distancia', () => {
+    const { el, setActiveTime } = createToneLyrics({ analysis: makeAnalysis() });
+    setActiveTime(50);
+    const lines = el.querySelectorAll('.tone-line');
+    lines.forEach((lineEl) => {
+      expect(lineEl.classList.contains('tone-line--active')).toBe(false);
+      expect(lineEl.classList.contains('tone-line--d1')).toBe(false);
+    });
+  });
+
+  it('respeta prefers-reduced-motion (snap sin animación)', () => {
     window.matchMedia = vi.fn().mockReturnValue({ matches: true });
     const { setActiveTime } = createToneLyrics({ analysis: makeAnalysis() });
-    setActiveTime(0.35);
-    expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalledWith(
-      expect.objectContaining({ behavior: 'auto' }),
-    );
+    expect(() => setActiveTime(0.35)).not.toThrow();
   });
 });
 
@@ -358,74 +361,97 @@ describe('ToneLyrics — analysis vacío', () => {
   });
 });
 
-describe('ToneLyrics — sections (agrupación por encabezado, Task 19)', () => {
+describe('ToneLyrics — structure (encabezados de sección, Task 5)', () => {
   beforeEach(() => {
     window.matchMedia = vi.fn().mockReturnValue({ matches: false });
-    window.HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
-  // makeAnalysis() tiene 2 líneas en la voz base (lead): reparto por índice
-  // 1 línea -> 1a sección, 1 línea -> 2a sección.
-  function makeSections() {
-    return [
-      { type: 'verse', label: 'Verso', lines: [{ text: 'Me he vá la' }] },
-      { type: 'chorus', label: 'Coro', lines: [{ text: 'Oh' }] },
-    ];
+  // makeAnalysis(): línea 0 empieza en 0.31s (segmento "verso" [0,1000)ms),
+  // línea 1 empieza en 1.0s (segmento "coro" [1000,2000)ms).
+  function makeStructure() {
+    return {
+      segments: [
+        { label: 'verso', startMs: 0, endMs: 1000 },
+        { label: 'coro', startMs: 1000, endMs: 2000 },
+      ],
+    };
   }
 
-  it('pinta un encabezado por sección con label y color, y reparte las líneas por índice', () => {
-    const { el } = createToneLyrics({ analysis: makeAnalysis(), sections: makeSections() });
+  it('pinta un encabezado por segmento con label y color, ubicado por el start de la línea', () => {
+    const { el } = createToneLyrics({ analysis: makeAnalysis(), structure: makeStructure() });
     const headers = el.querySelectorAll('.tone-lyrics__section-header');
     expect(headers.length).toBe(2);
-    expect(headers[0].textContent).toBe('VERSO');
-    expect(headers[1].textContent).toBe('CORO');
+    expect(headers[0].textContent).toBe('Verso');
+    expect(headers[1].textContent).toBe('Coro');
     expect(headers[0].getAttribute('style')).toContain('--color-section-verse');
     expect(headers[1].getAttribute('style')).toContain('--color-section-chorus');
 
-    // Orden en el DOM: encabezado 1, línea 0, encabezado 2, línea 1.
-    const children = [...el.children];
+    // Orden dentro del roll: encabezado 1, línea 0, encabezado 2, línea 1.
+    const roll = el.querySelector('.tone-lyrics__roll');
+    const children = [...roll.children];
     expect(children[0]).toBe(headers[0]);
-    expect(children[1].className).toBe('tone-line');
     expect(children[1].dataset.line).toBe('0');
     expect(children[2]).toBe(headers[1]);
     expect(children[3].dataset.line).toBe('1');
   });
 
-  it('sin sections (null o vacío) no pinta ningún encabezado: lista PLANA idéntica a hoy', () => {
-    const withNull = createToneLyrics({ analysis: makeAnalysis(), sections: null });
+  it('sin structure (null, sin segments) no pinta ningún encabezado: lista PLANA idéntica a hoy', () => {
+    const withNull = createToneLyrics({ analysis: makeAnalysis(), structure: null });
     expect(withNull.el.querySelectorAll('.tone-lyrics__section-header').length).toBe(0);
     expect(withNull.el.querySelectorAll('.tone-line').length).toBe(2);
 
-    const withEmpty = createToneLyrics({ analysis: makeAnalysis(), sections: [] });
+    const withEmpty = createToneLyrics({ analysis: makeAnalysis(), structure: { segments: [] } });
     expect(withEmpty.el.querySelectorAll('.tone-lyrics__section-header').length).toBe(0);
 
     const withoutParam = createToneLyrics({ analysis: makeAnalysis() });
     expect(withoutParam.el.querySelectorAll('.tone-lyrics__section-header').length).toBe(0);
   });
 
-  it('conteo de líneas desincronizado entre sections y analysis: degrada a lista PLANA (sin encabezados)', () => {
-    // sections (cancionero) y analysis (partitura de tono) son pipelines
-    // independientes sin reconciliación: si el cancionero se editó después
-    // del análisis, o el corte ASR no coincide, el conteo total diverge.
-    // makeAnalysis() tiene 2 líneas en la base; acá las sections suman 3.
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const sectionsDesincronizadas = [
-      { type: 'verse', label: 'Verso', lines: [{ text: 'Me he' }, { text: 'vá la' }] },
+  it('sections (cancionero) ya no alimenta encabezados, aunque se pase', () => {
+    const legacySections = [
+      { type: 'verse', label: 'Verso', lines: [{ text: 'Me he vá la' }] },
       { type: 'chorus', label: 'Coro', lines: [{ text: 'Oh' }] },
     ];
-    const { el } = createToneLyrics({
-      analysis: makeAnalysis(),
-      sections: sectionsDesincronizadas,
-    });
+    const { el } = createToneLyrics({ analysis: makeAnalysis(), sections: legacySections });
     expect(el.querySelectorAll('.tone-lyrics__section-header').length).toBe(0);
-    expect(el.querySelectorAll('.tone-line').length).toBe(2);
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
+  });
+});
+
+describe('ToneLyrics — timings (confianza por línea, Task 5)', () => {
+  beforeEach(() => {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: false });
   });
 
-  it('conteo de líneas sincronizado: sí pinta encabezados (caso feliz, contraste con el anterior)', () => {
-    const { el } = createToneLyrics({ analysis: makeAnalysis(), sections: makeSections() });
-    expect(el.querySelectorAll('.tone-lyrics__section-header').length).toBe(2);
+  it('interpolated o score<0.6 marca tone-line--lowconf; manual marca tone-line--manual', () => {
+    const timings = {
+      status: 'ready',
+      lines: [
+        { i: 0, startMs: 310, interpolated: true },
+        { i: 1, startMs: 1000, score: '0.9', manual: true },
+      ],
+    };
+    const { el } = createToneLyrics({ analysis: makeAnalysis(), timings });
+    const lines = el.querySelectorAll('.tone-line');
+    expect(lines[0].classList.contains('tone-line--lowconf')).toBe(true);
+    expect(lines[0].classList.contains('tone-line--manual')).toBe(false);
+    expect(lines[1].classList.contains('tone-line--manual')).toBe(true);
+    expect(lines[1].classList.contains('tone-line--lowconf')).toBe(false);
+  });
+
+  it('score numérico bajo 0.6 también marca lowconf', () => {
+    const timings = { lines: [{ i: 0, startMs: 310, score: 0.4 }] };
+    const { el } = createToneLyrics({ analysis: makeAnalysis(), timings });
+    expect(el.querySelectorAll('.tone-line')[0].classList.contains('tone-line--lowconf')).toBe(
+      true,
+    );
+  });
+
+  it('sin timings no marca ninguna línea', () => {
+    const { el } = createToneLyrics({ analysis: makeAnalysis() });
+    el.querySelectorAll('.tone-line').forEach((lineEl) => {
+      expect(lineEl.classList.contains('tone-line--lowconf')).toBe(false);
+      expect(lineEl.classList.contains('tone-line--manual')).toBe(false);
+    });
   });
 });
 

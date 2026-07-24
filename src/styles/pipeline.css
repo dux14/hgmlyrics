@@ -1618,10 +1618,16 @@ body.chrome-hidden .main {
 .tone-lyrics {
   --tone-alt: #a78bfa;
   --tone-coros: #f9a8d4;
+  overflow: hidden;
+  max-height: 55vh;
+  color: var(--color-text);
+}
+
+.tone-lyrics__roll {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  color: var(--color-text);
+  will-change: transform;
 }
 
 .tone-lyrics__empty {
@@ -1648,10 +1654,42 @@ body.chrome-hidden .main {
   margin: 0;
   border-radius: var(--border-radius-sm);
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    opacity 0.22s ease,
+    filter 0.22s ease;
 }
 .tone-line:hover {
   background: color-mix(in srgb, var(--color-action) 6%, transparent);
+}
+
+/* Blur/opacity por distancia a la línea activa (roll con resorte, Task 5). */
+.tone-line--active {
+  opacity: 1;
+  filter: none;
+}
+.tone-line--d1 {
+  opacity: 0.6;
+  filter: none;
+}
+.tone-line--d2 {
+  opacity: 0.35;
+  filter: blur(1.5px);
+}
+.tone-line--far {
+  opacity: 0.18;
+  filter: blur(2.5px);
+}
+
+/* Confianza por línea (alignment): interpolada/score bajo y offset manual,
+   subrayado punteado sobre el texto de la sílaba. */
+.tone-line--lowconf .tone-syl-text {
+  text-decoration: underline dotted var(--color-warn);
+  text-underline-offset: 3px;
+}
+.tone-line--manual .tone-syl-text {
+  text-decoration: underline dotted var(--color-brand);
+  text-underline-offset: 3px;
 }
 
 .tone-syl {
@@ -1713,6 +1751,7 @@ body.chrome-hidden .main {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .tone-lyrics__roll,
   .tone-line,
   .tone-syl.hot .tone-syl-text {
     transition-duration: 0.001ms !important;

@@ -12,6 +12,7 @@ import { escapeHtml } from '../../lib/escape.js';
 import { isAdmin } from '../../lib/authStore.js';
 import { patchStructure } from '../../lib/pipelineApi.js';
 import { showToast } from '../../lib/toast.js';
+import { sectionColorSlug, displayLabel } from '../../lib/structureLabels.js';
 
 // 8-class EXACTO de SongFormer (ver SONGFORMER_LABELS en
 // api/songs/[id]/structure.js): el PATCH rechaza cualquier label fuera de
@@ -27,28 +28,6 @@ const SONGFORMER_LABELS = [
   'pre-coro',
 ];
 
-// Label de SongFormer -> slug de color de sección. Mapeo EXPLÍCITO (no
-// normalizeSectionType/sectionTypes.js): ese normalizador cae en 'verse'
-// para cualquier tipo que no reconoce (fallback pensado para datos de letra,
-// no para SongFormer), y 'instrumental'/'silencio' terminarían con el color
-// de verso por COINCIDENCIA (hoy ambos son neutros) en vez de por intención.
-// Acá 'instrumental'/'silencio' (y cualquier label inesperado) van directo a
-// 'neutral' (--color-section-neutral, review Task 16 Minor 1).
-const LABEL_TO_SECTION_SLUG = {
-  intro: 'intro',
-  verso: 'verse',
-  coro: 'chorus',
-  puente: 'bridge',
-  instrumental: 'neutral',
-  outro: 'outro',
-  silencio: 'neutral',
-  'pre-coro': 'prechorus',
-};
-
-function sectionColorSlug(label) {
-  return LABEL_TO_SECTION_SLUG[String(label || '').toLowerCase()] || 'neutral';
-}
-
 const NUDGE_MS = 1000;
 
 function pad2(n) {
@@ -61,11 +40,6 @@ function pad2(n) {
 function formatMmSs(ms) {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
   return `${Math.floor(totalSec / 60)}:${pad2(totalSec % 60)}`;
-}
-
-function displayLabel(label) {
-  const s = String(label || '');
-  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 /**

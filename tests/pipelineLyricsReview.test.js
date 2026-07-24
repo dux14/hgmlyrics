@@ -1,10 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   buildReviewDoc,
   applyReviewAction,
   canApprove,
   approvedSnapshot,
 } from '../api/_lib/pipeline/lyricsReview.js';
+import * as seedLyrics from '../api/_lib/pipeline/seedLyrics.js';
 
 // Transcripción mínima: transLines en orden temporal, words planas
 // concatenadas en el mismo orden (shape real de align_app.py run_transcribe).
@@ -278,6 +279,29 @@ describe('buildReviewDoc v2 + semilla: aislamiento del match entre fragmentos de
   });
 });
 
+describe('buildReviewDoc v2: sin semilla no corre monotonicAlign (nice-to-have)', () => {
+  it('seedSections vacío/ausente evita monotonicAlign (su resultado nunca se consulta)', () => {
+    const spy = vi.spyOn(seedLyrics, 'monotonicAlign');
+    buildReviewDoc({
+      transcription: trans([{ text: 'hola mundo', words: [[0, 500, 0.9], [600, 900, 0.8]] }]),
+      structureSegments: [],
+    });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('con semilla sí corre monotonicAlign', () => {
+    const spy = vi.spyOn(seedLyrics, 'monotonicAlign');
+    buildReviewDoc({
+      transcription: trans([{ text: 'hola mundo', words: [[0, 500, 0.9], [600, 900, 0.8]] }]),
+      structureSegments: [],
+      seedSections: [{ lines: [{ text: 'hola mundo' }] }],
+    });
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
+
 describe('canApprove v2 (editor puro)', () => {
   it('true con al menos un renglón; false con doc vacío', () => {
     const doc = buildReviewDoc({
@@ -301,6 +325,31 @@ describe('approvedSnapshot v2', () => {
     expect(a.sections).toEqual(doc.sections);
     expect(a.hash).toMatch(/^[0-9a-f]{64}$/);
     expect(a.hash).toBe(b.hash);
+  });
+
+  // Nice-to-have review tanda C: seedSectionIdx es interno de buildReviewDoc
+  // (solo tiene sentido mientras se arma el doc), no debe llegar al store
+  // persistido de song_pipeline_lyrics.
+  it('excluye seedSectionIdx (interno) del snapshot persistido', () => {
+    const doc = buildReviewDoc({
+      transcription: {
+        text: 'uno',
+        transLines: ['uno'],
+        words: [{ word: 'uno', startMs: 0, endMs: 500, score: 0.9 }],
+        perLine: [{ transIndex: 0, dbIndex: 0, score: 0.9 }],
+      },
+      structureSegments: [],
+      seedSections: [{ lines: [{ text: 'uno' }] }],
+    });
+    // Sanity: si esto no está seteado, el test no ejercita nada.
+    expect(doc.sections[0].lines[0].seedSectionIdx).toBe(0);
+
+    const snap = approvedSnapshot(doc);
+    for (const section of snap.sections) {
+      for (const line of section.lines) {
+        expect(line).not.toHaveProperty('seedSectionIdx');
+      }
+    }
   });
 });
 
@@ -417,5 +466,36 @@ describe('applyReviewAction v2', () => {
     const merged = applyReviewAction(split, { type: 'mergeSections', section: 0 });
     expect(merged.sections).toHaveLength(1);
     expect(merged.sections[0].endMs).toBe(2500);
+  });
+
+  // Important de seguridad (review tanda C): doc.sections['__proto__'] es
+  // Array.prototype (truthy) sin el guard de Number.isInteger, así que el
+  // `if (!section)` no dispara y la acción sigue mutando el prototipo
+  // global — en serverless con instancias tibias, eso contamina TODAS las
+  // requests siguientes hasta el próximo cold start.
+  it('índice "__proto__" lanza RangeError y no contamina Array.prototype', () => {
+    expect(() =>
+      applyReviewAction(base(), { type: 'renameSection', section: '__proto__', label: 'PWNED' }),
+    ).toThrow(RangeError);
+    expect(Array.prototype.label).toBeUndefined();
+
+    expect(() =>
+      applyReviewAction(base(), {
+        type: 'setBreath',
+        section: 0,
+        line: '__proto__',
+        breath: true,
+      }),
+    ).toThrow(RangeError);
+    expect(Array.prototype.breath).toBeUndefined();
+  });
+
+  it('índice no entero (float, string numérica) lanza RangeError', () => {
+    expect(() => applyReviewAction(base(), { type: 'deleteLine', section: 0, line: 0.5 })).toThrow(
+      RangeError,
+    );
+    expect(() => applyReviewAction(base(), { type: 'deleteLine', section: '0', line: 0 })).toThrow(
+      RangeError,
+    );
   });
 });

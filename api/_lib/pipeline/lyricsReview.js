@@ -48,13 +48,20 @@ export function isNil(value) {
   return value === null || value === undefined;
 }
 
+// Sin el chequeo de entero, `doc.sections['__proto__']` devuelve
+// Array.prototype (truthy): el guard `if (!section)` de abajo no dispara y
+// la acción sigue mutando el prototipo global en vez de fallar (Important
+// de seguridad, review tanda C — ver requireInt más abajo, mismo criterio
+// que ya se aplicaba a afterWord/toLine/startMs).
 function requireSection(doc, sectionIdx) {
+  requireInt(sectionIdx, 'section');
   const section = doc.sections[sectionIdx];
   if (!section) throw new RangeError(`Sección fuera de rango: ${sectionIdx}`);
   return section;
 }
 
 function requireLine(section, lineIdx) {
+  requireInt(lineIdx, 'line');
   const line = section.lines[lineIdx];
   if (!line) throw new RangeError(`Renglón fuera de rango: ${lineIdx}`);
   return line;
@@ -161,9 +168,12 @@ export function buildReviewDoc({ transcription, structureSegments = [], seedSect
   const wordsPerTransIndex = wordsByTransIndex(transLines, allWords);
   // Semilla del cancionero: índice plano + alineamiento monótono contra
   // perLine, único punto donde el transIndex todavía existe (H3).
+  // Sin semilla (caso más común, canción aún no publicada) no hay contra qué
+  // alinear: monotonicAlign(perLine) nunca se consulta más abajo (`seed.length
+  // ? alignment.get(...) : null`) — evitamos el trabajo directamente.
   const seed = seedIndex(seedSections);
   const alignment = new Map(
-    monotonicAlign(transcription?.perLine ?? []).map((p) => [p.transIndex, p]),
+    seed.length ? monotonicAlign(transcription?.perLine ?? []).map((p) => [p.transIndex, p]) : [],
   );
 
   let sections = lyricSectionsFromSegments(collapseSegments(structureSegments));
@@ -255,11 +265,20 @@ export function canApprove(doc) {
 }
 
 /**
- * Snapshot aprobado para el store song_pipeline_lyrics: las sections v2 tal
- * cual + hash sha256 determinístico (stableStringify se conserva de v1).
+ * Snapshot aprobado para el store song_pipeline_lyrics: las sections v2 +
+ * hash sha256 determinístico (stableStringify se conserva de v1).
+ * `seedSectionIdx` (interno, solo tiene sentido mientras buildReviewDoc
+ * arma el documento) se saca del snapshot persistido.
  */
 export function approvedSnapshot(doc) {
-  const sections = structuredClone(doc.sections);
+  const sections = structuredClone(doc.sections).map((section) => ({
+    ...section,
+    lines: section.lines.map((line) => {
+      const rest = { ...line };
+      delete rest.seedSectionIdx;
+      return rest;
+    }),
+  }));
   const hash = createHash('sha256').update(stableStringify(sections)).digest('hex');
   return { sections, hash };
 }

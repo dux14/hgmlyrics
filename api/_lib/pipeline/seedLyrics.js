@@ -56,3 +56,87 @@ export function monotonicAlign(perLine) {
   for (let i = end; i !== -1; i = prev[i]) chain.unshift(pairs[i]);
   return chain;
 }
+
+// Banda de sugerencia: por debajo, el renglón no es esa línea; por encima, ya
+// coincide. Las tres erratas del run del 24-jul (57%, 58%, 66%) caen dentro.
+// Valores iniciales, calibrables con el primer run posterior a esta tanda.
+export const SUGGEST_MIN_SCORE = 0.5;
+export const SUGGEST_MAX_SCORE = 0.95;
+
+/** Misma normalización que modal/transcribe_diff.normalize_for_compare:
+ * minúsculas, sin diacríticos ni puntuación, espacios colapsados. Duplicada a
+ * propósito (el backend no puede importar del árbol de Python), igual que
+ * normalizeSectionType en lyricsReview.js. */
+function normalizeForCompare(text) {
+  return (text || '')
+    .normalize('NFD')
+    .replace(/\p{Mn}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9ñ\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Distancia de edición a nivel carácter (Levenshtein, dos filas). */
+function editDistance(a, b) {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i += 1) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      row[j] = Math.min(
+        prev[j] + 1,
+        row[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    prev = row;
+  }
+  return prev[b.length];
+}
+
+/**
+ * 1 - CER normalizado por el largo del primer texto, acotado a [0,1]. Mismo
+ * criterio que line_scores en modal/transcribe_diff.py.
+ * @returns {number}
+ */
+export function compareScore(text, candidate) {
+  const a = normalizeForCompare(text);
+  const b = normalizeForCompare(candidate);
+  if (!a || !b) return 0;
+  return Math.max(0, 1 - editDistance(a, b) / a.length);
+}
+
+/**
+ * Propuestas de corrección por renglón contra la semilla. Se calcula en el
+ * GET, no se persiste — mismo patrón que buildSuggestions (cortes). Compara
+ * el renglón TAL COMO QUEDÓ, así que también cubre los que el admin editó.
+ * @param {{sections:Array}} doc
+ * @param {Array<{text:string}>} seed salida de seedIndex
+ * @returns {Array<{section:number,line:number,text:string,score:number}>}
+ */
+export function buildTextSuggestions(doc, seed) {
+  const out = [];
+  if (!seed || seed.length === 0) return out;
+  (doc?.sections ?? []).forEach((section, sIdx) => {
+    (section.lines ?? []).forEach((line, lIdx) => {
+      let best = null;
+      for (const entry of seed) {
+        const score = compareScore(line.text, entry.text);
+        if (!best || score > best.score) best = { text: entry.text, score };
+      }
+      if (!best) return;
+      if (best.score < SUGGEST_MIN_SCORE || best.score >= SUGGEST_MAX_SCORE) return;
+      if (normalizeForCompare(best.text) === normalizeForCompare(line.text)) return;
+      out.push({
+        section: sIdx,
+        line: lIdx,
+        text: best.text,
+        score: Math.round(best.score * 10000) / 10000,
+      });
+    });
+  });
+  return out;
+}

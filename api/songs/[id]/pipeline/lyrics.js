@@ -20,6 +20,7 @@ import {
   isNil,
 } from '../../../_lib/pipeline/lyricsReview.js';
 import { suggestLineBreaks } from '../../../_lib/pipeline/phrasing.js';
+import { seedIndex, buildTextSuggestions } from '../../../_lib/pipeline/seedLyrics.js';
 import { upsertPipelineLyrics, getPipelineLyrics } from '../../../_lib/pipeline/lyricsStore.js';
 import {
   applyPhaseEvent,
@@ -124,10 +125,12 @@ async function getGate(res, songId) {
     return;
   }
   const { lyricsReview } = await ensureReview(run, songId);
+  const [song] = await sql`SELECT sections FROM songs WHERE id = ${songId}`;
   res.status(200).json({
     review: lyricsReview.review,
     canApprove: canApprove(lyricsReview.review),
     suggestions: buildSuggestions(lyricsReview.review),
+    textSuggestions: buildTextSuggestions(lyricsReview.review, seedIndex(song?.sections)),
   });
 }
 

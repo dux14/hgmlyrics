@@ -64,7 +64,7 @@ const SUBTITLES = {
   lyrics_review: {
     pending: 'En espera',
     running: 'Transcribiendo letra...',
-    awaiting: 'Revisá la letra transcrita',
+    awaiting: 'Revisa la letra transcrita',
     done: 'Letra aprobada',
     failed: 'No se pudo transcribir la letra',
   },

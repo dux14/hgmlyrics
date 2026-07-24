@@ -10,7 +10,7 @@
  * y phrasing.js en este mismo directorio.
  */
 import { createHash } from 'node:crypto';
-import { collapseSegments } from './structureShape.js';
+import { collapseSegments, collapseBySeed } from './structureShape.js';
 import { seedIndex, monotonicAlign } from './seedLyrics.js';
 import {
   autoSplitLongLines,
@@ -19,6 +19,7 @@ import {
   splitLineAtWord,
   lineConfidence,
   VOCALIZATION_CONFIDENCE_THRESHOLD,
+  SEED_INHERIT_MIN_SCORE,
 } from './lyricsSplit.js';
 
 // Normalización mínima de tipo de sección, DUPLICADA a propósito (ver header
@@ -213,19 +214,25 @@ export function buildReviewDoc({ transcription, structureSegments = [], seedSect
           ? lastSectionIdx
           : bestSectionIndex(sections, piece.startMs, piece.endMs);
       lastSectionIdx = sIdx;
+      if (match && match.score >= SEED_INHERIT_MIN_SCORE) {
+        const origin = seed[match.dbIndex];
+        if (origin) piece.seedSectionIdx = origin.sectionIdx;
+      }
       sections[sIdx].lines.push(piece);
     }
   }
 
-  // Envelope real de cada sección desde sus renglones (sectionEnvelope ya
-  // existía pero solo lo usaba applyReviewAction).
-  for (const section of sections) {
+  // Colapso guiado por semilla: fusiona secciones adyacentes cuyos renglones
+  // alineados apuntan a la misma sección del cancionero (H4), antes de
+  // recalcular el envelope real de cada sección.
+  const collapsed = collapseBySeed({ version: 2, sections }, seed);
+  for (const section of collapsed.sections) {
     const env = sectionEnvelope(section.lines, { startMs: section.startMs, endMs: section.endMs });
     section.startMs = env.startMs;
     section.endMs = env.endMs;
   }
 
-  return { version: 2, sections };
+  return collapsed;
 }
 
 /** Editor puro: aprobable con al menos un renglón en alguna sección. */

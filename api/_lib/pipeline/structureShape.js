@@ -38,3 +38,38 @@ export function collapseSegments(segments) {
   }
   return out;
 }
+
+/**
+ * Fusiona secciones ADYACENTES del documento cuando todos sus renglones
+ * alineados apuntan a la misma sección de la semilla. Compara pertenencia
+ * real, no conteos de sección: una semilla incompleta o una repetición no
+ * escrita romperían un colapso por conteo. Sin semilla, o con renglones sin
+ * `seedSectionIdx`, no hace nada.
+ * @param {{version:number, sections:Array}} doc
+ * @param {Array<{dbIndex:number,sectionIdx:number}>} seed salida de seedIndex
+ * @returns {{version:number, sections:Array}} documento nuevo
+ */
+export function collapseBySeed(doc, seed) {
+  if (!seed || seed.length === 0) return doc;
+  const sections = [];
+  // Sección semilla de una sección del doc: única si TODOS sus renglones
+  // alineados coinciden; null si hay mezcla o si ninguno está alineado.
+  const seedOf = (section) => {
+    const idxs = (section.lines ?? [])
+      .map((l) => l.seedSectionIdx)
+      .filter((v) => Number.isInteger(v));
+    if (idxs.length === 0 || idxs.length !== (section.lines ?? []).length) return null;
+    return idxs.every((v) => v === idxs[0]) ? idxs[0] : null;
+  };
+  for (const section of doc.sections) {
+    const prev = sections[sections.length - 1];
+    const mine = seedOf(section);
+    if (prev && mine !== null && seedOf(prev) === mine) {
+      prev.lines.push(...section.lines);
+      prev.endMs = section.endMs;
+      continue;
+    }
+    sections.push({ ...section, lines: [...(section.lines ?? [])] });
+  }
+  return { ...doc, sections };
+}

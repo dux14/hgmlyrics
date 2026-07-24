@@ -1670,7 +1670,12 @@ body.chrome-hidden .main {
 .tone-line {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  /* baseline, no flex-end: cada .tone-syl es una columna texto+notas, y las
+     sílabas sin nota producen columnas más bajas. Con flex-end esas columnas
+     se pegan al borde inferior y su texto queda desplazado hacia abajo
+     respecto de las que sí tienen notas; con baseline se alinea la primera
+     línea base de cada columna (el texto) y las notas cuelgan debajo. */
+  align-items: baseline;
   gap: 2px var(--space-xs);
   padding: var(--space-xs) var(--space-sm);
   margin: 0;

@@ -258,6 +258,15 @@ body.chrome-hidden .main {
   border-color: color-mix(in oklch, var(--color-accent-2) 40%, transparent);
 }
 
+.lrp__suggest {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  grid-column: 1 / -1;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
 .lrp .lrp__merge {
   display: block;
   width: 100%;

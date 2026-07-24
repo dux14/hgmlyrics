@@ -86,6 +86,13 @@ function suggestionsByLine(suggestions) {
   return byLine;
 }
 
+/** Índice de propuestas de texto (semilla) por "sección:línea". */
+function textSuggestionsByLine(textSuggestions) {
+  const byLine = new Map();
+  for (const s of textSuggestions ?? []) byLine.set(`${s.section}:${s.line}`, s);
+  return byLine;
+}
+
 /** Fila de un renglón: texto (con tijeras de sugerencia) + badge de
  * confianza + botonera compacta (editar, vocalización, mover, borrar).
  * `canMoveUp`/`canMoveDown` deshabilitan los extremos globales del
@@ -93,7 +100,14 @@ function suggestionsByLine(suggestions) {
  * dentro de eso `moveLine` siempre tiene un destino válido, cruce de
  * sección incluido (ver bind()).
  */
-function lineRowHtml(line, sIdx, lIdx, afterWords, { disabled, canMoveUp, canMoveDown }) {
+function lineRowHtml(
+  line,
+  sIdx,
+  lIdx,
+  afterWords,
+  suggestion,
+  { disabled, canMoveUp, canMoveDown },
+) {
   const dis = disabled ? ' disabled' : '';
   const vocClass = line.vocalization ? ' lrp__line--vocalization' : '';
   return `
@@ -107,6 +121,15 @@ function lineRowHtml(line, sIdx, lIdx, afterWords, { disabled, canMoveUp, canMov
         <button type="button" class="btn2 lrp__line-down" aria-label="Mover abajo"${dis}${canMoveDown ? '' : ' disabled'}>${icon('chevron-down', { size: 14 })}</button>
         <button type="button" class="btn2 lrp__line-delete" aria-label="Borrar renglón"${dis}>${icon('trash', { size: 14 })}</button>
       </div>
+      ${
+        suggestion
+          ? `
+      <div class="lrp__suggest">
+        <span class="lrp__suggest-text">${escapeHtml(suggestion.text)}</span>
+        <button type="button" class="btn2 lrp__suggest-accept"${dis}>Usar este texto</button>
+      </div>`
+          : ''
+      }
     </div>`;
 }
 
@@ -114,17 +137,24 @@ function lineRowHtml(line, sIdx, lIdx, afterWords, { disabled, canMoveUp, canMov
  * @param {{disabled: boolean}} opts `disabled` bloquea los controles
  *   interactivos (acción en vuelo).
  */
-function sectionHtml(section, sIdx, byLine, { disabled, isLast } = {}) {
+function sectionHtml(section, sIdx, byLine, textByLine, { disabled, isLast } = {}) {
   const type = normalizeSectionType(section.type);
   const dis = disabled ? ' disabled' : '';
 
   const linesHtml = section.lines
     .map((line, lIdx) => {
-      const lineRow = lineRowHtml(line, sIdx, lIdx, byLine.get(`${sIdx}:${lIdx}`), {
-        disabled,
-        canMoveUp: sIdx > 0 || lIdx > 0,
-        canMoveDown: !isLast || lIdx < section.lines.length - 1,
-      });
+      const lineRow = lineRowHtml(
+        line,
+        sIdx,
+        lIdx,
+        byLine.get(`${sIdx}:${lIdx}`),
+        textByLine.get(`${sIdx}:${lIdx}`),
+        {
+          disabled,
+          canMoveUp: sIdx > 0 || lIdx > 0,
+          canMoveDown: !isLast || lIdx < section.lines.length - 1,
+        },
+      );
       const mergeHtml =
         lIdx < section.lines.length - 1
           ? `<button type="button" class="lrp__merge" data-section="${sIdx}" data-line="${lIdx}"${dis}>Unir con el siguiente renglón</button>`
@@ -181,7 +211,7 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
    */
   function lockControls() {
     el.querySelectorAll(
-      '.lrp__line-edit, .lrp__edit-save, .lrp__edit-cancel, .lrp__line-voc, .lrp__line-up, .lrp__line-down, .lrp__line-delete, .lrp__split, .lrp__merge, .lrp__approve, .lrp__type-select, .lrp__rename-input, .lrp__section-merge, .lrp__section-split',
+      '.lrp__line-edit, .lrp__edit-save, .lrp__edit-cancel, .lrp__line-voc, .lrp__line-up, .lrp__line-down, .lrp__line-delete, .lrp__split, .lrp__merge, .lrp__approve, .lrp__type-select, .lrp__rename-input, .lrp__section-merge, .lrp__section-split, .lrp__suggest-accept',
     ).forEach((btn) => {
       btn.disabled = true;
     });
@@ -400,6 +430,16 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
       ),
     );
 
+    el.querySelectorAll('.lrp__suggest-accept').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const row = btn.closest('.lrp__line-row');
+        const sIdx = Number(row.dataset.section);
+        const lIdx = Number(row.dataset.line);
+        const text = row.querySelector('.lrp__suggest-text').textContent;
+        runAction({ type: 'editLine', section: sIdx, line: lIdx, text }, { rowEl: row });
+      });
+    });
+
     el.querySelector('.lrp__approve')?.addEventListener('click', handleApprove);
   }
 
@@ -419,6 +459,7 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
 
   function render() {
     const byLine = suggestionsByLine(state.suggestions || []);
+    const textByLine = textSuggestionsByLine(state.textSuggestions);
     const motion = reduceMotion() ? '' : ' lrp--motion';
     const disabled = state.busy;
 
@@ -430,7 +471,7 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
       <div class="lrp__body">
         ${state.review.sections
           .map((s, i) =>
-            sectionHtml(s, i, byLine, {
+            sectionHtml(s, i, byLine, textByLine, {
               disabled,
               isLast: i === state.review.sections.length - 1,
             }),

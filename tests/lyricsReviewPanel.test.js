@@ -126,6 +126,33 @@ describe('LyricsReviewPanel', () => {
     });
   });
 
+  it('muestra la propuesta de texto y aceptarla dispara editLine', async () => {
+    getLyricsReview.mockResolvedValue(
+      pendingResult({
+        canApprove: true,
+        textSuggestions: [
+          { section: 0, line: 0, text: 'y en la noche oscura brillará', score: 0.58 },
+        ],
+      }),
+    );
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const proposal = el.querySelector('.lrp__suggest');
+    expect(proposal).not.toBeNull();
+    expect(proposal.textContent).toContain('y en la noche oscura brillará');
+
+    proposal.querySelector('.lrp__suggest-accept').click();
+    await flush();
+
+    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
+      type: 'editLine',
+      section: 0,
+      line: 0,
+      text: 'y en la noche oscura brillará',
+    });
+  });
+
   it('(c) "Unir con el siguiente renglón" despacha mergeLines', async () => {
     const el = await LyricsReviewPanel({ songId: 'song-1' });
     document.body.appendChild(el);
@@ -444,5 +471,4 @@ describe('LyricsReviewPanel', () => {
     expect(errorEl.textContent).toBe('No se pudo cargar la revisión de letra');
     expect(el.querySelector('.lrp__approve')).toBeNull();
   });
-
 });

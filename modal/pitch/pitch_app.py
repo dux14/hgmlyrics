@@ -145,8 +145,8 @@ def n_notes(job_id, webhook, sign_upload_url, inbound_secret, f0_lead, f0_backin
 
 # n_lyrics corre en lyrics_image AISLADA (base cuDNN 8 para CTranslate2/faster-whisper).
 @app.function(image=lyrics_image, secrets=_secrets, gpu="T4", timeout=900)
-def n_lyrics(job_id, webhook, sign_upload_url, inbound_secret, lead_bytes):
-    return run_lyrics(job_id, webhook, sign_upload_url, inbound_secret, lead_bytes)
+def n_lyrics(job_id, webhook, sign_upload_url, inbound_secret, lead_bytes, lines=None, language=None):
+    return run_lyrics(job_id, webhook, sign_upload_url, inbound_secret, lead_bytes, lines=lines, language=language)
 
 
 @app.function(image=cpu_image, secrets=_secrets, timeout=60)
@@ -272,7 +272,7 @@ def run_pipeline(payload: dict) -> None:
     except Exception:
         (fail_all("notas fallo") if pipeline_mode else skip_rest(2, "notas fallo")); cancel_optional(); return
     try:
-        lines_words = n_lyrics.remote(job_id, node_webhook, sign_upload_url, inbound_secret, lead)
+        lines_words = n_lyrics.remote(job_id, node_webhook, sign_upload_url, inbound_secret, lead, inp.get("lines"), inp.get("language"))
     except Exception:
         (fail_all("letra fallo") if pipeline_mode else skip_rest(3, "letra fallo")); cancel_optional(); return
 

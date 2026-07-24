@@ -18,9 +18,19 @@ async function readError(res, fallback) {
 }
 
 /**
- * Estudio publicado de una canción (stems, análisis, secciones, timings).
+ * Estudio publicado de una canción (stems, análisis, secciones, timings,
+ * audio manual y clips por sección).
  * @param {string} songId
- * @returns {Promise<{stems:Array, analysis:object|null, sections:Array, timings:object|null, title:string|null, structure:{segments:Array}|null}|null>}
+ * @returns {Promise<{
+ *   stems: Array,
+ *   analysis: object|null,
+ *   sections: Array,
+ *   timings: {status:string, lines:Array, beats:Array|null, bpmDetected:number|null}|null,
+ *   title: string|null,
+ *   structure: {segments:Array}|null,
+ *   audio: {bpmManual:number|null, timeSignature:string|null, beatAnchor:number|null}|null,
+ *   clips: Array<{sectionIndex:number, voiceScope:string|null, label:string|null, durationSec:number|null, url:string}>,
+ * }|null>}
  *   null si la canción todavía no tiene estudio publicado (404).
  */
 export async function getSongStudio(songId) {

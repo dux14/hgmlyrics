@@ -69,6 +69,8 @@ describe('GET /api/songs/[id]/studio', () => {
     sqlResponses.push([]); // SELECT songs
     sqlResponses.push([]); // SELECT song_line_timings
     sqlResponses.push([]); // SELECT song_structure
+    sqlResponses.push([]); // SELECT song_audio
+    sqlResponses.push([]); // SELECT song_section_audio
     const res = makeRes();
     await handler(makeReq(), res);
     expect(requireUser).toHaveBeenCalled();
@@ -89,8 +91,10 @@ describe('GET /api/songs/[id]/studio', () => {
     ]); // SELECT song_stems
     sqlResponses.push([{ analysis: { notes: [1, 2, 3] } }]); // SELECT song_pitch_analysis
     sqlResponses.push([{ sections: [{ id: 's1' }], title: 'Mi canción' }]); // SELECT songs
-    sqlResponses.push([{ status: 'ready', lines: [{ i: 0, startMs: 100 }] }]); // SELECT song_line_timings
+    sqlResponses.push([{ status: 'ready', lines: [{ i: 0, startMs: 100 }], beats: null, bpmDetected: null }]); // SELECT song_line_timings
     sqlResponses.push([{ segments: [{ label: 'verse', startMs: 0, endMs: 2000 }] }]); // SELECT song_structure
+    sqlResponses.push([]); // SELECT song_audio
+    sqlResponses.push([]); // SELECT song_section_audio
     const res = makeRes();
     await handler(makeReq(), res);
     expect(res._status).toBe(200);
@@ -106,9 +110,11 @@ describe('GET /api/songs/[id]/studio', () => {
       ],
       analysis: { notes: [1, 2, 3] },
       sections: [{ id: 's1' }],
-      timings: { status: 'ready', lines: [{ i: 0, startMs: 100 }] },
+      timings: { status: 'ready', lines: [{ i: 0, startMs: 100 }], beats: null, bpmDetected: null },
       title: 'Mi canción',
       structure: { segments: [{ label: 'verse', startMs: 0, endMs: 2000 }] },
+      audio: null,
+      clips: [],
     });
     expect(signSongAudioDownload).toHaveBeenCalledTimes(2);
     expect(signSongAudioDownload).toHaveBeenCalledWith('song-1/vocals.mp3');
@@ -123,6 +129,8 @@ describe('GET /api/songs/[id]/studio', () => {
     sqlResponses.push([{ sections: null, title: 'Mi canción' }]); // SELECT songs
     sqlResponses.push([]); // SELECT song_line_timings
     sqlResponses.push([]); // SELECT song_structure
+    sqlResponses.push([]); // SELECT song_audio
+    sqlResponses.push([]); // SELECT song_section_audio
     const res = makeRes();
     await handler(makeReq(), res);
     expect(res._status).toBe(200);
@@ -130,6 +138,36 @@ describe('GET /api/songs/[id]/studio', () => {
     expect(res._body.sections).toEqual([]);
     expect(res._body.timings).toBeNull();
     expect(res._body.structure).toBeNull();
+    expect(res._body.audio).toBeNull();
+    expect(res._body.clips).toEqual([]);
+  });
+
+  it('incluye audio (bpm/compás/ancla), beats en timings y clips firmados', async () => {
+    sqlResponses.push([
+      { kind: 'lead', storageKey: 'k1', durationSec: '180.5', display: null },
+    ]); // SELECT song_stems
+    sqlResponses.push([{ analysis: { voices_present: [] } }]); // SELECT song_pitch_analysis
+    sqlResponses.push([{ sections: [], title: 'Primero el Cielo' }]); // SELECT songs
+    sqlResponses.push([
+      { status: 'ready', lines: [{ i: 0, startMs: 0 }], beats: [500, 1000], bpmDetected: '112.35' },
+    ]); // SELECT song_line_timings
+    sqlResponses.push([{ segments: [{ label: 'verso', startMs: 0, endMs: 30000 }] }]); // SELECT song_structure
+    sqlResponses.push([{ bpmManual: '96', timeSignature: '3/4', beatAnchor: 1 }]); // SELECT song_audio
+    sqlResponses.push([
+      { sectionIndex: 0, voiceScope: null, storageKey: 'c1', label: null, durationSec: 12.4 },
+    ]); // SELECT song_section_audio
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    const body = res._body;
+    // NUMERIC de postgres.js llega como string: el contrato del GET es number.
+    expect(body.audio).toEqual({ bpmManual: 96, timeSignature: '3/4', beatAnchor: 1 });
+    expect(body.timings.beats).toEqual([500, 1000]);
+    expect(body.timings.bpmDetected).toBe(112.35);
+    expect(body.clips).toEqual([
+      { sectionIndex: 0, voiceScope: null, label: null, durationSec: 12.4, url: 'https://get/c1' },
+    ]);
   });
 
   it('requireUser exigido: si lanza 401, el handler propaga el error', async () => {

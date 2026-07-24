@@ -155,6 +155,9 @@ export function renderSongStudioView(container, songId) {
     lyricsWrap.appendChild(tone.el);
 
     bodyEl.innerHTML = '';
+    // Layout B: se descarta `player.el` a propósito, solo se usan los
+    // sub-elementos `els.*` recompuestos en el orden de esta vista. No
+    // reintroducir `appendChild(player.el)` — duplicaría todo el DOM.
     bodyEl.append(
       player.els.transport,
       player.els.practice,

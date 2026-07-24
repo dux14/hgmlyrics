@@ -53,6 +53,27 @@ describe('SongPartituraView (D5b)', () => {
     routeChangeCb = null;
   });
 
+  it('header tiene link Ver en Estudio hacia /song/:id/estudio', () => {
+    getSongStudio.mockResolvedValue(null);
+    renderSongPartituraView(container, 'song-1');
+    const link = container.querySelector('.pipeline-view__studio-link');
+    expect(link).toBeTruthy();
+    expect(link.getAttribute('href')).toBe('#/song/song-1/estudio');
+  });
+
+  it('escapa songId malicioso en el href de Ver en Estudio (XSS reflejada)', () => {
+    const maliciousId = 'x"><img src=y onerror=alert(1)>';
+    getSongStudio.mockResolvedValue(null);
+    renderSongPartituraView(container, maliciousId);
+    // Escapado: el ataque no rompe el atributo href ni inyecta un <img> real
+    // como hermano del link.
+    expect(container.querySelector('img[src="y"]')).toBeNull();
+    const link = container.querySelector('.pipeline-view__studio-link');
+    expect(link).toBeTruthy();
+    expect(link.parentElement.children.length).toBe(3); // back, h1, link — sin <img> colado
+    expect(link.getAttribute('href')).toBe(`#/song/${maliciousId}/estudio`);
+  });
+
   it('sin estudio (404 -> null): pinta estado vacio coherente', async () => {
     getSongStudio.mockResolvedValue(null);
     renderSongPartituraView(container, 'song-1');
@@ -119,8 +140,6 @@ describe('SongPartituraView (D5b)', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(container.querySelector('.partitura-view__title').textContent).toBe(
-      'Cancion de prueba',
-    );
+    expect(container.querySelector('.partitura-view__title').textContent).toBe('Cancion de prueba');
   });
 });

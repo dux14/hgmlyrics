@@ -40,7 +40,7 @@ export function renderSongPartituraView(container, songId) {
     <header class="pipeline-view__header">
       <button type="button" class="pipeline-view__back" aria-label="Volver">${icon('arrow-left')}</button>
       <h1 class="pipeline-view__title partitura-view__title">Partitura</h1>
-      <a class="pipeline-view__studio-link" href="#/song/${songId}/estudio">${icon('audio-lines', { size: 16 })}<span>Ver en Estudio</span></a>
+      <a class="pipeline-view__studio-link" href="#/song/${escapeHtml(songId)}/estudio">${icon('audio-lines', { size: 16 })}<span>Ver en Estudio</span></a>
     </header>
     <div class="partitura-view__body">
       <p class="partitura-view__loading">Cargando partitura...</p>

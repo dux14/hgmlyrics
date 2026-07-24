@@ -194,6 +194,21 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     expect(link.getAttribute('href')).toBe(`#/song/${SONG_ID}/estudio`);
   });
 
+  it('escapa songId malicioso en el href de Ver en Estudio (XSS reflejada)', () => {
+    const maliciousId = 'x"><img src=y onerror=alert(1)>';
+    renderSongPipelineView(container, maliciousId);
+    // Escapado: el ataque no rompe el atributo href ni inyecta un <img> real
+    // como hermano del link (sin escapar, el `"` cierra el atributo y el
+    // `<img>` queda como elemento del DOM).
+    expect(container.querySelector('img[src="y"]')).toBeNull();
+    const link = container.querySelector('.pipeline-view__studio-link');
+    expect(link).toBeTruthy();
+    expect(link.parentElement.children.length).toBe(4); // back, h1, link, pill — sin <img> colado
+    // El valor del atributo queda intacto (los entities decodean al parsear,
+    // pero al no romper el href no se crea markup nuevo).
+    expect(link.getAttribute('href')).toBe(`#/song/${maliciousId}/estudio`);
+  });
+
   it('fases pending con letra no aprobada: sync/pitch quedan bloqueadas (.wait)', () => {
     renderSongPipelineView(container, SONG_ID);
     watchOnChange({ run: buildRun() });

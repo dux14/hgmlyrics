@@ -498,4 +498,42 @@ describe('applyReviewAction v2', () => {
       RangeError,
     );
   });
+
+  it('setLineText sin \\n cambia solo el texto (equivale a editLine)', () => {
+    const next = applyReviewAction(base(), { type: 'setLineText', section: 0, line: 0, text: 'uno dos editado' });
+    expect(next.sections[0].lines.map((l) => l.text)).toEqual(['uno dos editado', 'tres cuatro']);
+    expect(next.sections[0].lines[0].startMs).toBe(0); // conserva timing, como editLine
+  });
+
+  it('setLineText con \\n parte el renglón en piezas (splice conserva el resto)', () => {
+    const next = applyReviewAction(base(), { type: 'setLineText', section: 0, line: 0, text: 'uno\ndos' });
+    expect(next.sections[0].lines.map((l) => l.text)).toEqual(['uno', 'dos', 'tres cuatro']);
+  });
+
+  it('setLineText con texto vacío lanza RangeError, igual criterio que editLine', () => {
+    expect(() => applyReviewAction(base(), { type: 'setLineText', section: 0, line: 0, text: '  ' }))
+      .toThrow(RangeError);
+  });
+
+  it('setLineText con índice inválido lanza RangeError y no muta el doc', () => {
+    const doc = base();
+    expect(() => applyReviewAction(doc, { type: 'setLineText', section: 0, line: 9, text: 'x' }))
+      .toThrow(RangeError);
+    expect(doc.sections[0].lines.map((l) => l.text)).toEqual(['uno dos', 'tres cuatro']);
+  });
+
+  it('setLanguage escribe doc.language sin mutar el original; valor fuera de es/en lanza RangeError', () => {
+    const doc = base();
+    expect(doc.language).toBe('es');
+    const next = applyReviewAction(doc, { type: 'setLanguage', language: 'en' });
+    expect(next.language).toBe('en');
+    expect(doc.language).toBe('es');
+    expect(() => applyReviewAction(doc, { type: 'setLanguage', language: 'fr' })).toThrow(RangeError);
+  });
+
+  it('approvedSnapshot no cambia con el idioma: el hash solo depende de sections', () => {
+    const doc = base();
+    const withEn = applyReviewAction(doc, { type: 'setLanguage', language: 'en' });
+    expect(approvedSnapshot(doc).hash).toBe(approvedSnapshot(withEn).hash);
+  });
 });

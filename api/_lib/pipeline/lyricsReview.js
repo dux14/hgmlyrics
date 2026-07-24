@@ -17,9 +17,14 @@ import {
   splitAtSectionBoundaries,
   splitBySeed,
   splitLineAtWord,
+  splitLineByText,
   lineConfidence,
   VOCALIZATION_CONFIDENCE_THRESHOLD,
 } from './lyricsSplit.js';
+
+// Idiomas soportados por la partitura vocal (align_app.py ya no autodetecta:
+// el admin elige acá y el idioma viaja pegado a la letra aprobada).
+const SUPPORTED_LANGUAGES = ['es', 'en'];
 
 // Normalización mínima de tipo de sección, DUPLICADA a propósito (ver header
 // de src/lib/sectionTypes.js: la lógica se duplica ahí mismo para que
@@ -256,6 +261,9 @@ export function buildReviewDoc({ transcription, structureSegments = [], seedSect
     section.endMs = env.endMs;
   }
 
+  // El idioma no se adivina (sin autodetección en align_app.py): el admin lo
+  // elige en el gate vía setLanguage; 'es' es el default del gate.
+  collapsed.language = 'es';
   return collapsed;
 }
 
@@ -304,6 +312,29 @@ export function applyReviewAction(doc, action) {
         throw new RangeError(`text inválido: ${action.text}`);
       }
       line.text = action.text;
+      break;
+    }
+    // setLineText (P2): el admin escribe un salto de línea en el editor.
+    // Sin \n, splitLineByText devuelve un renglón (equivale a editLine); con
+    // \n devuelve un array de piezas que reemplaza al renglón original.
+    case 'setLineText': {
+      const section = requireSection(next, action.section);
+      const line = requireLine(section, action.line);
+      if (typeof action.text !== 'string' || action.text.trim() === '') {
+        throw new RangeError(`text inválido: ${action.text}`);
+      }
+      const result = splitLineByText(line, action.text);
+      const pieces = Array.isArray(result) ? result : [result];
+      section.lines.splice(action.line, 1, ...pieces);
+      break;
+    }
+    // setLanguage (P1): el idioma no se adivina, viaja pegado a la letra
+    // aprobada. No toca approvedSnapshot/hash (sigue hasheando solo sections).
+    case 'setLanguage': {
+      if (!SUPPORTED_LANGUAGES.includes(action.language)) {
+        throw new RangeError(`language inválido: ${action.language}`);
+      }
+      next.language = action.language;
       break;
     }
     case 'splitLine': {

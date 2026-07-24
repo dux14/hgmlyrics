@@ -155,6 +155,25 @@ describe('SyncFineTuning', () => {
     detail.destroy();
   });
 
+  it('gate: run con sync fuera de done NO pinta líneas del store (aunque timings.ready)', async () => {
+    mockReady([{ i: 0, startMs: 0, score: 0.9, interpolated: false }]);
+    const detail = createSyncFineTuning({ songId: 'song-1' });
+    container.appendChild(detail.el);
+    // El padre informa un run cuyo sync todavía no terminó: el alignment del
+    // store es de un run superado y NO debe mostrarse.
+    detail.update({ phases: { sync: { status: 'pending' } } });
+
+    await vi.waitFor(() => expect(songAudioApi.getSongAudio).toHaveBeenCalled());
+    expect(detail.el.querySelectorAll('.lineRow').length).toBe(0);
+    expect(detail.el.textContent).toContain('La sincronía todavía no está lista');
+
+    // Cuando sync pasa a done, sí se pinta.
+    detail.update({ phases: { sync: { status: 'done' } } });
+    await vi.waitFor(() => expect(detail.el.querySelectorAll('.lineRow').length).toBe(1));
+
+    detail.destroy();
+  });
+
   it('dotClass: score bajo pero interpolated:false es "hi" (alineada), no "int"', async () => {
     mockReady([{ i: 0, startMs: 0, score: 0.2, interpolated: false }]);
     const detail = createSyncFineTuning({ songId: 'song-1' });

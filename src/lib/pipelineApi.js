@@ -227,12 +227,35 @@ export async function patchStructure(songId, patch) {
  *   invocable como función; `.refresh` fuerza un refresh fuera de ciclo (p.
  *   ej. desde un botón "Reintentar" tras un {error}).
  */
+// Estados terminales del run: no cambian sin acción del usuario, así que el
+// polling de 3s se detiene al alcanzarlos (evita martillar /pipeline —> getUser
+// —> 429 de Supabase Auth cuando una pestaña queda abierta sobre una canción ya
+// procesada). Un broadcast reactiva el polling si arranca un run nuevo.
+const TERMINAL_RUN_STATUSES = new Set(['done', 'failed', 'cancelled', 'superseded']);
+// Coalesce de la ráfaga de broadcasts (el trigger emite un 'change' por cada
+// transición de fase durante el procesamiento): un trailing debounce agrupa la
+// ráfaga en un solo refresh en vez de un GET inmediato por evento.
+const BROADCAST_DEBOUNCE_MS = 400;
+
 export function watchPipelineRun(songId, onChange) {
   let stopped = false;
   // Contador monotónico: polling y broadcast pueden solaparse y resolver fuera
   // de orden. Solo la petición más reciente emite, para no regresar la vista a
   // un estado viejo.
   let lastReqId = 0;
+  let pollId = null;
+  let debounceId = null;
+
+  function startPolling() {
+    if (pollId || stopped) return;
+    pollId = setInterval(refresh, 3000);
+  }
+  function stopPolling() {
+    if (pollId) {
+      clearInterval(pollId);
+      pollId = null;
+    }
+  }
 
   async function refresh() {
     // El botón "Reintentar" del banner de error llama a `.refresh()` incluso
@@ -259,6 +282,14 @@ export function watchPipelineRun(songId, onChange) {
     // queda FUERA del try: un error del consumer no debe enmascararse como
     // ruido de red.
     if (stopped || reqId !== lastReqId) return;
+    // Corta el polling en estado terminal; lo mantiene/reactiva mientras el run
+    // esté activo (o no exista todavía: null —> el usuario aún puede subir audio).
+    const status = data?.run?.status ?? null;
+    if (status && TERMINAL_RUN_STATUSES.has(status)) {
+      stopPolling();
+    } else {
+      startPolling();
+    }
     onChange(data);
   }
 
@@ -266,17 +297,26 @@ export function watchPipelineRun(songId, onChange) {
     config: { broadcast: { self: false } },
   });
   channel.on('broadcast', { event: 'change' }, () => {
-    refresh();
+    if (stopped) return;
+    if (debounceId) clearTimeout(debounceId);
+    debounceId = setTimeout(() => {
+      debounceId = null;
+      // Un broadcast implica que algo cambió (p. ej. arrancó un run nuevo tras
+      // uno terminal): reactiva el polling y refresca.
+      startPolling();
+      refresh();
+    }, BROADCAST_DEBOUNCE_MS);
   });
   channel.subscribe();
 
-  const pollId = setInterval(refresh, 3000);
+  startPolling();
   refresh();
 
   function unsubscribe() {
     if (stopped) return;
     stopped = true;
-    clearInterval(pollId);
+    stopPolling();
+    if (debounceId) clearTimeout(debounceId);
     supabase.removeChannel(channel);
   }
   // Se mantiene el contrato de "función invocable" (único call-site sigue

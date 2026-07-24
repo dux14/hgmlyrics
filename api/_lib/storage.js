@@ -184,6 +184,27 @@ export async function signSongAudioDownload(key, expiresIn = 21600) {
 }
 
 /**
+ * Firma varias keys de descarga en UNA sola llamada (createSignedUrls) en vez
+ * de N createSignedUrl en ráfaga. Un GET del Estudio/section-audio con muchas
+ * secciones × scopes podía disparar ~200 firmas en paralelo contra Storage y
+ * tropezar con el rate limit upstream de Supabase (429 "too many requests").
+ * Devuelve las URLs en el MISMO orden que `keys` (null si esa key falló).
+ * @param {string[]} keys
+ * @param {number} [expiresIn]
+ * @returns {Promise<(string|null)[]>}
+ */
+export async function signSongAudioDownloads(keys, expiresIn = 21600) {
+  if (keys.length === 0) return [];
+  const { data, error } = await supabase.storage
+    .from(SONG_AUDIO_BUCKET)
+    .createSignedUrls(keys, expiresIn);
+  if (error) throw error;
+  // createSignedUrls devuelve un array alineado con la entrada; cada item trae
+  // { path, error, signedUrl }. Se preserva el orden para mapear 1:1 con las filas.
+  return data.map((d) => d?.signedUrl ?? null);
+}
+
+/**
  * Borra un objeto del bucket song-audio. Best-effort: ignora "not found" para
  * que el DELETE de la fila no falle si el objeto ya no estaba (p.ej. borrado manual).
  * @param {string} key

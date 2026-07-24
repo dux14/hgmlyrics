@@ -9,22 +9,28 @@ import { allowMethods, withErrors } from '../../_lib/http.js';
 import {
   pipelineInputKey,
   createSongAudioSignedPutUrl,
-  signSongAudioDownload,
+  signSongAudioDownloads,
   deleteSongAudioObjects,
 } from '../../_lib/storage.js';
 import { deletePitchPrefix } from '../../pitch/_lib/storage.js';
 import { initialPhases } from '../../_lib/pipeline/state.js';
 import { titleSimilarity, TITLE_MATCH_THRESHOLD } from '../../_lib/pipeline/titleMatch.js';
 
-async function findActiveRun(songId) {
+// Run "actual" para el GET del stepper: el activo (no terminal) si existe, y si
+// no, el último terminal 'done'/'failed'. Sin este fallback, una canción YA
+// procesada (run 'done') caía en 404 y la vista de Procesamiento la mostraba
+// como "no procesada" (0/6). Se excluyen 'cancelled'/'superseded' (historial:
+// reemplazados por un run más nuevo o purgados) — el ORDER BY created_at ya deja
+// arriba el activo cuando coexiste con un terminal viejo. El set no-terminal es
+// el mismo del índice único parcial (song_pipeline_runs_one_active_per_song).
+async function findCurrentRun(songId) {
   const rows = await sql`
     SELECT id, song_id AS "songId", status, phases, input_path AS "inputPath",
       input_meta AS "inputMeta", lyrics_review AS "lyricsReview", created_at AS "createdAt"
     FROM song_pipeline_runs
     WHERE song_id = ${songId}
-      -- Estados no terminales: mismo set que el índice único parcial de la
-      -- migración (song_pipeline_runs_one_active_per_song).
-      AND status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')
+      AND status IN ('created', 'uploading', 'processing', 'awaiting_lyrics',
+                     'running', 'done', 'failed')
     ORDER BY created_at DESC LIMIT 1
   `;
   return rows[0] ?? null;
@@ -34,22 +40,27 @@ async function findActiveRun(songId) {
 // storage key; para el front necesitamos la URL de descarga firmada, no la key cruda.
 async function signTracks(phases) {
   const signed = structuredClone(phases);
+  // Junta TODAS las keys de todas las fases y las firma en UNA sola llamada
+  // batch (createSignedUrls) en vez de un createSignedUrl por pista: evita la
+  // ráfaga contra Storage que contribuye al 429 de Supabase.
+  const refs = [];
   for (const phase of Object.keys(signed)) {
     const tracks = signed[phase]?.tracks;
     if (!tracks) continue;
-    const entries = await Promise.all(
-      Object.entries(tracks).map(async ([k, v]) => [
-        k,
-        typeof v === 'string' ? await signSongAudioDownload(v) : v,
-      ]),
-    );
-    signed[phase] = { ...signed[phase], tracks: Object.fromEntries(entries) };
+    for (const [k, v] of Object.entries(tracks)) {
+      if (typeof v === 'string') refs.push({ phase, k, key: v });
+    }
   }
+  if (refs.length === 0) return signed;
+  const urls = await signSongAudioDownloads(refs.map((r) => r.key));
+  refs.forEach((r, idx) => {
+    signed[r.phase].tracks[r.k] = urls[idx];
+  });
   return signed;
 }
 
 async function getRun(_req, res, songId) {
-  const run = await findActiveRun(songId);
+  const run = await findCurrentRun(songId);
   if (!run) {
     res.status(404).json({ error: 'No hay una ejecución activa para esta canción' });
     return;

@@ -28,7 +28,7 @@ vi.mock('../api/_lib/http.js', () => ({
   withErrors: (fn) => fn,
 }));
 vi.mock('../api/_lib/storage.js', () => ({
-  signSongAudioDownload: vi.fn((key) => Promise.resolve(`https://get/${key}`)),
+  signSongAudioDownloads: vi.fn((keys) => Promise.resolve(keys.map((k) => `https://get/${k}`))),
 }));
 
 process.env.SUPABASE_URL = 'https://x.supabase.co';
@@ -37,7 +37,7 @@ process.env.DATABASE_URL = 'postgresql://test';
 
 const handler = (await import('../api/songs/[id]/studio.js')).default;
 const { requireUser } = await import('../api/_lib/auth.js');
-const { signSongAudioDownload } = await import('../api/_lib/storage.js');
+const { signSongAudioDownloads } = await import('../api/_lib/storage.js');
 
 function makeReq(over = {}) {
   return { method: 'GET', query: { id: 'song-1' }, body: {}, ...over };
@@ -76,7 +76,7 @@ describe('GET /api/songs/[id]/studio', () => {
     expect(requireUser).toHaveBeenCalled();
     expect(res._status).toBe(404);
     expect(res._body).toEqual({ error: 'Esta canción todavía no tiene estudio publicado' });
-    expect(signSongAudioDownload).not.toHaveBeenCalled();
+    expect(signSongAudioDownloads).not.toHaveBeenCalled();
   });
 
   it('con stems → 200 con stems firmados + analysis + sections + timings + title', async () => {
@@ -118,9 +118,12 @@ describe('GET /api/songs/[id]/studio', () => {
       audio: null,
       clips: [],
     });
-    expect(signSongAudioDownload).toHaveBeenCalledTimes(2);
-    expect(signSongAudioDownload).toHaveBeenCalledWith('song-1/vocals.mp3');
-    expect(signSongAudioDownload).toHaveBeenCalledWith('song-1/instrumental.mp3');
+    // Firma en batch: UNA sola llamada con stems + clips juntos.
+    expect(signSongAudioDownloads).toHaveBeenCalledTimes(1);
+    expect(signSongAudioDownloads).toHaveBeenCalledWith([
+      'song-1/vocals.mp3',
+      'song-1/instrumental.mp3',
+    ]);
   });
 
   it('sin analysis/sections/timings → analysis:null, sections:[], timings:null', async () => {

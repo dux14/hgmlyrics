@@ -45,6 +45,15 @@ export function createSyncFineTuning({ songId, getSong = () => null, getVocalsUr
 
   let destroyed = false;
   let lastSyncStatus = null;
+  // Gate: la Sincronía se lee de un store independiente (/audio) que puede
+  // conservar el alignment de un run anterior. NO se muestra data si el run
+  // ACTUAL tiene la fase `sync` fuera de 'done' — si no, la vista mostraría "37
+  // líneas ancladas" mientras el stepper dice "0/6 / en espera" (data de un run
+  // superado). `runSeen` arranca en false: el gate queda abierto hasta que el
+  // padre informe un run vía update(run) (SongPipelineView SIEMPRE lo hace en su
+  // primer renderPhases). Una vez visto un run, manda `syncDone`.
+  let runSeen = false;
+  let syncDone = false;
 
   // Corrección manual por línea — mismo patrón que SongAudioSection: índice
   // canónico expandido, startMs propuesto y línea sonando (para resaltar).
@@ -226,7 +235,10 @@ export function createSyncFineTuning({ songId, getSong = () => null, getVocalsUr
       return;
     }
 
-    if (state.timings?.status !== 'ready') {
+    // Gate por la fase del run: con un run visto y sync fuera de 'done' no se
+    // pinta la data del store (evita mostrar el alignment de un run superado con
+    // el stepper en "en espera").
+    if ((runSeen && !syncDone) || state.timings?.status !== 'ready') {
       el.innerHTML = `
         <p class="sync-tuning__hint">La sincronía todavía no está lista</p>
         ${state.error ? `<p class="sync-tuning__error" role="alert">${escapeHtml(state.error)}</p>` : ''}
@@ -442,12 +454,20 @@ export function createSyncFineTuning({ songId, getSong = () => null, getVocalsUr
     update(run) {
       const status = run?.phases?.sync?.status ?? null;
       const becameDone = status === 'done' && lastSyncStatus !== 'done';
+      const gateWasOpen = !runSeen || syncDone;
       lastSyncStatus = status;
+      runSeen = true;
+      syncDone = status === 'done';
+      const gateOpen = syncDone;
       // Evita pisar el estado local mientras el admin está editando una
       // línea o tiene un valor de metrónomo sin guardar: el próximo
       // refresh() disparado por un evento real (guardar, descartar) ya
       // trae la sincronía al día.
-      if (becameDone && expandedI === null && !metronomeDirty) refresh();
+      if (expandedI !== null || metronomeDirty) return;
+      if (becameDone) refresh();
+      // El gate cambió (p. ej. un run nuevo dejó sync en pending): repinta para
+      // ocultar/mostrar la data del store sin re-fetchear.
+      else if (gateOpen !== gateWasOpen) render();
     },
     // A7 fix: la carrera SongPipelineView vs. este componente — el watcher
     // del run puede consumir la transición pending→done de `update()` ANTES

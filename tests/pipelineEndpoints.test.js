@@ -8,6 +8,7 @@ vi.mock('../api/_lib/storage.js', () => ({
   pipelineInputKey: (songId, runId) => `${songId}/runs/${runId}/full.mp3`,
   createSongAudioSignedPutUrl: vi.fn(async (key) => `https://signed/put/${key}`),
   signSongAudioDownload: vi.fn(async (key) => `https://signed/get/${key}`),
+  signSongAudioDownloads: vi.fn(async (keys) => keys.map((k) => `https://signed/get/${k}`)),
   pipelineInputStat: vi.fn(async () => ({ exists: true, size: 1024 })),
   pipelineStemKey: (songId, kind) => `${songId}/stems/${kind}.mp3`,
   deleteSongAudioObjects: vi.fn(async () => {}),
@@ -212,6 +213,23 @@ describe('GET /api/songs/:id/pipeline', () => {
     expect(res.status).toHaveBeenCalledWith(404);
   });
 
+  it('devuelve un run terminal done (canción ya procesada, no 404)', async () => {
+    // Fallback findCurrentRun: sin run activo pero con uno terminal 'done', la
+    // vista de Procesamiento debe verlo (6/6), no caer en 404 "no procesada".
+    const phases = initialPhases();
+    for (const k of Object.keys(phases)) phases[k] = { status: 'done', error: null };
+    routeSql([
+      [
+        'SELECT id, song_id AS "songId"',
+        [{ id: 'r-done', songId: 's1', status: 'done', phases, inputMeta: {}, lyricsReview: {} }],
+      ],
+    ]);
+    const res = makeRes();
+    await pipelineHandler({ method: 'GET', query: { id: 's1' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json.mock.calls[0][0].run.status).toBe('done');
+  });
+
   it('adjunta run.structure.segments desde song_structure (Task 16)', async () => {
     const phases = initialPhases();
     const segments = [{ label: 'verso', startMs: 0, endMs: 5000 }];
@@ -302,9 +320,7 @@ describe('DELETE /api/songs/:id/pipeline (A2: purga)', () => {
     // ...y el shim de song_line_timings queda filtrado al provider del
     // pipeline: un align standalone (provider 'whisperx', ver
     // modal/align_app.py) no debe perderse al reemplazar el audio.
-    const timingsQuery = capturedQueries.find(
-      (q) => q.includes('DELETE FROM song_line_timings'),
-    );
+    const timingsQuery = capturedQueries.find((q) => q.includes('DELETE FROM song_line_timings'));
     expect(timingsQuery).toContain("provider = 'pipeline'");
   });
 
@@ -666,11 +682,9 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
     const res = makeRes();
     await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(dispatchPhase).toHaveBeenCalledWith(
-      'stems',
-      expect.objectContaining({ id: 'r1' }),
-      { isRetry: true },
-    );
+    expect(dispatchPhase).toHaveBeenCalledWith('stems', expect.objectContaining({ id: 'r1' }), {
+      isRetry: true,
+    });
     expect(persisted.stems.status).toBe('running');
   });
 

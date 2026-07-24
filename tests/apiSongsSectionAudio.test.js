@@ -30,6 +30,7 @@ vi.mock('../api/_lib/http.js', () => ({
 vi.mock('../api/_lib/storage.js', () => ({
   createSongAudioSignedPutUrl: vi.fn((key) => Promise.resolve(`https://put/${key}`)),
   signSongAudioDownload: vi.fn((key) => Promise.resolve(`https://get/${key}`)),
+  signSongAudioDownloads: vi.fn((keys) => Promise.resolve(keys.map((key) => `https://get/${key}`))),
   deleteSongAudioObject: vi.fn(async () => {}),
 }));
 
@@ -39,9 +40,8 @@ process.env.DATABASE_URL = 'postgresql://test';
 
 const handler = (await import('../api/songs/[id]/section-audio.js')).default;
 const { requireUser, requireAdmin } = await import('../api/_lib/auth.js');
-const { createSongAudioSignedPutUrl, deleteSongAudioObject } = await import(
-  '../api/_lib/storage.js'
-);
+const { createSongAudioSignedPutUrl, deleteSongAudioObject } =
+  await import('../api/_lib/storage.js');
 
 function makeReq(over = {}) {
   return { method: 'GET', query: { id: 'song-1' }, body: {}, ...over };

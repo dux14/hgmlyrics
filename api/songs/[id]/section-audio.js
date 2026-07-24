@@ -3,7 +3,7 @@ import { requireUser, requireAdmin } from '../../_lib/auth.js';
 import { allowMethods, withErrors } from '../../_lib/http.js';
 import {
   createSongAudioSignedPutUrl,
-  signSongAudioDownload,
+  signSongAudioDownloads,
   deleteSongAudioObject,
 } from '../../_lib/storage.js';
 
@@ -19,12 +19,11 @@ async function getSectionAudio(_req, res, songId) {
     WHERE song_id = ${songId}
     ORDER BY section_index, voice_scope
   `;
-  const items = await Promise.all(
-    rows.map(async ({ storageKey, ...row }) => ({
-      ...row,
-      url: await signSongAudioDownload(storageKey),
-    })),
-  );
+  // Firma en batch (1 request a Storage) en vez de un createSignedUrl por
+  // clip: con muchas secciones × scopes la ráfaga tropezaba con el rate limit
+  // de Supabase (429).
+  const urls = await signSongAudioDownloads(rows.map((r) => r.storageKey));
+  const items = rows.map(({ storageKey, ...row }, idx) => ({ ...row, url: urls[idx] }));
   res.status(200).json({ items });
 }
 

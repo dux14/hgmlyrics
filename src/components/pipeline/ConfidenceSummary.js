@@ -129,6 +129,11 @@ export function createConfidenceSummary({ songId, scrollToPhase }) {
     const syncStatus = run?.phases?.sync?.status ?? null;
     if (syncStatus === 'done' && syncStatus !== lastSyncStatus) {
       ensureTimings();
+    } else if (syncStatus !== 'done' && timings !== null) {
+      // Un run nuevo dejó sync fuera de 'done': descarta el alignment viejo para
+      // no reportar baja confianza de un run superado (mismo criterio que el
+      // gate de SyncFineTuning).
+      timings = null;
     }
     lastSyncStatus = syncStatus;
 

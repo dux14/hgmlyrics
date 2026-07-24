@@ -6,7 +6,7 @@
 import sql from '../../_lib/db.js';
 import { requireUser } from '../../_lib/auth.js';
 import { allowMethods, withErrors } from '../../_lib/http.js';
-import { signSongAudioDownload } from '../../_lib/storage.js';
+import { signSongAudioDownloads } from '../../_lib/storage.js';
 
 async function getStudio(_req, res, songId) {
   const [stems, [pitch], [song], [timings], [structure], [audio], clips] = await Promise.all([
@@ -38,22 +38,25 @@ async function getStudio(_req, res, songId) {
     return;
   }
 
-  const signedStems = await Promise.all(
-    stems.map(async (s) => ({
-      kind: s.kind,
-      url: await signSongAudioDownload(s.storageKey),
-      display: s.display ?? null,
-      // NUMERIC llega como string vía postgres.js: coacción explícita.
-      durationSec: s.durationSec == null ? null : Number(s.durationSec),
-    })),
-  );
-
-  const signedClips = await Promise.all(
-    clips.map(async ({ storageKey, ...clip }) => ({
-      ...clip,
-      url: await signSongAudioDownload(storageKey),
-    })),
-  );
+  // Firma TODO (stems + clips) en UNA sola llamada batch a Storage: un Estudio
+  // con muchos stems y secciones × scopes disparaba ~200 createSignedUrl en
+  // paralelo y tropezaba con el rate limit de Supabase (429 "too many requests").
+  const urls = await signSongAudioDownloads([
+    ...stems.map((s) => s.storageKey),
+    ...clips.map((c) => c.storageKey),
+  ]);
+  const signedStems = stems.map((s, i) => ({
+    kind: s.kind,
+    url: urls[i],
+    display: s.display ?? null,
+    // NUMERIC llega como string vía postgres.js: coacción explícita.
+    durationSec:
+      s.durationSec === null || s.durationSec === undefined ? null : Number(s.durationSec),
+  }));
+  const signedClips = clips.map(({ storageKey, ...clip }, i) => ({
+    ...clip,
+    url: urls[stems.length + i],
+  }));
 
   res.status(200).json({
     stems: signedStems,

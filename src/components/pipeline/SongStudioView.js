@@ -17,6 +17,7 @@ import { isAdmin } from '../../lib/authStore.js';
 import { getSongStudio } from '../../lib/studioApi.js';
 import { createMultiTrackPlayer } from './MultiTrackPlayer.js';
 import { createToneLyrics } from './ToneLyrics.js';
+import { createSectionAudioManager } from '../SectionPlayer.js';
 
 // Etiqueta legible por tipo de stem. Fallback: el propio `kind` tal cual
 // vino del backend (nunca queda una fila sin texto).
@@ -96,10 +97,12 @@ export function renderSongStudioView(container, songId) {
   let unmounted = false;
   let player = null;
   let tone = null;
+  let clipManager = null;
   const off = onRouteChange(() => {
     unmounted = true;
     player?.destroy();
     tone?.destroy();
+    clipManager?.destroy();
     off();
   });
 
@@ -168,6 +171,44 @@ export function renderSongStudioView(container, songId) {
       player.els.mixer,
       player.els.audios,
     );
+
+    // Clip de la sección activa: reproduce song_section_audio con exclusión
+    // mutua contra el multitrack (nunca dos fuentes sonando a la vez). Sin
+    // clips (data.clips vacío), no se pinta el botón — nada de relleno.
+    if (data.clips?.length) {
+      clipManager = createSectionAudioManager({
+        tracks: data.clips.map((c, idx) => ({
+          id: `clip-${idx}`,
+          sectionIndex: c.sectionIndex,
+          voiceScope: c.voiceScope ?? null,
+          url: c.url,
+          label: c.label,
+          durationSec: c.durationSec,
+        })),
+      });
+      const clipBtn = document.createElement('button');
+      clipBtn.type = 'button';
+      clipBtn.className = 'studio-view__clip';
+      clipBtn.innerHTML = `${icon('scissors', { size: 16 })}<span>Escuchar solo esta sección</span>`;
+      clipBtn.addEventListener('click', () => {
+        const idx = player.getActiveSection?.() ?? 0;
+        const track = clipManager.tracksFor(idx)[0];
+        if (!track) return;
+        player.pause(); // exclusión mutua: nunca dos fuentes sonando
+        clipManager.play(track);
+      });
+      bodyEl.append(clipBtn);
+      // Exclusión mutua inversa: al arrancar el multitrack, pausar el clip.
+      player.onPlay(() => clipManager?.pause());
+      // El botón se deshabilita cuando la sección activa no tiene clip —
+      // se recalcula al cambiar de chip (onTime, vía updateActiveChip).
+      const refreshClipBtn = () => {
+        const idx = player.getActiveSection?.() ?? 0;
+        clipBtn.disabled = clipManager.tracksFor(idx).length === 0;
+      };
+      refreshClipBtn();
+      player.onTime(() => refreshClipBtn());
+    }
 
     // Leyenda: un ítem por voz que ToneLyrics efectivamente pinta
     // (tone.voices), no por posición en voices_present.

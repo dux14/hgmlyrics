@@ -1840,6 +1840,31 @@ body.chrome-hidden .main {
   }
 }
 
+.studio-view__clip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--border-radius-full, 999px);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease-out);
+}
+.studio-view__clip:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+.studio-view__clip:focus-visible {
+  outline: 2px solid var(--color-action);
+  outline-offset: 2px;
+}
+.studio-view__clip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* --- SongPartituraView (D5b): partitura por canción (letra↔nota) --- */
 .partitura-view__title {
   font-family: 'Cormorant Garamond', 'Cormorant-fallback', Georgia, serif;

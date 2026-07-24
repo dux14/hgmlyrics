@@ -31,6 +31,11 @@ vi.mock('../src/components/pipeline/ToneLyrics.js', () => ({
   createToneLyrics: (...args) => createToneLyrics(...args),
 }));
 
+const createSectionAudioManager = vi.fn();
+vi.mock('../src/components/SectionPlayer.js', () => ({
+  createSectionAudioManager: (...args) => createSectionAudioManager(...args),
+}));
+
 import { renderSongStudioView } from '../src/components/pipeline/SongStudioView.js';
 
 function makePlayerStub() {
@@ -51,8 +56,10 @@ function makePlayerStub() {
     },
     destroy: vi.fn(),
     onTime: vi.fn(),
+    onPlay: vi.fn(),
     seek: vi.fn(),
     pause: vi.fn(),
+    getActiveSection: vi.fn(() => 0),
   };
 }
 function makeToneStub(voices = []) {
@@ -87,6 +94,7 @@ function makeStudioData(overrides = {}) {
     sections: [],
     structure: null,
     timings: null,
+    clips: [],
     ...overrides,
   };
 }
@@ -102,6 +110,7 @@ describe('SongStudioView', () => {
     offRouteChange.mockReset();
     createMultiTrackPlayer.mockReset();
     createToneLyrics.mockReset();
+    createSectionAudioManager.mockReset();
     isAdmin.mockReset();
     isAdmin.mockReturnValue(false);
     routeChangeCb = null;
@@ -300,5 +309,55 @@ describe('SongStudioView', () => {
     const arg = createToneLyrics.mock.calls[0][0];
     expect(arg.structure).toEqual(data.structure);
     expect(arg.timings).toEqual(data.timings);
+  });
+
+  it('con clips: botón "Escuchar solo esta sección" pausa el multitrack al reproducir', async () => {
+    isAdmin.mockReturnValue(false);
+    const playerStub = makePlayerStub();
+    const toneStub = makeToneStub();
+    const clipTrack = {
+      id: 'clip-0',
+      sectionIndex: 0,
+      url: 'https://x/c0.mp3',
+      label: null,
+      durationSec: 12,
+      voiceScope: null,
+    };
+    const managerStub = {
+      tracksFor: vi.fn(() => [clipTrack]),
+      play: vi.fn(),
+      pause: vi.fn(),
+      destroy: vi.fn(),
+    };
+    createSectionAudioManager.mockReturnValue(managerStub);
+    createMultiTrackPlayer.mockReturnValue(playerStub);
+    createToneLyrics.mockReturnValue(toneStub);
+    getSongStudio.mockResolvedValue(
+      makeStudioData({
+        structure: { segments: [{ label: 'verso', startMs: 0, endMs: 12000 }] },
+        clips: [clipTrack],
+      }),
+    );
+    renderSongStudioView(container, 's1');
+    await Promise.resolve();
+    await Promise.resolve();
+    const btn = container.querySelector('.studio-view__clip');
+    expect(btn).not.toBeNull();
+    btn.click();
+    expect(playerStub.pause).toHaveBeenCalled();
+    expect(managerStub.play).toHaveBeenCalledWith(clipTrack);
+  });
+
+  it('sin clips: no se pinta el botón', async () => {
+    isAdmin.mockReturnValue(false);
+    const playerStub = makePlayerStub();
+    const toneStub = makeToneStub();
+    createMultiTrackPlayer.mockReturnValue(playerStub);
+    createToneLyrics.mockReturnValue(toneStub);
+    getSongStudio.mockResolvedValue(makeStudioData({ clips: [] }));
+    renderSongStudioView(container, 's1');
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(container.querySelector('.studio-view__clip')).toBeNull();
   });
 });

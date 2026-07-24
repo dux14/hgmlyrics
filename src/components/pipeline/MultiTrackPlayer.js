@@ -50,7 +50,7 @@ export function syncStep(audios, masterTime, threshold = DRIFT_THRESHOLD_S) {
 /**
  * Crea un reproductor multipista.
  * @param {{ tracks: Array<{kind:string, url:string, label?:string, durationSec?:number}>, structure?: {segments: Array<{label:string, startMs:number, endMs:number}>}|null, beats?: number[]|null, bpm?: number|null, timeSignature?: string, beatAnchor?: number }} opts
- * @returns {{ el: HTMLElement, els: { transport: HTMLElement, practice: HTMLElement, sections: HTMLElement, nowSound: HTMLElement, mixer: HTMLElement, audios: HTMLElement }, destroy: () => void, onTime: (cb: (sec:number)=>void) => (() => void), seek: (time:number) => void, pause: () => void }}
+ * @returns {{ el: HTMLElement, els: { transport: HTMLElement, practice: HTMLElement, sections: HTMLElement, nowSound: HTMLElement, mixer: HTMLElement, audios: HTMLElement }, destroy: () => void, onTime: (cb: (sec:number)=>void) => (() => void), onPlay: (cb: () => void) => (() => void), seek: (time:number) => void, pause: () => void, getActiveSection: () => number|null }}
  */
 export function createMultiTrackPlayer({
   tracks,
@@ -352,6 +352,15 @@ export function createMultiTrackPlayer({
     return () => timeListeners.delete(cb);
   };
 
+  // Listeners de "arrancó a reproducir" — usado por quien compone este
+  // player (SongStudioView) para exclusión mutua con el clip de sección
+  // (nunca deben sonar dos fuentes a la vez).
+  const playListeners = new Set();
+  const onPlay = (cb) => {
+    playListeners.add(cb);
+    return () => playListeners.delete(cb);
+  };
+
   /** Notifica a los listeners de tiempo (onTime) con `sec` en segundos. */
   const notifyTime = (sec) => {
     timeListeners.forEach((cb) => cb(sec));
@@ -405,6 +414,7 @@ export function createMultiTrackPlayer({
   const playAll = () => {
     playing = true;
     setPlayIcon(true);
+    playListeners.forEach((cb) => cb());
     // Reproduce SIEMPRE todas las pistas, muteadas o no: la audibilidad es
     // responsabilidad exclusiva de audio.muted (applyAudibility). Si la
     // maestra no reproduce, su currentTime queda en 0 y syncStep arrastra
@@ -554,6 +564,7 @@ export function createMultiTrackPlayer({
     stopLoop();
     metronome?.stop();
     timeListeners.clear();
+    playListeners.clear();
     rowLongPressCancels.forEach((cancel) => cancel());
     ac.abort();
     audios.forEach((audio) => {
@@ -592,7 +603,9 @@ export function createMultiTrackPlayer({
     els: { transport, practice, sections, nowSound: nowSoundEl, mixer, audios: audiosEl },
     destroy,
     onTime,
+    onPlay,
     seek,
     pause: pauseAll,
+    getActiveSection: () => activeChipIdx,
   };
 }

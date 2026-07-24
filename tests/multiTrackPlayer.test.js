@@ -302,6 +302,22 @@ describe('createMultiTrackPlayer', () => {
     expect(player.els.nowSound.textContent).toBe('Sonando: Voz + Bajo');
     player.destroy();
   });
+
+  it('onPlay: se notifica al arrancar playAll (exclusión mutua con clips)', () => {
+    const p = createMultiTrackPlayer({ tracks: makeTracks(), structure: null });
+    const cb = vi.fn();
+    p.onPlay(cb);
+    p.el.querySelector('.mtp__play').click();
+    expect(cb).toHaveBeenCalled();
+    p.destroy();
+  });
+
+  it('getActiveSection retorna el índice del chip activo', () => {
+    const structure = { segments: [{ label: 'verso', startMs: 0, endMs: 30000 }] };
+    const p = createMultiTrackPlayer({ tracks: makeTracks(), structure });
+    expect(p.getActiveSection()).toBe(0); // updateActiveChip(0) en init
+    p.destroy();
+  });
 });
 
 describe('createMultiTrackPlayer — long-press vs click nativo (guard anti-carrera)', () => {

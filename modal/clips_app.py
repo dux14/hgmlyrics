@@ -170,22 +170,37 @@ def _download(get_url: str, suffix: str = ".audio") -> str:
     return path
 
 
+# Micro-fade en ambos bordes del clip: mata el click del padding del encoder
+# sin que se perciba como atenuacion (10 ms).
+CLIP_FADE_SEC = 0.010
+
+
 def _cut_clip(src_path: str, start_ms: int, end_ms: int) -> str:
     """
-    Corta [start_ms, end_ms) de `src_path` con ffmpeg `-c copy` (sin
-    reencode: rapido, y las pistas ya vienen en el formato final).
-    Devuelve la ruta local del clip producido.
+    Corta [start_ms, end_ms) de `src_path` REENCODEANDO a mp3 192k, con
+    micro-fades de 10 ms en ambos bordes.
+
+    No se usa `-c copy` (H10 de la auditoria del 24-jul): cortar mp3 en modo
+    copia alinea al frame mas cercano (~26 ms), rompe el bit reservoir de los
+    primeros frames y deja los clicks del padding gapless — exactamente los
+    micro-cortes que se oian en el mixer. El costo de CPU del reencode es
+    despreciable frente a la separacion de stems.
     """
     fd, out_path = tempfile.mkstemp(suffix=".mp3")
     os.close(fd)
     start_s = start_ms / 1000.0
-    end_s = end_ms / 1000.0
+    dur_s = max((end_ms - start_ms) / 1000.0, 0.001)
+    # En clips muy cortos el fade no puede comerse mas de un cuarto del clip.
+    fade_s = min(CLIP_FADE_SEC, dur_s / 4)
+    fade_out_start = max(dur_s - fade_s, 0.0)
     cmd = [
         "ffmpeg", "-y",
-        "-ss", str(start_s),
-        "-to", str(end_s),
+        "-ss", f"{start_s:.3f}",
+        "-t", f"{dur_s:.3f}",
         "-i", src_path,
-        "-c", "copy",
+        "-af",
+        f"afade=t=in:st=0:d={fade_s:.3f},afade=t=out:st={fade_out_start:.3f}:d={fade_s:.3f}",
+        "-c:a", "libmp3lame", "-b:a", "192k",
         out_path,
     ]
     subprocess.run(cmd, check=True, capture_output=True)

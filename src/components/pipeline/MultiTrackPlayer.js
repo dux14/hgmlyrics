@@ -10,7 +10,18 @@
 import { icon } from '../../lib/icons.js';
 import { safeUrl, escapeHtml } from '../../lib/escape.js';
 import { fmtTime, clamp, timeToPos, posToTime } from '../StudioPlayer.js';
+import { isTrackAudible, nowSoundLabel } from '../../lib/studioPractice.js';
 import '../../styles/pipeline.css';
+
+const LONG_PRESS_MS = 500;
+
+/** Crea un nodo DOM con clase e innerHTML dados (helper de composicion). */
+const buildEl = (tag, className, html = '') => {
+  const node = document.createElement(tag);
+  node.className = className;
+  if (html) node.innerHTML = html;
+  return node;
+};
 
 const DRIFT_THRESHOLD_S = 0.04;
 
@@ -37,25 +48,49 @@ export function syncStep(audios, masterTime, threshold = DRIFT_THRESHOLD_S) {
 /**
  * Crea un reproductor multipista.
  * @param {{ tracks: Array<{kind:string, url:string, label?:string, durationSec?:number}>, structure?: {segments: Array<{label:string, startMs:number, endMs:number}>}|null }} opts
- * @returns {{ el: HTMLElement, destroy: () => void }}
+ * @returns {{ el: HTMLElement, els: { transport: HTMLElement, practice: HTMLElement, sections: HTMLElement, nowSound: HTMLElement, mixer: HTMLElement, audios: HTMLElement }, destroy: () => void, onTime: (cb: (sec:number)=>void) => (() => void), seek: (time:number) => void, pause: () => void }}
  */
 export function createMultiTrackPlayer({ tracks, structure }) {
   const ac = new AbortController();
-  const root = document.createElement('div');
-  root.className = 'mtp';
+  const root = buildEl('div', 'mtp');
+
+  // Transporte maestro: play, barra de progreso, tiempo.
+  const transport = buildEl(
+    'div',
+    'mtp__transport',
+    `
+    <button type="button" class="mtp__play" aria-label="Reproducir">${icon('play', { size: 18 })}</button>
+    <div class="mtp__bar" role="slider" tabindex="0"
+         aria-label="Buscar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="mtp__fill"></div>
+      <div class="mtp__thumb"></div>
+    </div>
+    <span class="mtp__time" aria-hidden="true">0:00 / 0:00</span>
+  `,
+  );
+
+  // Tira de práctica (loop de sección + velocidad) — la llena Task 4, vacía
+  // por ahora: solo se reserva el sub-elemento del layout.
+  const practice = buildEl('div', 'mtp__practice');
 
   // Chips de navegación por sección (estructura detectada por SongFormer,
-  // Task 8). Sin `structure.segments` (o vacío) no aparece la fila — no se
-  // inventa contenido de relleno, mismo criterio que el encabezado de grupo.
+  // Task 8). Sin `structure.segments` (o vacío) el contenedor queda vacío —
+  // no se inventa contenido de relleno, mismo criterio que el encabezado de
+  // grupo.
   const segments = Array.isArray(structure?.segments) ? structure.segments : [];
-  const sectionsHtml = segments.length
-    ? `<div class="mtp__sections">${segments
-        .map(
-          (seg, i) =>
-            `<button type="button" class="mtp__section-chip" data-idx="${i}">${escapeHtml(seg.label ?? '')}</button>`,
-        )
-        .join('')}</div>`
-    : '';
+  const sections = buildEl(
+    'div',
+    'mtp__sections',
+    segments
+      .map(
+        (seg, i) =>
+          `<button type="button" class="mtp__section-chip" data-idx="${i}">${escapeHtml(seg.label ?? '')}</button>`,
+      )
+      .join(''),
+  );
+
+  // Línea viva "qué estoy oyendo" (modelo C).
+  const nowSoundEl = buildEl('div', 'mtp__nowsound');
 
   // Encabezado de grupo sutil: se inserta antes de la fila cuando `group`
   // cambia respecto de la fila anterior. Sin `group` en los tracks, no
@@ -71,81 +106,74 @@ export function createMultiTrackPlayer({ tracks, structure }) {
       lastGroup = t.group ?? lastGroup;
       return `
       ${groupHtml}
-      <div class="mtp__row" data-idx="${i}">
-        <span class="mtp__row-label">${label}</span>
-        <div class="mtp__row-actions">
-          <button type="button" class="mtp__row-btn mtp__row-btn--mute" data-idx="${i}" aria-label="Silenciar ${label}" aria-pressed="false">M</button>
-          <button type="button" class="mtp__row-btn mtp__row-btn--solo" data-idx="${i}" aria-label="Solo ${label}" aria-pressed="false">S</button>
-        </div>
+      <div class="mtp__row is-on" data-idx="${i}">
+        <button type="button" class="mtp__row-toggle" data-idx="${i}" aria-pressed="true" aria-label="Activar ${label}">
+          <span class="mtp__row-dot" aria-hidden="true"></span>
+          <span class="mtp__row-label">${label}</span>
+        </button>
+        <button type="button" class="mtp__row-btn mtp__row-btn--solo" data-idx="${i}" aria-pressed="false" aria-label="Aislar ${label}">${icon('circle-dot', { size: 16 })}</button>
       </div>`;
     })
     .join('');
 
-  root.innerHTML = `
-    <div class="mtp__transport">
-      <button type="button" class="mtp__play" aria-label="Reproducir">${icon('play', { size: 18 })}</button>
-      <div class="mtp__bar" role="slider" tabindex="0"
-           aria-label="Buscar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-        <div class="mtp__fill"></div>
-        <div class="mtp__thumb"></div>
-      </div>
-      <span class="mtp__time" aria-hidden="true">0:00 / 0:00</span>
-    </div>
-    ${sectionsHtml}
-    <div class="mtp__tracks">${rowsHtml}</div>
-    <div class="mtp__audios" hidden></div>
-  `;
-
-  const playBtn = root.querySelector('.mtp__play');
-  const bar = root.querySelector('.mtp__bar');
-  const fill = root.querySelector('.mtp__fill');
-  const thumb = root.querySelector('.mtp__thumb');
-  const timeEl = root.querySelector('.mtp__time');
-  const chipEls = Array.from(root.querySelectorAll('.mtp__section-chip'));
-  const muteBtns = Array.from(root.querySelectorAll('.mtp__row-btn--mute'));
-  const soloBtns = Array.from(root.querySelectorAll('.mtp__row-btn--solo'));
+  // Mixer: chip "Todo" (restaura la mezcla completa) + filas por pista.
+  const mixer = buildEl(
+    'div',
+    'mtp__mixer',
+    `<button type="button" class="mtp__all">Todo</button><div class="mtp__tracks">${rowsHtml}</div>`,
+  );
 
   // Un <audio> por pista, montado oculto (hidden) — no visible pero
   // presente en el DOM para que el navegador gestione su ciclo de vida.
-  const audiosContainer = root.querySelector('.mtp__audios');
+  const audiosEl = buildEl('div', 'mtp__audios');
+  audiosEl.hidden = true;
+
+  root.append(transport, practice, sections, nowSoundEl, mixer, audiosEl);
+
+  const playBtn = transport.querySelector('.mtp__play');
+  const bar = transport.querySelector('.mtp__bar');
+  const fill = transport.querySelector('.mtp__fill');
+  const thumb = transport.querySelector('.mtp__thumb');
+  const timeEl = transport.querySelector('.mtp__time');
+  const chipEls = Array.from(sections.querySelectorAll('.mtp__section-chip'));
+  const rowEls = Array.from(mixer.querySelectorAll('.mtp__row'));
+  const toggleBtns = Array.from(mixer.querySelectorAll('.mtp__row-toggle'));
+  const soloBtns = Array.from(mixer.querySelectorAll('.mtp__row-btn--solo'));
+  const allBtn = mixer.querySelector('.mtp__all');
+
   const audios = tracks.map((t) => {
     const audio = document.createElement('audio');
     audio.preload = 'metadata';
     audio.crossOrigin = 'anonymous';
     audio.src = safeUrl(t.url) || '';
-    audiosContainer.appendChild(audio);
+    audiosEl.appendChild(audio);
     return audio;
   });
 
-  // --- Estado mute/solo ---
-  const manualMuted = new Set(); // mute explicito por el usuario (boton M)
-  const soloed = new Set(); // pistas en solo (boton S)
+  // --- Estado del mixer (modelo C: aditivo + aislar) ---
+  const disabled = new Set(); // pistas apagadas por el usuario (fila entera)
+  const soloed = new Set(); // pistas aisladas (boton solo, circle-dot)
 
-  const anySolo = () => soloed.size > 0;
-
-  /** Recalcula audio.muted de todas las pistas segun mute manual + solo. */
+  /** Recalcula audio.muted de todas las pistas segun disabled + soloed. */
   const applyAudibility = () => {
     audios.forEach((audio, i) => {
-      const audible = anySolo() ? soloed.has(i) : !manualMuted.has(i);
-      audio.muted = !audible;
+      audio.muted = !isTrackAudible({ i, disabled, soloed });
     });
-    muteBtns.forEach((btn, i) => {
-      const active = manualMuted.has(i);
-      btn.classList.toggle('is-active', active);
-      btn.setAttribute('aria-pressed', String(active));
+    rowEls.forEach((row, i) => {
+      const on = isTrackAudible({ i, disabled, soloed });
+      row.classList.toggle('is-on', on);
+      row.classList.toggle('is-solo', soloed.has(i));
+      row.querySelector('.mtp__row-toggle').setAttribute('aria-pressed', String(!disabled.has(i)));
+      row.querySelector('.mtp__row-btn--solo').setAttribute('aria-pressed', String(soloed.has(i)));
     });
-    soloBtns.forEach((btn, i) => {
-      const active = soloed.has(i);
-      btn.classList.toggle('is-active', active);
-      btn.setAttribute('aria-pressed', String(active));
-    });
+    nowSoundEl.textContent = nowSoundLabel(tracks, disabled, soloed);
   };
   applyAudibility();
 
-  const onMuteClick = (e) => {
+  const onToggleClick = (e) => {
     const i = Number(e.currentTarget.dataset.idx);
-    if (manualMuted.has(i)) manualMuted.delete(i);
-    else manualMuted.add(i);
+    if (disabled.has(i)) disabled.delete(i);
+    else disabled.add(i);
     applyAudibility();
   };
   const onSoloClick = (e) => {
@@ -154,8 +182,47 @@ export function createMultiTrackPlayer({ tracks, structure }) {
     else soloed.add(i);
     applyAudibility();
   };
-  muteBtns.forEach((btn) => btn.addEventListener('click', onMuteClick, { signal: ac.signal }));
+  toggleBtns.forEach((btn) => btn.addEventListener('click', onToggleClick, { signal: ac.signal }));
   soloBtns.forEach((btn) => btn.addEventListener('click', onSoloClick, { signal: ac.signal }));
+  allBtn.addEventListener(
+    'click',
+    () => {
+      disabled.clear();
+      soloed.clear();
+      applyAudibility();
+    },
+    { signal: ac.signal },
+  );
+
+  // Long-press en la fila (touch/mouse, 500ms) también aísla la pista —
+  // atajo para no tener que apuntar al botón de solo en pantallas chicas.
+  // Se cancela con pointerup/pointerleave para no disparar de más.
+  const rowLongPressCancels = [];
+  rowEls.forEach((row, i) => {
+    let timer = null;
+    const cancel = () => {
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
+    row.addEventListener(
+      'pointerdown',
+      () => {
+        cancel();
+        timer = setTimeout(() => {
+          timer = null;
+          if (soloed.has(i)) soloed.delete(i);
+          else soloed.add(i);
+          applyAudibility();
+        }, LONG_PRESS_MS);
+      },
+      { signal: ac.signal },
+    );
+    row.addEventListener('pointerup', cancel, { signal: ac.signal });
+    row.addEventListener('pointerleave', cancel, { signal: ac.signal });
+    rowLongPressCancels.push(cancel);
+  });
 
   // --- Duracion / tiempo maestro ---
   const durationOf = (i) => {
@@ -364,6 +431,7 @@ export function createMultiTrackPlayer({ tracks, structure }) {
     destroyed = true;
     stopLoop();
     timeListeners.clear();
+    rowLongPressCancels.forEach((cancel) => cancel());
     ac.abort();
     audios.forEach((audio) => {
       audio.pause();
@@ -396,5 +464,12 @@ export function createMultiTrackPlayer({ tracks, structure }) {
     );
   });
 
-  return { el: root, destroy, onTime, seek };
+  return {
+    el: root,
+    els: { transport, practice, sections, nowSound: nowSoundEl, mixer, audios: audiosEl },
+    destroy,
+    onTime,
+    seek,
+    pause: pauseAll,
+  };
 }

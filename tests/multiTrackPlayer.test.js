@@ -41,14 +41,14 @@ describe('createMultiTrackPlayer', () => {
     destroy();
   });
 
-  it('play global llama play() en TODAS las pistas, incluidas las muteadas', () => {
+  it('play global llama play() en TODAS las pistas, incluidas las apagadas', () => {
     const { el, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
     const audios = el.querySelectorAll('audio');
-    const muteBtns = el.querySelectorAll('.mtp__row-btn--mute');
+    const toggleBtns = el.querySelectorAll('.mtp__row-toggle');
 
-    // Silenciar la pista 1 (Batería) antes de reproducir: solo debe afectar
+    // Apagar la pista 1 (Batería) antes de reproducir: solo debe afectar
     // audibilidad (muted), no si la pista reproduce.
-    muteBtns[1].click();
+    toggleBtns[1].click();
     expect(audios[1].muted).toBe(true);
 
     el.querySelector('.mtp__play').click();
@@ -63,29 +63,29 @@ describe('createMultiTrackPlayer', () => {
     destroy();
   });
 
-  it('mute/unmute en caliente: la pista sigue reproduciendo, nunca se pausa', () => {
+  it('apagar/prender en caliente: la pista sigue reproduciendo, nunca se pausa', () => {
     const { el, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
     const audios = el.querySelectorAll('audio');
-    const muteBtns = el.querySelectorAll('.mtp__row-btn--mute');
+    const toggleBtns = el.querySelectorAll('.mtp__row-toggle');
 
     el.querySelector('.mtp__play').click();
     window.HTMLMediaElement.prototype.pause.mockClear();
 
-    muteBtns[0].click();
+    toggleBtns[0].click();
     expect(audios[0].muted).toBe(true);
-    muteBtns[0].click();
+    toggleBtns[0].click();
     expect(audios[0].muted).toBe(false);
 
     expect(window.HTMLMediaElement.prototype.pause).not.toHaveBeenCalled();
     destroy();
   });
 
-  it('maestra muteada: igual reproduce y su currentTime avanza (no arrastra a 0)', () => {
+  it('maestra apagada: igual reproduce y su currentTime avanza (no arrastra a 0)', () => {
     const { el, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
     const audios = el.querySelectorAll('audio');
-    const muteBtns = el.querySelectorAll('.mtp__row-btn--mute');
+    const toggleBtns = el.querySelectorAll('.mtp__row-toggle');
 
-    muteBtns[0].click();
+    toggleBtns[0].click();
     expect(audios[0].muted).toBe(true);
 
     el.querySelector('.mtp__play').click();
@@ -123,17 +123,17 @@ describe('createMultiTrackPlayer', () => {
     expect(window.cancelAnimationFrame).toHaveBeenCalledTimes(2);
   });
 
-  it('mute de una pista: solo esa pista queda muted', () => {
+  it('apagar una pista: solo esa pista queda muted', () => {
     const { el, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
     const audios = el.querySelectorAll('audio');
-    const muteBtns = el.querySelectorAll('.mtp__row-btn--mute');
+    const toggleBtns = el.querySelectorAll('.mtp__row-toggle');
 
-    muteBtns[0].click();
+    toggleBtns[0].click();
 
     expect(audios[0].muted).toBe(true);
     expect(audios[1].muted).toBe(false);
     expect(audios[2].muted).toBe(false);
-    expect(muteBtns[0].getAttribute('aria-pressed')).toBe('true');
+    expect(toggleBtns[0].getAttribute('aria-pressed')).toBe('false');
     destroy();
   });
 
@@ -244,6 +244,51 @@ describe('createMultiTrackPlayer', () => {
     const cb = vi.fn();
     onTime(cb);
     expect(() => destroy()).not.toThrow();
+  });
+
+  it('expone sub-elementos para el layout B', () => {
+    const player = createMultiTrackPlayer({ tracks: makeTracks(), structure: null });
+    for (const key of ['transport', 'practice', 'sections', 'nowSound', 'mixer', 'audios']) {
+      expect(player.els[key]).toBeInstanceOf(HTMLElement);
+    }
+    player.destroy();
+  });
+
+  it('aditivo: todas encendidas al inicio; togglear una fila la apaga (muted)', () => {
+    const player = createMultiTrackPlayer({ tracks: makeTracks(), structure: null });
+    const audios = player.el.querySelectorAll('audio');
+    expect([...audios].map((a) => a.muted)).toEqual([false, false, false]);
+    player.el.querySelector('.mtp__row[data-idx="0"] .mtp__row-toggle').click();
+    expect(audios[0].muted).toBe(true);
+    expect(audios[1].muted).toBe(false);
+    player.destroy();
+  });
+
+  it('solo: aísla la pista aunque el resto esté encendido', () => {
+    const player = createMultiTrackPlayer({ tracks: makeTracks(), structure: null });
+    const audios = player.el.querySelectorAll('audio');
+    player.el.querySelector('.mtp__row[data-idx="1"] .mtp__row-btn--solo').click();
+    expect(audios[0].muted).toBe(true);
+    expect(audios[1].muted).toBe(false);
+    player.destroy();
+  });
+
+  it('chip Todo restaura la mezcla completa', () => {
+    const player = createMultiTrackPlayer({ tracks: makeTracks(), structure: null });
+    player.el.querySelector('.mtp__row[data-idx="0"] .mtp__row-toggle').click();
+    player.el.querySelector('.mtp__row[data-idx="1"] .mtp__row-btn--solo').click();
+    player.el.querySelector('.mtp__all').click();
+    const audios = player.el.querySelectorAll('audio');
+    expect([...audios].map((a) => a.muted)).toEqual([false, false, false]);
+    player.destroy();
+  });
+
+  it('nowsound refleja el estado del mixer', () => {
+    const player = createMultiTrackPlayer({ tracks: makeTracks(), structure: null });
+    expect(player.els.nowSound.textContent).toBe('Sonando: Voz + Batería + Bajo');
+    player.el.querySelector('.mtp__row[data-idx="1"] .mtp__row-toggle').click();
+    expect(player.els.nowSound.textContent).toBe('Sonando: Voz + Bajo');
+    player.destroy();
   });
 });
 

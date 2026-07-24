@@ -205,6 +205,79 @@ describe('buildReviewDoc v2', () => {
   });
 });
 
+describe('buildReviewDoc v2 + semilla: aislamiento del match entre fragmentos de frontera (blocker tanda C)', () => {
+  it('el fragmento posterior a una frontera de sección no reusa el match del anterior (sin corte espurio)', () => {
+    const doc = buildReviewDoc({
+      transcription: {
+        text: 'sé que tú me cuidarás quiero escuchar tu voz',
+        transLines: ['sé que tú me cuidarás quiero escuchar tu voz'],
+        words: [
+          { word: 'sé', startMs: 39000, endMs: 39300, score: 0.9 },
+          { word: 'que', startMs: 39400, endMs: 39700, score: 0.9 },
+          { word: 'tú', startMs: 39800, endMs: 40000, score: 0.9 },
+          { word: 'me', startMs: 40100, endMs: 40300, score: 0.9 },
+          { word: 'cuidarás', startMs: 40400, endMs: 41000, score: 0.9 },
+          { word: 'quiero', startMs: 42500, endMs: 42900, score: 0.9 },
+          { word: 'escuchar', startMs: 43000, endMs: 43600, score: 0.9 },
+          { word: 'tu', startMs: 43700, endMs: 43900, score: 0.9 },
+          { word: 'voz', startMs: 44000, endMs: 44400, score: 0.9 },
+        ],
+        // Alinea el renglón completo contra dbIndex 0 ("sé que"): el mismo
+        // match que antes se reusaba, sin corregir, en el segundo fragmento.
+        perLine: [{ transIndex: 0, dbIndex: 0, score: 0.9 }],
+      },
+      structureSegments: [
+        { label: 'coro', startMs: 28200, endMs: 42100 },
+        { label: 'verso', startMs: 42100, endMs: 58200 },
+      ],
+      seedSections: [
+        {
+          type: 'verse',
+          lines: [
+            { text: 'sé que' },
+            { text: 'tú me cuidarás' },
+            { text: 'quiero escuchar tu voz' },
+          ],
+        },
+      ],
+    });
+    const allLines = doc.sections.flatMap((s) => s.lines.map((l) => l.text));
+    // Con el bug, "quiero escuchar tu voz" quedaba partido en "quiero
+    // escuchar" / "tu voz" al heredar el dbIndex del primer fragmento.
+    expect(allLines).toContain('quiero escuchar tu voz');
+  });
+
+  it('un renglón que cruza dos líneas de semilla de secciones distintas no funde el chorus dentro del verse', () => {
+    const doc = buildReviewDoc({
+      transcription: {
+        text: 'me cuidarás quiero escuchar',
+        transLines: ['me cuidarás quiero escuchar'],
+        words: [
+          { word: 'me', startMs: 8000, endMs: 8400, score: 0.9 },
+          { word: 'cuidarás', startMs: 8500, endMs: 9200, score: 0.9 },
+          { word: 'quiero', startMs: 10500, endMs: 10900, score: 0.9 },
+          { word: 'escuchar', startMs: 11000, endMs: 11600, score: 0.9 },
+        ],
+        // dbIndex 1 = "me cuidarás", última línea del verse en la semilla.
+        perLine: [{ transIndex: 0, dbIndex: 1, score: 0.9 }],
+      },
+      structureSegments: [
+        { label: 'verso', startMs: 0, endMs: 10000 },
+        { label: 'coro', startMs: 10000, endMs: 20000 },
+      ],
+      seedSections: [
+        { type: 'verse', lines: [{ text: 'sé que tú' }, { text: 'me cuidarás' }] },
+        { type: 'chorus', lines: [{ text: 'quiero escuchar' }] },
+      ],
+    });
+    // Con el bug, "quiero escuchar" heredaba el sectionIdx de "me cuidarás"
+    // (verse) y collapseBySeed fusionaba el chorus dentro del verse,
+    // perdiendo su type.
+    expect(doc.sections.map((s) => s.type)).toContain('chorus');
+    expect(doc.sections).toHaveLength(2);
+  });
+});
+
 describe('canApprove v2 (editor puro)', () => {
   it('true con al menos un renglón; false con doc vacío', () => {
     const doc = buildReviewDoc({

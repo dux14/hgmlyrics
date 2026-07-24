@@ -19,7 +19,6 @@ import {
   splitLineAtWord,
   lineConfidence,
   VOCALIZATION_CONFIDENCE_THRESHOLD,
-  SEED_INHERIT_MIN_SCORE,
 } from './lyricsSplit.js';
 
 // Normalización mínima de tipo de sección, DUPLICADA a propósito (ver header
@@ -205,19 +204,34 @@ export function buildReviewDoc({ transcription, structureSegments = [], seedSect
   let lastSectionIdx = 0;
   for (const [transIndex, raw] of rawLines.entries()) {
     const match = seed.length ? (alignment.get(transIndex) ?? null) : null;
-    const pieces = splitAtSectionBoundaries(raw, sections)
-      .flatMap((p) => splitBySeed(p, match, seed))
-      .flatMap((p) => autoSplitLongLines({ version: 2, sections: [{ lines: [p] }] }).sections[0].lines);
+    const pieces = splitAtSectionBoundaries(raw, sections).flatMap((boundaryPiece, boundaryIdx) => {
+      // Solo la PRIMERA pieza de una frontera de sección hereda el match del
+      // renglón completo: las siguientes ya son un fragmento temporal
+      // posterior cuyo dbIndex real no puede derivarse sin volver a alinear
+      // -- reusar el mismo dbIndex ahí producía cortes espurios (blocker
+      // tanda C: la segunda pieza consumía líneas de semilla que en realidad
+      // pertenecían a la primera).
+      const boundaryMatch = boundaryIdx === 0 ? match : null;
+      return splitBySeed(boundaryPiece, boundaryMatch, seed).flatMap((seedPiece) => {
+        const longPieces = autoSplitLongLines({
+          version: 2,
+          sections: [{ lines: [seedPiece] }],
+        }).sections[0].lines;
+        // autoSplitLongLines reconstruye cada mitad desde cero
+        // (splitLineAtWord) y no copia campos ajenos al v2: el tag de
+        // semilla (ya correcto por pieza, ver splitBySeed) se re-adjunta acá.
+        if (!isNil(seedPiece.seedSectionIdx)) {
+          for (const l of longPieces) l.seedSectionIdx = seedPiece.seedSectionIdx;
+        }
+        return longPieces;
+      });
+    });
     for (const piece of pieces) {
       const sIdx =
         piece.startMs === null
           ? lastSectionIdx
           : bestSectionIndex(sections, piece.startMs, piece.endMs);
       lastSectionIdx = sIdx;
-      if (match && match.score >= SEED_INHERIT_MIN_SCORE) {
-        const origin = seed[match.dbIndex];
-        if (origin) piece.seedSectionIdx = origin.sectionIdx;
-      }
       sections[sIdx].lines.push(piece);
     }
   }

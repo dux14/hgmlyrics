@@ -80,4 +80,22 @@ describe('splitBySeed', () => {
     const l = line('primero el cielo', [[1000, 1300], [1400, 1600], [1700, 2000]]);
     expect(splitBySeed(l, null, [])).toHaveLength(1);
   });
+
+  // Blocker tanda C, hallazgo 2: cada pieza debe etiquetarse con la sección
+  // de la línea de semilla que REALMENTE consumió (match.dbIndex + posición
+  // de la pieza), no con la del match original fijo -- si no, un renglón que
+  // cubre dos líneas de secciones distintas etiqueta ambas con la primera.
+  it('etiqueta cada pieza con el sectionIdx de la línea de semilla que consumió, no el de match.dbIndex fijo', () => {
+    const seedTwoSections = [
+      { dbIndex: 0, sectionIdx: 0, lineIdx: 0, text: 'primero el cielo' },
+      { dbIndex: 1, sectionIdx: 1, lineIdx: 0, text: 'y lo demás está de mar' },
+    ];
+    const l = line('primero el cielo y lo demás está de mar', [
+      [1000, 1300], [1400, 1600], [1700, 2000], [2100, 2300], [2400, 2600],
+      [2700, 2900], [3000, 3300], [3400, 3800], [3900, 4200],
+    ]);
+    const out = splitBySeed(l, { dbIndex: 0, score: 0.9 }, seedTwoSections);
+    expect(out.map((p) => p.text)).toEqual(['primero el cielo', 'y lo demás está de mar']);
+    expect(out.map((p) => p.seedSectionIdx)).toEqual([0, 1]);
+  });
 });

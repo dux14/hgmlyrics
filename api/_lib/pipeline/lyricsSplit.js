@@ -151,19 +151,35 @@ export function splitAtSectionBoundaries(line, sections) {
 // 57-66%); calibrable con el primer run posterior a esta tanda.
 export const SEED_INHERIT_MIN_SCORE = 0.6;
 
+// Etiqueta cada pieza con la sección de origen de la línea de semilla que
+// consumió (por posición: la pieza i corresponde a seed[match.dbIndex + i] --
+// un corte por línea de semilla consumida entera, más el resto en la
+// última). Sin esto, todas las piezas heredaban el sectionIdx de
+// match.dbIndex fijo, mal-etiquetando la segunda mitad cuando el renglón
+// cubre líneas de semilla de secciones distintas (blocker tanda C, ver
+// collapseBySeed en structureShape.js).
+function tagPiecesWithSeedSection(pieces, dbIndexStart, seed) {
+  return pieces.map((piece, i) => {
+    const origin = seed[dbIndexStart + i];
+    return origin ? { ...piece, seedSectionIdx: origin.sectionIdx } : piece;
+  });
+}
+
 /**
  * Hereda los cortes de renglón de la semilla: si el renglón transcrito cubre
  * varias líneas consecutivas del cancionero a partir de `match.dbIndex`, se
  * parte en esas fronteras, ubicando el punto por conteo acumulado de palabras.
  * @param {object} line renglón v2
  * @param {{dbIndex:number,score:number}|null} match del alineamiento monótono
- * @param {Array<{dbIndex:number,text:string}>} seed salida de seedIndex
+ * @param {Array<{dbIndex:number,sectionIdx:number,text:string}>} seed salida de seedIndex
  * @returns {object[]}
  */
 export function splitBySeed(line, match, seed) {
   if (!match || match.score < SEED_INHERIT_MIN_SCORE) return [line];
   const tokens = line.text.split(/\s+/).filter(Boolean);
-  if (!Array.isArray(line.words) || line.words.length !== tokens.length) return [line];
+  if (!Array.isArray(line.words) || line.words.length !== tokens.length) {
+    return tagPiecesWithSeedSection([line], match.dbIndex, seed);
+  }
 
   // Cuántas palabras aporta cada línea de la semilla desde el match, mientras
   // quepan en el renglón transcrito.
@@ -175,7 +191,7 @@ export function splitBySeed(line, match, seed) {
     if (consumed >= tokens.length) break;
     cuts.push(consumed - 1); // afterWord absoluto
   }
-  if (cuts.length === 0) return [line];
+  if (cuts.length === 0) return tagPiecesWithSeedSection([line], match.dbIndex, seed);
 
   let pieces = [line];
   for (const afterWord of [...cuts].reverse()) {
@@ -186,7 +202,7 @@ export function splitBySeed(line, match, seed) {
     const [first, second] = splitLineAtWord(last, afterWord - before);
     pieces = [...pieces.slice(0, -1), first, second];
   }
-  return pieces;
+  return tagPiecesWithSeedSection(pieces, match.dbIndex, seed);
 }
 
 /**

@@ -232,12 +232,34 @@ export async function patchStructure(songId, patch) {
 // —> 429 de Supabase Auth cuando una pestaña queda abierta sobre una canción ya
 // procesada). Un broadcast reactiva el polling si arranca un run nuevo.
 const TERMINAL_RUN_STATUSES = new Set(['done', 'failed', 'cancelled', 'superseded']);
+// Instrumentación H11 (auditoría del 24-jul): el polling de 3 s no explica por
+// sí solo las ráfagas de requests observadas contra /pipeline. Estos contadores
+// existen para MEDIR si hay watchers acumulados (una fuga de suscripción en un
+// re-montaje sin cambio de ruta) antes de tocar el intervalo o agregar backoff.
+// Son diagnóstico puro: no cambian ningún comportamiento.
+let activeWatchers = 0;
+let totalRefreshes = 0;
+
+export function pipelineWatcherStats() {
+  return { active: activeWatchers, refreshes: totalRefreshes };
+}
+
+export function resetPipelineWatcherStats() {
+  activeWatchers = 0;
+  totalRefreshes = 0;
+}
 // Coalesce de la ráfaga de broadcasts (el trigger emite un 'change' por cada
 // transición de fase durante el procesamiento): un trailing debounce agrupa la
 // ráfaga en un solo refresh en vez de un GET inmediato por evento.
 const BROADCAST_DEBOUNCE_MS = 400;
 
 export function watchPipelineRun(songId, onChange) {
+  activeWatchers += 1;
+  if (activeWatchers > 1) {
+    console.warn(
+      `watchPipelineRun: ${activeWatchers} watchers activos sobre /pipeline (posible fuga de suscripción)`,
+    );
+  }
   let stopped = false;
   // Contador monotónico: polling y broadcast pueden solaparse y resolver fuera
   // de orden. Solo la petición más reciente emite, para no regresar la vista a
@@ -263,6 +285,7 @@ export function watchPipelineRun(songId, onChange) {
     // vista): cortamos ANTES del fetch de red para no disparar una petición
     // que de todos modos se va a descartar.
     if (stopped) return;
+    totalRefreshes += 1;
     const reqId = (lastReqId += 1);
     let data;
     try {
@@ -315,6 +338,7 @@ export function watchPipelineRun(songId, onChange) {
   function unsubscribe() {
     if (stopped) return;
     stopped = true;
+    activeWatchers = Math.max(0, activeWatchers - 1);
     stopPolling();
     if (debounceId) clearTimeout(debounceId);
     supabase.removeChannel(channel);
@@ -325,4 +349,13 @@ export function watchPipelineRun(songId, onChange) {
   // suscripción entera.
   unsubscribe.refresh = refresh;
   return unsubscribe;
+}
+
+// Handle de diagnóstico en el browser: en la consola de la vista de pipeline,
+//   __hknPipelineStats()
+// devuelve { active, refreshes }. Complementarlo con
+//   performance.getEntriesByType('resource').filter((r) => r.name.includes('/pipeline')).length
+// para separar "un interval de 3 s" de "N watchers vivos".
+if (typeof window !== 'undefined') {
+  window.__hknPipelineStats = pipelineWatcherStats;
 }

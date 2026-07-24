@@ -37,6 +37,8 @@ import {
   renamePipelineAudio,
   publishLyricsToSongbook,
   watchPipelineRun,
+  pipelineWatcherStats,
+  resetPipelineWatcherStats,
 } from '../src/lib/pipelineApi.js';
 
 function jsonResponse(status, body) {
@@ -392,5 +394,47 @@ describe('watchPipelineRun', () => {
     await vi.advanceTimersByTimeAsync(3000); // siguiente tick del polling
 
     expect(onChange).toHaveBeenLastCalledWith({ run: { id: 'r1' } });
+  });
+
+  // H11 (auditoría 24-jul): las ráfagas de /pipeline observadas en red no se
+  // explican solo con el interval de 3s; estos tests miden si hay watchers
+  // acumulados (fuga de suscripción) sin tocar el comportamiento del polling.
+  describe('instrumentación H11 (diagnóstico, no comportamiento)', () => {
+    beforeEach(() => {
+      resetPipelineWatcherStats();
+    });
+
+    it('pipelineWatcherStats().active cuenta watchers vivos y baja con unsubscribe idempotente', async () => {
+      global.fetch.mockResolvedValue(jsonResponse(200, { run: { id: 'r1' } }));
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const unsubscribeA = watchPipelineRun('s1', vi.fn());
+      const unsubscribeB = watchPipelineRun('s1', vi.fn());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(pipelineWatcherStats().active).toBe(2);
+
+      unsubscribeA();
+      expect(pipelineWatcherStats().active).toBe(1);
+
+      unsubscribeB();
+      expect(pipelineWatcherStats().active).toBe(0);
+
+      // Idempotente: un segundo unsubscribe del mismo watcher no debe bajar
+      // el contador de 0.
+      unsubscribeB();
+      expect(pipelineWatcherStats().active).toBe(0);
+
+      warnSpy.mockRestore();
+    });
+
+    it('pipelineWatcherStats().refreshes crece con el refresh inicial del watcher', async () => {
+      global.fetch.mockResolvedValue(jsonResponse(200, { run: { id: 'r1' } }));
+      expect(pipelineWatcherStats().refreshes).toBe(0);
+
+      watchPipelineRun('s1', vi.fn());
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(pipelineWatcherStats().refreshes).toBe(1);
+    });
   });
 });

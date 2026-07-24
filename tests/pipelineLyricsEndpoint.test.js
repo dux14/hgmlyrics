@@ -16,7 +16,8 @@ import { requireAdmin } from '../api/_lib/auth.js';
 import { dispatchPhase } from '../api/songs/[id]/pipeline/_dispatch.js';
 import { deleteSongAudioObject } from '../api/_lib/storage.js';
 import { initialPhases } from '../api/_lib/pipeline/state.js';
-import lyricsHandler, { timingLinesFromSections } from '../api/songs/[id]/pipeline/lyrics.js';
+import lyricsHandler from '../api/songs/[id]/pipeline/lyrics.js';
+import { timingLinesFromSections } from '../api/_lib/pipeline/lyricsStore.js';
 import { makeRes } from './helpers/makeRes.js';
 
 beforeEach(() => {

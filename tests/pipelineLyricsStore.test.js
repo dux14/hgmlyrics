@@ -70,7 +70,7 @@ describe('getPipelineLyrics', () => {
 });
 
 describe('pipelineLinesFor', () => {
-  const mkLine = (text, startMs, words = []) => ({
+  const mkLine = (text, startMs, words = [], manualStartMs = null) => ({
     text,
     startMs,
     endMs: startMs,
@@ -78,7 +78,7 @@ describe('pipelineLinesFor', () => {
     confidence: null,
     vocalization: false,
     breath: false,
-    manualStartMs: null,
+    manualStartMs,
   });
   const mkSection = (lines) => ({ type: 'verse', label: null, startMs: 0, endMs: 0, lines });
 
@@ -136,5 +136,51 @@ describe('pipelineLinesFor', () => {
     const sections = [mkSection([mkLine('unica', 500)])];
     const lines = pipelineLinesFor(sections);
     expect(lines).toEqual([{ text: 'unica', startMs: 500, endMs: 500 }]);
+  });
+
+  // Hallazgo Critical del review: startMs (timingLinesFromSections) y endMs
+  // (ultima word del renglon) son dos fuentes que pueden desincronizarse. Sin
+  // clamp, ese intervalo invertido llega tal cual al forced align en GPU.
+  it('offset manual muy adelantado a sus propias words: el endMs se clampea, no queda invertido', () => {
+    const sections = [
+      mkSection([
+        mkLine('a', 0, [{ word: 'a', startMs: 0, endMs: 300, score: 0.9 }], 5000),
+        mkLine('b', 6000),
+      ]),
+    ];
+    const lines = pipelineLinesFor(sections);
+    expect(lines[0]).toMatchObject({ text: 'a', startMs: 5000 });
+    expect(lines[0].endMs).toBeGreaterThan(lines[0].startMs);
+  });
+
+  it('dos renglones adyacentes con el mismo startMs del ASR: el bump de monotonia no invierte el endMs propio', () => {
+    const sections = [
+      mkSection([
+        mkLine('a', 1000, [{ word: 'a', startMs: 1000, endMs: 1000, score: 0.9 }]),
+        mkLine('b', 1000, [{ word: 'b', startMs: 1000, endMs: 1000, score: 0.9 }]),
+        mkLine('c', 2000),
+      ]),
+    ];
+    const lines = pipelineLinesFor(sections);
+    // El bump de monotonia estricta de timingLinesFromSections empuja 'b' a
+    // 1001; su word endMs (1000, sin reajustar) quedaria por debajo sin clamp.
+    expect(lines[1].startMs).toBe(1001);
+    expect(lines[1].endMs).toBeGreaterThan(lines[1].startMs);
+  });
+
+  it('invariante: endMs > startMs en todo renglon salvo el ultimo (que por diseno queda endMs === startMs)', () => {
+    const sections = [
+      mkSection([
+        mkLine('a', 0, [{ word: 'a', startMs: 0, endMs: 300, score: 0.9 }], 5000),
+        mkLine('b', 1000, [{ word: 'b', startMs: 1000, endMs: 1000, score: 0.9 }]),
+        mkLine('c', 1000, [{ word: 'c', startMs: 1000, endMs: 1000, score: 0.9 }]),
+        mkLine('d', null),
+        mkLine('e', 2000),
+      ]),
+    ];
+    const lines = pipelineLinesFor(sections);
+    lines.slice(0, -1).forEach((l) => expect(l.endMs).toBeGreaterThan(l.startMs));
+    const last = lines[lines.length - 1];
+    expect(last.endMs).toBe(last.startMs);
   });
 });

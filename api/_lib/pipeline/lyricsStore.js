@@ -105,13 +105,29 @@ export function timingLinesFromSections(sections) {
 /**
  * Aplana el snapshot aprobado del gate a `[{text, startMs, endMs}]` en orden
  * de documento — el contrato que la fase pitch va a consumir como fuente
- * única de la letra (Task 2.2; el dispatch que la enchufa es otra tarea).
- * Pura: reusa timingLinesFromSections para el startMs de los renglones sin
- * timing propio (mismo punto medio/monotonia estricta que ya exige
- * validateLines). endMs sale de la última word del renglón; sin words (o sin
- * endMs finito en la última), del startMs de la línea siguiente; en la
- * última línea del documento, su propio startMs (el consumidor lo acota
- * contra la duración del audio).
+ * única de la letra (Task 2.2; el dispatch que la enchufa es otra tarea) para
+ * acotar segmentos del forced align en GPU. Pura: reusa
+ * timingLinesFromSections para el startMs de los renglones sin timing propio
+ * (mismo punto medio/monotonia estricta que ya exige validateLines). endMs
+ * sale de la última word del renglón; sin words (o sin endMs finito en la
+ * última), del startMs de la línea siguiente; en la última línea del
+ * documento, su propio startMs (el consumidor lo acota contra la duración
+ * del audio) — ese caso queda con endMs===startMs A PROPOSITO, no entra en
+ * el clamp de abajo.
+ *
+ * Invariante `endMs > startMs` (todo renglón salvo el último): startMs y
+ * endMs salen de dos fuentes que pueden desincronizarse — startMs de
+ * timingLinesFromSections (manualStartMs, o el bump de monotonia estricta
+ * sobre un startMs duplicado del ASR) y endMs de las words originales del
+ * renglón, que nunca se reajustan contra esos dos casos. Sin el clamp, un
+ * offset manual muy adelantado a sus propias words, o dos renglones
+ * adyacentes con el mismo startMs de ASR, emiten un intervalo invertido o de
+ * duración cero que corrompe el forced align de la canción entera (hallazgo
+ * Critical, review). Clamp elegido: mínimo 1ms de duración
+ * (`startMs + 1`, mismo patrón de +1ms que ya usa timingLinesFromSections
+ * para su propia monotonía) en vez de descartar la line o recalcular su
+ * startMs — es el fix mínimo que no toca timingLinesFromSections (fuera de
+ * alcance) ni cambia el orden/cantidad de líneas emitidas.
  * @param {Array} sections snapshot de `song_pipeline_lyrics.sections`
  * @returns {Array<{text:string, startMs:number, endMs:number}>}
  */
@@ -122,11 +138,13 @@ export function pipelineLinesFor(sections) {
     const line = flat[t.i];
     const words = Array.isArray(line.words) ? line.words : [];
     const lastWord = words[words.length - 1];
-    const endMs = Number.isFinite(lastWord?.endMs)
+    const isLastLine = idx === timed.length - 1;
+    let endMs = Number.isFinite(lastWord?.endMs)
       ? lastWord.endMs
-      : idx + 1 < timed.length
+      : !isLastLine
         ? timed[idx + 1].startMs
         : t.startMs;
+    if (!isLastLine && endMs <= t.startMs) endMs = t.startMs + 1;
     return { text: line.text, startMs: t.startMs, endMs };
   });
 }

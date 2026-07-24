@@ -25,11 +25,6 @@ import {
   getPipelineLyrics,
   timingLinesFromSections,
 } from '../../../_lib/pipeline/lyricsStore.js';
-
-// Re-exportada para no romper a quien la importaba de acá (mismo símbolo,
-// movido a lyricsStore.js en Task 2.2 — ver ese módulo para la implementación
-// y el porqué del movimiento).
-export { timingLinesFromSections };
 import {
   applyPhaseEvent,
   phasesAfterLyricsEdit,

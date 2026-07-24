@@ -91,7 +91,9 @@ describe('GET /api/songs/[id]/studio', () => {
     ]); // SELECT song_stems
     sqlResponses.push([{ analysis: { notes: [1, 2, 3] } }]); // SELECT song_pitch_analysis
     sqlResponses.push([{ sections: [{ id: 's1' }], title: 'Mi canción' }]); // SELECT songs
-    sqlResponses.push([{ status: 'ready', lines: [{ i: 0, startMs: 100 }], beats: null, bpmDetected: null }]); // SELECT song_line_timings
+    sqlResponses.push([
+      { status: 'ready', lines: [{ i: 0, startMs: 100 }], beats: null, bpmDetected: null },
+    ]); // SELECT song_line_timings
     sqlResponses.push([{ segments: [{ label: 'verse', startMs: 0, endMs: 2000 }] }]); // SELECT song_structure
     sqlResponses.push([]); // SELECT song_audio
     sqlResponses.push([]); // SELECT song_section_audio
@@ -143,13 +145,17 @@ describe('GET /api/songs/[id]/studio', () => {
   });
 
   it('incluye audio (bpm/compás/ancla), beats en timings y clips firmados', async () => {
-    sqlResponses.push([
-      { kind: 'lead', storageKey: 'k1', durationSec: '180.5', display: null },
-    ]); // SELECT song_stems
+    sqlResponses.push([{ kind: 'lead', storageKey: 'k1', durationSec: '180.5', display: null }]); // SELECT song_stems
     sqlResponses.push([{ analysis: { voices_present: [] } }]); // SELECT song_pitch_analysis
     sqlResponses.push([{ sections: [], title: 'Primero el Cielo' }]); // SELECT songs
     sqlResponses.push([
-      { status: 'ready', lines: [{ i: 0, startMs: 0 }], beats: [500, 1000], bpmDetected: '112.35' },
+      {
+        status: 'ready',
+        lines: [{ i: 0, startMs: 0 }],
+        // shape real de la DB: JSONB { bpm, beatsMs }, no un array plano.
+        beats: { bpm: 112.35, beatsMs: [500, 1000] },
+        bpmDetected: '112.35',
+      },
     ]); // SELECT song_line_timings
     sqlResponses.push([{ segments: [{ label: 'verso', startMs: 0, endMs: 30000 }] }]); // SELECT song_structure
     sqlResponses.push([{ bpmManual: '96', timeSignature: '3/4', beatAnchor: 1 }]); // SELECT song_audio
@@ -168,6 +174,21 @@ describe('GET /api/songs/[id]/studio', () => {
     expect(body.clips).toEqual([
       { sectionIndex: 0, voiceScope: null, label: null, durationSec: 12.4, url: 'https://get/c1' },
     ]);
+  });
+
+  it('song_audio parcialmente poblado: guards per-field independientes', async () => {
+    sqlResponses.push([{ kind: 'lead', storageKey: 'k1', durationSec: '180.5', display: null }]); // SELECT song_stems
+    sqlResponses.push([]); // SELECT song_pitch_analysis
+    sqlResponses.push([{ sections: [], title: 'Primero el Cielo' }]); // SELECT songs
+    sqlResponses.push([]); // SELECT song_line_timings
+    sqlResponses.push([]); // SELECT song_structure
+    sqlResponses.push([{ bpmManual: '96', timeSignature: null, beatAnchor: null }]); // SELECT song_audio
+    sqlResponses.push([]); // SELECT song_section_audio
+
+    const res = makeRes();
+    await handler(makeReq(), res);
+    expect(res._status).toBe(200);
+    expect(res._body.audio).toEqual({ bpmManual: 96, timeSignature: null, beatAnchor: null });
   });
 
   it('requireUser exigido: si lanza 401, el handler propaga el error', async () => {

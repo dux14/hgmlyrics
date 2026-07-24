@@ -63,16 +63,18 @@ async function getStudio(_req, res, songId) {
       ? {
           status: timings.status,
           lines: timings.lines,
-          beats: timings.beats ?? null,
+          // beats se guarda como JSONB { bpm, beatsMs } (shape del webhook);
+          // el contrato del GET es la rejilla plana en ms, como en audio.js.
+          beats: Array.isArray(timings.beats?.beatsMs) ? timings.beats.beatsMs : null,
           // NUMERIC llega como string vía postgres.js: coacción explícita.
-          bpmDetected: timings.bpmDetected == null ? null : Number(timings.bpmDetected),
+          bpmDetected: timings.bpmDetected === null ? null : Number(timings.bpmDetected),
         }
       : null,
     title: song?.title ?? null,
     structure: structure ? { segments: structure.segments } : null,
     audio: audio
       ? {
-          bpmManual: audio.bpmManual == null ? null : Number(audio.bpmManual),
+          bpmManual: audio.bpmManual === null ? null : Number(audio.bpmManual),
           timeSignature: audio.timeSignature ?? null,
           beatAnchor: audio.beatAnchor ?? null,
         }

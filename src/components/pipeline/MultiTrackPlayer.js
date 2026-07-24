@@ -70,8 +70,11 @@ export function createMultiTrackPlayer({ tracks, structure }) {
   );
 
   // Tira de práctica (loop de sección + velocidad) — la llena Task 4, vacía
-  // por ahora: solo se reserva el sub-elemento del layout.
+  // por ahora: solo se reserva el sub-elemento del layout. Oculta para no
+  // sumar gap del flex del root con un hijo sin contenido (Task 4 la
+  // des-oculta al llenarla).
   const practice = buildEl('div', 'mtp__practice');
+  practice.hidden = true;
 
   // Chips de navegación por sección (estructura detectada por SongFormer,
   // Task 8). Sin `structure.segments` (o vacío) el contenedor queda vacío —
@@ -88,6 +91,8 @@ export function createMultiTrackPlayer({ tracks, structure }) {
       )
       .join(''),
   );
+  // Sin segments, oculto (no dejo un hijo flex vacío consumiendo gap).
+  sections.hidden = segments.length === 0;
 
   // Línea viva "qué estoy oyendo" (modelo C).
   const nowSoundEl = buildEl('div', 'mtp__nowsound');
@@ -163,20 +168,34 @@ export function createMultiTrackPlayer({ tracks, structure }) {
       const on = isTrackAudible({ i, disabled, soloed });
       row.classList.toggle('is-on', on);
       row.classList.toggle('is-solo', soloed.has(i));
-      row.querySelector('.mtp__row-toggle').setAttribute('aria-pressed', String(!disabled.has(i)));
-      row.querySelector('.mtp__row-btn--solo').setAttribute('aria-pressed', String(soloed.has(i)));
+      toggleBtns[i].setAttribute('aria-pressed', String(!disabled.has(i)));
+      soloBtns[i].setAttribute('aria-pressed', String(soloed.has(i)));
     });
     nowSoundEl.textContent = nowSoundLabel(tracks, disabled, soloed);
   };
   applyAudibility();
 
+  // El click nativo SIEMPRE se dispara tras un pointerdown→pointerup en el
+  // mismo target, sin importar cuánto se sostuvo — así que un long-press que
+  // ya togglea `soloed` deja un click sintético pisándole el estado (ver
+  // review CRITICAL). `longPressFired` consume ese click sintético una vez.
+  let longPressFired = false;
+
   const onToggleClick = (e) => {
+    if (longPressFired) {
+      longPressFired = false;
+      return;
+    }
     const i = Number(e.currentTarget.dataset.idx);
     if (disabled.has(i)) disabled.delete(i);
     else disabled.add(i);
     applyAudibility();
   };
   const onSoloClick = (e) => {
+    if (longPressFired) {
+      longPressFired = false;
+      return;
+    }
     const i = Number(e.currentTarget.dataset.idx);
     if (soloed.has(i)) soloed.delete(i);
     else soloed.add(i);
@@ -196,7 +215,8 @@ export function createMultiTrackPlayer({ tracks, structure }) {
 
   // Long-press en la fila (touch/mouse, 500ms) también aísla la pista —
   // atajo para no tener que apuntar al botón de solo en pantallas chicas.
-  // Se cancela con pointerup/pointerleave para no disparar de más.
+  // Se cancela con pointerup/pointerleave/pointercancel (gesto reinterpretado
+  // como scroll) para no disparar de más.
   const rowLongPressCancels = [];
   rowEls.forEach((row, i) => {
     let timer = null;
@@ -210,8 +230,10 @@ export function createMultiTrackPlayer({ tracks, structure }) {
       'pointerdown',
       () => {
         cancel();
+        longPressFired = false;
         timer = setTimeout(() => {
           timer = null;
+          longPressFired = true;
           if (soloed.has(i)) soloed.delete(i);
           else soloed.add(i);
           applyAudibility();
@@ -221,6 +243,7 @@ export function createMultiTrackPlayer({ tracks, structure }) {
     );
     row.addEventListener('pointerup', cancel, { signal: ac.signal });
     row.addEventListener('pointerleave', cancel, { signal: ac.signal });
+    row.addEventListener('pointercancel', cancel, { signal: ac.signal });
     rowLongPressCancels.push(cancel);
   });
 

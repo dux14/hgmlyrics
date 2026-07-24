@@ -292,6 +292,67 @@ describe('createMultiTrackPlayer', () => {
   });
 });
 
+describe('createMultiTrackPlayer — long-press vs click nativo (guard anti-carrera)', () => {
+  beforeEach(() => {
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('long-press real (>=500ms) aisla la pista; el click sintetico posterior no la des-aisla', () => {
+    const player = createMultiTrackPlayer({ tracks: makeTracks(), structure: null });
+    const row = player.el.querySelector('.mtp__row[data-idx="1"]');
+    const soloBtn = row.querySelector('.mtp__row-btn--solo');
+    const audios = player.el.querySelectorAll('audio');
+
+    row.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    vi.advanceTimersByTime(500); // dispara el long-press: soloed.add(1)
+    row.dispatchEvent(new Event('pointerup', { bubbles: true }));
+    // El navegador SIEMPRE dispara un click sobre el target del
+    // pointerdown/pointerup, sin importar cuanto se sostuvo — lo simulamos.
+    soloBtn.click();
+
+    expect(audios[0].muted).toBe(true);
+    expect(audios[1].muted).toBe(false);
+    expect(audios[2].muted).toBe(true);
+    player.destroy();
+  });
+
+  it('long-press sobre el row-toggle no deja la pista en disabled Y soloed a la vez', () => {
+    const player = createMultiTrackPlayer({ tracks: makeTracks(), structure: null });
+    const row = player.el.querySelector('.mtp__row[data-idx="1"]');
+    const toggleBtn = row.querySelector('.mtp__row-toggle');
+    const soloBtn = row.querySelector('.mtp__row-btn--solo');
+    const audios = player.el.querySelectorAll('audio');
+
+    row.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    vi.advanceTimersByTime(500); // el timer aisla la pista (soloed.add(1))
+    row.dispatchEvent(new Event('pointerup', { bubbles: true }));
+    toggleBtn.click(); // click sintetico sobre el toggle, no sobre el solo
+
+    // Saco el solo con un click genuino (ya no hay longPressFired pendiente):
+    // si el click sintetico anterior hubiera togglado `disabled` de mas
+    // (bug pre-fix), la pista seguiria muted aca.
+    soloBtn.click();
+    expect(audios[1].muted).toBe(false);
+    player.destroy();
+  });
+
+  it('cleanup: destroy() antes de que venza el timer no dispara el long-press', () => {
+    const player = createMultiTrackPlayer({ tracks: makeTracks(), structure: null });
+    const row = player.el.querySelector('.mtp__row[data-idx="0"]');
+
+    row.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    player.destroy();
+
+    expect(() => vi.advanceTimersByTime(500)).not.toThrow();
+  });
+});
+
 describe('createMultiTrackPlayer — agrupacion de pistas', () => {
   it('sin group en los tracks, no aparece ningun encabezado (lista plana)', () => {
     const { el, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });

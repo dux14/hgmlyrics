@@ -14,7 +14,7 @@ import {
   signSongAudioDownload,
 } from '../../../_lib/storage.js';
 import { projectCanonicalLines, projectLineSections } from '../../../_lib/align.js';
-import { getPipelineLyrics } from '../../../_lib/pipeline/lyricsStore.js';
+import { getPipelineLyrics, pipelineLinesFor } from '../../../_lib/pipeline/lyricsStore.js';
 import sql from '../../../_lib/db.js';
 import { STEM_KINDS, SECTION_KEYS } from '../../../stems/_sections.js';
 
@@ -155,10 +155,17 @@ export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
       e.status = 409;
       throw e;
     }
-    const [leadGetUrl, backingGetUrl] = await Promise.all([
+    const [leadGetUrl, backingGetUrl, pipelineLyrics] = await Promise.all([
       signSongAudioDownload(leadKey),
       signSongAudioDownload(backingKey),
+      getPipelineLyrics(sql, run.songId),
     ]);
+    // Letra aprobada del gate (Task 2.3): sin fila en song_pipeline_lyrics
+    // (job standalone de pitch_jobs) lines/language quedan undefined y
+    // hkn-pitch conserva su camino actual (transcribe propio). `language`
+    // sale del store, no de run.lyricsReview: ese documento no viaja en un
+    // retry manual (ver nota de transcription arriba), el store sí.
+    const lines = pipelineLyrics ? pipelineLinesFor(pipelineLyrics.sections) : undefined;
     return dispatchPitch({
       run: { id: run.id, songId: run.songId },
       leadGetUrl,
@@ -166,6 +173,8 @@ export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
       // ver nota de transcription arriba: run.lyricsReview aún no viaja desde
       // confirm.js/retry.js, undefined por ahora si no hay aprobación.
       snapshotHash: run.lyricsReview?.approvedHash,
+      lines,
+      language: pipelineLyrics?.language,
       webhookUrl: webhook,
       reset: isRetry,
     });

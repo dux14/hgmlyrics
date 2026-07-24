@@ -32,11 +32,11 @@ export function upsertPipelineLyrics(sql, { songId, runId, sections, hash, langu
  * Letra aprobada del pipeline para una canción, o null si no hay.
  * @param {Function} sql cliente postgres.js
  * @param {string} songId
- * @returns {Promise<{songId:string, runId:string|null, sections:Array, hash:string, approvedAt:string}|null>}
+ * @returns {Promise<{songId:string, runId:string|null, sections:Array, hash:string, language:string, approvedAt:string}|null>}
  */
 export async function getPipelineLyrics(sql, songId) {
   const rows = await sql`
-    SELECT song_id AS "songId", run_id AS "runId", sections, hash,
+    SELECT song_id AS "songId", run_id AS "runId", sections, hash, language,
       approved_at AS "approvedAt"
     FROM song_pipeline_lyrics WHERE song_id = ${songId}
   `;

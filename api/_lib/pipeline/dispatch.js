@@ -105,16 +105,25 @@ export { dispatchAlign };
  * job original ya haya muerto. Solo retry.js debe pasar `reset:true` (acción
  * deliberada del admin); el dispatch inicial deja el default `false` para
  * seguir protegiendo el doble-approve accidental de una facturación GPU doble.
+ * `lines`/`language` (Task 2.3): letra aprobada del gate, aplanada por
+ * `pipelineLinesFor` — la fuente única que `hkn-pitch` usa para forced align
+ * en vez de transcribir por su cuenta (dos ASR independientes daban textos
+ * distintos entre el gate y la partitura). Ambos opcionales: sin fila en
+ * `song_pipeline_lyrics` (job standalone de `pitch_jobs`) el caller los deja
+ * `undefined` y el modo actual de hkn-pitch queda intacto.
  * @param {{ run:{id:string, songId:string, profile?:string}, leadGetUrl:string,
- *           backingGetUrl:string, snapshotHash?:string, webhookUrl:string,
- *           reset?:boolean }} args
+ *           backingGetUrl:string, snapshotHash?:string,
+ *           lines?:Array<{text:string,startMs:number,endMs:number}>,
+ *           language?:string, webhookUrl:string, reset?:boolean }} args
  * @returns {Promise<{id:string}>}
  */
-export async function dispatchPitch({ run, leadGetUrl, backingGetUrl, snapshotHash, webhookUrl, reset = false }) {
+export async function dispatchPitch({
+  run, leadGetUrl, backingGetUrl, snapshotHash, lines, language, webhookUrl, reset = false,
+}) {
   return invokePitchPipeline({
     jobId: run.id,
     profile: run.profile ?? 'default',
-    input: { leadGetUrl, backingGetUrl, snapshotHash },
+    input: { leadGetUrl, backingGetUrl, snapshotHash, lines, language },
     uploads: {},
     signUploadUrl: `${process.env.PUBLIC_BASE_URL}/api/pipeline/sign-upload`,
     webhook: { url: webhookUrl },

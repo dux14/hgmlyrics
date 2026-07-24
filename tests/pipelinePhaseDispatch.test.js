@@ -138,6 +138,7 @@ describe("dispatchPhase('transcription')", () => {
 
 describe("dispatchPhase('pitch')", () => {
   it('pasa snapshotHash desde run.lyricsReview.approvedHash cuando está presente', async () => {
+    sqlResponses.push([]); // getPipelineLyrics → sin fila
     const run = {
       id: 'run1',
       songId: 'song1',
@@ -152,6 +153,7 @@ describe("dispatchPhase('pitch')", () => {
   });
 
   it('sin lyricsReview → snapshotHash undefined, no rompe', async () => {
+    sqlResponses.push([]); // getPipelineLyrics → sin fila
     const run = {
       id: 'run1',
       songId: 'song1',
@@ -163,6 +165,7 @@ describe("dispatchPhase('pitch')", () => {
   });
 
   it('dispatch inicial (sin isRetry) pasa reset:false — no debe pisar un jobId ya en curso', async () => {
+    sqlResponses.push([]); // getPipelineLyrics → sin fila
     const run = {
       id: 'run1',
       songId: 'song1',
@@ -173,6 +176,7 @@ describe("dispatchPhase('pitch')", () => {
   });
 
   it('retry.js (isRetry:true) fuerza reset:true — sin esto Modal devuelve el callId cacheado y el job queda colgado', async () => {
+    sqlResponses.push([]); // getPipelineLyrics → sin fila
     const run = {
       id: 'run1',
       songId: 'song1',
@@ -180,6 +184,45 @@ describe("dispatchPhase('pitch')", () => {
     };
     await dispatchPhase('pitch', run, { isRetry: true });
     expect(dispatchPitch).toHaveBeenCalledWith(expect.objectContaining({ reset: true }));
+  });
+
+  // Task 2.3: la letra aprobada del gate viaja a hkn-pitch (evita las dos
+  // ASR independientes — gate y pitch discrepando en el texto).
+  const PITCH_STORE_SECTIONS = [
+    { type: 'verse', lines: [{ text: 'Santo, Santo, Santo', startMs: 100 }, { text: 'Es el Señor', startMs: 2000 }] },
+  ];
+
+  it('con fila en song_pipeline_lyrics: dispatchPitch recibe lines (pipelineLinesFor) y language del store', async () => {
+    sqlResponses.push([{ sections: PITCH_STORE_SECTIONS, language: 'en' }]); // getPipelineLyrics
+    const run = {
+      id: 'run1',
+      songId: 'song1',
+      phases: { stems: { tracks: { lead: 'l', backing: 'b' } } },
+    };
+    await dispatchPhase('pitch', run);
+
+    const args = dispatchPitch.mock.calls[0][0];
+    expect(args.language).toBe('en');
+    expect(args.lines).toEqual([
+      { text: 'Santo, Santo, Santo', startMs: 100, endMs: 2000 },
+      { text: 'Es el Señor', startMs: 2000, endMs: 2000 },
+    ]);
+    // orden de documento preservado (mismo orden que PITCH_STORE_SECTIONS).
+    expect(args.lines.map((l) => l.text)).toEqual(['Santo, Santo, Santo', 'Es el Señor']);
+  });
+
+  it('sin fila en song_pipeline_lyrics (job standalone): lines/language undefined, modo actual intacto', async () => {
+    sqlResponses.push([]); // getPipelineLyrics → sin fila
+    const run = {
+      id: 'run1',
+      songId: 'song1',
+      phases: { stems: { tracks: { lead: 'l', backing: 'b' } } },
+    };
+    await dispatchPhase('pitch', run);
+
+    const args = dispatchPitch.mock.calls[0][0];
+    expect(args.lines).toBeUndefined();
+    expect(args.language).toBeUndefined();
   });
 });
 

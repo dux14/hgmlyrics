@@ -122,6 +122,35 @@ describe('dispatchPitch', () => {
     expect(call.input.snapshotHash).toBeUndefined();
   });
 
+  it('incluye lines/language dentro de input cuando el caller los pasa (Task 2.3)', async () => {
+    const lines = [{ text: 'Santo', startMs: 100, endMs: 500 }];
+    await dispatchPitch({
+      run: { id: 'run1', songId: 'song1' },
+      leadGetUrl: 'https://get/lead.mp3',
+      backingGetUrl: 'https://get/backing.mp3',
+      lines,
+      language: 'es',
+      webhookUrl: 'https://x/webhook',
+    });
+    expect(invokePitchPipeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({ lines, language: 'es' }),
+      }),
+    );
+  });
+
+  it('sin lines/language (modo standalone) → undefined, no rompe', async () => {
+    await dispatchPitch({
+      run: { id: 'run1', songId: 'song1' },
+      leadGetUrl: 'https://get/lead.mp3',
+      backingGetUrl: 'https://get/backing.mp3',
+      webhookUrl: 'https://x/webhook',
+    });
+    const call = invokePitchPipeline.mock.calls[0][0];
+    expect(call.input.lines).toBeUndefined();
+    expect(call.input.language).toBeUndefined();
+  });
+
   it('incluye signUploadUrl apuntando al signer del pipeline', async () => {
     process.env.PUBLIC_BASE_URL = 'https://app.test';
     await dispatchPitch({

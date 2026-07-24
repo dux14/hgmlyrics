@@ -81,6 +81,117 @@ export function splitLineAtWord(line, afterWord) {
   return [first, second];
 }
 
+// Parte una word en el offset de carácter dado (dentro de word.word),
+// repartiendo su intervalo [startMs,endMs] proporcional a caracteres. Ambas
+// mitades heredan el score. offset 0 o al final no parte nada -> RangeError.
+export function splitWordAtChar(word, charOffset) {
+  const text = word.word ?? '';
+  if (charOffset <= 0 || charOffset >= text.length) {
+    throw new RangeError(`charOffset fuera de rango: ${charOffset}`);
+  }
+  const duration = word.endMs - word.startMs;
+  const splitMs = word.startMs + Math.round((duration * charOffset) / text.length);
+  return [
+    { word: text.slice(0, charOffset), startMs: word.startMs, endMs: splitMs, score: word.score },
+    { word: text.slice(charOffset), startMs: splitMs, endMs: word.endMs, score: word.score },
+  ];
+}
+
+/**
+ * Aplica el texto editado por el admin a un renglón. Sin `\n`, equivale a
+ * `editLine`: cambia solo `text`, conserva words/timing/confidence/
+ * vocalización (se devuelve un renglón, no un arreglo). Con `\n`, parte en
+ * tantas piezas como saltos queden tras colapsar saltos consecutivos y
+ * espacios (nunca se crea una pieza vacía). El reparto de `words` sigue el
+ * mismo criterio que splitLineAtWord: si el conteo de tokens del texto sin
+ * saltos coincide con `words.length`, cada pieza se lleva sus words por
+ * posición, y un corte que cae DENTRO de una palabra la divide con
+ * splitWordAtChar. Si el conteo no coincide (texto editado a mano), todas
+ * las piezas van sin words/confidence, con vocalización derivada.
+ * @param {object} line renglón v2
+ * @param {string} text texto nuevo, admite `\n` como separador de piezas
+ * @returns {object|object[]}
+ */
+export function splitLineByText(line, text) {
+  if (typeof text !== 'string' || text.trim() === '') {
+    throw new RangeError(`text inválido: ${text}`);
+  }
+  if (!text.includes('\n')) {
+    return { ...line, text };
+  }
+
+  const rawTexts = text.split('\n');
+  // tokens del texto SIN saltos (\n eliminado, no reemplazado por espacio):
+  // un corte de frontera no cambia el conteo (ya había espacio ahí), uno
+  // intra-palabra sí lo cambiaría si no se reconstruyera así.
+  const collapsedTokens = text.replace(/\n/g, '').split(/\s+/).filter(Boolean);
+  const aligned = Array.isArray(line.words) && line.words.length === collapsedTokens.length;
+
+  const wordsCopy = aligned ? line.words.map((w) => ({ ...w })) : [];
+  const wordSpans = [];
+  if (aligned) {
+    const collapsed = text.replace(/\n/g, '');
+    const re = /\S+/g;
+    let m = re.exec(collapsed);
+    while (m) {
+      wordSpans.push({ start: m.index, end: m.index + m[0].length });
+      m = re.exec(collapsed);
+    }
+  }
+
+  // Asigna cada word (o su mitad) al segmento crudo (entre saltos) donde cae,
+  // en la coordenada del texto colapsado -- los segmentos no tienen \n
+  // interno, así que su longitud coincide 1:1 con esa coordenada.
+  const rawWords = rawTexts.map(() => []);
+  let collapsedPos = 0;
+  let wordCursor = 0;
+  for (let i = 0; i < rawTexts.length; i += 1) {
+    const segEnd = collapsedPos + rawTexts[i].length;
+    while (aligned && wordCursor < wordSpans.length && wordSpans[wordCursor].start < segEnd) {
+      const span = wordSpans[wordCursor];
+      if (span.end <= segEnd) {
+        rawWords[i].push(wordsCopy[wordCursor]);
+        wordCursor += 1;
+      } else {
+        const localOffset = segEnd - span.start;
+        const [firstHalf, secondHalf] = splitWordAtChar(wordsCopy[wordCursor], localOffset);
+        rawWords[i].push(firstHalf);
+        wordsCopy[wordCursor] = secondHalf;
+        wordSpans[wordCursor] = { start: segEnd, end: span.end };
+        break;
+      }
+    }
+    collapsedPos = segEnd;
+  }
+
+  const mk = (pieceText, words) => {
+    const confidence = lineConfidence(words);
+    return {
+      text: pieceText,
+      startMs: words.length ? words[0].startMs : null,
+      endMs: words.length ? words[words.length - 1].endMs : null,
+      words,
+      confidence,
+      vocalization:
+        words.length === 0 ||
+        (confidence !== null && confidence < VOCALIZATION_CONFIDENCE_THRESHOLD),
+      breath: false,
+      manualStartMs: null,
+    };
+  };
+
+  const pieces = [];
+  rawTexts.forEach((raw, i) => {
+    const trimmed = raw.trim();
+    if (trimmed === '') return; // saltos consecutivos / solo espacios: colapsan
+    pieces.push(mk(trimmed, aligned ? rawWords[i] : []));
+  });
+
+  pieces[0].manualStartMs = line.manualStartMs;
+  pieces[pieces.length - 1].breath = line.breath;
+  return pieces;
+}
+
 export function splitLineRecursive(line) {
   if (line.text.length <= KARAOKE_MAX_CHARS) return [line];
   const tokens = line.text.split(/\s+/).filter(Boolean);

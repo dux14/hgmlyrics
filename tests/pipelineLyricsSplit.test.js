@@ -145,7 +145,9 @@ describe('splitLineByText', () => {
     const l = line('primero el cielo y lo demás', [
       [1200, 1450], [1500, 1700], [1800, 2100], [2200, 2400], [2500, 2600], [2700, 3000],
     ]);
-    const viaText = splitLineByText(l, 'primero el cielo\ny lo demás');
+    // El \n reemplaza el espacio de frontera SIN comerse el espacio (así
+    // edita un textarea real): la palabra previa conserva su espacio final.
+    const viaText = splitLineByText(l, 'primero el cielo \ny lo demás');
     const viaWord = splitLineAtWord(l, 2);
     expect(viaText).toEqual(viaWord);
   });

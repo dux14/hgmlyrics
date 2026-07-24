@@ -63,6 +63,13 @@ export function monotonicAlign(perLine) {
 export const SUGGEST_MIN_SCORE = 0.5;
 export const SUGGEST_MAX_SCORE = 0.95;
 
+// Piso de longitud normalizada (caracteres): bajo este umbral un solo
+// carácter de diferencia mueve el score demasiado -- compareScore('no','yo')
+// da exactamente 0.5 y cae dentro de la banda de sugerencia sin ser una
+// errata real (Important del review tanda C). Interjecciones y renglones de
+// 1-2 palabras muy breves quedan descartados como candidato o como texto.
+export const COMPARE_MIN_LENGTH = 4;
+
 /** Misma normalización que modal/transcribe_diff.normalize_for_compare:
  * minúsculas, sin diacríticos ni puntuación, espacios colapsados. Duplicada a
  * propósito (el backend no puede importar del árbol de Python), igual que
@@ -106,6 +113,15 @@ export function compareScore(text, candidate) {
   const a = normalizeForCompare(text);
   const b = normalizeForCompare(candidate);
   if (!a || !b) return 0;
+  if (a.length < COMPARE_MIN_LENGTH || b.length < COMPARE_MIN_LENGTH) return 0;
+  // Cota barata antes de pagar el O(n·m) de editDistance: la distancia nunca
+  // baja de |a.length - b.length| (cada carácter de más exige al menos una
+  // inserción/eliminación), así que si eso solo ya tira el score bajo
+  // SUGGEST_MIN_SCORE el candidato no puede calificar. Cubre candidatos del
+  // cancionero sin cota de largo, a diferencia de los renglones del
+  // documento (acotados por KARAOKE_MAX_CHARS).
+  const lengthDiff = Math.abs(a.length - b.length);
+  if (1 - lengthDiff / a.length < SUGGEST_MIN_SCORE) return 0;
   return Math.max(0, 1 - editDistance(a, b) / a.length);
 }
 

@@ -71,9 +71,12 @@ async function findAwaitingRun(songId) {
  * reconstruirlo en cada GET/PUT siguiente.
  * @param {{id:string, lyricsReview:object|null}} run
  * @param {string} songId
+ * @param {Array|null} [songSections] `songs.sections` ya leído por el
+ *   llamador (getGate siempre lo necesita para textSuggestions); sin pasarlo
+ *   se consulta acá, mismo criterio de siempre (putGate no lo tiene a mano).
  * @returns {Promise<{lyricsReview:object}>}
  */
-async function ensureReview(run, songId) {
+async function ensureReview(run, songId, songSections) {
   const lyricsReview = run.lyricsReview ?? {};
   // Docs v1 persistidos (sin version) se descartan y reconstruyen: la
   // transcripcion y song_structure siguen en el run, no se pierde nada.
@@ -86,12 +89,11 @@ async function ensureReview(run, songId) {
     transLines: [],
   };
   const structureSegments = await fetchStructureSegments(songId);
-  const [song] = await sql`SELECT sections FROM songs WHERE id = ${songId}`;
-  const review = buildReviewDoc({
-    transcription,
-    structureSegments,
-    seedSections: song?.sections ?? null,
-  });
+  const seedSections =
+    songSections === undefined
+      ? ((await sql`SELECT sections FROM songs WHERE id = ${songId}`)[0]?.sections ?? null)
+      : songSections;
+  const review = buildReviewDoc({ transcription, structureSegments, seedSections });
   const next = { ...lyricsReview, review };
   // CAS: si el run ya no esta en awaiting_lyrics (se aprobo/cancelo entre el
   // findAwaitingRun y este punto) no pisa lyrics_review — mismo criterio que
@@ -124,8 +126,8 @@ async function getGate(res, songId) {
     res.status(404).json({ error: 'No hay una ejecución esperando revisión de letra' });
     return;
   }
-  const { lyricsReview } = await ensureReview(run, songId);
   const [song] = await sql`SELECT sections FROM songs WHERE id = ${songId}`;
+  const { lyricsReview } = await ensureReview(run, songId, song?.sections ?? null);
   res.status(200).json({
     review: lyricsReview.review,
     canApprove: canApprove(lyricsReview.review),

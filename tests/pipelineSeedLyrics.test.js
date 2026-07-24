@@ -59,6 +59,21 @@ describe('compareScore', () => {
     expect(s).toBeGreaterThan(0.5);
     expect(s).toBeLessThan(1);
   });
+
+  // Important del review tanda C: sin piso de longitud, un renglón/candidato
+  // de 1-2 palabras muy cortas cae en la banda de sugerencia por pura
+  // casualidad de largo ("no" vs "yo" da exactamente 0.5).
+  it('descarta candidatos y textos por debajo del piso de longitud normalizada', () => {
+    expect(compareScore('no', 'yo')).toBe(0);
+    expect(compareScore('sí', 'no')).toBe(0);
+    expect(compareScore('mmm', 'ah')).toBe(0);
+  });
+
+  it('un candidato mucho más largo que el texto no puede calificar (cota barata antes de editDistance)', () => {
+    const candidate =
+      'esta linea del cancionero es mucho mas larga que el renglon transcrito y nunca podria ser una errata razonable';
+    expect(compareScore('hola mundo', candidate)).toBe(0);
+  });
 });
 
 describe('buildTextSuggestions', () => {
@@ -87,5 +102,11 @@ describe('buildTextSuggestions', () => {
   });
   it('sin semilla devuelve []', () => {
     expect(buildTextSuggestions({ sections: [{ lines: [{ text: 'a' }] }] }, [])).toEqual([]);
+  });
+
+  it('no propone nada para renglones muy cortos aunque coincidan poco (piso de longitud)', () => {
+    const shortSeed = [{ dbIndex: 0, sectionIdx: 0, lineIdx: 0, text: 'yo' }];
+    const doc = { sections: [{ lines: [{ text: 'no' }] }] };
+    expect(buildTextSuggestions(doc, shortSeed)).toEqual([]);
   });
 });

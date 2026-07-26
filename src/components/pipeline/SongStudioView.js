@@ -28,6 +28,8 @@ const KIND_LABEL = {
   male: 'Voz masculina',
   female: 'Voz femenina',
   choir: 'Coros',
+  voice_a: 'Voz A',
+  voice_b: 'Voz B',
   instrumental: 'Instrumental',
   guitar: 'Guitarra',
   piano: 'Piano',
@@ -36,7 +38,18 @@ const KIND_LABEL = {
   other: 'Otro',
 };
 
-const VOICE_KINDS = new Set(['vocals', 'lead', 'backing', 'male', 'female', 'choir']);
+// `voice_a`/`voice_b` (sección duet) son voces, no instrumentos: sin ellas aquí
+// caían bajo INSTRUMENTOS y mostraban el kind crudo como etiqueta.
+const VOICE_KINDS = new Set([
+  'vocals',
+  'lead',
+  'backing',
+  'male',
+  'female',
+  'choir',
+  'voice_a',
+  'voice_b',
+]);
 
 /** Mapea stems del backend a tracks del MultiTrackPlayer, agrupados (voces primero). */
 function stemsToTracks(stems) {

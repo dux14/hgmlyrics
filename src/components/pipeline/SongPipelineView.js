@@ -382,7 +382,7 @@ export function renderSongPipelineView(container, songId) {
     const status = phase.status;
     const table = SUBTITLES[key];
 
-    // 'structure' es best-effort (Task 16): un failed acá NUNCA ofrece
+    // 'structure' es best-effort (Task 16): un failed aquí NUNCA ofrece
     // reintento (el endpoint api/songs/[id]/pipeline/retry.js ni siquiera lo
     // acepta, ver RETRYABLE_PHASES) — se pinta como 'pending' con el copy de
     // fallo para no alarmar con un dot ámbar que promete una acción que no
@@ -557,8 +557,9 @@ export function renderSongPipelineView(container, songId) {
         }
       } else if (r.key === 'pitch') {
         const validSpans = getValidOrphanSpans(orphanSpans);
-        if (validSpans.length > 0)
+        if (validSpans.length > 0) {
           detail = createOrphanSpansWarning(validSpans, lyricsReopenAction);
+        }
       }
 
       const row = PhaseRow({
@@ -599,7 +600,7 @@ export function renderSongPipelineView(container, songId) {
   // watcher emita nada (primer refresh es async), para que la vista nunca
   // quede en blanco mientras esa promesa está en vuelo. Efecto secundario
   // intencional: esta llamada consume `firstRender`, así que la animación de
-  // entrada `phase--enter` corre UNA sola vez acá, sobre el esqueleto vacío
+  // entrada `phase--enter` corre UNA sola vez aquí, sobre el esqueleto vacío
   // (tipo skeleton loader) — no cuando llegan los datos reales del run.
   renderPhases(null);
 

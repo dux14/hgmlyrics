@@ -40,6 +40,10 @@ describe('createMultiTrackPlayer', () => {
       vi.fn(() => 1),
     );
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    // Cada tick manual del test cuenta como un frame separado en el tiempo:
+    // sin esto el throttle de TICK_INTERVAL_MS descartaria el segundo.
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => (clock += 100));
   });
 
   afterEach(() => {
@@ -53,7 +57,7 @@ describe('createMultiTrackPlayer', () => {
     destroy();
   });
 
-  it('play global llama play() en TODAS las pistas, incluidas las apagadas', () => {
+  it('play global no reproduce las pistas apagadas (no descargan ni decodifican)', () => {
     const { el, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
     const audios = el.querySelectorAll('audio');
     const toggleBtns = el.querySelectorAll('.mtp__row-toggle');
@@ -69,41 +73,64 @@ describe('createMultiTrackPlayer', () => {
     // instancias): se identifica el <audio> invocado por el `this` de cada
     // llamada (mock.instances).
     const playedOn = window.HTMLMediaElement.prototype.play.mock.instances;
+    expect(playedOn).not.toContain(audios[1]);
     expect(playedOn).toContain(audios[0]);
-    expect(playedOn).toContain(audios[1]);
     expect(playedOn).toContain(audios[2]);
     destroy();
   });
 
-  it('apagar/prender en caliente: la pista sigue reproduciendo, nunca se pausa', () => {
+  it('apagar en caliente pausa la pista de verdad; prenderla la repone en marcha', () => {
     const { el, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
     const audios = el.querySelectorAll('audio');
     const toggleBtns = el.querySelectorAll('.mtp__row-toggle');
+
+    // jsdom no mueve `paused` con los mocks del prototipo: se refleja a mano
+    // para que el player distinga una pista sonando de una ya pausada.
+    const setPaused = (audio, value) =>
+      Object.defineProperty(audio, 'paused', { value, configurable: true });
+    window.HTMLMediaElement.prototype.play.mockImplementation(function () {
+      setPaused(this, false);
+      return Promise.resolve();
+    });
+    window.HTMLMediaElement.prototype.pause.mockImplementation(function () {
+      setPaused(this, true);
+    });
 
     el.querySelector('.mtp__play').click();
     window.HTMLMediaElement.prototype.pause.mockClear();
+    window.HTMLMediaElement.prototype.play.mockClear();
 
     toggleBtns[0].click();
     expect(audios[0].muted).toBe(true);
+    expect(window.HTMLMediaElement.prototype.pause.mock.instances).toContain(audios[0]);
+
     toggleBtns[0].click();
     expect(audios[0].muted).toBe(false);
-
-    expect(window.HTMLMediaElement.prototype.pause).not.toHaveBeenCalled();
+    expect(window.HTMLMediaElement.prototype.play.mock.instances).toContain(audios[0]);
     destroy();
   });
 
-  it('maestra apagada: igual reproduce y su currentTime avanza (no arrastra a 0)', () => {
-    const { el, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
+  it('maestra apagada: el reloj pasa a la primera pista que sí suena', () => {
+    const { el, onTime, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
     const audios = el.querySelectorAll('audio');
     const toggleBtns = el.querySelectorAll('.mtp__row-toggle');
+
+    // jsdom no cambia `paused` con el play() mockeado: se fuerza para que
+    // masterAudio() distinga la pista que suena de la que quedó pausada.
+    Object.defineProperty(audios[0], 'paused', { value: true, configurable: true });
+    Object.defineProperty(audios[1], 'paused', { value: false, configurable: true });
+    audios[0].currentTime = 0;
+    audios[1].currentTime = 7.5;
 
     toggleBtns[0].click();
     expect(audios[0].muted).toBe(true);
 
+    const cb = vi.fn();
+    onTime(cb);
     el.querySelector('.mtp__play').click();
+    window.requestAnimationFrame.mock.calls.at(-1)[0]();
 
-    const playedOn = window.HTMLMediaElement.prototype.play.mock.instances;
-    expect(playedOn).toContain(audios[0]);
+    expect(cb).toHaveBeenCalledWith(7.5);
     destroy();
   });
 
@@ -266,7 +293,7 @@ describe('createMultiTrackPlayer', () => {
     player.destroy();
   });
 
-  it('aditivo: todas encendidas al inicio; togglear una fila la apaga (muted)', () => {
+  it('capas: sin solape entre kinds arrancan todas; togglear una fila la apaga (muted)', () => {
     const player = createMultiTrackPlayer({ tracks: makeTracks(), structure: null });
     const audios = player.el.querySelectorAll('audio');
     expect([...audios].map((a) => a.muted)).toEqual([false, false, false]);
@@ -285,7 +312,7 @@ describe('createMultiTrackPlayer', () => {
     player.destroy();
   });
 
-  it('chip Todo restaura la mezcla completa', () => {
+  it('chip Mezcla original restaura la mezcla de arranque', () => {
     const player = createMultiTrackPlayer({ tracks: makeTracks(), structure: null });
     player.el.querySelector('.mtp__row[data-idx="0"] .mtp__row-toggle').click();
     player.el.querySelector('.mtp__row[data-idx="1"] .mtp__row-btn--solo').click();
@@ -381,6 +408,59 @@ describe('createMultiTrackPlayer — long-press vs click nativo (guard anti-carr
   });
 });
 
+describe('createMultiTrackPlayer — capas excluyentes (señal nunca duplicada)', () => {
+  const overlapping = [
+    { kind: 'vocals', url: 'https://s.example.com/v.mp3', label: 'Voz', durationSec: 100 },
+    { kind: 'lead', url: 'https://s.example.com/l.mp3', label: 'Voz principal', durationSec: 100 },
+    { kind: 'backing', url: 'https://s.example.com/b.mp3', label: 'Coros', durationSec: 100 },
+    { kind: 'instrumental', url: 'https://s.example.com/i.mp3', label: 'Instr', durationSec: 100 },
+    { kind: 'drums', url: 'https://s.example.com/d.mp3', label: 'Batería', durationSec: 100 },
+  ];
+
+  beforeEach(() => {
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    // Cada tick manual del test cuenta como un frame separado en el tiempo:
+    // sin esto el throttle de TICK_INTERVAL_MS descartaria el segundo.
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => (clock += 100));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('al montar suena la mezcla original, no las cuatro descomposiciones a la vez', () => {
+    const p = createMultiTrackPlayer({ tracks: overlapping, structure: null });
+    const audios = p.el.querySelectorAll('audio');
+    expect([...audios].map((a) => a.muted)).toEqual([false, true, true, false, true]);
+    expect(p.els.nowSound.textContent).toBe('Sonando: Voz + Instr');
+    p.destroy();
+  });
+
+  it('encender Voz principal apaga la Voz completa (misma señal, no se suman)', () => {
+    const p = createMultiTrackPlayer({ tracks: overlapping, structure: null });
+    const audios = p.el.querySelectorAll('audio');
+    p.el.querySelector('.mtp__row[data-idx="1"] .mtp__row-toggle').click();
+    expect(audios[0].muted).toBe(true);
+    expect(audios[1].muted).toBe(false);
+    expect(audios[3].muted).toBe(false); // el dominio instrumental no se toca
+    p.destroy();
+  });
+
+  it('Mezcla original vuelve a vocals + instrumental', () => {
+    const p = createMultiTrackPlayer({ tracks: overlapping, structure: null });
+    const audios = p.el.querySelectorAll('audio');
+    p.el.querySelector('.mtp__row[data-idx="4"] .mtp__row-toggle').click(); // drums
+    expect(audios[3].muted).toBe(true);
+    p.el.querySelector('.mtp__all').click();
+    expect([...audios].map((a) => a.muted)).toEqual([false, true, true, false, true]);
+    p.destroy();
+  });
+});
+
 describe('createMultiTrackPlayer — agrupacion de pistas', () => {
   it('sin group en los tracks, no aparece ningun encabezado (lista plana)', () => {
     const { el, destroy } = createMultiTrackPlayer({ tracks: makeTracks() });
@@ -412,6 +492,10 @@ describe('createMultiTrackPlayer — chips de sección (structure.segments, Task
       vi.fn(() => 1),
     );
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    // Cada tick manual del test cuenta como un frame separado en el tiempo:
+    // sin esto el throttle de TICK_INTERVAL_MS descartaria el segundo.
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => (clock += 100));
   });
 
   afterEach(() => {
@@ -504,6 +588,10 @@ describe('createMultiTrackPlayer — tira de práctica (Task 4)', () => {
       vi.fn(() => 1),
     );
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    // Cada tick manual del test cuenta como un frame separado en el tiempo:
+    // sin esto el throttle de TICK_INTERVAL_MS descartaria el segundo.
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => (clock += 100));
   });
 
   afterEach(() => {
@@ -602,6 +690,10 @@ describe('createMultiTrackPlayer — scrub/flechas en pausa sincronizan sección
       vi.fn(() => 1),
     );
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    // Cada tick manual del test cuenta como un frame separado en el tiempo:
+    // sin esto el throttle de TICK_INTERVAL_MS descartaria el segundo.
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => (clock += 100));
   });
 
   afterEach(() => {
@@ -666,18 +758,90 @@ describe('createMultiTrackPlayer — scrub/flechas en pausa sincronizan sección
 });
 
 describe('syncStep', () => {
-  it('corrige una pista desviada mas del umbral a masterTime', () => {
-    const audios = [{ currentTime: 10.1 }, { currentTime: 10.0 }];
-    const corrected = syncStep(audios, 10.0);
-    expect(corrected).toBe(1);
-    expect(audios[0].currentTime).toBe(10.0);
-    expect(audios[1].currentTime).toBe(10.0);
+  // Pista sana: reproduciendo, con buffer por delante y sin seek pendiente.
+  const fake = (over = {}) => ({
+    currentTime: 10,
+    playbackRate: 1,
+    paused: false,
+    seeking: false,
+    readyState: 4,
+    ...over,
   });
 
   it('no toca una pista dentro del umbral', () => {
-    const audios = [{ currentTime: 10.02 }];
-    const corrected = syncStep(audios, 10.0);
-    expect(corrected).toBe(0);
+    const audios = [fake({ currentTime: 10.02 })];
+    expect(syncStep(audios, 10.0)).toEqual({ seeked: 0, nudged: 0 });
     expect(audios[0].currentTime).toBe(10.02);
+  });
+
+  it('desvío medio: lo reabsorbe con playbackRate, sin tocar currentTime', () => {
+    // Un seek aquí era el corte audible: descarta el buffer y pide otro rango.
+    const audios = [fake({ currentTime: 10.1 }), fake({ currentTime: 9.9 })];
+    const res = syncStep(audios, 10.0);
+    expect(res).toEqual({ seeked: 0, nudged: 2 });
+    expect(audios[0].currentTime).toBe(10.1);
+    expect(audios[1].currentTime).toBe(9.9);
+    expect(audios[0].playbackRate).toBeLessThan(1); // adelantada -> frena
+    expect(audios[1].playbackRate).toBeGreaterThan(1); // atrasada -> acelera
+  });
+
+  it('al volver dentro del umbral restaura el rate base', () => {
+    const audios = [fake({ currentTime: 10.0, playbackRate: 0.97 })];
+    syncStep(audios, 10.0, { rate: 1 });
+    expect(audios[0].playbackRate).toBe(1);
+  });
+
+  it('respeta el rate de la tira de práctica al corregir', () => {
+    const audios = [fake({ currentTime: 10.1 })];
+    syncStep(audios, 10.0, { rate: 0.5 });
+    expect(audios[0].playbackRate).toBeCloseTo(0.5 * 0.97, 5);
+  });
+
+  it('desvío grande: seek duro, una sola vez por pista dentro del cooldown', () => {
+    const audio = fake({ currentTime: 20 });
+    const lastSeekAt = new Map();
+    expect(syncStep([audio], 10.0, { now: 0, lastSeekAt })).toEqual({ seeked: 1, nudged: 0 });
+    expect(audio.currentTime).toBe(10.0);
+
+    // El seek real es asíncrono: el reloj sigue mostrando el valor viejo unos
+    // frames. Sin cooldown se reasignaba en cada frame -> seek -> stall -> seek.
+    audio.currentTime = 20;
+    expect(syncStep([audio], 10.0, { now: 300, lastSeekAt })).toEqual({ seeked: 0, nudged: 0 });
+    expect(audio.currentTime).toBe(20);
+
+    expect(syncStep([audio], 10.0, { now: 1500, lastSeekAt })).toEqual({ seeked: 1, nudged: 0 });
+  });
+
+  it('no toca una pista con seek en curso (reasignar cancela y reinicia el seek)', () => {
+    const audios = [fake({ currentTime: 20, seeking: true })];
+    expect(syncStep(audios, 10.0, { lastSeekAt: new Map() })).toEqual({ seeked: 0, nudged: 0 });
+    expect(audios[0].currentTime).toBe(20);
+  });
+
+  it('no toca una pista bufferando: su reloj está congelado, el desvío no es real', () => {
+    const audios = [fake({ currentTime: 20, readyState: 2 })];
+    expect(syncStep(audios, 10.0, { lastSeekAt: new Map() })).toEqual({ seeked: 0, nudged: 0 });
+    expect(audios[0].currentTime).toBe(20);
+  });
+
+  it('ignora las pistas pausadas por el mixer', () => {
+    const audios = [fake({ currentTime: 20, paused: true })];
+    expect(syncStep(audios, 10.0, { lastSeekAt: new Map() })).toEqual({ seeked: 0, nudged: 0 });
+    expect(audios[0].currentTime).toBe(20);
+  });
+
+  it('pistas sincronizadas con reloj cuantizado no generan correcciones espurias', () => {
+    // Cada <audio> actualiza su reloj oficial en un instante distinto: con el
+    // umbral viejo de 40 ms, 13 pistas en sincronía real disparaban seeks.
+    const quantize = (t, step, phase) => Math.floor((t + phase) / step) * step;
+    const lastSeekAt = new Map();
+    let seeked = 0;
+    for (let frame = 0; frame < 60; frame += 1) {
+      const t = 10 + frame * 0.05;
+      const master = quantize(t, 0.1, 0);
+      const audios = [1, 2, 3, 4, 5].map((k) => fake({ currentTime: quantize(t, 0.1, k * 0.02) }));
+      seeked += syncStep(audios, master, { now: frame * 50, lastSeekAt }).seeked;
+    }
+    expect(seeked).toBe(0);
   });
 });

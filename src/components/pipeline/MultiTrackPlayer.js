@@ -10,7 +10,13 @@
 import { icon } from '../../lib/icons.js';
 import { safeUrl, escapeHtml } from '../../lib/escape.js';
 import { fmtTime, clamp, timeToPos, posToTime } from '../StudioPlayer.js';
-import { isTrackAudible, nowSoundLabel, loopSeekTarget } from '../../lib/studioPractice.js';
+import {
+  isTrackAudible,
+  nowSoundLabel,
+  loopSeekTarget,
+  defaultActiveSet,
+  toggleTrack,
+} from '../../lib/studioPractice.js';
 import { createBeatClock } from '../../lib/beatClock.js';
 import { createMetronomeClick } from '../../lib/metronomeClick.js';
 import '../../styles/pipeline.css';
@@ -25,27 +31,76 @@ const buildEl = (tag, className, html = '') => {
   return node;
 };
 
-const DRIFT_THRESHOLD_S = 0.04;
+// Umbrales de sincronía. El valor anterior (un único umbral de 0.04 s que
+// disparaba seek) estaba por debajo del ruido de medición: `currentTime` de un
+// <audio> se reporta cuantizado y cada elemento actualiza su reloj oficial en
+// un instante distinto, así que pistas realmente sincronizadas mostraban
+// desvíos de decenas de ms y se "corregían" con un seek. Cada seek sobre un
+// stream remoto descarta el buffer, corta el sonido y dispara otra petición
+// Range: con 13 stems eso se realimentaba hasta romper la reproducción.
+export const DRIFT_NUDGE_S = 0.03; // por debajo: no se toca nada
+export const DRIFT_SEEK_S = 0.35; // por encima: seek duro, último recurso
+export const NUDGE_RATE = 0.03; // varispeed del 3%, inaudible
+export const SEEK_COOLDOWN_MS = 1000;
+const HAVE_FUTURE_DATA = 3;
 
 /**
- * Corrige el drift entre pistas: si el currentTime de una pista se desvía
- * de masterTime más del umbral, la realinea a masterTime.
+ * Realinea las pistas contra el reloj maestro sin cortar el audio: desvíos
+ * medios se reabsorben acelerando o frenando un 3% (varispeed), y solo un
+ * desvío grande justifica un seek, como mucho uno por pista y por segundo.
  * @param {HTMLAudioElement[]} audios
  * @param {number} masterTime
- * @param {number} [threshold]
- * @returns {number} cantidad de pistas corregidas en este paso
+ * @param {{rate?: number, nudgeThreshold?: number, seekThreshold?: number, now?: number, lastSeekAt?: Map<any, number>, seekCooldownMs?: number}} [opts]
+ * @returns {{seeked: number, nudged: number}} correcciones aplicadas en este paso
  */
-export function syncStep(audios, masterTime, threshold = DRIFT_THRESHOLD_S) {
-  let corrected = 0;
+export function syncStep(audios, masterTime, opts = {}) {
+  const {
+    rate = 1,
+    nudgeThreshold = DRIFT_NUDGE_S,
+    seekThreshold = DRIFT_SEEK_S,
+    now = 0,
+    lastSeekAt = null,
+    seekCooldownMs = SEEK_COOLDOWN_MS,
+  } = opts;
+  let seeked = 0;
+  let nudged = 0;
   for (const audio of audios) {
     if (!audio) continue;
-    if (Math.abs(audio.currentTime - masterTime) > threshold) {
+    // Pausada por el mixer: se realinea al reactivarse. Tocarla ahora solo
+    // pediría un rango que quizá nunca se oiga.
+    if (audio.paused === true) continue;
+    // Seek en curso: reasignar currentTime CANCELA y reinicia el seek. Ese era
+    // el bucle que dejaba pistas mudas (seek -> stall -> seek -> ...).
+    if (audio.seeking === true) continue;
+    // Bufferando: su currentTime está congelado, el desvío que se lee no es
+    // real, y "corregirlo" apila otra petición encima del stall.
+    if (Number.isFinite(audio.readyState) && audio.readyState < HAVE_FUTURE_DATA) continue;
+
+    const drift = audio.currentTime - masterTime;
+    const mag = Math.abs(drift);
+
+    if (mag > seekThreshold) {
+      const last = lastSeekAt?.get(audio) ?? -Infinity;
+      if (now - last < seekCooldownMs) continue;
+      lastSeekAt?.set(audio, now);
       audio.currentTime = masterTime;
-      corrected += 1;
+      audio.playbackRate = rate;
+      seeked += 1;
+    } else if (mag > nudgeThreshold) {
+      audio.playbackRate = rate * (drift > 0 ? 1 - NUDGE_RATE : 1 + NUDGE_RATE);
+      nudged += 1;
+    } else if (audio.playbackRate !== rate) {
+      audio.playbackRate = rate;
     }
   }
-  return corrected;
+  return { seeked, nudged };
 }
+
+// El tick de sincronía y repintado no necesita 60 Hz: a 20 Hz el scrubber se
+// ve igual, y ToneLyrics.setActiveTime (que recorre todas las sílabas en cada
+// llamada) deja de competir por el hilo principal con 13 decodificadores.
+const TICK_INTERVAL_MS = 50;
+const perfNow = () => (typeof performance?.now === 'function' ? performance.now() : 0);
 
 /**
  * Crea un reproductor multipista.
@@ -147,7 +202,7 @@ export function createMultiTrackPlayer({
   const mixer = buildEl(
     'div',
     'mtp__mixer',
-    `<button type="button" class="mtp__all">Todo</button><div class="mtp__tracks">${rowsHtml}</div>`,
+    `<button type="button" class="mtp__all">Mezcla original</button><div class="mtp__tracks">${rowsHtml}</div>`,
   );
 
   // Un <audio> por pista, montado oculto (hidden) — no visible pero
@@ -183,25 +238,46 @@ export function createMultiTrackPlayer({
     return audio;
   });
 
-  // --- Estado del mixer (modelo C: aditivo + aislar) ---
-  const disabled = new Set(); // pistas apagadas por el usuario (fila entera)
+  // --- Estado del mixer (aditivo dentro de una capa + aislar) ---
+  // Arranca en la mezcla original: `vocals` + `instrumental`. Encender una
+  // pista de otra partición del mismo dominio apaga la anterior, porque las
+  // particiones se solapan (ver TRACK_LAYERS en studioPractice.js).
+  let active = defaultActiveSet(tracks);
   const soloed = new Set(); // pistas aisladas (boton solo, circle-dot)
 
-  /** Recalcula audio.muted de todas las pistas segun disabled + soloed. */
+  const audibleAt = (i) => isTrackAudible({ i, active, soloed });
+
+  /**
+   * Recalcula audibilidad y transporte de cada pista. Las inaudibles se pausan
+   * de verdad, no solo se mutean: una pista muteada seguía descargando y
+   * decodificando, y con 13 stems eso era el grueso de la saturación de red y
+   * CPU que producía los cortes.
+   */
   const applyAudibility = () => {
+    // Se lee ANTES de pausar nada: pausar la pista que hoy hace de maestra
+    // cambiaría masterAudio() a mitad de la pasada.
+    const masterTime = masterAudio()?.currentTime ?? 0;
     audios.forEach((audio, i) => {
-      audio.muted = !isTrackAudible({ i, disabled, soloed });
+      const on = audibleAt(i);
+      audio.muted = !on;
+      if (!on) {
+        if (!audio.paused) audio.pause();
+        return;
+      }
+      if (playing && audio.paused) {
+        audio.currentTime = masterTime;
+        audio.play().catch((e) => console.warn('MultiTrackPlayer play() rechazado', e));
+      }
     });
     rowEls.forEach((row, i) => {
-      const on = isTrackAudible({ i, disabled, soloed });
+      const on = audibleAt(i);
       row.classList.toggle('is-on', on);
       row.classList.toggle('is-solo', soloed.has(i));
-      toggleBtns[i].setAttribute('aria-pressed', String(!disabled.has(i)));
+      toggleBtns[i].setAttribute('aria-pressed', String(active.has(i)));
       soloBtns[i].setAttribute('aria-pressed', String(soloed.has(i)));
     });
-    nowSoundEl.textContent = nowSoundLabel(tracks, disabled, soloed);
+    nowSoundEl.textContent = nowSoundLabel(tracks, active, soloed);
   };
-  applyAudibility();
 
   // El click nativo SIEMPRE se dispara tras un pointerdown→pointerup en el
   // mismo target, sin importar cuánto se sostuvo — así que un long-press que
@@ -215,8 +291,7 @@ export function createMultiTrackPlayer({
       return;
     }
     const i = Number(e.currentTarget.dataset.idx);
-    if (disabled.has(i)) disabled.delete(i);
-    else disabled.add(i);
+    active = toggleTrack(active, i, tracks);
     applyAudibility();
   };
   const onSoloClick = (e) => {
@@ -234,7 +309,7 @@ export function createMultiTrackPlayer({
   allBtn.addEventListener(
     'click',
     () => {
-      disabled.clear();
+      active = defaultActiveSet(tracks);
       soloed.clear();
       applyAudibility();
     },
@@ -278,7 +353,9 @@ export function createMultiTrackPlayer({
   // --- Tira de práctica: velocidad ---
   // El reloj maestro (tick) lee currentTime real de la pista, así que
   // syncStep sigue funcionando a cualquier rate — no requiere tocarlo.
+  let currentRate = 1;
   const setRate = (rate) => {
+    currentRate = rate;
     audios.forEach((audio) => {
       audio.preservesPitch = true;
       audio.playbackRate = rate;
@@ -319,7 +396,10 @@ export function createMultiTrackPlayer({
     return tracks[i]?.durationSec || 0;
   };
   const masterDuration = () => Math.max(0, ...audios.map((_, i) => durationOf(i)));
-  const masterAudio = () => audios[0];
+  // Reloj maestro = primera pista que esté sonando. Antes era `audios[0]` fijo:
+  // si esa pista quedaba en buffering o apagada, su currentTime se congelaba y
+  // syncStep arrastraba a las otras doce a un tiempo muerto.
+  const masterAudio = () => audios.find((audio) => !audio.paused) ?? audios[0];
 
   // --- Pintado del transporte ---
   let scrubbing = false;
@@ -382,10 +462,22 @@ export function createMultiTrackPlayer({
     });
   };
 
+  const lastSeekAt = new Map();
+  let lastTickAt = -Infinity;
+
   const tick = () => {
+    rafId = requestAnimationFrame(tick);
+    const now = perfNow();
+    if (now - lastTickAt < TICK_INTERVAL_MS) return;
+    lastTickAt = now;
+
     const master = masterAudio();
     const masterTime = master ? master.currentTime : 0;
-    syncStep(audios, masterTime);
+    // Con el maestro bufferando su reloj no es confiable: este frame no
+    // arrastra a nadie, en vez de propagar un tiempo congelado a las demás.
+    const masterReady =
+      !master || !Number.isFinite(master.readyState) || master.readyState >= HAVE_FUTURE_DATA;
+    if (masterReady) syncStep(audios, masterTime, { rate: currentRate, now, lastSeekAt });
     if (!scrubbing) paintAt(masterTime);
     notifyTime(masterTime);
     updateActiveChip(masterTime);
@@ -396,11 +488,10 @@ export function createMultiTrackPlayer({
       loopSegIdx !== null ? segments[loopSegIdx] : null,
     );
     if (loopTarget !== null) seekAll(loopTarget);
-    if (master && master.ended) {
-      pauseAll();
-      return;
-    }
-    rafId = requestAnimationFrame(tick);
+    // Se para cuando terminaron TODAS las audibles, no solo la maestra: con
+    // pistas de duración distinta, la más corta cortaba a las demás.
+    const audibles = audios.filter((_, i) => audibleAt(i));
+    if (audibles.length > 0 && audibles.every((audio) => audio.ended)) pauseAll();
   };
 
   const startLoop = () => {
@@ -415,12 +506,14 @@ export function createMultiTrackPlayer({
     playing = true;
     setPlayIcon(true);
     playListeners.forEach((cb) => cb());
-    // Reproduce SIEMPRE todas las pistas, muteadas o no: la audibilidad es
-    // responsabilidad exclusiva de audio.muted (applyAudibility). Si la
-    // maestra no reproduce, su currentTime queda en 0 y syncStep arrastra
-    // a 0 a las demás; y des-mutear en pleno playback debe sonar al
-    // instante, no requerir un nuevo play().
-    audios.forEach((audio) => {
+    // Solo reproduce las audibles: una pista muteada igual descarga y decodifica,
+    // y con 13 stems eso saturaba red y CPU. Reactivarla cuesta unos cientos de
+    // ms (applyAudibility la reposiciona y le da play), a cambio de que la
+    // mezcla que sí se oye no se entrecorte.
+    const t = masterAudio()?.currentTime ?? 0;
+    audios.forEach((audio, i) => {
+      if (!audibleAt(i)) return;
+      if (Math.abs(audio.currentTime - t) > DRIFT_SEEK_S) audio.currentTime = t;
       audio.play().catch((e) => console.warn('MultiTrackPlayer play() rechazado', e));
     });
     startLoop();
@@ -453,8 +546,11 @@ export function createMultiTrackPlayer({
     paintAt(previewTime);
   };
 
+  // Solo reposiciona las audibles; las apagadas se alinean al reactivarse
+  // (applyAudibility), sin gastar una petición de rango que nadie va a oír.
   const seekAll = (time) => {
-    audios.forEach((audio) => {
+    audios.forEach((audio, i) => {
+      if (!audibleAt(i)) return;
       audio.currentTime = time;
     });
   };
@@ -529,6 +625,9 @@ export function createMultiTrackPlayer({
     audio.addEventListener('loadedmetadata', onLoadedMetadata, { signal: ac.signal }),
   );
 
+  // Después de declarar masterAudio/playing: applyAudibility los usa para
+  // decidir qué pista pausar y cuál reponer en marcha.
+  applyAudibility();
   paintAt(0);
   updateActiveChip(0);
 

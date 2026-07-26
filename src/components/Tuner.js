@@ -585,7 +585,7 @@ export async function renderTuner(container, opts = {}) {
 
   function startExercise(sequence) {
     if (!sequence || sequence.length === 0) {
-      alert('No pude armar el ejercicio. Configurá tu rango en el perfil.');
+      alert('No pude armar el ejercicio. Configura tu rango en el perfil.');
       return;
     }
     exercise = createExercise({ sequence, holdFrames: 8 });
@@ -875,7 +875,7 @@ export async function renderTuner(container, opts = {}) {
   async function saveRange() {
     const token = getSession()?.access_token;
     if (!token) {
-      alert('Necesitás estar logueado.');
+      alert('Necesitas estar logueado.');
       navigate('/login');
       return;
     }

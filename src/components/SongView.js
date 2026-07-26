@@ -438,10 +438,10 @@ async function _renderSongBody(container, songId, isPreview, song) {
       <!-- Controls toolbar — modos excluyentes Letra/Acordes/Tono (pivote
            post-QA visual): #layer-chords/#layer-tono son un OR (activar uno
            apaga el otro; tap sobre el activo vuelve a Letra), exclusividad
-           impuesta por layerStore. El mic del afinador vive acá, siempre
+           impuesta por layerStore. El mic del afinador vive aquí, siempre
            visible (afinador libre si no hay voz elegida). A−/A+ y transpose
            viven solo en el sheet de opciones (#open-options-sheet). Solo
-           acciones de CANTAR quedan acá — Editar canción / Procesamiento /
+           acciones de CANTAR quedan aquí — Editar canción / Procesamiento /
            Estudio / Partitura se movieron al sheet de #open-song-actions-btn
            (Task 18, decisión 6 opción A): toolbar estable, sin pop-in async. -->
       <div class="song-toolbar">
@@ -683,7 +683,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
   }
 
   // Show controls relevant to the current mode: cejilla + transposition belong
-  // to chords mode; el panel Voz vive acá también para Tono. La caja Guitarra
+  // to chords mode; el panel Voz vive aquí también para Tono. La caja Guitarra
   // es exclusiva de Acordes: en Tono se oculta y, si era la única caja, el
   // contenedor entero también (para no dejar un margen fantasma).
   function applyModeVisibility() {

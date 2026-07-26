@@ -67,7 +67,7 @@ async function getRun(_req, res, songId) {
   }
   // structure (Task 16): song_structure.segments no vive en phases.structure
   // (solo status/error, ver applyPhaseEvent en process.js) sino en su propia
-  // tabla — se adjunta acá para que StructureDetail no necesite un fetch
+  // tabla — se adjunta aquí para que StructureDetail no necesite un fetch
   // aparte del mismo run que ya consume el stepper.
   const [phases, [structureRow]] = await Promise.all([
     signTracks(run.phases),
@@ -183,7 +183,7 @@ async function purgeRun(req, res, songId) {
     const structure = await tx`DELETE FROM song_structure WHERE song_id = ${songId}`;
     const pitch = await tx`DELETE FROM song_pitch_analysis WHERE song_id = ${songId}`;
     // Store propio de letra IA (Task 4): la letra manual del cancionero
-    // (songs.sections) nunca se toca acá, solo el store del pipeline.
+    // (songs.sections) nunca se toca aquí, solo el store del pipeline.
     const pipelineLyrics = await tx`DELETE FROM song_pipeline_lyrics WHERE song_id = ${songId}`;
     // Filtrado a provider='pipeline': song_line_timings es 1:1 por canción y
     // ese mismo registro lo puede ocupar un align standalone (provider
@@ -231,7 +231,7 @@ async function purgeRun(req, res, songId) {
 
   // Storage best-effort DESPUÉS del commit: si el borrado de objetos falla,
   // las filas ya no existen (fuente de verdad) y el cron de limpieza puede
-  // re-barrer keys huérfanas más adelante sin bloquear la respuesta acá.
+  // re-barrer keys huérfanas más adelante sin bloquear la respuesta aquí.
   const keys = [
     ...stemRows.map((r) => r.storageKey),
     ...clipRows.map((r) => r.storageKey),

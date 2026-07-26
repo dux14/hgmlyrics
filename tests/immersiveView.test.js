@@ -1740,7 +1740,7 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
 
       // El frame que había quedado pendiente antes del pause ya no debe
       // seguir pintando dots: stopPulseLoop no vacía la cola del rAF real
-      // (el navegador cancela por id), acá lo simulamos vaciándola a mano y
+      // (el navegador cancela por id), aquí lo simulamos vaciándola a mano y
       // confirmando que un nuevo play arranca un loop limpio (timingEngine +
       // pulso, un frame cada uno).
       queue.length = 0;

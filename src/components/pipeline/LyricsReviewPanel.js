@@ -208,7 +208,7 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
    * colapso previa) un doble click o dos acciones distintas dispararían
    * PUTs paralelos sobre el mismo documento — el backend tiene CAS por
    * status (`AND status='awaiting_lyrics'`), así que la 2a request puede
-   * fallar en silencio si no se bloquea acá.
+   * fallar en silencio si no se bloquea aquí.
    */
   function lockControls() {
     el.querySelectorAll(

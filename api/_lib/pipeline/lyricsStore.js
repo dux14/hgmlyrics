@@ -2,9 +2,9 @@
  * lyricsStore.js — acceso a song_pipeline_lyrics (letra IA-independiente del
  * pipeline, spec 2026-07-23). Los helpers reciben el cliente postgres.js
  * (sql o tx) como primer argumento: approveGate los usa dentro de su
- * transacción y los tests inyectan un fake. También vive acá la proyección
+ * transacción y los tests inyectan un fake. También vive aquí la proyección
  * pura del snapshot del store (timingLinesFromSections/pipelineLinesFor):
- * es su hogar natural (proyectan lo que este módulo persiste) y ponerla acá
+ * es su hogar natural (proyectan lo que este módulo persiste) y ponerla aquí
  * evita un ciclo de imports con api/songs/[id]/pipeline/lyrics.js, que
  * también consume upsertPipelineLyrics/getPipelineLyrics (Task 2.2).
  */
@@ -58,9 +58,9 @@ function clampScore(line) {
  * `prevEmitted`, el ULTIMO valor YA EMITIDO) se aplica despues como red de
  * seguridad — son dos marcos de referencia distintos a proposito: uno mira
  * los datos crudos, el otro lo que ya se decidio emitir.
- * (Task 2.2: movida acá desde api/songs/[id]/pipeline/lyrics.js para que
+ * (Task 2.2: movida aquí desde api/songs/[id]/pipeline/lyrics.js para que
  * pipelineLinesFor la reuse sin ciclo de imports; lyrics.js y audio.js la
- * importan de acá.) */
+ * importan de aquí.) */
 export function timingLinesFromSections(sections) {
   const flat = sections.flatMap((s) => s.lines);
   const known = flat.map((l) => l.manualStartMs ?? l.startMs);

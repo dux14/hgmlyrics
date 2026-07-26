@@ -303,7 +303,7 @@ function updateSectionLabel(s) {
 /**
  * Actualiza la nota disponible del widget híbrido con la de la línea activa
  * para la voz elegida (ciencia, "F#3"). El widget decide solo si la usa
- * (chip "Seguir nota" propio) — acá solo se alimenta el dato; sin panel
+ * (chip "Seguir nota" propio) — aquí solo se alimenta el dato; sin panel
  * abierto es no-op.
  */
 function updateTunerNote(s) {
@@ -692,7 +692,7 @@ function fallbackToTimer(s) {
   scheduleAdvance(s);
 }
 
-/** Pausa + vacía + desengancha el `<audio>` (todos los caminos de salida/degradación pasan por acá). */
+/** Pausa + vacía + desengancha el `<audio>` (todos los caminos de salida/degradación pasan por aquí). */
 function cleanupAudioEl(s) {
   if (!s.audioEl) return;
   s.audioEl.pause();

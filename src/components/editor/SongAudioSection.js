@@ -28,7 +28,7 @@ function statusLabel(status) {
  * @param {{ songId: string|null, getSong?: (() => object|null)|null }} opts
  * @returns {{ el: HTMLElement, destroy: () => void }}
  */
-// getSong ya no se usa acá (la tarjeta no proyecta líneas) — se conserva en
+// getSong ya no se usa aquí (la tarjeta no proyecta líneas) — se conserva en
 // la firma porque SongEditor.js sigue pasándolo; D6 no toca esa integración.
 export function createSongAudioSection({ songId, getSong: _getSong = null }) {
   const el = document.createElement('div');

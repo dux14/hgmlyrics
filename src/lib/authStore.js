@@ -48,7 +48,7 @@ let refreshInFlight = false;
 /**
  * @returns {object|null} sesión persistida por auth-js si trae refresh_token, o null.
  * Lee AUTH_STORAGE_KEY de supabase.js (misma fuente que storageKey del
- * cliente) en vez de re-derivar la convención `sb-<ref>-auth-token` acá: si
+ * cliente) en vez de re-derivar la convención `sb-<ref>-auth-token` aquí: si
  * alguna vez se pasa un storageKey custom, ambos quedan sincronizados solos.
  */
 function readPersistedSession() {
@@ -244,7 +244,7 @@ export async function refreshProfile() {
     }
     // El server respondió y dijo que no (401/403/500...): sesión sin perfil
     // válido, no queremos dejar UI admin colgada de un caché tras una
-    // revocación real. Acá sí nuleamos.
+    // revocación real. Aquí sí nuleamos.
     state.profile = null;
     state.flags = [];
     return false;
@@ -334,7 +334,7 @@ export async function initAuthStore() {
         // reintento en curso: clearPendingSession() es idempotente frente al
         // camino de attemptRefresh, cualquiera de los dos que llegue primero.
         // refreshProfile() adentro solo llama a fetch() propio, no a
-        // supabase.auth, así que awaitearla acá es seguro.
+        // supabase.auth, así que awaitearla aquí es seguro.
         await clearPendingSession(session);
       } else {
         // Sesión normal, sin pendingSession de por medio (login, refresh
@@ -387,7 +387,7 @@ export async function initAuthStore() {
     // SIGNED_OUT propio (signOut() nuestro: sin recheck, directo al kick) o
     // no elegible para recheck (ya se intentó en este episodio, u offline).
     // Ninguno de estos dos casos llama a supabase.auth, así que awaitear
-    // runSignOutKick() acá mismo es seguro.
+    // runSignOutKick() aquí mismo es seguro.
     await runSignOutKick(event);
   });
 }
@@ -513,7 +513,7 @@ export async function signOut() {
       // signOut admin. Si nunca llega el SIGNED_OUT propio, el flag se
       // quedaría pegado en true para siempre y el próximo SIGNED_OUT
       // legítimo (rotación multi-pestaña) saltaría el recheck de T2 sin
-      // razón. Lo revertimos acá.
+      // razón. Lo revertimos aquí.
       intentionalSignOut = false;
     }
     return result;

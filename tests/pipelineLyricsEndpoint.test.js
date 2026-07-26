@@ -359,7 +359,7 @@ describe('PUT /api/songs/:id/pipeline/lyrics', () => {
 
   // BLOCKER review tanda C: a diferencia de getGate, putGate no recalculaba
   // suggestions/textSuggestions — el front las congelaba en lo del último GET
-  // y, tras una acción que reordena índices (deleteLine acá), "Usar este
+  // y, tras una acción que reordena índices (deleteLine aquí), "Usar este
   // texto" podía escribir el texto correcto sobre el renglón equivocado.
   it('splitLine devuelve suggestions/textSuggestions recalculadas contra el documento resultante', async () => {
     const songSections = [{ type: 'verse', lines: [{ text: 'linea de la semilla' }] }];
@@ -855,7 +855,7 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
     expect(lines[1]).toMatchObject({ i: 1, startMs: 1250, interpolated: true });
     expect(lines[2]).toMatchObject({ i: 2, startMs: 2500, interpolated: false });
     // 'ready'/'pipeline' son literales inline en el INSERT (no placeholders),
-    // ya verificados por lectura del código; acá solo importan los binds.
+    // ya verificados por lectura del código; aquí solo importan los binds.
     expect(timingShimInsert).toContain('s1');
     // Fix Important (review F3): el swap de audio nuevo no debe heredar
     // bpm_detected/beats de un align standalone previo (metronomo stale) —

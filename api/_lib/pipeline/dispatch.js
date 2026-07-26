@@ -20,7 +20,7 @@ import { dispatchAlign } from '../align.js';
  * es exactamente el mismo shape que start.js, invokeModalPipeline es agnóstico
  * al llamador. `enabledSections` la arma el caller (Task 6: las 5 secciones del
  * DAG — ver ENABLED_SECTIONS en songs/[id]/pipeline/_dispatch.js), no se
- * hardcodea acá para que el pipeline unificado y el Estudio manual (start.js)
+ * hardcodea aquí para que el pipeline unificado y el Estudio manual (start.js)
  * puedan pedir subconjuntos distintos.
  * @param {{ run:{id:string, songId:string, inputGetUrl:string}, uploads:object,
  *           enabledSections:string[], webhookUrl:string }} args

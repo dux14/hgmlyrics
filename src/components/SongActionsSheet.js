@@ -5,7 +5,7 @@
  * Antes vivían sueltas en la toolbar (Editar canción / Procesamiento /
  * Estudio / Partitura), dos de ellas con "pop-in" async tras `getSongStudio`.
  * Con este sheet la toolbar queda estable (solo acciones de CANTAR + botón
- * "más") y la resolución condicional de qué items mostrar ocurre acá, cuando
+ * "más") y la resolución condicional de qué items mostrar ocurre aquí, cuando
  * el llamador arma la lista `items` con lo que ya resolvió.
  *
  * Patrón SINGLETON calcado de OptionsSheet.js (misma apertura/cierre, mismo

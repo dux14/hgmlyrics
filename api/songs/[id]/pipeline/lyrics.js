@@ -36,7 +36,7 @@ import { deleteSongAudioObject } from '../../../_lib/storage.js';
 // El default de Vercel (10s) no alcanza para el approve: la tx (steps 1-5) +
 // el dispatch post-commit a Modal (sync+pitch, cold start incluido) pueden
 // superarlo -> 504 con la tx ya commiteada pero sin dispatch. Mismo patron
-// que api/pipeline/webhook.js (300s); acá 60 alcanza de sobra.
+// que api/pipeline/webhook.js (300s); aquí 60 alcanza de sobra.
 export const config = { maxDuration: 60 };
 
 // Segmentos de estructura detectados por SongFormer (Task 15, fase
@@ -76,7 +76,7 @@ async function findAwaitingRun(songId) {
  * @param {string} songId
  * @param {Array|null} [songSections] `songs.sections` ya leído por el
  *   llamador (getGate siempre lo necesita para textSuggestions); sin pasarlo
- *   se consulta acá, mismo criterio de siempre (putGate no lo tiene a mano).
+ *   se consulta aquí, mismo criterio de siempre (putGate no lo tiene a mano).
  * @returns {Promise<{lyricsReview:object}>}
  */
 async function ensureReview(run, songId, songSections) {
@@ -302,7 +302,7 @@ async function putGate(req, res, songId) {
 // Fases derivadas de la letra recien aprobada. Fallo de dispatch NO debe
 // romper la respuesta 200 (la aprobacion en si ya se persistio): la fase que
 // se intento arrancar queda failed y admite retry vía retry.js (mismo
-// criterio de aislamiento de fallas que confirm.js/retry.js, pero acá el
+// criterio de aislamiento de fallas que confirm.js/retry.js, pero aquí el
 // resultado global de la aprobación no depende del dispatch).
 async function dispatchDerivedPhase(phase, run) {
   try {

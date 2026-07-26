@@ -52,7 +52,7 @@ export function createUploadPhaseCard({ songId, onAfterConfirm }) {
     el.innerHTML = `
       <label class="upload-card__drop" tabindex="0">
         ${icon('upload', { size: 22 })}
-        <span class="upload-card__drop-title">Subí el audio de la canción</span>
+        <span class="upload-card__drop-title">Sube el audio de la canción</span>
         <span class="upload-card__drop-hint">MP3, hasta 25MB</span>
         <input type="file" accept="audio/mpeg,.mp3" class="upload-card__input" />
       </label>

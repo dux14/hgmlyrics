@@ -106,7 +106,7 @@ function sectionResultToStemsEvent(jobId, section, result, error) {
  *   es una fila con retry en el stepper, aunque no bloquee el `done` del run
  *   (runStatusFromPhases no la exige). Los segments de SongFormer llegan en
  *   segundos (start/end float); la conversión a startMs/endMs enteros ocurre
- *   SOLO acá, una única vez — downstream ya trabaja en ms.
+ *   SOLO aquí, una única vez — downstream ya trabaja en ms.
  */
 function sectionResultToStructureEvent(jobId, result, error) {
   if (result.status === 'failed') {

@@ -13,7 +13,7 @@ export function createPoller(fn, intervalMs) {
   };
   const schedule = () => {
     clearInterval(timer);
-    // El check de visibilidad se mantiene también acá (defensa en profundidad
+    // El check de visibilidad se mantiene también aquí (defensa en profundidad
     // por si start() se llama con la pestaña ya oculta); onVisibility hace la
     // pausa real vía clearInterval cuando se oculta en caliente.
     timer = setInterval(() => {

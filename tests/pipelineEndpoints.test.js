@@ -36,7 +36,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   // clearAllMocks no resetea implementaciones seteadas con mockResolvedValue/
   // mockRejectedValue en un test previo (solo limpia el historial de llamadas)
-  // — se re-arma el default acá para que no se filtre entre tests.
+  // — se re-arma el default aquí para que no se filtre entre tests.
   requireAdmin.mockResolvedValue({ id: 'admin1', email: 'a@a.com' });
   dispatchPhase.mockResolvedValue({ id: 'call1' });
   pipelineInputStat.mockResolvedValue({ exists: true, size: 1024 });
@@ -386,7 +386,7 @@ describe('DELETE /api/songs/:id/pipeline (A2: purga)', () => {
       ['DELETE FROM song_pipeline_lyrics', { count: 0 }],
       ['DELETE FROM song_line_timings', { count: 0 }],
       // song_audio.storage_key apunta justo al input del run que se purga
-      // (el approve hizo el swap): la fila queda huérfana si no se borra acá.
+      // (el approve hizo el swap): la fila queda huérfana si no se borra aquí.
       ['DELETE FROM song_audio', { count: 1 }],
       ["SET status = 'cancelled'", { count: 0 }],
       ["SET status = 'superseded'", { count: 1 }],

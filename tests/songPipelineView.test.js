@@ -29,7 +29,7 @@ vi.mock('../src/components/pipeline/LyricsReviewPanel.js', () => ({
   LyricsReviewPanel: vi.fn(async () => document.createElement('div')),
 }));
 
-// D3b (UploadPhaseCard) tiene su propio test dedicado: acá se mockea como
+// D3b (UploadPhaseCard) tiene su propio test dedicado: aquí se mockea como
 // una caja negra para no acoplar el esqueleto del stepper a su máquina de
 // estados interna.
 let lastUploadCardDispose = null;
@@ -45,7 +45,7 @@ vi.mock('../src/components/pipeline/UploadPhaseCard.js', () => ({
   }),
 }));
 
-// D3c (StemTracksDetail) tiene su propio test dedicado: acá se mockea como
+// D3c (StemTracksDetail) tiene su propio test dedicado: aquí se mockea como
 // caja negra, igual que UploadPhaseCard.
 let lastStemTracksDestroy = null;
 let lastStemTracksUpdate = null;
@@ -62,7 +62,7 @@ vi.mock('../src/components/pipeline/StemTracksDetail.js', () => ({
   }),
 }));
 
-// D3d (SyncFineTuning) tiene su propio test dedicado: acá se mockea como
+// D3d (SyncFineTuning) tiene su propio test dedicado: aquí se mockea como
 // caja negra, igual que UploadPhaseCard y StemTracksDetail.
 let lastSyncTuningDestroy = null;
 let lastSyncTuningUpdate = null;
@@ -85,7 +85,7 @@ vi.mock('../src/components/pipeline/SyncFineTuning.js', () => ({
   }),
 }));
 
-// StructureDetail (Task 16) tiene su propio test dedicado: acá se mockea
+// StructureDetail (Task 16) tiene su propio test dedicado: aquí se mockea
 // como caja negra, igual que StemTracksDetail y SyncFineTuning.
 let lastStructureDetailDestroy = null;
 let lastStructureDetailUpdate = null;

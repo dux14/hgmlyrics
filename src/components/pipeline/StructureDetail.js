@@ -6,7 +6,7 @@
  * (label + nudge de bordes ±1s) que llama al PATCH de
  * api/songs/[id]/structure.js (Task 15d). 'structure' es best-effort (ver
  * CRITICAL_PHASES en api/_lib/pipeline/state.js): su fallo nunca bloquea el
- * run, así que acá solo mostramos un estado vacío, sin acción de reintento.
+ * run, así que aquí solo mostramos un estado vacío, sin acción de reintento.
  */
 import { escapeHtml } from '../../lib/escape.js';
 import { isAdmin } from '../../lib/authStore.js';
@@ -69,7 +69,7 @@ export function createStructureDetail({ songId, onChanged }) {
   }
 
   // Delegación de eventos sobre `el` en vez de un listener por fila: el
-  // timeline se reconstruye entero en cada render(), así que atarlos acá
+  // timeline se reconstruye entero en cada render(), así que atarlos aquí
   // (nodo estable) evita re-atar/perder listeners en cada re-pintado.
   el.addEventListener('change', (ev) => {
     const select = ev.target.closest('.struct-edit__label');

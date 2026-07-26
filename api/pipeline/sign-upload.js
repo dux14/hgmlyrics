@@ -6,7 +6,7 @@ import { ACTIVE_RUN_STATUSES } from '../_lib/pipeline/process.js';
 
 // Espejo de api/pitch/sign-upload.js para RUNS del pipeline unificado: el
 // orquestador Modal hkn-pitch, cuando corre dentro de un run del pipeline,
-// pasa jobId = song_pipeline_runs.id (no pitch_jobs.id, que no aplica acá).
+// pasa jobId = song_pipeline_runs.id (no pitch_jobs.id, que no aplica aquí).
 // Mismo secreto compartido y bucket de pitch; el prefijo pipeline/<songId>/
 // <runId>/ evita colisionar con los jobs standalone (<user_id>/<jobId>/).
 export default withErrors(async (req, res) => {

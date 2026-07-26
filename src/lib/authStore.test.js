@@ -161,7 +161,7 @@ describe('refreshProfile — fallo transitorio vs. definitivo', () => {
     await store.initAuthStore();
     expect(store.getProfile()).toEqual({ username: 'restaurado' });
 
-    // El server SI respondio (401: token revocado) — acá sí queremos nulear.
+    // El server SI respondio (401: token revocado) — aquí sí queremos nulear.
     globalThis.fetch.mockResolvedValueOnce({ ok: false, status: 401 });
     const ok = await store.refreshProfile();
 
@@ -179,7 +179,7 @@ describe('refreshProfile — fallo transitorio vs. definitivo', () => {
     supabase.auth.getSession.mockResolvedValue({ data: { session: makeSession() } });
     supabase.auth.onAuthStateChange.mockImplementation(() => {});
     // Boot en frío: el server nunca habló (red caída), sin profile "bueno"
-    // en memoria previo — a diferencia del test de arriba, acá no hay un
+    // en memoria previo — a diferencia del test de arriba, aquí no hay un
     // primer refreshProfile() exitoso que deje un profile del que conservar.
     globalThis.fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
 

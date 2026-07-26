@@ -9,7 +9,7 @@ vi.mock('../src/lib/pipelineApi.js', () => ({
 
 // jsdom no implementa matchMedia; se fuerza reduce-motion para que las
 // acciones de red no esperen la animación de colapso (~220ms) en cada test
-// — el motion en sí (gateado por esta misma preferencia) no se prueba acá.
+// — el motion en sí (gateado por esta misma preferencia) no se prueba aquí.
 window.matchMedia = () => ({
   matches: true,
   media: '(prefers-reduced-motion: reduce)',
@@ -154,7 +154,7 @@ describe('LyricsReviewPanel', () => {
   });
 
   // BLOCKER review tanda C: performAction hace `state = {...state, ...result}`
-  // — si el PUT de una acción que reordena índices (acá deleteLine) no trae
+  // — si el PUT de una acción que reordena índices (aquí deleteLine) no trae
   // suggestions/textSuggestions recalculadas, el spread conserva las del
   // último GET (indexadas contra el documento VIEJO) y `render()` las pinta
   // sobre la fila equivocada del documento NUEVO. Este test reproduce el

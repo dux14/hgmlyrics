@@ -3,7 +3,7 @@
  * (karaoke Apple Music style).
  *
  * Independiente del layerStore excluyente de la vista normal (decisión 3
- * del spec de vista inmersiva): cambiar el modo acá NO toca las capas de
+ * del spec de vista inmersiva): cambiar el modo aquí NO toca las capas de
  * SongView/ImmersiveView. Persiste una preferencia GLOBAL del dispositivo bajo
  * `hkn-immersive-mode`. Tolera localStorage roto (Safari privado, cuota) —
  * best-effort, nunca lanza.
@@ -46,7 +46,7 @@ export function setImmersiveMode(mode) {
  * canción actual. `hasChords`/`tonoAvailable` los calcula el caller (misma
  * señal que usan SongView/ImmersiveView: `songHasChords(song)` local a cada
  * componente y `isFeatureEnabled('voz_tono') && song.voiceRoster.length >
- * 0`) — no se duplica esa lógica acá porque no está expuesta como export
+ * 0`) — no se duplica esa lógica aquí porque no está expuesta como export
  * reusable desde donde vive hoy.
  * @param {{ hasChords: boolean, tonoAvailable: boolean }} availability
  * @returns {Array<'letra'|'chords'|'mixed'|'tono'>}

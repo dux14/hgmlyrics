@@ -20,7 +20,7 @@ if (!SUPABASE_URL || !KEY) {
  * algoritmo que supabase-js usa por defecto (ver su SupabaseClient.ts:
  * `sb-${hostname.split('.')[0]}-auth-token`) y se la pasamos explícita a
  * storageKey para que deje de ser una convención implícita: authStore.js la
- * importa de acá para leer/parsear la sesión persistida en boot (T1) sin
+ * importa de aquí para leer/parsear la sesión persistida en boot (T1) sin
  * re-derivarla por su cuenta.
  */
 export const AUTH_STORAGE_KEY = (() => {

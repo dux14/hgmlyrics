@@ -31,7 +31,7 @@ export const SECTION_OUTPUTS = {
  * como copia de trabajo/scratch, pero la fuente canónica de `tracks.vocals`
  * en el pipeline unificado es `leadBacking` (re-extrae el stem vocal antes de
  * separar lead/backing, ver modal/sections/lead_backing.py). `structure` no
- * tiene entrada acá: no publica kinds de audio, solo segments (fase aparte).
+ * tiene entrada aquí: no publica kinds de audio, solo segments (fase aparte).
  * Único hogar de este mapa (usado por api/songs/[id]/pipeline/_dispatch.js
  * para armar uploads y por api/_lib/pipeline/stemsAdapter.js para filtrar qué
  * kinds de cada sección llegan a publicarse) — evita que la protección de

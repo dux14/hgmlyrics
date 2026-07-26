@@ -10,7 +10,7 @@
 // para cualquier tipo que no reconoce (fallback pensado para datos de letra,
 // no para SongFormer), y 'instrumental'/'silencio' terminarían con el color
 // de verso por COINCIDENCIA (hoy ambos son neutros) en vez de por intención.
-// Acá 'instrumental'/'silencio' (y cualquier label inesperado) van directo a
+// Aquí 'instrumental'/'silencio' (y cualquier label inesperado) van directo a
 // 'neutral' (--color-section-neutral, review Task 16 Minor 1).
 export const LABEL_TO_SECTION_SLUG = {
   intro: 'intro',

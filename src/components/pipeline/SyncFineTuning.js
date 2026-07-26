@@ -5,7 +5,7 @@
  * que reproduce el stem de voz (no el mix) seekeado al inicio de cada línea,
  * más el sub-bloque de metrónomo (BPM/compás/ancla). Adaptado de
  * SongAudioSection.js (editor admin) — duplicación temporal intencional,
- * D6 la reemplaza. NO modificar SongAudioSection.js desde acá.
+ * D6 la reemplaza. NO modificar SongAudioSection.js desde aquí.
  */
 import { getSongAudio, patchSongAudio, patchLineTiming } from '../../lib/songAudioApi.js';
 import { icon } from '../../lib/icons.js';

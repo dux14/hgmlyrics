@@ -41,7 +41,7 @@ export const UPLOAD_SLOTS = STEM_KINDS;
 // Las 5 secciones del DAG Modal (modal/stems_app.py run_pipeline), mismo orden
 // que SECTION_KEYS. S1 (voiceInstrumental) corre siempre sin importar
 // enabledSections; S2 (structure) / S3 (leadBacking) / S4 (gender) / S5 (duet)
-// sí se gatean acá.
+// sí se gatean aquí.
 export const ENABLED_SECTIONS = SECTION_KEYS;
 
 function webhookUrl() {
@@ -206,7 +206,7 @@ export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
   const lines = lineTimingsRow[0]?.lines || [];
   // Segmentos detectados (ya en ms, ver supabase/migrations/20260722010000_song_structure.sql):
   // [{label, startMs, endMs}]. Nada garantiza en el productor (stemsAdapter/
-  // process.js no ordenan) que lleguen ordenados/contiguos, así que acá se
+  // process.js no ordenan) que lleguen ordenados/contiguos, así que aquí se
   // ordenan defensivamente por startMs ascendente y se descartan filas con
   // startMs/endMs no finitos antes de derivar nada (review Task 8, Important).
   const rawSegments = structureRow[0]?.segments;

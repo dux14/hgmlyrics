@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { projectLines, speedToSecondsPerLine } from '../src/lib/projectLines.js';
 
-// align.js importa db.js/storage.js (exigen env vars en runtime real); acá
+// align.js importa db.js/storage.js (exigen env vars en runtime real); aquí
 // solo se usa projectCanonicalLines, una función pura, así que se mockean
 // igual que en tests/apiAlign.test.js para poder importarla sin credenciales.
 vi.mock('../api/_lib/db.js', () => ({ default: () => Promise.resolve([]) }));

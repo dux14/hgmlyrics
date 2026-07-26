@@ -231,9 +231,9 @@ export function renderAdminFlagsPage(container) {
         const { flags } = await flagsRes.json();
         return { flags, allUsers };
       },
-      // `isEmpty()` de renderAsyncRegion solo reconoce null/array vacío, y acá
+      // `isEmpty()` de renderAsyncRegion solo reconoce null/array vacío, y aquí
       // el fetcher devuelve un objeto {flags, allUsers} — nunca dispara
-      // `empty`. Se chequea el caso 0 flags acá mismo, dentro de `render`.
+      // `empty`. Se chequea el caso 0 flags aquí mismo, dentro de `render`.
       render: ({ flags, allUsers }) => {
         flagsState = flags;
         usersState = allUsers;

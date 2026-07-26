@@ -23,12 +23,12 @@ import {
 } from './lyricsSplit.js';
 
 // Idiomas soportados por la partitura vocal (align_app.py ya no autodetecta:
-// el admin elige acá y el idioma viaja pegado a la letra aprobada).
+// el admin elige aquí y el idioma viaja pegado a la letra aprobada).
 const SUPPORTED_LANGUAGES = ['es', 'en'];
 
 // Normalización mínima de tipo de sección, DUPLICADA a propósito (ver header
 // de src/lib/sectionTypes.js: la lógica se duplica ahí mismo para que
-// ImmersiveView no dependa de SongView; misma razón aplica acá al revés,
+// ImmersiveView no dependa de SongView; misma razón aplica aquí al revés,
 // api/_lib no debe acoplarse al árbol de src/). Solo lo que este módulo
 // necesita: agrupar por tipo y validar/normalizar el tipo de setSectionType.
 const KNOWN_SECTION_TYPES = ['verse', 'chorus', 'bridge', 'prechorus', 'intro', 'outro'];
@@ -234,7 +234,7 @@ export function buildReviewDoc({ transcription, structureSegments = [], seedSect
         }).sections[0].lines;
         // autoSplitLongLines reconstruye cada mitad desde cero
         // (splitLineAtWord) y no copia campos ajenos al v2: el tag de
-        // semilla (ya correcto por pieza, ver splitBySeed) se re-adjunta acá.
+        // semilla (ya correcto por pieza, ver splitBySeed) se re-adjunta aquí.
         if (!isNil(seedPiece.seedSectionIdx)) {
           for (const l of longPieces) l.seedSectionIdx = seedPiece.seedSectionIdx;
         }

@@ -66,7 +66,9 @@ export default [
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       'prefer-const': 'error',
       'no-var': 'error',
-      eqeqeq: ['error', 'always'],
+      // `null: 'ignore'` permite el idiom `x == null`, que captura null y
+      // undefined en una sola comparación.
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
       curly: ['error', 'multi-line'],
     },
   },

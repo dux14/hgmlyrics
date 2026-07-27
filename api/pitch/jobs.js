@@ -2,15 +2,17 @@ import sql from '../_lib/db.js';
 import { requireUser } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { createPitchUploadUrl, deletePitchPrefix } from './_lib/storage.js';
-import { DAILY_QUOTA, checkAccess, validateUploadMeta, validateSha256, sanitizeTitle } from './_lib/state.js';
+import { DAILY_QUOTA, validateUploadMeta, validateSha256, sanitizeTitle } from './_lib/state.js';
 
 async function quotaUsedToday(userId) {
-  // Solo cuenta jobs que realmente entraron a procesamiento o terminaron OK.
-  // created/uploaded/estimating/awaiting_approval abandonados no consumen cuota.
+  // Fix HIGH (bypass de cuota): la cuota se cuenta por `dispatched_at` (fijado al
+  // aprobar/reintentar en approve.js y retry.js), no por el status vivo del job.
+  // Antes contaba status IN ('running','succeeded','partial'): como cancel.js
+  // permite running -> cancelled y 'cancelled' no cuenta, aprobar y cancelar de
+  // inmediato dejaba la cuota siempre en 0 (GPU ilimitada).
   const rows = await sql`
     SELECT count(*)::int AS n FROM pitch_jobs
-    WHERE user_id = ${userId} AND status IN ('running','succeeded','partial')
-      AND created_at >= date_trunc('day', now())
+    WHERE user_id = ${userId} AND dispatched_at >= date_trunc('day', now())
   `;
   return rows[0]?.n ?? 0;
 }
@@ -41,14 +43,8 @@ export default withErrors(async (req, res) => {
   }
 
   // POST: crear job.
-  // Verificar acceso beta antes de cualquier operación de escritura.
-  const profileRows = await sql`SELECT is_admin, pitch_beta FROM profiles WHERE id = ${user.id}`;
+  const profileRows = await sql`SELECT is_admin FROM profiles WHERE id = ${user.id}`;
   const profile = profileRows[0] ?? {};
-  const access = checkAccess(profile);
-  if (!access.ok) {
-    res.status(403).json({ error: 'beta', reason: access.reason });
-    return;
-  }
 
   // Reclama intentos previos sin arrancar (created/uploaded/estimating/awaiting_approval):
   // no consumen cuota y, si quedaron huérfanos por una subida fallida, bloquearían nuevos

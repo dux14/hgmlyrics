@@ -75,6 +75,21 @@ describe('api/pitch/jobs/[id]/retry', () => {
     expect(invokePitchPipeline).not.toHaveBeenCalled();
   });
 
+  it('Fix HIGH: 429 si ya se alcanzó el tope de reintentos (retries >= 3), sin dispatch', async () => {
+    sql.json = (o) => o;
+    sql.mockImplementation(async (strings) => {
+      const q = strings.join('?');
+      if (/SELECT .* FROM pitch_jobs/.test(q)) {
+        return [{ id: 'j', user_id: 'u1', status: 'failed', profile: 'oss', input_path: 'u1/j/input/a.mp3', retries: 3 }];
+      }
+      return { count: 1 };
+    });
+    const res = makeRes();
+    await handler({ method: 'POST', query: { id: 'j' }, headers: {} }, res);
+    expect(res.status).toHaveBeenCalledWith(429);
+    expect(invokePitchPipeline).not.toHaveBeenCalled();
+  });
+
   it('reinicia phases/artifacts para no arrastrar fases previas al recomputar succeeded/partial', async () => {
     sql.json = (o) => o;
     sql.mockImplementation(async (strings) => {

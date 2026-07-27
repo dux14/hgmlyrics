@@ -3,7 +3,6 @@ import { requireUser } from '../../../_lib/auth.js';
 import { allowMethods, withErrors } from '../../../_lib/http.js';
 import { signPitchDownload, deletePitchPrefix } from '../../_lib/storage.js';
 import { invokePitchPipeline } from '../../_lib/modal.js';
-import { choirEnabled } from '../../_lib/state.js';
 
 export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['POST'])) return;
@@ -24,8 +23,10 @@ export default withErrors(async (req, res) => {
 
   // Reclama la transición con compare-and-swap: persiste 'running' ANTES de despachar
   // y cierra la carrera de doble-approve (solo un llamador gana → un solo dispatch pagado).
+  // `dispatched_at` marca el consumo de cuota en este mismo instante: no depende del
+  // status vivo, así que cancelar después no lo libera (fix del bypass de cuota).
   const claimed = await sql`
-    UPDATE pitch_jobs SET status = 'running', updated_at = now()
+    UPDATE pitch_jobs SET status = 'running', dispatched_at = now(), updated_at = now()
     WHERE id = ${id} AND status = 'awaiting_approval'`;
   if (claimed.count !== 1) {
     res.status(409).json({ error: 'El job ya fue aprobado o cambió de estado' });
@@ -40,7 +41,6 @@ export default withErrors(async (req, res) => {
     uploads: {}, // Modal firma sus propios PUT vía endpoint dedicado en M1.
     signUploadUrl: `${process.env.PUBLIC_BASE_URL}/api/pitch/sign-upload`,
     webhook: { url: `${process.env.PUBLIC_BASE_URL}/api/pitch/webhook` },
-    flags: { choir: choirEnabled() },
   };
 
   // Dispatch aislado con 1 reintento; si falla, marcar failed (no dejar colgado en running).

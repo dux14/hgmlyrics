@@ -42,19 +42,9 @@ const postReq = (over = {}) => ({
 });
 
 describe('api/pitch/jobs', () => {
-  it('POST sin acceso beta → 403', async () => {
+  it('POST feliz (bajo cuota) → 200 con job + upload', async () => {
     routeSql([
-      ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: false }]],
-    ]);
-    const res = makeRes();
-    await handler(postReq(), res);
-    expect(res.status).toHaveBeenCalledWith(403);
-    expect(res.json).toHaveBeenCalledWith({ error: 'beta', reason: 'beta' });
-  });
-
-  it('POST feliz (beta activo, bajo cuota) → 200 con job + upload', async () => {
-    routeSql([
-      ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: true }]],
+      ['SELECT is_admin FROM profiles', [{ is_admin: false }]],
       ['RETURNING id, input_path', []], // reclamo de huérfanos: ninguno
       ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: 0 }]],
       ['INSERT INTO pitch_jobs', [{ id: 'j1', status: 'created', profile: 'oss', created_at: 't' }]],
@@ -73,7 +63,7 @@ describe('api/pitch/jobs', () => {
   it('POST puebla sha256 en el INSERT cuando el cliente lo envía', async () => {
     let insertedValues;
     routeSql([
-      ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: true }]],
+      ['SELECT is_admin FROM profiles', [{ is_admin: false }]],
       ['RETURNING id, input_path', []], // reclamo de huérfanos: ninguno
       ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: 0 }]],
       ['INSERT INTO pitch_jobs', (values) => {
@@ -91,7 +81,7 @@ describe('api/pitch/jobs', () => {
   it('POST rechaza sha256 con formato inválido → 400 sin insertar', async () => {
     let insertCalled = false;
     routeSql([
-      ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: true }]],
+      ['SELECT is_admin FROM profiles', [{ is_admin: false }]],
       ['RETURNING id, input_path', []],
       ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: 0 }]],
       ['INSERT INTO pitch_jobs', () => { insertCalled = true; return []; }],
@@ -104,7 +94,7 @@ describe('api/pitch/jobs', () => {
 
   it('POST con cuota agotada (no-admin) → 429', async () => {
     routeSql([
-      ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: true }]],
+      ['SELECT is_admin FROM profiles', [{ is_admin: false }]],
       ['RETURNING id, input_path', []],
       ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: DAILY_QUOTA }]],
     ]);
@@ -120,7 +110,7 @@ describe('api/pitch/jobs', () => {
       constraint_name: 'pitch_jobs_one_active_per_user',
     });
     routeSql([
-      ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: true }]],
+      ['SELECT is_admin FROM profiles', [{ is_admin: false }]],
       ['RETURNING id, input_path', []],
       ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: 0 }]],
       ['INSERT INTO pitch_jobs', { __reject: dupError }],
@@ -137,7 +127,7 @@ describe('api/pitch/jobs', () => {
       constraint_name: 'otra_constraint_cualquiera',
     });
     routeSql([
-      ['SELECT is_admin, pitch_beta FROM profiles', [{ is_admin: false, pitch_beta: true }]],
+      ['SELECT is_admin FROM profiles', [{ is_admin: false }]],
       ['RETURNING id, input_path', []],
       ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: 0 }]],
       ['INSERT INTO pitch_jobs', { __reject: otherDup }],
@@ -176,6 +166,28 @@ describe('api/pitch/jobs', () => {
       jobs: [{ id: 'j1', status: 'succeeded', profile: 'oss' }],
       quota: { used: 5, limit: null, unlimited: true },
     });
+  });
+
+  it('Fix HIGH: la cuota se cuenta por dispatched_at, no por status (cierra el bypass aprobar→cancelar→repetir)', async () => {
+    routeSql([
+      ['SELECT is_admin FROM profiles', [{ is_admin: false }]],
+      ['RETURNING id, input_path', []],
+      ['SELECT count(*)::int AS n FROM pitch_jobs', [{ n: 0 }]],
+      ['INSERT INTO pitch_jobs', [{ id: 'j1', status: 'created', profile: 'oss', created_at: 't' }]],
+      ['UPDATE pitch_jobs SET input_path', []],
+    ]);
+    const res = makeRes();
+    await handler(postReq(), res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    // La query de cuota ya no filtra por status (un job aprobado-y-cancelado seguiría
+    // contando por su dispatched_at de hoy, en vez de resetear la cuota a 0).
+    const quotaCall = sql.mock.calls.find(([strings]) =>
+      strings.join('?').includes('SELECT count(*)::int AS n FROM pitch_jobs'),
+    );
+    expect(quotaCall).toBeTruthy();
+    const queryText = quotaCall[0].join('?');
+    expect(queryText).not.toMatch(/status IN/);
+    expect(queryText).toMatch(/dispatched_at/);
   });
 
   it('método no permitido (DELETE) → 405', async () => {

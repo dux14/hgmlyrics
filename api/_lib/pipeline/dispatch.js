@@ -11,7 +11,7 @@
 // webhooks actuales). No se introduce un secreto nuevo por sección.
 import { invokeModalPipeline } from '../modal.js';
 import { invokePitchPipeline } from '../../pitch/_lib/modal.js';
-import { fetchWithTimeout } from '../http.js';
+import { fetchWithTimeout, MODAL_DISPATCH_TIMEOUT_MS } from '../http.js';
 import { dispatchAlign } from '../align.js';
 
 /**
@@ -70,7 +70,7 @@ export async function dispatchTranscribe({ run, vocalsGetUrl, dbLines, canonical
         snapshotHash,
       }),
     },
-    { timeoutMs: 8000, label: 'Modal (transcribe)' },
+    { timeoutMs: MODAL_DISPATCH_TIMEOUT_MS, label: 'Modal (transcribe)' },
   );
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
@@ -173,7 +173,7 @@ export async function dispatchClips({
         uploadKeys,
       }),
     },
-    { timeoutMs: 8000, label: 'Modal (clips)' },
+    { timeoutMs: MODAL_DISPATCH_TIMEOUT_MS, label: 'Modal (clips)' },
   );
   if (!res.ok) {
     const detail = await res.text().catch(() => '');

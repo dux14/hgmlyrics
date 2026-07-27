@@ -1,4 +1,4 @@
-import { fetchWithTimeout } from '../../_lib/http.js';
+import { fetchWithTimeout, MODAL_DISPATCH_TIMEOUT_MS } from '../../_lib/http.js';
 
 /**
  * Invoca run_pipeline del app Modal hkn-pitch. Secrets propios de Partitura.
@@ -18,7 +18,7 @@ export async function invokePitchPipeline(payload) {
     endpoint,
     { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-inbound-secret': secret },
       body: JSON.stringify({ fn: 'run_pipeline', ...payload }) },
-    { timeoutMs: 8000, label: 'Modal (pitch)' },
+    { timeoutMs: MODAL_DISPATCH_TIMEOUT_MS, label: 'Modal (pitch)' },
   );
   if (!res.ok) {
     const detail = await res.text().catch(() => '');

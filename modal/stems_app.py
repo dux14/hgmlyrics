@@ -90,6 +90,26 @@ songformer_image = (
     .add_local_python_source("sections")
 )
 
+# Imagen del ENDPOINT HTTP (`start`). Solo valida el payload y hace
+# `.spawn()` de run_pipeline, asi que no necesita nada de `image` (demucs,
+# MedleyVox, etc.): con la imagen pesada, un endpoint frio tardaba mas de 8s
+# solo en levantar, el POST de dispatch de Vercel abortaba por timeout y la
+# fase quedaba 'failed' mientras la GPU ya estaba procesando -- trabajo
+# pagado y tirado (mismo incidente que align_app.py, 27-jul-2026).
+#
+# Que lleva y por que: fastapi para el decorador de endpoint, y
+# add_local_python_source("sections") porque stems_app importa
+# `sections._common`/`extract`/`gender`/`lead_backing`/`medley_vox`/
+# `songformer` a nivel de MODULO -- el contenedor del endpoint carga el
+# archivo entero aunque solo ejecute `start`. Ninguno de esos modulos de
+# `sections` importa nada pesado (torch/demucs/httpx) a nivel de modulo, asi
+# que la imagen liviana alcanza para que el import global resuelva.
+dispatch_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("fastapi[standard]")
+    .add_local_python_source("sections")
+)
+
 # Sólo necesitamos el secret de webhook en el orquestador principal.
 # S1 accede a él a través del payload; el secret de Supabase ya no hace falta
 # porque usamos signed PUT URLs pre-firmadas por Vercel (sin service role key).
@@ -305,7 +325,7 @@ def _validate_stems_payload(payload: dict) -> str | None:
     return None
 
 
-@app.function(image=image, secrets=_webhook_secrets)
+@app.function(image=dispatch_image, secrets=_webhook_secrets)
 @modal.fastapi_endpoint(method="POST")
 def start(payload: dict, x_inbound_secret: str = Header(default="")):
     """

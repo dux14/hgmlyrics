@@ -79,6 +79,23 @@ describe('applyPhaseEvent (CAS)', () => {
     const next = applyPhaseEvent(phases, { phase: 'stems', ok: true, partial: true, tracks: { vocals: 'k/vocals' } });
     expect(next).toBeNull();
   });
+  it('rescata un evento final exitoso llegado tarde sobre una fase failed (timeout de dispatch, job vivo en Modal)', () => {
+    const phases = { ...initialPhases(), stems: { status: 'failed', error: 'Modal no respondió a tiempo.' } };
+    const next = applyPhaseEvent(phases, { phase: 'stems', ok: true, tracks: { vocals: 'k/vocals' } });
+    expect(next.stems.status).toBe('done');
+    expect(next.stems.error).toBeNull();
+    expect(next.stems.tracks.vocals).toBe('k/vocals');
+  });
+  it('NO rescata un evento parcial sobre stems failed (solo el evento final y exitoso rescata)', () => {
+    const phases = { ...initialPhases(), stems: { status: 'failed', error: 'boom' } };
+    const next = applyPhaseEvent(phases, { phase: 'stems', ok: true, partial: true, tracks: { vocals: 'k/vocals' } });
+    expect(next).toBeNull();
+  });
+  it('NO rescata un evento fallido sobre stems failed (sigue siendo zombie)', () => {
+    const phases = { ...initialPhases(), stems: { status: 'failed', error: 'boom' } };
+    const next = applyPhaseEvent(phases, { phase: 'stems', ok: false, error: 'otro fallo' });
+    expect(next).toBeNull();
+  });
 });
 
 describe('invalidacion en cascada', () => {

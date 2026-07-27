@@ -100,6 +100,29 @@ align_image = (
     .add_local_python_source("transcribe_diff")
 )
 
+# Imagen de los ENDPOINTS HTTP (start/transcribe). Solo validan el payload y
+# hacen `.spawn()` de la funcion GPU, asi que no necesitan nada de align_image:
+# con la imagen pesada, un endpoint frio tardaba mas de 8s solo en levantar
+# (torch/whisperx), el POST de dispatch de Vercel abortaba por timeout y la fase
+# quedaba 'failed' mientras la GPU ya estaba procesando -- trabajo pagado y
+# tirado (incidente 27-jul-2026, fase transcription). Con la imagen liviana el
+# cold start del endpoint baja al orden del segundo.
+#
+# Que lleva y por que: fastapi para el decorador de endpoint, y jiwer porque
+# align_app importa `transcribe_diff.line_scores` a nivel de MODULO y ese modulo
+# importa jiwer -- el contenedor del endpoint carga el archivo entero aunque
+# solo ejecute start/transcribe. Los tres add_local_python_source son los mismos
+# de align_image por la misma razon: el import global tiene que resolver.
+# `sections/_common.py` no importa nada pesado a nivel de modulo (httpx y el
+# stack de audio van DENTRO de sus funciones), asi que no arrastra la imagen.
+dispatch_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("fastapi[standard]", "jiwer==3.0.4")
+    .add_local_python_source("sections")
+    .add_local_python_source("align_mapping")
+    .add_local_python_source("transcribe_diff")
+)
+
 # hkn-webhook trae MODAL_INBOUND_SECRET (auth del endpoint web) y
 # MODAL_WEBHOOK_SECRET (firma del POST de salida) — mismo secret que stems_app.
 _webhook_secrets = [modal.Secret.from_name("hkn-webhook")]
@@ -361,7 +384,7 @@ def _validate_align_payload(payload: dict) -> str | None:
     return None
 
 
-@app.function(image=align_image, secrets=_webhook_secrets)
+@app.function(image=dispatch_image, secrets=_webhook_secrets)
 @modal.fastapi_endpoint(method="POST")
 def start(payload: dict, x_inbound_secret: str = Header(default="")):
     """
@@ -516,7 +539,7 @@ def run_transcribe(payload: dict) -> None:
         raise
 
 
-@app.function(image=align_image, secrets=_webhook_secrets)
+@app.function(image=dispatch_image, secrets=_webhook_secrets)
 @modal.fastapi_endpoint(method="POST")
 def transcribe(payload: dict, x_inbound_secret: str = Header(default="")):
     """

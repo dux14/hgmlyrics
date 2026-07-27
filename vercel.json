@@ -25,6 +25,30 @@
     "api/pipeline/cleanup.js": {
       "maxDuration": 60
     },
+    "api/pitch/jobs/\\[id\\]/approve.js": {
+      "maxDuration": 60
+    },
+    "api/pitch/jobs/\\[id\\]/retry.js": {
+      "maxDuration": 60
+    },
+    "api/songs/\\[id\\]/audio.js": {
+      "maxDuration": 60
+    },
+    "api/songs/\\[id\\]/pipeline/lyrics.js": {
+      "maxDuration": 60
+    },
+    "api/songs/\\[id\\]/pipeline/retry.js": {
+      "maxDuration": 60
+    },
+    "api/songs/\\[id\\]/pipeline/confirm.js": {
+      "maxDuration": 60
+    },
+    "api/stems/jobs/\\[id\\]/start.js": {
+      "maxDuration": 60
+    },
+    "api/stems/jobs/\\[id\\]/retry.js": {
+      "maxDuration": 60
+    },
     "api/**/*.js": {
       "maxDuration": 10
     }

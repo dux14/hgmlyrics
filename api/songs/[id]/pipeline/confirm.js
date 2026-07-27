@@ -91,10 +91,17 @@ export default withErrors(async (req, res) => {
       // retry.js) y SOLO la fase 'stems' pasa a failed. No hay auto-failed
       // de todo el run: sería YAGNI y además rompería el reintento sin volver
       // a subir el archivo.
+      // Igual que advance.js: un timeout (err2.timeout) no prueba que Modal no
+      // arrancó el job — el mensaje avisa al admin para que no reintente a
+      // ciegas y pague GPU doble; si el job sigue vivo, el webhook rescata la
+      // fase (ver isLateSuccessRescue en state.js).
+      const error = err2?.timeout
+        ? `${String(err2?.message ?? err2).slice(0, 180)} El job pudo haber arrancado en Modal igual; si termina, su resultado se aplica solo.`.slice(0, 300)
+        : String(err2?.message ?? err2).slice(0, 300);
       const failedPhases = applyPhaseEvent(phases, {
         phase: 'stems',
         ok: false,
-        error: String(err2?.message ?? err2).slice(0, 300),
+        error,
       });
       // 'structure' viajaba en el mismo dispatch: si este no salió, tampoco se
       // ejecuta. Se marca failed (es best-effort: la UI la pinta como pending y

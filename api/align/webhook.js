@@ -43,9 +43,13 @@ async function notifyPipelineSync(songId, ok, error, snapshotHash) {
 }
 
 // Raw body necesario para verificar la firma HMAC.
+// maxDuration 60: este webhook también dispara advanceNextPhase→dispatchAlign
+// hacia `clips`, que ahora espera hasta MODAL_DISPATCH_TIMEOUT_MS (30s) por el
+// dispatch a Modal — 30s de presupuesto total no dejaba margen para el resto
+// del handler (verificación HMAC, updates de DB antes/después del dispatch).
 export const config = {
   api: { bodyParser: false },
-  maxDuration: 30,
+  maxDuration: 60,
 };
 
 function readRawBody(req) {

@@ -61,7 +61,18 @@ export function applyPhaseEvent(phases, event) {
   const { phase, ok, partial = false, tracks, artifacts, error } = event;
   const cur = phases[phase];
   if (!cur) return null;
-  if (TERMINAL.has(cur.status)) {
+  // Rescate de dispatch incierto: una fase queda 'failed' cuando el POST de
+  // dispatch a Modal hace timeout del lado de Vercel, PERO Modal puede haber
+  // recibido el spawn igual (el timeout es del cliente, no del servidor) y el
+  // job corre hasta el final. Su resultado, completo y exitoso, llega al
+  // webhook con la fase ya en 'failed' y antes se descartaba: GPU pagada,
+  // trabajo a la basura y run congelado esperando un retry manual (caso real
+  // 27-jul-2026, transcription vs. cold start del endpoint de hkn-align).
+  // Solo rescata el evento FINAL y exitoso: un parcial sobre 'failed' se sigue
+  // ignorando (mergear tracks sin cerrar la fase dejaría stems.tracks.vocals
+  // presente con stems 'failed', y DEPS solo mira el track).
+  const isLateSuccessRescue = cur.status === 'failed' && ok && !partial;
+  if (TERMINAL.has(cur.status) && !isLateSuccessRescue) {
     // Merge tardío: pistas/artefactos que Modal reporta después de cerrar la
     // fase (ej. drums/bass tras lead) no deben perderse. Solo mergea, el
     // status de la fase terminal queda intacto; eventos no-parciales o

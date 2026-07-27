@@ -116,6 +116,17 @@ lyrics_image = (
         "gender", "choir_basicpitch"
     )
 )
+# Imagen del ENDPOINT HTTP (`start`). Solo valida el payload y hace `.spawn()`
+# de run_pipeline, asi que no necesita la imagen GPU (`image`): con esa imagen
+# pesada (torch/whisperx/audio-separator), un endpoint frio tardaba mas de 8s
+# solo en levantar, el POST de dispatch de Vercel abortaba por timeout y el
+# job quedaba 'failed' mientras la GPU ya estaba procesando -- trabajo pagado
+# y tirado (mismo incidente que align_app.py/stems_app.py, 27-jul-2026).
+# Reusamos cpu_image tal cual: ya es la imagen minima que satisface el import
+# global de pitch_app.py (core.py usa numpy a nivel de modulo; fastapi/httpx
+# y los mismos add_local_python_source de siempre), no hace falta duplicarla.
+dispatch_image = cpu_image
+
 _secrets = [
     modal.Secret.from_name("pitch-hmac"),  # PITCH_MODAL_INBOUND_SECRET + PITCH_MODAL_WEBHOOK_SECRET
     # Flags de rollback de modelos (F0_ENGINE=fcpe|crepe, etc.). Se puede
@@ -312,7 +323,7 @@ def run_pipeline(payload: dict) -> None:
             pass
 
 
-@app.function(image=image, secrets=_secrets)
+@app.function(image=dispatch_image, secrets=_secrets)
 @modal.fastapi_endpoint(method="POST")
 def start(payload: dict, x_inbound_secret: str = Header(default="")):
     """Espeja stems_app.py::start: valida x-inbound-secret y lanza async.

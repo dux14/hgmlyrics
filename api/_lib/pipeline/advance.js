@@ -45,7 +45,15 @@ export async function advanceNextPhase(sql, runId, songId, phase) {
       const fresh = rows[0].phases;
       if (fresh[phase]?.status !== 'running') return;
       const failed = structuredClone(fresh);
-      failed[phase] = { status: 'failed', error: String(err?.message ?? err).slice(0, 300), retries: fresh[phase]?.retries || 0 };
+      // Un timeout de dispatch (err.timeout) no prueba que Modal no arrancó el
+      // job: es un .spawn() que puede seguir corriendo en GPU aunque el fetch
+      // haya abortado. El mensaje se lo dice al admin para que NO reintente a
+      // ciegas (pagaría GPU doble) — si el job sigue vivo su webhook igual
+      // rescata esta fase 'failed' (ver isLateSuccessRescue en state.js).
+      const error = err?.timeout
+        ? `${String(err?.message ?? err).slice(0, 180)} El job pudo haber arrancado en Modal igual; si termina, su resultado se aplica solo.`.slice(0, 300)
+        : String(err?.message ?? err).slice(0, 300);
+      failed[phase] = { status: 'failed', error, retries: fresh[phase]?.retries || 0 };
       await tx`
         UPDATE song_pipeline_runs SET phases = ${tx.json(failed)}, updated_at = now()
         WHERE id = ${runId}

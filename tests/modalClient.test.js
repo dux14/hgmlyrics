@@ -97,7 +97,7 @@ describe('invokeModalPipeline', () => {
     });
   });
 
-  it('pasa AbortSignal.timeout(8000) a fetch', async () => {
+  it('pasa AbortSignal.timeout(MODAL_DISPATCH_TIMEOUT_MS) a fetch', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ callId: 'call_xyz' }),

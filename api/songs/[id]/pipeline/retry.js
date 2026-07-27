@@ -109,7 +109,13 @@ export default withErrors(async (req, res) => {
       const fresh = rows[0].phases;
       if (fresh[phase]?.status !== 'running') return;
       const failedPhases = structuredClone(fresh);
-      failedPhases[phase] = { status: 'failed', error: String(err?.message ?? err).slice(0, 300), retries: fresh[phase]?.retries || 0 };
+      // Igual que advance.js/confirm.js: si el dispatch abortó por timeout, el
+      // job pudo haber arrancado igual en Modal; el mensaje se lo dice al
+      // admin para que no dispare otro reintento a ciegas (GPU doble).
+      const error = err?.timeout
+        ? `${String(err?.message ?? err).slice(0, 180)} El job pudo haber arrancado en Modal igual; si termina, su resultado se aplica solo.`.slice(0, 300)
+        : String(err?.message ?? err).slice(0, 300);
+      failedPhases[phase] = { status: 'failed', error, retries: fresh[phase]?.retries || 0 };
       // Mismo criterio que confirm.js: si el reintento era de 'stems' y
       // 'structure' quedó en 'running' (mismo dispatch, nunca se disparó),
       // se marca failed en vez de dejarla colgada hasta el cron de zombis.

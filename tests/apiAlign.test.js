@@ -23,6 +23,7 @@ vi.mock('../api/_lib/http.js', () => ({
   allowMethods: vi.fn(() => false),
   withErrors: (fn) => fn,
   fetchWithTimeout: vi.fn(async () => ({ ok: true })),
+  MODAL_DISPATCH_TIMEOUT_MS: 30000,
 }));
 vi.mock('../api/_lib/storage.js', () => ({
   signSongAudioDownload: vi.fn((key) => Promise.resolve(`https://get/${key}`)),

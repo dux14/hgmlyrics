@@ -26,6 +26,18 @@ export function cachePublic(res, { sMaxage = 60, swr = 86400, sie = 86400 } = {}
 }
 
 /**
+ * Timeout de los POST de dispatch a Modal (stems/align/transcribe/clips/pitch).
+ * Esos endpoints solo validan el payload y hacen `.spawn()`, así que responden
+ * en milisegundos EN CALIENTE; el que manda es el cold start del contenedor del
+ * endpoint, que con imágenes pesadas pasa cómodamente de 8s (el valor viejo,
+ * que hacía fallar el dispatch mientras Modal ya había arrancado el job).
+ * Debe quedar por debajo del maxDuration del endpoint que despacha (60s en
+ * vercel.json para todos los que llaman a un dispatch) para que el catch que
+ * marca la fase alcance a correr.
+ */
+export const MODAL_DISPATCH_TIMEOUT_MS = 30000;
+
+/**
  * fetch con timeout que traduce fallos de red (timeout o conexión) a un error 502.
  * Unifica el patrón que estaba duplicado en modal.js y ordo/[date].js.
  * @param {string} url
@@ -48,6 +60,11 @@ export async function fetchWithTimeout(
         : `No se pudo contactar a ${label}: ${err.message}`,
     );
     e.status = 502;
+    // `timeout` distingue "no sabemos si el upstream recibió el request" de un
+    // fallo de conexión limpio. Para los dispatch a Modal (que son .spawn()) un
+    // timeout NO implica que el job no arrancó: el trabajo puede estar corriendo
+    // y su webhook llegar después (ver el rescate de applyPhaseEvent).
+    e.timeout = isTimeout;
     throw e;
   }
 }

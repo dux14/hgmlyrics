@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../api/_lib/http.js', () => ({
   fetchWithTimeout: vi.fn(async () => ({ ok: true, json: async () => ({ callId: 'call1' }) })),
+  MODAL_DISPATCH_TIMEOUT_MS: 30000,
 }));
 vi.mock('../api/_lib/modal.js', () => ({
   invokeModalPipeline: vi.fn(async () => ({ id: 'stems-call' })),

@@ -4,7 +4,7 @@
 // postear a Modal y, si el POST falla, marca failed y relanza.
 import sql from './db.js';
 import { signSongAudioDownload } from './storage.js';
-import { fetchWithTimeout } from './http.js';
+import { fetchWithTimeout, MODAL_DISPATCH_TIMEOUT_MS } from './http.js';
 
 /**
  * Proyecta las lineas canonicas de una cancion (modo letra sin voz): salta
@@ -105,7 +105,7 @@ export async function dispatchAlign(songId, snapshotHash) {
         headers: { 'Content-Type': 'application/json', 'x-inbound-secret': secret },
         body: JSON.stringify({ songId, audioUrl, lines, webhookUrl, snapshotHash }),
       },
-      { timeoutMs: 8000, label: 'Modal align' },
+      { timeoutMs: MODAL_DISPATCH_TIMEOUT_MS, label: 'Modal align' },
     );
     if (!res.ok) {
       const detail = await res.text().catch(() => '');

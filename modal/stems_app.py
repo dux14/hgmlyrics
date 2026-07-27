@@ -117,6 +117,13 @@ _webhook_secrets = [
     modal.Secret.from_name("hkn-webhook"),  # MODAL_INBOUND_SECRET, MODAL_WEBHOOK_SECRET
 ]
 
+# Dict persistente para idempotencia por jobId (jobId -> callId de run_pipeline).
+# Mismo patron que modal/pitch/pitch_app.py::_seen: sin esto, un timeout del
+# POST de confirm.js (el job SI pudo haber arrancado en Modal) hace que el
+# reintento con el mismo jobId lance un SEGUNDO run_pipeline sobre las mismas
+# storage keys (fix CRITICAL 2, auditoria de pipeline 27-jul).
+_seen = modal.Dict.from_name("stems-jobs-seen", create_if_missing=True)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # S1 — extracción de stems (GPU, ep_317+htdemucs_6s)
@@ -336,7 +343,14 @@ def start(payload: dict, x_inbound_secret: str = Header(default="")):
     asíncrona (.spawn), devolviendo el callId inmediatamente para no
     bloquear el request de Vercel.
 
-    Respuesta: { "callId": "<modal call object_id>" }
+    Idempotencia (mismo patron que modal/pitch/pitch_app.py::start): si el
+    jobId ya fue lanzado, NO relanza run_pipeline (evita dos escrituras
+    concurrentes sobre las mismas storage keys) y devuelve el callId
+    cacheado con `dedup: true`. `payload.reset=true` fuerza un run nuevo y
+    sobrescribe el cache -- reservado para un reintento deliberado del
+    admin, ya serializado por su propio CAS.
+
+    Respuesta: { "callId": "<modal call object_id>", "dedup"?: true }
     """
     if not hmac.compare_digest(
         x_inbound_secret,
@@ -348,5 +362,10 @@ def start(payload: dict, x_inbound_secret: str = Header(default="")):
     if validation_error:
         raise HTTPException(status_code=400, detail=validation_error)
 
+    job_id = payload["jobId"]
+    if not payload.get("reset") and job_id in _seen:
+        return {"callId": _seen[job_id], "dedup": True}
+
     call = run_pipeline.spawn(payload)
+    _seen[job_id] = call.object_id
     return {"callId": call.object_id}

@@ -79,45 +79,56 @@ export default withErrors(async (req, res) => {
     return;
   }
 
-  // Dispatch aislado con 1 reintento (mismo patrón que pitch/jobs/[id]/approve.js).
+  // Dispatch aislado con 1 reintento — PERO NUNCA si el primer intento hizo
+  // timeout (fix CRITICAL 2, auditoría de pipeline 27-jul): un timeout no
+  // prueba que Modal no recibió el POST, así que reintentar a ciegas podía
+  // lanzar un segundo run_pipeline sobre las mismas storage keys de stems, y
+  // 30s+30s agotaba el maxDuration del endpoint dejando la fase 'running'
+  // huérfana. stems_app.py::start ahora dedupea por jobId (ver _seen), así
+  // que un reintento manual vía retry.js sigue siendo seguro; lo que se
+  // elimina es el retry automático e inmediato de este handler ante timeout.
+  async function markStemsFailed(err) {
+    const error = err?.timeout
+      ? `${String(err?.message ?? err).slice(0, 180)} El job pudo haber arrancado en Modal igual; si termina, su resultado se aplica solo.`.slice(0, 300)
+      : String(err?.message ?? err).slice(0, 300);
+    // Decisión (carry del review plan A): runStatusFromPhases NO deriva
+    // 'failed' global — el run se queda 'processing' (retry-able vía
+    // retry.js) y SOLO la fase 'stems' pasa a failed. No hay auto-failed
+    // de todo el run: sería YAGNI y además rompería el reintento sin volver
+    // a subir el archivo.
+    const failedPhases = applyPhaseEvent(phases, {
+      phase: 'stems',
+      ok: false,
+      error,
+    });
+    // 'structure' viajaba en el mismo dispatch: si este no salió, tampoco se
+    // ejecuta. Se marca failed (es best-effort: la UI la pinta como pending y
+    // retry.js no la acepta) para no dejarla en 'running' eternamente.
+    failedPhases.structure = {
+      ...failedPhases.structure,
+      status: 'failed',
+      error: 'No se pudo iniciar la detección de secciones',
+    };
+    await sql`
+      UPDATE song_pipeline_runs SET phases = ${sql.json(failedPhases)}, updated_at = now()
+      WHERE id = ${run.id}
+    `;
+    const e = new Error('No se pudo iniciar el procesamiento. Intenta de nuevo.');
+    e.status = 502;
+    throw e;
+  }
+
   try {
     await dispatchPhase('stems', { ...run, phases });
-  } catch (_err1) {
-    try {
-      await dispatchPhase('stems', { ...run, phases });
-    } catch (err2) {
-      // Decisión (carry del review plan A): runStatusFromPhases NO deriva
-      // 'failed' global — el run se queda 'processing' (retry-able vía
-      // retry.js) y SOLO la fase 'stems' pasa a failed. No hay auto-failed
-      // de todo el run: sería YAGNI y además rompería el reintento sin volver
-      // a subir el archivo.
-      // Igual que advance.js: un timeout (err2.timeout) no prueba que Modal no
-      // arrancó el job — el mensaje avisa al admin para que no reintente a
-      // ciegas y pague GPU doble; si el job sigue vivo, el webhook rescata la
-      // fase (ver isLateSuccessRescue en state.js).
-      const error = err2?.timeout
-        ? `${String(err2?.message ?? err2).slice(0, 180)} El job pudo haber arrancado en Modal igual; si termina, su resultado se aplica solo.`.slice(0, 300)
-        : String(err2?.message ?? err2).slice(0, 300);
-      const failedPhases = applyPhaseEvent(phases, {
-        phase: 'stems',
-        ok: false,
-        error,
-      });
-      // 'structure' viajaba en el mismo dispatch: si este no salió, tampoco se
-      // ejecuta. Se marca failed (es best-effort: la UI la pinta como pending y
-      // retry.js no la acepta) para no dejarla en 'running' eternamente.
-      failedPhases.structure = {
-        ...failedPhases.structure,
-        status: 'failed',
-        error: 'No se pudo iniciar la detección de secciones',
-      };
-      await sql`
-        UPDATE song_pipeline_runs SET phases = ${sql.json(failedPhases)}, updated_at = now()
-        WHERE id = ${run.id}
-      `;
-      const e = new Error('No se pudo iniciar el procesamiento. Intenta de nuevo.');
-      e.status = 502;
-      throw e;
+  } catch (err1) {
+    if (err1?.timeout) {
+      await markStemsFailed(err1); // siempre lanza; no hay retry tras timeout
+    } else {
+      try {
+        await dispatchPhase('stems', { ...run, phases });
+      } catch (err2) {
+        await markStemsFailed(err2); // siempre lanza
+      }
     }
   }
   res.status(200).json({ success: true });

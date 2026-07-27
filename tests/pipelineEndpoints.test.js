@@ -669,6 +669,41 @@ describe('POST /api/songs/:id/pipeline/confirm', () => {
     expect(res.status).toHaveBeenCalledWith(502);
   });
 
+  it('dispatch hace timeout: NO reintenta (fix CRITICAL 2), stems queda failed en el primer intento', async () => {
+    const timeoutErr = Object.assign(new Error('Modal (stems): timeout'), { timeout: true });
+    dispatchPhase.mockRejectedValue(timeoutErr);
+    let finalPhases;
+    routeSql([
+      [
+        'SELECT id, song_id AS "songId"',
+        [
+          {
+            id: 'r1',
+            songId: 's1',
+            status: 'created',
+            phases: initialPhases(),
+            inputPath: 's1/runs/r1/full.mp3',
+          },
+        ],
+      ],
+      ["UPDATE song_pipeline_runs SET status = 'processing'", { count: 1 }],
+      [
+        'UPDATE song_pipeline_runs SET phases = ',
+        (values) => {
+          finalPhases = values.find((v) => v && v.stems);
+          return { count: 1 };
+        },
+      ],
+    ]);
+    const res = makeRes();
+    await confirmHandler({ method: 'POST', query: { id: 's1' } }, res);
+    // Un timeout no prueba que Modal no recibió el POST: reintentar a ciegas
+    // podía lanzar un segundo run_pipeline sobre las mismas storage keys.
+    expect(dispatchPhase).toHaveBeenCalledTimes(1);
+    expect(finalPhases.stems.status).toBe('failed');
+    expect(res.status).toHaveBeenCalledWith(502);
+  });
+
   it('marca stems y structure en running al despachar (H5)', async () => {
     let updatedRow;
     routeSql([
@@ -911,6 +946,46 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
     await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
     expect(res.status).toHaveBeenCalledWith(502);
     expect(finalPhases.stems.status).toBe('failed');
+  });
+
+  it('fix HIGH 1: un reintento fallido preserva phases.stems.tracks (no deja el run irrecuperable)', async () => {
+    dispatchPhase.mockRejectedValue(new Error('modal down'));
+    const runningPhases = activePhasesWithStemsFailed();
+    // tracks ya publicados por un webhook parcial previo (p.ej. vocals llegó
+    // antes de que la fase volviera a fallar en el reintento).
+    runningPhases.stems = { status: 'running', error: null, tracks: { vocals: 'k3' }, retries: 1 };
+    let finalPhases;
+    let call = 0;
+    routeSql([
+      [
+        "status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')",
+        [
+          {
+            id: 'r1',
+            songId: 's1',
+            status: 'processing',
+            phases: activePhasesWithStemsFailed(),
+            inputPath: 'p',
+          },
+        ],
+      ],
+      ['SELECT phases FROM song_pipeline_runs WHERE id = ', [{ phases: runningPhases }]],
+      [
+        'UPDATE song_pipeline_runs SET phases = ',
+        (values) => {
+          call += 1;
+          if (call === 2) finalPhases = values.find((v) => v && v.stems);
+          return { count: 1 };
+        },
+      ],
+    ]);
+    const res = makeRes();
+    await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'stems' } }, res);
+    expect(res.status).toHaveBeenCalledWith(502);
+    expect(finalPhases.stems.status).toBe('failed');
+    // DEPS.transcription (state.js) mira el track, no el status: sin esto
+    // canStartPhase('transcription') queda en false para siempre.
+    expect(finalPhases.stems.tracks).toEqual({ vocals: 'k3' });
   });
 
   it('si el redespacho de stems falla, structure tampoco queda en running (review holistico)', async () => {

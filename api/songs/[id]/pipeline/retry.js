@@ -115,7 +115,12 @@ export default withErrors(async (req, res) => {
       const error = err?.timeout
         ? `${String(err?.message ?? err).slice(0, 180)} El job pudo haber arrancado en Modal igual; si termina, su resultado se aplica solo.`.slice(0, 300)
         : String(err?.message ?? err).slice(0, 300);
-      failedPhases[phase] = { status: 'failed', error, retries: fresh[phase]?.retries || 0 };
+      // Preserva tracks/artifacts ya publicados por esa fase (fix HIGH 1,
+      // auditoría 27-jul): un UPDATE ciego con solo {status,error,retries}
+      // borraba `phases.stems.tracks`, y DEPS.transcription/DEPS.pitch
+      // (state.js) miran el track, no el status -- sin él, canStartPhase
+      // queda en false para siempre y el run es irrecuperable sin tocar la DB.
+      failedPhases[phase] = { ...fresh[phase], status: 'failed', error, retries: fresh[phase]?.retries || 0 };
       // Mismo criterio que confirm.js: si el reintento era de 'stems' y
       // 'structure' quedó en 'running' (mismo dispatch, nunca se disparó),
       // se marca failed en vez de dejarla colgada hasta el cron de zombis.

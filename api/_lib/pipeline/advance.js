@@ -3,7 +3,7 @@
 // (el legacy de alignment, único canal por el que completa la fase `sync`,
 // ver notifyPipelineSync). Extraído para que ambos webhooks reusen el mismo
 // CAS transaccional en vez de duplicar la lógica (y quedar desincronizados).
-import { canStartPhase } from './state.js';
+import { canStartPhase, runStatusFromPhases } from './state.js';
 import { dispatchPhase } from '../../songs/[id]/pipeline/_dispatch.js';
 
 // Fase que se dispara automáticamente al completarse la fase clave (DAG
@@ -53,9 +53,19 @@ export async function advanceNextPhase(sql, runId, songId, phase) {
       const error = err?.timeout
         ? `${String(err?.message ?? err).slice(0, 180)} El job pudo haber arrancado en Modal igual; si termina, su resultado se aplica solo.`.slice(0, 300)
         : String(err?.message ?? err).slice(0, 300);
-      failed[phase] = { status: 'failed', error, retries: fresh[phase]?.retries || 0 };
+      // Preserva tracks/artifacts ya publicados por esa fase (fix HIGH 1,
+      // auditoría 27-jul): un UPDATE ciego con solo {status,error,retries}
+      // borraba p.ej. `phases.stems.tracks`, y DEPS.transcription/DEPS.pitch
+      // (state.js) miran el track, no el status -- sin él, canStartPhase
+      // queda en false para siempre y el run es irrecuperable sin tocar la DB.
+      failed[phase] = { ...fresh[phase], status: 'failed', error, retries: fresh[phase]?.retries || 0 };
+      // Igual que retry.js (Task 11): si esta fase es crítica y ya agotó sus
+      // reintentos, el run entero debe derivar a 'failed' -- sin esto quedaba
+      // 'processing' para siempre y bloqueaba crear otro run para la canción
+      // (fix MEDIUM, auditoría 27-jul).
+      const status = runStatusFromPhases(failed);
       await tx`
-        UPDATE song_pipeline_runs SET phases = ${tx.json(failed)}, updated_at = now()
+        UPDATE song_pipeline_runs SET phases = ${tx.json(failed)}, status = ${status}, updated_at = now()
         WHERE id = ${runId}
       `;
     });

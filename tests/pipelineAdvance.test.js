@@ -121,4 +121,45 @@ describe('advanceNextPhase', () => {
     expect(failedArg.clips.status).toBe('failed');
     expect(failedArg.clips.retries).toBe(2);
   });
+
+  it('fix HIGH 1: dispatchPhase falla → preserva tracks ya publicados por la fase (no deja el run irrecuperable)', async () => {
+    const phases = initialPhases();
+    phases.upload = { status: 'done' };
+    phases.stems = { status: 'done', tracks: { vocals: 'k-vocals' } };
+    sqlResponses.push([{ phases }]); // SELECT phases FOR UPDATE (claim)
+    sqlResponses.push([]); // UPDATE phases (marca transcription 'running')
+    const claimedPhases = structuredClone(phases);
+    claimedPhases.transcription = { status: 'running', tracks: { partial: 'x' } };
+    sqlResponses.push([{ phases: claimedPhases }]); // SELECT phases FOR UPDATE (tx de error)
+    sqlResponses.push([]); // UPDATE phases (marca transcription 'failed')
+    dispatchPhaseMock.mockRejectedValueOnce(new Error('Modal caido'));
+
+    await advanceNextPhase(sqlMock, 'run-1', 'song-1', 'transcription');
+
+    const failUpdate = sqlCalls.filter((c) => c.text.includes('UPDATE song_pipeline_runs'));
+    const failedArg = failUpdate[1].values.find((v) => v && typeof v === 'object' && v.transcription);
+    expect(failedArg.transcription.status).toBe('failed');
+    // DEPS.pitch (state.js) mira el track, no el status: un UPDATE ciego que
+    // solo escriba {status,error,retries} lo borra y canStartPhase queda en
+    // false para siempre.
+    expect(failedArg.transcription.tracks).toEqual({ partial: 'x' });
+  });
+
+  it('fix MEDIUM: dispatchPhase falla y agota reintentos → el run deriva a status failed (no queda processing eterno)', async () => {
+    const phases = initialPhases();
+    phases.sync = { status: 'done' };
+    sqlResponses.push([{ phases }]); // SELECT phases FOR UPDATE (claim)
+    sqlResponses.push([]); // UPDATE phases (marca clips 'running')
+    const claimedPhases = structuredClone(phases);
+    claimedPhases.clips = { status: 'running', retries: 3 }; // ya agotó los 3 reintentos
+    sqlResponses.push([{ phases: claimedPhases }]); // SELECT phases FOR UPDATE (tx de error)
+    sqlResponses.push([]); // UPDATE phases (marca clips 'failed' + status del run)
+    dispatchPhaseMock.mockRejectedValueOnce(new Error('Modal caido'));
+
+    await advanceNextPhase(sqlMock, 'run-1', 'song-1', 'clips');
+
+    const failUpdate = sqlCalls.filter((c) => c.text.includes('UPDATE song_pipeline_runs'));
+    expect(failUpdate[1].text).toContain('status =');
+    expect(failUpdate[1].values).toContain('failed');
+  });
 });

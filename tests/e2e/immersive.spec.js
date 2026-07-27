@@ -9,8 +9,6 @@ import { test, expect } from '@playwright/test';
  *   - BASE_URL apunta a un deploy/preview.
  *   - USER_STORAGE_STATE: storageState de un usuario autenticado (sesión
  *     Supabase persistida en localStorage; login wall activo).
- *   - ADMIN_STORAGE_STATE: storageState de un admin con el flag
- *     `immersive_player` asignado — SOLO se usa en el describe del player.
  *   - SONG_ID: id de "Santo" (f969b156-ed95-4e2b-ab66-8381ff4939df por
  *     defecto), con audio + timings `ready` en la DB del preview.
  *
@@ -19,22 +17,21 @@ import { test, expect } from '@playwright/test';
  *      `.imm-v1` monta.
  *   2. Sheet de opciones: cambiar entre los modos que la canción permita
  *      (letra siempre; +Acordes solo si la canción tiene acordes; +Tono /
- *      +Ac.+Tono solo con roster de voces + flag voz_tono — Santo puede no
- *      tener todos, el test filtra por los botones realmente presentes) y
- *      elegir una voz cuando el sheet expone el grupo VOZ.
+ *      +Ac.+Tono solo con roster de voces — Santo puede no tener todos, el
+ *      test filtra por los botones realmente presentes) y elegir una voz
+ *      cuando el sheet expone el grupo VOZ.
  *   3. Afinador: abrir/cerrar el panel flotante SIN esperar permiso real de
  *      mic (el estado idle del widget ya es visible sin getUserMedia
  *      concedido — mismo criterio que tuner-shortcut.spec.js, que tampoco
  *      otorga permisos).
  *   4. Salir con el botón X y con Escape.
- *   5. Player (describe aparte, condicionado a flag `immersive_player` +
- *      admin): la barra `#imm-player` está visible, reproducir mueve el
- *      audio, tocar una línea hace seek y el scrubber avanza.
+ *   5. Player (describe aparte, condicionado a datos listos): la barra
+ *      `#imm-player` está visible, reproducir mueve el audio, tocar una
+ *      línea hace seek y el scrubber avanza.
  */
 
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:5173';
 const USER_STORAGE_STATE = process.env.USER_STORAGE_STATE ?? 'user-state.json';
-const ADMIN_STORAGE_STATE = process.env.ADMIN_STORAGE_STATE ?? 'admin-state.json';
 const SONG_ID = process.env.SONG_ID ?? 'f969b156-ed95-4e2b-ab66-8381ff4939df';
 // Si el runner no tiene el flag/datos del player listos, se salta ese
 // describe en vez de fallar (reportado como skipped por Playwright).
@@ -148,16 +145,16 @@ test.describe('Vista inmersiva — entrada, modos y voz', () => {
   });
 });
 
-test.describe('Vista inmersiva — player sincronizado (flag immersive_player)', () => {
+test.describe('Vista inmersiva — player sincronizado', () => {
   test.skip(
     !HAS_PLAYER_FIXTURE,
-    'requiere IMMERSIVE_PLAYER_READY=1: admin con flag immersive_player + audio/timings ready para SONG_ID',
+    'requiere IMMERSIVE_PLAYER_READY=1: audio/timings ready para SONG_ID',
   );
 
   test('barra de player visible, play mueve el audio, tap en linea hace seek', async ({
     browser,
   }) => {
-    const context = await browser.newContext({ storageState: ADMIN_STORAGE_STATE });
+    const context = await browser.newContext({ storageState: USER_STORAGE_STATE });
     const page = await context.newPage();
 
     await page.goto(`${BASE_URL}/#/song/${SONG_ID}`);

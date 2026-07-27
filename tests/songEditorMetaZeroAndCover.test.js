@@ -19,7 +19,6 @@ vi.mock('../src/lib/store.js', () => ({
 vi.mock('../src/router.js', () => ({ navigate: vi.fn(), onRouteChange: vi.fn() }));
 vi.mock('../src/lib/authStore.js', () => ({
   getSession: vi.fn(() => ({ access_token: 'tok-1' })),
-  isFeatureEnabled: vi.fn(() => false),
   isAdmin: vi.fn(() => false),
 }));
 vi.mock('../src/lib/sectionAudioApi.js', () => ({

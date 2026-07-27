@@ -27,7 +27,6 @@ vi.mock('../lib/lyricsRender.js', () => ({
 }));
 vi.mock('../lib/authStore.js', () => ({
   isAdmin: vi.fn(() => false),
-  isFeatureEnabled: vi.fn(() => false),
 }));
 vi.mock('../lib/icons.js', () => ({
   icon: vi.fn(() => ''),

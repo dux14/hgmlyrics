@@ -25,7 +25,6 @@ vi.mock('../src/router.js', () => ({ navigate: vi.fn() }));
 
 vi.mock('../src/lib/authStore.js', () => ({
   isAdmin: vi.fn().mockReturnValue(false),
-  isFeatureEnabled: vi.fn(() => false),
 }));
 
 vi.mock('../src/lib/lists.js', () => ({

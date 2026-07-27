@@ -11,7 +11,6 @@ vi.mock('../src/lib/store.js', () => ({
 vi.mock('../src/router.js', () => ({ navigate: vi.fn(), onRouteChange: vi.fn(() => vi.fn()) }));
 vi.mock('../src/lib/authStore.js', () => ({
   getSession: vi.fn(() => ({ access_token: 'tok-1' })),
-  isFeatureEnabled: vi.fn(() => false),
 }));
 vi.mock('../src/components/SongView.js', () => ({ renderSections: vi.fn(() => '') }));
 vi.mock('../src/lib/stemsApi.js', () => ({ readAudioDuration: vi.fn() }));

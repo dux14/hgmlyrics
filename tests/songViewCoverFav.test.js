@@ -27,7 +27,6 @@ vi.mock('../src/lib/authStore.js', () => ({
   getSession: () => null,
   subscribe: () => () => {},
   isAdmin: vi.fn().mockReturnValue(false),
-  isFeatureEnabled: vi.fn().mockReturnValue(false),
 }));
 
 let favState = false;

@@ -6,7 +6,6 @@ vi.mock('../src/lib/store.js', () => ({ fetchSongDetail: vi.fn(), refreshData: v
 vi.mock('../src/router.js', () => ({ navigate: vi.fn() }));
 vi.mock('../src/lib/authStore.js', () => ({
   getSession: vi.fn(() => null),
-  isFeatureEnabled: vi.fn(() => true),
 }));
 
 const { blocksToSectionsV3 } = await import('../src/components/SongEditor.js');

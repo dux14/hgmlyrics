@@ -9,9 +9,8 @@ import { test, expect } from '@playwright/test';
  *   BASE_URL: default http://localhost:3000 (dev:vercel). Para el preview:
  *     BASE_URL=https://hgmlyrics-pitch-preview.vercel.app
  *   ADMIN_STORAGE_STATE: default .playwright-mcp/admin-state.json — sesión
- *     Supabase de un admin con flags voz_tono + immersive_player. El token
- *     expira en ~1h: si los tests empiezan a fallar con login wall, regenerar
- *     con `node .playwright-mcp/make-state.mjs`.
+ *     Supabase de un admin. El token expira en ~1h: si los tests empiezan a
+ *     fallar con login wall, regenerar con `node .playwright-mcp/make-state.mjs`.
  *
  * Fixtures (DB real):
  *   SONG_SYNC ("Santo"): mp3 + beats + timings ready -> promueve a modo sync

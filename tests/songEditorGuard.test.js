@@ -42,7 +42,6 @@ vi.mock('../src/lib/pipelineApi.js', () => ({
 }));
 vi.mock('../src/lib/authStore.js', () => ({
   getSession: vi.fn(() => ({ access_token: 'tok-1' })),
-  isFeatureEnabled: vi.fn(() => false),
   isAdmin: vi.fn(() => false),
 }));
 vi.mock('../src/lib/sectionAudioApi.js', () => ({

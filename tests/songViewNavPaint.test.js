@@ -23,7 +23,6 @@ vi.mock('../src/router.js', () => ({ navigate: vi.fn() }));
 
 vi.mock('../src/lib/authStore.js', () => ({
   isAdmin: vi.fn().mockReturnValue(false),
-  isFeatureEnabled: vi.fn(() => false),
 }));
 
 // lists.js: getList NUNCA resuelve, para congelar _renderSongBody en el await de red

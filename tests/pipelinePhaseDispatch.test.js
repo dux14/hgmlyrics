@@ -417,6 +417,48 @@ describe("dispatchPhase('clips')", () => {
     expect(Object.keys(args.uploads.vocals)).toEqual(['0', '1', '3']);
   });
 
+  // Fix HIGH 5 (auditoría 27-jul): las storage keys de clips eran
+  // deterministas (`songId/clips/kind/section-N.mp3`) sin el hash del ciclo
+  // de letra -- un job del ciclo viejo que sigue vivo cuando ya se aprobó un
+  // ciclo nuevo pisaba en silencio el mp3 del ciclo nuevo (misma key).
+  it('con run.lyricsReview.approvedHash: las uploadKeys llevan el sufijo del snapshot', async () => {
+    sqlResponses.push([{ sections: CLIPS_SECTIONS }]); // SELECT sections FROM songs
+    sqlResponses.push([{ lines: CLIPS_LINE_TIMINGS }]); // SELECT lines FROM song_line_timings
+    sqlResponses.push([{ durationSec: '8.5' }]); // SELECT duration_sec FROM song_audio
+    sqlResponses.push([]); // SELECT segments FROM song_structure → sin fila
+    sqlResponses.push([]); // getPipelineLyrics → sin fila, cae a songs.sections
+
+    const run = {
+      id: 'run1',
+      songId: 'song1',
+      phases: { stems: { tracks: { vocals: 'song1/stems/vocals.mp3' } } },
+      lyricsReview: { approvedHash: 'abcdef1234567890' },
+    };
+    await dispatchPhase('clips', run);
+
+    const args = dispatchClips.mock.calls[0][0];
+    expect(args.uploadKeys.vocals['0']).toBe('song1/clips/vocals/section-0-abcdef12.mp3');
+    expect(args.uploadKeys.vocals['1']).toBe('song1/clips/vocals/section-1-abcdef12.mp3');
+  });
+
+  it('sin run.lyricsReview.approvedHash: las uploadKeys quedan sin sufijo (fallback intacto)', async () => {
+    sqlResponses.push([{ sections: CLIPS_SECTIONS }]); // SELECT sections FROM songs
+    sqlResponses.push([{ lines: CLIPS_LINE_TIMINGS }]); // SELECT lines FROM song_line_timings
+    sqlResponses.push([{ durationSec: '8.5' }]); // SELECT duration_sec FROM song_audio
+    sqlResponses.push([]); // SELECT segments FROM song_structure → sin fila
+    sqlResponses.push([]); // getPipelineLyrics → sin fila, cae a songs.sections
+
+    const run = {
+      id: 'run1',
+      songId: 'song1',
+      phases: { stems: { tracks: { vocals: 'song1/stems/vocals.mp3' } } },
+    };
+    await dispatchPhase('clips', run);
+
+    const args = dispatchClips.mock.calls[0][0];
+    expect(args.uploadKeys.vocals['0']).toBe('song1/clips/vocals/section-0.mp3');
+  });
+
   // Task 6 (H9): antes lineSections salía de los segmentos detectados
   // (song_structure) mientras uploads salía del documento aprobado —
   // dos ejes distintos para la misma columna section_index. Si el admin

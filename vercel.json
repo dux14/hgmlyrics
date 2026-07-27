@@ -13,6 +13,9 @@
     "api/pipeline/webhook.js": {
       "maxDuration": 300
     },
+    "api/align/webhook.js": {
+      "maxDuration": 60
+    },
     "api/stems/cleanup.js": {
       "maxDuration": 60
     },

@@ -253,13 +253,29 @@ export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
   for (const kind of Object.keys(tracks)) {
     uploads[kind] = {};
     uploadKeys[kind] = {};
-    for (const sectionIndex of sectionsWithLines) {
-      const key = `${run.songId}/clips/${kind}/section-${sectionIndex}.mp3`;
-      // Volumen bajo (secciones de una canción): claridad > paralelismo aquí.
-      uploads[kind][String(sectionIndex)] = await createSongAudioSignedPutUrl(key);
-      uploadKeys[kind][String(sectionIndex)] = key;
-    }
   }
+  // Sufijo por snapshot (fix HIGH 5, auditoría 27-jul): las storage keys eran
+  // deterministas (`songId/clips/kind/section-N.mp3`) SIN el hash del ciclo de
+  // letra. Un job de clips del ciclo viejo que sigue vivo cuando ya se aprobó
+  // un ciclo nuevo pisa en silencio el mp3 del ciclo nuevo (mismas keys) — la
+  // UI muestra los metadatos nuevos pero suena el recorte viejo. Sin
+  // approvedHash (canción standalone/manual, sin gate de letra) se conserva
+  // la key sin sufijo, mismo comportamiento que antes de este fix.
+  const clipsSnapshotHash = run.lyricsReview?.approvedHash;
+  const clipsKeySuffix = clipsSnapshotHash ? `-${clipsSnapshotHash.slice(0, 8)}` : '';
+  // Firmado en paralelo (fix HIGH 2, auditoría 27-jul): con ~200 clips
+  // (kinds × secciones) firmando en serie, el handler agotaba el maxDuration
+  // del webhook antes de terminar de armar el payload de dispatchClips —
+  // aquí ya no hay "volumen bajo" que justifique claridad sobre paralelismo.
+  await Promise.all(
+    Object.keys(tracks).flatMap((kind) =>
+      sectionsWithLines.map(async (sectionIndex) => {
+        const key = `${run.songId}/clips/${kind}/section-${sectionIndex}${clipsKeySuffix}.mp3`;
+        uploads[kind][String(sectionIndex)] = await createSongAudioSignedPutUrl(key);
+        uploadKeys[kind][String(sectionIndex)] = key;
+      }),
+    ),
+  );
   return dispatchClips({
     run: { id: run.id, songId: run.songId },
     stems,

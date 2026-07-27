@@ -31,7 +31,14 @@ async function notifyPipelineSync(songId, ok, error, snapshotHash) {
       WHERE song_id = ${songId} AND status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')
       ORDER BY created_at DESC LIMIT 1
     `;
-    if (!run || run.phases?.sync?.status !== 'running') return;
+    // Acepta 'running' Y 'failed' (fix HIGH 3, auditoría 27-jul): si el
+    // dispatch de sync hizo timeout del lado de Vercel pero el job SÍ corrió
+    // en Modal, la fase queda 'failed' aunque el resultado llegue completo y
+    // exitoso -- filtrar solo por 'running' descartaba ese rescate antes de
+    // que applyPhaseEvent/isLateSuccessRescue (state.js) pudiera evaluarlo, y
+    // 'sync' quedaba fallida para siempre. applyPipelinePhaseEvent decide: un
+    // evento parcial o fallido sobre una fase ya 'failed' se sigue ignorando.
+    if (!run || !['running', 'failed'].includes(run.phases?.sync?.status)) return;
     const outcome = await applyPipelinePhaseEvent(sql, run.id, { phase: 'sync', ok, error, snapshotHash });
     const advance = outcome?.next && ADVANCE_AFTER.sync;
     if (advance && canStartPhase(outcome.next, advance)) {

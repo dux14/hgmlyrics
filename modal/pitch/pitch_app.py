@@ -205,6 +205,15 @@ def run_pipeline(payload: dict) -> None:
     job_id, webhook = payload["jobId"], payload["webhook"]  # webhook={"url":...} (Design B, sin secret)
     inp = payload.get("input") or {}
     pipeline_mode = "leadGetUrl" in inp
+    # run_id: el id REAL de song_pipeline_runs para correlacionar el webhook de
+    # vuelta (fix CRITICAL 3, auditoria 27-jul). job_id puede venir versionado
+    # por ciclo de letra (`${run.id}:${snapshotHash}`, ver dispatchPitch) para
+    # que la dedup de `start()` (_seen) sea por ciclo y no por run -- pero
+    # process.js hace `WHERE id = ${runId}` contra la tabla, asi que el webhook
+    # SIEMPRE debe llevar el runId sin versionar. dispatchPitch manda ambos
+    # campos; si falta runId (payload viejo o caller que no lo setea) cae a
+    # job_id tal cual, mismo comportamiento que antes de este fix.
+    run_id = payload.get("runId") or job_id
 
     def skip_rest(from_idx: int, reason: str) -> None:
         for phase in REQUIRED_PHASES[from_idx:]:
@@ -215,9 +224,13 @@ def run_pipeline(payload: dict) -> None:
 
     def fail_all(reason: str) -> None:
         """Senial de fallo best-effort para el modo pipeline: nunca dejar la fase
-        'pitch' del run colgada en running."""
+        'pitch' del run colgada en running. Propaga snapshotHash (si el payload
+        lo trae) para que process.js pueda distinguir un fallo del ciclo de
+        letra actual de uno viejo (LYRICS_DERIVED_PHASES) -- sin esto el evento
+        se aplica sin importar snapshotHash y un job del ciclo anterior puede
+        marcar failed el ciclo nuevo ya en curso."""
         try:
-            post_pipeline_event(webhook, job_id, False, error=reason)
+            post_pipeline_event(webhook, run_id, False, error=reason, snapshot_hash=inp.get("snapshotHash"))
         except Exception:
             pass
 
@@ -314,7 +327,7 @@ def run_pipeline(payload: dict) -> None:
     if pipeline_mode:
         try:
             post_pipeline_event(
-                webhook, job_id, True,
+                webhook, run_id, True,
                 payload={"analysis": analysis},
                 artifacts=render_artifacts,
                 snapshot_hash=inp.get("snapshotHash"),

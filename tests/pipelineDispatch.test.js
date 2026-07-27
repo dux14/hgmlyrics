@@ -186,4 +186,49 @@ describe('dispatchPitch', () => {
     const payload = invokePitchPipeline.mock.calls.at(-1)[0];
     expect(payload.reset).toBe(true);
   });
+
+  it('jobId se versiona por snapshotHash (fix CRITICAL 3: re-aprobar una letra reabierta no debe deduparse contra el ciclo previo)', async () => {
+    await dispatchPitch({
+      run: { id: 'r1', songId: 's1' },
+      leadGetUrl: 'https://l',
+      backingGetUrl: 'https://b',
+      snapshotHash: 'hashA',
+      webhookUrl: 'https://w',
+    });
+    const payload = invokePitchPipeline.mock.calls.at(-1)[0];
+    expect(payload.jobId).toBe('r1:hashA');
+    expect(payload.runId).toBe('r1');
+  });
+
+  it('sin snapshotHash el jobId cae a run.id plano (mismo comportamiento que antes del fix)', async () => {
+    await dispatchPitch({
+      run: { id: 'r1', songId: 's1' },
+      leadGetUrl: 'https://l',
+      backingGetUrl: 'https://b',
+      webhookUrl: 'https://w',
+    });
+    const payload = invokePitchPipeline.mock.calls.at(-1)[0];
+    expect(payload.jobId).toBe('r1');
+    expect(payload.runId).toBe('r1');
+  });
+
+  it('dos snapshotHash distintos del mismo run producen jobId distinto (dedup por ciclo, no por run)', async () => {
+    await dispatchPitch({
+      run: { id: 'r1', songId: 's1' },
+      leadGetUrl: 'https://l',
+      backingGetUrl: 'https://b',
+      snapshotHash: 'hashA',
+      webhookUrl: 'https://w',
+    });
+    await dispatchPitch({
+      run: { id: 'r1', songId: 's1' },
+      leadGetUrl: 'https://l',
+      backingGetUrl: 'https://b',
+      snapshotHash: 'hashB',
+      webhookUrl: 'https://w',
+    });
+    const [first, second] = invokePitchPipeline.mock.calls.map((c) => c[0]);
+    expect(first.jobId).not.toBe(second.jobId);
+    expect(first.runId).toBe(second.runId);
+  });
 });

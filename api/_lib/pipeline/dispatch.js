@@ -97,14 +97,20 @@ export { dispatchAlign };
  * `signUploadUrl` apunta al endpoint `api/pipeline/sign-upload.js` (Task 2):
  * el orquestador hkn-pitch lo necesita para firmar sus propios uploads, sin
  * esta clave revienta con KeyError del lado de Modal.
- * `reset`: jobId = run.id, estable entre el dispatch inicial (aprobación de
- * letra, lyrics.js) y un reintento explícito (retry.js) — sin `reset:true`,
- * `start()` de pitch_app.py encuentra el jobId ya en su Dict de idempotencia
- * (`_seen`) y devuelve el callId cacheado sin relanzar `run_pipeline`
- * (dedup:true), dejando la fase colgada en 'running' para siempre aunque el
- * job original ya haya muerto. Solo retry.js debe pasar `reset:true` (acción
- * deliberada del admin); el dispatch inicial deja el default `false` para
- * seguir protegiendo el doble-approve accidental de una facturación GPU doble.
+ * `jobId` = `${run.id}:${snapshotHash}` cuando hay snapshotHash (fix CRITICAL 3,
+ * auditoría 27-jul): la dedup de `start()` (`_seen` de pitch_app.py) pasa a
+ * ser por CICLO de letra, no por run. Antes jobId = run.id a secas —
+ * estable durante toda la vida del run, así que re-aprobar una letra
+ * reabierta (aprobar → reabrir → corregir → aprobar de nuevo) reusaba el
+ * mismo jobId del ciclo previo y Modal devolvía `{dedup:true}` sin relanzar
+ * `run_pipeline`: la partitura del ciclo nuevo nunca se calculaba. `runId`
+ * viaja aparte (siempre `run.id` sin versionar) para que `run_pipeline`
+ * postee ESE valor al webhook — `process.js` hace `WHERE id = ${runId}`
+ * contra `song_pipeline_runs`, que exige el id real, no la clave de dedup.
+ * `reset`: fuerza relanzar aunque el jobId (ya versionado por ciclo) esté en
+ * `_seen` — reservado para un reintento explícito (retry.js) sobre el MISMO
+ * ciclo; el dispatch inicial deja el default `false` para seguir protegiendo
+ * el doble-approve accidental de una facturación GPU doble.
  * `lines`/`language` (Task 2.3): letra aprobada del gate, aplanada por
  * `pipelineLinesFor` — la fuente única que `hkn-pitch` usa para forced align
  * en vez de transcribir por su cuenta (dos ASR independientes daban textos
@@ -120,8 +126,13 @@ export { dispatchAlign };
 export async function dispatchPitch({
   run, leadGetUrl, backingGetUrl, snapshotHash, lines, language, webhookUrl, reset = false,
 }) {
+  // Versionado por ciclo de letra: sin snapshotHash (job standalone o retry
+  // sin lyricsReview disponible, ver nota en _dispatch.js) cae al jobId plano
+  // de siempre, mismo comportamiento que antes de este fix.
+  const jobId = snapshotHash ? `${run.id}:${snapshotHash}` : run.id;
   return invokePitchPipeline({
-    jobId: run.id,
+    jobId,
+    runId: run.id,
     profile: run.profile ?? 'default',
     input: { leadGetUrl, backingGetUrl, snapshotHash, lines, language },
     uploads: {},

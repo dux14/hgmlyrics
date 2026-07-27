@@ -2,8 +2,13 @@ import { fetchWithTimeout, MODAL_DISPATCH_TIMEOUT_MS } from '../../_lib/http.js'
 
 /**
  * Invoca run_pipeline del app Modal hkn-pitch. Secrets propios de Partitura.
- * @param {{ jobId:string, profile:string, input:{getUrl:string}, uploads:object,
- *           webhook:{url:string}, reset?:boolean }} payload
+ * `runId` (opcional, pipeline unificado): id real de song_pipeline_runs para
+ * correlacionar el webhook de vuelta cuando `jobId` viaja versionado por
+ * ciclo de letra (`${run.id}:${snapshotHash}`, ver dispatchPitch) — sin esto
+ * pitch_app.py postearía el jobId versionado como `runId` del webhook y
+ * process.js no encontraría la fila (`WHERE id = ${runId}`).
+ * @param {{ jobId:string, runId?:string, profile:string, input:{getUrl:string},
+ *           uploads:object, webhook:{url:string}, reset?:boolean }} payload
  * @returns {Promise<{ id:string }>}
  */
 export async function invokePitchPipeline(payload) {

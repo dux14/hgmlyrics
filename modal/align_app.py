@@ -415,16 +415,18 @@ def start(payload: dict, x_inbound_secret: str = Header(default="")):
 
 def _validate_transcribe_payload(payload: dict) -> str | None:
     """Misma logica que _validate_align_payload, adaptada al contrato de
-    transcribe: { vocalsGetUrl, dbLines, canonicalLines?, runId, webhookUrl,
-    snapshotHash? }. canonicalLines y snapshotHash son opcionales."""
+    transcribe: { vocalsGetUrl, dbLines?, canonicalLines?, runId, webhookUrl,
+    snapshotHash? }. dbLines, canonicalLines y snapshotHash son opcionales:
+    el caso de uso central del pipeline es una cancion SIN letra todavia (la
+    transcripcion es verbatim, no necesita referencia contra la que comparar) --
+    exigir dbLines no vacio rechazaba con 400 justo el caso que esta fase existe
+    para resolver."""
     if not payload.get("runId"):
         return "falta runId"
     if not payload.get("vocalsGetUrl"):
         return "falta vocalsGetUrl"
     if not payload.get("webhookUrl"):
         return "falta webhookUrl"
-    if not payload.get("dbLines"):
-        return "dbLines vacio o ausente"
     return None
 
 
@@ -452,8 +454,8 @@ def run_transcribe(payload: dict) -> None:
             raise ValueError("payload invalido: faltan runId/webhookUrl")
         if not vocals_get_url:
             raise ValueError("payload invalido: falta vocalsGetUrl")
-        if not db_lines:
-            raise ValueError("payload invalido: dbLines vacio")
+        # dbLines es opcional (ver _validate_transcribe_payload): sin letra
+        # aun en songs.sections, line_scores mas abajo degrada a perLine: [].
 
         import whisperx
 
@@ -499,7 +501,9 @@ def run_transcribe(payload: dict) -> None:
                     "score": word.get("score"),
                 })
 
-        per_line = line_scores(trans_lines, db_lines)
+        # Sin dbLines (cancion sin letra todavia) no hay contra que comparar:
+        # degrada a perLine vacio en vez de invocar jiwer con la referencia vacia.
+        per_line = line_scores(trans_lines, db_lines) if db_lines else []
 
         payload_out = {
             "text": " ".join(full_text_parts),

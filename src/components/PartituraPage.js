@@ -1,5 +1,5 @@
 /**
- * PartituraPage.js — Partitura vocal (BETA): sube un audio y lo convertimos en
+ * PartituraPage.js — Partitura vocal: sube un audio y lo convertimos en
  * partitura letra↔nota por sílaba. Estados: idle → uploading → processing → done | failed.
  * Espeja el patrón de StudioPage.js (root repintado por estado).
  */
@@ -65,7 +65,7 @@ export async function renderPartituraPage(container) {
   container.innerHTML = `
     <section class="partitura fade-in">
       <h1 class="partitura__title">
-        ${icon('music', { size: 28 })} Partitura <span class="badge--beta">BETA</span>
+        ${icon('music', { size: 28 })} Partitura
       </h1>
       <p class="partitura__sub">Sube un audio y te devolvemos la letra con la nota de cada sílaba.</p>
       <div class="partitura__body" aria-busy="true" aria-live="polite">
@@ -156,11 +156,9 @@ async function handleFile(body, file, profile, quota) {
 function renderUploadError(body, err, quota) {
   body.setAttribute('aria-busy', 'false');
   const msg =
-    err.status === 403
-      ? 'Partitura vocal está en beta cerrada. Pide acceso a un admin.'
-      : err.status === 429
-        ? 'Llegaste al límite de jobs de hoy. Intenta mañana.'
-        : (err.message ?? 'No se pudo procesar el audio. Intenta de nuevo.');
+    err.status === 429
+      ? 'Llegaste al límite de jobs de hoy. Intenta mañana.'
+      : (err.message ?? 'No se pudo procesar el audio. Intenta de nuevo.');
   body.innerHTML = `
     <p class="partitura__error" role="alert">${msg}</p>
     <button type="button" data-action="retry">Volver a intentar</button>

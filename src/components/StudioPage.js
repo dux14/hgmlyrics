@@ -1,5 +1,5 @@
 /**
- * StudioPage.js — Estudio de pistas (BETA): sube un audio, sepáralo en stems
+ * StudioPage.js — Estudio de pistas: sube un audio, sepáralo en stems
  * y divide la pista vocal (líder/coros + segmentos por cantante).
  * Estados: idle → uploading → processing → done | failed.
  */
@@ -93,7 +93,7 @@ export function renderStudioPage(container) {
   container.innerHTML = `
     <div class="studio fade-in">
       <h1 class="studio__title">
-        ${icon('layers', { size: 28 })} Estudio <span class="badge--beta">BETA</span>
+        ${icon('layers', { size: 28 })} Estudio
       </h1>
       <div id="studio-body" aria-live="polite"></div>
     </div>

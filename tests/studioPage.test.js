@@ -65,7 +65,6 @@ describe('renderStudioPage', () => {
     renderStudioPage(container);
     await vi.waitFor(() => expect(container.querySelector('.studio-dropzone')).not.toBeNull());
     expect(container.textContent).toContain('Estudio');
-    expect(container.querySelector('.badge--beta')).not.toBeNull();
     expect(container.textContent).toContain('25 MB');
     expect(container.textContent).toContain('2 de 3'); // cuota restante hoy
   });

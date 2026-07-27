@@ -17,7 +17,6 @@ const TOOLS = [
     path: '/afinador',
     iconKey: 'audio-lines',
     tone: 'teal',
-    beta: true,
     anim: 'eq',
   },
   {
@@ -27,7 +26,6 @@ const TOOLS = [
     path: '/recomendador',
     iconKey: 'sparkles',
     tone: 'violet',
-    beta: true,
     anim: 'sparkle',
   },
   {
@@ -37,7 +35,6 @@ const TOOLS = [
     path: '/estudio',
     iconKey: 'layers',
     tone: 'amber',
-    beta: true,
     anim: 'layers',
   },
   {
@@ -47,7 +44,6 @@ const TOOLS = [
     path: '/partitura',
     iconKey: 'music',
     tone: 'rose',
-    beta: true,
     anim: 'notes',
   },
 ];
@@ -104,14 +100,12 @@ export function renderToolsHub(container) {
     tile.className = 'tools-hub__tile';
     tile.dataset.tool = tool.id;
 
-    const betaBadge = tool.beta ? ' <span class="badge--beta">BETA</span>' : '';
-
     tile.innerHTML = `
       <span class="tools-hub__tile-icon tools-hub__tile-icon--${tool.tone}">
         ${animMarkup(tool.anim)}${icon(tool.iconKey, { size: 22 })}
       </span>
       <span class="tools-hub__tile-body">
-        <span class="tools-hub__tile-label">${tool.label}${betaBadge}</span>
+        <span class="tools-hub__tile-label">${tool.label}</span>
         <span class="tools-hub__tile-desc">${tool.desc}</span>
       </span>
       <span class="tools-hub__tile-arrow">${icon('chevron-right', { size: 16 })}</span>

@@ -612,7 +612,7 @@ export async function renderTuner(container, opts = {}) {
     <div class="tuner-page fade-in">
       <header class="tuner-header">
         <div class="tuner-nav" id="tuner-nav"></div>
-        <h1 id="tuner-title">Afinador <span class="badge--beta">BETA</span></h1>
+        <h1 id="tuner-title">Afinador</h1>
         <p class="tuner-header__sub" id="tuner-sub">El audio se procesa en tu dispositivo. No lo guardamos.</p>
       </header>
 
@@ -640,14 +640,14 @@ export async function renderTuner(container, opts = {}) {
     paintHeader();
   }
 
-  // Cabecera dinámica: en el hub muestra "Afinador BETA" + nota de privacidad;
+  // Cabecera dinámica: en el hub muestra "Afinador" + nota de privacidad;
   // dentro de un modo enfocado muestra el nombre del modo y oculta esa nota.
   function paintHeader() {
     const titleEl = container.querySelector('#tuner-title');
     const subEl = container.querySelector('#tuner-sub');
     if (!titleEl || !subEl) return;
     if (mode === null) {
-      titleEl.innerHTML = 'Afinador <span class="badge--beta">BETA</span>';
+      titleEl.textContent = 'Afinador';
       subEl.hidden = false;
     } else {
       titleEl.textContent = MODE_TITLES[mode] || 'Afinador';

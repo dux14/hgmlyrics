@@ -88,7 +88,7 @@ describe('PartituraPage — subida y cost gate', () => {
     expect(container.textContent).toMatch(/0[.,]15/);
   });
 
-  it('createJob 403 muestra mensaje de beta cerrada', async () => {
+  it('createJob 403 muestra el mensaje de error generico', async () => {
     const err = new Error('Forbidden');
     err.status = 403;
     pitchApi.createJob.mockRejectedValue(err);
@@ -96,7 +96,7 @@ describe('PartituraPage — subida y cost gate', () => {
     await renderPartituraPage(container);
     await selectFile(container);
 
-    expect(container.textContent).toMatch(/beta/i);
+    expect(container.textContent).toMatch(/forbidden/i);
   });
 
   it('createJob 429 muestra mensaje de limite de jobs', async () => {

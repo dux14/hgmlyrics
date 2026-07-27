@@ -1,6 +1,6 @@
 /**
- * RecommenderPage.js — Página "Recomendador" (BETA, en construcción).
- * Estado vacío deliberado: orbe ambiente SVG, chip BETA, promesa.
+ * RecommenderPage.js — Página "Recomendador" (en construcción).
+ * Estado vacío deliberado: orbe ambiente SVG, promesa.
  * Sin lógica de recomendación todavía.
  */
 import { icon } from '../lib/icons.js';
@@ -17,7 +17,6 @@ export function renderRecommenderPage(container) {
       <div class="recommender-page__orb">${icon('sparkles', { size: 34 })}</div>
       <h2 class="recommender-page__title">
         Recomendador
-        <span class="recommender-page__beta">BETA</span>
       </h2>
       <p class="recommender-page__text">
         Estamos construyendo esto. Pronto te sugeriremos canciones según lo que

@@ -41,16 +41,14 @@ export default withErrors(async (req, res) => {
 
   // ── 1. Secciones habilitadas ────────────────────────────────────────────────
   // El cliente elige qué secciones procesar (mínimo 1). Sin selección explícita,
-  // se procesan las 4 (compatibilidad con el flujo anterior).
-  // STUDIO_GENDER_FLAG: 'off' apaga gender sin redeploy.
-  const genderEnabled = process.env.STUDIO_GENDER_FLAG !== 'off';
+  // se procesan las 5 (compatibilidad con el flujo anterior).
   const raw = req.body?.enabledSections;
   if (raw !== undefined && !Array.isArray(raw)) {
     res.status(400).json({ error: 'enabledSections debe ser un arreglo' });
     return;
   }
   const requested = Array.isArray(raw) ? raw : SECTION_KEYS;
-  const enabledSections = validateEnabledSections(requested, { genderEnabled });
+  const enabledSections = validateEnabledSections(requested);
 
   const sections = initSections(enabledSections);
 

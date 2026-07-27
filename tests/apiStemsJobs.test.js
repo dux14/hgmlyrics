@@ -78,16 +78,8 @@ beforeEach(() => {
 });
 
 describe('POST /api/stems/jobs', () => {
-  it('403 si el perfil no está en beta ni es admin', async () => {
-    sqlResponses.push([{ is_admin: false, studio_beta: false }]); // perfil
-    const res = makeRes();
-    await handler(authedReq(), res);
-    expect(res.statusCode).toBe(403);
-    expect(res.body).toEqual({ error: 'beta', reason: 'beta' });
-  });
-
   it('409 solo si hay un job realmente en proceso', async () => {
-    sqlResponses.push([{ is_admin: true, studio_beta: false }]); // perfil (admin pasa)
+    sqlResponses.push([{ is_admin: true }]); // perfil (admin pasa)
     sqlResponses.push([]); // reclamo de created/uploaded huérfanos
     sqlResponses.push([{ id: 'job-activo' }]); // job en processing
     const res = makeRes();
@@ -96,7 +88,7 @@ describe('POST /api/stems/jobs', () => {
   });
 
   it('reclama un created huérfano y deja crear uno nuevo (regresión del 409)', async () => {
-    sqlResponses.push([{ is_admin: true, studio_beta: false }]); // perfil
+    sqlResponses.push([{ is_admin: true }]); // perfil
     sqlResponses.push([{ id: 'old', input_path: 'u1/old/input/a.mp3' }]); // reclamo huérfano
     sqlResponses.push([]); // ya no hay job en proceso
     // admin: no consulta cuota
@@ -108,7 +100,7 @@ describe('POST /api/stems/jobs', () => {
   });
 
   it('429 si la cuota diaria está agotada (no-admin)', async () => {
-    sqlResponses.push([{ is_admin: false, studio_beta: true }]); // perfil no-admin beta
+    sqlResponses.push([{ is_admin: false }]); // perfil no-admin beta
     sqlResponses.push([]); // reclamo
     sqlResponses.push([]); // sin job en proceso
     sqlResponses.push([{ n: 1 }]); // cuota 1/1 — agotada
@@ -119,7 +111,7 @@ describe('POST /api/stems/jobs', () => {
   });
 
   it('admin: no devuelve 429 aunque used >= DAILY_QUOTA', async () => {
-    sqlResponses.push([{ is_admin: true, studio_beta: false }]); // perfil admin
+    sqlResponses.push([{ is_admin: true }]); // perfil admin
     sqlResponses.push([]); // reclamo
     sqlResponses.push([]); // sin job en proceso
     // no se llama a quotaUsedToday para admin
@@ -131,7 +123,7 @@ describe('POST /api/stems/jobs', () => {
   });
 
   it('admin: lock de concurrencia (409) aplica igual', async () => {
-    sqlResponses.push([{ is_admin: true, studio_beta: false }]); // perfil admin
+    sqlResponses.push([{ is_admin: true }]); // perfil admin
     sqlResponses.push([]); // reclamo
     sqlResponses.push([{ id: 'job-activo' }]); // job en processing
     const res = makeRes();
@@ -140,7 +132,7 @@ describe('POST /api/stems/jobs', () => {
   });
 
   it('400 si el archivo no es audio', async () => {
-    sqlResponses.push([{ is_admin: true, studio_beta: false }]); // perfil
+    sqlResponses.push([{ is_admin: true }]); // perfil
     sqlResponses.push([]); // reclamo
     sqlResponses.push([]); // sin job en proceso
     sqlResponses.push([{ n: 0 }]);
@@ -153,7 +145,7 @@ describe('POST /api/stems/jobs', () => {
   });
 
   it('guarda title saneado en input_meta', async () => {
-    sqlResponses.push([{ is_admin: false, studio_beta: true }]); // perfil
+    sqlResponses.push([{ is_admin: false }]); // perfil
     sqlResponses.push([]); // reclamo
     sqlResponses.push([]); // sin job en proceso
     sqlResponses.push([{ n: 0 }]); // cuota
@@ -167,7 +159,7 @@ describe('POST /api/stems/jobs', () => {
   });
 
   it('title vacío cae al filename sin extensión', async () => {
-    sqlResponses.push([{ is_admin: false, studio_beta: true }]);
+    sqlResponses.push([{ is_admin: false }]);
     sqlResponses.push([]);
     sqlResponses.push([]);
     sqlResponses.push([{ n: 0 }]);
@@ -180,7 +172,7 @@ describe('POST /api/stems/jobs', () => {
   });
 
   it('Fix 1: 429 (mismo shape que cuota) si el INSERT choca con el índice único (23505)', async () => {
-    sqlResponses.push([{ is_admin: false, studio_beta: true }]); // perfil beta
+    sqlResponses.push([{ is_admin: false }]); // perfil beta
     sqlResponses.push([]); // reclamo
     sqlResponses.push([]); // sin job en proceso (el check TOCTOU no lo detecta)
     sqlResponses.push([{ n: 0 }]); // cuota libre
@@ -196,7 +188,7 @@ describe('POST /api/stems/jobs', () => {
   });
 
   it('23505 de OTRA constraint no se enmascara como cuota: se relanza (500)', async () => {
-    sqlResponses.push([{ is_admin: false, studio_beta: true }]); // perfil beta
+    sqlResponses.push([{ is_admin: false }]); // perfil beta
     sqlResponses.push([]); // reclamo
     sqlResponses.push([]); // sin job en proceso
     sqlResponses.push([{ n: 0 }]); // cuota libre
@@ -212,7 +204,7 @@ describe('POST /api/stems/jobs', () => {
   });
 
   it('crea el job y devuelve upload firmado', async () => {
-    sqlResponses.push([{ is_admin: false, studio_beta: true }]); // perfil beta
+    sqlResponses.push([{ is_admin: false }]); // perfil beta
     sqlResponses.push([]); // reclamo
     sqlResponses.push([]); // sin job en proceso
     sqlResponses.push([{ n: 0 }]); // cuota 0/1 — libre

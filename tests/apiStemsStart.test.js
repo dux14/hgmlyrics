@@ -2,7 +2,7 @@
  * apiStemsStart.test.js — TDD para POST /api/stems/jobs/[id]/start
  * Fase 0 DAG: inicializa secciones, pre-firma URLs de upload/download, invoca run_pipeline.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── Mocks de storage ──────────────────────────────────────────────────────────
 const mockCreateSignedUrl = vi.fn();
@@ -106,9 +106,6 @@ beforeEach(() => {
 
   mockInvokeModalPipeline.mockReset().mockResolvedValue({ id: 'call_xyz' });
 
-  // reset gender flag
-  delete process.env.STUDIO_GENDER_FLAG;
-
   // asegurar que MODAL_WEBHOOK_SECRET está presente para tests happy-path
   process.env.MODAL_WEBHOOK_SECRET = 'whsecret';
 });
@@ -175,33 +172,11 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
     expect(sectionsArg).toHaveProperty('gender');
     expect(sectionsArg).toHaveProperty('structure');
 
-    // gender habilitado por defecto (sin STUDIO_GENDER_FLAG=off) → pending
+    // gender siempre habilitado → pending
     expect(sectionsArg.voiceInstrumental.status).toBe('pending');
     expect(sectionsArg.leadBacking.status).toBe('pending');
     expect(sectionsArg.structure.status).toBe('pending');
     expect(sectionsArg.gender.status).toBe('pending');
-  });
-
-  it('con STUDIO_GENDER_FLAG=off excluye gender de enabledSections', async () => {
-    process.env.STUDIO_GENDER_FLAG = 'off';
-    sqlResponses.push([jobCreated()]);
-    sqlResponses.push([{ id: 'job1' }]); // UPDATE processing con RETURNING id (Fix 1)
-
-    const res = makeRes();
-    await handler(authedReq(), res);
-
-    expect(res.statusCode).toBe(200);
-
-    const updateCall = sqlCalls.find(
-      (c) => c.text.includes('processing') && c.text.includes('stem_jobs'),
-    );
-    const sectionsArg = updateCall.values.find(
-      (v) => v && typeof v === 'object' && 'voiceInstrumental' in v,
-    );
-    expect(sectionsArg.gender.status).toBe('skipped');
-
-    const payload = mockInvokeModalPipeline.mock.calls[0][0];
-    expect(payload.enabledSections).not.toContain('gender');
   });
 
   it('usa sql.array() para serializar enabled_sections en el UPDATE de processing', async () => {
@@ -291,7 +266,7 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
   });
 
   it('payload.uploads.gender tiene estructura anidada { chorus:{male,female}, aufr33:{male,female} }', async () => {
-    // gender habilitado por defecto (sin STUDIO_GENDER_FLAG=off)
+    // gender siempre habilitado
     sqlResponses.push([jobCreated()]);
     sqlResponses.push([{ id: 'job1' }]); // UPDATE processing con RETURNING id (Fix 1)
 
@@ -402,26 +377,11 @@ describe('POST /api/stems/jobs/[id]/start — DAG flow', () => {
     expect(mockInvokeModalPipeline).not.toHaveBeenCalled();
   });
 
-  it('gender pedido con STUDIO_GENDER_FLAG=off se elimina del set', async () => {
-    process.env.STUDIO_GENDER_FLAG = 'off';
-    sqlResponses.push([jobCreated()]);
-    sqlResponses.push([{ id: 'job1' }]); // UPDATE processing con RETURNING id (Fix 1)
-    const res = makeRes();
-    await handler(authedReq({ body: { enabledSections: ['voiceInstrumental', 'gender'] } }), res);
-    expect(res.statusCode).toBe(200);
-    const payload = mockInvokeModalPipeline.mock.calls[0][0];
-    expect(payload.enabledSections).not.toContain('gender');
-  });
-
   it('400 si enabledSections es un string (no-array presente)', async () => {
     sqlResponses.push([jobCreated()]); // SELECT
     const res = makeRes();
     await handler(authedReq({ body: { enabledSections: 'voiceInstrumental' } }), res);
     expect(res.statusCode).toBe(400);
     expect(mockInvokeModalPipeline).not.toHaveBeenCalled();
-  });
-
-  afterEach(() => {
-    delete process.env.STUDIO_GENDER_FLAG;
   });
 });

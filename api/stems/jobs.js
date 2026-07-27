@@ -2,7 +2,7 @@ import sql from '../_lib/db.js';
 import { requireUser } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { createStemsUploadUrl, deleteStemsPrefix } from '../_lib/storage.js';
-import { DAILY_QUOTA, validateUploadMeta, checkStudioAccess, sanitizeTitle } from '../_lib/stems.js';
+import { DAILY_QUOTA, validateUploadMeta, sanitizeTitle } from '../_lib/stems.js';
 
 async function quotaUsedToday(userId) {
   // Solo cuenta jobs que realmente entraron a procesamiento o terminaron OK.
@@ -41,14 +41,8 @@ export default withErrors(async (req, res) => {
   }
 
   // POST: crear job.
-  // Verificar acceso beta antes de cualquier operación de escritura.
-  const profileRows = await sql`SELECT is_admin, studio_beta FROM profiles WHERE id = ${user.id}`;
+  const profileRows = await sql`SELECT is_admin FROM profiles WHERE id = ${user.id}`;
   const profile = profileRows[0] ?? {};
-  const access = checkStudioAccess(profile);
-  if (!access.ok) {
-    res.status(403).json({ error: 'beta', reason: access.reason });
-    return;
-  }
 
   // Reclama intentos previos sin empezar (created/uploaded): no consumen cuota y, si
   // quedaron huérfanos por una subida fallida, bloquearían nuevos uploads hasta el

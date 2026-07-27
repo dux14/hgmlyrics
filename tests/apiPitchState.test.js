@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  canTransition, expiresAt, checkAccess, validateUploadMeta, sanitizeTitle,
+  canTransition, expiresAt, validateUploadMeta, sanitizeTitle,
   DAILY_QUOTA, MAX_FILE_BYTES,
 } from '../api/pitch/_lib/state.js';
 
@@ -15,16 +15,6 @@ describe('pitch state machine', () => {
   it('expiresAt suma 48h', () => {
     const from = new Date('2026-07-05T00:00:00Z');
     expect(expiresAt(from).toISOString()).toBe('2026-07-07T00:00:00.000Z');
-  });
-  it('beta gate: admin o pitch_beta', () => {
-    expect(checkAccess({ is_admin: true }).ok).toBe(true);
-    expect(checkAccess({ pitch_beta: true }).ok).toBe(true);
-    expect(checkAccess({}).ok).toBe(false);
-  });
-  it('checkAccess sin beta devuelve reason "beta"', () => {
-    const r = checkAccess({ is_admin: false, pitch_beta: false });
-    expect(r.ok).toBe(false);
-    expect(r.reason).toBe('beta');
   });
   it('valida MIME/tamaño', () => {
     expect(() => validateUploadMeta({ filename: 'a.mp3', size: 1, mime: 'audio/mpeg' })).not.toThrow();

@@ -89,10 +89,10 @@ describe('dispatchAlign', () => {
     expect(fetchWithTimeout).not.toHaveBeenCalled();
   });
 
-  it("song_line_timings ya 'processing' → no-op, no postea a Modal", async () => {
+  it("song_line_timings ya 'processing' → 409 explícito, no postea a Modal (fix MEDIUM: antes era no-op silencioso)", async () => {
     sqlResponses.push([{ storageKey: 'song-1/full.mp3' }]); // SELECT song_audio
     sqlResponses.push([{ status: 'processing' }]); // SELECT song_line_timings
-    await dispatchAlign('song-1');
+    await expect(dispatchAlign('song-1')).rejects.toMatchObject({ status: 409 });
     expect(fetchWithTimeout).not.toHaveBeenCalled();
     expect(signSongAudioDownload).not.toHaveBeenCalled();
     const upsert = sqlCalls.find((c) => c.text.startsWith('INSERT INTO song_line_timings'));
@@ -136,6 +136,24 @@ describe('dispatchAlign', () => {
       ],
       webhookUrl: 'https://hgmlyrics.vercel.app/api/align/webhook',
     });
+  });
+
+  it('fix HIGH 6: songs.sections vacío (canción de pipeline) + fila en song_pipeline_lyrics → lines sale del store, no de songs', async () => {
+    sqlResponses.push([{ storageKey: 'song-1/full.mp3' }]); // SELECT song_audio
+    sqlResponses.push([{ status: 'ready' }]); // SELECT song_line_timings
+    sqlResponses.push([{ sections: [] }]); // SELECT songs -- vacío a propósito (F3)
+    sqlResponses.push([{ sections: SANTO_SECTIONS }]); // getPipelineLyrics -- song_pipeline_lyrics
+    sqlResponses.push([]); // INSERT ... ON CONFLICT processing
+
+    await dispatchAlign('song-1');
+
+    const [, opts] = fetchWithTimeout.mock.calls[0];
+    const body = JSON.parse(opts.body);
+    expect(body.lines).toEqual([
+      { i: 0, text: 'Santo, Santo, Santo' },
+      { i: 1, text: 'Por eso con los ángeles, diciendo:' },
+      { i: 2, text: 'Es el Señor' },
+    ]);
   });
 
   it('con snapshotHash → viaja en el payload posteado a Modal (fase sync del pipeline)', async () => {

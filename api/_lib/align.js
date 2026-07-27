@@ -5,6 +5,7 @@
 import sql from './db.js';
 import { signSongAudioDownload } from './storage.js';
 import { fetchWithTimeout, MODAL_DISPATCH_TIMEOUT_MS } from './http.js';
+import { getPipelineLyrics } from './pipeline/lyricsStore.js';
 
 /**
  * Proyecta las lineas canonicas de una cancion (modo letra sin voz): salta
@@ -71,12 +72,33 @@ export async function dispatchAlign(songId, snapshotHash) {
     e.status = 409;
     throw e;
   }
-  if (timings?.status === 'processing') return;
+  // Fix MEDIUM (auditoría 27-jul): antes este `return` era un no-op
+  // silencioso -- el caller (confirm.js/retry.js/_dispatch.js) lo trataba
+  // como éxito (id undefined) y ningún admin se enteraba de que el dispatch
+  // no hizo nada. Un 409 explícito hace visible el conflicto, igual criterio
+  // que el resto del pipeline (confirm.js/retry.js ya usan 409 para carreras).
+  if (timings?.status === 'processing') {
+    const e = new Error('El alineamiento ya está en curso para esta canción');
+    e.status = 409;
+    throw e;
+  }
 
-  const audioUrl = await signSongAudioDownload(audio.storageKey);
-
-  const [song] = await sql`SELECT sections FROM songs WHERE id = ${songId}`;
-  const lines = projectCanonicalLines(song?.sections);
+  // Lecturas independientes: signing y las dos fuentes posibles de letra en
+  // paralelo (mismo criterio que arriba).
+  const [audioUrl, [song], pipelineLyrics] = await Promise.all([
+    signSongAudioDownload(audio.storageKey),
+    sql`SELECT sections FROM songs WHERE id = ${songId}`,
+    getPipelineLyrics(sql, songId),
+  ]);
+  // Fix HIGH 6 (auditoría 27-jul): para una canción de pipeline, songs.sections
+  // queda vacío A PROPÓSITO desde F3 (el approve del pipeline ya no la
+  // escribe) -- usar solo songs.sections mandaba `lines: []` a Modal, que
+  // rechaza con 400 y deja song_line_timings en 'failed', matando el
+  // reemplazo manual de audio (api/songs/[id]/audio.js) para cualquier
+  // canción que vino del pipeline. Igual criterio que sectionSource en
+  // _dispatch.js: el store propio (song_pipeline_lyrics) manda cuando existe.
+  const sectionSource = pipelineLyrics?.sections ?? song?.sections;
+  const lines = projectCanonicalLines(sectionSource);
 
   await sql`
     INSERT INTO song_line_timings (song_id, status, error)

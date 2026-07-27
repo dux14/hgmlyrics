@@ -124,13 +124,21 @@ async function postAudio(req, res, songId) {
     // SEGUNDO job a Modal (el webhook correlaciona solo por songId — el ultimo
     // en llegar ganaria, aunque sea el viejo). El umbral de 20 min deja escape
     // para un 'processing' colgado (webhook caido persistente).
+    // Fix HIGH 6 (auditoría 27-jul): NO pisar el shim si provider='pipeline'
+    // -- ese `lines` viene de song_pipeline_lyrics (letra aprobada del gate,
+    // word-timing real), no de un align standalone previo. Poner lines=NULL
+    // aquí lo tira a la basura antes de que dispatchAlign termine (o falle);
+    // dispatchAlign ya marca 'processing' por su cuenta sin tocar lines/
+    // provider, así que este reset destructivo solo hace falta para el
+    // flujo standalone (provider != 'pipeline').
     await sql`
       INSERT INTO song_line_timings (song_id, status, lines, error)
       VALUES (${songId}, 'pending', NULL, NULL)
       ON CONFLICT (song_id)
       DO UPDATE SET status = 'pending', lines = NULL, error = NULL, bpm_detected = NULL, beats = NULL
-      WHERE song_line_timings.status <> 'processing'
-         OR song_line_timings.updated_at < now() - interval '20 minutes'
+      WHERE coalesce(song_line_timings.provider, '') <> 'pipeline'
+        AND (song_line_timings.status <> 'processing'
+         OR song_line_timings.updated_at < now() - interval '20 minutes')
     `;
     await dispatchAlign(songId);
     res.status(200).json({ success: true });

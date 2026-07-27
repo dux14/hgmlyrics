@@ -492,6 +492,11 @@ describe('POST /api/songs/[id]/audio', () => {
     expect(timingsCall.text).toContain('beats = NULL');
     expect(dispatchAlign).toHaveBeenCalledTimes(1);
     expect(dispatchAlign).toHaveBeenCalledWith('song-1');
+    // Fix HIGH 6 (auditoría 27-jul): el reset destructivo (lines=NULL) no debe
+    // pisar el shim de una canción de pipeline -- ese guard va en el propio
+    // UPDATE (WHERE provider <> 'pipeline'), no en un chequeo previo en JS.
+    const timingsCall2 = sqlCalls.find((c) => c.text.includes('song_line_timings'));
+    expect(timingsCall2.text).toContain("provider, '') <> 'pipeline'");
   });
 
   it('{ confirm: true } sin fila song_audio (confirm fuera de orden o DELETE concurrente) → 404, no toca timings ni dispatchAlign', async () => {

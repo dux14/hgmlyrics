@@ -1,8 +1,6 @@
 import sql from '../_lib/db.js';
 import { requireUser } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
-import { resolveEnabledFlags } from '../../src/lib/featureFlags.js';
-import { getFlagsCatalog } from '../_lib/flagsCache.js';
 
 function isAdminFromEnv(email) {
   const list = (process.env.ADMIN_EMAILS || '')
@@ -75,28 +73,10 @@ export default withErrors(async (req, res) => {
     rows = retry;
   }
 
-  // Feature flags habilitados para este usuario. El catálogo y las asignaciones
-  // son lecturas independientes entre sí (van en Promise.all); el pool tiene
-  // max:5 (api/_lib/db.js), así que no hay problema de concurrencia. Ambas SÍ
-  // dependen de `profile`, que ya viene resuelto del SELECT/UPDATE anteriores.
-  // Son NO fatales: /api/auth/me es la puerta de toda la app (login wall), así
-  // que un problema resolviendo flags degrada a flags:[] en vez de tumbar la sesión.
   const profile = rows[0];
-  let flags;
-  try {
-    const { catalog: flagCatalog, assignments: flagAssignments } = await getFlagsCatalog();
-    flags = resolveEnabledFlags(flagCatalog, flagAssignments, {
-      email: user.email,
-      username: profile?.username,
-    });
-  } catch (e) {
-    console.warn('flag resolution failed; defaulting to []', e);
-    flags = [];
-  }
 
   res.status(200).json({
     user: { id: user.id, email: user.email },
     profile,
-    flags,
   });
 });

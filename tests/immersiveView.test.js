@@ -14,15 +14,6 @@ vi.mock('../src/lib/pitch.js', () => ({
   })),
 }));
 
-// 'voz_tono' siempre on para poder probar mixed/tono sin depender del
-// catálogo real de flags (mismo patrón que tests/stageMode.test.js).
-// 'immersive_player' (D3) default OFF — cada test del player lo enciende
-// explícitamente, así el resto de la suite (30+ tests preexistentes) no se
-// ve afectada por el nuevo flag.
-vi.mock('../src/lib/authStore.js', () => ({
-  isFeatureEnabled: vi.fn((key) => key === 'voz_tono'),
-}));
-
 // getSongAudio (D3): default null (sin audio/timings) para que ningún test
 // preexistente dispare una promoción a sync por accidente; cada test del
 // player lo sobreescribe con mockResolvedValueOnce.
@@ -52,7 +43,6 @@ import {
   buildMixedLineHTML,
 } from '../src/lib/lyricsRender.js';
 import { closeOptionsSheet } from '../src/components/OptionsSheet.js';
-import { isFeatureEnabled } from '../src/lib/authStore.js';
 import { getSongAudio } from '../src/lib/songAudioApi.js';
 
 /** Deja correr la cadena de microtasks del `getSongAudio(...).then(...)` de maybeLoadSyncAudio. */
@@ -167,7 +157,6 @@ beforeEach(() => {
   setLayer('tono', false);
   detectorStart.mockClear();
   detectorStop.mockClear();
-  isFeatureEnabled.mockImplementation((key) => key === 'voz_tono');
   getSongAudio.mockReset();
   getSongAudio.mockResolvedValue(null);
 });
@@ -740,10 +729,10 @@ describe('wake lock', () => {
   });
 });
 
-// D3: player sincronizado por timings (flag `immersive_player`). buildSong()
+// D3: player sincronizado por timings. buildSong()
 // tiene 3 líneas (i 0,1,2); el hueco entre la línea 1 (2000ms) y la línea 2
 // (12000ms) es de 10s > 5s -> interludio (mismo umbral de timingEngine.js).
-describe('player sincronizado por timings (flag immersive_player)', () => {
+describe('player sincronizado por timings', () => {
   const readyTimings = () => ({
     audio: { url: 'https://storage.example/full.mp3', durationSec: 20 },
     timings: {
@@ -756,27 +745,12 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     },
   });
 
-  const enablePlayerFlag = () =>
-    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
-
   beforeEach(() => {
     vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
     vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
   });
 
-  it('flag off: nunca hay player bar, sigue en TimerEngine aunque haya timings ready', async () => {
-    getSongAudio.mockResolvedValue(readyTimings());
-    const sv = mountSongView();
-    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
-    await flushAsync();
-
-    expect(document.getElementById('imm-player-slot').hidden).toBe(true);
-    expect(document.getElementById('imm-fab').hidden).toBe(false);
-    expect(document.querySelector('#imm-player-slot audio')).toBeNull();
-  });
-
-  it('flag on + timings ready + audio: la barra de player queda visible y el FAB se oculta para siempre (un solo play)', async () => {
-    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
+  it('timings ready + audio: la barra de player queda visible y el FAB se oculta para siempre (un solo play)', async () => {
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -790,7 +764,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it("toggle 'Pista: en pausa/sonando' en el sheet reproduce/pausa el audio", async () => {
-    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -804,7 +777,7 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     expect(window.HTMLMediaElement.prototype.play).toHaveBeenCalled();
   });
 
-  it('sin flag/audio/timings el sheet NO muestra el toggle de pista', () => {
+  it('sin audio/timings el sheet NO muestra el toggle de pista', () => {
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
     document.getElementById('imm-open-options').click();
@@ -812,7 +785,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('tap en línea en modo sync busca (audio.currentTime), NO usa goTo directo', async () => {
-    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -834,7 +806,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('error del <audio> en runtime: toast + cae en caliente a TimerEngine sin salir de la vista', async () => {
-    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
     getSongAudio.mockResolvedValue(readyTimings());
     vi.useFakeTimers();
     const sv = mountSongView();
@@ -865,7 +836,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('interludio (gap>5s) muestra un nodo .imm-interlude entre líneas, que desaparece al entrar la siguiente', async () => {
-    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -886,7 +856,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('pre-roll (intro >= 3s): sin línea activa, la línea 0 en --next, el interludio se pinta antes de la primera línea; al entrar a la línea 0 se retira y anima a activa', async () => {
-    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
     getSongAudio.mockResolvedValue({
       audio: { url: 'https://storage.example/full.mp3', durationSec: 20 },
       timings: {
@@ -922,7 +891,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('salir en modo sync pausa el audio y vacía el src', async () => {
-    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -938,7 +906,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('FAB de pausa: oculto y no-op en sync, esté la pista sonando o pausada', async () => {
-    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -961,7 +928,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('sheet: VELOCIDAD (AUTO-SCROLL) visible mientras conduce el timer, oculta apenas se promueve a sync', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -998,7 +964,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('scrubber: dispatch de "input" en #imm-player-scrubber asigna audio.currentTime', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1013,7 +978,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('timeupdate normal (sin interludio) mueve el highlight a la línea de lineAt', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1036,7 +1000,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('seekSyncToLine: línea sin timing propio (mapeo sparse) cae al último timing conocido <= idx', async () => {
-    enablePlayerFlag();
     // i=1 no tiene timing propio (p.ej. línea instrumental sin palabras alineadas).
     getSongAudio.mockResolvedValue({
       audio: { url: 'https://storage.example/full.mp3', durationSec: 20 },
@@ -1058,8 +1021,7 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
     expect(audio.currentTime).toBe(0.5); // cae al timing de i=0 (500ms), el último <= 1
   });
 
-  it('matriz de degradación: flag on sin audio -> sigue en timer (FAB visible, sin player bar)', async () => {
-    enablePlayerFlag();
+  it('matriz de degradación: sin audio -> sigue en timer (FAB visible, sin player bar)', async () => {
     getSongAudio.mockResolvedValue({
       audio: null,
       timings: { status: 'ready', lines: [{ i: 0, startMs: 0 }] },
@@ -1073,7 +1035,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it("matriz de degradación: timings status 'pending' -> sigue en timer", async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue({
       audio: { url: 'https://storage.example/full.mp3', durationSec: 20 },
       timings: { status: 'pending', lines: null },
@@ -1087,7 +1048,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it("matriz de degradación: timings status 'failed' -> sigue en timer", async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue({
       audio: { url: 'https://storage.example/full.mp3', durationSec: 20 },
       timings: { status: 'failed', lines: null },
@@ -1101,7 +1061,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('matriz de degradación: getSongAudio resuelve null -> sigue en timer', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(null);
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1112,7 +1071,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('sheet reabierto tras un fallback a timer vuelve a mostrar VELOCIDAD y esconde PISTA', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1134,7 +1092,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   // !== s` de maybeLoadSyncAudio): la promesa se controla a mano vía una
   // referencia al `resolve` capturada en el mock, sin await previo.
   it('race: salir ANTES de que resuelva getSongAudio no crashea ni promueve', async () => {
-    enablePlayerFlag();
     let resolveFetch;
     getSongAudio.mockImplementation(
       () =>
@@ -1154,7 +1111,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('race: salir y re-entrar -> el fetch VIEJO no promueve la sesión NUEVA (guard session !== s)', async () => {
-    enablePlayerFlag();
     let resolveFirst;
     getSongAudio.mockImplementation(
       () =>
@@ -1180,7 +1136,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('promovido a sync sin dar play: el timer queda detenido, la letra no avanza sola', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimings());
     vi.useFakeTimers();
     const sv = mountSongView();
@@ -1198,7 +1153,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it("'play'/'pause' de la pista pausan y reanudan TODO; el FAB nunca reaparece (un solo play)", async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimings());
     vi.useFakeTimers();
     const sv = mountSongView();
@@ -1230,7 +1184,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('al entrar en sync la pista arranca muteada', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1244,7 +1197,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('el botón de altavoz silencia/activa la pista (muted) sin pausarla', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1269,7 +1221,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('barra y sheet sincronizados: el altavoz de la barra refleja #osheet-track-sound y viceversa', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1292,7 +1243,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('independencia: mutear la pista no llama a metronomeSetMuted (canales separados)', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimings());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1305,7 +1255,6 @@ describe('player sincronizado por timings (flag immersive_player)', () => {
   });
 
   it('seek con la pista pausada: el highlight llega vía timeupdate, el timer NUNCA retoma en sync', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimings());
     vi.useFakeTimers();
     const sv = mountSongView();
@@ -1358,9 +1307,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     },
   });
 
-  const enablePlayerFlag = () =>
-    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
-
   beforeEach(() => {
     vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
     vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
@@ -1370,7 +1316,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
   });
 
   it('sin beat grid (timings.lines sin beats): badge y pulso siguen hidden', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue({
       audio: { url: 'https://storage.example/full.mp3', durationSec: 20 },
       timings: {
@@ -1391,7 +1336,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
   });
 
   it('con beats + ready: badge "112 BPM · 4/4" y pulso con perBar puntos visibles', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1406,7 +1350,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
   });
 
   it('con audio.bpmManual: el badge usa el bpm manual, no el detectado', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats({ audio: { bpmManual: 90 } }));
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1416,7 +1359,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
   });
 
   it('con beats pero bpm nulo (sin bpmDetected ni bpmManual): badge sigue hidden, pulso visible', async () => {
-    enablePlayerFlag();
     // No se usa el helper readyTimingsWithBeats: su `overrides.bpmDetected ?? 112.35`
     // trata `null` como nullish y cae al default, precisamente el caso que
     // este test necesita evitar.
@@ -1456,7 +1398,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
   // dar `remainingBeats=0` dentro de un hueco (ver el test de blindaje más
   // abajo) — por eso el test viejo se reemplazó, no se eliminó una cobertura.
   it('count-in acotado: faltando 12 beats (> perBar=4) se muestran puntos, no el contador', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1473,7 +1414,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
   });
 
   it('count-in acotado: faltando exactamente perBar (4) beats aparece .imm-interlude__count "4"', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1493,7 +1433,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
   });
 
   it('count-in acotado: faltando 1 beat muestra .imm-interlude__count "1"', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1512,7 +1451,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
   });
 
   it('count-in acotado: remainingBeats=0 (línea NO alineada a la rejilla de beats) muestra puntos, no el contador', async () => {
-    enablePlayerFlag();
     // La línea 2 arranca en 12200ms, fuera de la rejilla de beats (que
     // termina en beatsMs[24]=12000): tanto `indexAt(12000)` como
     // `indexAt(12200)` resuelven al mismo índice 24, así que
@@ -1550,7 +1488,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
   });
 
   it('sheet: showMetronome pinta la sección y el toggle de sonido dispara onMetronomeAudioToggle (setMuted)', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1567,7 +1504,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
   });
 
   it('sheet: el toggle VISUAL arranca encendido y dispara onMetronomeVisualToggle', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1592,7 +1528,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
   });
 
   it('independencia: togglear el sonido del metrónomo no muta audio.muted de la pista', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1606,7 +1541,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
   });
 
   it('sheet: el toggle de sonido también refleja el estado en el toggle rápido de la barra (mismo setMetronomeAudioOn)', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1635,7 +1569,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
   });
 
   it('toggle rápido en la barra de player: existe con beat grid, arranca apagado (split F4/TANDA B), un clic lo enciende (setMuted(false))', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1653,7 +1586,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
   });
 
   it('salir de la vista inmersiva detiene el click del metrónomo (stop)', async () => {
-    enablePlayerFlag();
     getSongAudio.mockResolvedValue(readyTimingsWithBeats());
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1672,7 +1604,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     // (retargetScroll) que si no, contaminaría la cola antes de que el
     // audio dispare `play`.
     async function enterWithBeats() {
-      enablePlayerFlag();
       getSongAudio.mockResolvedValue(readyTimingsWithBeats());
       const sv = mountSongView();
       enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1759,7 +1690,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
   // Con el sheet CERRADO, ninguno de esos caminos debe abrirlo.
   describe('refreshOptionsSheet: el sheet abierto refleja cambios hechos desde fuera', () => {
     it('metrónomo: el toggle rápido (audio) con el sheet abierto refresca #osheet-metronome-audio', async () => {
-      enablePlayerFlag();
       getSongAudio.mockResolvedValue(readyTimingsWithBeats());
       const sv = mountSongView();
       enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1800,7 +1730,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     });
 
     it('player: play/pause físico del audio refresca #osheet-player con el sheet abierto', async () => {
-      enablePlayerFlag();
       getSongAudio.mockResolvedValue(readyTimingsWithBeats());
       const sv = mountSongView();
       enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
@@ -1842,7 +1771,6 @@ describe('metrónomo (badge BPM, pulso, count-in, click)', () => {
     });
 
     it('con el sheet CERRADO, ninguno de esos caminos lo abre', async () => {
-      enablePlayerFlag();
       getSongAudio.mockResolvedValue(readyTimingsWithBeats());
       localStorage.setItem('hkn-immersive-mode', 'mixed');
       const sv = mountSongView();

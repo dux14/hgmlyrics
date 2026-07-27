@@ -319,15 +319,6 @@ async function bootBody() {
   );
 
   privateRoute(
-    '/admin/flags',
-    async () => {
-      const { renderAdminFlagsPage } = await import('./components/AdminFlagsPage.js');
-      renderAdminFlagsPage(mainContent);
-    },
-    { adminOnly: true },
-  );
-
-  privateRoute(
     '/admin/mundo',
     async () => {
       const { renderAdminWorldPage } = await import('./components/AdminWorldPage.js');

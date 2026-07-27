@@ -21,10 +21,8 @@ vi.mock('../src/router.js', () => ({
   navigate: vi.fn(),
 }));
 
-// voz_tono activo — mismo estilo que songViewRender.test.js (paridad preview).
 vi.mock('../src/lib/authStore.js', () => ({
   isAdmin: vi.fn().mockReturnValue(false),
-  isFeatureEnabled: vi.fn((key) => key === 'voz_tono'),
 }));
 
 const { renderSongView } = await import('../src/components/SongView.js');

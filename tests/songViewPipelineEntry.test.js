@@ -27,7 +27,6 @@ vi.mock('../src/lib/authStore.js', () => ({
   getSession: () => null,
   subscribe: () => () => {},
   isAdmin: vi.fn().mockReturnValue(false),
-  isFeatureEnabled: vi.fn((key) => key === 'voz_tono'),
 }));
 
 vi.mock('../src/lib/pipelineApi.js', () => ({

@@ -23,10 +23,9 @@ vi.mock('../src/router.js', () => ({
   navigate: vi.fn(),
 }));
 
-// Stub authStore — enable voz_tono for preview parity tests.
+// Stub authStore para tests de paridad de preview.
 vi.mock('../src/lib/authStore.js', () => ({
   isAdmin: vi.fn().mockReturnValue(false),
-  isFeatureEnabled: vi.fn((key) => key === 'voz_tono'),
 }));
 
 const { renderSections, renderVoicePanel } = await import('../src/components/SongView.js');

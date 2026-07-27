@@ -1,6 +1,6 @@
 /**
- * TonoEditorModal.js — popup "Voces y tono" del editor (v2, gated por
- * voz_tono). Flujo: 1) tap inicio→tap fin sobre las letras (rango de
+ * TonoEditorModal.js — popup "Voces y tono" del editor (v2). Flujo:
+ * 1) tap inicio→tap fin sobre las letras (rango de
  * caracteres), 2) elegir voz del roster, 3) escribir nota a mano (validada,
  * opcional), 4) "Agregar grupo". Lista de grupos con borrar. Muta line.groups.
  *

@@ -45,9 +45,8 @@ export function setImmersiveMode(mode) {
  * Modos disponibles según la disponibilidad de acordes y tono de la
  * canción actual. `hasChords`/`tonoAvailable` los calcula el caller (misma
  * señal que usan SongView/ImmersiveView: `songHasChords(song)` local a cada
- * componente y `isFeatureEnabled('voz_tono') && song.voiceRoster.length >
- * 0`) — no se duplica esa lógica aquí porque no está expuesta como export
- * reusable desde donde vive hoy.
+ * componente y `song.voiceRoster.length > 0`) — no se duplica esa lógica
+ * aquí porque no está expuesta como export reusable desde donde vive hoy.
  * @param {{ hasChords: boolean, tonoAvailable: boolean }} availability
  * @returns {Array<'letra'|'chords'|'mixed'|'tono'>}
  */

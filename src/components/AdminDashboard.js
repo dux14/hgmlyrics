@@ -27,13 +27,6 @@ const HUB_CARDS = [
     desc: 'Publicar una nueva voz en off.',
   },
   {
-    id: 'flags',
-    path: '/admin/flags',
-    iconName: 'flag',
-    title: 'Feature Flags',
-    desc: 'Asignar funciones experimentales a usuarios.',
-  },
-  {
     id: 'mundo',
     path: '/admin/mundo',
     iconName: 'globe',

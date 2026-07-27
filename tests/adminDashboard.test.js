@@ -44,18 +44,17 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('renderAdminDashboard — hub', () => {
-  it('renderiza 5 tarjetas de navegación', () => {
+  it('renderiza 4 tarjetas de navegación', () => {
     const container = makeContainer();
     renderAdminDashboard(container);
     const cards = container.querySelectorAll('.admin-hub__card');
-    expect(cards.length).toBe(5);
+    expect(cards.length).toBe(4);
   });
 
   it.each([
     ['Crear canción', '/admin/create'],
     ['Modificar canción', '/admin/edit'],
     ['Voces en off', '/admin/voz/nueva'],
-    ['Feature Flags', '/admin/flags'],
     ['Mundo Virtual', '/admin/mundo'],
   ])('la tarjeta "%s" navega a %s al hacer click', (text, path) => {
     const container = makeContainer();

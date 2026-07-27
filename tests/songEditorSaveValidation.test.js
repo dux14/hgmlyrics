@@ -20,7 +20,6 @@ vi.mock('../src/lib/store.js', () => ({
 vi.mock('../src/router.js', () => ({ navigate: vi.fn(), onRouteChange: vi.fn() }));
 vi.mock('../src/lib/authStore.js', () => ({
   getSession: vi.fn(() => ({ access_token: 'tok-1' })),
-  isFeatureEnabled: vi.fn(() => false),
   isAdmin: vi.fn(() => false),
 }));
 vi.mock('../src/lib/sectionAudioApi.js', () => ({
@@ -32,7 +31,6 @@ vi.mock('../src/lib/sectionAudioApi.js', () => ({
 vi.mock('../src/lib/stemsApi.js', () => ({ readAudioDuration: vi.fn() }));
 
 const store = await import('../src/lib/store.js');
-const { isFeatureEnabled } = await import('../src/lib/authStore.js');
 const { renderSongEditor } = await import('../src/components/SongEditor.js');
 
 // Chord con pos fuera del texto ("Primera línea" tiene 13 caracteres): la
@@ -83,9 +81,8 @@ const FAKE_SONG_OK = {
   ],
 };
 
-// Canción con tono ya asignado (voiceRoster + groups en una línea): el flag
-// voz_tono apagado NO debe impedir guardar un typo aquí, porque el roster de
-// datos siempre round-tripea aunque la UI de edición de tono esté oculta.
+// Canción con tono ya asignado (voiceRoster + groups en una línea): el
+// roster de datos siempre round-tripea al guardar.
 const FAKE_SONG_WITH_TONO = {
   ...FAKE_SONG_BAD_CHORD,
   schemaVersion: 3,
@@ -191,28 +188,7 @@ describe('SongEditor — validación pre-guardado', () => {
     expect(linksPutCalls).toHaveLength(0);
   });
 
-  it('con el flag voz_tono apagado, guarda una canción con tono ya asignado (roster+groups round-tripean)', async () => {
-    isFeatureEnabled.mockReturnValue(false);
-    store.fetchSongDetail.mockResolvedValue({
-      ...FAKE_SONG_WITH_TONO,
-      sections: [...FAKE_SONG_WITH_TONO.sections],
-    });
-    await renderSongEditor(container, 'song-1');
-    await vi.waitFor(() => expect(container.querySelector('#editor-save')).not.toBeNull());
-
-    container.querySelector('#editor-save').click();
-    await vi.waitFor(() =>
-      expect(global.fetch).toHaveBeenCalledWith('/api/songs/song-1', expect.any(Object)),
-    );
-
-    const call = global.fetch.mock.calls.find((c) => c[0] === '/api/songs/song-1');
-    const body = JSON.parse(call[1].body);
-    expect(body.schemaVersion).toBe(3);
-    expect(body.voiceRoster).toEqual(FAKE_SONG_WITH_TONO.voiceRoster);
-  });
-
-  it('con el flag voz_tono encendido, el guardado se comporta igual (regresión)', async () => {
-    isFeatureEnabled.mockReturnValue(true);
+  it('guarda una canción con tono ya asignado (roster+groups round-tripean)', async () => {
     store.fetchSongDetail.mockResolvedValue({
       ...FAKE_SONG_WITH_TONO,
       sections: [...FAKE_SONG_WITH_TONO.sections],

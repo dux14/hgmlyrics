@@ -10,7 +10,7 @@ import { fetchSongDetail, refreshData, invalidateSongDetailCache } from '../lib/
 import { songToChordPro } from '../lib/importParse.js';
 import { MUSICAL_KEYS, chordProKeyToCanonical } from '../lib/musicKeys.js';
 import { navigate, onRouteChange } from '../router.js';
-import { getSession, isFeatureEnabled } from '../lib/authStore.js';
+import { getSession } from '../lib/authStore.js';
 import { renderSections } from './SongView.js';
 import {
   CANONICAL_VOICE_ORDER,
@@ -209,12 +209,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   // delegados, es aceptable que el rebote también active dirty.
   let dirty = false;
 
-  // ─── v2 (Tono) gating ───
-  // When false, the voz_tono render output and event wiring are skipped; the
-  // saved DATA (roster/groups) round-trips regardless of the flag.
-  const v2Enabled = isFeatureEnabled('voz_tono');
-  // El roster de datos siempre round-tripea, apagado o no el flag: este solo
-  // gatea la UI de edición de tono, no el guardado de lo que ya existe.
+  // El editor de autoría v2 (roster de voces/tono) está siempre disponible.
   const voiceRoster = Array.isArray(existingSong?.voiceRoster)
     ? existingSong.voiceRoster.map((v) => ({ ...v }))
     : [];
@@ -333,16 +328,12 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         <button class="btn btn--secondary editor__add-link-btn" id="add-voice-link-btn" type="button">+ Agregar link de voz</button>
       </div>
 
-      ${
-        v2Enabled
-          ? `<!-- Roster de voces (v2) -->
+      <!-- Roster de voces (v2) -->
       <section class="editor-roster editor__section" id="editor-roster">
         <h2 class="editor__section-title editor__section-title--flex">${icon('users', { size: 18 })} Voces de la canción</h2>
         <div id="roster-list"></div>
         <button class="btn btn--secondary editor__roster-add-btn" id="add-roster-voice" type="button">${icon('plus', { size: 16 })} Añadir voz</button>
-      </section>`
-          : ''
-      }
+      </section>
 
       <!-- Block Editor -->
       <div class="editor__section">
@@ -485,8 +476,8 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
 
   renderVoiceLinks();
 
-  // ─── Roster de voces (v2, gated) ───
-  const rosterListEl = v2Enabled ? container.querySelector('#roster-list') : null;
+  // ─── Roster de voces (v2) ───
+  const rosterListEl = container.querySelector('#roster-list');
 
   function renderRoster() {
     if (!rosterListEl) return;
@@ -538,54 +529,52 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
     }
   }
 
-  if (v2Enabled) {
-    rosterListEl.addEventListener('input', (e) => {
-      const idx = Number.parseInt(e.target.dataset.idx, 10);
-      if (Number.isNaN(idx) || !voiceRoster[idx]) return;
-      const action = e.target.dataset.action;
-      if (action === 'roster-name') {
-        voiceRoster[idx].name = e.target.value;
-      } else if (action === 'roster-refkey') {
-        const val = e.target.value.trim();
-        voiceRoster[idx].referenceKey = val === '' ? null : val;
-        const invalid = val !== '' && !isValidNote(val);
-        e.target.classList.toggle('form-group__input--invalid', invalid);
-        e.target.setAttribute('aria-invalid', String(invalid));
-      }
-    });
+  rosterListEl.addEventListener('input', (e) => {
+    const idx = Number.parseInt(e.target.dataset.idx, 10);
+    if (Number.isNaN(idx) || !voiceRoster[idx]) return;
+    const action = e.target.dataset.action;
+    if (action === 'roster-name') {
+      voiceRoster[idx].name = e.target.value;
+    } else if (action === 'roster-refkey') {
+      const val = e.target.value.trim();
+      voiceRoster[idx].referenceKey = val === '' ? null : val;
+      const invalid = val !== '' && !isValidNote(val);
+      e.target.classList.toggle('form-group__input--invalid', invalid);
+      e.target.setAttribute('aria-invalid', String(invalid));
+    }
+  });
 
-    rosterListEl.addEventListener('change', (e) => {
-      const idx = Number.parseInt(e.target.dataset.idx, 10);
-      if (Number.isNaN(idx) || !voiceRoster[idx]) return;
-      if (e.target.dataset.action === 'roster-category') {
-        voiceRoster[idx].category = e.target.value;
-      }
-    });
+  rosterListEl.addEventListener('change', (e) => {
+    const idx = Number.parseInt(e.target.dataset.idx, 10);
+    if (Number.isNaN(idx) || !voiceRoster[idx]) return;
+    if (e.target.dataset.action === 'roster-category') {
+      voiceRoster[idx].category = e.target.value;
+    }
+  });
 
-    rosterListEl.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-action="roster-delete"]');
-      if (!btn) return;
-      const idx = Number.parseInt(btn.dataset.idx, 10);
-      if (Number.isNaN(idx) || !voiceRoster[idx]) return;
-      const removed = voiceRoster.splice(idx, 1)[0];
-      if (removed) purgeRosterIdFromLines(removed.id);
-      renderRoster();
-      renderBlocks();
-    });
-
-    container.querySelector('#add-roster-voice').addEventListener('click', () => {
-      dirty = true;
-      voiceRoster.push({
-        id: uid(),
-        name: `Voz ${voiceRoster.length + 1}`,
-        category: 'soprano',
-        referenceKey: null,
-      });
-      renderRoster();
-    });
-
+  rosterListEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action="roster-delete"]');
+    if (!btn) return;
+    const idx = Number.parseInt(btn.dataset.idx, 10);
+    if (Number.isNaN(idx) || !voiceRoster[idx]) return;
+    const removed = voiceRoster.splice(idx, 1)[0];
+    if (removed) purgeRosterIdFromLines(removed.id);
     renderRoster();
-  }
+    renderBlocks();
+  });
+
+  container.querySelector('#add-roster-voice').addEventListener('click', () => {
+    dirty = true;
+    voiceRoster.push({
+      id: uid(),
+      name: `Voz ${voiceRoster.length + 1}`,
+      category: 'soprano',
+      referenceKey: null,
+    });
+    renderRoster();
+  });
+
+  renderRoster();
 
   // ─── Audio por sección (admin, subida independiente del guardado) ───
   // Un solo GET al abrir el editor (fetchSectionAudio ya tolera cualquier
@@ -952,14 +941,10 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
             <input class="section-block__label-input" type="text" value="${escapeHtml(block.label)}" data-action="change-label" data-section="${index}" placeholder="Nombre de la sección" />
           </div>
           <div class="section-block__header-actions">
-            ${
-              v2Enabled
-                ? `<label class="section-block__speed" title="Velocidad de scroll sugerida (F)">
-                    <span class="section-block__speed-label">Vel.</span>
-                    <input class="section-block__speed-input" type="number" min="0" max="100" placeholder="—" value="${typeof block.speedPreset === 'number' ? block.speedPreset : ''}" data-action="change-speed" data-section="${index}" aria-label="Velocidad de scroll sugerida (0-100)" />
-                  </label>`
-                : ''
-            }
+            <label class="section-block__speed" title="Velocidad de scroll sugerida (F)">
+              <span class="section-block__speed-label">Vel.</span>
+              <input class="section-block__speed-input" type="number" min="0" max="100" placeholder="—" value="${typeof block.speedPreset === 'number' ? block.speedPreset : ''}" data-action="change-speed" data-section="${index}" aria-label="Velocidad de scroll sugerida (0-100)" />
+            </label>
             ${index > 0 ? `<button class="section-block__btn" data-action="move-section-up" data-section="${index}" title="Mover arriba" aria-label="Mover arriba">${icon('chevron-up', { size: 18 })}</button>` : ''}
             ${index < total - 1 ? `<button class="section-block__btn" data-action="move-section-down" data-section="${index}" title="Mover abajo" aria-label="Mover abajo">${icon('chevron-down', { size: 18 })}</button>` : ''}
             <button class="section-block__btn section-block__btn--danger" data-action="delete-section" data-section="${index}" title="Eliminar sección" aria-label="Eliminar sección">${icon('trash', { size: 16 })}</button>
@@ -983,7 +968,7 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         <div class="line-row__main">
           ${mainContent}
           <div class="line-row__actions">
-            ${v2Enabled ? `<button class="line-row__btn line-row__btn--tono${line.groups && line.groups.length > 0 ? ' line-row__btn--active' : ''}" data-action="open-tono" data-line-id="${line.id}" title="Voces y tono" aria-label="Voces y tono">${icon('music', { size: 16 })}</button>` : ''}
+            <button class="line-row__btn line-row__btn--tono${line.groups && line.groups.length > 0 ? ' line-row__btn--active' : ''}" data-action="open-tono" data-line-id="${line.id}" title="Voces y tono" aria-label="Voces y tono">${icon('music', { size: 16 })}</button>
             <button class="line-row__btn ${line.chords && line.chords.length > 0 ? 'line-row__btn--active' : ''}" data-action="open-chords" data-line-id="${line.id}" title="Acordes" aria-label="Acordes">${icon('audio-lines', { size: 16 })}</button>
             <button class="line-row__btn ${line.annotation ? 'line-row__btn--active line-row__btn--annotation' : ''}" data-action="toggle-annotation" data-line-id="${line.id}" title="Marcar como anotación/guía" aria-label="Marcar como anotación/guía">${icon('tag', { size: 16 })}</button>
             <button class="line-row__btn ${line.spoken ? 'line-row__btn--active' : ''}" data-action="toggle-spoken" data-line-id="${line.id}" title="Marcar como recitado (texto hablado)" aria-label="Marcar como recitado">${icon('message', { size: 16 })}</button>
@@ -1019,7 +1004,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         schedulePreviewUpdate(blocks[si].id);
       }
     } else if (action === 'change-speed') {
-      if (!v2Enabled) return;
       const si = parseInt(e.target.dataset.section);
       if (blocks[si]) {
         const raw = e.target.value.trim();
@@ -1106,7 +1090,6 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         renderBlocks();
       }
     } else if (action === 'open-tono') {
-      if (!v2Enabled) return;
       const found = findLine(btn.dataset.lineId);
       if (found) {
         // Mismo motivo que open-chords: el modal muta found.line.groups por

@@ -57,7 +57,7 @@ beforeEach(() => {
   vi.stubGlobal('navigator', { onLine: true });
   vi.spyOn(globalThis, 'fetch').mockResolvedValue({
     ok: true,
-    json: async () => ({ profile: { username: 'ana' }, flags: ['f1'] }),
+    json: async () => ({ profile: { username: 'ana' } }),
   });
   vi.spyOn(globalThis, 'addEventListener').mockImplementation((type, fn) => {
     if (type === 'online') onlineHandlers.push(fn);
@@ -127,14 +127,14 @@ describe('initAuthStore — boot normal', () => {
 });
 
 describe('refreshProfile — fallo transitorio vs. definitivo', () => {
-  it('fetch que lanza (fallo de red) conserva el ultimo profile/flags en memoria', async () => {
+  it('fetch que lanza (fallo de red) conserva el ultimo profile en memoria', async () => {
     const { store, supabase } = await loadStore();
     supabase.auth.getSession.mockResolvedValue({ data: { session: makeSession() } });
     supabase.auth.onAuthStateChange.mockImplementation(() => {});
     // El primer refreshProfile() del boot es exitoso y deja un profile "bueno".
     globalThis.fetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ profile: { username: 'restaurado' }, flags: ['f1'] }),
+      json: async () => ({ profile: { username: 'restaurado' } }),
     });
 
     await store.initAuthStore();
@@ -146,7 +146,6 @@ describe('refreshProfile — fallo transitorio vs. definitivo', () => {
 
     expect(ok).toBe(false);
     expect(store.getProfile()).toEqual({ username: 'restaurado' });
-    expect(store.isFeatureEnabled('f1')).toBe(true);
   });
 
   it('respuesta non-ok del server (401/403/500) nulea el profile como hoy', async () => {
@@ -155,7 +154,7 @@ describe('refreshProfile — fallo transitorio vs. definitivo', () => {
     supabase.auth.onAuthStateChange.mockImplementation(() => {});
     globalThis.fetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ profile: { username: 'restaurado' }, flags: ['f1'] }),
+      json: async () => ({ profile: { username: 'restaurado' } }),
     });
 
     await store.initAuthStore();
@@ -167,13 +166,12 @@ describe('refreshProfile — fallo transitorio vs. definitivo', () => {
 
     expect(ok).toBe(false);
     expect(store.getProfile()).toBeNull();
-    expect(store.isFeatureEnabled('f1')).toBe(false);
   });
 
   it('fetch que lanza sin profile en memoria restaura el snapshot cacheado (H4)', async () => {
     localStorage.setItem(
       PROFILE_CACHE_KEY,
-      JSON.stringify({ profile: { username: 'cached' }, flags: ['f1'] }),
+      JSON.stringify({ profile: { username: 'cached' } }),
     );
     const { store, supabase } = await loadStore();
     supabase.auth.getSession.mockResolvedValue({ data: { session: makeSession() } });
@@ -186,7 +184,6 @@ describe('refreshProfile — fallo transitorio vs. definitivo', () => {
     await store.initAuthStore();
 
     expect(store.getProfile()).toEqual({ username: 'cached' });
-    expect(store.isFeatureEnabled('f1')).toBe(true);
   });
 });
 
@@ -225,12 +222,12 @@ describe('initAuthStore — restauracion optimista (T1)', () => {
     expect(store.isAuthenticated()).toBe(false);
   });
 
-  it('en modo pending restaura profile/flags desde el cache en vez de hacer fetch', async () => {
+  it('en modo pending restaura el profile desde el cache en vez de hacer fetch', async () => {
     vi.useFakeTimers();
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
     localStorage.setItem(
       PROFILE_CACHE_KEY,
-      JSON.stringify({ profile: { username: 'cached' }, flags: ['cached-flag'] }),
+      JSON.stringify({ profile: { username: 'cached' } }),
     );
     const { store, supabase } = await loadStore();
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
@@ -240,11 +237,10 @@ describe('initAuthStore — restauracion optimista (T1)', () => {
     await store.initAuthStore();
 
     expect(store.getProfile()).toEqual({ username: 'cached' });
-    expect(store.isFeatureEnabled('cached-flag')).toBe(true);
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
-  it('refreshProfile() exitoso cachea profile+flags en localStorage', async () => {
+  it('refreshProfile() exitoso cachea el profile en localStorage', async () => {
     const { store, supabase } = await loadStore();
     supabase.auth.getSession.mockResolvedValue({ data: { session: makeSession() } });
     supabase.auth.onAuthStateChange.mockImplementation(() => {});
@@ -252,7 +248,7 @@ describe('initAuthStore — restauracion optimista (T1)', () => {
     await store.initAuthStore();
 
     const cached = JSON.parse(localStorage.getItem(PROFILE_CACHE_KEY));
-    expect(cached).toEqual({ profile: { username: 'ana' }, flags: ['f1'] });
+    expect(cached).toEqual({ profile: { username: 'ana' } });
   });
 
   it('reintenta refreshSession en background con backoff mientras pending', async () => {
@@ -447,7 +443,7 @@ describe('initAuthStore — restauracion optimista (T1)', () => {
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
     localStorage.setItem(
       PROFILE_CACHE_KEY,
-      JSON.stringify({ profile: { username: 'cached' }, flags: ['cached-flag'] }),
+      JSON.stringify({ profile: { username: 'cached' } }),
     );
     const { store, supabase } = await loadStore();
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
@@ -477,7 +473,7 @@ describe('initAuthStore — restauracion optimista (T1)', () => {
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
     localStorage.setItem(
       PROFILE_CACHE_KEY,
-      JSON.stringify({ profile: { username: 'cached' }, flags: [] }),
+      JSON.stringify({ profile: { username: 'cached' } }),
     );
     const { store, supabase } = await loadStore();
     supabase.auth.getSession.mockResolvedValueOnce({ data: { session: null } });
@@ -667,7 +663,7 @@ describe('signOut', () => {
   it('limpia el cache de perfil', async () => {
     localStorage.setItem(
       PROFILE_CACHE_KEY,
-      JSON.stringify({ profile: { username: 'ana' }, flags: [] }),
+      JSON.stringify({ profile: { username: 'ana' } }),
     );
     const { store, supabase } = await loadStore();
     supabase.auth.signOut.mockResolvedValue({});

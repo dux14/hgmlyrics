@@ -145,7 +145,7 @@ const hasNote = (g) => g.note !== null && g.note !== undefined && g.note !== '';
  */
 
 /**
- * Modo Tono (flag voz_tono): la letra cantada por la voz activa va neutra
+ * Modo Tono: la letra cantada por la voz activa va neutra
  * (clase `lyrics__tono-sung`, legible) y su NOTA flota sobre cada grupo con el
  * color de la voz (`colorClass`) para que resalte; el resto del texto se atenúa.
  *
@@ -182,7 +182,7 @@ export function buildTonoLineHTML(line, voiceId, colorClass, opts = {}) {
 }
 
 /**
- * Vista combinada (flag voz_tono): letra + acordes + tono de UNA voz en una
+ * Vista combinada: letra + acordes + tono de UNA voz en una
  * línea de 3 rieles ESTRICTOS de altura fija — acorde arriba / letra al medio /
  * nota abajo. Todo run de texto (incluido lo no cantado, comas, guiones) vive
  * en el riel de letra; los rieles existen en todos los segmentos para que nada

@@ -11,9 +11,8 @@
  * Motor de avance: arranca SIEMPRE en TimerEngine (segundos-por-línea desde
  * autoscroll.js, sin bloquear la entrada) y se promueve en caliente a
  * TimingEngine (audio real vía `song_line_timings`, Task D3) si al resolver
- * `getSongAudio` hay flag `immersive_player` + timings `ready` + audio. Si el
- * <audio> falla en runtime, degrada de vuelta a TimerEngine sin salir de la
- * vista (D3, spec §3).
+ * `getSongAudio` hay timings `ready` + audio. Si el <audio> falla en
+ * runtime, degrada de vuelta a TimerEngine sin salir de la vista (D3, spec §3).
  */
 import { icon } from '../lib/icons.js';
 import { getSongAudio } from '../lib/songAudioApi.js';
@@ -39,7 +38,6 @@ import {
 } from '../lib/autoscroll.js';
 import { buildVoiceChipHTML } from '../lib/voiceChips.js';
 import { openFloatingTuner } from './FloatingTuner.js';
-import { isFeatureEnabled } from '../lib/authStore.js';
 import { openOptionsSheet, closeOptionsSheet, isOptionsSheetOpen } from './OptionsSheet.js';
 import { projectLines } from '../lib/projectLines.js';
 import { getImmersiveMode, setImmersiveMode, availableModes } from '../lib/immersiveStore.js';
@@ -469,7 +467,7 @@ function recomputeLines(s) {
   retargetScroll(s);
 }
 
-// ── PLAYER SINCRONIZADO POR TIMINGS (D3, flag `immersive_player`) ────────
+// ── PLAYER SINCRONIZADO POR TIMINGS (D3) ─────────────────────────────────
 
 function formatTime(sec) {
   if (!Number.isFinite(sec) || sec < 0) return '0:00';
@@ -483,12 +481,11 @@ function formatTime(sec) {
 /**
  * Dispara la carga async de audio+timings al entrar (no bloquea el montaje:
  * la vista arranca siempre en TimerEngine — spec §3) y promueve en caliente a
- * TimingEngine si al resolver hay flag + timings `ready` + audio. Cualquier
- * fallo (flag off, sin audio, timings no listos, red caída) deja la vista tal
- * cual estaba: es degradación pura, nunca lanza.
+ * TimingEngine si al resolver hay timings `ready` + audio. Cualquier fallo
+ * (sin audio, timings no listos, red caída) deja la vista tal cual estaba:
+ * es degradación pura, nunca lanza.
  */
 function maybeLoadSyncAudio(s) {
-  if (!isFeatureEnabled('immersive_player')) return;
   getSongAudio(s.songId).then((data) => {
     if (session !== s || s.engineMode === 'sync') return; // salió, re-entró o ya se promovió
     const audio = data?.audio;
@@ -1156,7 +1153,7 @@ export function enterImmersive(songViewEl, ctx = {}) {
   if (lines.length === 0) return; // nada que proyectar
 
   const hasChords = songHasChords(ctx.song);
-  const tonoAvailable = isFeatureEnabled('voz_tono') && (ctx.song.voiceRoster || []).length > 0;
+  const tonoAvailable = (ctx.song.voiceRoster || []).length > 0;
   const modes = availableModes({ hasChords, tonoAvailable });
   let mode = getImmersiveMode();
   if (!modes.includes(mode)) mode = 'letra';
@@ -1216,8 +1213,8 @@ export function enterImmersive(songViewEl, ctx = {}) {
     rafId: null,
     lastFrameTs: null,
     els,
-    // Player sincronizado por timings (D3, flag immersive_player): arranca
-    // SIEMPRE en 'timer' — la promoción a 'sync' es en caliente tras el
+    // Player sincronizado por timings (D3): arranca SIEMPRE en 'timer' — la
+    // promoción a 'sync' es en caliente tras el
     // await de getSongAudio (maybeLoadSyncAudio), nunca bloquea la entrada.
     engineMode: 'timer',
     // true solo mientras la pista suena (eventos play/pause del <audio>).

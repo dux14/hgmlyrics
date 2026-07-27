@@ -1853,7 +1853,7 @@ body.floating-tuner-open .autoscroll-fab {
   color: var(--color-voice-bass);
 }
 
-/* ─── Editor v2 (voz_tono): roster, silabación, tono por sílaba ─── */
+/* ─── Editor v2: roster, silabación, tono por sílaba ─── */
 
 .btn--sm {
   min-height: 44px;

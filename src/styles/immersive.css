@@ -465,7 +465,7 @@ body.immersive-active > .floating-tuner {
   display: none;
 }
 
-/* ── Player de pista sincronizada (D3, flag immersive_player) ── */
+/* ── Player de pista sincronizada (D3) ── */
 
 .imm-player {
   display: flex;

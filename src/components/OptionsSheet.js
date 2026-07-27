@@ -275,7 +275,7 @@ function buildSheetHtml(opts) {
     </div>`
     : '';
 
-  // PISTA (D3, flag immersive_player): toggle "Reproducir pista" — solo
+  // PISTA (D3): toggle "Reproducir pista" — solo
   // ImmersiveView lo pasa (`showPlayerToggle: true`) cuando ya está en modo
   // sync (audio+timings listos); SongView y el resto queda sin cambios.
   // Segunda fila "Sonido de la pista" (`showTrackSound`, misma condición sync):

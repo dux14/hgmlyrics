@@ -5,10 +5,6 @@ vi.mock('../lib/songAudioApi.js', () => ({
   getSongAudio: vi.fn(() => Promise.resolve(null)),
 }));
 
-vi.mock('../lib/authStore.js', () => ({
-  isFeatureEnabled: vi.fn((key) => key === 'voz_tono'),
-}));
-
 vi.mock('./OptionsSheet.js', () => ({
   openOptionsSheet: vi.fn(),
   closeOptionsSheet: vi.fn(),
@@ -265,8 +261,6 @@ describe('ImmersiveView — toggle maestro del metrónomo (TANDA B)', () => {
   async function enterSyncSessionWithBeats() {
     const song = buildSong();
     const { getSongAudio } = await import('../lib/songAudioApi.js');
-    const { isFeatureEnabled } = await import('../lib/authStore.js');
-    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
     getSongAudio.mockResolvedValueOnce({
       audio: { url: 'https://example.com/full.mp3', bpmManual: 120, timeSignature: '4/4' },
       timings: {
@@ -294,8 +288,6 @@ describe('ImmersiveView — toggle maestro del metrónomo (TANDA B)', () => {
   async function enterSyncSessionForCountIn() {
     const song = buildSong();
     const { getSongAudio } = await import('../lib/songAudioApi.js');
-    const { isFeatureEnabled } = await import('../lib/authStore.js');
-    isFeatureEnabled.mockImplementation((key) => key === 'voz_tono' || key === 'immersive_player');
     getSongAudio.mockResolvedValueOnce({
       audio: { url: 'https://example.com/full.mp3', bpmManual: 120, timeSignature: '4/4' },
       timings: {

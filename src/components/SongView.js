@@ -30,7 +30,7 @@ import { getChordNotation, setChordNotation } from '../lib/chordNotation.js';
 import { resolveLabelOverlaps, observeLabelOverlaps } from '../lib/labelOverlap.js';
 import { getTranspose, setTranspose, normalizeSemitones } from '../lib/transposeStore.js';
 import { getLayers, setLayer, deriveViewMode } from '../lib/layerStore.js';
-import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
+import { isAdmin } from '../lib/authStore.js';
 import { getPipelineRun } from '../lib/pipelineApi.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { isFavorite, toggleFavorite } from '../lib/favorites.js';
@@ -264,14 +264,14 @@ async function _renderSongBody(container, songId, isPreview, song) {
   }
 
   let fontSize = getFontSize();
-  // Modo Tono: solo con el flag voz_tono. chordsCategory/chordsVoiceId (panel
-  // Voz unificado) dirigen el disclosure categoría→persona del modo notas.
-  const tonoEnabled = isFeatureEnabled('voz_tono');
+  // Modo Tono: disponible siempre que la canción tenga roster de voces.
+  // chordsCategory/chordsVoiceId (panel Voz unificado) dirigen el disclosure
+  // categoría→persona del modo notas.
   // hasChords/tonoAvailable se adelantan (antes vivían más abajo) porque la
   // derivación de viewMode (FIX finding 1) los necesita para intersectar la
   // preferencia global de capas con lo que la canción realmente soporta.
   const hasChords = songHasChords(song);
-  const tonoAvailable = tonoEnabled && (song.voiceRoster || []).length > 0;
+  const tonoAvailable = (song.voiceRoster || []).length > 0;
   // viewMode: 'lyrics' | 'chords' | 'tono' | 'mixed'. showChords se deriva para
   // no tocar la rama de acordes existente. 'mixed' es la combinación de las
   // capas Acordes+Tono (T3, toolbar de capas) — no es un modo exclusivo nuevo,

@@ -11,7 +11,6 @@ import { refresh, getCurrentPath } from '../router.js';
 const state = {
   session: null,
   profile: null,
-  flags: [],
   // true cuando getSession() devolvió null en boot pero hay un refresh token
   // persistido: la app es offline-first, así que dejamos pasar el guard con
   // datos de caché mientras se reintenta el refresh en background (T1).
@@ -65,10 +64,7 @@ function readPersistedSession() {
 
 function cacheProfileSnapshot() {
   try {
-    localStorage.setItem(
-      PROFILE_CACHE_KEY,
-      JSON.stringify({ profile: state.profile, flags: state.flags }),
-    );
+    localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ profile: state.profile }));
   } catch (_e) {
     /* Safari private mode u otro storage lleno/bloqueado: no es crítico. */
   }
@@ -228,7 +224,6 @@ export async function refreshProfile() {
       return false;
     }
     state.profile = null;
-    state.flags = [];
     return true;
   }
   try {
@@ -238,7 +233,6 @@ export async function refreshProfile() {
     if (res.ok) {
       const data = await res.json();
       state.profile = data.profile;
-      state.flags = Array.isArray(data.flags) ? data.flags : [];
       cacheProfileSnapshot();
       return true;
     }
@@ -246,7 +240,6 @@ export async function refreshProfile() {
     // válido, no queremos dejar UI admin colgada de un caché tras una
     // revocación real. Aquí sí nuleamos.
     state.profile = null;
-    state.flags = [];
     return false;
   } catch (e) {
     // El fetch LANZÓ (red caída, timeout): el server nunca habló. No es una
@@ -261,7 +254,6 @@ export async function refreshProfile() {
       const cached = readCachedProfileSnapshot();
       if (cached) {
         state.profile = cached.profile ?? null;
-        state.flags = Array.isArray(cached.flags) ? cached.flags : [];
       }
     }
     return false;
@@ -303,7 +295,6 @@ export async function initAuthStore() {
       const cached = readCachedProfileSnapshot();
       if (cached) {
         state.profile = cached.profile ?? null;
-        state.flags = Array.isArray(cached.flags) ? cached.flags : [];
       }
       startPendingRetry();
     }
@@ -402,7 +393,6 @@ export async function initAuthStore() {
 async function runSignOutKick(event) {
   intentionalSignOut = false;
   state.profile = null;
-  state.flags = [];
   state.pendingSession = false;
   stopPendingRetry();
   clearProfileCache();
@@ -456,16 +446,6 @@ async function recheckSessionAfterSignOut() {
     console.warn('recheck tras SIGNED_OUT failed', e);
   }
   return false;
-}
-
-/** @param {string} key @returns {boolean} */
-export function isFeatureEnabled(key) {
-  return state.flags.includes(key);
-}
-
-/** Solo para tests. */
-export function __setFlagsForTest(flags) {
-  state.flags = Array.isArray(flags) ? flags : [];
 }
 
 export async function signInWithGoogle() {

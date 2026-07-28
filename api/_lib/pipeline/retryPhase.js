@@ -6,6 +6,7 @@
 // evitan el loop infinito con una fase 'stale' (run 'failed' terminal no
 // reabrible + canStartPhase en false mientras la letra esta reabierta).
 import { canStartPhase, retriesLeft, runStatusFromPhases } from './state.js';
+import { shouldAutoRetry } from './autoRetry.js';
 import { dispatchPhase } from '../../songs/[id]/pipeline/_dispatch.js';
 
 /**
@@ -168,10 +169,78 @@ export async function retryPhase(sql, { songId, phase, auto }) {
         WHERE id = ${run.id}
       `;
     });
-    // Tarea 4: acá va la llamada a maybeAutoRetry (programa o dispara el
-    // próximo reintento automático según shouldAutoRetry).
+    // Tarea 4: el dispatch del reintento (manual o automático) falló. Si
+    // había sido automático, el próximo turno se programa diferido (nunca
+    // inmediato: reintentar en el acto contra un dispatch que recién falló es
+    // el peor caso, R3 del diseño). Si había sido manual, igual puede
+    // corresponder programar uno automático (el admin reintentó a mano una
+    // fase que el circuito automático también puede seguir cubriendo).
+    // Nunca puede romper la respuesta del handler que llamó a retryPhase
+    // (mismo criterio que webhook.js:126-130 para advanceNextPhase).
+    try {
+      await maybeAutoRetry(sql, {
+        runId: run.id,
+        songId,
+        phase,
+        errorText: String(err?.message ?? err),
+        timeout: err?.timeout === true,
+        immediate: false,
+      });
+    } catch (autoRetryErr) {
+      console.error('maybeAutoRetry falló:', autoRetryErr);
+    }
     return { status: 502, error: 'No se pudo reintentar la fase. Intenta de nuevo.' };
   }
 
   return { ok: true };
+}
+
+/**
+ * Evalúa si corresponde un reintento automático de `phase` y, si corresponde,
+ * lo dispara en el acto (`immediate:true`, solo para el primer automático de
+ * la fase) o lo programa para la próxima corrida del cron (`next_retry_at`).
+ *
+ * Requisito de diseño: esta función NUNCA corre dentro de una transacción con
+ * el run lockeado (`FOR UPDATE`) — el SELECT de abajo es una lectura suelta, y
+ * tanto el dispatch de `retryPhase` como el UPDATE de `next_retry_at` corren
+ * fuera de cualquier lock heredado del llamador. Un POST de red con el lock
+ * tomado bloquearía el run entero.
+ *
+ * @param {object} sql - cliente postgres.js del llamador (nunca una tx activa).
+ * @param {{ runId: string, songId: string, phase: string, errorText?: string,
+ *   timeout: boolean, immediate: boolean }} args
+ */
+export async function maybeAutoRetry(sql, { runId, songId, phase, errorText, timeout, immediate }) {
+  const rows = await sql`
+    SELECT phases, auto_retries AS "autoRetries" FROM song_pipeline_runs WHERE id = ${runId}
+  `;
+  if (rows.length === 0) return;
+  const run = rows[0];
+  const phaseState = run.phases?.[phase];
+  if (!phaseState) return;
+
+  const ok = shouldAutoRetry({
+    phase,
+    phaseState,
+    runAutoRetries: run.autoRetries || 0,
+    errorText,
+    timeout,
+  });
+  if (!ok) return;
+
+  // Solo se dispara en el acto el PRIMER automático de la fase: el segundo
+  // (autoRetries ya en 1) siempre va diferido al cron, aunque el llamador
+  // pida immediate:true — mismo criterio que la tabla del plan de diseño.
+  if (immediate && (phaseState.autoRetries || 0) === 0) {
+    await retryPhase(sql, { songId, phase, auto: true });
+    return;
+  }
+
+  // Diferido: solo programa next_retry_at, nunca re-despacha acá. Evita la
+  // recursión sincrónica hacia retryPhase (el catch de arriba llama a esta
+  // misma función con immediate:false).
+  await sql`
+    UPDATE song_pipeline_runs SET next_retry_at = now() + interval '10 minutes'
+    WHERE id = ${runId}
+  `;
 }

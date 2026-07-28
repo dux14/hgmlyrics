@@ -886,6 +886,118 @@ describe('applyPipelinePhaseEvent — durationSec server-side (Task 7)', () => {
 // suyo) correlaciona con el jobId versionado en vez del runId. Ese valor iba
 // directo al WHERE id = ${runId} de una columna uuid -> 22P02 -> 500, y el
 // evento se perdía dejando la fase colgada (incidente 28-jul).
+describe('POST /api/pipeline/webhook — retry automático (Tarea 4)', () => {
+  function transcriptionRunningPhases(overrides = {}) {
+    const phases = initialPhases();
+    phases.upload.status = 'done';
+    phases.stems.status = 'done';
+    phases.stems.tracks = { vocals: 'song-1/stems/vocals.mp3' };
+    phases.transcription = {
+      status: 'running',
+      error: null,
+      retries: 0,
+      autoRetries: 0,
+      ...overrides,
+    };
+    return phases;
+  }
+
+  it('evento ok:false transitorio → re-dispatch inmediato (auto:true)', async () => {
+    const phases = transcriptionRunningPhases();
+    sqlResponses.push([runRow({ phases })]); // SELECT FOR UPDATE (webhook CAS)
+    sqlResponses.push([]); // UPDATE song_pipeline_runs (commit CAS, marca failed)
+
+    const failedPhases = structuredClone(phases);
+    failedPhases.transcription = {
+      ...phases.transcription,
+      status: 'failed',
+      error: 'connection reset',
+    };
+    sqlResponses.push([{ phases: failedPhases, autoRetries: 0 }]); // maybeAutoRetry: SELECT plano
+
+    sqlResponses.push([runRow({ phases: failedPhases, status: 'processing' })]); // retryPhase: claim FOR UPDATE
+    sqlResponses.push([]); // retryPhase: UPDATE (auto:true)
+
+    const res = makeRes();
+    await handler(
+      signedReq({
+        runId: 'run-1',
+        phase: 'transcription',
+        ok: false,
+        error: 'connection reset',
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(dispatchPhaseMock).toHaveBeenCalledWith(
+      'transcription',
+      expect.anything(),
+      expect.objectContaining({ isRetry: true }),
+    );
+    expect(sqlCalls.some((c) => c.text.includes('next_retry_at = now()'))).toBe(false);
+  });
+
+  it('evento ok:false con OOM (permanente) → no re-dispatch', async () => {
+    const phases = transcriptionRunningPhases();
+    sqlResponses.push([runRow({ phases })]); // SELECT FOR UPDATE
+    sqlResponses.push([]); // UPDATE song_pipeline_runs (commit CAS)
+
+    const failedPhases = structuredClone(phases);
+    failedPhases.transcription = {
+      ...phases.transcription,
+      status: 'failed',
+      error: 'CUDA out of memory',
+    };
+    sqlResponses.push([{ phases: failedPhases, autoRetries: 0 }]); // maybeAutoRetry: SELECT plano
+
+    const res = makeRes();
+    await handler(
+      signedReq({
+        runId: 'run-1',
+        phase: 'transcription',
+        ok: false,
+        error: 'CUDA out of memory',
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(dispatchPhaseMock).not.toHaveBeenCalled();
+    expect(sqlCalls.filter((c) => c.text.includes('UPDATE song_pipeline_runs')).length).toBe(1);
+  });
+
+  it('segundo fallo transitorio de la misma fase (autoRetries ya en 1) → no re-dispatch, programa next_retry_at', async () => {
+    const phases = transcriptionRunningPhases({ retries: 1, autoRetries: 1 });
+    sqlResponses.push([runRow({ phases })]); // SELECT FOR UPDATE
+    sqlResponses.push([]); // UPDATE song_pipeline_runs (commit CAS)
+
+    const failedPhases = structuredClone(phases);
+    failedPhases.transcription = {
+      ...phases.transcription,
+      status: 'failed',
+      error: 'connection reset',
+    };
+    sqlResponses.push([{ phases: failedPhases, autoRetries: 1 }]); // maybeAutoRetry: SELECT plano
+    sqlResponses.push([]); // UPDATE next_retry_at
+
+    const res = makeRes();
+    await handler(
+      signedReq({
+        runId: 'run-1',
+        phase: 'transcription',
+        ok: false,
+        error: 'connection reset',
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(dispatchPhaseMock).not.toHaveBeenCalled();
+    expect(sqlCalls.some((c) => c.text.includes('next_retry_at = now()'))).toBe(true);
+  });
+});
+
 describe('POST /api/pipeline/webhook — runId versionado por ciclo de letra', () => {
   it('normaliza `runId:snapshotHash` al runId plano antes de consultar', async () => {
     const phases = initialPhases();

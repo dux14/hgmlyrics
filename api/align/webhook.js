@@ -12,6 +12,7 @@ import { projectCanonicalLines } from '../_lib/align.js';
 import { validateBeats } from '../_lib/beats.js';
 import { applyPipelinePhaseEvent, isStaleSnapshot } from '../_lib/pipeline/process.js';
 import { ADVANCE_AFTER, advanceNextPhase } from '../_lib/pipeline/advance.js';
+import { maybeAutoRetry } from '../_lib/pipeline/retryPhase.js';
 import { canStartPhase } from '../_lib/pipeline/state.js';
 
 // Puente hacia el run unificado (pipeline por canción): este webhook es el
@@ -45,6 +46,24 @@ async function notifyPipelineSync(songId, ok, error, snapshotHash) {
       error,
       snapshotHash,
     });
+    // Tarea 4 (retry automático transversal): mismo enganche que
+    // api/pipeline/webhook.js — el job corrió y falló, 1.er reintento
+    // inmediato. Un fallo acá no debe propagarse (ya estamos dentro del
+    // try/catch de notifyPipelineSync, que nunca rompe el 200 del webhook).
+    if (outcome?.next?.sync?.status === 'failed') {
+      try {
+        await maybeAutoRetry(sql, {
+          runId: run.id,
+          songId,
+          phase: 'sync',
+          errorText: outcome.next.sync.error,
+          timeout: false,
+          immediate: true,
+        });
+      } catch (autoRetryErr) {
+        console.error('maybeAutoRetry falló:', autoRetryErr);
+      }
+    }
     const advance = outcome?.next && ADVANCE_AFTER.sync;
     if (advance && canStartPhase(outcome.next, advance)) {
       await advanceNextPhase(sql, run.id, songId, advance);

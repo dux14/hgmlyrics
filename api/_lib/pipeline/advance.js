@@ -4,6 +4,7 @@
 // ver notifyPipelineSync). Extraído para que ambos webhooks reusen el mismo
 // CAS transaccional en vez de duplicar la lógica (y quedar desincronizados).
 import { canStartPhase, runStatusFromPhases } from './state.js';
+import { maybeAutoRetry } from './retryPhase.js';
 import { dispatchPhase } from '../../songs/[id]/pipeline/_dispatch.js';
 
 // Fase que se dispara automáticamente al completarse la fase clave (DAG
@@ -51,14 +52,22 @@ export async function advanceNextPhase(sql, runId, songId, phase) {
       // ciegas (pagaría GPU doble) — si el job sigue vivo su webhook igual
       // rescata esta fase 'failed' (ver isLateSuccessRescue en state.js).
       const error = err?.timeout
-        ? `${String(err?.message ?? err).slice(0, 180)} El job pudo haber arrancado en Modal igual; si termina, su resultado se aplica solo.`.slice(0, 300)
+        ? `${String(err?.message ?? err).slice(0, 180)} El job pudo haber arrancado en Modal igual; si termina, su resultado se aplica solo.`.slice(
+            0,
+            300,
+          )
         : String(err?.message ?? err).slice(0, 300);
       // Preserva tracks/artifacts ya publicados por esa fase (fix HIGH 1,
       // auditoría 27-jul): un UPDATE ciego con solo {status,error,retries}
       // borraba p.ej. `phases.stems.tracks`, y DEPS.transcription/DEPS.pitch
       // (state.js) miran el track, no el status -- sin él, canStartPhase
       // queda en false para siempre y el run es irrecuperable sin tocar la DB.
-      failed[phase] = { ...fresh[phase], status: 'failed', error, retries: fresh[phase]?.retries || 0 };
+      failed[phase] = {
+        ...fresh[phase],
+        status: 'failed',
+        error,
+        retries: fresh[phase]?.retries || 0,
+      };
       // Igual que retry.js (Task 11): si esta fase es crítica y ya agotó sus
       // reintentos, el run entero debe derivar a 'failed' -- sin esto quedaba
       // 'processing' para siempre y bloqueaba crear otro run para la canción
@@ -69,5 +78,22 @@ export async function advanceNextPhase(sql, runId, songId, phase) {
         WHERE id = ${runId}
       `;
     });
+    // Tarea 4: el POST de dispatch falló (no un ok:false del job). Política
+    // siempre diferida (R3: reintentar en el acto contra un servicio caído es
+    // el peor caso) — nunca rompe la respuesta del webhook que llamó a
+    // advanceNextPhase (mismo criterio que el bloque de arriba y el de
+    // webhook.js:126-130).
+    try {
+      await maybeAutoRetry(sql, {
+        runId,
+        songId,
+        phase,
+        errorText: String(err?.message ?? err),
+        timeout: err?.timeout === true,
+        immediate: false,
+      });
+    } catch (autoRetryErr) {
+      console.error('maybeAutoRetry falló:', autoRetryErr);
+    }
   }
 }

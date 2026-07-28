@@ -60,6 +60,7 @@ const SUBTITLES = {
     running: 'Separando pistas...',
     done: 'Pistas separadas',
     failed: 'No se pudo separar las pistas',
+    retrying: 'Reintentando separar las pistas...',
   },
   structure: {
     pending: 'En espera',
@@ -81,6 +82,7 @@ const SUBTITLES = {
     done: 'Sincronía lista',
     failed: 'No se pudo sincronizar',
     stale: 'Desactualizado respecto a la letra',
+    retrying: 'Reintentando sincronizar...',
   },
   pitch: {
     pending: 'En espera',
@@ -89,6 +91,7 @@ const SUBTITLES = {
     done: 'Tono por sílaba listo',
     failed: 'No se pudo calcular el tono',
     stale: 'Desactualizado respecto a la letra',
+    retrying: 'Reintentando calcular el tono...',
   },
   clips: {
     pending: 'En espera',
@@ -97,8 +100,25 @@ const SUBTITLES = {
     done: 'Clips por sección listos',
     failed: 'No se pudieron generar los clips',
     stale: 'Desactualizado respecto a la letra',
+    retrying: 'Reintentando generar los clips...',
   },
 };
+
+// Entrega 2 (retry automático transversal): fases con reintento automático
+// que SÍ tienen fila propia en el stepper (espejo de AUTO_RETRYABLE_PHASES de
+// api/_lib/pipeline/autoRetry.js, menos 'structure' -- best-effort, ya se
+// desvía antes de llegar a describePhase -- y 'transcription', que no tiene
+// fila: vive adentro de la fila Letra).
+const AUTO_RETRY_ROW_PHASES = new Set(['stems', 'sync', 'pitch', 'clips']);
+
+// Espejo de AUTO_MAX_RETRIES/autoRetriesLeft (api/_lib/pipeline/autoRetry.js):
+// se duplica en vez de importarse porque src/ no depende de api/_lib (front y
+// funciones de Vercel son bundles separados). Si el tope cambia en el
+// backend, actualizar acá también.
+const AUTO_MAX_RETRIES = 2;
+function autoRetriesLeft(phase) {
+  return AUTO_MAX_RETRIES - (phase?.autoRetries || 0);
+}
 
 /** Botón "Publicar al cancionero" (F4): copia SOLO el texto de la letra
  * aprobada del pipeline a songs.sections (one-way, sin correr alignment — el
@@ -435,9 +455,15 @@ export function renderSongPipelineView(container, songId) {
     }
 
     if (status === 'failed') {
+      // Retry automático transversal (Entrega 2): mientras la fase todavía
+      // tenga presupuesto automático, el sistema va a reintentar solo (de
+      // inmediato o en el próximo cron) -- "Reintentando" evita que el admin
+      // lea el mismo copy de "se rindió" mientras el retry sigue en curso. El
+      // botón manual queda igual, disponible en ambos casos.
+      const retrying = AUTO_RETRY_ROW_PHASES.has(key) && autoRetriesLeft(phase) > 0;
       return {
-        state: 'failed',
-        subtitle: table.failed,
+        state: retrying ? 'retrying' : 'failed',
+        subtitle: retrying ? table.retrying : table.failed,
         actionLabel: 'Reintentar fase',
         onRetry: async (k) => {
           try {

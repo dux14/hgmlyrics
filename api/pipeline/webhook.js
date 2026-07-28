@@ -16,6 +16,7 @@ import { PHASES, canStartPhase } from '../_lib/pipeline/state.js';
 import { applyPipelinePhaseEvent } from '../_lib/pipeline/process.js';
 import { sectionEventToPhaseEvent } from '../_lib/pipeline/stemsAdapter.js';
 import { ADVANCE_AFTER, advanceNextPhase } from '../_lib/pipeline/advance.js';
+import { maybeAutoRetry } from '../_lib/pipeline/retryPhase.js';
 import { SECTION_KEYS } from '../stems/_sections.js';
 
 // Raw body necesario para verificar la firma HMAC.
@@ -54,15 +55,18 @@ export default withErrors(async (req, res) => {
   // secreto de pitch emitiera eventos de stems/clips/structure. La fase de
   // sección de stems (evento sin `phase`, ver adapter abajo) siempre usa
   // MODAL_WEBHOOK_SECRET.
-  const secret = event.phase === 'pitch'
-    ? process.env.PITCH_MODAL_WEBHOOK_SECRET
-    : process.env.MODAL_WEBHOOK_SECRET;
-  const okSignature = Boolean(secret) && verifyModalSignature({
-    timestamp: req.headers['x-modal-timestamp'],
-    signature: req.headers['x-modal-signature'],
-    body,
-    secret,
-  });
+  const secret =
+    event.phase === 'pitch'
+      ? process.env.PITCH_MODAL_WEBHOOK_SECRET
+      : process.env.MODAL_WEBHOOK_SECRET;
+  const okSignature =
+    Boolean(secret) &&
+    verifyModalSignature({
+      timestamp: req.headers['x-modal-timestamp'],
+      signature: req.headers['x-modal-signature'],
+      body,
+      secret,
+    });
   if (!okSignature) {
     res.status(401).json({ error: 'Firma de webhook inválida' });
     return;
@@ -116,6 +120,25 @@ export default withErrors(async (req, res) => {
   if (outcome.stale) {
     res.status(200).json({ stale: true });
     return;
+  }
+
+  // Tarea 4 (retry automático transversal): el job SÍ corrió en Modal y
+  // falló (webhook con ok:false) — política de 1.er reintento inmediato. Un
+  // fallo acá jamás debe romper el 200 del webhook (mismo criterio que el
+  // catch de advanceNextPhase de abajo).
+  if (outcome.next?.[phase]?.status === 'failed') {
+    try {
+      await maybeAutoRetry(sql, {
+        runId,
+        songId: outcome.songId,
+        phase,
+        errorText: outcome.next[phase].error,
+        timeout: false,
+        immediate: true,
+      });
+    } catch (err) {
+      console.error('maybeAutoRetry falló:', err);
+    }
   }
 
   const advance = ADVANCE_AFTER[phase];

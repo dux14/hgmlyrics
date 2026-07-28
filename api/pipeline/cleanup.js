@@ -2,10 +2,16 @@
  * cleanup.js — Cron de limpieza del pipeline unificado (song_pipeline_runs).
  * Calca el patrón de auth/http de api/stems/cleanup.js.
  *
+ * 0) Reintentos automáticos diferidos (`next_retry_at` vencido) → se disparan
+ *    vía `retryPhase(..., { auto: true })`. Va ANTES del paso 1 (zombis)
+ *    porque `retryPhase` deja la fase en 'running' con `updated_at = now()`,
+ *    así el paso 1 no la mata en la misma corrida.
  * 1) Fases 'running' zombis (run sin updates > 30 min) → 'failed' (timeout),
  *    con CAS: se re-lee `phases` dentro de la transacción (FOR UPDATE) y solo
  *    se toca la fase si SIGUE en 'running' — evita pisar un webhook de Modal
- *    que completó la fase entre el candidato y el UPDATE.
+ *    que completó la fase entre el candidato y el UPDATE. Si la fase que
+ *    queda failed pasa `shouldAutoRetry`, se programa `next_retry_at` (nunca
+ *    inmediato: un job que se colgó 30 min no es un transitorio de segundos).
  * 2) Runs 'created'/'uploading' abandonados (> 24h) → se borran junto con el
  *    storage de su input.
  * 3) Runs 'superseded' → se borra el storage de su input (el prefijo
@@ -21,6 +27,12 @@ import { allowMethods, withErrors } from '../_lib/http.js';
 import { timingSafeEqualStr } from '../_lib/crypto.js';
 import { deleteSongAudioObject, deleteSongAudioPrefix } from '../_lib/storage.js';
 import { applyPhaseEvent, runStatusFromPhases, PHASES } from '../_lib/pipeline/state.js';
+import { shouldAutoRetry } from '../_lib/pipeline/autoRetry.js';
+import { retryPhase } from '../_lib/pipeline/retryPhase.js';
+
+// Mismo texto que escribe el paso 1 al marcar una fase zombi. classifyFailure
+// (autoRetry.js) lo trata como transitorio: no matchea ningún patrón permanente.
+const ZOMBIE_ERROR = 'La fase tardó demasiado y fue cancelada.';
 
 // Vercel cron manda Authorization: Bearer ${CRON_SECRET}
 export default withErrors(async (req, res) => {
@@ -32,6 +44,48 @@ export default withErrors(async (req, res) => {
     res.status(401).json({ error: 'No autorizado' });
     return;
   }
+
+  // 0) Reintentos diferidos: runs con next_retry_at vencido. El dispatch de
+  // retryPhase es una llamada de red — nunca corre dentro de una tx con el
+  // run lockeado, por eso este paso vive fuera de sql.begin().
+  const dueRuns = await sql`
+    SELECT id, song_id AS "songId", phases, auto_retries AS "autoRetries"
+    FROM song_pipeline_runs
+    WHERE next_retry_at IS NOT NULL AND next_retry_at <= now()
+      AND status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')
+    LIMIT 50
+  `;
+  let autoRetried = 0;
+  // allSettled: un run que explota (dispatch caído, fila borrada entre medio)
+  // no puede abortar la corrida ni el resto de los pasos.
+  await Promise.allSettled(
+    dueRuns.map(async (run) => {
+      let retriedAny = false;
+      for (const phase of PHASES) {
+        const phaseState = run.phases[phase];
+        if (phaseState?.status !== 'failed') continue;
+        if (
+          !shouldAutoRetry({
+            phase,
+            phaseState,
+            runAutoRetries: run.autoRetries || 0,
+            errorText: phaseState.error,
+            timeout: false,
+          })
+        ) {
+          continue;
+        }
+        retriedAny = true;
+        const result = await retryPhase(sql, { songId: run.songId, phase, auto: true });
+        if (result.ok) autoRetried += 1;
+      }
+      // Ninguna fase calificó: limpiar next_retry_at para no re-escanear esta
+      // fila en cada corrida horaria (el estado no va a cambiar solo).
+      if (!retriedAny) {
+        await sql`UPDATE song_pipeline_runs SET next_retry_at = NULL WHERE id = ${run.id}`;
+      }
+    }),
+  );
 
   // 1) Fases zombi: running > 30 min sin actividad → failed (timeout).
   // LIMIT 200: el resto lo procesa la próxima corrida horaria (maxDuration=60).
@@ -45,32 +99,55 @@ export default withErrors(async (req, res) => {
   for (const { id } of staleCandidates) {
     const marked = await sql.begin(async (tx) => {
       const rows = await tx`
-        SELECT phases FROM song_pipeline_runs WHERE id = ${id} FOR UPDATE
+        SELECT phases, auto_retries AS "autoRetries" FROM song_pipeline_runs WHERE id = ${id} FOR UPDATE
       `;
       if (rows.length === 0) return false;
       // Re-verificar dentro de la tx: si un webhook completó la fase entre el
       // candidato de arriba y este FOR UPDATE, ya no aparecerá como 'running'.
       let phases = rows[0].phases;
       let changed = false;
+      let scheduleRetry = false;
       for (const phase of PHASES) {
         if (phases[phase]?.status !== 'running') continue;
         const next = applyPhaseEvent(phases, {
           phase,
           ok: false,
-          error: 'La fase tardó demasiado y fue cancelada.',
+          error: ZOMBIE_ERROR,
         });
         if (next) {
           phases = next;
           changed = true;
+          // Diferido siempre: un job colgado 30 min no es un transitorio de
+          // segundos (a diferencia del `ok:false` inmediato del webhook).
+          if (
+            shouldAutoRetry({
+              phase,
+              phaseState: next[phase],
+              runAutoRetries: rows[0].autoRetries || 0,
+              errorText: ZOMBIE_ERROR,
+              timeout: false,
+            })
+          ) {
+            scheduleRetry = true;
+          }
         }
       }
       if (!changed) return false;
       const status = runStatusFromPhases(phases);
-      await tx`
-        UPDATE song_pipeline_runs
-        SET phases = ${tx.json(phases)}, status = ${status}, updated_at = now()
-        WHERE id = ${id}
-      `;
+      if (scheduleRetry) {
+        await tx`
+          UPDATE song_pipeline_runs
+          SET phases = ${tx.json(phases)}, status = ${status},
+              next_retry_at = now() + interval '10 minutes', updated_at = now()
+          WHERE id = ${id}
+        `;
+      } else {
+        await tx`
+          UPDATE song_pipeline_runs
+          SET phases = ${tx.json(phases)}, status = ${status}, updated_at = now()
+          WHERE id = ${id}
+        `;
+      }
       return true;
     });
     if (marked) timedOut += 1;
@@ -130,6 +207,7 @@ export default withErrors(async (req, res) => {
   }
 
   res.status(200).json({
+    autoRetried,
     timedOut,
     abandoned: abandoned.length,
     supersededCleaned: cleared.length,

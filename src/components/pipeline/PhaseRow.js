@@ -4,7 +4,9 @@
  * contenido real de Audio/Pistas/Sincronía dentro de ese slot). Estados del
  * dot: done (check verde), act (ámbar, requiere acción — cubre failed,
  * stale y letra por revisar), run (cyan, procesando, con loader inline por
- * fase), wait (número, en espera o bloqueada por la letra).
+ * fase; retrying comparte este tratamiento -- el reintento automático de la
+ * Entrega 2 todavía está en curso, no requiere acción del admin), wait
+ * (número, en espera o bloqueada por la letra).
  */
 import { icon } from '../../lib/icons.js';
 import { escapeHtml } from '../../lib/escape.js';
@@ -30,6 +32,7 @@ const DOT_CLASS = {
   failed: 'act',
   stale: 'act',
   running: 'run',
+  retrying: 'run',
   pending: 'wait',
   blocked: 'wait',
 };
@@ -82,7 +85,7 @@ export function PhaseRow({
     <div class="dot ${dotClass}">${dotContent(dotClass, index)}</div>
     <div class="phase__body">
       <h4 class="phase__title">${escapeHtml(title)}</h4>
-      <p class="phase__subtitle">${escapeHtml(subtitle)}${state === 'running' ? loaderHtml(key) : ''}</p>
+      <p class="phase__subtitle">${escapeHtml(subtitle)}${state === 'running' || state === 'retrying' ? loaderHtml(key) : ''}</p>
       ${error ? `<p class="phase__error">${escapeHtml(error)}</p>` : ''}
       ${showsAction ? `<button type="button" class="phase__action">${escapeHtml(actionLabel)}</button>` : ''}
       <div class="phase__detail"></div>

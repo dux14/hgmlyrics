@@ -337,6 +337,60 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     expect(retryPipelinePhase).toHaveBeenCalledWith(SONG_ID, 'clips');
   });
 
+  describe('retry automático transversal (Entrega 2, Tarea 6)', () => {
+    // phase.autoRetries llega tal cual del GET del run (jsonb `phases`, sin
+    // transformación del endpoint) -- ver api/songs/[id]/pipeline.js signTracks.
+    it('fase failed con autoRetries pendientes: pinta "Reintentando" en vez de darse por vencido', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({
+          lyrics_review: { status: 'done' },
+          sync: { status: 'done' },
+          pitch: { status: 'failed', error: 'boom', autoRetries: 0 },
+        }),
+      });
+
+      const row = container.querySelector('[data-phase="pitch"]');
+      expect(row.textContent).toContain('Reintentando calcular el tono...');
+      expect(row.textContent).not.toContain('No se pudo calcular el tono');
+      expect(row.querySelector('.dot.run')).toBeTruthy();
+      expect(row.querySelector('.dot.act')).toBeFalsy();
+      // El botón manual sigue disponible mientras el auto-retry está en curso.
+      const btn = row.querySelector('.phase__action');
+      expect(btn.textContent).toBe('Reintentar fase');
+      btn.click();
+      expect(retryPipelinePhase).toHaveBeenCalledWith(SONG_ID, 'pitch');
+    });
+
+    it('fase failed con autoRetries agotados: vuelve al copy de "se rindió" (estado .act)', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({
+          lyrics_review: { status: 'done' },
+          sync: { status: 'done' },
+          pitch: { status: 'failed', error: 'boom', autoRetries: 2 },
+        }),
+      });
+
+      const row = container.querySelector('[data-phase="pitch"]');
+      expect(row.textContent).toContain('No se pudo calcular el tono');
+      expect(row.querySelector('.dot.act')).toBeTruthy();
+      expect(row.querySelector('.dot.run')).toBeFalsy();
+    });
+
+    it('structure failed con autoRetries pendientes: sigue pintándose como pending, best-effort', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ structure: { status: 'failed', error: 'boom', autoRetries: 0 } }),
+      });
+
+      const row = container.querySelector('[data-phase="structure"]');
+      expect(row.textContent).toContain('No se pudo detectar la estructura');
+      expect(row.textContent).not.toContain('Reintentando');
+      expect(row.querySelector('.phase__action')).toBeFalsy();
+    });
+  });
+
   it('fila clips (#8): tiene su propia fila en el stepper y bloquea si la letra no está aprobada', () => {
     renderSongPipelineView(container, SONG_ID);
     watchOnChange({ run: buildRun() });

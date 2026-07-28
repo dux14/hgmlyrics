@@ -88,6 +88,27 @@ def _normalize_label(raw: str) -> str:
     return _LABEL_MAP.get(raw.lower().strip(), raw)
 
 
+def _worker_error(stderr: str) -> str:
+    """
+    Extrae de `stderr` la causa que un worker de infer.py dejo al fallar.
+
+    Cada hijo loguea `process {rank} error\\n{item}\\n{e}` y sigue vivo, asi que
+    el padre sale con rc=0 (ver el RuntimeError de _run_inference). Se buscan
+    esas lineas de error de atras hacia adelante y se devuelven las ultimas,
+    que son las que caben en los 400 chars a los que run_songformer trunca el
+    webhook. Si no hay ninguna, cae a la cola cruda del stderr.
+    """
+    if not stderr:
+        return "(stderr vacio)"
+    lines = [ln.strip() for ln in stderr.splitlines() if ln.strip()]
+    marked = [
+        ln for ln in lines
+        if "error" in ln.lower() or "Error" in ln or "out of memory" in ln.lower()
+    ]
+    picked = marked[-3:] if marked else lines[-3:]
+    return " | ".join(picked)[:260]
+
+
 def _run_inference(audio_path: str) -> list[dict]:
     """
     Corre la inferencia de estructura de SongFormer sobre `audio_path` invocando
@@ -157,9 +178,25 @@ def _run_inference(audio_path: str) -> list[dict]:
             if fn.endswith(".json")
         ]
         if not found:
+            # rc=0 y sin JSON es el modo de fallo NORMAL de infer.py, no una
+            # rareza: reparte los items del .scp entre procesos hijos y cada
+            # worker envuelve su inferencia en `except Exception as e:
+            # logger.error(...)`. El padre hace `p.join()` sin mirar
+            # `p.exitcode` y sale con 0 igual. Es decir: la excepcion real
+            # (OOM de la T4, audio ilegible, etc.) SOLO existe en el STDERR
+            # del hijo — el STDOUT trae apenas el "num_threads: N on GPU M"
+            # con que cada worker se anuncia. Sin STDERR aqui, todo fallo de
+            # esta seccion se reporta con el mismo mensaje inutil (caso real
+            # 28-jul-2026, run 5963fbd5).
+            # run_songformer trunca el error a 400 chars al postear el webhook,
+            # asi que la causa va PRIMERO: las lineas de error que el worker
+            # dejo en STDERR. El volcado completo queda despues, para los logs
+            # de Modal (que no truncan).
             raise RuntimeError(
-                f"SongFormer no produjo JSON en {out_dir}. "
-                f"STDOUT:\n{proc.stdout[-1000:]}"
+                f"SongFormer no produjo JSON (rc=0: infer.py se traga las excepciones "
+                f"de sus workers). Causa: {_worker_error(proc.stderr)}\n"
+                f"--- STDERR ---\n{proc.stderr[-2000:]}\n"
+                f"--- STDOUT ---\n{proc.stdout[-1000:]}"
             )
         out_json = found[0]
 

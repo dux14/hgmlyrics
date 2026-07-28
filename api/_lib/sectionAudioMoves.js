@@ -66,15 +66,25 @@ export function validateSectionAudioMoves(moves, sectionCount) {
  * dejando el índice `to` final. El offset es positivo (nunca negativo) a
  * propósito: el schema tiene CHECK (section_index >= 0), así que una fase
  * temporal negativa viola el CHECK en cuanto toca una fila real.
+ * Fase 1 es un único UPDATE con `unnest` de dos arrays (from/to+offset) en vez
+ * de un UPDATE por move: es el único loop de SQL secuencial del repo (hallazgo
+ * de auditoría), y el editor puede mandar tantos moves como secciones tenga
+ * la canción. `unnest` sobre dos arrays paralelos es la forma estándar de
+ * Postgres de expresar un `UPDATE ... FROM (VALUES ...)` sin construir el
+ * VALUES a mano fila por fila.
  * @param {import('postgres').TransactionSql} tx
  * @param {string} songId
  * @param {Array<{from:number,to:number}>} moves
  */
 export async function applySectionAudioMoves(tx, songId, moves) {
-  for (const m of moves) {
+  if (moves.length > 0) {
+    const froms = moves.map((m) => m.from);
+    const temps = moves.map((m) => MOVE_OFFSET + m.to);
     await tx`
-      UPDATE song_section_audio SET section_index = ${MOVE_OFFSET + m.to}
-      WHERE song_id = ${songId} AND section_index = ${m.from}
+      UPDATE song_section_audio AS sa
+      SET section_index = u.temp_idx
+      FROM unnest(${froms}::int[], ${temps}::int[]) AS u(from_idx, temp_idx)
+      WHERE sa.song_id = ${songId} AND sa.section_index = u.from_idx
     `;
   }
   await tx`

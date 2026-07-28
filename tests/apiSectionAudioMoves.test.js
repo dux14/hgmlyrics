@@ -98,18 +98,18 @@ describe('applySectionAudioMoves', () => {
   // negativo violaría ese CHECK en cuanto tocara una fila real. Por eso la
   // fase temporal usa un offset POSITIVO (MOVE_OFFSET = 1_000_000) en vez de
   // -1-to.
-  it('fase 1: manda cada from a un índice temporal MOVE_OFFSET+to (positivo)', async () => {
+  it('fase 1: un único UPDATE con unnest(froms, temps) para todos los moves', async () => {
     const tx = makeFakeTx();
     await applySectionAudioMoves(tx, 'song-1', [
       { from: 0, to: 1 },
       { from: 1, to: 0 },
     ]);
 
-    // Fase 1 son las primeras N llamadas (una por move), fase 2 es la última.
-    const phase1 = tx.calls.slice(0, 2);
-    expect(phase1[0].text).toMatch(/UPDATE song_section_audio SET section_index/);
-    expect(phase1[0].values).toEqual([1_000_001, 'song-1', 0]); // to=1 -> 1e6+1, songId, from=0
-    expect(phase1[1].values).toEqual([1_000_000, 'song-1', 1]); // to=0 -> 1e6+0, songId, from=1
+    // Fase 1 es UNA sola llamada (no una por move), fase 2 es la última.
+    expect(tx.calls).toHaveLength(2);
+    const phase1 = tx.calls[0];
+    expect(phase1.text).toMatch(/UPDATE song_section_audio.*unnest/s);
+    expect(phase1.values).toEqual([[0, 1], [1_000_001, 1_000_000], 'song-1']);
   });
 
   it('fase 2: resta el offset de todo lo que quedó por encima, para ese song_id', async () => {
@@ -121,7 +121,7 @@ describe('applySectionAudioMoves', () => {
     expect(phase2.values).toEqual([1_000_000, 'song-1', 1_000_000]);
   });
 
-  it('sin moves: no ejecuta ninguna query', async () => {
+  it('sin moves: no ejecuta el UPDATE de fase 1, solo la fase 2', async () => {
     const tx = makeFakeTx();
     await applySectionAudioMoves(tx, 'song-1', []);
     expect(tx.calls).toHaveLength(1); // solo la fase 2 (resta offset, no-op si nada quedó por encima)
@@ -139,10 +139,13 @@ describe('applySectionAudioMoves', () => {
       { from: 2, to: 1 },
     ]);
 
-    // El primer valor de cada UPDATE (fase 1 y fase 2) es el que se asigna a
-    // section_index — nunca debe ser negativo.
-    for (const call of tx.calls) {
-      expect(call.values[0]).toBeGreaterThanOrEqual(0);
+    // Fase 1: el array de temporales (segundo parámetro, el que se asigna a
+    // section_index vía unnest) nunca debe traer negativos.
+    const phase1Temps = tx.calls[0].values[1];
+    for (const temp of phase1Temps) {
+      expect(temp).toBeGreaterThanOrEqual(0);
     }
+    // Fase 2: el offset restado también es no-negativo.
+    expect(tx.calls[tx.calls.length - 1].values[0]).toBeGreaterThanOrEqual(0);
   });
 });

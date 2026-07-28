@@ -69,7 +69,8 @@ function insertCallsFor(table) {
   );
 }
 
-// sectionAudioMoves aplica dos UPDATE por-move: matchea por el fragmento
+// sectionAudioMoves aplica un único UPDATE (unnest) para fase 1 + un UPDATE
+// para fase 2, sin importar cuántos moves haya: matchea por el fragmento
 // característico de cada fase (ver api/_lib/sectionAudioMoves.js).
 function moveCallsFor(fragment) {
   return mockTx.mock.calls.filter(
@@ -175,8 +176,8 @@ describe('PUT /api/songs/[id].js — guardado atómico con links', () => {
     const res = makeRes();
     await handler(req, res);
     expect(res._status).toBe(200);
-    // 2 UPDATE de fase 1 (uno por move) + 1 UPDATE de fase 2 (des-negativiza).
-    expect(moveCallsFor('song_section_audio')).toHaveLength(3);
+    // 1 UPDATE de fase 1 (unnest, cubre ambos moves) + 1 UPDATE de fase 2 (des-negativiza).
+    expect(moveCallsFor('song_section_audio')).toHaveLength(2);
   });
 
   it('con sectionAudioMoves inválidos (fuera de rango): 400 y no llama begin', async () => {

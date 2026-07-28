@@ -215,6 +215,14 @@
      pero la reserva de layout (y todos los sticky top: var(--header-height))
      crecen solos bajo el notch. */
   --header-height: calc(52px + var(--safe-top));
+  /* Altura del app bar propio de las vistas de tarea del pipeline
+     (procesamiento / estudio / partitura), que corren headerless: no hay
+     header global detrás, así que el app bar absorbe el safe-area superior.
+     Es un PISO deliberado (el bar real mide algo más): los sticky anidados
+     que se anclan a esta variable quedan unos px por debajo de su borde y el
+     bar los tapa con su z-index mayor. Anclarlos a la altura exacta dejaría
+     una franja por la que se vería pasar el contenido si el bar creciera. */
+  --pv-header-h: calc(60px + var(--safe-top));
   --bottom-nav-height: 56px;
   /* Alto extra del bottom-nav cuando la máscara del fade superior está activa
      (layout.css la sube a 8px dentro de @supports mask-image). */

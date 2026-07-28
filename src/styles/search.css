@@ -92,10 +92,13 @@
    Scope: solo /buscar (.main--bleed). El wrapper sticky se convierte en banda negra
    (z-index > --z-header = 200) que cubre el header fijo al scrollear. Sin JS extra.
    En reposo (scroll=0) el wrapper está en su posición natural (y=var(--header-height)), header visible.
-   Al scrollear: wrapper sticks en top:0 y tapa el header — resultado visual requerido. */
+   Al scrollear: wrapper sticks en top:var(--safe-top) y tapa el header — resultado visual requerido.
+   El anclaje NO es 0: la pill quedaba bajo la barra de estado del iPhone. La franja del
+   safe-area la sigue cubriendo el header fijo, que en /buscar no tiene auto-hide y lleva
+   el mismo fondo sólido, así que el efecto de banda continua se mantiene. */
 .main--bleed .search-bar-wrap {
   position: sticky;
-  top: 0;
+  top: var(--safe-top);
   z-index: calc(var(--z-header) + 1); /* 201 > 200 = cubre el header fijo */
   background: var(--color-bg); /* fondo negro sólido — mismo que .header */
   padding: var(--space-sm) var(--space-md);

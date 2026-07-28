@@ -38,9 +38,12 @@ body.chrome-hidden .main {
   margin: 0 var(--space-md) var(--space-md);
 }
 
+/* El panel se monta dentro de `.pipeline-view`, bajo su app bar sticky: se
+   ancla a `--pv-header-h` en vez de a 0 para no montarse sobre el bar (ni,
+   con él, sobre la barra de estado del iPhone) al desplazarse. */
 .lrp__header {
   position: sticky;
-  top: 0;
+  top: var(--pv-header-h);
   z-index: 1;
   display: flex;
   align-items: center;
@@ -372,6 +375,9 @@ body.chrome-hidden .main {
   cursor: default;
 }
 
+/* Las vistas del pipeline corren sin bottom-nav, así que nada reserva el
+   safe-area inferior por debajo: el botón de aprobar caía sobre el indicador
+   de inicio del iPhone. */
 .lrp__footer {
   position: sticky;
   bottom: 0;
@@ -379,6 +385,7 @@ body.chrome-hidden .main {
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-md);
+  padding-bottom: calc(var(--space-md) + var(--safe-bottom));
   background: var(--color-surface);
   border-top: 1px solid var(--color-border);
 }
@@ -490,13 +497,15 @@ body.chrome-hidden .main {
   color: var(--color-accent-2);
 }
 
+/* Mismo caso que `.lrp__footer`: sin bottom-nav detrás, el safe-area inferior
+   lo absorbe la propia barra de acciones. */
 .lps__actions {
   position: sticky;
   bottom: 0;
   display: flex;
   align-items: center;
   gap: var(--space-md);
-  padding: var(--space-md) 0 0;
+  padding: var(--space-md) 0 var(--safe-bottom);
   background: var(--color-surface);
   border-top: 1px solid var(--color-border);
 }
@@ -532,14 +541,20 @@ body.chrome-hidden .main {
   }
 }
 
+/* App bar de las vistas de tarea. Corren headerless (`body.chrome-hidden`
+   cancela el padding-top de `.main`), así que arranca en y=0: sin absorber
+   `--safe-top` el título queda bajo la barra de estado del iPhone. z-index
+   por encima de los sticky anidados del cuerpo (transport del multipista,
+   header del panel de letra), que se anclan a `--pv-header-h`. */
 .pipeline-view__header {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 3;
   display: flex;
   align-items: center;
   gap: var(--space-sm);
   padding: var(--space-md);
+  padding-top: calc(var(--space-md) + var(--safe-top));
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
@@ -560,26 +575,37 @@ body.chrome-hidden .main {
   background: var(--color-surface-hover);
 }
 
+/* `min-width: 0` + ellipsis: el título cede antes que el link y la píldora,
+   que se quedan en una línea. Sin esto los tres compiten por el ancho y en
+   móvil el link y la píldora se parten en dos renglones. */
 .pipeline-view__title {
   flex: 1;
+  min-width: 0;
   font-size: 1.05rem;
   font-weight: 700;
   margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pipeline-view__studio-link,
 .editor__studio-link {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 6px;
   font-size: 0.8rem;
   color: var(--color-brand);
   margin-left: auto;
+  white-space: nowrap;
 }
 
 .pipeline-view__pill {
   display: inline-flex;
+  flex: none;
   align-items: center;
+  white-space: nowrap;
   background: color-mix(in oklch, var(--color-brand) 12%, transparent);
   color: var(--color-brand);
   border-radius: 999px;
@@ -1950,9 +1976,11 @@ body.chrome-hidden .main {
   color: var(--color-text-secondary);
 }
 
+/* Mismo anclaje que `.lrp__header`: bajo el app bar de la vista, no en 0
+   (donde tapaba el bar por z-index y quedaba bajo la barra de estado). */
 .studio-view__body > .mtp__transport {
   position: sticky;
-  top: 0;
+  top: var(--pv-header-h);
   z-index: 2;
   background: var(--color-bg);
   padding-block: 8px;

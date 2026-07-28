@@ -36,6 +36,17 @@ let signOutRecheckAttempted = false;
  */
 let intentionalSignOut = false;
 
+/**
+ * Un solo intento de refresh tras un 401 de /api/auth/me (T4). Un access
+ * token expirado y un perfil revocado producen el MISMO 401, pero solo el
+ * primero es recuperable: sin este reintento, el token vencido dejaba la app
+ * en un limbo permanente — sesión que no patea a /login, vistas servidas
+ * desde caché y header sin identidad (el avatar "?" de Header.js) hasta que
+ * el usuario cerraba sesión a mano. El flag evita el loop cuando el 401 es de
+ * los definitivos; se resetea con el primer /api/auth/me exitoso.
+ */
+let profileUnauthorizedRetried = false;
+
 const PROFILE_CACHE_KEY = 'hkn-profile-cache';
 const RETRY_DELAYS_MS = [2000, 5000, 15000, 30000, 60000];
 let retryTimeoutId = null;
@@ -233,6 +244,7 @@ export async function refreshProfile() {
     if (res.ok) {
       const data = await res.json();
       state.profile = data.profile;
+      profileUnauthorizedRetried = false;
       cacheProfileSnapshot();
       return true;
     }
@@ -240,6 +252,12 @@ export async function refreshProfile() {
     // válido, no queremos dejar UI admin colgada de un caché tras una
     // revocación real. Aquí sí nuleamos.
     state.profile = null;
+    // 401 puede ser solo el access token vencido: pedir uno nuevo y reintentar
+    // una vez (T4). 403/500 no se reintentan — ahí el server ya decidió.
+    if (res.status === 401 && !profileUnauthorizedRetried) {
+      profileUnauthorizedRetried = true;
+      scheduleUnauthorizedRefresh();
+    }
     return false;
   } catch (e) {
     // El fetch LANZÓ (red caída, timeout): el server nunca habló. No es una
@@ -261,6 +279,65 @@ export async function refreshProfile() {
 }
 
 /**
+ * Pide una sesión nueva tras un 401 de /api/auth/me y reintenta el perfil.
+ *
+ * Va diferido con setTimeout(0) por la MISMA razón que el recheck de T2:
+ * refreshProfile() se llama desde dentro del callback de onAuthStateChange, y
+ * auth-js sostiene su lock interno hasta que ese callback resuelve. Llamar a
+ * supabase.auth.refreshSession() antes de retornar reintentaría el mismo lock
+ * y colgaría la operación en curso — ver la nota grande de initAuthStore.
+ *
+ * Si el refresh falla de verdad (refresh token revocado o ya usado), auth-js
+ * emite SIGNED_OUT y el flujo de T2 se encarga del kick: aquí no forzamos
+ * ninguna salida a /login por nuestra cuenta.
+ */
+function scheduleUnauthorizedRefresh() {
+  setTimeout(() => {
+    (async () => {
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error || !data?.session) return;
+      state.session = data.session;
+      await refreshProfile();
+      notify();
+    })().catch((e) => console.warn('refresh tras 401 de /api/auth/me falló', e));
+  }, 0);
+}
+
+/**
+ * Recuperación al volver a primer plano (T5).
+ *
+ * El token no es el problema: auth-js ya registra su propio listener de
+ * `visibilitychange` y corre `_recoverAndRefresh()` al volver a visible
+ * (autoRefreshToken está en true en supabase.js). Lo que nadie reintenta es
+ * el PERFIL: si quedó en null (401 previo, o boot con red caída), auth-js no
+ * emite ningún evento mientras la sesión siga vigente, así que refreshProfile
+ * no se vuelve a llamar y el header queda con el avatar "?" hasta recargar.
+ * En una PWA instalada eso es permanente: se reabre desde el app switcher sin
+ * boot nuevo, y no hay forma manual de recargar.
+ *
+ * Se llama fuera de todo callback de auth-js, así que puede tocar
+ * supabase.auth (vía attemptRefresh) sin arriesgar el deadlock del lock.
+ */
+function onVisible() {
+  if (globalThis.document?.visibilityState !== 'visible') return;
+  if (state.pendingSession) {
+    // Los timers del backoff no corren con la PWA suspendida: al volver,
+    // reintentar ya en vez de esperar el delay que quedó pendiente.
+    attemptRefresh();
+    return;
+  }
+  if (!state.session || state.profile) return;
+  // Cada vuelta a primer plano es un episodio nuevo: si el 401 anterior fue
+  // por un token que ya se renovó, este intento debe poder volver a pedirlo.
+  profileUnauthorizedRetried = false;
+  refreshProfile()
+    .then((ok) => {
+      if (ok) notify();
+    })
+    .catch((e) => console.warn('refreshProfile al volver a primer plano falló', e));
+}
+
+/**
  * Bootstrap: read current session, fetch profile, subscribe to changes.
  */
 export async function initAuthStore() {
@@ -279,6 +356,8 @@ export async function initAuthStore() {
       console.warn('exchangeCodeForSession failed', e);
     }
   }
+
+  globalThis.addEventListener('visibilitychange', onVisible);
 
   const { data } = await supabase.auth.getSession();
   state.session = data.session;

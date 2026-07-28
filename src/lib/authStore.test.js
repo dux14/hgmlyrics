@@ -49,11 +49,15 @@ async function loadStore() {
 // add/removeEventListener para 'online' con un registro propio por test, en
 // vez de depender del bus de eventos real de jsdom.
 let onlineHandlers = [];
+// Mismo motivo para 'visibilitychange' (recuperación de perfil en primer
+// plano, T5): el handler se registra en globalThis y sobrevive a resetModules.
+let visibilityHandlers = [];
 
 beforeEach(() => {
   localStorage.clear();
   vi.clearAllMocks();
   onlineHandlers = [];
+  visibilityHandlers = [];
   vi.stubGlobal('navigator', { onLine: true });
   vi.spyOn(globalThis, 'fetch').mockResolvedValue({
     ok: true,
@@ -61,14 +65,23 @@ beforeEach(() => {
   });
   vi.spyOn(globalThis, 'addEventListener').mockImplementation((type, fn) => {
     if (type === 'online') onlineHandlers.push(fn);
+    if (type === 'visibilitychange') visibilityHandlers.push(fn);
   });
   vi.spyOn(globalThis, 'removeEventListener').mockImplementation((type, fn) => {
     if (type === 'online') onlineHandlers = onlineHandlers.filter((h) => h !== fn);
+    if (type === 'visibilitychange') {
+      visibilityHandlers = visibilityHandlers.filter((h) => h !== fn);
+    }
   });
 });
 
 function fireOnline() {
   onlineHandlers.forEach((fn) => fn());
+}
+
+function fireVisible(stateValue = 'visible') {
+  vi.spyOn(document, 'visibilityState', 'get').mockReturnValue(stateValue);
+  visibilityHandlers.forEach((fn) => fn());
 }
 
 afterEach(() => {
@@ -149,7 +162,12 @@ describe('refreshProfile — fallo transitorio vs. definitivo', () => {
   });
 
   it('respuesta non-ok del server (401/403/500) nulea el profile como hoy', async () => {
+    // Timers falsos porque el 401 programa el reintento diferido de T4: sin
+    // drenarlo dentro de este test, el setTimeout quedaría huérfano y su
+    // refreshSession() contaminaría el conteo de mocks del test siguiente.
+    vi.useFakeTimers();
     const { store, supabase } = await loadStore();
+    supabase.auth.refreshSession.mockResolvedValue({ data: { session: null }, error: null });
     supabase.auth.getSession.mockResolvedValue({ data: { session: makeSession() } });
     supabase.auth.onAuthStateChange.mockImplementation(() => {});
     globalThis.fetch.mockResolvedValueOnce({
@@ -165,6 +183,11 @@ describe('refreshProfile — fallo transitorio vs. definitivo', () => {
     const ok = await store.refreshProfile();
 
     expect(ok).toBe(false);
+    expect(store.getProfile()).toBeNull();
+
+    // Drena el reintento diferido: el refresh tampoco recupera sesión, así
+    // que el profile sigue nulo (no hay recuperación que enmascare el 401).
+    await vi.advanceTimersByTimeAsync(0);
     expect(store.getProfile()).toBeNull();
   });
 
@@ -707,6 +730,172 @@ describe('signOut', () => {
     await vi.advanceTimersByTimeAsync(1500);
 
     expect(supabase.auth.getSession).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('refreshProfile — 401 recuperable (token expirado)', () => {
+  async function bootOk() {
+    const { store, supabase } = await loadStore();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: makeSession() } });
+    supabase.auth.onAuthStateChange.mockImplementation(() => {});
+    await store.initAuthStore();
+    return { store, supabase };
+  }
+
+  it('401 dispara un refreshSession diferido y, si recupera sesion, vuelve a traer el perfil', async () => {
+    vi.useFakeTimers();
+    const { store, supabase } = await bootOk();
+
+    // El access_token expiró: /api/auth/me responde 401.
+    globalThis.fetch.mockResolvedValueOnce({ ok: false, status: 401 });
+    // El refresh_token sigue vivo: auth-js entrega una sesión nueva.
+    const rotated = makeSession({ access_token: 'tok2' });
+    supabase.auth.refreshSession.mockResolvedValue({ data: { session: rotated }, error: null });
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ profile: { username: 'ana' } }),
+    });
+
+    const ok = await store.refreshProfile();
+    // El 401 nulea el perfil como hoy: la recuperación es diferida, no síncrona.
+    expect(ok).toBe(false);
+    expect(store.getProfile()).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(supabase.auth.refreshSession).toHaveBeenCalledTimes(1);
+    expect(store.getSession()).toEqual(rotated);
+    expect(store.getProfile()).toEqual({ username: 'ana' });
+  });
+
+  it('el reintento corre diferido: refreshProfile() resuelve sin tocar supabase.auth en el mismo tick', async () => {
+    // Misma razón que el recheck de T2: refreshProfile() se llama DESDE
+    // dentro del callback de onAuthStateChange, y auth-js sostiene su lock
+    // hasta que ese callback resuelve. Tocar supabase.auth antes de retornar
+    // reintentaría el lock y colgaría el logout.
+    vi.useFakeTimers();
+    const { store, supabase } = await bootOk();
+    supabase.auth.refreshSession.mockResolvedValue({ data: { session: null }, error: null });
+
+    globalThis.fetch.mockResolvedValueOnce({ ok: false, status: 401 });
+    await store.refreshProfile();
+
+    expect(supabase.auth.refreshSession).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(supabase.auth.refreshSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('un 401 que persiste tras el refresh no vuelve a reintentar (sin loop)', async () => {
+    vi.useFakeTimers();
+    const { store, supabase } = await bootOk();
+    const rotated = makeSession({ access_token: 'tok2' });
+    supabase.auth.refreshSession.mockResolvedValue({ data: { session: rotated }, error: null });
+
+    // Ambos intentos dan 401: el perfil está revocado de verdad, no expirado.
+    globalThis.fetch.mockResolvedValue({ ok: false, status: 401 });
+    await store.refreshProfile();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(supabase.auth.refreshSession).toHaveBeenCalledTimes(1);
+    expect(store.getProfile()).toBeNull();
+  });
+
+  it('403 y 500 no disparan reintento: solo el 401 es recuperable', async () => {
+    vi.useFakeTimers();
+    const { store, supabase } = await bootOk();
+
+    globalThis.fetch.mockResolvedValueOnce({ ok: false, status: 403 });
+    await store.refreshProfile();
+    globalThis.fetch.mockResolvedValueOnce({ ok: false, status: 500 });
+    await store.refreshProfile();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(supabase.auth.refreshSession).not.toHaveBeenCalled();
+    expect(store.getProfile()).toBeNull();
+  });
+});
+
+describe('volver a primer plano — recuperacion del perfil (T5)', () => {
+  it('con sesion viva pero sin perfil, vuelve a pedirlo al volver a primer plano y notifica', async () => {
+    vi.useFakeTimers();
+    const { store, supabase } = await loadStore();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: makeSession() } });
+    supabase.auth.onAuthStateChange.mockImplementation(() => {});
+    supabase.auth.refreshSession.mockResolvedValue({ data: { session: null }, error: null });
+    // Boot con 401: el perfil queda nulo (el limbo del avatar "?").
+    globalThis.fetch.mockResolvedValueOnce({ ok: false, status: 401 });
+
+    await store.initAuthStore();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getProfile()).toBeNull();
+
+    const spy = vi.fn();
+    store.subscribe(spy);
+    // La PWA vuelve del app switcher: auth-js ya renovo el token por su
+    // cuenta, pero sin evento de sesion nadie volveria a pedir el perfil.
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ profile: { username: 'ana' } }),
+    });
+    fireVisible();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.getProfile()).toEqual({ username: 'ana' });
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it('no re-pide el perfil si ya hay uno cargado', async () => {
+    const { store, supabase } = await loadStore();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: makeSession() } });
+    supabase.auth.onAuthStateChange.mockImplementation(() => {});
+
+    await store.initAuthStore();
+    expect(store.getProfile()).toEqual({ username: 'ana' });
+    globalThis.fetch.mockClear();
+
+    fireVisible();
+    await Promise.resolve();
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('en pendingSession reintenta el refresh ya, sin esperar el backoff suspendido', async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
+    const { store, supabase } = await loadStore();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    supabase.auth.onAuthStateChange.mockImplementation(() => {});
+    const rotated = makeSession({ access_token: 'tok2' });
+    supabase.auth.refreshSession.mockResolvedValue({ data: { session: rotated }, error: null });
+
+    await store.initAuthStore();
+    expect(store.isPendingSession()).toBe(true);
+    // Sin avanzar el reloj: los timers del backoff no corren suspendidos.
+    expect(supabase.auth.refreshSession).not.toHaveBeenCalled();
+
+    fireVisible();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(supabase.auth.refreshSession).toHaveBeenCalledTimes(1);
+    expect(store.isPendingSession()).toBe(false);
+    expect(store.getSession()).toEqual(rotated);
+  });
+
+  it('un visibilitychange a hidden no dispara nada', async () => {
+    const { store, supabase } = await loadStore();
+    supabase.auth.getSession.mockResolvedValue({ data: { session: makeSession() } });
+    supabase.auth.onAuthStateChange.mockImplementation(() => {});
+    globalThis.fetch.mockResolvedValueOnce({ ok: false, status: 403 });
+
+    await store.initAuthStore();
+    expect(store.getProfile()).toBeNull();
+    globalThis.fetch.mockClear();
+
+    fireVisible('hidden');
+    await Promise.resolve();
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 });
 

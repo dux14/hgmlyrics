@@ -124,6 +124,13 @@ export default withErrors(async (req, res) => {
       input: { getUrl: inputGetUrl },
       enabledSections: [section],
       uploads,
+      // Mismo bug que en el pipeline unificado: `start()` de modal/stems_app.py
+      // dedupea por jobId y aquí el jobId es el mismo job.id que ya despachó
+      // start.js, así que sin `reset` el reintento devuelve el callId cacheado
+      // y no spawnea nada — la sección queda 'processing' sin webhook. Este
+      // endpoint SIEMPRE es un reintento deliberado del usuario, ya serializado
+      // por su propio CAS, así que va fijo en true.
+      reset: true,
       webhook: {
         url: webhookUrl,
         secret: process.env.MODAL_WEBHOOK_SECRET,

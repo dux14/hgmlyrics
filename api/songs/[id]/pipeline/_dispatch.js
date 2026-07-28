@@ -99,11 +99,12 @@ async function stemsUploads(songId) {
  * @param {'stems'|'structure'|'transcription'|'sync'|'pitch'|'clips'} phase
  * @param {{id:string, songId:string, inputPath:string, phases:object}} run
  * @param {{isRetry?:boolean}} [opts] `isRetry` solo lo pasa retry.js (acción
- *   deliberada del admin sobre una fase failed/stale) — hoy únicamente lo
- *   consume `pitch`: sin esto, el jobId (=run.id) ya visto por hkn-pitch en
- *   un dispatch anterior (aprobación de letra) hace que `start()` del lado
- *   Modal devuelva el callId cacheado (dedup) en vez de relanzar
- *   `run_pipeline`, dejando la fase colgada en 'running' sin webhook ni logs.
+ *   deliberada del admin sobre una fase failed/stale) y viaja como `reset` a
+ *   las fases cuyo lado Modal dedupea por jobId: `stems`, `structure` y
+ *   `pitch`. Sin esto, el jobId (=run.id) ya visto en un dispatch anterior
+ *   hace que `start()` del lado Modal devuelva el callId cacheado (dedup) en
+ *   vez de relanzar `run_pipeline`, dejando la fase colgada en 'running' sin
+ *   webhook ni logs. `transcription`/`sync`/`clips` no dedupean: ignoran el flag.
  * @returns {Promise<{id:string}>}
  */
 export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
@@ -115,6 +116,10 @@ export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
       run: { id: run.id, songId: run.songId, inputGetUrl },
       uploads,
       enabledSections: ENABLED_SECTIONS,
+      // Sin esto el reintento es MUDO: modal/stems_app.py `start()` dedupea
+      // por jobId (=run.id, constante entre reintentos) y devuelve el callId
+      // cacheado sin spawnear. Mismo criterio que structure/pitch abajo.
+      reset: isRetry,
       webhookUrl: webhook,
     });
   }
@@ -208,7 +213,10 @@ export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
   const [song, stems, lineTimingsRow, audioRow, structureRow, pipelineLyrics] = await Promise.all([
     sql`SELECT sections FROM songs WHERE id = ${run.songId}`,
     Promise.all(
-      Object.entries(tracks).map(async ([kind, key]) => ({ kind, getUrl: await signSongAudioDownload(key) })),
+      Object.entries(tracks).map(async ([kind, key]) => ({
+        kind,
+        getUrl: await signSongAudioDownload(key),
+      })),
     ),
     sql`SELECT lines FROM song_line_timings WHERE song_id = ${run.songId}`,
     sql`SELECT duration_sec AS "durationSec" FROM song_audio WHERE song_id = ${run.songId}`,

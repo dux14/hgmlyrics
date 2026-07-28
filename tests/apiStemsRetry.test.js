@@ -123,7 +123,15 @@ const jobWithFailedVI = () => ({
       model: null,
       error: 'timeout',
       enabled: true,
-      outputs: { vocals: null, instrumental: null, drums: null, bass: null, guitar: null, piano: null, other: null },
+      outputs: {
+        vocals: null,
+        instrumental: null,
+        drums: null,
+        bass: null,
+        guitar: null,
+        piano: null,
+        other: null,
+      },
     },
     structure: {
       status: 'done',
@@ -245,9 +253,7 @@ describe('POST /api/stems/jobs/[id]/retry — DAG retry flow', () => {
     const updateCall = sqlCalls.find(
       (c) => c.text.includes('processing') && c.text.includes('stem_jobs'),
     );
-    const sectionsArg = updateCall.values.find(
-      (v) => v && typeof v === 'object' && 'gender' in v,
-    );
+    const sectionsArg = updateCall.values.find((v) => v && typeof v === 'object' && 'gender' in v);
     expect(sectionsArg.gender.status).toBe('running');
 
     // enabled_sections se actualiza con la sección reanudada
@@ -301,6 +307,10 @@ describe('POST /api/stems/jobs/[id]/retry — DAG retry flow', () => {
     expect(payload.enabledSections).toEqual(['voiceInstrumental']);
     expect(payload.webhook.url).toContain('/api/stems/webhook');
     expect(payload.webhook.secret).toBe('whsecret');
+    // reset:true es obligatorio: `start()` de modal/stems_app.py dedupea por
+    // jobId y aquí el jobId es el mismo job.id que ya despachó start.js, así
+    // que sin el flag el reintento devuelve el callId cacheado sin spawnear.
+    expect(payload.reset).toBe(true);
 
     // Las 7 pistas de voiceInstrumental deben tener URLs firmadas
     const vi_uploads = payload.uploads.voiceInstrumental;

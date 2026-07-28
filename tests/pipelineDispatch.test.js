@@ -25,9 +25,8 @@ process.env.MODAL_INBOUND_SECRET = 'inbound-secret';
 const { fetchWithTimeout } = await import('../api/_lib/http.js');
 const { invokeModalPipeline } = await import('../api/_lib/modal.js');
 const { invokePitchPipeline } = await import('../api/pitch/_lib/modal.js');
-const { dispatchStems, dispatchStructure, dispatchTranscribe, dispatchPitch } = await import(
-  '../api/_lib/pipeline/dispatch.js'
-);
+const { dispatchStems, dispatchStructure, dispatchTranscribe, dispatchPitch } =
+  await import('../api/_lib/pipeline/dispatch.js');
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -60,7 +59,10 @@ describe('dispatchStructure', () => {
     expect(body).toEqual({
       jobId: 'run1',
       input: { getUrl: 'https://get/input.mp3' },
-      webhook: { url: 'https://hgmlyrics.vercel.app/api/pipeline/webhook', secret: 'webhook-secret' },
+      webhook: {
+        url: 'https://hgmlyrics.vercel.app/api/pipeline/webhook',
+        secret: 'webhook-secret',
+      },
       reset: false,
     });
   });
@@ -94,8 +96,20 @@ describe('dispatchStems', () => {
         input: { getUrl: 'https://get/input.mp3' },
         enabledSections,
         uploads,
+        reset: false,
       }),
     );
+  });
+
+  it('propaga reset al payload de invokeModalPipeline (rompe el dedup por jobId de start())', async () => {
+    await dispatchStems({
+      run: { id: 'run1', songId: 'song1', inputGetUrl: 'https://get/input.mp3' },
+      uploads: {},
+      enabledSections: ['voiceInstrumental'],
+      reset: true,
+      webhookUrl: 'https://x/webhook',
+    });
+    expect(invokeModalPipeline).toHaveBeenCalledWith(expect.objectContaining({ reset: true }));
   });
 });
 

@@ -29,11 +29,20 @@ vi.mock('../api/_lib/db.js', () => ({ default: sqlMock }));
 process.env.PUBLIC_BASE_URL = 'https://hgmlyrics.vercel.app';
 
 const { dispatchPhase } = await import('../api/songs/[id]/pipeline/_dispatch.js');
-const { dispatchStems, dispatchStructure, dispatchTranscribe, dispatchAlign, dispatchPitch, dispatchClips } =
-  await import('../api/_lib/pipeline/dispatch.js');
+const {
+  dispatchStems,
+  dispatchStructure,
+  dispatchTranscribe,
+  dispatchAlign,
+  dispatchPitch,
+  dispatchClips,
+} = await import('../api/_lib/pipeline/dispatch.js');
 
 const SANTO_SECTIONS = [
-  { type: 'verse', lines: [{ text: 'Santo, Santo, Santo' }, { text: '(instrumental)', annotation: true }] },
+  {
+    type: 'verse',
+    lines: [{ text: 'Santo, Santo, Santo' }, { text: '(instrumental)', annotation: true }],
+  },
   { type: 'chorus', lines: [{ text: 'Es el Señor' }] },
 ];
 
@@ -95,6 +104,22 @@ describe("dispatchPhase('stems')", () => {
     // structure no sube archivos: no debe aparecer en uploads.
     expect(args.uploads.structure).toBeUndefined();
   });
+
+  // T0 de docs/plans/2026-07-28-retry-automatico-transversal.md: el retry
+  // manual de 'stems' era MUDO en producción. `start()` de modal/stems_app.py
+  // dedupea por jobId (=run.id, constante entre reintentos) y devolvía el
+  // callId cacheado sin spawnear: la fase quedaba 'running' para siempre.
+  it('dispatch inicial (sin isRetry) pasa reset:false', async () => {
+    const run = { id: 'run1', songId: 'song1', inputPath: 'song1/input.mp3' };
+    await dispatchPhase('stems', run);
+    expect(dispatchStems).toHaveBeenCalledWith(expect.objectContaining({ reset: false }));
+  });
+
+  it('retry.js (isRetry:true) fuerza reset:true para romper el dedup de Modal', async () => {
+    const run = { id: 'run1', songId: 'song1', inputPath: 'song1/input.mp3' };
+    await dispatchPhase('stems', run, { isRetry: true });
+    expect(dispatchStems).toHaveBeenCalledWith(expect.objectContaining({ reset: true }));
+  });
 });
 
 // structure reintentable (docs/plans/2026-07-28-structure-reintentable.md
@@ -153,7 +178,13 @@ describe("dispatchPhase('transcription')", () => {
 
   it('canonicalLines se aplana desde song_lyrics_canonical.content cuando existe fila', async () => {
     sqlResponses.push([{ sections: SANTO_SECTIONS }]);
-    sqlResponses.push([{ content: { secciones: [{ lineas: [{ texto: 'Santo Santo Santo' }, { texto: 'Es el Señor' }] }] } }]);
+    sqlResponses.push([
+      {
+        content: {
+          secciones: [{ lineas: [{ texto: 'Santo Santo Santo' }, { texto: 'Es el Señor' }] }],
+        },
+      },
+    ]);
 
     const run = { id: 'run1', songId: 'song1', phases: { stems: { tracks: { vocals: 'k' } } } };
     await dispatchPhase('transcription', run);
@@ -175,7 +206,9 @@ describe("dispatchPhase('pitch')", () => {
     const run = {
       id: 'run1',
       songId: 'song1',
-      phases: { stems: { tracks: { lead: 'song1/stems/lead.mp3', backing: 'song1/stems/backing.mp3' } } },
+      phases: {
+        stems: { tracks: { lead: 'song1/stems/lead.mp3', backing: 'song1/stems/backing.mp3' } },
+      },
     };
     await dispatchPhase('pitch', run);
 
@@ -196,7 +229,9 @@ describe("dispatchPhase('pitch')", () => {
     const run = {
       id: 'run1',
       songId: 'song1',
-      phases: { stems: { tracks: { lead: 'song1/stems/lead.mp3', backing: 'song1/stems/backing.mp3' } } },
+      phases: {
+        stems: { tracks: { lead: 'song1/stems/lead.mp3', backing: 'song1/stems/backing.mp3' } },
+      },
       // sin lyricsReview: exactamente el shape que arma retry.js
     };
     await dispatchPhase('pitch', run, { isRetry: true });
@@ -243,7 +278,13 @@ describe("dispatchPhase('pitch')", () => {
   // Task 2.3: la letra aprobada del gate viaja a hkn-pitch (evita las dos
   // ASR independientes — gate y pitch discrepando en el texto).
   const PITCH_STORE_SECTIONS = [
-    { type: 'verse', lines: [{ text: 'Santo, Santo, Santo', startMs: 100 }, { text: 'Es el Señor', startMs: 2000 }] },
+    {
+      type: 'verse',
+      lines: [
+        { text: 'Santo, Santo, Santo', startMs: 100 },
+        { text: 'Es el Señor', startMs: 2000 },
+      ],
+    },
   ];
 
   it('con fila en song_pipeline_lyrics: dispatchPitch recibe lines (pipelineLinesFor) y language del store', async () => {
@@ -282,7 +323,12 @@ describe("dispatchPhase('pitch')", () => {
 
 describe("dispatchPhase('sync')", () => {
   it('pasa snapshotHash desde run.lyricsReview.approvedHash cuando está presente', async () => {
-    const run = { id: 'run1', songId: 'song1', phases: {}, lyricsReview: { approvedHash: 'hash123' } };
+    const run = {
+      id: 'run1',
+      songId: 'song1',
+      phases: {},
+      lyricsReview: { approvedHash: 'hash123' },
+    };
     await dispatchPhase('sync', run);
     expect(dispatchAlign).toHaveBeenCalledWith('song1', 'hash123');
   });
@@ -297,7 +343,10 @@ describe("dispatchPhase('sync')", () => {
 // Snapshot con un coro repetido (lines:null, no aporta líneas canónicas) para
 // verificar que projectLineSections lo salta igual que projectCanonicalLines.
 const CLIPS_SECTIONS = [
-  { type: 'verse', lines: [{ text: 'A' }, { text: '(instrumental)', annotation: true }, { text: 'B' }] },
+  {
+    type: 'verse',
+    lines: [{ text: 'A' }, { text: '(instrumental)', annotation: true }, { text: 'B' }],
+  },
   { type: 'chorus', lines: [{ text: 'C' }] },
   { type: 'chorus', lines: null },
   { type: 'verse', lines: [{ text: 'D' }] },
@@ -562,7 +611,14 @@ describe("dispatchPhase('clips')", () => {
       ],
     };
     sqlResponses.push([{ sections: [] }]); // SELECT sections FROM songs -- pipeline: vacío
-    sqlResponses.push([{ lines: [{ i: 0, startMs: 11000 }, { i: 1, startMs: 25000 }] }]); // SELECT lines FROM song_line_timings
+    sqlResponses.push([
+      {
+        lines: [
+          { i: 0, startMs: 11000 },
+          { i: 1, startMs: 25000 },
+        ],
+      },
+    ]); // SELECT lines FROM song_line_timings
     sqlResponses.push([{ durationSec: '40' }]); // SELECT duration_sec FROM song_audio
     sqlResponses.push([
       {

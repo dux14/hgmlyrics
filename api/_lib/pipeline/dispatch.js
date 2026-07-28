@@ -22,16 +22,23 @@ import { dispatchAlign } from '../align.js';
  * DAG — ver ENABLED_SECTIONS en songs/[id]/pipeline/_dispatch.js), no se
  * hardcodea aquí para que el pipeline unificado y el Estudio manual (start.js)
  * puedan pedir subconjuntos distintos.
+ *
+ * `reset` desactiva el dedup por jobId de `start()` (modal/stems_app.py:376):
+ * el jobId es `run.id`, constante entre reintentos, así que sin este flag todo
+ * re-dispatch devuelve `{dedup:true}` con el callId cacheado y NO spawnea nada
+ * — la fase queda 'running' para siempre, sin webhook, hasta que el cron la
+ * mata a los 30 min. Lo pasa `dispatchPhase` con el `isRetry` de retry.js.
  * @param {{ run:{id:string, songId:string, inputGetUrl:string}, uploads:object,
- *           enabledSections:string[], webhookUrl:string }} args
+ *           enabledSections:string[], reset?:boolean, webhookUrl:string }} args
  * @returns {Promise<{id:string}>}
  */
-export async function dispatchStems({ run, uploads, enabledSections, webhookUrl }) {
+export async function dispatchStems({ run, uploads, enabledSections, reset = false, webhookUrl }) {
   return invokeModalPipeline({
     jobId: run.id,
     input: { getUrl: run.inputGetUrl },
     enabledSections,
     uploads,
+    reset,
     webhook: { url: webhookUrl, secret: process.env.MODAL_WEBHOOK_SECRET },
   });
 }
@@ -48,7 +55,14 @@ export async function dispatchStems({ run, uploads, enabledSections, webhookUrl 
  *           webhookUrl:string }} args
  * @returns {Promise<{id:string}>}
  */
-export async function dispatchTranscribe({ run, vocalsGetUrl, dbLines, canonicalLines, snapshotHash, webhookUrl }) {
+export async function dispatchTranscribe({
+  run,
+  vocalsGetUrl,
+  dbLines,
+  canonicalLines,
+  snapshotHash,
+  webhookUrl,
+}) {
   const endpoint = process.env.MODAL_TRANSCRIBE_ENDPOINT;
   const secret = process.env.MODAL_INBOUND_SECRET;
   if (!endpoint || !secret) {
@@ -124,7 +138,14 @@ export { dispatchAlign };
  * @returns {Promise<{id:string}>}
  */
 export async function dispatchPitch({
-  run, leadGetUrl, backingGetUrl, snapshotHash, lines, language, webhookUrl, reset = false,
+  run,
+  leadGetUrl,
+  backingGetUrl,
+  snapshotHash,
+  lines,
+  language,
+  webhookUrl,
+  reset = false,
 }) {
   // Versionado por ciclo de letra: sin snapshotHash (job standalone o retry
   // sin lyricsReview disponible, ver nota en _dispatch.js) cae al jobId plano
@@ -206,7 +227,15 @@ export async function dispatchStructure({ run, inputGetUrl, reset = false, webho
  * @returns {Promise<{id:string}>}
  */
 export async function dispatchClips({
-  run, stems, lines, lineSections, totalMs, uploads, uploadKeys, snapshotHash, webhookUrl,
+  run,
+  stems,
+  lines,
+  lineSections,
+  totalMs,
+  uploads,
+  uploadKeys,
+  snapshotHash,
+  webhookUrl,
 }) {
   const endpoint = process.env.MODAL_CLIPS_ENDPOINT;
   const secret = process.env.MODAL_INBOUND_SECRET;

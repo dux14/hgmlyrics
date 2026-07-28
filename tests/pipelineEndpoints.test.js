@@ -246,6 +246,26 @@ describe('GET /api/songs/:id/pipeline', () => {
     expect(body.run.structure).toEqual({ segments });
   });
 
+  it('ordena run.structure.segments por startMs ascendente (#5: el productor no garantiza orden)', async () => {
+    const phases = initialPhases();
+    const unordered = [
+      { label: 'coro', startMs: 5000, endMs: 9000 },
+      { label: 'verso', startMs: 0, endMs: 5000 },
+      { label: 'puente', startMs: 9000, endMs: 12000 },
+    ];
+    routeSql([
+      [
+        'SELECT id, song_id AS "songId"',
+        [{ id: 'r1', songId: 's1', status: 'processing', phases, inputMeta: {}, lyricsReview: {} }],
+      ],
+      ['SELECT segments FROM song_structure', [{ segments: unordered }]],
+    ]);
+    const res = makeRes();
+    await pipelineHandler({ method: 'GET', query: { id: 's1' } }, res);
+    const body = res.json.mock.calls[0][0];
+    expect(body.run.structure.segments.map((s) => s.label)).toEqual(['verso', 'coro', 'puente']);
+  });
+
   it('run.structure es null si todavía no hay song_structure para la canción', async () => {
     const phases = initialPhases();
     routeSql([

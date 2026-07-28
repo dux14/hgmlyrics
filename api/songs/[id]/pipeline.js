@@ -73,7 +73,15 @@ async function getRun(_req, res, songId) {
     signTracks(run.phases),
     sql`SELECT segments FROM song_structure WHERE song_id = ${songId}`,
   ]);
-  const structure = structureRow ? { segments: structureRow.segments } : null;
+  // El orden de song_structure.segments NO está garantizado en el productor
+  // (mismo hallazgo que pipelineLinesFor en lyrics.js): ordenar acá por
+  // startMs ascendente deja a TODOS los consumidores (StructureDetail
+  // incluido) viendo el mismo orden cronológico, en vez de que cada uno
+  // ordene (o no) por su cuenta.
+  const segments = structureRow
+    ? [...structureRow.segments].sort((a, b) => a.startMs - b.startMs)
+    : null;
+  const structure = segments ? { segments } : null;
   res.status(200).json({ run: { ...run, phases, structure } });
 }
 

@@ -9,7 +9,7 @@ import { subscribe as subscribeFavorites, isFavorite, toggleFavorite } from '../
 import { getCurrentPath } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { resolveCoverUrl } from './songRow.js';
-import { escapeHtml } from '../lib/escape.js';
+import { escapeHtml, safeUrl } from '../lib/escape.js';
 
 let unsubFav = null;
 let unsubStore = null;
@@ -18,10 +18,10 @@ function buildFavGrid(mount, favs) {
   mount.innerHTML = `<div class="fav-grid">${favs
     .map(
       (s) => `
-      <a class="fav-cover" href="#/song/${s.id}" aria-label="${escapeHtml(s.title || '')}">
-        <img class="fav-cover__img" src="${resolveCoverUrl(s)}" alt="" loading="lazy" decoding="async" />
+      <a class="fav-cover" href="#/song/${escapeHtml(s.id)}" aria-label="${escapeHtml(s.title || '')}">
+        <img class="fav-cover__img" src="${safeUrl(resolveCoverUrl(s))}" alt="" loading="lazy" decoding="async" />
         <span class="fav-cover__veil"></span>
-        <button class="fav-cover__heart is-on" data-fav-id="${s.id}" aria-label="Quitar de favoritos">${icon('heart', { fill: true, size: 16 })}</button>
+        <button class="fav-cover__heart is-on" data-fav-id="${escapeHtml(s.id)}" aria-label="Quitar de favoritos">${icon('heart', { fill: true, size: 16 })}</button>
         <span class="fav-cover__title">${escapeHtml(s.title || '')}</span>
       </a>`,
     )

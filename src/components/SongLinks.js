@@ -137,7 +137,7 @@ export function renderSongLinks(container, songId) {
       region.innerHTML = `
         <div class="slinks fade-in">
           <div class="slinks__header">
-            ${coverUrl ? `<img class="slinks__cover" src="${coverUrl}" alt="" onerror="this.style.display='none'" />` : ''}
+            ${coverUrl ? `<img class="slinks__cover" src="${safeUrl(coverUrl)}" alt="" onerror="this.style.display='none'" />` : ''}
             <div class="slinks__meta">
               <h1 class="slinks__title">${escapeHtml(song.title)}</h1>
               <p class="slinks__artist">${escapeHtml(song.artist || '')} — ${escapeHtml(song.album || '')}</p>

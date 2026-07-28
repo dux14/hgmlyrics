@@ -8,7 +8,7 @@
 import { getAlbums, filterByAlbum, getState } from '../lib/store.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
-import { escapeHtml } from '../lib/escape.js';
+import { escapeHtml, safeUrl } from '../lib/escape.js';
 import { listMyLists } from '../lib/lists.js';
 import { expiryBand } from '../lib/listDraft.js';
 import { skelRow } from '../lib/skeleton.js';
@@ -102,7 +102,7 @@ export function updateSidebarContent() {
           <div class="sidebar__album-item ${activeAlbum === album.slug ? 'active' : ''}" data-album="${album.slug}">
             <img
               class="sidebar__album-thumb"
-              src="${coverUrl}"
+              src="${safeUrl(coverUrl)}"
               alt="${escapeHtml(album.name)}"
               loading="lazy"
               onerror="this.style.display='none'"

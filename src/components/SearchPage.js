@@ -8,7 +8,7 @@ import { resolveCoverUrl } from './songRow.js';
 import { isAuthenticated } from '../lib/authStore.js';
 import { isFavorite } from '../lib/favorites.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
-import { escapeHtml } from '../lib/escape.js';
+import { escapeHtml, safeUrl } from '../lib/escape.js';
 import { songTile } from './songTile.js';
 import { searchEverything } from '../lib/search.js';
 import { renderAsyncRegion } from '../lib/renderAsync.js';
@@ -58,7 +58,7 @@ function albumCard(album, container) {
   const a = document.createElement('a');
   a.className = 'search-rail__album';
   a.href = `/buscar?album=${encodeURIComponent(album.slug)}`;
-  const cover = resolveCoverUrl(album);
+  const cover = safeUrl(resolveCoverUrl(album));
   a.innerHTML = `<img src="${cover}" alt="" width="98" height="98" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'"><span>${escapeHtml(album.name)}</span>`;
   a.addEventListener('click', (e) => {
     e.preventDefault();
@@ -240,7 +240,7 @@ export async function renderSearchPage(container, weeklyWords = null) {
       const a = document.createElement('a');
       a.className = 'search-row';
       a.href = `/song/${s.id}`;
-      a.innerHTML = `<img class="search-row__cover" src="${resolveCoverUrl(s)}" alt="" width="56" height="56" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'"><div class="search-row__info"><div class="search-row__title">${escapeHtml(s.title)}</div><div class="search-row__sub">Canción · ${escapeHtml(s.album || '')}</div></div>`;
+      a.innerHTML = `<img class="search-row__cover" src="${safeUrl(resolveCoverUrl(s))}" alt="" width="56" height="56" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'"><div class="search-row__info"><div class="search-row__title">${escapeHtml(s.title)}</div><div class="search-row__sub">Canción · ${escapeHtml(s.album || '')}</div></div>`;
       a.addEventListener('click', (e) => {
         e.preventDefault();
         navigateFromFocus(`/song/${s.id}`);
@@ -251,7 +251,7 @@ export async function renderSearchPage(container, weeklyWords = null) {
       const a = document.createElement('a');
       a.className = 'search-row';
       a.href = `/buscar?album=${encodeURIComponent(al.slug)}`;
-      a.innerHTML = `<img class="search-row__cover" src="${resolveCoverUrl(al)}" alt="" width="56" height="56" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'"><div class="search-row__info"><div class="search-row__title">${escapeHtml(al.name)}</div><div class="search-row__sub">Álbum · ${escapeHtml(al.artist || 'Hakuna Group Music')}</div></div>`;
+      a.innerHTML = `<img class="search-row__cover" src="${safeUrl(resolveCoverUrl(al))}" alt="" width="56" height="56" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'"><div class="search-row__info"><div class="search-row__title">${escapeHtml(al.name)}</div><div class="search-row__sub">Álbum · ${escapeHtml(al.artist || 'Hakuna Group Music')}</div></div>`;
       a.addEventListener('click', (e) => {
         e.preventDefault();
         navigateFromFocus(`/buscar?album=${encodeURIComponent(al.slug)}`);

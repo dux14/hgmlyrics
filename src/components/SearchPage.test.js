@@ -37,6 +37,7 @@ vi.mock('../lib/icons.js', () => ({
 
 vi.mock('../lib/escape.js', () => ({
   escapeHtml: vi.fn((s) => (s === null || s === undefined ? '' : String(s))),
+  safeUrl: vi.fn((s) => (s === null || s === undefined ? '' : String(s))),
 }));
 
 vi.mock('./songTile.js', () => ({

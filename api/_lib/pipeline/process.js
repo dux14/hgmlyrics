@@ -7,6 +7,7 @@
  * reuse sin duplicar la lógica de CAS ni de publicación.
  */
 import { applyPhaseEvent, runStatusFromPhases } from './state.js';
+import { validateBeats } from '../beats.js';
 
 // Estados de run donde un evento de fase todavía puede aplicar efectos.
 // Mismo set que el índice único parcial song_pipeline_runs_one_active_per_song
@@ -159,11 +160,24 @@ export async function applyPipelinePhaseEvent(sql, jobId, event) {
     }
 
     if (event.phase === 'structure' && event.ok && !event.partial && event.payload?.segments) {
+      // beats (bpm/beatsMs detectados con librosa en la fase structure, ver
+      // sections/beats.py): best-effort igual que en align/webhook.js — un
+      // shape invalido no tumba la persistencia de segments, solo se
+      // descarta y queda NULL (el metronomo simplemente no tiene tempo).
+      // Se guarda SOLO el shape explicito {bpm, beatsMs}, nunca el objeto
+      // crudo del payload.
+      const rawBeats = event.payload.beats ?? null;
+      const beatsError = validateBeats(rawBeats);
+      if (beatsError) {
+        console.warn(`pipeline structure: beats invalidos, se descartan (${beatsError})`);
+      }
+      const beats =
+        rawBeats && !beatsError ? { bpm: rawBeats.bpm, beatsMs: rawBeats.beatsMs } : null;
       await tx`
-        INSERT INTO song_structure (song_id, run_id, segments, model)
-        VALUES (${run.songId}, ${runId}, ${tx.json(event.payload.segments)}, ${event.payload.model ?? null})
+        INSERT INTO song_structure (song_id, run_id, segments, model, beats)
+        VALUES (${run.songId}, ${runId}, ${tx.json(event.payload.segments)}, ${event.payload.model ?? null}, ${tx.json(beats)})
         ON CONFLICT (song_id)
-        DO UPDATE SET run_id = EXCLUDED.run_id, segments = EXCLUDED.segments, model = EXCLUDED.model, updated_at = now()
+        DO UPDATE SET run_id = EXCLUDED.run_id, segments = EXCLUDED.segments, model = EXCLUDED.model, beats = EXCLUDED.beats, updated_at = now()
       `;
     }
 

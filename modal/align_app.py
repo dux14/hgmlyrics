@@ -47,6 +47,8 @@ import modal
 
 from align_mapping import map_words_to_lines
 from sections._common import _extract_vocals_from_path
+from sections.beats import beats_payload as _beats_payload
+from sections.beats import detect_beats as _detect_beats
 from transcribe_diff import line_scores
 
 app = modal.App("hkn-align")
@@ -189,39 +191,10 @@ def _post_align_webhook(webhook_url: str, body: dict) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Beat-tracking (librosa, best-effort)
+# Beat-tracking (librosa, best-effort) — implementacion compartida en
+# sections/beats.py (tambien la usa songformer.py para persistir bpm/beats
+# en la fase `structure` del pipeline unificado).
 # ──────────────────────────────────────────────────────────────────────────────
-
-_MIN_BEATS = 8
-
-
-def _beats_payload(raw: dict | None) -> dict | None:
-    """Normaliza el resultado del beat-tracking; None si no es usable
-    (best-effort: pocos beats detectados o bpm invalido)."""
-    if not raw or not raw.get("beatsMs") or len(raw["beatsMs"]) < _MIN_BEATS:
-        return None
-    bpm = float(raw.get("bpm") or 0)
-    if bpm <= 0:
-        return None
-    return {"bpm": round(bpm, 2), "beatsMs": [int(t) for t in raw["beatsMs"]]}
-
-
-def _detect_beats(audio_path: str) -> dict | None:
-    """Beat-tracking con librosa sobre la MEZCLA completa (no el stem
-    vocal). Best-effort: cualquier excepcion devuelve None y el alignment
-    sigue — el metronomo es una feature aparte, nunca debe tumbar el
-    forced alignment."""
-    try:
-        import numpy as np
-        import librosa  # solo disponible dentro del contenedor Modal
-
-        y, sr = librosa.load(audio_path, sr=22050, mono=True)
-        tempo, beat_times = librosa.beat.beat_track(y=y, sr=sr, units="time")
-        bpm = float(np.atleast_1d(tempo)[0])
-        return _beats_payload({"bpm": bpm, "beatsMs": [int(t * 1000) for t in beat_times]})
-    except Exception as exc:
-        print(f"beat-tracking fallo (no fatal): {exc}")
-        return None
 
 
 def _download_audio(get_url: str) -> str:

@@ -857,10 +857,12 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
     // 'ready'/'pipeline' son literales inline en el INSERT (no placeholders),
     // ya verificados por lectura del código; aquí solo importan los binds.
     expect(timingShimInsert).toContain('s1');
-    // Fix Important (review F3): el swap de audio nuevo no debe heredar
-    // bpm_detected/beats de un align standalone previo (metronomo stale) —
-    // mismo criterio de reset que api/songs/[id]/audio.js:100.
-    expect(timingShimText).toContain('bpm_detected = NULL, beats = NULL');
+    // Sin fila en song_structure (mock sin handler para el SELECT) el bpm
+    // repuesto queda NULL, igual que antes de este fix.
+    expect(timingShimInsert).toContain(null);
+    expect(timingShimText).toContain(
+      'bpm_detected = EXCLUDED.bpm_detected, beats = EXCLUDED.beats',
+    );
 
     const phasesArg = mainRunUpdate.find((v) => v && typeof v === 'object' && v.lyrics_review);
     expect(phasesArg.sync.status).toBe('done');
@@ -870,6 +872,52 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
     expect(dispatchPhase).toHaveBeenCalledWith('pitch', expect.anything());
     expect(dispatchPhase).toHaveBeenCalledWith('clips', expect.anything());
     expect(dispatchPhase).not.toHaveBeenCalledWith('sync', expect.anything());
+  });
+
+  it('repone bpm_detected/beats desde song_structure.beats (fase structure de este run, ya no se pierden en el swap)', async () => {
+    let timingShimInsert;
+    routeSql([
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { review: approvableReviewV2() } })]],
+      ['SELECT beats FROM song_structure', [{ beats: { bpm: 128, beatsMs: [0, 469, 938] } }]],
+      ['INSERT INTO song_pipeline_lyrics', { count: 1 }],
+      [
+        'INSERT INTO song_line_timings',
+        (values) => {
+          timingShimInsert = values;
+          return { count: 1 };
+        },
+      ],
+      ['lyrics_review = ', { count: 1 }],
+      ['INSERT INTO song_audio', { count: 1 }],
+    ]);
+    const res = makeRes();
+    await lyricsHandler({ method: 'POST', query: { id: 's1' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(timingShimInsert).toContain(128);
+    expect(timingShimInsert).toContainEqual({ bpm: 128, beatsMs: [0, 469, 938] });
+  });
+
+  it('sin fila en song_structure (o sin beats): bpm_detected/beats siguen en NULL, igual que antes', async () => {
+    let timingShimInsert;
+    routeSql([
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { review: approvableReviewV2() } })]],
+      ['SELECT beats FROM song_structure', []],
+      ['INSERT INTO song_pipeline_lyrics', { count: 1 }],
+      [
+        'INSERT INTO song_line_timings',
+        (values) => {
+          timingShimInsert = values;
+          return { count: 1 };
+        },
+      ],
+      ['lyrics_review = ', { count: 1 }],
+      ['INSERT INTO song_audio', { count: 1 }],
+    ]);
+    const res = makeRes();
+    await lyricsHandler({ method: 'POST', query: { id: 's1' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(timingShimInsert).toContain(null);
+    expect(timingShimInsert).not.toContainEqual({ bpm: expect.anything() });
   });
 
   it('resetea retries de pitch/clips a 0 al re-aprobar aunque vengan de un ciclo previo con retries>0 (fix Important MAX_RETRIES acumulativo)', async () => {
@@ -892,7 +940,12 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
     routeSql([
       [
         'AS "lyricsReview"',
-        [runRow({ phases: phasesWithStaleRetries, lyricsReview: { review: approvableReviewV2() } })],
+        [
+          runRow({
+            phases: phasesWithStaleRetries,
+            lyricsReview: { review: approvableReviewV2() },
+          }),
+        ],
       ],
       [
         'lyrics_review = ',
@@ -907,7 +960,9 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
     await lyricsHandler({ method: 'POST', query: { id: 's1' } }, res);
     expect(res.status).toHaveBeenCalledWith(200);
 
-    const phasesArg = mainRunUpdateValues.find((v) => v && typeof v === 'object' && v.lyrics_review);
+    const phasesArg = mainRunUpdateValues.find(
+      (v) => v && typeof v === 'object' && v.lyrics_review,
+    );
     expect(phasesArg.sync.status).toBe('done');
     expect(phasesArg.pitch.status).toBe('running');
     expect(phasesArg.clips.status).toBe('running');

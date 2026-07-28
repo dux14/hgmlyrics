@@ -20,10 +20,15 @@ CONTRATO DE SALIDA (webhook `structure`):
     "result": {
       "status": "done",
       "model": "songformer",
-      "segments": [{"label": str, "start": float, "end": float}, ...]
+      "segments": [{"label": str, "start": float, "end": float}, ...],
+      "beats": {"bpm": float, "beatsMs": [int, ...]} | null
     },
     "error": null
   }
+
+  `beats` sale de un beat-tracking con librosa (sections/beats.py, mismo
+  helper que usa align_app.py) sobre la mezcla ya descargada en el paso 1.
+  Best-effort: None si la deteccion no es usable, nunca tumba la fase.
 
 INFERENCIA (repo SongFormer directo — NO trust_remote_code):
   El modeling file de HuggingFace (trust_remote_code=True) NO es cargable: su
@@ -233,6 +238,7 @@ def run_songformer(payload: dict) -> None:
     import httpx  # noqa: F401 — disponible en la imagen
 
     from sections._common import post_webhook
+    from sections.beats import detect_beats
 
     job_id: str = payload["jobId"]
     get_url: str = payload["input"]["getUrl"]
@@ -247,6 +253,10 @@ def run_songformer(payload: dict) -> None:
             with open(src_path, "wb") as f:
                 for chunk in r.iter_bytes():
                     f.write(chunk)
+
+        # Beat-tracking sobre la mezcla ya descargada (best-effort: None si
+        # falla, nunca tumba la fase `structure`).
+        beats = detect_beats(src_path)
 
         # ── 2. Inferencia SongFormer (infer.py carga el audio a 24 kHz solo) ─
         raw_segments = _run_inference(src_path)
@@ -270,6 +280,7 @@ def run_songformer(payload: dict) -> None:
                 "status": "done",
                 "model": _MODEL_LABEL,
                 "segments": segments,
+                "beats": beats,
             },
         )
 
@@ -284,6 +295,7 @@ def run_songformer(payload: dict) -> None:
                     "status": "failed",
                     "model": _MODEL_LABEL,
                     "segments": [],
+                    "beats": None,
                 },
                 error=str(exc)[:400],
             )

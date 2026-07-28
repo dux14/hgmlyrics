@@ -100,13 +100,17 @@ function sectionResultToStemsEvent(jobId, section, result, error) {
 
 /**
  * @returns {{runId:string, phase:'structure', ok:boolean, partial?:boolean,
- *            payload?:{segments:object[], model:string|null}, error?:string} | null}
+ *            payload?:{segments:object[], model:string|null,
+ *            beats:{bpm:number, beatsMs:number[]}|null}, error?:string} | null}
  *   A diferencia de gender/voiceInstrumental (best-effort: al fallar se
  *   ignoran con null), structure failed SI produce un evento visible —
  *   es una fila con retry en el stepper, aunque no bloquee el `done` del run
  *   (runStatusFromPhases no la exige). Los segments de SongFormer llegan en
  *   segundos (start/end float); la conversión a startMs/endMs enteros ocurre
- *   SOLO aquí, una única vez — downstream ya trabaja en ms.
+ *   SOLO aquí, una única vez — downstream ya trabaja en ms. `beats` es el
+ *   bpm/beats detectados con librosa sobre la mezcla completa (best-effort,
+ *   null si Modal no pudo detectarlos): se propaga tal cual, process.js lo
+ *   valida antes de persistir.
  */
 function sectionResultToStructureEvent(jobId, result, error) {
   if (result.status === 'failed') {
@@ -124,7 +128,7 @@ function sectionResultToStructureEvent(jobId, result, error) {
     phase: 'structure',
     ok: true,
     partial: false,
-    payload: { segments, model: result.model ?? null },
+    payload: { segments, model: result.model ?? null, beats: result.beats ?? null },
   };
 }
 

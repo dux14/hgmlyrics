@@ -87,6 +87,12 @@ songformer_image = (
         "pip install httpx==0.27.2",  # _common.py (download/post_webhook); no en su requirements
         "cd /opt/songformer/src/SongFormer && python utils/fetch_pretrained.py",
     )
+    # librosa: infer.py del repo SongFormer ya lo trae transitivamente (carga
+    # el audio a 24kHz con el), pero ahora run_songformer TAMBIEN lo usa
+    # directo (sections/beats.py, deteccion de bpm/beats) -- se pinea
+    # explicito para no depender de una version transitiva sin garantia.
+    # Misma version que modal/requirements.txt (imagen de align_app.py/stems).
+    .pip_install("librosa==0.10.2")
     .add_local_python_source("sections")
 )
 

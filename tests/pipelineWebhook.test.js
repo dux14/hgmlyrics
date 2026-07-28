@@ -788,6 +788,68 @@ describe('POST /api/pipeline/webhook — structure (SongFormer)', () => {
     expect(phasesArg.structure.status).toBe('failed');
     expect(phasesArg.structure.error).toBe('timeout de inferencia');
   });
+
+  it('structure done con beats válidos → se persisten en el upsert de song_structure', async () => {
+    const phases = initialPhases();
+    phases.upload.status = 'done';
+    phases.structure.status = 'running';
+    sqlResponses.push([runRow({ phases })]); // SELECT FOR UPDATE
+    sqlResponses.push([]); // upsert song_structure
+    sqlResponses.push([]); // UPDATE song_pipeline_runs
+
+    const res = makeRes();
+    await handler(
+      signedReq({
+        runId: 'run-1',
+        phase: 'structure',
+        ok: true,
+        payload: {
+          segments: [{ label: 'coro', startMs: 64200, endMs: 105800 }],
+          model: 'songformer',
+          beats: { bpm: 128, beatsMs: [0, 469, 938, 1407, 1875, 2344, 2813, 3281] },
+        },
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    const upsert = sqlCalls.find((c) => c.text.includes('INSERT INTO song_structure'));
+    expect(upsert.values).toContainEqual({
+      bpm: 128,
+      beatsMs: [0, 469, 938, 1407, 1875, 2344, 2813, 3281],
+    });
+  });
+
+  it('structure done con beats inválidos (bpm fuera de rango) → se descartan, queda NULL', async () => {
+    const phases = initialPhases();
+    phases.upload.status = 'done';
+    phases.structure.status = 'running';
+    sqlResponses.push([runRow({ phases })]); // SELECT FOR UPDATE
+    sqlResponses.push([]); // upsert song_structure
+    sqlResponses.push([]); // UPDATE song_pipeline_runs
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const res = makeRes();
+    await handler(
+      signedReq({
+        runId: 'run-1',
+        phase: 'structure',
+        ok: true,
+        payload: {
+          segments: [{ label: 'coro', startMs: 64200, endMs: 105800 }],
+          model: 'songformer',
+          beats: { bpm: 999, beatsMs: [0, 469, 938, 1407, 1875, 2344, 2813, 3281] },
+        },
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    const upsert = sqlCalls.find((c) => c.text.includes('INSERT INTO song_structure'));
+    expect(upsert.values).toContainEqual(null);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('beats invalidos'));
+    warnSpy.mockRestore();
+  });
 });
 
 describe('applyPipelinePhaseEvent — CAS directo (reuso B7)', () => {

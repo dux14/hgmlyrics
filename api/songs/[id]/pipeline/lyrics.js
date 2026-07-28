@@ -248,7 +248,8 @@ async function publishToSongbook(res, songId) {
       line.vocalization ? { text: line.text, spoken: true } : { text: line.text },
     ),
   }));
-  const result = await sql`UPDATE songs SET sections = ${sql.json(sections)}, updated_at = now() WHERE id = ${songId}`;
+  const result =
+    await sql`UPDATE songs SET sections = ${sql.json(sections)}, updated_at = now() WHERE id = ${songId}`;
   // La canción pudo borrarse concurrentemente entre el read del store y este
   // UPDATE: si no afecto filas, no reportamos exito (mismo patron TOCTOU que
   // api/songs/[id].js).
@@ -294,9 +295,11 @@ async function putGate(req, res, songId) {
     UPDATE song_pipeline_runs SET lyrics_review = ${sql.json(nextLyricsReview)}, updated_at = now()
     WHERE id = ${run.id} AND status = 'awaiting_lyrics'
   `;
-  res
-    .status(200)
-    .json({ review: next, canApprove: canApprove(next), ...buildGateSuggestions(next, songSections) });
+  res.status(200).json({
+    review: next,
+    canApprove: canApprove(next),
+    ...buildGateSuggestions(next, songSections),
+  });
 }
 
 // Fases derivadas de la letra recien aprobada. Fallo de dispatch NO debe
@@ -371,19 +374,30 @@ async function approveGate(res, songId) {
       sections: snapshot.sections,
       hash: snapshot.hash,
     });
+    // bpm_detected/beats ya no se resetean a NULL en el swap: la fase
+    // `structure` de ESTE MISMO run detecto el tempo con librosa sobre la
+    // mezcla completa (sections/beats.py) y lo dejo en song_structure.beats
+    // -- se repone aca en vez de perderse. Antes se escribia NULL siempre
+    // porque sync (el unico lugar que persistia bpm/beats) nunca se despacha
+    // en el path pipeline (ver dispatchSync mas abajo). Sin beats validos
+    // (Modal no detecto nada usable) sigue quedando NULL, igual que antes.
+    const structureRows = await tx`
+      SELECT beats FROM song_structure WHERE song_id = ${songId}
+    `;
+    const structureBeats = structureRows[0]?.beats ?? null;
+    const bpmDetected = structureBeats?.bpm ?? null;
+
     // Shim de compatibilidad: los consumidores actuales de song_line_timings
     // (clips, SyncFineTuning, ImmersiveView hasta F4) reciben el timing del
     // store. Renglones sin word-timing interpolan el punto medio entre vecinas
     // (monotonia estricta que exige validateLines/seekSyncToLine).
-    // bpm_detected/beats se resetean en el swap (mismo criterio que
-    // api/songs/[id]/audio.js:100): el audio nuevo del run no puede heredar la
-    // rejilla de un align standalone previo (metronomo quedaria stale).
     await tx`
-      INSERT INTO song_line_timings (song_id, status, lines, provider, error)
-      VALUES (${songId}, 'ready', ${tx.json(timingLinesFromSections(snapshot.sections))}, 'pipeline', NULL)
+      INSERT INTO song_line_timings (song_id, status, lines, provider, error, bpm_detected, beats)
+      VALUES (${songId}, 'ready', ${tx.json(timingLinesFromSections(snapshot.sections))}, 'pipeline', NULL,
+        ${bpmDetected}, ${tx.json(structureBeats)})
       ON CONFLICT (song_id) DO UPDATE
         SET status = 'ready', lines = EXCLUDED.lines, provider = 'pipeline', error = NULL,
-          bpm_detected = NULL, beats = NULL
+          bpm_detected = EXCLUDED.bpm_detected, beats = EXCLUDED.beats
     `;
     await tx`
       UPDATE song_pipeline_runs

@@ -217,8 +217,23 @@ describe('sectionEventToPhaseEvent', () => {
       payload: {
         segments: [{ label: 'coro', startMs: 64200, endMs: 105800 }],
         model: 'songformer',
+        beats: null,
       },
     });
+  });
+
+  it('structure done con beats → se propaga tal cual en el payload', () => {
+    const out = sectionEventToPhaseEvent({
+      jobId: 'run-1',
+      section: 'structure',
+      result: {
+        status: 'done',
+        model: 'songformer',
+        segments: [{ label: 'coro', start: 64.2, end: 105.8 }],
+        beats: { bpm: 128, beatsMs: [0, 469, 938] },
+      },
+    });
+    expect(out.payload.beats).toEqual({ bpm: 128, beatsMs: [0, 469, 938] });
   });
 
   it('structure failed → fase structure falla (NO null: fila visible con retry, aunque no bloquee el run)', () => {

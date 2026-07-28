@@ -87,7 +87,7 @@ export async function renderPartituraPage(container) {
   // dejar timers huérfanos (mismo patrón que StudioPage). onRouteChange (no
   // 'hashchange' con {once:true}): ese patrón se consumía con la PRIMERA
   // navegación de la sesión, no necesariamente al abandonar esta ruta —
-  // ademas replaceState (logout/expiracion) no dispara 'hashchange'.
+  // además replaceState (logout/expiración) no dispara 'hashchange'.
   unsubscribePartituraRoute = onRouteChange(() => {
     if (!window.location.hash.startsWith('#/partitura')) {
       stopPolling();

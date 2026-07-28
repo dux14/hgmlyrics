@@ -61,7 +61,7 @@ function stopPolling() {
 // cuando el usuario sale de #/estudio. Idempotente: si ya hay guarda, no
 // añade otra. onRouteChange (no solo 'hashchange'): navigate(path,
 // {replace:true}) usa history.replaceState y no dispara 'hashchange'
-// (logout, expiracion de sesion via guardedRoute) — sin esto el poller y el
+// (logout, expiración de sesión vía guardedRoute) — sin esto el poller y el
 // canal Realtime quedaban vivos tras salir.
 function startHashGuard() {
   if (hashChangeHandler) return;

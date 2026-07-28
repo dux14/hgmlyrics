@@ -104,7 +104,7 @@ const PATHS = {
 /**
  * Cover-art fallback: a quiet music note on a dark tile, shown when an album
  * cover fails to load. Data URI (no network), works as an <img> src in the
- * onerror handler. Replaces the previous 🎵 emoji placeholder.
+ * onerror handler. Replaces the previous emoji placeholder.
  */
 export const COVER_PLACEHOLDER =
   'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><rect width=%2224%22 height=%2224%22 fill=%22%231a1a1a%22/><path d=%22M9 18V5l12-2v13%22 fill=%22none%22 stroke=%22%23555%22 stroke-width=%221.5%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/><circle cx=%226%22 cy=%2218%22 r=%223%22 fill=%22none%22 stroke=%22%23555%22 stroke-width=%221.5%22/><circle cx=%2218%22 cy=%2216%22 r=%223%22 fill=%22none%22 stroke=%22%23555%22 stroke-width=%221.5%22/></svg>';

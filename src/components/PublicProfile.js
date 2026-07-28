@@ -205,7 +205,7 @@ export async function renderPublicProfile(container, username) {
             if (ok) {
               invalidateFriends();
               invalidatePublicProfile(profile.username);
-              invalidateMyProfile(); // friendCount propio tambien cambia
+              invalidateMyProfile(); // friendCount propio también cambia
               rmBtn.textContent = 'Eliminado';
               rmBtn.classList.add('pf-btn-action--sent');
             } else {
@@ -229,7 +229,7 @@ export async function renderPublicProfile(container, username) {
             if (ok) {
               invalidateFriends();
               invalidatePublicProfile(profile.username);
-              invalidateMyProfile(); // friendCount propio tambien cambia
+              invalidateMyProfile(); // friendCount propio también cambia
               acceptBtn.textContent = 'Solicitud aceptada';
               acceptBtn.classList.add('pf-btn-action--sent');
             } else {

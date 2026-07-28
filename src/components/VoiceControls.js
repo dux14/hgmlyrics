@@ -164,7 +164,7 @@ export function VoiceControls({
   /**
    * Map peerId → { stream: MediaStream, monitor: { stop: () => void } | null, indicator }
    * Se guarda stream para poder arrancar el monitor retroactivamente cuando
-   * audioCtx se crea despues de que llego el stream remoto.
+   * audioCtx se crea después de que llegó el stream remoto.
    * @type {Map<string, { stream: MediaStream, monitor: { stop: () => void }|null, indicator: object }>}
    */
   const remotePeers = new Map();
@@ -249,7 +249,7 @@ export function VoiceControls({
       });
 
       // Arrancar monitores para peers remotos que llegaron antes de activar la voz.
-      // Tambien los añadimos al DOM ahora que la voz esta activa (Minor 1).
+      // También los añadimos al DOM ahora que la voz está activa (Minor 1).
       remotePeers.forEach((entry, peerId) => {
         if (!entry.monitor) {
           entry.monitor = createLevelMonitor(audioCtx, entry.stream, (speaking) => {

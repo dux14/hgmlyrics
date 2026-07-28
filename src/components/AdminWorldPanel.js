@@ -174,7 +174,7 @@ function renderZones(zonesContainer, zones, tiledJsonRef) {
             <label class="wm-zone-label">Nombre</label>
             <input class="ff-input wm-zone-name" value="${esc(z.name)}" placeholder="Nombre de la zona" />
             <label class="wm-zone-label">channelId</label>
-            <input class="ff-input wm-zone-channel" value="${esc(z.channelId)}" placeholder="channelId unico" />
+            <input class="ff-input wm-zone-channel" value="${esc(z.channelId)}" placeholder="channelId único" />
           </div>
         </div>
       `,

@@ -1347,7 +1347,7 @@ export async function renderTuner(container, opts = {}) {
 
   // onRouteChange (no solo 'hashchange'): navigate(path, {replace:true}) usa
   // history.replaceState y no dispara 'hashchange' (logout, expiracion de
-  // sesion via guardedRoute) — con solo 'hashchange' el mic, el AudioContext
+  // sesión vía guardedRoute) — con solo 'hashchange' el mic, el AudioContext
   // y el worklet quedaban vivos, mas un setInterval huerfano.
   const cleanupOnRouteChange = () => {
     if (!window.location.hash.startsWith('#/afinador')) {

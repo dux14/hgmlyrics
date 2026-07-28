@@ -389,7 +389,7 @@ export function createMultiTrackPlayer({
     { signal: ac.signal },
   );
 
-  // --- Duracion / tiempo maestro ---
+  // --- Duración / tiempo maestro ---
   const durationOf = (i) => {
     const audio = audios[i];
     if (audio && Number.isFinite(audio.duration) && audio.duration > 0) return audio.duration;

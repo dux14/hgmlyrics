@@ -25,7 +25,6 @@ export function initUpdateNotifier() {
   // 3. Debug helper — accessible from browser console
   globalThis.__showUpdateBanner = () => {
     showUpdateBanner();
-    console.log('✅ Update banner shown (debug mode)');
   };
 }
 

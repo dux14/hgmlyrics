@@ -8,7 +8,7 @@
  * Teardown: registra una guarda de onRouteChange que destruye el juego
  * Phaser al salir de #/mundo (mismo patrón que StudioPage.js). No usa solo
  * 'hashchange': navigate(path, {replace:true}) usa history.replaceState y
- * no lo dispara (logout, expiracion de sesion via guardedRoute) — sin esto
+ * no lo dispara (logout, expiración de sesión vía guardedRoute) — sin esto
  * quedaban la escena Phaser, las RTCPeerConnection, el stream local y los
  * canales de Supabase vivos tras salir.
  */
@@ -287,9 +287,9 @@ export async function renderWorldPage(container) {
     _reconnectEl.hidden = state === 'connected';
 
     if (state === 'connected' && _wasDisconnected) {
-      // Re-suscribir señalizacion y reconciliar el mesh si habia zona y microfono.
-      // El canal de señalizacion Supabase se cierra al caer la conexion; hay que
-      // recrearlo. El mesh tambien se recrea para que su handler onSignal apunte
+      // Re-suscribir señalización y reconciliar el mesh si había zona y micrófono.
+      // El canal de señalización Supabase se cierra al caer la conexión; hay que
+      // recrearlo. El mesh también se recrea para que su handler onSignal apunte
       // al nuevo canal; diffPeers se encarga de solo abrir las conexiones nuevas.
       if (_currentZone && _localStream) {
         // Limpiar peers remotos anteriores para que el roster se reconstruya limpio.
@@ -360,7 +360,7 @@ export async function renderWorldPage(container) {
       // El mesh original fue creado con getLocalStream() === null; al tener
       // el stream ahora, re-establecemos las conexiones para la zona actual
       // llamando a setPeers con la lista ya registrada (si la hay).
-      // La renegociacion completa queda para A3; aqui nos limitamos a dar el
+      // La renegociación completa queda para A3; aquí nos limitamos a dar el
       // stream al contexto del mesh.
     },
     onDeactivate() {

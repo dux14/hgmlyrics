@@ -127,7 +127,7 @@ export async function compressImageToLimit(
   }
 
   if (!result) {
-    throw new Error('No se pudo reducir la imagen por debajo del limite de tamano.');
+    throw new Error('No se pudo reducir la imagen por debajo del límite de tamaño.');
   }
 
   const ext = result.type === 'image/webp' ? 'webp' : 'jpg';

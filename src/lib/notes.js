@@ -132,7 +132,7 @@ export function matchesTarget(detected, target) {
   );
 }
 
-/** Convierte un numero MIDI (C-1 = 0) a nombre con octava, ej. 48 -> "C3". */
+/** Convierte un número MIDI (C-1 = 0) a nombre con octava, ej. 48 -> "C3". */
 export function midiToName(midi) {
   const i = ((midi % 12) + 12) % 12;
   const octave = Math.floor(midi / 12) - 1;

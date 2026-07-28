@@ -100,11 +100,11 @@ const SUBTITLES = {
   },
 };
 
-/** Boton "Publicar al cancionero" (F4): copia SOLO el texto de la letra
+/** Botón "Publicar al cancionero" (F4): copia SOLO el texto de la letra
  * aprobada del pipeline a songs.sections (one-way, sin correr alignment — el
  * karaoke ya consume el store del pipeline directamente). Vive en el slot de
- * detalle de la fila Letra, separado del boton "Editar letra" (que usa el
- * unico `actionLabel`/`onRetry` de PhaseRow). */
+ * detalle de la fila Letra, separado del botón "Editar letra" (que usa el
+ * único `actionLabel`/`onRetry` de PhaseRow). */
 function createPublishToSongbookButton(songId) {
   const wrap = document.createElement('div');
   const btn = document.createElement('button');

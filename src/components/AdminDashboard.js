@@ -76,7 +76,7 @@ export function renderAdminEditList(container) {
       </div>
 
       <div class="form-group">
-        <input type="search" id="admin-search" class="form-group__input" placeholder="Buscar por titulo, album o artista..." autocomplete="off" />
+        <input type="search" id="admin-search" class="form-group__input" placeholder="Buscar por título, álbum o artista..." autocomplete="off" />
       </div>
 
       <div id="admin-song-list" class="admin-song-list">

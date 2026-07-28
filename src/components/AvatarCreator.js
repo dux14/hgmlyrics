@@ -323,7 +323,7 @@ export function AvatarCreator() {
     const user = getSession()?.user;
     if (!user) {
       statusEl.className = 'ac-status ac-status--error';
-      statusEl.textContent = 'No hay sesion activa.';
+      statusEl.textContent = 'No hay sesión activa.';
       return;
     }
 

@@ -79,8 +79,17 @@ export async function applyPipelinePhaseEvent(sql, runId, event) {
     if (next === null) return { ignored: true };
 
     // Publicación progresiva: efectos por fase, en la misma transacción.
+    // Guard de pertenencia (mismo patrón que api/stems/jobs/[id].js SEC-07): el
+    // servidor mismo manda las keys esperadas en el dispatch (pipelineStemKey en
+    // api/_lib/storage.js), así que una key que no empiece por `${songId}/` no
+    // puede venir de un dispatch legítimo — se descarta en vez de insertarla,
+    // para no dejar firmable una key ajena vía api/songs/[id]/studio.js.
+    const belongsToSong = (storageKey) =>
+      typeof storageKey === 'string' && storageKey.startsWith(`${run.songId}/`);
+
     if (event.phase === 'stems' && event.tracks) {
       for (const [kind, storageKey] of Object.entries(event.tracks)) {
+        if (!belongsToSong(storageKey)) continue;
         await tx`
           INSERT INTO song_stems (song_id, kind, storage_key, run_id)
           VALUES (${run.songId}, ${kind}, ${storageKey}, ${runId})
@@ -147,6 +156,7 @@ export async function applyPipelinePhaseEvent(sql, runId, event) {
       Array.isArray(event.payload?.clips)
     ) {
       for (const clip of event.payload.clips) {
+        if (!belongsToSong(clip.storageKey)) continue;
         // ON CONFLICT sobre el mismo índice único de song_section_audio
         // (song_id, section_index, coalesce(voice_scope,'')). El WHERE del
         // DO UPDATE es la guarda: si la fila existente es un clip manual

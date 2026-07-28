@@ -47,12 +47,13 @@ function makeRes() {
   };
 }
 
+// El secreto se elige por fase (mismo criterio que api/pipeline/webhook.js):
+// 'pitch' firma con PITCH_MODAL_WEBHOOK_SECRET, el resto con MODAL_WEBHOOK_SECRET.
 function signedReq(bodyObj) {
+  const secret = bodyObj.phase === 'pitch' ? 'secret-pitch' : 'modalwebhooksecret';
   const body = JSON.stringify(bodyObj);
   const timestamp = String(Math.floor(Date.now() / 1000));
-  const sig = createHmac('sha256', 'modalwebhooksecret')
-    .update(`${timestamp}.${body}`)
-    .digest('hex');
+  const sig = createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
   const req = Readable.from([Buffer.from(body)]);
   req.method = 'POST';
   req.headers = { 'x-modal-timestamp': timestamp, 'x-modal-signature': sig };
@@ -140,6 +141,42 @@ describe('POST /api/pipeline/webhook — firma HMAC', () => {
 
     expect(res.statusCode).not.toBe(401);
   });
+
+  it('rechaza un evento de fase "stems" firmado con PITCH_MODAL_WEBHOOK_SECRET (no cruzar secretos entre fases)', async () => {
+    process.env.PITCH_MODAL_WEBHOOK_SECRET = 'secret-pitch';
+
+    const bodyObj = { runId: 'run-1', phase: 'stems', ok: true, tracks: { vocals: 'song-1/stems/vocals.mp3' } };
+    const body = JSON.stringify(bodyObj);
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const sig = createHmac('sha256', 'secret-pitch').update(`${timestamp}.${body}`).digest('hex');
+    const req = Readable.from([Buffer.from(body)]);
+    req.method = 'POST';
+    req.headers = { 'x-modal-timestamp': timestamp, 'x-modal-signature': sig };
+    req.query = {};
+    req.url = '/api/pipeline/webhook';
+
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('rechaza un evento de fase "pitch" firmado con MODAL_WEBHOOK_SECRET (debe usar el secreto de pitch)', async () => {
+    const bodyObj = { runId: 'run-1', phase: 'pitch', ok: true, payload: { analysis: {} } };
+    const body = JSON.stringify(bodyObj);
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const sig = createHmac('sha256', 'modalwebhooksecret').update(`${timestamp}.${body}`).digest('hex');
+    const req = Readable.from([Buffer.from(body)]);
+    req.method = 'POST';
+    req.headers = { 'x-modal-timestamp': timestamp, 'x-modal-signature': sig };
+    req.query = {};
+    req.url = '/api/pipeline/webhook';
+
+    const res = makeRes();
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(401);
+  });
 });
 
 describe('POST /api/pipeline/webhook — stems parcial y final', () => {
@@ -172,11 +209,31 @@ describe('POST /api/pipeline/webhook — stems parcial y final', () => {
     expect(finalUpdate).toBeDefined();
   });
 
+  it('stems con storage key de otra canción → se descarta, no se inserta', async () => {
+    sqlResponses.push([runRow()]); // SELECT FOR UPDATE
+    sqlResponses.push([]); // UPDATE song_pipeline_runs
+
+    const res = makeRes();
+    await handler(
+      signedReq({
+        runId: 'run-1',
+        phase: 'stems',
+        ok: true,
+        partial: true,
+        tracks: { vocals: 'otra-cancion/stems/vocals.mp3' },
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(sqlCalls.some((c) => c.text.includes('INSERT INTO song_stems'))).toBe(false);
+  });
+
   it('stems final (ok, sin partial) → fase done + status recalculado', async () => {
     const phases = initialPhases();
     phases.upload.status = 'done';
     phases.stems.status = 'running';
-    phases.stems.tracks = { vocals: 'k1', instrumental: 'k2' };
+    phases.stems.tracks = { vocals: 'song-1/stems/vocals.mp3', instrumental: 'song-1/stems/instrumental.mp3' };
     sqlResponses.push([runRow({ phases })]);
     sqlResponses.push([]); // insert song_stems lead
     sqlResponses.push([]); // insert song_stems backing
@@ -185,7 +242,12 @@ describe('POST /api/pipeline/webhook — stems parcial y final', () => {
     const doneStemsPhases = structuredClone(phases);
     doneStemsPhases.stems = {
       status: 'done',
-      tracks: { vocals: 'k1', instrumental: 'k2', lead: 'k3', backing: 'k4' },
+      tracks: {
+        vocals: 'song-1/stems/vocals.mp3',
+        instrumental: 'song-1/stems/instrumental.mp3',
+        lead: 'song-1/stems/lead.mp3',
+        backing: 'song-1/stems/backing.mp3',
+      },
     };
     sqlResponses.push([{ phases: doneStemsPhases }]); // SELECT phases FOR UPDATE (claim)
     sqlResponses.push([]); // UPDATE phases (marca transcription 'running')
@@ -196,7 +258,7 @@ describe('POST /api/pipeline/webhook — stems parcial y final', () => {
         runId: 'run-1',
         phase: 'stems',
         ok: true,
-        tracks: { lead: 'k3', backing: 'k4' },
+        tracks: { lead: 'song-1/stems/lead.mp3', backing: 'song-1/stems/backing.mp3' },
       }),
       res,
     );
@@ -408,8 +470,8 @@ describe('POST /api/pipeline/webhook — clips', () => {
         ok: true,
         payload: {
           clips: [
-            { sectionIndex: 0, voiceScope: null, storageKey: 'c0.mp3', durationSec: 4.2 },
-            { sectionIndex: 1, voiceScope: 'lead', storageKey: 'c1.mp3', durationSec: 3.1 },
+            { sectionIndex: 0, voiceScope: null, storageKey: 'song-1/clips/full/section-0.mp3', durationSec: 4.2 },
+            { sectionIndex: 1, voiceScope: 'lead', storageKey: 'song-1/clips/lead/section-1.mp3', durationSec: 3.1 },
           ],
         },
       }),
@@ -420,6 +482,32 @@ describe('POST /api/pipeline/webhook — clips', () => {
     const upserts = sqlCalls.filter((c) => c.text.includes('song_section_audio'));
     expect(upserts.length).toBe(2);
     expect(upserts.every((c) => c.text.includes('run_id IS NOT NULL'))).toBe(true);
+  });
+
+  it('clips con storage key de otra canción → se descarta, no se inserta', async () => {
+    const phases = initialPhases();
+    phases.sync.status = 'done';
+    phases.clips.status = 'running';
+    sqlResponses.push([runRow({ phases })]);
+    sqlResponses.push([]); // UPDATE song_pipeline_runs
+
+    const res = makeRes();
+    await handler(
+      signedReq({
+        runId: 'run-1',
+        phase: 'clips',
+        ok: true,
+        payload: {
+          clips: [
+            { sectionIndex: 0, voiceScope: null, storageKey: 'otra-cancion/clips/full/section-0.mp3' },
+          ],
+        },
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(sqlCalls.some((c) => c.text.includes('song_section_audio'))).toBe(false);
   });
 });
 
@@ -454,7 +542,11 @@ describe('POST /api/pipeline/webhook — sección de stems (adapter hkn-stems)',
     const doneStemsPhases = structuredClone(phases);
     doneStemsPhases.stems = {
       status: 'done',
-      tracks: { lead: 'k-lead', backing: 'k-back', vocals: 'k-voc' },
+      tracks: {
+        lead: 'song-1/stems/lead.mp3',
+        backing: 'song-1/stems/backing.mp3',
+        vocals: 'song-1/stems/vocals.mp3',
+      },
     };
     sqlResponses.push([{ phases: doneStemsPhases }]); // advanceNextPhase: claim
     sqlResponses.push([]); // marca transcription 'running'
@@ -467,7 +559,11 @@ describe('POST /api/pipeline/webhook — sección de stems (adapter hkn-stems)',
         result: {
           status: 'done',
           model: 'karaoke',
-          outputs: { lead: 'k-lead', backing: 'k-back', vocals: 'k-voc' },
+          outputs: {
+            lead: 'song-1/stems/lead.mp3',
+            backing: 'song-1/stems/backing.mp3',
+            vocals: 'song-1/stems/vocals.mp3',
+          },
         },
       }),
       res,

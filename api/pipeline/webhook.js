@@ -37,30 +37,34 @@ export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['POST'])) return;
 
   const body = await readRawBody(req);
-  // hkn-pitch firma con su propio secreto (PITCH_MODAL_WEBHOOK_SECRET, ver
-  // modal/pitch/_common.py); stems/align/transcription/clips firman con
-  // MODAL_WEBHOOK_SECRET. Se acepta cualquiera de los dos: la fase se valida
-  // después contra PHASES, así que aceptar ambos no debilita la autorización.
-  const okSignature = [process.env.MODAL_WEBHOOK_SECRET, process.env.PITCH_MODAL_WEBHOOK_SECRET]
-    .filter(Boolean)
-    .some((secret) =>
-      verifyModalSignature({
-        timestamp: req.headers['x-modal-timestamp'],
-        signature: req.headers['x-modal-signature'],
-        body,
-        secret,
-      }),
-    );
-  if (!okSignature) {
-    res.status(401).json({ error: 'Firma de webhook inválida' });
-    return;
-  }
 
   let event;
   try {
     event = JSON.parse(body);
   } catch {
     res.status(400).json({ error: 'Body JSON inválido' });
+    return;
+  }
+
+  // hkn-pitch firma con su propio secreto (PITCH_MODAL_WEBHOOK_SECRET, ver
+  // modal/pitch/_common.py); el resto de fases (stems/align/transcription/
+  // clips/structure) firma con MODAL_WEBHOOK_SECRET. El secreto se elige por
+  // la fase del evento ANTES de verificar la firma: aceptar cualquiera de los
+  // dos para cualquier fase (como antes) permitía que quien solo tuviera el
+  // secreto de pitch emitiera eventos de stems/clips/structure. La fase de
+  // sección de stems (evento sin `phase`, ver adapter abajo) siempre usa
+  // MODAL_WEBHOOK_SECRET.
+  const secret = event.phase === 'pitch'
+    ? process.env.PITCH_MODAL_WEBHOOK_SECRET
+    : process.env.MODAL_WEBHOOK_SECRET;
+  const okSignature = Boolean(secret) && verifyModalSignature({
+    timestamp: req.headers['x-modal-timestamp'],
+    signature: req.headers['x-modal-signature'],
+    body,
+    secret,
+  });
+  if (!okSignature) {
+    res.status(401).json({ error: 'Firma de webhook inválida' });
     return;
   }
 

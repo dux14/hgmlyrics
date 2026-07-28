@@ -156,7 +156,7 @@ def s1_extract(payload: dict) -> str | None:
 # S2 — estructura (SongFormer, CPU)
 # ──────────────────────────────────────────────────────────────────────────────
 
-@app.function(image=songformer_image, secrets=_webhook_secrets, gpu="T4", timeout=900)
+@app.function(image=songformer_image, secrets=_webhook_secrets, gpu="L4", timeout=900)
 def s2_structure(payload: dict) -> None:
     """
     S2: segmentacion de estructura musical con SongFormer (ASLP-lab).
@@ -167,6 +167,16 @@ def s2_structure(payload: dict) -> None:
 
     Timeout aumentado a 300 s (vs 60 del stub) para dar margen a la descarga
     del modelo desde HuggingFace en el primer cold start.
+
+    GPU L4 (24 GiB), no T4 (16 GiB): infer.py de SongFormer corre el track
+    ENTERO en una pasada, sin ventaneo por lotes, asi que el pico de memoria
+    escala con la duracion. En T4 una cancion de 6:27 murio con
+    "CUDA out of memory. Tried to allocate 5.58 GiB" (~20 GiB de pico
+    necesarios) mientras las de <=4:53 pasaban -- fallo silencioso, porque
+    infer.py se traga la excepcion del worker y sale con rc=0 (ver
+    sections/songformer.py). 24 GiB cubren el catalogo real con margen; una
+    cancion de mas de ~8 min volveria a quedarse corta y necesitaria
+    ventanear la inferencia, no solo mas GPU.
     """
     _run_songformer_impl(payload)
 

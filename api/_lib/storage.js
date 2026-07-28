@@ -228,6 +228,43 @@ export async function deleteSongAudioObjects(keys) {
   if (error && !/not.*found/i.test(error.message || '')) throw error;
 }
 
+/**
+ * Borra TODOS los archivos bajo un prefijo del bucket song-audio (mismo
+ * patrón que deleteStemsPrefix, pero con subcarpetas del pipeline unificado:
+ * stems/ y clips/<kind>/). Usado por el cron de limpieza para barrer los
+ * objetos huérfanos de un run cancelado (#4: purgeRun cancela el run en DB
+ * pero los jobs de Modal ya despachados con signed PUT URLs pueden seguir
+ * subiendo después del borrado).
+ * @param {string} prefix - p.ej. `${songId}`
+ */
+export async function deleteSongAudioPrefix(prefix) {
+  const toDelete = [];
+  const { data: stemFiles, error: stemErr } = await supabase.storage
+    .from(SONG_AUDIO_BUCKET)
+    .list(`${prefix}/stems`);
+  if (!stemErr && stemFiles) {
+    for (const f of stemFiles) toDelete.push(`${prefix}/stems/${f.name}`);
+  }
+  const { data: clipKinds, error: clipKindsErr } = await supabase.storage
+    .from(SONG_AUDIO_BUCKET)
+    .list(`${prefix}/clips`);
+  if (!clipKindsErr && clipKinds) {
+    const clipLists = await Promise.all(
+      clipKinds.map((kind) =>
+        supabase.storage.from(SONG_AUDIO_BUCKET).list(`${prefix}/clips/${kind.name}`),
+      ),
+    );
+    clipLists.forEach(({ data, error }, i) => {
+      if (error || !data) return;
+      const kindName = clipKinds[i].name;
+      for (const f of data) toDelete.push(`${prefix}/clips/${kindName}/${f.name}`);
+    });
+  }
+  if (toDelete.length > 0) {
+    await supabase.storage.from(SONG_AUDIO_BUCKET).remove(toDelete);
+  }
+}
+
 // ──────────────────────────────────────────────
 // Pipeline unificado — keys dentro del mismo bucket 'song-audio' (spec fase A).
 // La firma PUT/GET reutiliza createSongAudioSignedPutUrl/signSongAudioDownload

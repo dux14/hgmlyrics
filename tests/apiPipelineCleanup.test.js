@@ -10,8 +10,10 @@ import { initialPhases } from '../api/_lib/pipeline/state.js';
 
 // ── Mock de storage ───────────────────────────────────────────────────────────
 const mockDeleteSongAudioObject = vi.fn();
+const mockDeleteSongAudioPrefix = vi.fn();
 vi.mock('../api/_lib/storage.js', () => ({
   deleteSongAudioObject: mockDeleteSongAudioObject,
+  deleteSongAudioPrefix: mockDeleteSongAudioPrefix,
 }));
 
 // ── Mock de sql ────────────────────────────────────────────────────────────────
@@ -51,6 +53,7 @@ beforeEach(() => {
   topLevelResponses.length = 0;
   sqlResponses.length = 0;
   mockDeleteSongAudioObject.mockReset().mockResolvedValue(undefined);
+  mockDeleteSongAudioPrefix.mockReset().mockResolvedValue(undefined);
   process.env.CRON_SECRET = 'supersecret';
 });
 
@@ -82,12 +85,18 @@ describe('GET /api/pipeline/cleanup — auth fail-closed', () => {
     topLevelResponses.push([]); // candidatos de fases running
     topLevelResponses.push([]); // DELETE runs abandonados
     topLevelResponses.push([]); // SELECT runs superseded
+    topLevelResponses.push([]); // SELECT runs cancelled
 
     const res = makeRes();
     await handler(makeReq({ headers: { authorization: 'Bearer supersecret' } }), res);
 
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ timedOut: 0, abandoned: 0, supersededCleaned: 0 });
+    expect(res.json).toHaveBeenCalledWith({
+      timedOut: 0,
+      abandoned: 0,
+      supersededCleaned: 0,
+      cancelledCleaned: 0,
+    });
   });
 });
 
@@ -203,6 +212,46 @@ describe('GET /api/pipeline/cleanup — runs superseded', () => {
     expect(mockDeleteSongAudioObject).toHaveBeenCalledTimes(2);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ supersededCleaned: 1 }),
+    );
+  });
+});
+
+describe('GET /api/pipeline/cleanup — runs cancelled (#4: objetos huérfanos de purgeRun)', () => {
+  it('barre <songId>/stems|clips/ y el input del run, luego limpia input_path', async () => {
+    topLevelResponses.push([]); // candidatos fases running
+    topLevelResponses.push([]); // DELETE runs abandonados
+    topLevelResponses.push([]); // SELECT runs superseded
+    topLevelResponses.push([
+      { id: 'run-7', song_id: 'song-1', input_path: 'song-1/runs/run-7/full.mp3' },
+    ]); // SELECT runs cancelled
+    topLevelResponses.push([]); // UPDATE input_path = NULL
+
+    const res = makeRes();
+    await handler(makeReq({ headers: { authorization: 'Bearer supersecret' } }), res);
+
+    expect(mockDeleteSongAudioPrefix).toHaveBeenCalledWith('song-1');
+    expect(mockDeleteSongAudioObject).toHaveBeenCalledWith('song-1/runs/run-7/full.mp3');
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ cancelledCleaned: 1 }),
+    );
+  });
+
+  it('un sweep que falla no marca el run cancelado como limpio (se reintenta después)', async () => {
+    topLevelResponses.push([]);
+    topLevelResponses.push([]);
+    topLevelResponses.push([]);
+    topLevelResponses.push([
+      { id: 'run-8', song_id: 'song-2', input_path: 'song-2/runs/run-8/full.mp3' },
+    ]);
+
+    mockDeleteSongAudioPrefix.mockReset().mockRejectedValue(new Error('storage caído'));
+
+    const res = makeRes();
+    await handler(makeReq({ headers: { authorization: 'Bearer supersecret' } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ cancelledCleaned: 0 }),
     );
   });
 });

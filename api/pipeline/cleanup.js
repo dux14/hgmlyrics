@@ -11,11 +11,15 @@
  * 3) Runs 'superseded' → se borra el storage de su input (el prefijo
  *    runs/<runId>/ solo contiene ese objeto); los stems publicados viven en
  *    <songId>/stems/ y no se tocan.
+ * 4) Runs 'cancelled' (purgeRun, api/songs/[id]/pipeline.js) → barre
+ *    <songId>/stems|clips/ por si un job de Modal ya despachado (signed PUT
+ *    URLs) siguió subiendo después del borrado del run; process.js ignora
+ *    esos jobs por run cancelado, pero nadie más barría esos objetos.
  */
 import sql from '../_lib/db.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { timingSafeEqualStr } from '../_lib/crypto.js';
-import { deleteSongAudioObject } from '../_lib/storage.js';
+import { deleteSongAudioObject, deleteSongAudioPrefix } from '../_lib/storage.js';
 import { applyPhaseEvent, runStatusFromPhases, PHASES } from '../_lib/pipeline/state.js';
 
 // Vercel cron manda Authorization: Bearer ${CRON_SECRET}
@@ -100,9 +104,35 @@ export default withErrors(async (req, res) => {
     `;
   }
 
+  // 4) Runs 'cancelled' (purgeRun) con input_path aún seteado: barrer el
+  // prefijo <songId>/stems|clips/ (jobs de Modal despachados antes del purge
+  // que siguieron subiendo después) además del input propio del run. Igual
+  // criterio que 'superseded': solo se limpia input_path (marca "ya barrido")
+  // si el sweep tuvo éxito; si falla, la próxima corrida reintenta.
+  const cancelledRuns = await sql`
+    SELECT id, song_id, input_path FROM song_pipeline_runs
+    WHERE status = 'cancelled' AND input_path IS NOT NULL
+  `;
+  const cancelledResults = await Promise.allSettled(
+    cancelledRuns.map(async (run) => {
+      await deleteSongAudioPrefix(run.song_id);
+      await deleteSongAudioObject(run.input_path);
+    }),
+  );
+  const cancelledCleared = cancelledRuns.filter(
+    (_, i) => cancelledResults[i].status === 'fulfilled',
+  );
+  for (const run of cancelledCleared) {
+    await sql`
+      UPDATE song_pipeline_runs SET input_path = NULL, updated_at = now()
+      WHERE id = ${run.id}
+    `;
+  }
+
   res.status(200).json({
     timedOut,
     abandoned: abandoned.length,
     supersededCleaned: cleared.length,
+    cancelledCleaned: cancelledCleared.length,
   });
 });

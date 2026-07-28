@@ -6,6 +6,7 @@
  *   #/song/:id   → Song view
  *   #/admin      → Admin gate / editor
  */
+import { icon } from './lib/icons.js';
 
 /** @type {Map<string, Function>} */
 const routes = new Map();
@@ -200,7 +201,15 @@ function resolve() {
   for (const [pattern, handler] of routes) {
     const params = matchRoute(pattern, path);
     if (params !== null) {
-      handler({ params, path, query });
+      // Promise.resolve() cubre handlers sync y async por igual. Los handlers
+      // lazy (import() dinámico) son async: si el chunk falla — típicamente
+      // offline en una ruta cuyos assets no están precacheados — la promesa
+      // rechaza. Sin este catch quedaba sin manejar y la pantalla se quedaba
+      // con el skeleton de showPageSkeleton() (main.js) para siempre.
+      Promise.resolve(handler({ params, path, query })).catch((err) => {
+        console.error('Fallo al resolver la ruta:', err);
+        renderRouteLoadError();
+      });
       return;
     }
   }
@@ -208,6 +217,26 @@ function resolve() {
   if (notFoundHandler) {
     notFoundHandler({ path });
   }
+}
+
+/**
+ * Estado de error legible cuando un handler de ruta (típicamente uno lazy,
+ * con import() dinámico) rechaza — p. ej. offline en una ruta cuyos chunks no
+ * están precacheados. Reemplaza el skeleton colgado por un mensaje con
+ * reintento. Mismo patrón visual que renderAsyncRegion()/ListDetail.js
+ * (empty-state + [data-retry]).
+ */
+function renderRouteLoadError() {
+  const container = document.getElementById('main-content');
+  if (!container) return;
+  container.innerHTML = `
+    <div class="empty-state">
+      <div class="empty-state__icon">${icon('frown', { size: 40 })}</div>
+      <h2 class="empty-state__title">No se pudo cargar esta sección</h2>
+      <p class="empty-state__text">Revisa tu conexión e inténtalo de nuevo.</p>
+      <button class="btn btn--primary" type="button" data-retry>Reintentar</button>
+    </div>`;
+  container.querySelector('[data-retry]')?.addEventListener('click', () => refresh());
 }
 
 /**

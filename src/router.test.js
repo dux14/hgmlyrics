@@ -116,6 +116,43 @@ describe('router — capa backable (focus de búsqueda)', () => {
   });
 });
 
+describe('router — handler lazy que rechaza', () => {
+  beforeEach(async () => {
+    await resetHistory();
+  });
+
+  it('pinta un estado de error en #main-content en vez de dejar el skeleton colgado', async () => {
+    document.body.innerHTML = '<div id="main-content">skeleton</div>';
+    route('/mundo', async () => {
+      throw new Error('Failed to fetch dynamically imported module');
+    });
+    initRouter();
+
+    navigate('/mundo');
+    await tick();
+
+    const container = document.getElementById('main-content');
+    expect(container.innerHTML).not.toContain('skeleton');
+    expect(container.textContent).toContain('No se pudo cargar esta sección');
+    expect(container.querySelector('[data-retry]')).toBeTruthy();
+  });
+
+  it('el handler sync se sigue comportando igual (sin regresión)', async () => {
+    document.body.innerHTML = '<div id="main-content"></div>';
+    const handler = vi.fn();
+    route('/albumes', handler);
+    initRouter();
+
+    navigate('/albumes');
+    await tick();
+
+    expect(handler).toHaveBeenCalled();
+    expect(document.getElementById('main-content').textContent).not.toContain(
+      'No se pudo cargar',
+    );
+  });
+});
+
 describe('router — onRouteChange()', () => {
   beforeEach(async () => {
     await resetHistory();

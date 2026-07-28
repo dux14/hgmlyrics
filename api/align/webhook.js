@@ -10,7 +10,7 @@ import { allowMethods, withErrors } from '../_lib/http.js';
 import { verifyModalSignature } from '../_lib/modal.js';
 import { projectCanonicalLines } from '../_lib/align.js';
 import { validateBeats } from '../_lib/beats.js';
-import { applyPipelinePhaseEvent } from '../_lib/pipeline/process.js';
+import { applyPipelinePhaseEvent, isStaleSnapshot } from '../_lib/pipeline/process.js';
 import { ADVANCE_AFTER, advanceNextPhase } from '../_lib/pipeline/advance.js';
 import { canStartPhase } from '../_lib/pipeline/state.js';
 
@@ -39,7 +39,12 @@ async function notifyPipelineSync(songId, ok, error, snapshotHash) {
     // 'sync' quedaba fallida para siempre. applyPipelinePhaseEvent decide: un
     // evento parcial o fallido sobre una fase ya 'failed' se sigue ignorando.
     if (!run || !['running', 'failed'].includes(run.phases?.sync?.status)) return;
-    const outcome = await applyPipelinePhaseEvent(sql, run.id, { phase: 'sync', ok, error, snapshotHash });
+    const outcome = await applyPipelinePhaseEvent(sql, run.id, {
+      phase: 'sync',
+      ok,
+      error,
+      snapshotHash,
+    });
     const advance = outcome?.next && ADVANCE_AFTER.sync;
     if (advance && canStartPhase(outcome.next, advance)) {
       await advanceNextPhase(sql, run.id, songId, advance);
@@ -188,6 +193,19 @@ export default withErrors(async (req, res) => {
     score: typeof l.score === 'number' && l.score >= 0 && l.score <= 1 ? l.score : null,
     interpolated: l.interpolated === true,
   }));
+
+  // Gate T7 (retry automatico transversal): un job tardio del ciclo de letra
+  // viejo no debe pisar los timings del ciclo nuevo (el admin reabrio y
+  // volvio a aprobar la letra mientras este job de Modal seguia corriendo).
+  // Se chequea ANTES del UPDATE propio de este webhook -- notifyPipelineSync
+  // igual corre despues (marca `sync` 'stale' via applyPipelinePhaseEvent) sin
+  // invertir el orden: si notifyPipelineSync corriera primero marcaria `sync`
+  // 'done' y `clips` arrancaria leyendo song_line_timings viejo.
+  if (await isStaleSnapshot(sql, songId, snapshotHash)) {
+    await notifyPipelineSync(songId, true, undefined, snapshotHash);
+    res.status(200).json({ status: 'stale' });
+    return;
+  }
 
   await sql`
     UPDATE song_line_timings

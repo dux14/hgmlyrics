@@ -38,9 +38,19 @@ vi.mock('../src/lib/voiceSystem.js', () => ({
   validateSongV3: vi.fn(),
 }));
 
-const applyPipelinePhaseEventMock = vi.fn(async () => ({ status: 'running', next: {}, songId: 'song-1' }));
+const applyPipelinePhaseEventMock = vi.fn(async () => ({
+  status: 'running',
+  next: {},
+  songId: 'song-1',
+}));
+// isStaleSnapshot default: no stale (false) — la logica propia del gate
+// (solo aplica si AMBOS hashes existen) se prueba contra la implementacion
+// real en tests/pipelineWebhook.test.js sobre applyPipelinePhaseEvent, misma
+// regla; aca solo se prueba el cableado de este webhook.
+const isStaleSnapshotMock = vi.fn(async () => false);
 vi.mock('../api/_lib/pipeline/process.js', () => ({
   applyPipelinePhaseEvent: (...args) => applyPipelinePhaseEventMock(...args),
+  isStaleSnapshot: (...args) => isStaleSnapshotMock(...args),
 }));
 
 // dispatchPhase real toca Modal/Storage — se mockea para aislar el webhook,
@@ -98,6 +108,8 @@ beforeEach(() => {
   sqlCalls.length = 0;
   applyPipelinePhaseEventMock.mockClear();
   dispatchPhaseMock.mockClear();
+  isStaleSnapshotMock.mockClear();
+  isStaleSnapshotMock.mockResolvedValue(false);
 });
 
 // Fixture: 3 lineas canonicas (misma proyeccion que api/_lib/align.js).
@@ -321,6 +333,33 @@ describe('POST /api/align/webhook — payload de beats (best-effort)', () => {
   });
 });
 
+describe('POST /api/align/webhook — gate T7 de snapshotHash (anti-clobber ciclo viejo)', () => {
+  it('snapshotHash stale → song_line_timings intacto, notifica sync igual, 200', async () => {
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
+    isStaleSnapshotMock.mockResolvedValueOnce(true);
+    sqlResponses.push([{ id: 'run-9', phases: { sync: { status: 'running' } } }]); // SELECT run activo (notifyPipelineSync)
+    const lines = [{ i: 0, startMs: 0 }];
+    const res = makeRes();
+    await webhookHandler(
+      modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx', snapshotHash: 'hash-vieja' }),
+      res,
+    );
+    expect(res.statusCode).toBe(200);
+    expect(isStaleSnapshotMock).toHaveBeenCalledWith(expect.anything(), 'song-1', 'hash-vieja');
+    // No debe haber ningun UPDATE song_line_timings: el gate corta ANTES.
+    const update = sqlCalls.find((c) => c.text.startsWith('UPDATE song_line_timings'));
+    expect(update).toBeUndefined();
+    // notifyPipelineSync SI corre (marca la fase 'stale' via applyPipelinePhaseEvent).
+    expect(applyPipelinePhaseEventMock).toHaveBeenCalledTimes(1);
+    expect(applyPipelinePhaseEventMock.mock.calls[0][2]).toEqual({
+      phase: 'sync',
+      ok: true,
+      error: undefined,
+      snapshotHash: 'hash-vieja',
+    });
+  });
+});
+
 describe('POST /api/align/webhook — lines estructuralmente invalidas (200 + failed)', () => {
   it('startMs no monotono creciente → failed, 200', async () => {
     sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT sections
@@ -409,11 +448,17 @@ describe('POST /api/align/webhook — puente al run unificado (fase sync)', () =
     const res = makeRes();
     await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
     expect(res.statusCode).toBe(200);
-    const runSelect = sqlCalls.find((c) => c.text.startsWith('SELECT id, phases FROM song_pipeline_runs'));
+    const runSelect = sqlCalls.find((c) =>
+      c.text.startsWith('SELECT id, phases FROM song_pipeline_runs'),
+    );
     expect(runSelect).toBeTruthy();
     expect(applyPipelinePhaseEventMock).toHaveBeenCalledTimes(1);
     expect(applyPipelinePhaseEventMock.mock.calls[0][1]).toBe('run-1');
-    expect(applyPipelinePhaseEventMock.mock.calls[0][2]).toEqual({ phase: 'sync', ok: true, error: undefined });
+    expect(applyPipelinePhaseEventMock.mock.calls[0][2]).toEqual({
+      phase: 'sync',
+      ok: true,
+      error: undefined,
+    });
   });
 
   it('failed (error de Modal) + run activo con sync running → notifica ok:false', async () => {
@@ -509,7 +554,11 @@ describe('POST /api/align/webhook — puente al run unificado (fase sync)', () =
     await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
     expect(res.statusCode).toBe(200);
     expect(applyPipelinePhaseEventMock).toHaveBeenCalledTimes(1);
-    expect(applyPipelinePhaseEventMock.mock.calls[0][2]).toEqual({ phase: 'sync', ok: true, error: undefined });
+    expect(applyPipelinePhaseEventMock.mock.calls[0][2]).toEqual({
+      phase: 'sync',
+      ok: true,
+      error: undefined,
+    });
   });
 });
 
@@ -585,7 +634,12 @@ describe('POST /api/align/webhook — contrato del puente sync (spec 2026-07-22 
     const lines = [{ i: 0, startMs: 0 }];
     const res = makeRes();
     await webhookHandler(
-      modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx', snapshotHash: 'hash-contract' }),
+      modalAlignReq({
+        songId: 'song-1',
+        lines,
+        provider: 'whisperx',
+        snapshotHash: 'hash-contract',
+      }),
       res,
     );
     expect(res.statusCode).toBe(200);

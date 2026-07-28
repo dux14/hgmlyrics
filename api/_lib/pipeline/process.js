@@ -42,6 +42,30 @@ export function runIdFromJobId(jobId) {
 }
 
 /**
+ * Gate T7 (retry automatico transversal): misma regla que LYRICS_DERIVED_PHASES
+ * de arriba, pero pensada para webhooks legacy standalone (api/align/webhook.js)
+ * que escriben su propia tabla (song_line_timings) ANTES de notificar al run
+ * unificado. Un job tardio de un ciclo de letra viejo no debe pisar los
+ * timings del ciclo nuevo -- se llama ANTES del UPDATE propio del webhook, no
+ * despues. Solo aplica si AMBOS hashes existen: sin snapshotHash en el
+ * payload (karaoke standalone, sin pipeline) no hay gate, igual que hoy.
+ * @param {import('postgres').Sql} sql
+ * @param {string} songId
+ * @param {string|undefined} snapshotHash snapshotHash del payload del webhook.
+ * @returns {Promise<boolean>} true si el snapshotHash llego stale.
+ */
+export async function isStaleSnapshot(sql, songId, snapshotHash) {
+  if (!snapshotHash) return false;
+  const [run] = await sql`
+    SELECT lyrics_review AS "lyricsReview" FROM song_pipeline_runs
+    WHERE song_id = ${songId} AND status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')
+    ORDER BY created_at DESC LIMIT 1
+  `;
+  const approvedHash = run?.lyricsReview?.approvedHash;
+  return Boolean(approvedHash) && snapshotHash !== approvedHash;
+}
+
+/**
  * @param {import('postgres').Sql} sql
  * @param {string} jobId runId de song_pipeline_runs, con o sin el sufijo
  *   `:snapshotHash` que agrega dispatchPitch (ver runIdFromJobId).

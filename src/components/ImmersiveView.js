@@ -39,7 +39,7 @@ import {
 import { buildVoiceChipHTML } from '../lib/voiceChips.js';
 import { openFloatingTuner } from './FloatingTuner.js';
 import { openOptionsSheet, closeOptionsSheet, isOptionsSheetOpen } from './OptionsSheet.js';
-import { projectLines } from '../lib/projectLines.js';
+import { projectLines, speedToSecondsPerLine } from '../lib/projectLines.js';
 import { getImmersiveMode, setImmersiveMode, availableModes } from '../lib/immersiveStore.js';
 import { createSpring } from '../lib/spring.js';
 import { resolveLabelOverlaps, observeLabelOverlaps } from '../lib/labelOverlap.js';
@@ -438,10 +438,17 @@ function togglePause(s) {
   showControls(s);
 }
 
+// B8 (perf): un swipe de velocidad solo cambia `line.seconds` — no la voz, el
+// modo ni la transposición — así que no hace falta reproyectar `s.lines`
+// (transponer acordes/notas, reconstruir groups) ni reconstruir el roll con
+// innerHTML. Las líneas con speedPreset de sección conservan su velocidad
+// fija (mismo criterio que projectLines: presetSpeed ?? velocidad base).
 function applySpeed(s, next) {
   s.speed = next;
   saveBaseSpeed(next, s.songId);
-  recomputeLines(s);
+  for (const line of s.lines) {
+    line.seconds = speedToSecondsPerLine(line.presetSpeed ?? next);
+  }
   scheduleAdvance(s);
 }
 

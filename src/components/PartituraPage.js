@@ -11,9 +11,11 @@ import { PHASE_ORDER, phaseLabel, phaseProgress, isTerminalStatus } from '../lib
 import { escapeHtml, safeUrl } from '../lib/escape.js';
 import { createPoller } from '../lib/poller.js';
 import { renderVoiceLines } from '../lib/partituraRender.js';
+import { onRouteChange } from '../router.js';
 
 const POLL_MS = 3000;
 let poller = null;
+let unsubscribePartituraRoute = null;
 
 // Extensiones/MIME aceptados: mismo criterio doble que studioFile.js#isMp3File,
 // ampliado a los formatos que soporta la Partitura (no solo MP3).
@@ -54,14 +56,18 @@ function formatExpiry(iso) {
   }
 }
 
-// Guarda de navegación del polling del job activo (mismo patrón que StudioPage#stopPolling):
-// registrada por renderPartituraPage vía hashchange {once:true} para no dejar timers huérfanos.
+// Guarda de navegación del polling del job activo (mismo patrón que StudioPage#stopPolling).
 function stopPolling() {
   if (poller) poller.stop();
   poller = null;
+  if (unsubscribePartituraRoute) {
+    unsubscribePartituraRoute();
+    unsubscribePartituraRoute = null;
+  }
 }
 
 export async function renderPartituraPage(container) {
+  stopPolling();
   container.innerHTML = `
     <section class="partitura fade-in">
       <h1 class="partitura__title">
@@ -77,8 +83,15 @@ export async function renderPartituraPage(container) {
   const body = container.querySelector('.partitura__body');
 
   // Al salir de #/partitura hay que cortar el polling del job activo para no
-  // dejar timers huérfanos (mismo patrón que StudioPage).
-  window.addEventListener('hashchange', stopPolling, { once: true });
+  // dejar timers huérfanos (mismo patrón que StudioPage). onRouteChange (no
+  // 'hashchange' con {once:true}): ese patrón se consumía con la PRIMERA
+  // navegación de la sesión, no necesariamente al abandonar esta ruta —
+  // ademas replaceState (logout/expiracion) no dispara 'hashchange'.
+  unsubscribePartituraRoute = onRouteChange(() => {
+    if (!window.location.hash.startsWith('#/partitura')) {
+      stopPolling();
+    }
+  });
 
   let quota = { used: 0, limit: 2 };
   try {

@@ -26,7 +26,7 @@ import {
 import { fetchSongDetail } from '../lib/store.js';
 import { getSession, refreshProfile, getProfile } from '../lib/authStore.js';
 import { invalidateMyProfile } from '../lib/profileCache.js';
-import { navigate } from '../router.js';
+import { navigate, onRouteChange } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { showToast } from '../lib/toast.js';
 import {
@@ -1345,7 +1345,11 @@ export async function renderTuner(container, opts = {}) {
 
   /* ─── cleanup on route change ─── */
 
-  const cleanupOnHashChange = () => {
+  // onRouteChange (no solo 'hashchange'): navigate(path, {replace:true}) usa
+  // history.replaceState y no dispara 'hashchange' (logout, expiracion de
+  // sesion via guardedRoute) — con solo 'hashchange' el mic, el AudioContext
+  // y el worklet quedaban vivos, mas un setInterval huerfano.
+  const cleanupOnRouteChange = () => {
     if (!window.location.hash.startsWith('#/afinador')) {
       if (detector) {
         detector.stop();
@@ -1362,10 +1366,10 @@ export async function renderTuner(container, opts = {}) {
       }
       stopMetroVisual();
       clearTimeout(metroHoldTimer);
-      window.removeEventListener('hashchange', cleanupOnHashChange);
+      unsubscribeTunerRoute();
     }
   };
-  window.addEventListener('hashchange', cleanupOnHashChange);
+  const unsubscribeTunerRoute = onRouteChange(cleanupOnRouteChange);
 
   paintNav();
   paintBody();

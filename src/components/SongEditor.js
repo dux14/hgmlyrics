@@ -6,6 +6,9 @@
  * chord editor (UltimateGuitar style), import modal, and live preview.
  */
 
+// B4 (perf): editor.css movido acá desde el import eager de app.css — solo lo
+// consumen SongEditor/AdminDashboard/AdminSection/VozEditor, todos lazy.
+import '../styles/editor.css';
 import { fetchSongDetail, refreshData, invalidateSongDetailCache } from '../lib/store.js';
 import { songToChordPro } from '../lib/importParse.js';
 import { MUSICAL_KEYS, chordProKeyToCanonical } from '../lib/musicKeys.js';

@@ -6,6 +6,7 @@
 
 import '../styles/weekly-word.css';
 import '../styles/voz-editor.css';
+import '../styles/editor.css'; // B4 (perf): .editor__* — movido desde app.css
 import { navigate } from '../router.js';
 import { liturgicalPalette, coverGradient } from '../lib/liturgicalColor.js';
 import { vozHeroBodyHtml } from '../lib/vozHeroBody.js';

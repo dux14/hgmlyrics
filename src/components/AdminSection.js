@@ -5,6 +5,7 @@ import { icon } from '../lib/icons.js';
 // también lo consume AdminWorldPage.js, que vive en un chunk lazy distinto
 // y no arrastra el CSS de AdminDashboard.js.
 import '../styles/admin-dashboard.css';
+import '../styles/editor.css'; // B4 (perf): .editor__* — movido desde app.css
 
 /**
  * Cabecera estándar para sub-páginas de admin: botón volver (a /admin por

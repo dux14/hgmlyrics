@@ -99,6 +99,10 @@ export function projectLines(song, ctx = {}) {
         noteRaw,
         spoken,
         seconds,
+        // presetSpeed: velocidad fija de la sección (si tiene data-speed-preset),
+        // null si usa la velocidad base. La usa ImmersiveView#applySpeed (B8,
+        // perf) para recalcular seconds por línea sin reproyectar todo.
+        presetSpeed,
       });
     }
   }

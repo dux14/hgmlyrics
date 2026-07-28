@@ -3,6 +3,7 @@ import { getState } from '../lib/store.js';
 import { icon } from '../lib/icons.js';
 import { escapeHtml as escapeHtmlLocal } from '../lib/escape.js';
 import '../styles/admin-dashboard.css';
+import '../styles/editor.css'; // B4 (perf): .form-group/.editor__* — movido desde app.css
 
 const HUB_CARDS = [
   {

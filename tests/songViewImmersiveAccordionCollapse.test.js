@@ -135,8 +135,11 @@ describe('Task 1.3: entrar al full view colapsa y pausa el acordeón de audio de
     expect(audioEl.pause).not.toHaveBeenCalled();
 
     // Entra al escenario: dispara el mismo callback que ImmersiveView real
-    // invoca de forma síncrona al entrar (ctx.pauseAutoscroll).
+    // invoca de forma síncrona al entrar (ctx.pauseAutoscroll). B4 (perf):
+    // enterImmersive se importa dinámicamente en el handler del botón —
+    // flush de microtasks para que capturedCtx quede seteado.
     container.querySelector('#enter-stage-btn').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(capturedCtx).toBeTruthy();
     capturedCtx.pauseAutoscroll();
 

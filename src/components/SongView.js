@@ -52,7 +52,11 @@ import {
 import { escapeHtml, safeUrl } from '../lib/escape.js';
 import { getSongAudio } from '../lib/songAudioApi.js';
 import { getSongStudio } from '../lib/studioApi.js';
-import { enterImmersive } from './ImmersiveView.js';
+// B4 (perf): ImmersiveView.js (1457 líneas) + labelOverlap/timingEngine/
+// beatClock/metronomeClick/FloatingTuner/spring/immersive.css NO se importan
+// de forma estática: SongView.js es import estático de main.js, así que
+// viajaban en el chunk de arranque aunque la vista se monta por gesto de
+// usuario. Se cargan al vuelo dentro del handler de #enter-stage-btn.
 import { normalizeSectionType } from '../lib/sectionTypes.js';
 
 const FONT_SIZE_KEY = 'hkn-lyrics-font-size';
@@ -964,7 +968,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
     reRenderLyrics();
   }
 
-  container.querySelector('#enter-stage-btn')?.addEventListener('click', () => {
+  container.querySelector('#enter-stage-btn')?.addEventListener('click', async () => {
     const sv = container.querySelector('.song-view');
     if (sv) {
       // FIX finding 4: el afinador flotante (mic en vivo) no se pausa solo al
@@ -973,6 +977,7 @@ async function _renderSongBody(container, songId, isPreview, song) {
       floatingTunerApi?.destroy();
       floatingTunerApi = null;
       setFloatingTunerOpen(false);
+      const { enterImmersive } = await import('./ImmersiveView.js');
       enterImmersive(sv, {
         song,
         getActiveVoice: () => chordsVoiceId,
@@ -1617,6 +1622,24 @@ function setupAutoscroll(_container, songId) {
     scheduleCollapse();
   }
 
+  // Cache de docHeight/innerHeight: leerlos por frame junto a un scrollTo()
+  // fuerza un reflow síncrono sobre el DOM más grande de la app (layout
+  // thrashing). Se refrescan solo cuando el tamaño real cambia.
+  let cachedDocHeight = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+  let cachedInnerHeight = window.innerHeight;
+  // Degrada sin romper si ResizeObserver no existe (jsdom en tests).
+  const docResizeObserver =
+    typeof ResizeObserver === 'function'
+      ? new ResizeObserver(() => {
+          cachedDocHeight = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+        })
+      : null;
+  docResizeObserver?.observe(document.body);
+  function onWindowResize() {
+    cachedInnerHeight = window.innerHeight;
+  }
+  window.addEventListener('resize', onWindowResize);
+
   function startScroll() {
     isScrolling = true;
     applyFabVisibility();
@@ -1668,8 +1691,7 @@ function setupAutoscroll(_container, songId) {
 
       // Stop if at the bottom
       const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-      const docHeight = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
-      if (scrollTop + window.innerHeight >= docHeight - 2) {
+      if (scrollTop + cachedInnerHeight >= cachedDocHeight - 2) {
         stopScroll();
         return;
       }
@@ -1753,18 +1775,23 @@ function setupAutoscroll(_container, songId) {
   window.addEventListener('wheel', onUserScroll, { passive: true });
   window.addEventListener('touchmove', onUserScroll, { passive: true });
 
-  // Cleanup when navigating away (hashchange)
+  // Cleanup al navegar fuera. onRouteChange (no 'hashchange') porque
+  // navigate(path, {replace:true}) usa history.replaceState y no dispara
+  // 'hashchange' (ver router.js) — con solo 'hashchange' quedaban dos FAB
+  // superpuestos con IDs duplicados tras logout/expiración de sesión.
   function cleanup() {
     stopScroll();
     clearTimeout(collapseTimer);
     io.disconnect();
     if (headerIo) headerIo.disconnect();
+    docResizeObserver?.disconnect();
+    window.removeEventListener('resize', onWindowResize);
     fab.remove();
     window.removeEventListener('wheel', onUserScroll);
     window.removeEventListener('touchmove', onUserScroll);
-    window.removeEventListener('hashchange', cleanup);
+    unsubscribeRouteChange();
   }
-  window.addEventListener('hashchange', cleanup);
+  const unsubscribeRouteChange = onRouteChange(cleanup);
 
   return { pauseAutoscroll: stopScroll };
 }

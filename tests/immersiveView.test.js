@@ -471,6 +471,25 @@ describe('gestos (swipe horizontal/vertical, tap vs swipe)', () => {
     expect(stored).toBeGreaterThan(0.5);
   });
 
+  it('B8 (perf): swipe vertical NO reconstruye el roll (innerHTML) — solo cambia seconds', () => {
+    const sv = mountSongView();
+    enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });
+    const viewport = document.getElementById('imm-viewport');
+    const roll = document.getElementById('imm-roll');
+    const lineElsBefore = Array.from(roll.children);
+
+    dispatchPointer(viewport, 'pointerdown', 100, 300);
+    dispatchPointer(document, 'pointermove', 100, 200);
+    dispatchPointer(document, 'pointerup', 100, 200); // dy=-100 >= 40px: sube velocidad
+
+    // Si recomputeLines/renderRoll corrieran, el roll se reconstruye con
+    // innerHTML y los nodos hijos serían instancias NUEVAS (misma referencia
+    // != mismo elemento tras un innerHTML rebuild).
+    const lineElsAfter = Array.from(roll.children);
+    expect(lineElsAfter).toEqual(lineElsBefore);
+    lineElsAfter.forEach((el, i) => expect(el).toBe(lineElsBefore[i]));
+  });
+
   it('un tap corto no dispara swipe: primero despierta el chrome, luego pausa', () => {
     vi.useFakeTimers();
     const sv = mountSongView();

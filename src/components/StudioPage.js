@@ -31,6 +31,7 @@ import { subscribe, isOffline } from '../lib/offlineState.js';
 import { renderAsyncRegion } from '../lib/renderAsync.js';
 import { skelRowList } from '../lib/skeleton.js';
 import { createPoller } from '../lib/poller.js';
+import { onRouteChange } from '../router.js';
 
 const MAX_DURATION_S = 10.5 * 60;
 let poller = null;
@@ -50,22 +51,25 @@ function stopPolling() {
     jobChannel = null;
   }
   if (hashChangeHandler) {
-    window.removeEventListener('hashchange', hashChangeHandler);
+    hashChangeHandler();
     hashChangeHandler = null;
   }
   if (_unsubOffline) { _unsubOffline(); _unsubOffline = null; }
 }
 
-// Registra (una sola vez) la guarda que corta el polling cuando el usuario sale
-// de #/estudio. Idempotente: si ya hay guarda, no añade otra.
+// Registra (una sola vez) la guarda que corta el polling y el canal Realtime
+// cuando el usuario sale de #/estudio. Idempotente: si ya hay guarda, no
+// añade otra. onRouteChange (no solo 'hashchange'): navigate(path,
+// {replace:true}) usa history.replaceState y no dispara 'hashchange'
+// (logout, expiracion de sesion via guardedRoute) — sin esto el poller y el
+// canal Realtime quedaban vivos tras salir.
 function startHashGuard() {
   if (hashChangeHandler) return;
-  hashChangeHandler = () => {
+  hashChangeHandler = onRouteChange(() => {
     if (!window.location.hash.startsWith('#/estudio')) {
       stopPolling();
     }
-  };
-  window.addEventListener('hashchange', hashChangeHandler);
+  });
 }
 
 function hoursLeft(expiresAt) {

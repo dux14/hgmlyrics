@@ -5,13 +5,18 @@
  *  - resolveWorldGate({ user, online }) → 'login' | 'offline' | 'ok'
  *  - renderWorldPage(container)
  *
- * Teardown: registra una guarda de hashchange que destruye el juego Phaser
- * al salir de #/mundo (mismo patrón que StudioPage.js).
+ * Teardown: registra una guarda de onRouteChange que destruye el juego
+ * Phaser al salir de #/mundo (mismo patrón que StudioPage.js). No usa solo
+ * 'hashchange': navigate(path, {replace:true}) usa history.replaceState y
+ * no lo dispara (logout, expiracion de sesion via guardedRoute) — sin esto
+ * quedaban la escena Phaser, las RTCPeerConnection, el stream local y los
+ * canales de Supabase vivos tras salir.
  */
 import '../styles/world.css';
 import { getSession, getProfile } from '../lib/authStore.js';
 import { subscribe } from '../lib/offlineState.js';
 import { supabase } from '../lib/supabase.js';
+import { onRouteChange } from '../router.js';
 import { WorldRoster } from './WorldRoster.js';
 import { ZoneChat } from './ZoneChat.js';
 import { AvatarCreator } from './AvatarCreator.js';
@@ -133,19 +138,18 @@ function teardown() {
     _chatEl = null;
   }
   if (_hashGuardHandler) {
-    window.removeEventListener('hashchange', _hashGuardHandler);
+    _hashGuardHandler();
     _hashGuardHandler = null;
   }
 }
 
 function startHashGuard() {
   if (_hashGuardHandler) return;
-  _hashGuardHandler = () => {
+  _hashGuardHandler = onRouteChange(() => {
     if (!window.location.hash.startsWith('#/mundo')) {
       teardown();
     }
-  };
-  window.addEventListener('hashchange', _hashGuardHandler);
+  });
 }
 
 // ---------------------------------------------------------------------------

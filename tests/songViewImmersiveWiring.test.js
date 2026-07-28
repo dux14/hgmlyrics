@@ -107,6 +107,9 @@ describe('SongView → ImmersiveView: contrato de ctx (FIX 1 y FIX 2)', () => {
     const container = document.createElement('div');
     await renderSongView(container, 'song-1');
     container.querySelector('#enter-stage-btn').click();
+    // B4 (perf): enterImmersive se importa dinámicamente en el handler del
+    // botón — flush de microtasks para que capturedCtx quede seteado.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(capturedCtx).toBeTruthy();
 
     const toggleBtn = document.querySelector('#autoscroll-toggle');
@@ -126,6 +129,7 @@ describe('SongView → ImmersiveView: contrato de ctx (FIX 1 y FIX 2)', () => {
     const container = document.createElement('div');
     await renderSongView(container, 'song-2');
     container.querySelector('#enter-stage-btn').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     capturedCtx.setActiveVoice('tenor', 'ten2');
 
@@ -140,6 +144,7 @@ describe('SongView → ImmersiveView: contrato de ctx (FIX 1 y FIX 2)', () => {
     const container = document.createElement('div');
     await renderSongView(container, 'song-3');
     container.querySelector('#enter-stage-btn').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(() => capturedCtx.setActiveVoice('soprano', 'sop1')).not.toThrow();
     // El panel Voz (selector único) se eliminó de este escenario junto con el
@@ -164,6 +169,7 @@ describe('FINDING 2: SongView resincroniza capas al salir del escenario (ctx.onE
     const container = document.createElement('div');
     await renderSongView(container, 'song-4');
     container.querySelector('#enter-stage-btn').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(capturedCtx.onExit).toBeTypeOf('function');
 
     // Simula el toggle DENTRO del stage (ImmersiveView llama setLayer directamente).

@@ -82,15 +82,15 @@ describe('GET /api/admin/profiles', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('devuelve { users: [...] } con id/username/displayName para admin', async () => {
+  it('devuelve { users: [...] } con id/username/displayName/email/isAdmin para admin', async () => {
     process.env.ADMIN_EMAILS = 'admin@b.com';
     mockGetUser.mockResolvedValueOnce({
       data: { user: { id: 'u1', email: 'admin@b.com' } },
       error: null,
     });
     const sampleProfiles = [
-      { id: 'p1', username: 'samu', displayName: 'Samuel' },
-      { id: 'p2', username: 'mari', displayName: null },
+      { id: 'p1', username: 'samu', displayName: 'Samuel', email: 'a@b.com', isAdmin: true },
+      { id: 'p2', username: null, displayName: null, email: 'c@d.com', isAdmin: false },
     ];
     sqlResponses.push(sampleProfiles);
 
@@ -100,7 +100,7 @@ describe('GET /api/admin/profiles', () => {
     expect(res.body).toEqual({ users: sampleProfiles });
   });
 
-  it('devuelve arreglo vacío cuando no hay perfiles con username', async () => {
+  it('devuelve arreglo vacío cuando no hay perfiles', async () => {
     process.env.ADMIN_EMAILS = 'admin@b.com';
     mockGetUser.mockResolvedValueOnce({
       data: { user: { id: 'u1', email: 'admin@b.com' } },

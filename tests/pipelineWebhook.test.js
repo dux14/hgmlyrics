@@ -145,7 +145,12 @@ describe('POST /api/pipeline/webhook — firma HMAC', () => {
   it('rechaza un evento de fase "stems" firmado con PITCH_MODAL_WEBHOOK_SECRET (no cruzar secretos entre fases)', async () => {
     process.env.PITCH_MODAL_WEBHOOK_SECRET = 'secret-pitch';
 
-    const bodyObj = { runId: 'run-1', phase: 'stems', ok: true, tracks: { vocals: 'song-1/stems/vocals.mp3' } };
+    const bodyObj = {
+      runId: 'run-1',
+      phase: 'stems',
+      ok: true,
+      tracks: { vocals: 'song-1/stems/vocals.mp3' },
+    };
     const body = JSON.stringify(bodyObj);
     const timestamp = String(Math.floor(Date.now() / 1000));
     const sig = createHmac('sha256', 'secret-pitch').update(`${timestamp}.${body}`).digest('hex');
@@ -165,7 +170,9 @@ describe('POST /api/pipeline/webhook — firma HMAC', () => {
     const bodyObj = { runId: 'run-1', phase: 'pitch', ok: true, payload: { analysis: {} } };
     const body = JSON.stringify(bodyObj);
     const timestamp = String(Math.floor(Date.now() / 1000));
-    const sig = createHmac('sha256', 'modalwebhooksecret').update(`${timestamp}.${body}`).digest('hex');
+    const sig = createHmac('sha256', 'modalwebhooksecret')
+      .update(`${timestamp}.${body}`)
+      .digest('hex');
     const req = Readable.from([Buffer.from(body)]);
     req.method = 'POST';
     req.headers = { 'x-modal-timestamp': timestamp, 'x-modal-signature': sig };
@@ -233,7 +240,10 @@ describe('POST /api/pipeline/webhook — stems parcial y final', () => {
     const phases = initialPhases();
     phases.upload.status = 'done';
     phases.stems.status = 'running';
-    phases.stems.tracks = { vocals: 'song-1/stems/vocals.mp3', instrumental: 'song-1/stems/instrumental.mp3' };
+    phases.stems.tracks = {
+      vocals: 'song-1/stems/vocals.mp3',
+      instrumental: 'song-1/stems/instrumental.mp3',
+    };
     sqlResponses.push([runRow({ phases })]);
     sqlResponses.push([]); // insert song_stems lead
     sqlResponses.push([]); // insert song_stems backing
@@ -470,8 +480,18 @@ describe('POST /api/pipeline/webhook — clips', () => {
         ok: true,
         payload: {
           clips: [
-            { sectionIndex: 0, voiceScope: null, storageKey: 'song-1/clips/full/section-0.mp3', durationSec: 4.2 },
-            { sectionIndex: 1, voiceScope: 'lead', storageKey: 'song-1/clips/lead/section-1.mp3', durationSec: 3.1 },
+            {
+              sectionIndex: 0,
+              voiceScope: null,
+              storageKey: 'song-1/clips/full/section-0.mp3',
+              durationSec: 4.2,
+            },
+            {
+              sectionIndex: 1,
+              voiceScope: 'lead',
+              storageKey: 'song-1/clips/lead/section-1.mp3',
+              durationSec: 3.1,
+            },
           ],
         },
       }),
@@ -499,7 +519,11 @@ describe('POST /api/pipeline/webhook — clips', () => {
         ok: true,
         payload: {
           clips: [
-            { sectionIndex: 0, voiceScope: null, storageKey: 'otra-cancion/clips/full/section-0.mp3' },
+            {
+              sectionIndex: 0,
+              voiceScope: null,
+              storageKey: 'otra-cancion/clips/full/section-0.mp3',
+            },
           ],
         },
       }),
@@ -856,4 +880,28 @@ describe('applyPipelinePhaseEvent — durationSec server-side (Task 7)', () => {
       expect(updateCall).toBeUndefined();
     },
   );
+});
+
+// La app Modal hkn-pitch anterior al fix 69dd37f (y cualquier webhook tardío
+// suyo) correlaciona con el jobId versionado en vez del runId. Ese valor iba
+// directo al WHERE id = ${runId} de una columna uuid -> 22P02 -> 500, y el
+// evento se perdía dejando la fase colgada (incidente 28-jul).
+describe('POST /api/pipeline/webhook — runId versionado por ciclo de letra', () => {
+  it('normaliza `runId:snapshotHash` al runId plano antes de consultar', async () => {
+    const phases = initialPhases();
+    phases.lyrics_review.status = 'done';
+    phases.pitch.status = 'running';
+    sqlResponses.push([runRow({ phases, status: 'running' })]); // SELECT FOR UPDATE
+    sqlResponses.push([]); // publicación / UPDATE
+
+    await applyPipelinePhaseEvent(sqlMock, 'run-1:d1e2f3', {
+      phase: 'pitch',
+      ok: false,
+      error: 'boom',
+    });
+
+    const select = sqlCalls.find((c) => c.text.includes('FROM song_pipeline_runs'));
+    expect(select.values).toContain('run-1');
+    expect(select.values).not.toContain('run-1:d1e2f3');
+  });
 });

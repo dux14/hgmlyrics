@@ -28,15 +28,31 @@ export const ACTIVE_RUN_STATUSES = new Set([
 const LYRICS_DERIVED_PHASES = new Set(['sync', 'pitch', 'clips']);
 
 /**
+ * Normaliza el identificador que manda Modal al runId real de
+ * song_pipeline_runs. dispatchPitch versiona el jobId por ciclo de letra
+ * (`${runId}:${snapshotHash}`) para que el dedup `_seen` de hkn-pitch relance
+ * el pipeline al re-aprobar una letra; ese sufijo NO es parte del runId y
+ * revienta cualquier consulta contra la columna uuid (22P02 -> 500). El
+ * snapshotHash es hex, así que el primer ':' siempre separa ambas partes.
+ * @param {string} jobId
+ * @returns {string}
+ */
+export function runIdFromJobId(jobId) {
+  return String(jobId ?? '').split(':')[0];
+}
+
+/**
  * @param {import('postgres').Sql} sql
- * @param {string} runId
+ * @param {string} jobId runId de song_pipeline_runs, con o sin el sufijo
+ *   `:snapshotHash` que agrega dispatchPitch (ver runIdFromJobId).
  * @param {{phase:string, ok:boolean, partial?:boolean, tracks?:object,
  *          artifacts?:object, error?:string, snapshotHash?:string, payload?:object,
  *          durationSec?:number}} event
  * @returns {Promise<{status:string, next:object, songId:string}
  *   | {ignored:true} | {stale:true} | null>} null si el run no existe.
  */
-export async function applyPipelinePhaseEvent(sql, runId, event) {
+export async function applyPipelinePhaseEvent(sql, jobId, event) {
+  const runId = runIdFromJobId(jobId);
   return sql.begin(async (tx) => {
     const rows = await tx`
       SELECT id, song_id AS "songId", status, phases, lyrics_review AS "lyricsReview",

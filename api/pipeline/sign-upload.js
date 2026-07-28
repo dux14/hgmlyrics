@@ -2,7 +2,7 @@ import sql from '../_lib/db.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { timingSafeEqualStr } from '../_lib/crypto.js';
 import { createPitchSignedPutUrl } from '../pitch/_lib/storage.js';
-import { ACTIVE_RUN_STATUSES } from '../_lib/pipeline/process.js';
+import { ACTIVE_RUN_STATUSES, runIdFromJobId } from '../_lib/pipeline/process.js';
 
 // Espejo de api/pitch/sign-upload.js para RUNS del pipeline unificado: el
 // orquestador Modal hkn-pitch, cuando corre dentro de un run del pipeline,
@@ -25,8 +25,14 @@ export default withErrors(async (req, res) => {
     return;
   }
 
+  // Los nodos de modal/pitch firman con el job_id que recibieron, que viene
+  // versionado por ciclo de letra (`${runId}:${snapshotHash}`, ver
+  // dispatchPitch). El sufijo no es parte del runId: sin quitarlo la consulta
+  // reventaba con 22P02 contra la columna uuid y devolvía 500, matando el job
+  // sin webhook (incidente 28-jul).
+  const runId = runIdFromJobId(jobId);
   const rows = await sql`
-    SELECT id, song_id AS "songId", status, phases FROM song_pipeline_runs WHERE id = ${jobId}
+    SELECT id, song_id AS "songId", status, phases FROM song_pipeline_runs WHERE id = ${runId}
   `;
   if (rows.length === 0) {
     res.status(404).json({ error: 'Run no encontrado' });
@@ -52,7 +58,11 @@ export default withErrors(async (req, res) => {
     return;
   }
 
-  const fullKey = `pipeline/${rows[0].songId}/${jobId}/${key}`;
+  // Prefijo por RUN, nunca por ciclo: api/songs/[id]/pipeline.js purga con
+  // deletePitchPrefix(`pipeline/${songId}/${runId}`), así que versionar el
+  // prefijo dejaría los artefactos huérfanos en el bucket. Reescribir el ciclo
+  // anterior es el comportamiento buscado (createPitchSignedPutUrl usa upsert).
+  const fullKey = `pipeline/${rows[0].songId}/${runId}/${key}`;
   const url = await createPitchSignedPutUrl(fullKey);
   res.status(200).json({ url });
 });

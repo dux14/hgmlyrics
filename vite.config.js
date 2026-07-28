@@ -193,6 +193,24 @@ export default defineConfig({
               fetchOptions: { mode: 'cors' },
             },
           },
+          {
+            // Assets del mundo virtual (dev-map.json, dev-tileset.png) excluidos
+            // del precache por globIgnores: 'world/**' (H10 auditoría, Phaser ya
+            // pesa ~1.35MB). Sin esta regla no había NINGUNA vía de cache para
+            // ellos y worldMapStore.js los pide en runtime → /mundo quedaba
+            // inutilizable offline de forma permanente tras la primera visita.
+            urlPattern: /\/world\/.*\.(?:json|png|jpe?g|webp)$/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'world-assets',
+              expiration: {
+                maxEntries: 30,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+                purgeOnQuotaError: true,
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           // Google Fonts eliminado: fuentes self-hosted en public/fonts/ (precache via globPatterns woff2)
         ],
       },

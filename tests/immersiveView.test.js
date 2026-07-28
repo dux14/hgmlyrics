@@ -205,6 +205,36 @@ describe('enterImmersive/exitImmersive', () => {
     expect(document.querySelectorAll('#imm-roll .imm-line--d1')).toHaveLength(0);
   });
 
+  it('#9 perf: un salto grande de índice actualiza correctamente las clases de distancia fuera de la ventana de 4', () => {
+    const sv = mountSongView();
+    const manyLines = Array.from({ length: 20 }, (_, i) => ({
+      text: `Línea ${i}`,
+      groups: [{ start: 0, end: 5, voiceId: 'soprano-1', note: 'C4' }],
+    }));
+    enterImmersive(sv, {
+      song: buildSong({ sections: [{ type: 'verse', label: 'Verso 1', lines: manyLines }] }),
+      getActiveVoice: () => 'soprano-1',
+    });
+    // Antes del salto: línea 5 está a distancia 5 de la activa (0) → 'far'.
+    expect(
+      document.querySelector('#imm-roll .imm-line[data-i="5"]').classList.contains('imm-line--far'),
+    ).toBe(true);
+    // Salto a la línea 5 (updateDistanceClasses solo barre la ventana
+    // [min(0,5)-4, max(0,5)+4] = [0,9] — la línea 5 cae dentro y debe
+    // recalcularse a 'active', no quedar con la clase 'far' vieja).
+    document.querySelector('#imm-roll .imm-line[data-i="5"]').click();
+    const line5 = document.querySelector('#imm-roll .imm-line[data-i="5"]');
+    expect(line5.classList.contains('imm-line--active')).toBe(true);
+    expect(line5.classList.contains('imm-line--far')).toBe(false);
+    // Línea 0 (antigua activa, ahora a distancia 5 de la nueva) debe pasar a 'far'.
+    const line0 = document.querySelector('#imm-roll .imm-line[data-i="0"]');
+    expect(line0.classList.contains('imm-line--far')).toBe(true);
+    // Línea 19, fuera de ambas ventanas (antes y después), nunca se tocó y
+    // sigue en 'far' (ya lo era desde el montaje inicial).
+    const line19 = document.querySelector('#imm-roll .imm-line[data-i="19"]');
+    expect(line19.classList.contains('imm-line--far')).toBe(true);
+  });
+
   it('modo letra (default): todas las líneas usan buildLetraLineHTML', () => {
     const sv = mountSongView();
     enterImmersive(sv, { song: buildSong(), getActiveVoice: () => 'soprano-1' });

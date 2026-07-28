@@ -10,6 +10,13 @@ import { extractCoverColor } from '../lib/coverColor.js';
 
 const FALLBACK = { base: '#3a3a3a', light: '#565656' };
 
+// Cache en memoria por URL de portada (#9, perf): sin colorMap precomputado
+// (portada remota de Storage) cada songTile creaba una Image auxiliar y
+// hacía getImageData en el hilo principal — se repetía en CADA render de
+// Home/Buscar para la MISMA portada. `null` cacheado = ya se intentó
+// extraer y extractCoverColor no devolvió color (no reintentar en vano).
+const extractedColorCache = new Map();
+
 /**
  * @param {object} song - forma de /api/songs
  * @param {Record<string,{base:string,light:string}>} colorMap - de cover-colors.json
@@ -56,16 +63,25 @@ export function songTile(song, colorMap = {}, coverBySlug = {}) {
   // como el resto de la app: mezclar modos para la misma URL hacía que el SW
   // cacheara la respuesta opaca y la petición CORS del tile quedara rota.
   if (!preColor) {
-    const probe = new Image();
-    probe.crossOrigin = 'anonymous';
-    probe.addEventListener('load', () => {
-      const c = extractCoverColor(probe);
-      if (c) {
-        a.style.setProperty('--tile-c1', c.base);
-        a.style.setProperty('--tile-c2', c.light);
+    if (extractedColorCache.has(cover)) {
+      const cached = extractedColorCache.get(cover);
+      if (cached) {
+        a.style.setProperty('--tile-c1', cached.base);
+        a.style.setProperty('--tile-c2', cached.light);
       }
-    });
-    probe.src = cover;
+    } else {
+      const probe = new Image();
+      probe.crossOrigin = 'anonymous';
+      probe.addEventListener('load', () => {
+        const c = extractCoverColor(probe);
+        extractedColorCache.set(cover, c);
+        if (c) {
+          a.style.setProperty('--tile-c1', c.base);
+          a.style.setProperty('--tile-c2', c.light);
+        }
+      });
+      probe.src = cover;
+    }
   }
   art.src = cover;
   a.appendChild(art);

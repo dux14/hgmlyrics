@@ -244,11 +244,36 @@ const DISTANCE_CLASSES = [
   'imm-line--far',
 ];
 
-function updateDistanceClasses(s) {
-  s.lineEls.forEach((el, i) => {
+// Ventana de distancia relevante para distanceClass: más allá de ±3 todo
+// colapsa a 'imm-line--far', así que una línea a más de DISTANCE_WINDOW de
+// AMBOS índices (viejo y nuevo) ya tenía esa clase y la sigue teniendo —
+// tocarla es trabajo perdido. Margen +1 sobre el máximo distanceClass (3)
+// por si el umbral cambia sin actualizar esta constante.
+const DISTANCE_WINDOW = 4;
+
+/**
+ * Recalcula la clase de distancia. Con `prevIndex` (perf, #9: cada avance
+ * barría las N líneas del rollo completo) solo toca el rango
+ * [min(prevIndex,s.index)-W, max(prevIndex,s.index)+W]: fuera de esa
+ * ventana la clase no pudo haber cambiado (ver comentario de DISTANCE_WINDOW).
+ * Sin `prevIndex` (montaje inicial / pre-roll) barre todo el rollo.
+ */
+function updateDistanceClasses(s, prevIndex) {
+  if (prevIndex === undefined) {
+    s.lineEls.forEach((el, i) => {
+      el.classList.remove(...DISTANCE_CLASSES);
+      el.classList.add(distanceClass(i - s.index));
+    });
+    return;
+  }
+  const lo = Math.max(0, Math.min(prevIndex, s.index) - DISTANCE_WINDOW);
+  const hi = Math.min(s.lineEls.length - 1, Math.max(prevIndex, s.index) + DISTANCE_WINDOW);
+  for (let i = lo; i <= hi; i += 1) {
+    const el = s.lineEls[i];
+    if (!el) continue;
     el.classList.remove(...DISTANCE_CLASSES);
     el.classList.add(distanceClass(i - s.index));
-  });
+  }
 }
 
 /** Monta TODAS las líneas de una vez (spec §1) y aplica las clases de distancia. */
@@ -380,7 +405,7 @@ function setActiveIndex(s, index) {
   const clamped = Math.max(0, Math.min(s.lines.length - 1, index));
   const prevIndex = s.index;
   s.index = clamped;
-  updateDistanceClasses(s);
+  updateDistanceClasses(s, prevIndex);
   // `updateDistanceClasses` ya puso la clase de distancia de `prevIndex`/
   // `clamped` en el className; `renderLineContent` la vuelve a calcular al
   // reasignar `className` completo (necesita reasignarlo entero porque

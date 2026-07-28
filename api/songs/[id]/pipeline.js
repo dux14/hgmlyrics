@@ -15,6 +15,8 @@ import {
 import { deletePitchPrefix } from '../../pitch/_lib/storage.js';
 import { initialPhases } from '../../_lib/pipeline/state.js';
 import { titleSimilarity, TITLE_MATCH_THRESHOLD } from '../../_lib/pipeline/titleMatch.js';
+import { getPipelineLyrics } from '../../_lib/pipeline/lyricsStore.js';
+import { songbookDiverged } from '../../_lib/pipeline/songbookSync.js';
 
 // Run "actual" para el GET del stepper: el activo (no terminal) si existe, y si
 // no, el último terminal 'done'/'failed'. Sin este fallback, una canción YA
@@ -69,9 +71,11 @@ async function getRun(_req, res, songId) {
   // (solo status/error, ver applyPhaseEvent en process.js) sino en su propia
   // tabla — se adjunta aquí para que StructureDetail no necesite un fetch
   // aparte del mismo run que ya consume el stepper.
-  const [phases, [structureRow]] = await Promise.all([
+  const [phases, [structureRow], pipelineLyrics, [song]] = await Promise.all([
     signTracks(run.phases),
     sql`SELECT segments FROM song_structure WHERE song_id = ${songId}`,
+    getPipelineLyrics(sql, songId),
+    sql`SELECT sections FROM songs WHERE id = ${songId}`,
   ]);
   // El orden de song_structure.segments NO está garantizado en el productor
   // (mismo hallazgo que pipelineLinesFor en lyrics.js): ordenar acá por
@@ -82,7 +86,14 @@ async function getRun(_req, res, songId) {
     ? [...structureRow.segments].sort((a, b) => a.startMs - b.startMs)
     : null;
   const structure = segments ? { segments } : null;
-  res.status(200).json({ run: { ...run, phases, structure } });
+  // Señal de lectura (songbookSync.js): el cancionero (songs.sections) se
+  // editó después de aprobar la letra del pipeline y ya no coincide con lo
+  // que canta el karaoke. Solo aplica si hay letra de pipeline — sin ella el
+  // cancionero ES la fuente y no hay nada que comparar.
+  const lyricsDiverged = pipelineLyrics
+    ? songbookDiverged(song?.sections, pipelineLyrics.sections)
+    : false;
+  res.status(200).json({ run: { ...run, phases, structure, lyricsDiverged } });
 }
 
 async function createRun(req, res, songId) {

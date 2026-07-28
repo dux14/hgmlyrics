@@ -380,6 +380,21 @@ export function renderSongPipelineView(container, songId) {
   });
   view.insertBefore(confidenceSummary.el, rowsEl);
 
+  // Aviso de sincronía del cancionero (songbookSync.js): el run trae
+  // `lyricsDiverged` cuando la letra editada en el cancionero (songs.sections)
+  // ya no coincide con la aprobada del pipeline (song_pipeline_lyrics), típico
+  // de una edición que cambió el número de renglones. El dato viaja en `run`
+  // (sin fetch propio, a diferencia de confidenceSummary): se actualiza en
+  // cada renderPhases, incluso cuando `sig` no cambió (ver más abajo).
+  const lyricsSyncWarning = document.createElement('div');
+  lyricsSyncWarning.className = 'lyrics-sync-warning';
+  lyricsSyncWarning.hidden = true;
+  lyricsSyncWarning.innerHTML = `
+    ${icon('triangle-alert', { size: 16, className: 'lyrics-sync-warning__icon' })}
+    <p class="lyrics-sync-warning__text">La letra del cancionero se editó y ya no coincide con la sincronizada. Reabre la letra para volver a alinearla.</p>
+  `;
+  view.insertBefore(lyricsSyncWarning, rowsEl);
+
   async function ensureLyricsPanel() {
     if (lyricsPanelEl || lyricsPanelLoading) return;
     lyricsPanelLoading = true;
@@ -525,6 +540,12 @@ export function renderSongPipelineView(container, songId) {
   function renderPhases(run) {
     if (destroyed) return;
     lastRun = run;
+
+    // Fuera del gate de `sig` de más abajo: `sig` solo captura el estado del
+    // stepper, y este aviso debe reflejar el run más reciente en cada tick
+    // del polling aunque el stepper no haya cambiado (p. ej. el admin editó
+    // el cancionero en otra pestaña mientras esta seguía abierta).
+    lyricsSyncWarning.hidden = !run?.lyricsDiverged;
 
     // A7: el approve del gate de letra reescribe songs.sections en el
     // backend — la copia local (lastSong) queda stale justo en el momento en

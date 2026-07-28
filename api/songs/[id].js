@@ -8,6 +8,8 @@ import { persistLinksInTx } from '../_lib/songLinks.js';
 import { projectCanonicalLines } from '../_lib/align.js';
 import { validateSectionAudioMoves, applySectionAudioMoves } from '../_lib/sectionAudioMoves.js';
 import { deleteSongAudioObjects } from '../_lib/storage.js';
+import { getPipelineLyrics, upsertPipelineLyrics } from '../_lib/pipeline/lyricsStore.js';
+import { propagateSongbookText } from '../_lib/pipeline/songbookSync.js';
 
 function normalizeKey(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -85,8 +87,14 @@ async function update(req, res, id) {
     }
   }
   // Se lee ANTES de la tx para comparar sections tras el UPDATE y decidir si
-  // los timings de alignment (song_line_timings) quedan obsoletos.
-  const [prevRow] = await sql`SELECT sections FROM songs WHERE id = ${id}`;
+  // los timings de alignment (song_line_timings) quedan obsoletos. La letra
+  // del pipeline (si la canción vino de ahí) es independiente del UPDATE de
+  // songs: se lee en paralelo para decidir más abajo si el texto editado en
+  // el cancionero se propaga al store del karaoke.
+  const [[prevRow], pipelineLyrics] = await Promise.all([
+    sql`SELECT sections FROM songs WHERE id = ${id}`,
+    getPipelineLyrics(sql, id),
+  ]);
   await sql.begin(async (tx) => {
     const result = await tx`
       UPDATE songs SET
@@ -131,15 +139,45 @@ async function update(req, res, id) {
   // no el JSON crudo: sections leido de Postgres (JSONB) reordena las claves
   // de los objetos internamente, asi que comparar strings crudos da falsos
   // positivos aunque el contenido relevante sea identico.
+  const canonicalLines = projectCanonicalLines(s.sections);
   const sectionsChanged =
-    JSON.stringify(projectCanonicalLines(prevRow?.sections)) !==
-    JSON.stringify(projectCanonicalLines(s.sections));
-  if (sectionsChanged) {
+    JSON.stringify(projectCanonicalLines(prevRow?.sections)) !== JSON.stringify(canonicalLines);
+
+  // lyricsSync informa al front qué pasó con la letra del karaoke (pipeline):
+  // 'none' cuando la canción no vino del pipeline o las sections no
+  // cambiaron; 'propagated'/'diverged' solo aplican cuando sí hay letra de
+  // pipeline y el editor la tocó.
+  let lyricsSync = 'none';
+  if (sectionsChanged && pipelineLyrics) {
+    const propagated = propagateSongbookText(pipelineLyrics.sections, canonicalLines);
+    if (propagated) {
+      // Mismo hash y runId: el número de renglones y los timings NO
+      // cambiaron, solo el texto. Cambiar el hash marcaría 'stale' vía
+      // isStaleSnapshot cualquier job de Modal en vuelo para este run
+      // (sync/pitch/clips, ver process.js), y acá no hay nada que
+      // re-alinear — el forced align sigue siendo válido para el audio y los
+      // timings existentes.
+      await upsertPipelineLyrics(sql, {
+        songId: id,
+        runId: pipelineLyrics.runId,
+        sections: propagated,
+        hash: pipelineLyrics.hash,
+        language: pipelineLyrics.language,
+      });
+      lyricsSync = 'propagated';
+    } else {
+      // El número de renglones canónicos cambió: no hay forma de mapear 1:1
+      // el texto nuevo a los timings existentes. Mismo comportamiento que
+      // canciones sin pipeline (marcar stale), más la señal para el aviso.
+      await sql`UPDATE song_line_timings SET status = 'stale' WHERE song_id = ${id}`;
+      lyricsSync = 'diverged';
+    }
+  } else if (sectionsChanged) {
     await sql`UPDATE song_line_timings SET status = 'stale' WHERE song_id = ${id}`;
   }
 
   invalidateListCache();
-  res.status(200).json({ success: true });
+  res.status(200).json({ success: true, lyricsSync });
 }
 
 async function remove(req, res, id) {

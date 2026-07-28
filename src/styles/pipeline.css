@@ -721,6 +721,31 @@ body.chrome-hidden .main {
   text-decoration-color: currentColor;
 }
 
+.lyrics-sync-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  margin: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: color-mix(in oklch, var(--color-action) 10%, var(--color-surface));
+  border-radius: var(--border-radius-md);
+  color: var(--color-text);
+}
+.lyrics-sync-warning[hidden] {
+  display: none;
+}
+
+.lyrics-sync-warning__icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--color-action);
+}
+
+.lyrics-sync-warning__text {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
 .pipeline-view__rows {
   padding: 0 var(--space-md);
 }

@@ -1475,8 +1475,8 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
       body: JSON.stringify(newSong),
     });
 
+    const data = await res.json().catch(() => null);
     if (!res.ok) {
-      const data = await res.json().catch(() => null);
       throw new Error(data?.error || 'Error guardando la canción');
     }
 
@@ -1486,7 +1486,20 @@ async function handleSave(container, existingSong, blocks, voiceLinkItems, v2 = 
     await refreshData();
     v2.destroySongAudio?.();
     navigate(postSaveTarget({ from: v2.from || null, isNew: !existingSong }));
-    showToast('Canción guardada correctamente', { duration: 3000 });
+    // lyricsSync 'diverged': la canción vino del pipeline y el número de
+    // renglones canónicos cambió — no hay forma de mapear el texto nuevo a
+    // los timings existentes (songbookSync.js), así que el karaoke quedó
+    // desalineado y hace falta reabrir la letra en el procesamiento.
+    // 'propagated'/'none' no requieren avisar nada: el texto ya se sincronizó
+    // o la canción no tiene letra de pipeline.
+    if (data?.lyricsSync === 'diverged') {
+      showToast(
+        'La letra se guardó, pero la sincronía del karaoke quedó desfasada. Reabre la letra en el procesamiento para volver a alinearla.',
+        { type: 'error', duration: 5000 },
+      );
+    } else {
+      showToast('Canción guardada correctamente', { duration: 3000 });
+    }
   } catch (err) {
     console.error(err);
     showToast('Error: ' + err.message, { type: 'error', duration: 3000 });

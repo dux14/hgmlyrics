@@ -280,6 +280,76 @@ describe('GET /api/songs/:id/pipeline', () => {
     const body = res.json.mock.calls[0][0];
     expect(body.run.structure).toBeNull();
   });
+
+  // songbookSync.js: run.lyricsDiverged avisa cuando el cancionero
+  // (songs.sections) se editó y ya no coincide con la letra aprobada del
+  // pipeline (song_pipeline_lyrics).
+  it('lyricsDiverged es false sin letra de pipeline (canción no vino del pipeline)', async () => {
+    const phases = initialPhases();
+    routeSql([
+      [
+        'SELECT id, song_id AS "songId"',
+        [{ id: 'r1', songId: 's1', status: 'processing', phases, inputMeta: {}, lyricsReview: {} }],
+      ],
+      ['FROM song_pipeline_lyrics', []],
+      ['SELECT sections FROM songs', [{ sections: [{ lines: [{ text: 'a' }] }] }]],
+    ]);
+    const res = makeRes();
+    await pipelineHandler({ method: 'GET', query: { id: 's1' } }, res);
+    expect(res.json.mock.calls[0][0].run.lyricsDiverged).toBe(false);
+  });
+
+  it('lyricsDiverged es false cuando el cancionero coincide con la letra aprobada', async () => {
+    const phases = initialPhases();
+    routeSql([
+      [
+        'SELECT id, song_id AS "songId"',
+        [{ id: 'r1', songId: 's1', status: 'processing', phases, inputMeta: {}, lyricsReview: {} }],
+      ],
+      [
+        'FROM song_pipeline_lyrics',
+        [
+          {
+            songId: 's1',
+            runId: 'r1',
+            hash: 'h1',
+            language: 'es',
+            sections: [{ lines: [{ text: 'linea uno' }] }],
+          },
+        ],
+      ],
+      ['SELECT sections FROM songs', [{ sections: [{ lines: [{ text: 'linea uno' }] }] }]],
+    ]);
+    const res = makeRes();
+    await pipelineHandler({ method: 'GET', query: { id: 's1' } }, res);
+    expect(res.json.mock.calls[0][0].run.lyricsDiverged).toBe(false);
+  });
+
+  it('lyricsDiverged es true cuando el cancionero se editó y ya no coincide con la letra aprobada', async () => {
+    const phases = initialPhases();
+    routeSql([
+      [
+        'SELECT id, song_id AS "songId"',
+        [{ id: 'r1', songId: 's1', status: 'processing', phases, inputMeta: {}, lyricsReview: {} }],
+      ],
+      [
+        'FROM song_pipeline_lyrics',
+        [
+          {
+            songId: 's1',
+            runId: 'r1',
+            hash: 'h1',
+            language: 'es',
+            sections: [{ lines: [{ text: 'linea uno' }] }],
+          },
+        ],
+      ],
+      ['SELECT sections FROM songs', [{ sections: [{ lines: [{ text: 'linea editada' }] }] }]],
+    ]);
+    const res = makeRes();
+    await pipelineHandler({ method: 'GET', query: { id: 's1' } }, res);
+    expect(res.json.mock.calls[0][0].run.lyricsDiverged).toBe(true);
+  });
 });
 
 describe('DELETE /api/songs/:id/pipeline (A2: purga)', () => {
@@ -910,8 +980,20 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
       tracks: { lead: 'k1', backing: 'k2', vocals: 'k3' },
       artifacts: undefined,
     };
-    phases.structure = { status: 'failed', error: 'boom', tracks: undefined, artifacts: undefined, retries: 0 };
-    phases.pitch = { status: 'failed', error: 'boom', tracks: undefined, artifacts: undefined, retries: 0 };
+    phases.structure = {
+      status: 'failed',
+      error: 'boom',
+      tracks: undefined,
+      artifacts: undefined,
+      retries: 0,
+    };
+    phases.pitch = {
+      status: 'failed',
+      error: 'boom',
+      tracks: undefined,
+      artifacts: undefined,
+      retries: 0,
+    };
     routeSql([
       [
         "status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')",

@@ -75,7 +75,9 @@ function requireLine(section, lineIdx) {
 // Cuenta de tokens por espacios en blanco (mismo criterio que buildSuggestions
 // y splitLineByText en lyricsSplit.js): usado para detectar si `words` sigue
 // alineado 1:1 con el texto tras una edición (#6).
-function tokenCount(text) {
+// Exportado: songbookSync.js la reusa para el mismo criterio de descarte de
+// `words` al propagar texto editado del cancionero.
+export function tokenCount(text) {
   return (text || '').split(/\s+/).filter(Boolean).length;
 }
 
@@ -143,7 +145,10 @@ function bestSectionIndex(sections, startMs, endMs) {
   let bestOverlap = 0;
   sections.forEach((sec, i) => {
     const overlap = Math.min(endMs, sec.endMs) - Math.max(startMs, sec.startMs);
-    if (overlap > bestOverlap) { bestOverlap = overlap; best = i; }
+    if (overlap > bestOverlap) {
+      bestOverlap = overlap;
+      best = i;
+    }
   });
   if (best !== -1) return best;
   const mid = (startMs + endMs) / 2;
@@ -151,7 +156,10 @@ function bestSectionIndex(sections, startMs, endMs) {
   let nearestDist = Infinity;
   sections.forEach((sec, i) => {
     const dist = mid < sec.startMs ? sec.startMs - mid : mid > sec.endMs ? mid - sec.endMs : 0;
-    if (dist < nearestDist) { nearestDist = dist; nearest = i; }
+    if (dist < nearestDist) {
+      nearestDist = dist;
+      nearest = i;
+    }
   });
   return nearest;
 }
@@ -418,7 +426,8 @@ export function applyReviewAction(doc, action) {
       break;
     }
     case 'setBreath': {
-      requireLine(requireSection(next, action.section), action.line).breath = action.breath === true;
+      requireLine(requireSection(next, action.section), action.line).breath =
+        action.breath === true;
       break;
     }
     case 'toggleVocalization': {

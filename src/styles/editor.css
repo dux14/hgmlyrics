@@ -420,6 +420,8 @@
   flex-wrap: wrap;
 }
 
+/* 16px exactos: por debajo de esa medida, Safari iOS hace zoom automático
+   sobre el campo al enfocarlo y deja la vista desencuadrada. */
 /* Chip de tipo de sección: ámbar uppercase (Ambient Kinetic) */
 .section-block__type-select {
   padding: 4px 8px;
@@ -427,7 +429,7 @@
   border: 1px solid var(--color-border);
   background: var(--color-bg);
   color: var(--color-action);
-  font-size: var(--font-size-xs);
+  font-size: 1rem;
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -441,7 +443,7 @@
   border: 1px solid transparent;
   border-radius: var(--border-radius-sm);
   background: transparent;
-  font-size: var(--font-size-sm);
+  font-size: 1rem;
   font-weight: var(--font-weight-semibold);
   color: var(--color-text);
   min-width: 100px;
@@ -1042,7 +1044,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-sm);
   font-family: 'SF Mono', 'Fira Code', monospace;
-  font-size: var(--font-size-sm);
+  font-size: 1rem;
   line-height: 1.6;
   resize: vertical;
   color: var(--color-text);

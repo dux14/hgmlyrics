@@ -83,7 +83,10 @@ body.chrome-hidden .main {
 }
 
 /* El `<select>` de retipado hereda el look del label estático que reemplaza:
-   mismo tamaño/tracking/color por tipo (`.section-*`), sin chrome de <select>. */
+   mismo tamaño/tracking/color por tipo (`.section-*`), sin chrome de <select>.
+   font-size aparte, en 1rem: 16px exactos, por debajo de esa medida Safari
+   iOS hace zoom automático sobre el campo al enfocarlo y deja la vista
+   desencuadrada. */
 .lrp .lrp__type-select {
   margin-bottom: 0;
   background: none;
@@ -92,6 +95,7 @@ body.chrome-hidden .main {
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
+  font-size: 1rem;
 }
 .lrp .lrp__type-select[disabled] {
   opacity: 0.38;
@@ -105,7 +109,7 @@ body.chrome-hidden .main {
   border: none;
   border-bottom: 1px solid transparent;
   color: var(--color-text-secondary);
-  font-size: 0.82rem;
+  font-size: 1rem;
   padding: 2px 0;
   transition: border-color 0.15s var(--ease-out);
 }
@@ -306,7 +310,7 @@ body.chrome-hidden .main {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 6px 8px;
-  font-size: 0.85rem;
+  font-size: 1rem;
   font-family: inherit;
   resize: none;
   overflow: hidden;
@@ -389,7 +393,7 @@ body.chrome-hidden .main {
   border: 1px solid var(--color-border);
   border-radius: 9px;
   padding: 7px 10px;
-  font-size: 0.82rem;
+  font-size: 1rem;
   cursor: pointer;
 }
 .lrp .lrp__language-select[disabled] {
@@ -1049,7 +1053,7 @@ body.chrome-hidden .main {
 
 .upload-card__name-input,
 .upload-card__rename-input {
-  font-size: 0.86rem;
+  font-size: 1rem;
   font-weight: 500;
   text-transform: none;
   letter-spacing: normal;
@@ -1384,7 +1388,7 @@ body.chrome-hidden .main {
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-sm);
   color: var(--color-text);
-  font-size: 0.88rem;
+  font-size: 1rem;
   font-family: inherit;
   transition: border-color 0.15s var(--ease-out);
 }
@@ -2120,7 +2124,7 @@ body.chrome-hidden .main {
   border: 1px solid var(--color-border);
   border-radius: 4px;
   padding: 2px 6px;
-  font-size: 0.8rem;
+  font-size: 1rem;
 }
 
 .struct-edit__nudge {

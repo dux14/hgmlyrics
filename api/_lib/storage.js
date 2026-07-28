@@ -43,6 +43,11 @@ export async function uploadAvatar({ userId, ext, contentType, body }) {
   const { error } = await supabase.storage.from(AVATARS_BUCKET).upload(key, body, {
     contentType: contentType || 'application/octet-stream',
     upsert: true,
+    // Cache de 1 año: es seguro porque la URL que se persiste en profiles.avatar_url
+    // siempre lleva el cache-buster `?t=` generado abajo, así que un avatar nuevo
+    // pisa la key pero se sirve con una URL distinta (nunca queda una URL vieja
+    // apuntando a contenido stale).
+    cacheControl: '31536000',
   });
   if (error) throw error;
 

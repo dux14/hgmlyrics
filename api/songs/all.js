@@ -33,6 +33,9 @@ export default withErrors(async (req, res) => {
     return t > m ? t : m;
   }, 0);
 
-  cachePublic(res, { sMaxage: 60 });
+  // swr:0 — sin ventana de stale-while-revalidate: tras publicar/editar una
+  // canción el edge no debe servir la copia vieja hasta 24h mientras revalida
+  // en background (regresión vs. no-store de master).
+  cachePublic(res, { sMaxage: 60, swr: 0 });
   res.status(200).json({ songs, version });
 });

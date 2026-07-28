@@ -1,0 +1,895 @@
+/* profile.css — Perfil propio · Ambient Kinetic (F2a)
+ * Valores extraídos de profile-assembled.html (diseño aprobado, Task 5).
+ * Tokens locales del mockup mapeados a tokens de app:
+ *   --teal → --color-primary  |  --violet → --color-accent-2
+ *   --amber → --color-action  |  --gold → --color-liturgy
+ *   --muted → --color-text-secondary  |  --hair → --color-border
+ *   --surface-2 → --color-surface  |  --bg → --color-bg
+ *   --text → --color-text
+ *   --ten/--bass/--sop → --color-voice-tenor/bass/soprano
+ */
+
+/* Region async del perfil (regionEl de renderAsyncRegion). display:contents
+   la borra de la caja de layout: .profile-page se comporta como hijo directo
+   de .main__content (conserva el sangrado a sangre completa y el min-height:100%
+   contra .main__content, identico al original). La region sigue en el DOM para
+   pintar el contenido async y para desprenderse al navegar (bug de navegacion #3). */
+.pf-profile-region {
+  display: contents;
+}
+
+/* ── Contenedor de página ── */
+.profile-page {
+  max-width: 720px;
+  margin: 0 auto;
+  min-height: 100%;
+  padding-bottom: calc(var(--bottom-nav-height, 60px) + 1rem);
+}
+
+/* ── Zona superior: ambient blob + avatar + identidad ── */
+.pf-top {
+  position: relative;
+  /* Sin padding lateral propio: el gutter unico lo da .main__content (--space-md).
+     El difuminado (.pf-amb) sangra -space-md para llegar al borde. */
+  padding: 22px 0 4px;
+  text-align: center;
+}
+
+.pf-amb {
+  position: absolute;
+  /* Difuminado a sangre completa: cubre los gutters laterales (--space-md a
+     cada lado, hasta el borde de la pantalla en movil) y sube hasta pegar con
+     el header. Aplica a perfil propio y publico (ambos usan .pf-amb). */
+  top: calc(-1 * var(--space-md));
+  left: calc(-1 * var(--space-md));
+  right: calc(-1 * var(--space-md));
+  height: 190px;
+  background:
+    radial-gradient(120% 100% at 50% 0, rgba(29, 111, 126, 0.3), transparent 70%),
+    radial-gradient(90% 80% at 78% 0, rgba(124, 58, 237, 0.22), transparent);
+  pointer-events: none;
+}
+
+.pf-av {
+  width: 104px;
+  height: 104px;
+  border-radius: 99px;
+  display: block;
+  margin: 4px auto 0;
+  position: relative;
+  background: linear-gradient(135deg, var(--color-accent-2), var(--color-accent-rose));
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 12px 34px -10px rgba(0, 0, 0, 0.7);
+  object-fit: cover;
+}
+
+.pf-name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: 23px;
+  font-weight: 800;
+}
+
+/* La corona (.avatar-crown) la reutiliza el sistema existente. */
+
+.pf-user {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-top: 3px;
+}
+
+/* ── Distintivo de voz ── */
+.pf-vbadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 99px;
+}
+
+.pf-vbadge--soprano {
+  color: var(--color-voice-soprano);
+  background: color-mix(in srgb, var(--color-voice-soprano) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-voice-soprano) 35%, transparent);
+}
+
+.pf-vbadge--contralto {
+  color: var(--color-voice-contralto);
+  background: color-mix(in srgb, var(--color-voice-contralto) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-voice-contralto) 35%, transparent);
+}
+
+.pf-vbadge--tenor {
+  color: var(--color-voice-tenor);
+  background: color-mix(in srgb, var(--color-voice-tenor) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-voice-tenor) 35%, transparent);
+}
+
+.pf-vbadge--bass {
+  color: var(--color-voice-bass);
+  background: color-mix(in srgb, var(--color-voice-bass) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-voice-bass) 35%, transparent);
+}
+
+/* Punto de color dentro del badge (estático) */
+.pf-vbadge .pf-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+}
+
+.pf-vbadge--soprano .pf-dot {
+  background: var(--color-voice-soprano);
+}
+.pf-vbadge--contralto .pf-dot {
+  background: var(--color-voice-contralto);
+}
+.pf-vbadge--tenor .pf-dot {
+  background: var(--color-voice-tenor);
+}
+.pf-vbadge--bass .pf-dot {
+  background: var(--color-voice-bass);
+}
+
+/* ── Bio ── */
+.pf-bio {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #c9c9cf;
+  margin: 14px 6px 0;
+  text-align: center;
+}
+
+/* ── Botón primario Editar perfil ── */
+.pf-edit-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 13px;
+  border-radius: 14px;
+  background: var(--color-primary);
+  color: var(--color-bg);
+  font-size: 14.5px;
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow: 0 0 20px color-mix(in srgb, var(--color-primary) 30%, transparent);
+}
+
+.pf-edit-primary:hover {
+  background: color-mix(in oklch, var(--color-primary) 85%, black);
+}
+
+.pf-edit-primary .icon {
+  width: 17px;
+  height: 17px;
+}
+
+/* ── Tarjetas de datos (rango / instrumentos) ── */
+.pf-card {
+  margin: 14px 0 0;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface);
+  padding: 15px 15px 16px;
+}
+
+.pf-ctop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.pf-cl {
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+/* ── Host de onda de rango vocal ── */
+.pf-wave-host {
+  width: 100%;
+  height: 110px;
+}
+
+.pf-wave-host canvas {
+  width: 100%;
+  height: 110px;
+  display: block;
+}
+
+/* ── Etiquetas grave/agudo bajo la onda ── */
+.pf-range-lbl {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-top: 10px;
+}
+
+.pf-range-lbl span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pf-range-lbl b {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+/* Punto de color en etiquetas de rango */
+.pf-range-lbl .pf-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+}
+
+.pf-range-lbl .lo .pf-dot {
+  background: var(--color-voice-bass);
+}
+
+.pf-range-lbl .hi .pf-dot {
+  background: var(--color-voice-soprano);
+}
+
+/* ── Comentario del rango ── */
+.pf-rnote {
+  font-size: 12px;
+  color: #b7b7bd;
+  line-height: 1.5;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  font-style: italic;
+}
+
+/* ── Chips de instrumentos ── */
+.pf-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pf-chip {
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 13px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--color-border);
+  color: #c9c9cf;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ── Etiqueta de sección ── */
+.pf-divlabel {
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  margin: 22px 0 2px;
+}
+
+/* ── Filas de acceso (Amigos / Favoritos / Admin / Cerrar sesión) ── */
+.pf-acc {
+  padding: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pf-accrow {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  text-decoration: none;
+  color: var(--color-text);
+  transition: border-color 0.12s ease-out;
+}
+
+.pf-accrow:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
+}
+
+.pf-ai {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+
+.pf-ai--friends {
+  background: color-mix(in srgb, var(--color-voice-soprano) 15%, transparent);
+  color: var(--color-voice-soprano);
+}
+
+.pf-ai--fav {
+  background: color-mix(in srgb, var(--color-action) 15%, transparent);
+  color: var(--color-action);
+}
+
+.pf-ai--admin {
+  background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+  color: var(--color-primary);
+}
+
+.pf-ai--logout {
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  color: var(--color-danger);
+}
+
+.pf-accrow--logout {
+  width: 100%;
+  text-align: left;
+  color: var(--color-danger);
+}
+
+.pf-accrow--logout:hover {
+  border-color: color-mix(in srgb, var(--color-danger) 30%, transparent);
+}
+
+.pf-ai .icon {
+  width: 19px;
+  height: 19px;
+}
+
+.pf-an {
+  flex: 1;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.pf-ac {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.icon.pf-arr {
+  width: 15px;
+  height: 15px;
+  color: var(--color-text-secondary);
+  flex: none;
+}
+
+/* ── Fila de licencias y créditos ── */
+.pf-lic {
+  margin: 16px 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px;
+  border-radius: 14px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* ──────────────────────────────────────────────
+   Pantalla de edición de perfil (Task 3)
+   Tokens: misma tabla de mapeo que la vista.
+   ────────────────────────────────────────────── */
+
+/* ── Cabecera de edición ── */
+.pf-etop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* Sin padding lateral propio: gutter unico de .main__content (--space-md). */
+  padding: 14px 0 10px;
+}
+
+.pf-bk {
+  width: 30px;
+  height: 30px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  display: grid;
+  place-items: center;
+  color: var(--color-text);
+  flex: none;
+  text-decoration: none;
+}
+
+.pf-bk .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.pf-etop h1 {
+  font-size: 19px;
+  font-weight: 800;
+  margin: 0;
+  flex: 1;
+}
+
+.pf-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-success);
+}
+
+.pf-saved .icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* ── Bloque de avatar (edición) ── */
+.pf-av-edit {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 6px 0 2px;
+}
+
+.pf-av-lg {
+  width: 88px;
+  height: 88px;
+  border-radius: 99px;
+  flex: none;
+  background: linear-gradient(135deg, var(--color-accent-2), var(--color-voice-soprano));
+  border: 2px solid color-mix(in srgb, var(--color-text) 14%, transparent);
+  position: relative;
+}
+
+/* Sobreescribe el tamaño del .pf-av global dentro del bloque de edición */
+.pf-av-lg .pf-av {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  box-shadow: none;
+}
+
+.pf-cam {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 28px;
+  height: 28px;
+  border-radius: 99px;
+  background: var(--color-primary);
+  border: 2px solid var(--color-bg);
+  display: grid;
+  place-items: center;
+  color: var(--color-bg);
+}
+
+.pf-cam .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.pf-ava {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pf-ab {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 13px;
+  border-radius: 99px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.pf-ab:hover {
+  background: var(--color-surface-hover);
+}
+
+.pf-ab.rm {
+  color: var(--color-error);
+  border-color: color-mix(in srgb, var(--color-error) 22%, transparent);
+  background: transparent;
+}
+
+.pf-ab.rm:hover {
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+}
+
+.pf-av-note {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  padding: 6px 0 0;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* ── Formulario de edición ── */
+.pf-form {
+  padding: 6px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.pf-fld {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pf-fl {
+  font-size: 11px;
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pf-cnt {
+  color: var(--color-text-secondary);
+}
+
+.pf-inp {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 11px;
+  padding: 12px 13px;
+  font-size: 14px;
+  color: var(--color-text);
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.pf-inp:focus {
+  border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 8%, transparent);
+  outline: none;
+}
+
+.pf-inp--area {
+  display: block;
+  min-height: 64px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+select.pf-inp {
+  display: block;
+  appearance: auto;
+  cursor: pointer;
+}
+
+.pf-two {
+  display: flex;
+  gap: 10px;
+}
+
+.pf-two .pf-fld {
+  flex: 1;
+  min-width: 0;
+}
+
+.pf-hint {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+  margin: 0;
+}
+
+/* ── Fila de enlace (linkrow) ── */
+.pf-linkrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 13px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  text-decoration: none;
+  color: var(--color-text);
+}
+
+.pf-li {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--color-voice-tenor) 12%, transparent);
+  color: var(--color-voice-tenor);
+}
+
+.pf-li--eye {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+}
+
+.pf-li .icon {
+  width: 15px;
+  height: 15px;
+}
+
+.pf-lt {
+  flex: 1;
+  min-width: 0;
+}
+
+.pf-lt-a {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pf-lt-b {
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+  margin-top: 1px;
+}
+
+.icon.pf-li-arr {
+  width: 15px;
+  height: 15px;
+  color: var(--color-text-secondary);
+  flex: none;
+}
+
+/* ── Toggle de visibilidad (pf-sw) ── */
+.pf-sw {
+  width: 34px;
+  height: 19px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--color-text) 12%, transparent);
+  position: relative;
+  flex: none;
+  cursor: pointer;
+  display: block;
+}
+
+.pf-sw::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 99px;
+  background: var(--color-text);
+}
+
+/* Estado activo vía CSS :has() — sin JS extra */
+.pf-sw:has(input:checked) {
+  background: color-mix(in srgb, var(--color-primary) 55%, transparent);
+}
+
+.pf-sw:has(input:checked)::after {
+  transform: translateX(15px);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pf-sw {
+    transition: background 0.15s ease-out;
+  }
+
+  .pf-sw::after {
+    transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+/* ── Barra de acción fija ── */
+.pf-actbar {
+  /* Barra sticky a sangre completa: cancela el gutter con margin negativo para
+     que el panel difuminado llegue al borde, y conserva 16px internos para que
+     los botones queden alineados al gutter unico (sin doblar el margen). */
+  margin: 0 calc(-1 * var(--space-md));
+  padding: 11px 16px calc(13px + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--color-bg) 82%, transparent);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid color-mix(in srgb, var(--color-text) 7%, transparent);
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+}
+
+.pf-btn-ghost {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  flex: 1;
+  font-family: inherit;
+}
+
+.pf-btn-pri {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--color-primary);
+  color: var(--color-bg);
+  font-size: 13.5px;
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--color-primary) 32%, transparent);
+  flex: 1;
+  font-family: inherit;
+}
+
+.pf-btn-pri .icon {
+  width: 15px;
+  height: 15px;
+}
+
+/* ──────────────────────────────────────────────
+   Perfil público — Ambient Kinetic (Task 4 F2a)
+   ────────────────────────────────────────────── */
+
+/* ── Botón de acción ámbar (agregar amigo) ── */
+.pf-btn-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 12px 16px 0;
+  padding: 11px;
+  border-radius: 12px;
+  background: var(--color-action);
+  color: var(--color-bg);
+  font-size: 12px;
+  font-weight: 800;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--color-action) 35%, transparent);
+  font-family: inherit;
+}
+
+.pf-btn-action:hover:not(.pf-btn-action--sent) {
+  background: color-mix(in oklch, var(--color-action) 85%, black);
+}
+
+.pf-btn-action .icon {
+  width: 15px;
+  height: 15px;
+}
+
+/* Estado enviado: fondo atenuado, sin glow */
+.pf-btn-action--sent {
+  background: color-mix(in srgb, var(--color-action) 38%, transparent);
+  box-shadow: none;
+  opacity: 0.7;
+  cursor: default;
+}
+
+/* Estado eliminar amigo: borde rojo, fondo transparente */
+.pf-btn-action--rm {
+  background: transparent;
+  color: var(--color-danger);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 40%, transparent);
+  box-shadow: none;
+}
+
+.pf-btn-action--rm:hover {
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+}
+
+/* Estado aceptar solicitud: variante cyan/primario */
+.pf-btn-action--in {
+  background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+  color: var(--color-primary);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
+  box-shadow: none;
+}
+
+.pf-btn-action--in:hover {
+  background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+}
+
+/* Chips en perfil público: padding lateral (no afecta .pf-card que tiene el suyo) */
+.pf-chips--pub {
+  padding: 0 16px;
+}
+
+/* ── Encabezados de sección del perfil público ── */
+.sec-h {
+  font-size: 8px;
+  color: var(--color-primary);
+  padding: 14px 18px 7px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+/* ── Lista de canciones favoritas ── */
+.pf-list {
+  padding: 0 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pf-srow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px;
+  border-radius: 13px;
+}
+
+.pf-srow:hover {
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pf-srow {
+    transition: background 0.12s ease-out;
+  }
+}
+
+/* Carátula dentro de la fila */
+.pf-cv {
+  width: 42px;
+  height: 42px;
+  border-radius: 9px;
+  flex: none;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+
+/* Bloque de info (título + álbum) */
+.pf-si {
+  min-width: 0;
+  flex: 1;
+}
+
+.pf-st {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text);
+}
+
+.pf-sa {
+  font-size: 9.5px;
+  color: var(--color-text-secondary);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

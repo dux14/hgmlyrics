@@ -5,18 +5,20 @@
  * Precise results with Spanish accent support.
  */
 
-/** @type {Array} */
-let songList = [];
-
-/** @type {Array} */
-let weeklyWordList = [];
+// B6 (perf): campos normalizados precomputados en buildIndex — antes se
+// normalizaba (NFD + regex + toLowerCase) título/álbum/artista/voiceover_body
+// enteros de CADA canción y CADA weekly_word en cada pulsación de búsqueda.
+/** @type {Array<{ song: object, t: string, al: string, ar: string }>} */
+let songRecords = [];
+/** @type {Array<{ ww: object, t: string, ref: string, lit: string, body: string }>} */
+let weeklyRecords = [];
 
 /**
  * Normalize text: strip accents + lowercase for accent-insensitive comparison
  * @param {string} str
  * @returns {string}
  */
-function normalize(str) {
+export function normalize(str) {
   return str
     .normalize('NFD')
     .replaceAll(/[\u0300-\u036f]/g, '')
@@ -30,8 +32,19 @@ function normalize(str) {
  * @param {Array} [weeklyWords]
  */
 export function buildIndex(songs, weeklyWords = []) {
-  songList = songs;
-  weeklyWordList = weeklyWords;
+  songRecords = songs.map((song) => ({
+    song,
+    t: normalize(song.title || ''),
+    al: normalize(song.album || ''),
+    ar: normalize(song.artist || ''),
+  }));
+  weeklyRecords = weeklyWords.map((ww) => ({
+    ww,
+    t: normalize(ww.title || ''),
+    ref: normalize(ww.gospel_ref || ''),
+    lit: normalize(ww.liturgical_title || ''),
+    body: normalize(ww.voiceover_body || ''),
+  }));
 }
 
 /**
@@ -50,29 +63,25 @@ export function searchSongs(query, limit = 10) {
   // Score each song based on where the match is found
   const scored = [];
 
-  for (const song of songList) {
-    const normalizedTitle = normalize(song.title || '');
-    const normalizedAlbum = normalize(song.album || '');
-    const normalizedArtist = normalize(song.artist || '');
-
+  for (const { song, t, al, ar } of songRecords) {
     let score = 0;
 
     // Title match (highest priority)
-    if (normalizedTitle.includes(normalizedQuery)) {
+    if (t.includes(normalizedQuery)) {
       score += 100;
       // Bonus for starts-with match
-      if (normalizedTitle.startsWith(normalizedQuery)) {
+      if (t.startsWith(normalizedQuery)) {
         score += 50;
       }
     }
 
     // Album match
-    if (normalizedAlbum.includes(normalizedQuery)) {
+    if (al.includes(normalizedQuery)) {
       score += 30;
     }
 
     // Artist match
-    if (normalizedArtist.includes(normalizedQuery)) {
+    if (ar.includes(normalizedQuery)) {
       score += 10;
     }
 
@@ -99,11 +108,8 @@ export function searchAll(query, limit = 10) {
   const q = normalize(query.trim());
   const scored = [];
 
-  for (const song of songList) {
+  for (const { song, t, al, ar } of songRecords) {
     let score = 0;
-    const t = normalize(song.title || '');
-    const al = normalize(song.album || '');
-    const ar = normalize(song.artist || '');
     if (t.includes(q)) {
       score += 100;
       if (t.startsWith(q)) score += 50;
@@ -113,12 +119,8 @@ export function searchAll(query, limit = 10) {
     if (score > 0) scored.push({ type: 'song', item: song, score });
   }
 
-  for (const ww of weeklyWordList) {
+  for (const { ww, t: searchTitle, ref, lit: litTitle, body } of weeklyRecords) {
     let score = 0;
-    const ref = normalize(ww.gospel_ref || '');
-    const searchTitle = normalize(ww.title || '');
-    const litTitle = normalize(ww.liturgical_title || '');
-    const body = normalize(ww.voiceover_body || '');
     if (searchTitle.includes(q)) {
       score += 120;
       if (searchTitle.startsWith(q)) score += 50;
@@ -140,6 +142,43 @@ export function searchAll(query, limit = 10) {
  * Clear the search index (songs + weekly words).
  */
 export function clearIndex() {
-  songList = [];
-  weeklyWordList = [];
+  songRecords = [];
+  weeklyRecords = [];
+}
+
+/**
+ * Busqueda unificada seccionada: canciones, albumes (dedupe por slug) y voces en off.
+ * @param {string} query
+ * @param {{ songs?: number, albums?: number, voces?: number }} [limits]
+ * @returns {{ songs: Array, albums: Array, voces: Array }}
+ */
+export function searchEverything(query, limits = {}) {
+  const empty = { songs: [], albums: [], voces: [] };
+  if (!query?.trim()) return empty;
+  const q = normalize(query.trim());
+  const { songs: sL = 40, albums: aL = 10, voces: vL = 8 } = limits;
+
+  const songs = searchSongs(query, sL);
+
+  const albumMap = new Map();
+  for (const { song, al } of songRecords) {
+    if (!song.albumSlug || albumMap.has(song.albumSlug)) continue;
+    if (al.includes(q)) {
+      albumMap.set(song.albumSlug, {
+        slug: song.albumSlug,
+        name: song.album,
+        coverImage: song.coverImage,
+        artist: song.artist,
+      });
+    }
+  }
+  const albums = Array.from(albumMap.values()).slice(0, aL);
+
+  const voces = [];
+  for (const { ww, t, ref, lit } of weeklyRecords) {
+    if (t.includes(q) || ref.includes(q) || lit.includes(q)) voces.push(ww);
+    if (voces.length >= vL) break;
+  }
+
+  return { songs, albums, voces };
 }

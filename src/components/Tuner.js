@@ -21,11 +21,14 @@ import {
   GUITAR_STANDARD,
   parseTunerTarget,
   matchesTarget,
+  centsBetween,
 } from '../lib/notes.js';
 import { fetchSongDetail } from '../lib/store.js';
 import { getSession, refreshProfile, getProfile } from '../lib/authStore.js';
-import { navigate } from '../router.js';
+import { invalidateMyProfile } from '../lib/profileCache.js';
+import { navigate, onRouteChange } from '../router.js';
 import { icon } from '../lib/icons.js';
+import { showToast } from '../lib/toast.js';
 import {
   getCalibrationCents,
   applyCalibration,
@@ -40,21 +43,83 @@ import { buildWarmup } from '../lib/warmup.js';
 import { createExercise } from '../lib/exerciseEngine.js';
 import { get, set } from 'idb-keyval';
 import { createMetronome, TIME_SIGNATURES, DEFAULT_BPM } from '../lib/metronome.js';
+import { centsToBarPercent } from '../lib/tunerGauge.js';
+import { colorFromCents } from '../lib/tunerWidget.js';
 
 /** Formatea un valor de cents con signo explícito: "+5¢", "-3¢", "0¢". */
 const fmtCents = (c) => `${c > 0 ? '+' : ''}${c}¢`;
 
-const MODES = [
-  { id: 'guitar', label: `${icon('audio-lines', { size: 15 })} Guitarra` },
-  { id: 'voice', label: `${icon('mic', { size: 15 })} Voz` },
-  { id: 'song', label: `${icon('music', { size: 15 })} Canción` },
-  { id: 'range', label: `${icon('ruler', { size: 15 })} Rango` },
-  { id: 'calibrar', label: `${icon('settings', { size: 15 })} Calibrar` },
-  { id: 'entrenar', label: `${icon('activity', { size: 15 })} Entrenar` },
-  { id: 'metronomo', label: 'Metrónomo' },
+/** IDs de modo válidos (usados para validar `?mode=` y las tiles del hub). */
+const MODES = ['guitar', 'voice', 'song', 'range', 'calibrar', 'entrenar', 'metronomo'];
+
+/** Modos que necesitan micrófono activo apenas se entra a ellos (auto-start). */
+const MIC_MODES = new Set(['guitar', 'voice', 'song', 'range', 'entrenar']);
+
+/** Hub (Opción C): tiles agrupadas por bloque, tinte teal, one-liner corto. */
+const HUB_GROUPS = [
+  {
+    label: 'Afinar',
+    items: [
+      {
+        id: 'guitar',
+        iconKey: 'audio-lines',
+        name: 'Guitarra',
+        desc: 'Afina las 6 cuerdas en estándar E.',
+      },
+      { id: 'voice', iconKey: 'mic', name: 'Voz', desc: 'Afina tu voz nota por nota.' },
+      {
+        id: 'song',
+        iconKey: 'music',
+        name: 'Canción',
+        desc: 'Afina contra el tono de una canción.',
+      },
+    ],
+  },
+  {
+    label: 'Practicar',
+    items: [
+      { id: 'range', iconKey: 'ruler', name: 'Rango', desc: 'Mide tu nota más grave y más aguda.' },
+      {
+        id: 'entrenar',
+        iconKey: 'activity',
+        name: 'Entrenar',
+        desc: 'Ejercicios de escalas y calentamiento.',
+      },
+      {
+        id: 'metronomo',
+        iconKey: 'timer',
+        name: 'Metrónomo',
+        desc: 'Practica manteniendo el tempo.',
+      },
+    ],
+  },
+  {
+    label: 'Ajustes',
+    items: [
+      {
+        id: 'calibrar',
+        iconKey: 'settings',
+        name: 'Calibrar',
+        desc: 'Ajusta la referencia A4 de tu dispositivo.',
+      },
+    ],
+  },
 ];
 
+/** Título que muestra la cabecera al entrar a cada modo enfocado. */
+const MODE_TITLES = {
+  guitar: 'Guitarra',
+  voice: 'Voz',
+  song: 'Canción',
+  range: 'Rango',
+  entrenar: 'Entrenamiento',
+  metronomo: 'Metrónomo',
+  calibrar: 'Calibrar',
+};
+
 const RANGE_STEP_MS = 10000;
+const RANGE_RING_R = 36;
+const RANGE_RING_CIRCUMFERENCE = 2 * Math.PI * RANGE_RING_R;
 
 function parseQuery(query) {
   const out = {};
@@ -66,28 +131,21 @@ function parseQuery(query) {
   return out;
 }
 
-function colorFromCents(cents) {
-  const abs = Math.abs(cents);
-  if (abs < 10) return 'ok';
-  if (abs < 30) return 'warn';
-  return 'bad';
-}
-
-function clampCents(c) {
-  if (c === null || c === undefined) return 0;
-  return Math.max(-50, Math.min(50, c));
-}
-
 function renderGauge() {
+  // Barra lineal horizontal (ancho completo). Zonas fijas sobre una escala
+  // 0..100% donde 0¢ = 50% (centro): ok=±10¢ (40–60%), warn=±10–30¢
+  // (20–40% / 60–80%), danger=>±30¢ (0–20% / 80–100%). El indicador se
+  // posiciona en runtime con centsToBarPercent() vía setNeedle().
   return `
     <div class="tuner-gauge" aria-hidden="true">
       <div class="tuner-gauge__track">
-        <span class="tuner-gauge__mark" style="left:0%"></span>
-        <span class="tuner-gauge__mark" style="left:40%"></span>
-        <span class="tuner-gauge__mark tuner-gauge__mark--zero" style="left:50%"></span>
-        <span class="tuner-gauge__mark" style="left:60%"></span>
-        <span class="tuner-gauge__mark" style="left:100%"></span>
-        <span class="tuner-gauge__needle" id="tuner-needle"></span>
+        <div class="tuner-gauge__zone tuner-gauge__zone--danger tuner-gauge__zone--danger-left"></div>
+        <div class="tuner-gauge__zone tuner-gauge__zone--warn tuner-gauge__zone--warn-left"></div>
+        <div class="tuner-gauge__zone tuner-gauge__zone--ok"></div>
+        <div class="tuner-gauge__zone tuner-gauge__zone--warn tuner-gauge__zone--warn-right"></div>
+        <div class="tuner-gauge__zone tuner-gauge__zone--danger tuner-gauge__zone--danger-right"></div>
+        <div class="tuner-gauge__center-mark"></div>
+        <div id="tuner-needle" class="tuner-gauge__indicator" data-status="" style="left: 50%"></div>
       </div>
       <div class="tuner-gauge__scale">
         <span>−50</span><span>−10</span><span>0</span><span>+10</span><span>+50</span>
@@ -97,11 +155,10 @@ function renderGauge() {
 }
 
 function setNeedle(container, cents, statusClass) {
-  const needle = container.querySelector('#tuner-needle');
-  if (!needle) return;
-  const pct = 50 + clampCents(cents);
-  needle.style.left = `${pct}%`;
-  needle.dataset.status = statusClass || '';
+  const indicator = container.querySelector('#tuner-needle');
+  if (!indicator) return;
+  indicator.style.left = `${centsToBarPercent(cents)}%`;
+  indicator.dataset.status = statusClass || '';
 }
 
 function renderReadout(container, { label, hz, cents, sub }) {
@@ -134,7 +191,7 @@ function bodyGuitarOrVoice(mode, targetNote) {
       : '';
   const objective =
     mode === 'voice' && targetNote
-      ? `<p class="tuner-objective" id="tuner-objective">Objetivo: <strong>${targetNote}</strong></p>`
+      ? `<p class="tuner-objective" id="tuner-objective">Objetivo: <strong>${targetNote}</strong><span class="tuner-objective__check" aria-hidden="true">${icon('check-circle', { size: 18 })}</span></p>`
       : '';
   return `
     ${objective}
@@ -146,10 +203,10 @@ function bodyGuitarOrVoice(mode, targetNote) {
     ${renderGauge()}
     <p class="tuner-hint">${
       mode === 'guitar'
-        ? 'Tocá una cuerda. Se resalta la nota objetivo más cercana.'
+        ? 'Toca una cuerda. Se resalta la nota objetivo más cercana.'
         : targetNote
-          ? `Cantá ${targetNote} sostenida. Se pone en verde cuando coincide.`
-          : 'Cantá una nota sostenida.'
+          ? `Canta ${targetNote} sostenida. Se pone en verde cuando coincide.`
+          : 'Canta una nota sostenida.'
     }</p>
   `;
 }
@@ -190,7 +247,7 @@ export function bodySong(song, targetLabel = null) {
       ${renderGauge()}
       <p class="tuner-hint">${
         targetLabel
-          ? `Cantá <strong>${targetLabel}</strong>. Se pone verde al coincidir. Verde claro = nota en escala de ${song.key}.`
+          ? `Canta <strong>${targetLabel}</strong>. Se pone verde al coincidir. Verde claro = nota en escala de ${song.key}.`
           : `Verde = la nota pertenece a <em>${song.key}</em>. Rojo = fuera de escala.`
       }</p>
     `;
@@ -209,7 +266,7 @@ export function bodySong(song, targetLabel = null) {
         <div class="tuner-readout__meta">— Hz · —¢</div>
       </div>
       ${renderGauge()}
-      <p class="tuner-hint">Cantá <strong>${targetLabel}</strong> sostenida. Se pone verde al coincidir.</p>
+      <p class="tuner-hint">Canta <strong>${targetLabel}</strong> sostenida. Se pone verde al coincidir.</p>
     `;
   }
 
@@ -217,7 +274,7 @@ export function bodySong(song, targetLabel = null) {
   return `
     <div class="tuner-empty">
       <p>Esta canción no tiene notas asignadas todavía.</p>
-      <p>Pedile al admin que configure las voces y el tono en el editor.</p>
+      <p>Pide al admin que configure las voces y el tono en el editor.</p>
     </div>
   `;
 }
@@ -230,7 +287,7 @@ function bodyRange(step, currentNote) {
       <div class="tuner-range__step">Paso ${stepNum} / 2</div>
       <h2 class="tuner-range__title">${label}</h2>
       <p class="tuner-range__hint">
-        Cantala sostenida durante <strong>10 segundos</strong>.
+        Canta sostenida durante <strong>10 segundos</strong>.
       </p>
 
       <div class="tuner-readout" id="tuner-readout" data-status="">
@@ -239,7 +296,18 @@ function bodyRange(step, currentNote) {
       </div>
 
       <div class="tuner-progress">
-        <div class="tuner-progress__bar" id="tuner-progress-bar"></div>
+        <svg class="tuner-progress__ring" viewBox="0 0 80 80" width="80" height="80" role="img" aria-label="Progreso de la medicion">
+          <circle class="tuner-progress__ring-track" cx="40" cy="40" r="${RANGE_RING_R}" />
+          <circle
+            class="tuner-progress__ring-fill"
+            id="tuner-progress-ring"
+            cx="40"
+            cy="40"
+            r="${RANGE_RING_R}"
+            stroke-dasharray="${RANGE_RING_CIRCUMFERENCE}"
+            stroke-dashoffset="${RANGE_RING_CIRCUMFERENCE}"
+          />
+        </svg>
       </div>
       <div class="tuner-progress__label" id="tuner-progress-label">0 / 10s</div>
 
@@ -276,7 +344,7 @@ export function bodyFreeNote(pick) {
   const hz = noteToFrequency(label);
   return `
     <div class="tuner-free">
-      <p class="tuner-free__hint">Elegí la nota que querés afinar</p>
+      <p class="tuner-free__hint">Elige la nota que quieres afinar</p>
       <div class="tuner-free__grid" role="group" aria-label="Nota">
         ${FREE_PCS.map(
           (pc) =>
@@ -306,7 +374,7 @@ export function bodyCalibrar({ calCents }) {
   return `
     <div class="tuner-cal">
       <p class="tuner-cal__hint">
-        ${icon('info', { size: 14 })} Usá un <strong>altavoz</strong> (no audífonos) para el auto-test.
+        ${icon('info', { size: 14 })} Usa un <strong>altavoz</strong> (no audífonos) para el auto-test.
       </p>
       <div class="tuner-cal__current">Ajuste actual: <strong id="cal-current">${fmtCents(calCents)}</strong></div>
       <button class="btn btn--primary" id="cal-run">${icon('activity', { size: 14 })} Probar afinador</button>
@@ -332,7 +400,7 @@ export function bodyEntrenarPicker() {
   ).join('');
   return `
     <div class="tuner-train">
-      <p class="tuner-train__hint">Elegí un entrenamiento</p>
+      <p class="tuner-train__hint">Elige un entrenamiento</p>
       <button class="btn btn--primary tuner-train__warmup" data-train="warmup">
         ${icon('flame', { size: 15 })} Calentamiento por mi rango
       </button>
@@ -378,6 +446,16 @@ function bodyMetronomo({ bpm, signature, running }) {
           .join('')}
       </div>
 
+      <div
+        class="metro-pendulum"
+        id="metro-pendulum"
+        data-running="${running}"
+        style="--metro-pendulum-duration: ${Math.round(120000 / bpm)}ms"
+        aria-hidden="true"
+      >
+        <div class="metro-pendulum__arm"></div>
+      </div>
+
       <div class="metro-beats" id="metro-beats" aria-hidden="true">${dots}</div>
       <div class="metro-count" id="metro-count" aria-live="off">—</div>
 
@@ -395,15 +473,51 @@ function bodyPermissionGate(state) {
   if (state === 'denied') {
     return `
       <div class="tuner-perm">
-        <p>${icon('mic', { size: 16 })} Microfono bloqueado.</p>
-        <p>Habilitalo en los permisos del sitio para usar el afinador.</p>
+        <div class="tuner-perm__icon">${icon('mic-off', { size: 32 })}</div>
+        <p>Micrófono bloqueado.</p>
+        <p>Habilita el micrófono en los permisos del sitio para usar el afinador.</p>
       </div>
     `;
   }
   return `
     <div class="tuner-perm">
-      <p>${icon('mic', { size: 16 })} Necesito acceso al micrófono para detectar el tono.</p>
-      <button class="btn btn--primary" id="tuner-grant">Permitir micrófono</button>
+      <div class="tuner-perm__icon">${icon('mic-off', { size: 32 })}</div>
+      <p>Necesito acceso al micrófono para detectar el tono.</p>
+      <button class="tuner-perm__btn" id="tuner-grant">
+        ${icon('mic', { size: 15 })} Activar micrófono
+      </button>
+    </div>
+  `;
+}
+
+/* ─── Hub (landing agrupada) ─── */
+
+function renderHub() {
+  return `
+    <div class="tuner-hub">
+      ${HUB_GROUPS.map(
+        (group) => `
+          <section class="tuner-hub__group">
+            <h2 class="tuner-hub__label">${group.label}</h2>
+            <div class="tuner-hub__grid">
+              ${group.items
+                .map(
+                  (it) => `
+                    <button class="tuner-hub__tile" data-mode="${it.id}">
+                      <span class="tuner-hub__plate">${icon(it.iconKey, { size: 20 })}</span>
+                      <span class="tuner-hub__text">
+                        <span class="tuner-hub__name">${it.name}</span>
+                        <span class="tuner-hub__desc">${it.desc}</span>
+                      </span>
+                      ${icon('chevron-right', { size: 18, className: 'tuner-hub__arrow' })}
+                    </button>
+                  `,
+                )
+                .join('')}
+            </div>
+          </section>
+        `,
+      ).join('')}
     </div>
   `;
 }
@@ -417,8 +531,11 @@ function bodyPermissionGate(state) {
 export async function renderTuner(container, opts = {}) {
   const params = parseQuery(opts.query);
   const target = parseTunerTarget(params);
-  const defaultMode = target.note ? 'voice' : 'guitar';
-  let mode = params.mode && MODES.some((m) => m.id === params.mode) ? params.mode : defaultMode;
+  // Sin ?mode= ni objetivo de canción: aterriza en el hub (mode = null).
+  // Con ?mode= válido o un objetivo de voz (shortcut desde canción): entra
+  // directo al modo enfocado, saltando el hub.
+  const defaultMode = target.note ? 'voice' : null;
+  let mode = params.mode && MODES.includes(params.mode) ? params.mode : defaultMode;
   const songId = params.songId || null;
 
   // Canonical (sharp-spelled) target so it matches frequencyToNote output,
@@ -493,7 +610,7 @@ export async function renderTuner(container, opts = {}) {
 
   function startExercise(sequence) {
     if (!sequence || sequence.length === 0) {
-      alert('No pude armar el ejercicio. Configurá tu rango en el perfil.');
+      alert('No pude armar el ejercicio. Configura tu rango en el perfil.');
       return;
     }
     exercise = createExercise({ sequence, holdFrames: 8 });
@@ -519,41 +636,61 @@ export async function renderTuner(container, opts = {}) {
   container.innerHTML = `
     <div class="tuner-page fade-in">
       <header class="tuner-header">
-        ${
-          target.fromSongId
-            ? `<button class="btn btn--sm tuner-back" id="tuner-back">${icon('arrow-left', { size: 14 })} Volver a la canción</button>`
-            : ''
-        }
-        <h1>Afinador <span class="badge--beta">BETA</span></h1>
-        <p class="tuner-header__sub">El audio se procesa en tu dispositivo. No lo guardamos.</p>
+        <div class="tuner-nav" id="tuner-nav"></div>
+        <h1 id="tuner-title">Afinador</h1>
+        <p class="tuner-header__sub" id="tuner-sub">El audio se procesa en tu dispositivo. No lo guardamos.</p>
       </header>
-
-      <nav class="tuner-tabs" role="tablist" id="tuner-tabs">
-        ${MODES.map(
-          (m) =>
-            `<button class="tuner-tabs__btn" role="tab" data-mode="${m.id}" aria-selected="${m.id === mode}">${m.label}</button>`,
-        ).join('')}
-      </nav>
 
       <div class="tuner-body" id="tuner-body"></div>
     </div>
   `;
 
-  const tabsEl = container.querySelector('#tuner-tabs');
+  const navEl = container.querySelector('#tuner-nav');
   const bodyEl = container.querySelector('#tuner-body');
 
-  const backBtn = container.querySelector('#tuner-back');
-  if (backBtn && target.fromSongId) {
-    backBtn.addEventListener('click', () => navigate('/song/' + target.fromSongId));
+  // "Volver a la canción" es estático (no depende del modo enfocado ni del
+  // hub): se conserva visible mientras exista un origen `target.fromSongId`.
+  // "Volver" al hub solo aparece dentro de un modo enfocado (paintNav).
+  const backButton = (id, label) =>
+    `<button type="button" class="btn btn--back" id="${id}">${icon('arrow-left', { size: 16 })} ${label}</button>`;
+
+  function paintNav() {
+    const backHub = mode !== null ? backButton('tuner-hub-back', 'Volver') : '';
+    const backSong = target.fromSongId ? backButton('tuner-back', 'Volver a la canción') : '';
+    navEl.innerHTML = backHub + backSong;
+    navEl.querySelector('#tuner-hub-back')?.addEventListener('click', goToHub);
+    navEl
+      .querySelector('#tuner-back')
+      ?.addEventListener('click', () => navigate('/song/' + target.fromSongId));
+    paintHeader();
   }
 
-  function paintTabs() {
-    for (const btn of tabsEl.querySelectorAll('button')) {
-      btn.setAttribute('aria-selected', btn.dataset.mode === mode ? 'true' : 'false');
+  // Cabecera dinámica: en el hub muestra "Afinador" + nota de privacidad;
+  // dentro de un modo enfocado muestra el nombre del modo y oculta esa nota.
+  function paintHeader() {
+    const titleEl = container.querySelector('#tuner-title');
+    const subEl = container.querySelector('#tuner-sub');
+    if (!titleEl || !subEl) return;
+    if (mode === null) {
+      titleEl.textContent = 'Afinador';
+      subEl.hidden = false;
+    } else {
+      titleEl.textContent = MODE_TITLES[mode] || 'Afinador';
+      subEl.hidden = true;
     }
   }
 
   function paintBody() {
+    // Marca el modo activo en el contenedor para estilos escopados (p.ej. la
+    // vista Canción se muestra a mayor tamaño via #tuner-body[data-mode='song']).
+    bodyEl.dataset.mode = mode === null ? 'hub' : mode;
+
+    if (mode === null) {
+      bodyEl.innerHTML = renderHub();
+      bindHub();
+      return;
+    }
+
     if (mode === 'metronomo') {
       bodyEl.innerHTML = bodyMetronomo({
         bpm: metronome ? metronome.getBpm() : DEFAULT_BPM,
@@ -662,10 +799,19 @@ export async function renderTuner(container, opts = {}) {
       return;
     }
     const inScale = song?.key ? getScaleNotes(song.key).includes(stab.note) : null;
+    // Con objetivo, afinamos contra ESA nota: la desviacion (y el verde) se
+    // miden respecto al objetivo, no a la nota mas cercana. Asi cantar otra
+    // nota bien afinada NO se pone verde. Sin objetivo (modo escala pura) se
+    // conserva la lectura contra la nota mas cercana.
+    let cents = stab.cents;
+    if (targetCanonical) {
+      const targetFreq = noteToFrequency(`${targetCanonical.note}${targetCanonical.octave}`);
+      cents = centsBetween(stab.hz, targetFreq);
+    }
     renderReadout(bodyEl, {
       label: `${stab.note}${stab.octave}`,
       hz: stab.hz,
-      cents: stab.cents,
+      cents,
       sub:
         inScale === null
           ? undefined
@@ -673,7 +819,7 @@ export async function renderTuner(container, opts = {}) {
             ? `${icon('check', { size: 14 })} en escala`
             : `${icon('close', { size: 14 })} fuera de escala`,
     });
-    setNeedle(bodyEl, stab.cents, colorFromCents(stab.cents));
+    setNeedle(bodyEl, cents, colorFromCents(cents));
     const ul = bodyEl.querySelector('#tuner-scale');
     if (ul) {
       for (const li of ul.children) {
@@ -717,9 +863,9 @@ export async function renderTuner(container, opts = {}) {
     rangeTimerId = setInterval(() => {
       const elapsed = performance.now() - rangeStartMs;
       const pct = Math.min(100, (elapsed / RANGE_STEP_MS) * 100);
-      const bar = bodyEl.querySelector('#tuner-progress-bar');
+      const ring = bodyEl.querySelector('#tuner-progress-ring');
       const lbl = bodyEl.querySelector('#tuner-progress-label');
-      if (bar) bar.style.width = `${pct}%`;
+      if (ring) ring.style.strokeDashoffset = `${RANGE_RING_CIRCUMFERENCE * (1 - pct / 100)}`;
       if (lbl) lbl.textContent = `${(elapsed / 1000).toFixed(1)} / 10s`;
       if (elapsed >= RANGE_STEP_MS) {
         finishRangeStep();
@@ -733,7 +879,7 @@ export async function renderTuner(container, opts = {}) {
     // Pick the mode of notes detected during the last 75% of the window.
     const tail = rangeSamples.slice(Math.floor(rangeSamples.length * 0.25));
     if (tail.length < 5) {
-      alert('No detecté una nota sostenida. Intentá de nuevo.');
+      alert('No detecté una nota sostenida. Intenta de nuevo.');
       paintBody();
       return;
     }
@@ -754,7 +900,7 @@ export async function renderTuner(container, opts = {}) {
   async function saveRange() {
     const token = getSession()?.access_token;
     if (!token) {
-      alert('Necesitás estar logueado.');
+      alert('Necesitas estar logueado.');
       navigate('/login');
       return;
     }
@@ -766,6 +912,7 @@ export async function renderTuner(container, opts = {}) {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       await refreshProfile();
+      invalidateMyProfile();
       bodyEl.innerHTML = `
         <div class="tuner-empty">
           <h2>${icon('check-circle', { size: 22 })} Listo</h2>
@@ -776,7 +923,7 @@ export async function renderTuner(container, opts = {}) {
       `;
       bodyEl.querySelector('#range-back').addEventListener('click', () => navigate('/perfil'));
     } catch (e) {
-      alert(`Error guardando: ${e.message}`);
+      showToast(`Error guardando: ${e.message}`, { type: 'error' });
       paintBody();
     }
   }
@@ -861,9 +1008,14 @@ export async function renderTuner(container, opts = {}) {
   function renderExerciseRunner() {
     const st = exercise.push(null); // estado actual sin avanzar
     const target = st.target;
+    const chips = Array.from({ length: st.total }, (_, i) => {
+      const state = i < st.index ? 'done' : i === st.index ? 'current' : 'pending';
+      return `<span class="tuner-train-run__chip" data-state="${state}">${i + 1}</span>`;
+    }).join('');
     bodyEl.innerHTML = `
       <div class="tuner-train-run">
         <div class="tuner-train-run__progress">Nota ${Math.min(st.index + 1, st.total)} / ${st.total}</div>
+        <div class="tuner-train-run__chips" aria-hidden="true">${chips}</div>
         <div class="tuner-train-run__target" id="train-target">${target ? target.label : '—'}</div>
         <button class="btn btn--sm" id="train-ref">${icon('volume-2', { size: 14 })} Tono de referencia</button>
         <div class="tuner-readout" id="tuner-readout" data-status="">
@@ -921,8 +1073,12 @@ export async function renderTuner(container, opts = {}) {
       exercise.push(null);
       return;
     }
-    renderReadout(bodyEl, { label: `${stab.note}${stab.octave}`, hz: stab.hz, cents: stab.cents });
-    setNeedle(bodyEl, stab.cents, colorFromCents(stab.cents));
+    // Igual que en Canción: hay una nota objetivo (la del ejercicio), asi que la
+    // desviacion y el verde se miden contra ESA nota, no contra la mas cercana.
+    const cur = exercise.current();
+    const cents = cur ? centsBetween(stab.hz, noteToFrequency(cur.label)) : stab.cents;
+    renderReadout(bodyEl, { label: `${stab.note}${stab.octave}`, hz: stab.hz, cents });
+    setNeedle(bodyEl, cents, colorFromCents(cents));
     const r = exercise.push(stab);
     if (r.justAdvanced) {
       if (r.done) finishExercise();
@@ -967,7 +1123,7 @@ export async function renderTuner(container, opts = {}) {
     const runBtn = bodyEl.querySelector('#cal-run');
     runBtn?.addEventListener('click', async () => {
       if (micState !== 'running') {
-        resultEl.textContent = 'Activá el micrófono primero.';
+        resultEl.textContent = 'Activa el micrófono primero.';
         return;
       }
       // Fix 2: deshabilita para evitar dobles clics concurrentes.
@@ -981,7 +1137,7 @@ export async function renderTuner(container, opts = {}) {
           isCancelled: () => mode !== 'calibrar',
         });
         if (!ok) {
-          resultEl.textContent = 'No detecté los tonos. Subí el volumen y reintentá.';
+          resultEl.textContent = 'No detecté los tonos. Sube el volumen e intenta de nuevo.';
           return;
         }
         const rounded = Math.round(offsetCents);
@@ -1024,6 +1180,7 @@ export async function renderTuner(container, opts = {}) {
     const numEl = bodyEl.querySelector('#metro-bpm-num');
     const countEl = bodyEl.querySelector('#metro-count');
     const playBtn = bodyEl.querySelector('#metro-play');
+    const pendulumEl = bodyEl.querySelector('#metro-pendulum');
 
     // El motor puede no existir todavía (primer pintado): créalo y refresca.
     // Guarda: la promesa de idb puede resolver tras cambiar de pestaña; solo
@@ -1038,6 +1195,9 @@ export async function renderTuner(container, opts = {}) {
     const stepBpm = (delta) => {
       const next = metronome.setBpm(metronome.getBpm() + delta);
       if (numEl) numEl.textContent = String(next);
+      if (pendulumEl) {
+        pendulumEl.style.setProperty('--metro-pendulum-duration', `${Math.round(120000 / next)}ms`);
+      }
       persistMetronome();
     };
 
@@ -1090,10 +1250,12 @@ export async function renderTuner(container, opts = {}) {
         stopMetroVisual();
         playBtn.textContent = 'Iniciar';
         if (countEl) countEl.textContent = '—';
+        if (pendulumEl) pendulumEl.dataset.running = 'false';
       } else {
         metronome.start();
         playBtn.textContent = 'Detener';
         startMetroVisual();
+        if (pendulumEl) pendulumEl.dataset.running = 'true';
       }
     });
 
@@ -1162,14 +1324,11 @@ export async function renderTuner(container, opts = {}) {
     detector.start();
   }
 
-  /* ─── tab clicks ─── */
+  /* ─── navegación hub ↔ modo enfocado ─── */
 
-  tabsEl.addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-mode]');
-    if (!btn) return;
-    const nextMode = btn.dataset.mode;
-    if (nextMode === mode) return;
-    mode = nextMode;
+  // Detiene/resetea todo lo que quedó en curso del modo que se abandona
+  // (mismo cleanup que antes vivía inline en el click de tabs).
+  function cleanupModeState() {
     stabilizer.reset();
     // Cancel any in-progress range timer when switching away.
     if (rangeTimerId !== null) {
@@ -1180,19 +1339,44 @@ export async function renderTuner(container, opts = {}) {
     // corta el tono que pudiera estar sonando.
     capturePitch = null;
     calPlayer.stop();
-    // Resetea el estado de entrenar al cambiar de pestaña.
+    // Resetea el estado de entrenar al cambiar de modo.
     exercise = null;
     exerciseDone = false;
     tonePlayer.stop();
     if (metronome) metronome.stop();
     stopMetroVisual();
-    paintTabs();
+  }
+
+  function switchMode(nextMode) {
+    if (nextMode === mode) return;
+    cleanupModeState();
+    mode = nextMode;
+    paintNav();
     paintBody();
-  });
+    if (MIC_MODES.has(mode)) attemptAutoStartMic();
+  }
+
+  function goToHub() {
+    if (mode === null) return;
+    cleanupModeState();
+    mode = null;
+    paintNav();
+    paintBody();
+  }
+
+  function bindHub() {
+    bodyEl.querySelectorAll('.tuner-hub__tile').forEach((btn) => {
+      btn.addEventListener('click', () => switchMode(btn.dataset.mode));
+    });
+  }
 
   /* ─── cleanup on route change ─── */
 
-  const cleanupOnHashChange = () => {
+  // onRouteChange (no solo 'hashchange'): navigate(path, {replace:true}) usa
+  // history.replaceState y no dispara 'hashchange' (logout, expiracion de
+  // sesión vía guardedRoute) — con solo 'hashchange' el mic, el AudioContext
+  // y el worklet quedaban vivos, mas un setInterval huerfano.
+  const cleanupOnRouteChange = () => {
     if (!window.location.hash.startsWith('#/afinador')) {
       if (detector) {
         detector.stop();
@@ -1209,23 +1393,31 @@ export async function renderTuner(container, opts = {}) {
       }
       stopMetroVisual();
       clearTimeout(metroHoldTimer);
-      window.removeEventListener('hashchange', cleanupOnHashChange);
+      unsubscribeTunerRoute();
     }
   };
-  window.addEventListener('hashchange', cleanupOnHashChange);
+  const unsubscribeTunerRoute = onRouteChange(cleanupOnRouteChange);
 
-  paintTabs();
+  paintNav();
   paintBody();
 
   // Micrófono persistente: si el permiso ya está concedido, arrancar sin pedir
   // un tap. Salvedad iOS: si el AudioContext no resuelve sin gesto, el gate
   // sigue disponible como fallback. Sin Permissions API → gate normal.
-  try {
-    if (navigator.permissions?.query) {
-      const status = await navigator.permissions.query({ name: 'microphone' });
-      if (shouldAutoStartMic(status.state)) requestMic();
+  // Solo se intenta al montar si ya entramos directo a un modo enfocado que
+  // necesita mic (deep-link o shortcut desde canción); el hub nunca lo pide.
+  if (mode !== null && MIC_MODES.has(mode)) {
+    await attemptAutoStartMic();
+  }
+
+  async function attemptAutoStartMic() {
+    try {
+      if (navigator.permissions?.query) {
+        const status = await navigator.permissions.query({ name: 'microphone' });
+        if (shouldAutoStartMic(status.state)) requestMic();
+      }
+    } catch (_e) {
+      /* Permissions API no soporta 'microphone' (Safari antiguo): gate normal */
     }
-  } catch (_e) {
-    /* Permissions API no soporta 'microphone' (Safari antiguo): gate normal */
   }
 }

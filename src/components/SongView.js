@@ -2,18 +2,19 @@
  * SongView.js — Lyrics reader component (Upgraded)
  *
  * Displays song lyrics with section labels, voice-colored highlights,
- * word-level voice spans, font size controls, breadcrumb navigation,
- * album navigation bar, voice part filter with premium chips,
- * chord display with transposition, and album navigation.
+ * word-level voice spans, font size controls, album navigation bar,
+ * voice part filter with premium chips, chord display with transposition,
+ * and album navigation.
  */
 
-import { getSongById, filterByAlbum, fetchSongDetail, getAdjacentSongs } from '../lib/store.js';
-import { navigate } from '../router.js';
+import { getSongById, fetchSongDetail, getAdjacentSongs } from '../lib/store.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelSongDetail } from '../lib/skeleton.js';
+import { navigate, onRouteChange } from '../router.js';
 import {
   upgradeLegacySong,
   rosterByCategory,
   getVoiceLabel,
-  tonoGeneralForVoice,
   firstNoteForVoice,
 } from '../lib/voiceSystem.js';
 import {
@@ -21,11 +22,42 @@ import {
   buildChordsLineHTML,
   buildTonoLineHTML,
   buildMixedLineHTML,
+  buildTransposeBubbleLabel,
+  buildCejillaHint,
+  transposeNote,
 } from '../lib/lyricsRender.js';
-import { isAdmin, isFeatureEnabled } from '../lib/authStore.js';
+import { getChordNotation, setChordNotation } from '../lib/chordNotation.js';
+import { resolveLabelOverlaps, observeLabelOverlaps } from '../lib/labelOverlap.js';
+import { getTranspose, setTranspose, normalizeSemitones } from '../lib/transposeStore.js';
+import { getLayers, setLayer, deriveViewMode } from '../lib/layerStore.js';
+import { isAdmin } from '../lib/authStore.js';
+import { getPipelineRun } from '../lib/pipelineApi.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
-import { presetToSpeed, stepToward, shouldShowFab } from '../lib/autoscroll.js';
-import { escapeHtml } from '../lib/escape.js';
+import { isFavorite, toggleFavorite } from '../lib/favorites.js';
+import { recordVisit } from '../lib/recentVisits.js';
+import '../styles/favorites.css';
+import { openOptionsSheet } from './OptionsSheet.js';
+import { openSongActionsSheet } from './SongActionsSheet.js';
+import { openFloatingTuner } from './FloatingTuner.js';
+import {
+  presetToSpeed,
+  stepToward,
+  shouldShowFab,
+  AUTOSCROLL_SPEED_MIN,
+  AUTOSCROLL_SPEED_MAX,
+  getAutoscrollSpeed,
+  saveAutoscrollSpeed,
+  speedToPercentLabel,
+} from '../lib/autoscroll.js';
+import { escapeHtml, safeUrl } from '../lib/escape.js';
+import { getSongAudio } from '../lib/songAudioApi.js';
+import { getSongStudio } from '../lib/studioApi.js';
+// B4 (perf): ImmersiveView.js (1457 líneas) + labelOverlap/timingEngine/
+// beatClock/metronomeClick/FloatingTuner/spring/immersive.css NO se importan
+// de forma estática: SongView.js es import estático de main.js, así que
+// viajaban en el chunk de arranque aunque la vista se monta por gesto de
+// usuario. Se cargan al vuelo dentro del handler de #enter-stage-btn.
+import { normalizeSectionType } from '../lib/sectionTypes.js';
 
 const FONT_SIZE_KEY = 'hkn-lyrics-font-size';
 const FONT_STEP = 0.125; // rem
@@ -33,11 +65,7 @@ const FONT_MIN = 0.875;
 const FONT_MAX = 2.5;
 
 // Autoscroll config
-const AUTOSCROLL_SPEED_KEY = 'hkn-autoscroll-speed';
-const AUTOSCROLL_SPEED_MIN = 0.01;
-const AUTOSCROLL_SPEED_MAX = 2.0;
 const AUTOSCROLL_SPEED_STEP = 0.05;
-const AUTOSCROLL_SPEED_DEFAULT = 0.5;
 const AUTOSCROLL_BASE_PX_PER_FRAME = 1.8;
 const AUTOSCROLL_COLLAPSE_DELAY = 1500;
 // Fracción del paso manual aplicada por frame al converger hacia el preset de
@@ -114,34 +142,114 @@ function getVoiceTypeLabel(voiceType) {
 }
 
 /**
+ * Muestra un toast indicando si la canción fue agregada o eliminada de favoritos.
+ * El botón "Deshacer" llama toggleFavorite de nuevo y actualiza el btn.
+ * @param {boolean} added
+ * @param {string} songId
+ * @param {HTMLElement} favBtn
+ */
+function showFavToast(added, songId, favBtn) {
+  let toast = document.querySelector('.toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.className = 'toast';
+    document.body.appendChild(toast);
+  }
+  clearTimeout(toast._hideTimer);
+
+  const label = added ? 'Agregada' : 'Eliminada';
+  toast.innerHTML = `
+    <span>${label}</span>
+    <button class="fav-toast__undo" type="button" aria-label="Deshacer">· Deshacer</button>
+  `;
+  toast.classList.add('visible');
+
+  toast.querySelector('.fav-toast__undo').addEventListener(
+    'click',
+    async () => {
+      toast.classList.remove('visible');
+      await toggleFavorite(songId);
+      const nowOn = !added;
+      if (favBtn) {
+        favBtn.classList.toggle('is-on', nowOn);
+        favBtn.setAttribute('aria-label', nowOn ? 'Quitar de favoritos' : 'Agregar a favoritos');
+      }
+    },
+    { once: true },
+  );
+
+  toast._hideTimer = setTimeout(() => toast.classList.remove('visible'), 3500);
+}
+
+/**
  * Render the song view
  * @param {HTMLElement} container
  * @param {string|object} songIdOrData - Either a song ID string, or a full song object (with isPreview flag)
  */
 export async function renderSongView(container, songIdOrData) {
   const isPreview = typeof songIdOrData === 'object' && songIdOrData !== null;
-  let song = null;
   let songId = null;
 
   if (isPreview) {
-    song = songIdOrData;
-  } else {
-    songId = songIdOrData;
-    song = getSongById(songId);
-
-    // If no sections cached, fetch full detail from API
-    if (!song?.sections?.length) {
-      container.innerHTML = `
-        <div class="empty-state fade-in">
-          <div class="empty-state__icon">${icon('music', { size: 48, className: 'loading-pulse' })}</div>
-          <h2 class="empty-state__title">Cargando...</h2>
-        </div>
-      `;
-      const detail = await fetchSongDetail(songId);
-      if (detail) song = detail;
-    }
+    // Preview: datos ya disponibles, render directo sin skeleton.
+    await _renderSongBody(container, null, true, songIdOrData);
+    return;
   }
 
+  songId = songIdOrData;
+  const cachedSong = getSongById(songId);
+
+  if (cachedSong?.sections?.length) {
+    // Canción ya en caché con secciones: render directo sin skeleton.
+    await _renderSongBody(container, songId, false, cachedSong);
+    recordVisit(songId);
+    return;
+  }
+
+  // Sin secciones en caché: shell instantáneo + skeleton + fetch.
+  container.innerHTML = `
+    <div class="song-view__shell">
+      <div class="song-view__region" aria-busy="true"></div>
+    </div>
+  `;
+  const region = container.querySelector('.song-view__region');
+
+  renderAsyncRegion(region, {
+    skeleton: () => skelSongDetail(),
+    fetcher: () => fetchSongDetail(songId),
+    render: (detail) => {
+      // Si el usuario ya navego fuera, la region fue removida del container y
+      // _renderSongBody (que posee el container full-bleed) clobberearia la
+      // pantalla nueva con esta canción tardía (bug de navegación #3).
+      if (!container.contains(region)) return;
+      _renderSongBody(container, songId, false, detail)
+        .then(() => recordVisit(songId))
+        .catch(() => {
+          container.innerHTML = `
+          <div class="empty-state">
+            <h2 class="empty-state__title">No se pudo cargar la canción</h2>
+            <a class="btn btn--primary" href="#/">Volver al inicio</a>
+          </div>`;
+        });
+    },
+    empty: () => `
+      <div class="empty-state fade-in">
+        <div class="empty-state__icon">${icon('frown', { size: 48 })}</div>
+        <h2 class="empty-state__title">Canción no encontrada</h2>
+        <p class="empty-state__text">La canción que buscas no existe o fue eliminada.</p>
+        <a class="btn btn--primary" style="margin-top: 1rem;" href="#/">Volver al inicio</a>
+      </div>`,
+    onError: () => `
+      <div class="empty-state">
+        <h2 class="empty-state__title">No se pudo cargar la canción</h2>
+        <button class="btn btn--primary" data-retry>Reintentar</button>
+      </div>`,
+  });
+}
+
+// _renderSongBody: pinta la canción completa en container. Invocado desde
+// renderSongView (rutas: preview directo, caché directa, fetch async).
+async function _renderSongBody(container, songId, isPreview, song) {
   // Lectura dual: normaliza v1 → v2 en memoria (inerte para v2 y para el
   // render de Letra/Acordes, que sigue leyendo text/chords/voiceRanges).
   if (song) song = upgradeLegacySong(song);
@@ -160,25 +268,83 @@ export async function renderSongView(container, songIdOrData) {
   }
 
   let fontSize = getFontSize();
-  // viewMode: 'lyrics' | 'chords' | 'tono'. showChords se deriva para no tocar
-  // la rama de acordes existente.
+  // Modo Tono: disponible siempre que la canción tenga roster de voces.
+  // chordsCategory/chordsVoiceId (panel Voz unificado) dirigen el disclosure
+  // categoría→persona del modo notas.
+  // hasChords/tonoAvailable se adelantan (antes vivían más abajo) porque la
+  // derivación de viewMode (FIX finding 1) los necesita para intersectar la
+  // preferencia global de capas con lo que la canción realmente soporta.
+  const hasChords = songHasChords(song);
+  const tonoAvailable = (song.voiceRoster || []).length > 0;
+  // viewMode: 'lyrics' | 'chords' | 'tono' | 'mixed'. showChords se deriva para
+  // no tocar la rama de acordes existente. 'mixed' es la combinación de las
+  // capas Acordes+Tono (T3, toolbar de capas) — no es un modo exclusivo nuevo,
+  // solo la representación interna de "ambas capas encendidas" para
+  // renderSections/reRenderLyrics.
   let viewMode = 'lyrics';
   let showChords = false;
-  let transposeSemitones = 0;
-  let useFlats = false;
-  // Modo Tono: solo con el flag voz_tono. activeRosterId/activeCategory dirigen
-  // el disclosure categoría→persona del modo notas.
-  const tonoEnabled = isFeatureEnabled('voz_tono');
-  let activeCategory = null;
-  let activeRosterId = null;
+  // Capas de lectura (T3): Acordes y Tono ya no son un mode exclusivo en la
+  // toolbar — son dos toggles independientes persistidos globalmente
+  // (layerStore). `layers` es la preferencia GLOBAL cruda (persistida sin
+  // tocar); `getEffectiveLayers` (FIX finding 1, CRITICAL) la intersecta con
+  // hasChords/tonoAvailable de ESTA canción para que una capa encendida en
+  // otra canción con acordes no sangre en una sin acordes (sin control para
+  // apagarla, porque el toggle ni se pinta). Solo aplican fuera de preview: el
+  // preview conserva el toggle viejo Letra/Acordes/Tono (chord-toggle) tal
+  // cual, sin tocarlo.
+  const layers = getLayers();
+  function getEffectiveLayers() {
+    return { chords: layers.chords && hasChords, tono: layers.tono && tonoAvailable };
+  }
+  if (!isPreview) {
+    viewMode = deriveViewMode(getEffectiveLayers());
+    showChords = viewMode === 'chords' || viewMode === 'mixed';
+  }
+  // Transposición persistida por canción (T3); preview no persiste (no hay id
+  // estable de sesión ni beneficio de recordarla para una vista efímera).
+  const savedTranspose = !isPreview ? getTranspose(songId) : { semitones: 0, useFlats: false };
+  let transposeSemitones = savedTranspose.semitones;
+  let useFlats = savedTranspose.useFlats;
+  // API de setupAutoscroll (FIX 1): pauseAutoscroll detiene el motor rAF del
+  // autoscroll clásico al entrar al escenario, para que no siga corriendo
+  // detrás del overlay. Se asigna al llamar setupAutoscroll más abajo; el
+  // handler de #enter-stage-btn ya solo registra el listener en este punto,
+  // así que para cuando se dispare el click ya está poblada.
+  let stageAutoscrollApi = null;
+  // Audio por sección (Task 1.2): se resuelve lazy tras el render principal,
+  // no bloquea. sectionsWithAudio alimenta el icono play junto al label de la
+  // sección en la letra; sectionAudioManager.pause() se engancha al mismo
+  // hook del stage-btn que pausa el autoscroll clásico. Un solo manager
+  // compartido (un <audio> real) consumido por un acordeón por sección —
+  // reemplaza al widget global .section-player.
+  let sectionAudioManager = null;
+  let sectionAccordionFactory = null;
+  const sectionAccordions = new Map();
+  let openSectionAudioIndex = null;
+  // Preserva el track/scope activo de cada acordeón a través de un rebuild
+  // (wireSectionPlayButtons destruye y recrea todos los paneles en cada
+  // reRenderLyrics): sin esto, un reRenderLyrics ajeno a esta feature
+  // (transponer, cambiar notación, elegir voz…) reseteaba el chip a Mezcla
+  // aunque el usuario tuviera otra voz elegida o sonando.
+  const sectionAudioActiveTrackId = new Map();
+  let sectionsWithAudio = new Set();
+  // Afinador flotante (T5): bajo demanda desde el mic de la toolbar, null
+  // hasta que se abre. Siempre disponible (afinador libre sin voz
+  // seleccionada); refreshActiveVoiceNote() lo refresca junto con la voz
+  // activa para que la nota objetivo la siga sin lógica aparte.
+  let floatingTunerApi = null;
 
-  const hasChords = songHasChords(song);
-  // Vista combinada (Acordes+Voz, Wave 4): voz activa del modo Acordes,
-  // independiente de la de Tono. Solo con flag voz_tono + roster + acordes.
+  // Selector de voz UNIFICADO (pivote modos excluyentes, post-QA visual): un
+  // solo concepto de "mi voz" para Acordes (mezcla acordes+voz) y Tono (notas
+  // por sílaba) — antes eran dos estados independientes (activeCategory/
+  // activeRosterId para Tono via chips del hero, chordsCategory/chordsVoiceId
+  // para Acordes+Voz via el panel). El panel Voz (renderVoicePanel) es ahora
+  // EL selector en ambos modos; disponible siempre que haya roster (ya no
+  // requiere acordes).
   let chordsCategory = null;
   let chordsVoiceId = null;
   let voicePanelOpen = false;
-  const mixAvailable = tonoEnabled && (song.voiceRoster || []).length > 0 && hasChords;
+  const voicePanelAvailable = tonoAvailable;
 
   const voiceBadgeClass = getVoiceBadgeClass(song.voiceType);
   const voiceLabel = getVoiceTypeLabel(song.voiceType);
@@ -192,6 +358,14 @@ export async function renderSongView(container, songIdOrData) {
   // Leer ?lista= del hash (p. ej. #/song/abc?lista=xyz)
   const _hashQuery = new URLSearchParams((globalThis.location?.hash ?? '').split('?')[1] || '');
   const listId = isPreview ? null : _hashQuery.get('lista') || null;
+
+  // Resolver el contexto de lista (prev/next dentro de la lista) implica
+  // await import('lists') + getList() por red ANTES de pintar el cuerpo abajo.
+  // Sin esto, la pantalla anterior (la lista) queda visible bajo la URL nueva
+  // /song/:id mientras la red resuelve. Pinta un skeleton al instante para
+  // limpiarla ya; el innerHTML del cuerpo lo reemplaza al terminar. Solo aplica
+  // al caso con ?lista= (la rama sin lista y el preview pintan síncronamente).
+  if (listId) container.innerHTML = skelSongDetail();
 
   let adjacent;
   let listName = null;
@@ -224,45 +398,30 @@ export async function renderSongView(container, songIdOrData) {
     adjacent = getAdjacentSongs(songId);
   }
   const hasNav = !isPreview && (adjacent.prev || adjacent.next);
-  // El modo Tono está disponible si el flag está activo y la canción tiene
-  // roster de voces. La fila toggle aparece si hay acordes o si hay Tono.
-  const tonoAvailable = tonoEnabled && (song.voiceRoster || []).length > 0;
+  // La fila toggle aparece si hay acordes o si hay Tono (hasChords/tonoAvailable
+  // ya se calcularon arriba, junto a viewMode).
   const showToggle = hasChords || tonoAvailable;
 
   container.innerHTML = `
     <div class="song-view fade-in">
-      ${
-        !isPreview
-          ? `
-      <!-- Breadcrumb -->
-      <nav class="breadcrumb" aria-label="Breadcrumb">
-        <a href="#/" id="breadcrumb-home">Inicio</a>
-        <span class="breadcrumb__separator">›</span>
-        <a href="#/" data-album="${song.albumSlug}" id="breadcrumb-album">${escapeHtml(song.album || '')}</a>
-        <span class="breadcrumb__separator">›</span>
-        <span class="breadcrumb__current">${escapeHtml(song.title)}</span>
-      </nav>
-      `
-          : ''
-      }
-
       <!-- Song Header -->
       <div class="song-view__header">
-        ${
-          coverUrl
-            ? `
-        <img
-          class="song-view__cover"
-          src="${coverUrl}"
-          alt="Portada de ${escapeHtml(song.album || '')}"
-          width="80"
-          height="80"
-          decoding="async"
-          onerror="this.src='${COVER_PLACEHOLDER}'"
-        />
-        `
-            : ''
-        }
+        <div class="song-view__cover-wrap">
+          <img
+            class="song-view__cover"
+            src="${coverUrl || COVER_PLACEHOLDER}"
+            alt="Portada de ${escapeHtml(song.album || '')}"
+            width="80"
+            height="80"
+            decoding="async"
+            onerror="this.src='${COVER_PLACEHOLDER}'"
+          />
+          ${
+            !isPreview
+              ? `<button class="fav-btn fav-btn--cover${songId && isFavorite(songId) ? ' is-on' : ''}" id="fav-btn" aria-label="Agregar a favoritos" aria-pressed="${songId && isFavorite(songId)}">${icon('heart', { size: 16 })}</button>`
+              : ''
+          }
+        </div>
         <div class="song-view__meta">
           <h1 class="song-view__title${!isPreview ? ' song-view__title--linked' : ''}" id="song-title-link">${escapeHtml(song.title || 'Sin título')}${!isPreview ? '<svg class="song-view__link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' : ''}</h1>
           <p class="song-view__album">${escapeHtml(song.artist || '')} — ${escapeHtml(song.album || '')}</p>
@@ -280,76 +439,50 @@ export async function renderSongView(container, songIdOrData) {
       ${
         !isPreview
           ? `
-      <!-- Controls toolbar — grouped by function -->
+      <!-- Controls toolbar — modos excluyentes Letra/Acordes/Tono (pivote
+           post-QA visual): #layer-chords/#layer-tono son un OR (activar uno
+           apaga el otro; tap sobre el activo vuelve a Letra), exclusividad
+           impuesta por layerStore. El mic del afinador vive aquí, siempre
+           visible (afinador libre si no hay voz elegida). A−/A+ y transpose
+           viven solo en el sheet de opciones (#open-options-sheet). Solo
+           acciones de CANTAR quedan aquí — Editar canción / Procesamiento /
+           Estudio / Partitura se movieron al sheet de #open-song-actions-btn
+           (Task 18, decisión 6 opción A): toolbar estable, sin pop-in async. -->
       <div class="song-toolbar">
-        <!-- Zone: Reading -->
-        <div class="song-toolbar__group">
-          <div class="font-controls" style="margin-bottom: 0;">
-            <button class="font-controls__btn" id="font-decrease" aria-label="Reducir tamaño de letra">A−</button>
-            <span class="font-controls__label" id="font-size-label">${fontSize.toFixed(2)}</span>
-            <button class="font-controls__btn" id="font-increase" aria-label="Aumentar tamaño de letra">A+</button>
-          </div>
-          ${
-            showToggle
-              ? `
-          <div class="chord-toggle" id="chord-toggle" style="margin-bottom: 0;">
-            <button class="chord-toggle__btn chord-toggle__btn--active" data-mode="lyrics">Letra</button>
-            ${hasChords ? `<button class="chord-toggle__btn" data-mode="chords">Acordes</button>` : ''}
-            ${tonoAvailable ? `<button class="chord-toggle__btn" data-mode="tono">Tono</button>` : ''}
-          </div>
-          `
-              : ''
-          }
-        </div>
+        ${hasChords ? `<button class="layer-toggle" id="layer-chords" aria-pressed="${layers.chords}">Acordes</button>` : ''}
+        ${tonoAvailable ? `<button class="layer-toggle" id="layer-tono" aria-pressed="${layers.tono}">Tono</button>` : ''}
+        <span class="song-toolbar__spacer"></span>
+        <button class="song-toolbar__icon" id="hero-tuner-mic" aria-label="Afinar mi voz">${icon('mic', { size: 18 })}</button>
+        <button class="song-toolbar__icon" id="enter-stage-btn" aria-label="Modo escenario">${icon('maximize', { size: 18 })}</button>
+        <button class="song-toolbar__icon" id="open-options-sheet" aria-label="Opciones">${icon('sliders', { size: 18 })}</button>
+        <button class="song-toolbar__icon" id="open-song-actions-btn" aria-label="Más acciones">${icon('ellipsis-vertical', { size: 18 })}<span class="song-actions-badge" hidden aria-hidden="true"></span></button>
+      </div>
 
+      ${
+        (song.cejilla && song.cejilla > 0) || voicePanelAvailable
+          ? `
+      <!-- Cajas temáticas — Guitarra (cejilla, SOLO modo Acordes; ver
+           applyModeVisibility) y Voz (selector único para "mi tono" en
+           Acordes y para la voz activa en Tono). -->
+      <div class="chords-extras" id="chords-extras" style="display: none;">
         ${
-          isAdmin()
+          song.cejilla && song.cejilla > 0
             ? `
-        <!-- Zone: Actions -->
-        <div class="song-toolbar__group song-toolbar__group--actions">
-          <a href="#/admin/edit/${song.id}?from=${song.id}" class="btn btn--secondary song-toolbar__btn">${icon('pencil', { size: 16 })} Editar</a>
+        <div class="tool-box tool-box--row" id="guitar-box">
+          <div class="tool-box__title">${icon('audio-lines', { size: 13 })} Guitarra</div>
+          <div class="cejilla-badge" title="Colocar cejilla en el traste ${song.cejilla}">
+            <span class="cejilla-badge__icon">${icon('audio-lines', { size: 15 })}</span>
+            <span class="cejilla-badge__text" id="cejilla-badge-text">${escapeHtml(buildCejillaHint(song.key, song.cejilla, useFlats, getChordNotation()))}</span>
+          </div>
         </div>
         `
             : ''
         }
-      </div>
-
-      ${
-        hasChords || (song.cejilla && song.cejilla > 0)
-          ? `
-      <!-- Wave 4: cajas temáticas del modo Acordes — Guitarra y Voz -->
-      <div class="chords-extras" id="chords-extras" style="display: none;">
-        <div class="tool-box">
-          <div class="tool-box__title">${icon('audio-lines', { size: 13 })} Guitarra</div>
-          <div class="tool-box__row">
-            ${
-              song.cejilla && song.cejilla > 0
-                ? `<div class="cejilla-badge" title="Colocar cejilla en el traste ${song.cejilla}">
-                     <span class="cejilla-badge__icon">${icon('audio-lines', { size: 15 })}</span>
-                     <span class="cejilla-badge__text">Cejilla: ${song.cejilla}</span>
-                   </div>`
-                : ''
-            }
-            ${
-              hasChords
-                ? `<div class="transpose-controls" id="transpose-controls">
-                     <button class="transpose-btn" id="transpose-down">−½</button>
-                     <span class="transpose-value" id="transpose-value">0</span>
-                     <button class="transpose-btn" id="transpose-up">+½</button>
-                     <span class="filter-separator"></span>
-                     <button class="transpose-notation-toggle" id="notation-toggle">♯ / ♭</button>
-                   </div>`
-                : ''
-            }
-          </div>
-        </div>
-        ${mixAvailable ? renderVoicePanel(song) : ''}
+        ${voicePanelAvailable ? renderVoicePanel(song) : ''}
       </div>
       `
           : ''
       }
-
-      ${tonoAvailable ? renderTonoFilters(song) : ''}
       `
           : `
       ${
@@ -367,17 +500,16 @@ export async function renderSongView(container, songIdOrData) {
           : ''
       }
       ${
-        mixAvailable
+        voicePanelAvailable
           ? `<div class="chords-extras" id="chords-extras" style="display: none;">${renderVoicePanel(song)}</div>`
           : ''
       }
-      ${tonoAvailable ? renderTonoFilters(song) : ''}
       `
       }
 
       <!-- Lyrics -->
       <div class="lyrics" id="lyrics-content">
-        ${renderSections(song.sections || [], { viewMode, transposeSemitones, useFlats, activeVoiceId: activeRosterId, activeCategory, chordsVoiceId, chordsCategory })}
+        ${renderSections(song.sections || [], { viewMode, transposeSemitones, useFlats, activeVoiceId: chordsVoiceId, activeCategory: chordsCategory, chordsVoiceId, chordsCategory, notation: getChordNotation() })}
       </div>
 
       ${
@@ -411,175 +543,329 @@ export async function renderSongView(container, songIdOrData) {
         viewMode,
         transposeSemitones,
         useFlats,
-        activeVoiceId: activeRosterId,
-        activeCategory,
+        activeVoiceId: chordsVoiceId,
+        activeCategory: chordsCategory,
         chordsVoiceId,
         chordsCategory,
+        notation: getChordNotation(),
+        sectionsWithAudio,
       });
       if (!isPreview) applyFontSize(fontSize);
+      wireSectionPlayButtons();
+      resolveLabelOverlaps(lyricsEl);
     }
   }
 
+  // Anti-colisión de etiquetas de acorde/nota (Acordes/Tono/Mixto): resuelve
+  // la primera pintada siempre (incluido preview) y, fuera de preview,
+  // engancha además el observer de resize/fonts con su propio teardown por
+  // onRouteChange. El preview (editor) no navega por router, no hay ruta de
+  // la que salir (mismo razonamiento que el afinador flotante, ver
+  // comentario más abajo) — se conforma con la resolución puntual al montar.
+  // Consecuencia: en preview NO hay observer, por lo que no hay re-resolve
+  // tras un resize de la ventana ni al cargar fuentes de forma diferida —
+  // limitación aceptada (el editor es una superficie acotada, no la lectura
+  // final de la canción).
+  const lyricsElInitial = container.querySelector('#lyrics-content');
+  if (lyricsElInitial) {
+    if (isPreview) {
+      resolveLabelOverlaps(lyricsElInitial);
+    } else {
+      const disconnectLabelOverlaps = observeLabelOverlaps(lyricsElInitial);
+      const unsubscribeLabelOverlapsRoute = onRouteChange(() => {
+        disconnectLabelOverlaps();
+        unsubscribeLabelOverlapsRoute();
+      });
+    }
+  }
+
+  // Tap en la etiqueta de una sección con audio togglea su acordeón (Task
+  // 1.2). Se reconecta en cada reRenderLyrics porque el innerHTML pierde
+  // listeners y elementos — los paneles se remontan junto con la letra.
+  function wireSectionPlayButtons() {
+    // Antes de destruir los paneles viejos, recuerda qué track tenía elegido
+    // cada sección — createSectionAccordion ya prioriza lo que esté REALMENTE
+    // sonando en el manager por su cuenta, pero una selección sin reproducir
+    // (chip elegido, nada sonando aún) solo sobrevive si se la pasamos.
+    sectionAccordions.forEach((acc, idx) => {
+      sectionAudioActiveTrackId.set(idx, acc.getActiveTrackId());
+      acc.destroy();
+    });
+    sectionAccordions.clear();
+    if (sectionAudioManager && sectionAccordionFactory) {
+      container.querySelectorAll('#lyrics-content .lyrics__section').forEach((sectionEl) => {
+        const sectionIndex = Number(sectionEl.dataset.sectionIndex);
+        if (!sectionsWithAudio.has(sectionIndex)) return;
+        const tracks = sectionAudioManager.tracksFor(sectionIndex);
+        if (tracks.length === 0) return;
+        const accordion = sectionAccordionFactory({
+          manager: sectionAudioManager,
+          sectionIndex,
+          tracks,
+          initialTrackId: sectionAudioActiveTrackId.get(sectionIndex) ?? null,
+        });
+        const isOpen = sectionIndex === openSectionAudioIndex;
+        accordion.el.hidden = !isOpen;
+        sectionEl
+          .querySelector('.lyrics__section-label')
+          ?.insertAdjacentElement('afterend', accordion.el);
+        sectionAccordions.set(sectionIndex, accordion);
+      });
+    }
+    container.querySelectorAll('[data-section-audio]').forEach((btn) => {
+      const sectionIndex = Number(btn.dataset.sectionAudio);
+      updateSectionPlayButtonLabel(btn, sectionIndex === openSectionAudioIndex);
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleSectionAudioPanel(sectionIndex);
+      });
+    });
+  }
+
+  function updateSectionPlayButtonLabel(btn, isOpen) {
+    btn.setAttribute(
+      'aria-label',
+      isOpen ? 'Ocultar audio de la sección' : 'Mostrar audio de la sección',
+    );
+  }
+
+  // Un panel abierto a la vez: togglea el de `sectionIndex` y colapsa el
+  // resto. Al abrir por primera vez, carga metadata (duración) sin bajar el
+  // archivo — el usuario decide si reproduce.
+  function toggleSectionAudioPanel(sectionIndex) {
+    const accordion = sectionAccordions.get(sectionIndex);
+    if (!accordion) return;
+    const opening = accordion.el.hidden;
+    sectionAccordions.forEach((acc, idx) => {
+      acc.el.hidden = !(opening && idx === sectionIndex);
+    });
+    container.querySelectorAll('[data-section-audio]').forEach((btn) => {
+      updateSectionPlayButtonLabel(
+        btn,
+        opening && Number(btn.dataset.sectionAudio) === sectionIndex,
+      );
+    });
+    openSectionAudioIndex = opening ? sectionIndex : null;
+    if (opening) accordion.load();
+  }
+
+  // Blindaje full view (Task 1.3): colapsa cualquier acordeón de sección
+  // abierto, sin depender de toggleSectionAudioPanel (que solo sabe cerrar
+  // el que YA está abierto vía su botón). Se engancha al mismo hook de
+  // pauseAutoscroll que entra al escenario, para que ningún `.section-audio`
+  // quede visible/pintado detrás del overlay inmersivo.
+  function collapseSectionAudioPanels() {
+    if (openSectionAudioIndex === null) return;
+    sectionAccordions.forEach((acc) => {
+      acc.el.hidden = true;
+    });
+    container.querySelectorAll('[data-section-audio]').forEach((btn) => {
+      updateSectionPlayButtonLabel(btn, false);
+    });
+    openSectionAudioIndex = null;
+  }
+
+  // Resalta la sección que suena ahora (.lyrics__section--playing); null
+  // apaga el resaltado (pausa, fin de canción, cambio de scope).
+  function highlightPlayingSection(sectionIndex) {
+    container.querySelectorAll('#lyrics-content .lyrics__section').forEach((el) => {
+      const isPlaying = sectionIndex !== null && Number(el.dataset.sectionIndex) === sectionIndex;
+      el.classList.toggle('lyrics__section--playing', isPlaying);
+    });
+  }
+
+  // Refresca el bubble de tono + hint de cejilla (no requieren re-pintar la
+  // letra completa) y persiste la transposición por canción (T3).
+  function refreshTransposeUI() {
+    if (!isPreview) setTranspose(songId, { semitones: transposeSemitones, useFlats });
+    const notation = getChordNotation();
+    const cejillaTextEl = container.querySelector('#cejilla-badge-text');
+    if (cejillaTextEl && song.cejilla) {
+      cejillaTextEl.textContent = buildCejillaHint(song.key, song.cejilla, useFlats, notation);
+    }
+    refreshActiveVoiceNote();
+  }
+
   // Show controls relevant to the current mode: cejilla + transposition belong
-  // to chords mode; tono filters to tono mode.
+  // to chords mode; el panel Voz vive aquí también para Tono. La caja Guitarra
+  // es exclusiva de Acordes: en Tono se oculta y, si era la única caja, el
+  // contenedor entero también (para no dejar un margen fantasma).
   function applyModeVisibility() {
-    const isTono = viewMode === 'tono';
     const chordsExtrasEl = container.querySelector('#chords-extras');
-    if (chordsExtrasEl) chordsExtrasEl.style.display = showChords ? 'flex' : 'none';
-    const tonoFiltersEl = container.querySelector('#tono-filters');
-    if (tonoFiltersEl) tonoFiltersEl.style.display = isTono ? '' : 'none';
+    const guitarBoxEl = container.querySelector('#guitar-box');
+    if (guitarBoxEl) guitarBoxEl.style.display = showChords ? '' : 'none';
+    if (chordsExtrasEl) {
+      const hasVisibleBox = (guitarBoxEl && showChords) || voicePanelAvailable;
+      chordsExtrasEl.style.display =
+        (showChords || viewMode === 'tono') && hasVisibleBox ? 'flex' : 'none';
+    }
     // Re-asegura el estado del panel Voz al cambiar de modo (defensivo).
     syncVoicePanel();
   }
 
-  // ── Tono mode: disclosure categoría → persona ──
-  function updateActiveVoiceHeading() {
-    const headingEl = container.querySelector('#tono-active-voice');
-    if (!headingEl) return;
-    if (!activeRosterId) {
-      headingEl.textContent = activeCategory ? 'Elegí una voz' : 'Elegí una categoría';
-      updateTuneAction();
-      return;
-    }
-    const voice = (song.voiceRoster || []).find((v) => v.id === activeRosterId);
-    headingEl.textContent = voice ? `Voz activa: ${voice.name}` : '';
-    updateTuneAction();
-  }
-
-  // Dos botones: Afinar · tono general (referenceKey o 1ª nota) y Afinar · 1ª nota.
-  // Sólo con activeRosterId y el flag afinador_shortcut; si no hay notas, no aparece.
-  // En preview no hay song.id (draft del editor) → sin botones (URL rota si no).
-  function updateTuneAction() {
-    const slot = container.querySelector('#tono-tune-action');
-    if (!slot) return;
-    if (isPreview || !activeRosterId || !isFeatureEnabled('afinador_shortcut')) {
-      slot.innerHTML = '';
-      return;
-    }
-    const general = tonoGeneralForVoice(song, activeRosterId);
-    const first = firstNoteForVoice(song, activeRosterId);
-    const btns = [];
-    if (general) {
-      btns.push(
-        `<button class="btn btn--sm" data-ref="${escapeHtml(general)}">${icon('mic', { size: 14 })} Afinar · ${escapeHtml(general)}</button>`,
-      );
-    }
-    if (first && first !== general) {
-      btns.push(
-        `<button class="btn btn--sm" data-ref="${escapeHtml(first)}">${icon('mic', { size: 14 })} 1ª nota · ${escapeHtml(first)}</button>`,
-      );
-    }
-    slot.innerHTML = btns.join('');
-    slot.querySelectorAll('[data-ref]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const ref = btn.dataset.ref;
-        navigate(
-          `/afinador?mode=song&songId=${encodeURIComponent(song.id)}` +
-            `&ref=${encodeURIComponent(ref)}&from=${encodeURIComponent(song.id)}`,
-        );
-      });
-    });
-  }
-
-  function renderPersonRow() {
-    const rowEl = container.querySelector('#tono-person-row');
-    if (!rowEl) return;
-    if (!activeCategory) {
-      rowEl.innerHTML = '';
-      return;
-    }
-    const people = rosterByCategory(song, activeCategory);
-    // Una sola persona en la categoría: el chip de categoría ya la representa,
-    // así que la fila de persona sería un duplicado. selectCategory ya la
-    // autoselecciona; no renderizamos nada aquí.
-    if (people.length <= 1) {
-      rowEl.innerHTML = '';
-      return;
-    }
-    rowEl.innerHTML = people
-      .map((p) => {
-        const note = tonoGeneralForVoice(song, p.id);
-        const noteHtml = note ? `<span class="tono-chip__note">${escapeHtml(note)}</span>` : '';
-        return `
-        <button class="tono-chip tono-chip--person${p.id === activeRosterId ? ' tono-chip--active' : ''}" data-roster-id="${p.id}" aria-pressed="${p.id === activeRosterId}">
-          <span class="voice-filter__label-text">${escapeHtml(p.name)}</span>
-          ${noteHtml}
-        </button>`;
-      })
-      .join('');
-    rowEl.querySelectorAll('[data-roster-id]').forEach((btn) => {
-      btn.addEventListener('click', () => selectPerson(btn.dataset.rosterId));
-    });
-  }
-
+  // Selector de voz unificado (panel #voice-panel): sirve tanto a Acordes
+  // ("mi tono" → mezcla acordes+voz) como a Tono (notas por sílaba de la voz
+  // activa) — un solo estado, chordsCategory/chordsVoiceId, sin importar el
+  // modo. selectPerson/selectCategory también los usa el chip S·A·T·B del
+  // escenario (setActiveVoice, ImmersiveView) para mantener paridad.
   function selectPerson(rosterId) {
-    activeRosterId = rosterId;
-    container.querySelectorAll('#tono-person-row .tono-chip').forEach((c) => {
-      const isActive = c.dataset.rosterId === rosterId;
-      c.classList.toggle('tono-chip--active', isActive);
-      c.setAttribute('aria-pressed', String(isActive));
-    });
-    updateActiveVoiceHeading();
+    chordsVoiceId = rosterId;
+    renderChordsPersonRow();
+    syncVoicePanel();
+    refreshActiveVoiceNote();
     reRenderLyrics();
   }
 
   function selectCategory(category) {
-    activeCategory = category;
-    activeRosterId = null;
-    container.querySelectorAll('#tono-category-row .tono-chip').forEach((c) => {
-      const isActive = c.dataset.category === category;
-      c.classList.toggle('tono-chip--active', isActive);
-      c.setAttribute('aria-pressed', String(isActive));
-    });
-    renderPersonRow();
+    chordsCategory = category;
+    chordsVoiceId = null;
+    renderChordsPersonRow();
+    refreshActiveVoiceNote();
     // Autoselección si la categoría tiene una sola persona.
     const people = rosterByCategory(song, category);
     if (people.length === 1) {
       selectPerson(people[0].id);
     } else {
-      updateActiveVoiceHeading();
+      syncVoicePanel();
       reRenderLyrics();
     }
   }
 
-  // Al entrar a Tono sin selección previa, preseleccionar la primera categoría
-  // (y su persona si es única) para que el modo muestre algo de inmediato.
-  function ensureTonoSelection() {
-    if (activeCategory) {
-      updateActiveVoiceHeading();
-      return;
-    }
-    const categories = rosterCategories(song);
-    if (categories.length > 0) selectCategory(categories[0]);
+  // Limpia la voz seleccionada (botón de cierre del panel). Tono soporta "sin
+  // voz activa" (letra sin resaltar, fallback existente en renderSections), así
+  // que NO se fuerza la vuelta a modo Letra — se queda en el modo actual.
+  function clearVoiceSelection() {
+    chordsVoiceId = null;
+    chordsCategory = null;
+    voicePanelOpen = false;
+    syncVoicePanel();
+    renderChordsPersonRow();
+    refreshActiveVoiceNote();
+    reRenderLyrics();
   }
 
-  if (tonoAvailable) {
-    container.querySelectorAll('#tono-category-row [data-category]').forEach((btn) => {
-      btn.addEventListener('click', () => selectCategory(btn.dataset.category));
-    });
-    updateActiveVoiceHeading();
+  // Refresca la nota objetivo del afinador flotante (si está abierto) según la
+  // voz activa (chordsCategory) y la transposición/notación actuales. Es lo
+  // único que sobrevive de la vieja updateHeroChips() tras quitar los chips
+  // del hero (T5 → toolbar); el resto (chip DOM, atenuado) ya no aplica.
+  function refreshActiveVoiceNote() {
+    if (!floatingTunerApi) return;
+    floatingTunerApi.setNote(
+      chordsCategory
+        ? heroChipTargetNote(song, chordsCategory, { transposeSemitones, useFlats })
+        : null,
+    );
   }
 
   if (!isPreview) applyFontSize(fontSize);
   applyModeVisibility();
 
-  // Mode toggle (Letra / Acordes / Tono) — works in both normal and preview mode
+  // Cambia de modo (Letra/Acordes/Tono) — solo lo usa el chord-toggle viejo
+  // del preview, sin tocar.
+  function switchViewMode(mode) {
+    viewMode = mode;
+    showChords = viewMode === 'chords' || viewMode === 'mixed';
+    container
+      .querySelectorAll('.chord-toggle__btn')
+      .forEach((c) => c.classList.toggle('chord-toggle__btn--active', c.dataset.mode === mode));
+    applyModeVisibility();
+    reRenderLyrics();
+  }
+
+  // Mode toggle (Letra / Acordes / Tono) — solo queda en preview (chord-toggle
+  // viejo, sin tocar). Fuera de preview la toolbar usa los modos excluyentes
+  // (toggleLayer) en vez de este mode toggle.
   if (showToggle) {
     container.querySelectorAll('[data-mode]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        viewMode = btn.dataset.mode;
-        showChords = viewMode === 'chords';
-        container
-          .querySelectorAll('.chord-toggle__btn')
-          .forEach((c) => c.classList.toggle('chord-toggle__btn--active', c === btn));
-        applyModeVisibility();
-        if (viewMode === 'tono') ensureTonoSelection();
-        reRenderLyrics();
-      });
+      btn.addEventListener('click', () => switchViewMode(btn.dataset.mode));
     });
   }
 
-  // ── Vista combinada: panel Voz del modo Acordes (Wave 4) ──
+  // ── Modos excluyentes Letra/Acordes/Tono (pivote post-QA visual) ──
+  // `layers` es la fuente de verdad persistida (layerStore, exclusiva); tras
+  // togglear se relee fresca del store para reflejar la exclusividad que el
+  // store ya impuso (activar una apaga la otra) — el estado local no puede
+  // limitarse a invertir el propio booleano o queda desincronizado. Sin
+  // auto-preselección de voz: al entrar a Tono el panel queda visible y la
+  // letra se pinta plana (fallback existente) hasta que el usuario elige.
+  function toggleLayer(name) {
+    setLayer(name, !layers[name]);
+    const fresh = getLayers();
+    layers.chords = fresh.chords;
+    layers.tono = fresh.tono;
+    container.querySelector('#layer-chords')?.setAttribute('aria-pressed', String(layers.chords));
+    container.querySelector('#layer-tono')?.setAttribute('aria-pressed', String(layers.tono));
+    viewMode = deriveViewMode(getEffectiveLayers());
+    showChords = viewMode === 'chords' || viewMode === 'mixed';
+    // Al activar Tono sin voz elegida, el panel debe abrirse expandido: es el
+    // camino para seleccionar la voz (spec del pivote), no tiene sentido
+    // mostrarlo colapsado. Con voz ya elegida se respeta el estado actual.
+    if (name === 'tono' && layers.tono && !chordsVoiceId) voicePanelOpen = true;
+    applyModeVisibility();
+    reRenderLyrics();
+    // Crossfade 150ms ease-out (CSS respeta prefers-reduced-motion, ver
+    // .lyrics--layer-fade en components.css).
+    const lyricsEl = container.querySelector('#lyrics-content');
+    if (lyricsEl) {
+      lyricsEl.classList.remove('lyrics--layer-fade');
+      void lyricsEl.offsetWidth; // reflow: reinicia la animación en clicks seguidos
+      lyricsEl.classList.add('lyrics--layer-fade');
+    }
+  }
+
+  container.querySelector('#layer-chords')?.addEventListener('click', () => toggleLayer('chords'));
+  container.querySelector('#layer-tono')?.addEventListener('click', () => toggleLayer('tono'));
+
+  // Task 4: clase en body mientras el afinador flotante está abierto — el
+  // autoscroll FAB (fixed, ancla abajo) la usa para apilarse por encima del
+  // widget en vez de taparlo. Se togglea en TODOS los caminos de cierre (X,
+  // Escape, re-click del mic, route change, entrar al escenario).
+  function setFloatingTunerOpen(open) {
+    document.body.classList.toggle('floating-tuner-open', open);
+  }
+
+  // ── Afinador flotante: mic de la toolbar, bajo demanda. Toggle simple — un
+  // segundo click en el mismo mic cierra la barra en vez de apilar otra. Se
+  // monta en document.body (mismo patrón que autoscroll-fab) para que el
+  // `position: fixed` no dependa de ancestros del árbol de la vista. Siempre
+  // disponible (no gated por tonoAvailable): sin voz activa es un afinador
+  // libre, igual que el de Herramientas.
+  container.querySelector('#hero-tuner-mic')?.addEventListener('click', () => {
+    if (floatingTunerApi) {
+      floatingTunerApi.destroy();
+      floatingTunerApi = null;
+      setFloatingTunerOpen(false);
+      return;
+    }
+    floatingTunerApi = openFloatingTuner(document.body, {
+      note: chordsCategory
+        ? heroChipTargetNote(song, chordsCategory, { transposeSemitones, useFlats })
+        : null,
+      voiceLabel: chordsCategory ? getVoiceLabel(chordsCategory) : 'Afinador',
+      onClose: () => {
+        floatingTunerApi = null;
+        setFloatingTunerOpen(false);
+      },
+    });
+    setFloatingTunerOpen(true);
+  });
+
+  // El afinador flotante no depende del audio por sección (F5): se destruye
+  // en su propia suscripción a onRouteChange, mismo patrón que
+  // destroySectionAudio más abajo (logout/redirects no deben dejarlo vivo).
+  // Solo fuera de preview: el preview (editor) no navega por router, no hay
+  // ruta de la que salir.
+  if (!isPreview) {
+    const destroyFloatingTuner = () => {
+      floatingTunerApi?.destroy();
+      floatingTunerApi = null;
+      setFloatingTunerOpen(false);
+      unsubscribeFloatingTunerRoute();
+    };
+    const unsubscribeFloatingTunerRoute = onRouteChange(destroyFloatingTuner);
+  }
+
+  // ── Panel Voz (selector único, Acordes+Tono) ──
   function syncVoicePanel() {
     const panel = container.querySelector('#voice-panel');
     if (!panel) return;
@@ -595,7 +881,15 @@ export async function renderSongView(container, songIdOrData) {
         ? `${icon('mic', { size: 13 })} Voz · ${escapeHtml(voice.name)}`
         : `${icon('mic', { size: 13 })} Voz`;
     }
-    if (close) close.hidden = !chordsVoiceId;
+    if (close) {
+      close.hidden = !chordsVoiceId;
+      // En Tono, quitar la voz no significa "solo acordes" — el texto se
+      // adapta al modo vigente.
+      close.innerHTML =
+        viewMode === 'tono'
+          ? `${icon('close', { size: 12 })} Quitar voz`
+          : `${icon('close', { size: 12 })} Solo acordes`;
+    }
     panel.querySelectorAll('#voice-panel-categories .tono-chip').forEach((c) => {
       const isActive = c.dataset.category === chordsCategory;
       c.classList.toggle('tono-chip--active', isActive);
@@ -624,114 +918,399 @@ export async function renderSongView(container, songIdOrData) {
       )
       .join('');
     rowEl.querySelectorAll('[data-mix-roster-id]').forEach((btn) => {
-      btn.addEventListener('click', () => selectChordsPerson(btn.dataset.mixRosterId));
+      btn.addEventListener('click', () => selectPerson(btn.dataset.mixRosterId));
     });
   }
 
-  function selectChordsPerson(rosterId) {
-    chordsVoiceId = rosterId;
-    renderChordsPersonRow();
-    syncVoicePanel();
-    reRenderLyrics();
-  }
-
-  function selectChordsCategory(category) {
-    chordsCategory = category;
-    chordsVoiceId = null;
-    renderChordsPersonRow();
-    const people = rosterByCategory(song, category);
-    if (people.length === 1) {
-      selectChordsPerson(people[0].id);
-    } else {
-      syncVoicePanel();
-      reRenderLyrics();
-    }
-  }
-
-  if (mixAvailable) {
+  if (voicePanelAvailable) {
     container.querySelector('#voice-panel-toggle')?.addEventListener('click', () => {
       voicePanelOpen = !voicePanelOpen;
       syncVoicePanel();
     });
-    container.querySelector('#voice-panel-close')?.addEventListener('click', () => {
-      chordsVoiceId = null;
-      chordsCategory = null;
-      voicePanelOpen = false;
-      syncVoicePanel();
-      renderChordsPersonRow();
-      reRenderLyrics();
-    });
+    container
+      .querySelector('#voice-panel-close')
+      ?.addEventListener('click', () => clearVoiceSelection());
     container.querySelectorAll('#voice-panel-categories [data-category]').forEach((btn) => {
-      btn.addEventListener('click', () => selectChordsCategory(btn.dataset.category));
+      btn.addEventListener('click', () => selectCategory(btn.dataset.category));
     });
   }
 
   // ── Preview mode: skip remaining interactive controls ──
   if (isPreview) return;
 
-  // Font controls
-  container.querySelector('#font-decrease')?.addEventListener('click', () => {
-    fontSize = Math.max(FONT_MIN, fontSize - FONT_STEP);
-    applyFontSize(fontSize);
-    saveFontSize(fontSize);
-    container.querySelector('#font-size-label').textContent = fontSize.toFixed(2);
+  // Favorite button
+  const favBtn = container.querySelector('#fav-btn');
+  if (favBtn && songId) {
+    favBtn.addEventListener('click', async () => {
+      const wasOn = favBtn.classList.contains('is-on');
+      await toggleFavorite(songId);
+      favBtn.classList.toggle('is-on', !wasOn);
+      favBtn.setAttribute('aria-pressed', String(!wasOn));
+      favBtn.setAttribute('aria-label', wasOn ? 'Agregar a favoritos' : 'Quitar de favoritos');
+      showFavToast(!wasOn, songId, favBtn);
+    });
+  }
+
+  // Al salir del escenario (FIX finding 2): ImmersiveView togglea capas
+  // directamente contra layerStore (mismo storage global), así que el closure
+  // de SongView (layers/viewMode/aria-pressed/letra pintada) queda obsoleto si
+  // el usuario las cambió adentro. Relee getLayers(), re-deriva viewMode (con
+  // la misma intersección de disponibilidad de finding 1) y re-pinta.
+  function resyncLayersFromStore() {
+    const fresh = getLayers();
+    layers.chords = fresh.chords;
+    layers.tono = fresh.tono;
+    container.querySelector('#layer-chords')?.setAttribute('aria-pressed', String(layers.chords));
+    container.querySelector('#layer-tono')?.setAttribute('aria-pressed', String(layers.tono));
+    viewMode = deriveViewMode(getEffectiveLayers());
+    showChords = viewMode === 'chords' || viewMode === 'mixed';
+    applyModeVisibility();
+    reRenderLyrics();
+  }
+
+  container.querySelector('#enter-stage-btn')?.addEventListener('click', async () => {
+    const sv = container.querySelector('.song-view');
+    if (sv) {
+      // FIX finding 4: el afinador flotante (mic en vivo) no se pausa solo al
+      // entrar al escenario — se destruye, mismo patrón que el route-change
+      // teardown (destroyFloatingTuner más arriba).
+      floatingTunerApi?.destroy();
+      floatingTunerApi = null;
+      setFloatingTunerOpen(false);
+      const { enterImmersive } = await import('./ImmersiveView.js');
+      enterImmersive(sv, {
+        song,
+        getActiveVoice: () => chordsVoiceId,
+        getTranspose: () => ({ semitones: transposeSemitones, useFlats }),
+        getNotation: () => getChordNotation(),
+        setActiveVoice: (category, personId) => {
+          selectCategory(category);
+          // selectCategory ya autoselecciona la única persona cuando hay una
+          // sola; con 2+ personas, respeta la que muestra el chip del stage.
+          const people = rosterByCategory(song, category);
+          if (personId && people.length > 1) selectPerson(personId);
+        },
+        pauseAutoscroll: () => {
+          stageAutoscrollApi?.pauseAutoscroll();
+          sectionAudioManager?.pause();
+          collapseSectionAudioPanels();
+        },
+        onExit: resyncLayersFromStore,
+      });
+    }
   });
 
-  container.querySelector('#font-increase')?.addEventListener('click', () => {
-    fontSize = Math.min(FONT_MAX, fontSize + FONT_STEP);
-    applyFontSize(fontSize);
-    saveFontSize(fontSize);
-    container.querySelector('#font-size-label').textContent = fontSize.toFixed(2);
+  // Sheet de acciones (Task 18, decisión 6 opción A): reemplaza los botones
+  // sueltos de gestión de la toolbar (Editar canción / Procesamiento /
+  // Estudio / Partitura). `songActionsState` guarda lo que van resolviendo
+  // los fetches de abajo (run del pipeline, stems, voces con letra) — el
+  // sheet lee este mismo estado al abrirse, así que nunca pinta un item
+  // vencido y la toolbar nunca reflowea por un pop-in async.
+  const songActionsState = { pipelineStatus: null, hasStems: false, hasPartitura: false };
+
+  function pipelineStatusLabel(status) {
+    if (status === 'awaiting_lyrics') return 'Esperando letra';
+    if (status === 'failed') return 'Con errores';
+    if (status === 'done') return 'Completado';
+    if (['created', 'uploading', 'processing', 'running'].includes(status)) return 'En proceso';
+    return 'Sin iniciar';
+  }
+
+  function updateSongActionsBadge() {
+    const btn = container.querySelector('#open-song-actions-btn');
+    const badge = btn?.querySelector('.song-actions-badge');
+    if (!badge) return;
+    const status = songActionsState.pipelineStatus;
+    if (!status || status === 'done') {
+      badge.hidden = true;
+      badge.className = 'song-actions-badge';
+      return;
+    }
+    if (status === 'awaiting_lyrics' || status === 'failed') {
+      badge.className = 'song-actions-badge need';
+      badge.hidden = false;
+    } else if (['created', 'uploading', 'processing', 'running'].includes(status)) {
+      badge.className = 'song-actions-badge proc';
+      badge.hidden = false;
+    }
+  }
+
+  function buildSongActionsItems() {
+    const items = [];
+    if (isAdmin()) {
+      items.push({
+        id: 'edit-song',
+        icon: 'pencil',
+        label: 'Editar canción',
+        onClick: () => navigate(`/admin/edit/${song.id}?from=${song.id}`),
+      });
+      items.push({
+        id: 'pipeline',
+        icon: 'activity',
+        label: 'Procesamiento',
+        subLabel: pipelineStatusLabel(songActionsState.pipelineStatus),
+        onClick: () => navigate(`/song/${song.id}/procesamiento`),
+      });
+    }
+    if (songActionsState.hasStems) {
+      items.push({
+        id: 'studio',
+        icon: 'audio-lines',
+        label: 'Estudio',
+        onClick: () => navigate(`/song/${song.id}/estudio`),
+      });
+    }
+    if (songActionsState.hasPartitura) {
+      items.push({
+        id: 'partitura',
+        icon: 'music',
+        label: 'Partitura',
+        onClick: () => navigate(`/song/${song.id}/partitura`),
+      });
+    }
+    return items;
+  }
+
+  container.querySelector('#open-song-actions-btn')?.addEventListener('click', () => {
+    openSongActionsSheet({ items: buildSongActionsItems() });
   });
 
-  // Breadcrumb
-  container.querySelector('#breadcrumb-album')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    filterByAlbum(song.albumSlug);
-    navigate('/');
-  });
+  // Estado del run del pipeline (sin Realtime, una sola llamada al montar):
+  // ámbar = requiere acción del admin, cyan pulsante = en proceso, sin punto
+  // si no hay run activo o ya está 'done'. Alimenta tanto el punto sobre el
+  // botón "más" como el sub-label de "Procesamiento" dentro del sheet.
+  if (isAdmin()) {
+    (async () => {
+      let data;
+      try {
+        data = await getPipelineRun(song.id);
+      } catch {
+        return;
+      }
+      songActionsState.pipelineStatus = data?.run?.status ?? null;
+      updateSongActionsBadge();
+    })();
+  }
 
   // Title → links page
   container.querySelector('#song-title-link')?.addEventListener('click', () => {
     navigate(`/song/${songId}/links`);
   });
 
-  // Chord toggle — only transpose and notation for full mode (already set up above)
-  if (hasChords) {
-    container.querySelector('#transpose-down')?.addEventListener('click', () => {
-      transposeSemitones--;
-      container.querySelector('#transpose-value').textContent = transposeSemitones;
-      reRenderLyrics();
-    });
-
-    container.querySelector('#transpose-up')?.addEventListener('click', () => {
-      transposeSemitones++;
-      container.querySelector('#transpose-value').textContent = transposeSemitones;
-      reRenderLyrics();
-    });
-
-    container.querySelector('#notation-toggle')?.addEventListener('click', () => {
-      useFlats = !useFlats;
-      container.querySelector('#notation-toggle').textContent = useFlats ? '♭ → ♯' : '♯ / ♭';
-      reRenderLyrics();
-    });
-  }
-
   // Album / lista navigation
   if (hasNav) {
     const listSuffix = listId ? `?lista=${listId}` : '';
     container.querySelector('#nav-prev')?.addEventListener('click', () => {
-      if (adjacent.prev)
-        {navigate(`/song/${adjacent.prev.item_id ?? adjacent.prev.id}${listSuffix}`);}
+      if (adjacent.prev) {
+        navigate(`/song/${adjacent.prev.item_id ?? adjacent.prev.id}${listSuffix}`);
+      }
     });
     container.querySelector('#nav-next')?.addEventListener('click', () => {
-      if (adjacent.next)
-        {navigate(`/song/${adjacent.next.item_id ?? adjacent.next.id}${listSuffix}`);}
+      if (adjacent.next) {
+        navigate(`/song/${adjacent.next.item_id ?? adjacent.next.id}${listSuffix}`);
+      }
     });
   }
 
+  // ── OptionsSheet (T4): menú de opciones unificado, todas las resoluciones ──
+  container.querySelector('#open-options-sheet')?.addEventListener('click', () => {
+    const syncTonoBubble = () => {
+      const label = buildTransposeBubbleLabel(
+        song.key,
+        transposeSemitones,
+        useFlats,
+        getChordNotation(),
+      );
+      const el = document.querySelector('#osheet-tono');
+      if (el) {
+        el.textContent = label;
+        el.setAttribute('aria-label', `Tono: ${label}. Toca para restablecer al original.`);
+      }
+    };
+    openOptionsSheet({
+      showTono: hasChords,
+      tonoLabel: buildTransposeBubbleLabel(
+        song.key,
+        transposeSemitones,
+        useFlats,
+        getChordNotation(),
+      ),
+      useFlats,
+      notation: getChordNotation(),
+      fontLabel: fontSize.toFixed(2),
+      autoscrollLabel: document.querySelector('#autoscroll-speed-label')?.textContent || '',
+      onTranspose: (dir) => {
+        transposeSemitones = normalizeSemitones(transposeSemitones + dir);
+        refreshTransposeUI();
+        syncTonoBubble();
+        reRenderLyrics();
+      },
+      onResetTranspose: () => {
+        if (transposeSemitones === 0) return;
+        transposeSemitones = 0;
+        refreshTransposeUI();
+        syncTonoBubble();
+        reRenderLyrics();
+      },
+      onToggleAccidental: () => {
+        useFlats = !useFlats;
+        refreshTransposeUI();
+        syncTonoBubble();
+        const accidentalBtn = document.querySelector('.osheet__accidental');
+        if (accidentalBtn) accidentalBtn.textContent = useFlats ? '♭' : '♯';
+        reRenderLyrics();
+      },
+      onNotationChange: (value) => {
+        setChordNotation(value);
+        refreshTransposeUI();
+        syncTonoBubble();
+        reRenderLyrics();
+      },
+      onFont: (dir) => {
+        fontSize = Math.min(FONT_MAX, Math.max(FONT_MIN, fontSize + dir * FONT_STEP));
+        applyFontSize(fontSize);
+        saveFontSize(fontSize);
+        const of = document.querySelector('#osheet-font');
+        if (of) of.textContent = fontSize.toFixed(2);
+      },
+      onAutoscroll: (dir) => {
+        const btn = document.querySelector(dir === 1 ? '#autoscroll-faster' : '#autoscroll-slower');
+        btn?.click();
+        return document.querySelector('#autoscroll-speed-label')?.textContent || '';
+      },
+    });
+  });
+
   // ── Feature 1: Autoscroll FAB ──
-  setupAutoscroll(container, song.id);
+  stageAutoscrollApi = setupAutoscroll(container, song.id);
+
+  // ── Task 1.2: Audio por sección — lazy, no bloquea el render principal. Se
+  // monta solo si hay tracks; import dinámico para no engordar el bundle
+  // de canciones sin audio (la mayoría, mientras se sube). Un manager
+  // compartido (un solo <audio>) + un acordeón colapsado por sección con
+  // tracks, insertado tras su encabezado en la letra. ──
+  if (songId) {
+    let destroyed = false;
+    // onRouteChange (no 'hashchange'): navigate(path, {replace:true}) usa
+    // history.replaceState y NO dispara 'hashchange' (ver router.js), pero sí
+    // pasa por resolve() — logout (Profile.js) y redirects de guardedRoute
+    // dejaban el audio vivo (sonando) tras salir de la canción.
+    // Refs de los listeners atados directo a sectionAudioManager.audio (no
+    // pasan por manager.onTime/onEnded, que sí se auto-limpian en
+    // manager.destroy()) — hace falta guardarlas para poder desatarlas
+    // simétricamente, igual que createSectionAccordion.destroy() hace con
+    // las suyas.
+    let onManagerPlay = null;
+    let onManagerPause = null;
+    const destroySectionAudio = () => {
+      destroyed = true;
+      if (sectionAudioManager) {
+        if (onManagerPlay) sectionAudioManager.audio.removeEventListener('play', onManagerPlay);
+        if (onManagerPause) sectionAudioManager.audio.removeEventListener('pause', onManagerPause);
+        sectionAudioManager.destroy();
+        sectionAudioManager.audio.remove();
+      }
+      onManagerPlay = null;
+      onManagerPause = null;
+      sectionAudioManager = null;
+      sectionAccordionFactory = null;
+      sectionAccordions.forEach((acc) => acc.destroy());
+      sectionAccordions.clear();
+      sectionAudioActiveTrackId.clear();
+      openSectionAudioIndex = null;
+      unsubscribeRouteChange();
+    };
+    const unsubscribeRouteChange = onRouteChange(destroySectionAudio);
+    (async () => {
+      const { fetchSectionAudio } = await import('../lib/sectionAudioApi.js');
+      const tracks = await fetchSectionAudio(songId);
+      if (destroyed || tracks.length === 0) return;
+      const { createSectionAudioManager, createSectionAccordion } =
+        await import('./SectionPlayer.js');
+      const sv = container.querySelector('.song-view');
+      if (destroyed || !sv) return;
+      sectionAccordionFactory = createSectionAccordion;
+      sectionAudioManager = createSectionAudioManager({
+        tracks,
+        refetch: () => fetchSectionAudio(songId),
+      });
+      // El <audio> del manager no tiene UI propia (lo consumen los acordeones
+      // por sección), pero necesita estar en el DOM para reproducir de forma
+      // fiable — oculto, colgado del contenedor de la vista.
+      sectionAudioManager.audio.hidden = true;
+      sv.appendChild(sectionAudioManager.audio);
+      // Resalta la sección que suena (highlightPlayingSection) buscando, entre
+      // las secciones con audio, cuál trae el track cuyo src coincide con el
+      // <audio> del manager — no hay noción de "foco" en el manager en sí.
+      const findPlayingSection = () => {
+        for (const idx of sectionsWithAudio) {
+          const match = sectionAudioManager
+            .tracksFor(idx)
+            .find((t) => safeUrl(t.url) === sectionAudioManager.audio.src);
+          if (match) return idx;
+        }
+        return null;
+      };
+      onManagerPlay = () => highlightPlayingSection(findPlayingSection());
+      onManagerPause = () => highlightPlayingSection(null);
+      sectionAudioManager.audio.addEventListener('play', onManagerPlay);
+      sectionAudioManager.audio.addEventListener('pause', onManagerPause);
+      sectionAudioManager.onEnded(() => highlightPlayingSection(null));
+      sectionsWithAudio = new Set(tracks.map((t) => t.sectionIndex));
+      reRenderLyrics();
+    })();
+  }
+
+  // ── Chip BPM (F4-D6): best-effort, no bloquea el render principal. Si el
+  // usuario navega fuera antes de resolver, no toca el DOM (mismo patrón de
+  // guard que F5 arriba). El callback se desuscribe a sí mismo en cuanto
+  // dispara — si el fetch nunca resuelve, el listener no queda huérfano. ──
+  if (songId) {
+    let bpmDestroyed = false;
+    const unsubscribeBpmRoute = onRouteChange(() => {
+      bpmDestroyed = true;
+      unsubscribeBpmRoute();
+    });
+    getSongAudio(songId).then((result) => {
+      unsubscribeBpmRoute();
+      if (bpmDestroyed) return;
+      const bpm = result?.audio?.bpmManual ?? result?.timings?.bpmDetected;
+      if (bpm === null || bpm === undefined) return;
+      const meta = container.querySelector('.song-view__meta');
+      if (!meta) return;
+      const timeSignature = result.audio?.timeSignature ?? '4/4';
+      const chip = document.createElement('span');
+      chip.className = 'song-view__bpm';
+      chip.textContent = `${Math.round(bpm)} BPM · ${timeSignature}`;
+      meta.appendChild(chip);
+    });
+  }
+
+  // ── Acceso a Estudio (D4e) + Partitura (D5b): visibles a TODOS los
+  // usuarios (no gateados por isAdmin), condicionados a lo que trae el
+  // MISMO fetch de getSongStudio (un solo request, dos items posibles).
+  // Mismo patrón de guard de teardown que el chip BPM. Con el sheet de
+  // acciones (Task 18) esto ya NO pinta botones en la toolbar — solo
+  // actualiza `songActionsState`, que el sheet lee al abrirse. ──
+  if (songId) {
+    let estudioDestroyed = false;
+    const unsubscribeEstudioRoute = onRouteChange(() => {
+      estudioDestroyed = true;
+      unsubscribeEstudioRoute();
+    });
+    getSongStudio(songId)
+      .then((result) => {
+        unsubscribeEstudioRoute();
+        if (estudioDestroyed) return;
+        songActionsState.hasStems = !!result?.stems?.length;
+        songActionsState.hasPartitura = Object.values(result?.analysis?.voices ?? {}).some(
+          (v) => v?.lines?.length,
+        );
+      })
+      .catch(() => {
+        unsubscribeEstudioRoute();
+      });
+  }
 
   // Favorita lives on the song card cover in the list view now.
 }
@@ -748,39 +1327,20 @@ function rosterCategories(song) {
 }
 
 /**
- * Header del modo Tono: categorías en grid 2×2; al elegir una con varias voces
- * se despliega el panel lateral de voces. La nota (tono general) va dentro del
- * chip. Dos botones Afinar (tono general / 1ª nota) bajo el grid.
- * @param {object} song
- * @returns {string}
+ * Nota objetivo de la voz activa en formato científico crudo ("F#3"), ya
+ * transpuesta pero SIN pasar por `displayNote` — la usa el afinador flotante,
+ * que necesita el formato parseable por `noteToMidi`, no el de presentación.
+ * @param {object} song @param {string} category
+ * @param {{ transposeSemitones?: number, useFlats?: boolean }} [opts]
+ * @returns {string|null}
  */
-function renderTonoFilters(song) {
-  const categories = rosterCategories(song);
-  const catChips = categories
-    .map((c) => {
-      const people = rosterByCategory(song, c);
-      // Nota en el chip sólo si la categoría tiene una sola voz (su tono general).
-      const note = people.length === 1 ? tonoGeneralForVoice(song, people[0].id) : null;
-      const noteHtml = note ? `<span class="tono-chip__note">${escapeHtml(note)}</span>` : '';
-      return `
-      <button class="tono-chip tono-chip--category" data-category="${c}" aria-pressed="false">
-        <span class="voice-filter__dot" style="background: var(--color-voice-${c})"></span>
-        <span class="voice-filter__label-text">${escapeHtml(getVoiceLabel(c))}</span>
-        ${noteHtml}
-      </button>`;
-    })
-    .join('');
-  return `
-    <div class="lyrics__tono-filters" id="tono-filters" style="display: none;">
-      <div class="lyrics__tono-grid">
-        <div class="lyrics__tono-categories" id="tono-category-row" role="group" aria-label="Categoría de voz">
-          ${catChips}
-        </div>
-        <div class="lyrics__tono-voices" id="tono-person-row" role="group" aria-label="Voz"></div>
-      </div>
-      <p class="lyrics__tono-active" id="tono-active-voice" aria-live="polite"></p>
-      <div class="lyrics__tono-tune" id="tono-tune-action"></div>
-    </div>`;
+function heroChipTargetNote(song, category, opts = {}) {
+  const { transposeSemitones = 0, useFlats = false } = opts;
+  const voice = rosterByCategory(song, category)[0];
+  if (!voice) return null;
+  const raw = firstNoteForVoice(song, voice.id);
+  if (!raw) return null;
+  return transposeSemitones ? transposeNote(raw, transposeSemitones, useFlats) : raw;
 }
 
 /**
@@ -805,7 +1365,7 @@ export function renderVoicePanel(song) {
     <div class="tool-box voice-panel" id="voice-panel">
       <div class="tool-box__title voice-panel__title">
         <button class="voice-panel__toggle" id="voice-panel-toggle" aria-expanded="false" aria-controls="voice-panel-body">
-          <span id="voice-panel-label">${icon('mic', { size: 13 })} Voz</span>
+          <span class="voice-panel__label" id="voice-panel-label">${icon('mic', { size: 13 })} Voz</span>
           <span class="voice-panel__chevron">${icon('chevron-down', { size: 14 })}</span>
         </button>
         <button class="voice-panel__close" id="voice-panel-close" hidden>
@@ -827,11 +1387,13 @@ export function renderVoicePanel(song) {
  * Cuando se pasa `chordsVoiceId` en modo `chords`, cada línea se renderiza en
  * vista combinada (3 rieles: acorde / letra / nota de voz).
  * @param {Array} sections
- * @param {{ viewMode?: 'lyrics'|'chords'|'tono', transposeSemitones?: number,
+ * @param {{ viewMode?: 'lyrics'|'chords'|'tono'|'mixed', transposeSemitones?: number,
  *           useFlats?: boolean, activeVoiceId?: string|null,
  *           activeCategory?: string|null,
  *           chordsVoiceId?: string|null,
- *           chordsCategory?: string|null }} [opts]
+ *           chordsCategory?: string|null,
+ *           notation?: 'anglo'|'latin',
+ *           sectionsWithAudio?: Set<number>|null }} [opts]
  * @returns {string} HTML
  */
 export function renderSections(sections, opts = {}) {
@@ -843,18 +1405,31 @@ export function renderSections(sections, opts = {}) {
     activeCategory = null,
     chordsVoiceId = null,
     chordsCategory = null,
+    notation = 'anglo',
+    sectionsWithAudio = null,
   } = opts;
-  const showChords = viewMode === 'chords';
+  // 'mixed' (T3, toolbar de capas): capas Acordes+Tono encendidas a la vez —
+  // no exclusivo con 'chords'. Reusa el mismo riel de 3 pistas de la vista
+  // combinada (Acordes + Voz), con o sin voz elegida en el panel.
+  const showChords = viewMode === 'chords' || viewMode === 'mixed';
+  const showMixed = viewMode === 'mixed';
   const colorClass = activeCategory ? `voice-text--${activeCategory}` : '';
   const mixColorClass = chordsCategory ? `voice-text--${chordsCategory}` : '';
 
   return (sections || [])
     .map(
-      (section) => `
-    <div class="lyrics__section lyrics__section--${section.type}"${
+      (section, sectionIndex) => `
+    <div class="lyrics__section lyrics__section--${normalizeSectionType(section.type)}" data-section-index="${sectionIndex}"${
       typeof section.speedPreset === 'number' ? ` data-speed-preset="${section.speedPreset}"` : ''
     }>
-      <div class="lyrics__section-label">${escapeHtml(section.label)}</div>
+      <div class="lyrics__section-label">
+        ${
+          sectionsWithAudio?.has(sectionIndex)
+            ? `<button class="lyrics__section-play" type="button" data-section-audio="${sectionIndex}" aria-label="Mostrar audio de la sección">${icon('play', { size: 12 })}</button>`
+            : ''
+        }
+        <span class="lyrics__section-label-text">${escapeHtml(section.label)}</span>
+      </div>
       ${(section.lines || [])
         .map((line) => {
           const text = line.text || '';
@@ -878,12 +1453,13 @@ export function renderSections(sections, opts = {}) {
           // ── Tono: voz activa coloreada + nota flotante ──
           if (viewMode === 'tono' && activeVoiceId) {
             if (text.trim() === '') return `<p class="lyrics__line">&nbsp;</p>`;
-            const inner = buildTonoLineHTML(line, activeVoiceId, colorClass);
+            const inner = buildTonoLineHTML(line, activeVoiceId, colorClass, { notation });
             return `<p class="lyrics__line lyrics__line--tono">${inner}</p>`;
           }
 
-          // ── Combinada (Acordes + Voz): 3 rieles estrictos ──
-          if (showChords && chordsVoiceId) {
+          // ── Combinada (Acordes + Voz, o capa Acordes+Tono ambas on): 3 rieles
+          //    estrictos. Sin voz elegida los rieles de nota quedan vacíos. ──
+          if ((showChords && chordsVoiceId) || showMixed) {
             if (text.trim() === '') return `<p class="lyrics__line">&nbsp;</p>`;
             const inner = buildMixedLineHTML(
               line,
@@ -893,6 +1469,7 @@ export function renderSections(sections, opts = {}) {
               {
                 transposeSemitones,
                 useFlats,
+                notation,
               },
             );
             return `<p class="lyrics__line lyrics__line--mix">${inner}</p>`;
@@ -905,7 +1482,11 @@ export function renderSections(sections, opts = {}) {
 
           // ── Acordes: letra atenuada + acordes flotantes ──
           if (showChords && line.chords?.length > 0) {
-            const inner = buildChordsLineHTML(text, line.chords, { transposeSemitones, useFlats });
+            const inner = buildChordsLineHTML(text, line.chords, {
+              transposeSemitones,
+              useFlats,
+              notation,
+            });
             return `<p class="lyrics__line lyrics__line--chords">${inner}</p>`;
           }
           if (showChords) {
@@ -941,36 +1522,16 @@ function applyFontSize(size) {
 
 /* ─── Feature 1: Autoscroll ─── */
 
-function getAutoscrollSpeed(songId) {
-  try {
-    const perSong = songId && localStorage.getItem(`${AUTOSCROLL_SPEED_KEY}:${songId}`);
-    const stored = perSong ?? localStorage.getItem(AUTOSCROLL_SPEED_KEY);
-    if (stored) {
-      const val = Number.parseFloat(stored);
-      if (val >= AUTOSCROLL_SPEED_MIN && val <= AUTOSCROLL_SPEED_MAX) return val;
-    }
-  } catch (_e) {
-    /* ignore */
-  }
-  return AUTOSCROLL_SPEED_DEFAULT;
-}
-
-function saveAutoscrollSpeed(speed, songId) {
-  try {
-    const key = songId ? `${AUTOSCROLL_SPEED_KEY}:${songId}` : AUTOSCROLL_SPEED_KEY;
-    localStorage.setItem(key, speed.toString());
-  } catch (_e) {
-    /* ignore */
-  }
-}
-
 const PLAY_ICON_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7L8 5z"/></svg>`;
 const PAUSE_ICON_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6V5zm8 0h4v14h-4V5z"/></svg>`;
 
-function speedToPercentLabel(speed) {
-  return `${Math.round(speed * 100)}%`;
-}
-
+/**
+ * Monta el FAB de autoscroll clásico y su motor rAF de scroll continuo.
+ * @param {HTMLElement} _container
+ * @param {string} songId
+ * @returns {{ pauseAutoscroll: () => void }} API mínima para consumidores
+ *   externos (ImmersiveView la usa para detener el motor al entrar al escenario).
+ */
 function setupAutoscroll(_container, songId) {
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let scrollSpeed = getAutoscrollSpeed(songId);
@@ -1061,6 +1622,27 @@ function setupAutoscroll(_container, songId) {
     scheduleCollapse();
   }
 
+  // Cache de docHeight/innerHeight: leerlos por frame junto a un scrollTo()
+  // fuerza un reflow síncrono sobre el DOM más grande de la app (layout
+  // thrashing). Se refrescan solo cuando el tamaño real cambia.
+  let cachedDocHeight = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+  let cachedInnerHeight = window.innerHeight;
+  // Degrada sin romper si ResizeObserver no existe (jsdom en tests).
+  const docResizeObserver =
+    typeof ResizeObserver === 'function'
+      ? new ResizeObserver(() => {
+          cachedDocHeight = Math.max(
+            document.body.scrollHeight,
+            document.documentElement.scrollHeight,
+          );
+        })
+      : null;
+  docResizeObserver?.observe(document.body);
+  function onWindowResize() {
+    cachedInnerHeight = window.innerHeight;
+  }
+  window.addEventListener('resize', onWindowResize);
+
   function startScroll() {
     isScrolling = true;
     applyFabVisibility();
@@ -1112,8 +1694,7 @@ function setupAutoscroll(_container, songId) {
 
       // Stop if at the bottom
       const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-      const docHeight = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
-      if (scrollTop + window.innerHeight >= docHeight - 2) {
+      if (scrollTop + cachedInnerHeight >= cachedDocHeight - 2) {
         stopScroll();
         return;
       }
@@ -1197,16 +1778,23 @@ function setupAutoscroll(_container, songId) {
   window.addEventListener('wheel', onUserScroll, { passive: true });
   window.addEventListener('touchmove', onUserScroll, { passive: true });
 
-  // Cleanup when navigating away (hashchange)
+  // Cleanup al navegar fuera. onRouteChange (no 'hashchange') porque
+  // navigate(path, {replace:true}) usa history.replaceState y no dispara
+  // 'hashchange' (ver router.js) — con solo 'hashchange' quedaban dos FAB
+  // superpuestos con IDs duplicados tras logout/expiración de sesión.
   function cleanup() {
     stopScroll();
     clearTimeout(collapseTimer);
     io.disconnect();
     if (headerIo) headerIo.disconnect();
+    docResizeObserver?.disconnect();
+    window.removeEventListener('resize', onWindowResize);
     fab.remove();
     window.removeEventListener('wheel', onUserScroll);
     window.removeEventListener('touchmove', onUserScroll);
-    window.removeEventListener('hashchange', cleanup);
+    unsubscribeRouteChange();
   }
-  window.addEventListener('hashchange', cleanup);
+  const unsubscribeRouteChange = onRouteChange(cleanup);
+
+  return { pauseAutoscroll: stopScroll };
 }

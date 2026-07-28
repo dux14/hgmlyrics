@@ -182,6 +182,14 @@
   margin-bottom: var(--space-lg);
   align-items: flex-start;
   text-align: left;
+  position: relative;
+  isolation: isolate;
+}
+
+/* Hero compacto (T6): 80px fijo en todas las resoluciones — ver spec D1. */
+.song-view__cover-wrap {
+  position: relative;
+  flex-shrink: 0;
 }
 
 .song-view__cover {
@@ -190,7 +198,9 @@
   border-radius: var(--border-radius-md);
   object-fit: cover;
   flex-shrink: 0;
-  box-shadow: 0 4px 16px var(--color-shadow);
+  box-shadow:
+    0 4px 16px var(--color-shadow),
+    0 0 0 1px color-mix(in oklch, var(--color-teal-500) 20%, transparent);
 }
 
 .song-view__meta {
@@ -199,8 +209,76 @@
   align-items: flex-start;
 }
 
+/* === Hero voice chips (T2) — fila única: selector S·A·T·B + nota + afinar === */
+.hero-voice-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: var(--space-sm);
+}
+
+.hero-voice-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 32px;
+  padding: 0 0.7rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 2px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.8rem;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.hero-voice-chip__dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.hero-voice-chip__note {
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-voice-chip.is-active {
+  border-color: var(--color-teal-400);
+  color: var(--color-teal-400);
+}
+
+.hero-voice-chip--dimmed {
+  opacity: 0.4;
+}
+
+.hero-voice-chip__mic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+/* Hero compacto (T6): tamaño fijo 1.35rem — no crece en desktop, ver spec D1. */
 .song-view__title {
-  font-size: var(--font-size-xl);
+  font-size: 1.35rem;
   font-weight: var(--font-weight-bold);
   margin-bottom: var(--space-xs);
   line-height: var(--line-height-tight);
@@ -231,46 +309,27 @@
   opacity: 0.65;
 }
 
+/* Artista/álbum/año: línea secundaria discreta, sin competir con el título. */
 .song-view__album {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
-  margin-bottom: var(--space-sm);
+  margin-bottom: var(--space-xs);
 }
 
 .song-view__year {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-sm);
 }
 
-/* === Breadcrumb === */
-.breadcrumb {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: var(--space-xs);
-  font-size: var(--font-size-sm);
+/* Chip BPM (F4-D6): discreto, mismo tono que year/album — no compite con el
+   título. Inyectado post-render (fetch best-effort de songAudioApi). */
+.song-view__bpm {
+  display: inline-block;
+  font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
-  margin-bottom: var(--space-lg);
-  flex-wrap: wrap;
-}
-
-.breadcrumb a {
-  color: var(--color-text-secondary);
-  transition: color var(--transition-fast);
-}
-
-.breadcrumb a:hover {
-  color: var(--color-primary);
-}
-
-.breadcrumb__separator {
-  color: var(--color-border);
-}
-
-.breadcrumb__current {
-  color: var(--color-text);
-  font-weight: var(--font-weight-medium);
+  margin-top: calc(-1 * var(--space-xs));
+  margin-bottom: var(--space-sm);
 }
 
 /* === Font Size Controls === */
@@ -318,23 +377,52 @@
 }
 
 .lyrics__section {
-  margin-bottom: var(--space-xl);
+  margin-bottom: var(--space-lg);
   transition: opacity var(--transition-base);
 }
 
-/* Labeled divider: neutral, uniform across all section types — decoupled
-   from voice colors so it never competes with the colored lyrics. The label
-   sits left; a hairline rule extends to the right as quiet wayfinding. */
+/* Identidad fija por TIPO de sección (spec F1 D1 §3, revisado T7: sin barra
+   lateral — la identidad vive solo en el color del label + el divider
+   horizontal de .lyrics__section-label::after; verso=neutro, coro=teal,
+   puente=violet, pre-coro=amber, intro/outro=neutro). NO son 4+ colores
+   simultáneos sobre la letra: solo acento en el label, el texto sigue
+   --color-text. */
+
+/* Labeled divider: identidad Ambient Kinetic — Syncopate en chip versalitas
+   (VERSO, CORO…), color por tipo de sección. La hairline rule de la derecha
+   sigue siendo --color-border (quieta). */
 .lyrics__section-label {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  font-size: var(--font-size-xs);
+  /* T7: sin token 10-11px en la escala (xs=12px, sm=14px) — literal según
+     spec para que el label sostenga la jerarquía sin la barra lateral. */
+  font-size: 11px;
+  font-family: var(--font-display);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-text-secondary);
+  color: var(--color-teal-500);
   text-transform: uppercase;
   letter-spacing: 1.5px;
   margin-bottom: var(--space-sm);
+}
+
+.lyrics__section--verse .lyrics__section-label {
+  color: var(--color-section-verse);
+}
+.lyrics__section--chorus .lyrics__section-label {
+  color: var(--color-section-chorus);
+}
+.lyrics__section--bridge .lyrics__section-label {
+  color: var(--color-section-bridge);
+}
+.lyrics__section--prechorus .lyrics__section-label {
+  color: var(--color-section-prechorus);
+}
+.lyrics__section--intro .lyrics__section-label {
+  color: var(--color-section-intro);
+}
+.lyrics__section--outro .lyrics__section-label {
+  color: var(--color-section-outro);
 }
 
 .lyrics__section-label::after {
@@ -385,6 +473,15 @@
   /* Los acordes mandan en modo Acordes: bien grandes como antes (legacy 1.4em). */
   font-size: 0.95em;
   top: -1.25em;
+}
+/* El box visual (pill/subrayado) vive en el <i> hijo, no en el span: así el
+   span puede ir a width:0 (ver bloque "Reservar espacio") sin recortar el
+   contenido, que sobresale con su tamaño natural. En el caso absolute (modo
+   Letra) el <i> hereda normal, sin efecto visible extra. */
+.float-label.chord-label i {
+  font-style: normal;
+  display: inline-block;
+  white-space: nowrap;
   /* Pill de fondo para despegar el acorde de la letra (igual que las notas de Tono). */
   background: var(--color-chord-bg);
   padding: 0.1em 0.35em;
@@ -396,6 +493,11 @@
    sirve para las 4 voces). La letra cantada manda; la nota es anotación. */
 .float-label.tono-note {
   font-size: 0.68em;
+}
+.float-label.tono-note i {
+  font-style: normal;
+  display: inline-block;
+  white-space: nowrap;
   padding: 0 0.1em 0.2em;
   border-bottom: 1.5px solid color-mix(in srgb, currentColor 45%, transparent);
 }
@@ -423,11 +525,28 @@
   text-underline-offset: 0.25em;
 }
 
-/* ─── Reservar espacio: la nota/acorde empuja su sílaba (estilo cancionero) ───
-   Cada .line-seg pasa a columna in-flow [nota arriba / sílaba abajo], así su
-   ancho ≥ ancho de la etiqueta y las etiquetas vecinas NUNCA se solapan en
-   líneas densas. Solo Tono/Acordes (Letra no usa .line-seg). `pre-wrap`
-   conserva los espacios entre palabras (los segmentos pasan a inline-flex). */
+/* ─── Integridad de palabra: .line-word agrupa los .line-seg/.mix-seg de una
+   misma palabra (run de texto sin espacios) en UNA caja atómica que nunca se
+   parte entre renglones — el wrap solo ocurre en los espacios, que viajan
+   como texto plano entre wrappers (ver buildAnnotatedLineHTML/buildMixedLineHTML
+   en lyricsRender.js/voiceSystem.js). Compartida por Acordes/Tono/Mix. */
+.line-word {
+  display: inline-flex;
+  align-items: flex-end;
+  white-space: pre;
+  vertical-align: bottom;
+}
+
+/* ─── Etiqueta sobre la sílaba sin ensancharla ───
+   Cada .line-seg pasa a columna in-flow [nota arriba / sílaba abajo], pero el
+   .float-label toma width:0 (ver más abajo) para que la etiqueta NO aporte
+   ancho a la columna: el ancho del segmento lo decide solo la sílaba, y la
+   etiqueta (su <i> hijo, con tamaño natural) sobresale hacia la derecha sin
+   empujar el resto de la línea. La anti-colisión entre etiquetas vecinas ya
+   no vive en CSS: la resuelve un módulo JS medido (src/lib/labelOverlap.js)
+   que desplaza o esconde etiquetas que se solaparían. Solo Tono/Acordes
+   (Letra no usa .line-seg). `pre-wrap` conserva los espacios entre palabras
+   (los segmentos pasan a inline-flex). */
 .lyrics__line--tono,
 .lyrics__line--chords {
   padding-top: 0.35em;
@@ -440,21 +559,88 @@
   align-items: flex-start;
   vertical-align: bottom;
 }
+/* Tono-solo: la nota (emitida ANTES que la sílaba en el DOM, ver
+   buildAnnotatedLineHTML) va DEBAJO de la letra — mismo patrón "acordes
+   arriba / tono abajo" del modo Mixto. column-reverse invierte el orden
+   visual sin tocar el builder. */
+.lyrics__line--tono .line-seg {
+  flex-direction: column-reverse;
+}
+/* En column-reverse, la caja del segmento arranca (top) en la sílaba (último
+   hijo en el DOM, ver comentario arriba) y termina (bottom) en la nota si la
+   hay. `.line-word` alinea sus segmentos/palabras vecinos por el FONDO
+   (align-items/vertical-align: bottom, L521/523) — eso encaja perfecto en
+   Acordes/Mix (nota arriba manda el tope), pero en Tono hunde la sílaba SIN
+   nota (caja corta, solo texto) al nivel del fondo de la caja con nota
+   (texto+nota, más alta). Alinear por el TOPE en Tono deja la fila de letra
+   siempre arriba, haya o no nota debajo. */
+.lyrics__line--tono .line-word {
+  align-items: flex-start;
+  vertical-align: top;
+}
 .lyrics__line--chords .float-label {
   position: static;
   top: auto;
   left: auto;
+  width: 0;
   margin-bottom: 0.08em;
 }
 .lyrics__line--tono .float-label {
   position: static;
   top: auto;
   left: auto;
-  margin-bottom: 0.4em;
+  width: 0;
+  margin-top: 0.4em;
 }
 /* Separación entre líneas del modo Tono (colchón "aire + letra manda") */
 .lyrics__line--tono {
   margin-bottom: 0.6em;
+}
+
+/* ─── Nota promovida (labelOverlap.js decideNotePromotions) ───
+   Cuando dos notas del carril inferior colisionan, la de la DERECHA del par
+   se PROMUEVE arriba de su sílaba en vez de empujar la letra (ver JSDoc de
+   cabecera de labelOverlap.js). Sale del flujo (position: absolute) para que
+   la sílaba no pierda ni gane un píxel de posición — el .line-seg sigue
+   determinando su ancho SOLO por la sílaba (igual que sin promoción), la
+   nota promovida ya no aporta altura ni ancho a la columna. `top` es un
+   desplazamiento fijo en em (no % — el .line-seg no tiene una altura
+   explícita contra la que resolver un porcentaje una vez la nota sale del
+   flujo) calibrado para que quede claramente sobre la sílaba sin pisar la
+   fila anterior. */
+.lyrics__line--tono .line-seg--note-flip .float-label {
+  position: absolute;
+  top: -1.35em;
+  left: 0;
+  width: 0;
+  margin: 0;
+}
+/* Conector visual (leader line) entre la nota promovida y su sílaba: sin
+   esto, la nota volada arriba queda visualmente huérfana (feedback real de
+   usuario — no se distingue de qué sílaba es, podía leerse como de la
+   vecina). Pseudo-elemento sobre `.float-label` (ya lleva la clase de voz →
+   `currentColor` correcto) para no tocar el layout de la sílaba: fuera de
+   flujo, mismo `color-mix` que el subrayado de la nota (45% de currentColor)
+   para que ambos elementos se lean como una sola anotación. `top`/`height`
+   calibrados con Playwright (harness ad-hoc, caso "dormir tranquiiilo") para
+   que el conector arranque justo bajo el subrayado de la nota y termine
+   justo sobre el glifo de la sílaba, sin pisar ninguno de los dos. */
+.lyrics__line--tono .line-seg--note-flip .float-label.tono-note::after {
+  content: '';
+  position: absolute;
+  top: 1.35em;
+  left: 0;
+  width: 0;
+  height: 0.44em;
+  border-left: 1.5px dotted color-mix(in srgb, currentColor 45%, transparent);
+}
+/* La fila con al menos una nota promovida necesita aire arriba para que la
+   nota volada no roce la línea anterior. Limitación aceptada: con wrap
+   multilínea, una promoción en la fila 2+ (no la primera del renglón) puede
+   rozar la fila anterior del mismo wrap — caso raro, requiere colisión y
+   wrap a la vez; no se resuelve aquí. */
+.lyrics__line--tono.lyrics__line--has-flip {
+  padding-top: 1.6em;
 }
 
 /* ─── Wave 4: vista combinada (letra+acordes+tono por voz) — 3 rieles ESTRICTOS
@@ -470,16 +656,23 @@
   flex-direction: column;
   align-items: flex-start;
   vertical-align: bottom;
+  /* Ancla de la nota promovida (labelOverlap.js, ver bloque más abajo): sin
+     esto, `position: absolute` en `.mix-rail--note` se resolvería contra un
+     ancestro más lejano y ya no quedaría dentro de SU segmento. */
+  position: relative;
 }
 .mix-rail {
   display: block;
   line-height: 1;
   white-space: pre;
 }
+/* width:0 → el acorde/nota no ensancha su columna (mismo modelo que
+   .float-label arriba); el <i> sobresale a la derecha con su ancho natural. */
 .mix-rail--chord {
   height: 1.5em;
   font-size: 0.78em;
   font-weight: 700;
+  width: 0;
 }
 .mix-rail--chord i {
   font-style: normal;
@@ -488,6 +681,7 @@
   padding: 0.12em 0.4em;
   border-radius: 5px;
   display: inline-block;
+  white-space: nowrap;
 }
 .mix-rail--lyric {
   line-height: var(--line-height-lyrics);
@@ -497,12 +691,68 @@
   font-size: 0.68em;
   font-weight: 700;
   padding-top: 0.55em;
+  width: 0;
 }
 .mix-rail--note i {
   font-style: normal;
   border-top: 1.5px solid color-mix(in srgb, currentColor 45%, transparent);
   padding-top: 0.25em;
   display: inline-block;
+  white-space: nowrap;
+}
+
+/* ─── Nota promovida en Mixto (labelOverlap.js decideNotePromotions) ───
+   Cuando dos notas del riel de abajo colisionan, la de la DERECHA del par
+   sube al área SUPERIOR de su segmento, apilada por debajo del acorde si lo
+   hay: orden vertical ACORDE → NOTA → letra. Si el segmento no tiene acorde,
+   la nota promovida ocupa igual esa franja (mismo nivel vertical que si
+   estuviera apilada, para que todas las notas promovidas de la línea queden
+   a la misma altura).
+
+   OJO: `position: absolute` va en el `<i>` (el contenido), NO en
+   `.mix-rail--note` (el riel/contenedor). El riel CONSERVA su altura fija
+   normal siempre, promovida o no — si se sacara el riel entero del flujo, el
+   segmento se queda más bajo que sus vecinos de la misma `.line-word`, y como
+   `.line-word` alinea sus segmentos por el FONDO (`align-items: flex-end`,
+   ver "Integridad de palabra" arriba), el segmento más corto se reubica hacia
+   ABAJO para igualar el fondo del más alto — hundiendo la fila de letra de
+   ESE segmento respecto a sus vecinos (bug real detectado al calibrar con
+   Playwright: la letra "o" quedaba más abajo que "dormir"/"tranquiii"/"l" en
+   la misma palabra). Dejando el riel en flujo (vacío, mismo alto de
+   siempre) el segmento nunca cambia de altura total, así que nunca se
+   desalinea. */
+.mix-seg--note-flip .mix-rail--note i {
+  position: absolute;
+  top: 1.75em;
+  left: 0;
+}
+/* Conector visual (leader line), mismo propósito que en Tono-solo arriba
+   (ver ese comentario). Aquí va en `.mix-rail--note` (lleva la clase de
+   voz → `currentColor` correcto), NO en el `<i>` — el `<i>` es el que se
+   mueve (`position: absolute`), pero el riel sigue en flujo como ancla
+   estable para el pseudo-elemento. Su containing block real es `.mix-seg`
+   (`position: relative`, ver arriba), no el propio riel (que no está
+   posicionado) — por eso `top` se calibró en unidades absolutas desde el
+   TOPE del segmento, no relativas al riel. Calibrado con el mismo harness
+   Playwright que Tono-solo: el hueco vertical libre entre el subrayado de
+   la nota y la fila de letra es angosto en Mixto (apenas ~4px a este
+   tamaño), así que el conector queda corto a propósito — preferible a que
+   pise texto. */
+.mix-seg--note-flip .mix-rail--note::after {
+  content: '';
+  position: absolute;
+  top: 3.15em;
+  left: 0;
+  width: 0;
+  height: 0.18em;
+  border-left: 1.5px dotted color-mix(in srgb, currentColor 45%, transparent);
+}
+/* Con al menos una nota promovida en la línea, el riel de acorde crece EN
+   TODA la línea (uniforme para las dos filas de wrap si las hay) para dejar
+   sitio a la nota apilada debajo — así ningún segmento de la fila desalinea
+   su letra respecto a los demás. */
+.lyrics__line--mix.lyrics__line--has-flip .mix-rail--chord {
+  height: 2.95em;
 }
 
 /* Wave 4: el modo Acordes agrupa sus herramientas en cajas temáticas
@@ -514,13 +764,16 @@
   margin-bottom: var(--space-md);
 }
 
+/* Surface glass — el panel flota visualmente sobre el contenido de la
+   canción con un fondo semitransparente + desenfoque ambient. */
 .tool-box {
-  background: var(--color-surface);
+  background: color-mix(in oklch, var(--color-surface) 85%, transparent);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
   padding: 0.6rem 0.75rem;
   width: 100%;
   box-sizing: border-box;
+  backdrop-filter: blur(8px);
 }
 .tool-box__title {
   display: flex;
@@ -533,19 +786,16 @@
   letter-spacing: 1px;
   color: var(--color-text-secondary);
 }
-.tool-box__row {
+/* Variante compacta (caja Guitarra): título y contenido comparten la única
+   fila — la cejilla sale al frente del título en vez de debajo. */
+.tool-box--row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);
-  flex-wrap: wrap;
 }
-/* Dentro de la caja, la transposición pierde su caja propia (sin doble marco) */
-.tool-box .transpose-controls {
-  background: transparent;
-  border: none;
-  padding: 0;
-  margin-bottom: 0;
+.tool-box--row .tool-box__title {
+  margin: 0;
 }
 
 /* Panel Voz */
@@ -557,6 +807,10 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  /* Ocupa todo el ancho libre del header: la fila completa es tappable,
+     no solo el texto "Voz" de la izquierda. */
+  flex: 1;
+  min-width: 0;
   background: none;
   border: none;
   color: inherit;
@@ -566,6 +820,15 @@
   cursor: pointer;
   padding: 0.25rem 0;
   min-height: 38px;
+  text-align: left;
+}
+/* El preflight de Tailwind pone svg{display:block}: sin este inline-flex el
+   mic del label saltaba a su propia línea encima de "VOZ". */
+.voice-panel__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
 }
 .voice-panel__toggle[aria-expanded='true'] .voice-panel__chevron {
   transform: rotate(180deg);
@@ -685,7 +948,7 @@
 /* === Toast / Notification === */
 .toast {
   position: fixed;
-  bottom: var(--space-lg);
+  bottom: calc(var(--space-lg) + var(--safe-bottom));
   left: 50%;
   transform: translateX(-50%) translateY(100px);
   background: var(--color-text);
@@ -707,43 +970,9 @@
   opacity: 1;
 }
 
-/* === View Toolbar === */
-.song-view-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-md);
-  padding: 0 var(--space-xs);
-}
-
-.song-view-toggle {
-  display: flex;
-  background: var(--color-surface);
-  border-radius: var(--border-radius-sm);
-  border: 1px solid var(--color-border);
-  overflow: hidden;
-}
-
-.view-btn {
-  padding: 4px 12px;
-  background: transparent;
-  color: var(--color-text-secondary);
-  border: none;
-  cursor: pointer;
-  font-size: 1.1rem;
-  transition:
-    background-color var(--transition-fast),
-    color var(--transition-fast),
-    border-color var(--transition-fast);
-}
-
-.view-btn:hover {
-  color: var(--color-primary);
-}
-
-.view-btn.active {
-  background: var(--color-primary);
-  color: var(--color-bg);
+.toast--error {
+  background: var(--color-danger);
+  color: #fff;
 }
 
 /* === Song Table === */
@@ -808,56 +1037,119 @@
   color: var(--color-text-secondary);
 }
 
-/* === Song View — controls toolbar (grouped by function) === */
+/* === Song View — controls toolbar (grouped by function) ===
+   Fila única scrolleable horizontal (T6): en mobile no cabe todo el set de
+   controles, así que en vez de apilar se deja una sola fila con overflow-x;
+   en desktop hay ancho de sobra y se permite wrap (ver media query abajo). */
 .song-toolbar {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: var(--space-sm);
   margin-bottom: var(--space-md);
+  overflow-x: auto;
 }
 
 .song-toolbar__group {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
   gap: var(--space-sm);
 }
 
-.song-toolbar__btn {
+.song-toolbar__spacer {
+  flex: 1 1 auto;
+}
+
+.song-toolbar__icon {
   display: inline-flex;
   align-items: center;
-  gap: 0.4em;
-  min-height: 40px;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.song-toolbar__icon:hover {
+  background: var(--color-surface-hover);
+}
+
+.song-toolbar__icon:active {
+  background: color-mix(in srgb, var(--color-teal-500) 15%, transparent);
+}
+
+/* Badge de estado del run del pipeline: movida a song-actions-sheet.css
+   (`.song-actions-badge`, punto sobre #open-song-actions-btn) — la toolbar ya
+   no aloja #open-pipeline-btn directo (Task 18). */
+
+/* === Layer toggles (T3) — Acordes/Tono independientes, NO exclusivos ===
+   A diferencia de .chord-toggle (segmented control, cyan primary), cada capa
+   es su propio pill on/off; el acento es teal para no chocar con el cyan de
+   marca del viejo mode toggle (que sigue vivo en preview). */
+.layer-toggle {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-radius: var(--border-radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.layer-toggle[aria-pressed='true'] {
+  border-color: color-mix(in oklch, var(--color-teal-500) 45%, transparent);
+  color: var(--color-teal-500);
+  background: color-mix(in oklch, var(--color-teal-500) 8%, var(--color-surface));
+}
+
+/* Crossfade al alternar capas (T3): 150ms ease-out, sin animación si el
+   usuario prefiere movimiento reducido. */
+@keyframes lyricsLayerFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.lyrics--layer-fade {
+  animation: lyricsLayerFade 150ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lyrics--layer-fade {
+    animation: none;
+  }
 }
 
 /* === Tablet/Desktop Song View === */
 @media (min-width: 768px) {
-  .song-view__cover {
-    width: 100px;
-    height: 100px;
-  }
-
-  .song-view__title {
-    font-size: var(--font-size-2xl);
-  }
-
   .voice-filter {
     justify-content: flex-start;
   }
 
-  .transpose-controls {
-    justify-content: flex-start;
-  }
-
-  /* Lay the control zones in a single row, separated by quiet dividers. */
+  /* Sobra ancho: el wrap ya no es necesario y el scroll queda solo como red
+     de seguridad; separa los grupos con dividers discretos. */
   .song-toolbar {
-    flex-direction: row;
     flex-wrap: wrap;
-    align-items: center;
+    overflow-x: visible;
     gap: var(--space-md);
   }
 
   .song-toolbar__group {
+    flex-wrap: wrap;
     gap: var(--space-md);
   }
 
@@ -945,7 +1237,7 @@
 /* === Update Banner (F1) === */
 .update-banner {
   position: fixed;
-  bottom: var(--space-lg);
+  bottom: calc(var(--space-lg) + var(--safe-bottom));
   left: 50%;
   transform: translateX(-50%) translateY(100px);
   display: flex;
@@ -1037,29 +1329,37 @@
   white-space: nowrap;
 }
 
-/* === Chord Toggle (F6) === */
+/* === Chord Toggle — segmented control de modos (F6, pill T6) ===
+   Tabs pill ambient-kinetic: fondo surface, activo con el acento cyan de
+   marca (--color-primary). El ámbar (--color-accent) queda reservado para
+   acciones (fav, cejilla) — no es un modo, así que no aplica aquí. */
 .chord-toggle {
   display: inline-flex;
-  border-radius: var(--border-radius-sm);
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--border-radius-full);
   border: 1px solid var(--color-border);
-  overflow: hidden;
+  background: var(--color-surface);
   margin-bottom: var(--space-md);
 }
 
 .chord-toggle__btn {
-  padding: 8px 16px;
+  padding: 6px 14px;
+  border-radius: var(--border-radius-full);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   transition: all var(--transition-fast);
   cursor: pointer;
   background: transparent;
-  color: var(--color-text);
+  color: var(--color-text-secondary);
   border: none;
 }
 
 .chord-toggle__btn--active {
-  background: var(--color-primary);
-  color: #fff;
+  background: color-mix(in oklch, var(--color-primary) 18%, var(--color-surface));
+  color: var(--color-primary);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-primary) 45%, transparent);
 }
 
 /* === Cejilla Badge === */
@@ -1210,62 +1510,6 @@
   line-height: 1.4;
 }
 
-/* === Transpose Controls (F6) === */
-.transpose-controls {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  margin-bottom: var(--space-md);
-  flex-wrap: wrap;
-}
-
-.transpose-btn {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-sm);
-  font-weight: var(--font-weight-bold);
-  transition: all var(--transition-fast);
-  cursor: pointer;
-  background: transparent;
-  color: var(--color-text);
-}
-
-.transpose-btn:active {
-  background: var(--color-primary);
-  color: #fff;
-}
-
-.transpose-value {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-bold);
-  min-width: 28px;
-  text-align: center;
-}
-
-.transpose-notation-toggle {
-  padding: 4px 10px;
-  font-size: var(--font-size-xs);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-sm);
-  cursor: pointer;
-  background: transparent;
-  color: var(--color-text);
-  transition: all var(--transition-fast);
-}
-
-.transpose-notation-toggle:hover {
-  background: var(--color-surface-hover);
-}
-
 /* === Offline Badge (F8) === */
 .offline-badge {
   font-size: var(--font-size-xs);
@@ -1278,7 +1522,9 @@
 /* === Autoscroll FAB === */
 .autoscroll-fab {
   position: fixed;
-  top: calc(140px + env(safe-area-inset-top, 0px));
+  bottom: calc(
+    var(--bnav-offset, 56px) + var(--bottom-nav-fade-extra, 0px) + var(--safe-bottom, 0px) + 12px
+  );
   right: 12px;
   z-index: var(--z-toast);
   display: flex;
@@ -1288,13 +1534,28 @@
   animation: fabIn 400ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
   transition:
     opacity 300ms ease,
-    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    bottom 200ms ease;
 }
 
 @media (min-width: 768px) {
   .autoscroll-fab {
-    top: 84px;
     right: 24px;
+  }
+}
+
+/* Apilado (Task 4): cuando el afinador flotante está montado, anclado abajo,
+   el FAB sube por encima de la barra visible más alta para no taparla ni
+   quedar tapado por ella. Altura aproximada medida de `.floating-tuner`
+   (~100px, ver components.css). El acordeón de audio por sección (Task 1.2)
+   vive inline en la letra, no anclado abajo — no necesita esta regla. */
+body.floating-tuner-open .autoscroll-fab {
+  bottom: calc(var(--space-md, 1rem) + 100px + env(safe-area-inset-bottom, 0px) + 12px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .autoscroll-fab {
+    transition: none;
   }
 }
 
@@ -1302,7 +1563,7 @@
 .autoscroll-fab--collapsed {
   opacity: 0.2;
   transform: scale(0.7);
-  transform-origin: top right;
+  transform-origin: bottom right;
 }
 
 .autoscroll-fab--collapsed .autoscroll-fab__controls {
@@ -1473,13 +1734,18 @@
   line-height: 0;
 }
 
-/* ─── Modo Tono: notas por sílaba (ruby) ─── */
-.lyrics__line--tono {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.15rem 0.35rem;
-}
+/* ─── Modo Tono: notas por sílaba (ruby, sistema v2 legacy) ───
+   `buildSyllableNotesHTML`/`.syll` (voiceSystem.js) no tiene ningún caller
+   vivo — quedó reemplazado por el modelo v3 `.line-word`/`.line-seg`
+   (buildTonoLineHTML, ver L531+). El selector `.lyrics__line--tono` de este
+   bloque SÍ seguía coincidiendo con el contenedor real (aunque sus hijos
+   `.syll` nunca se rendericen), y al llegar después en la cascada ganaba
+   sobre las reglas vivas: `display:flex; align-items:flex-end` convertía la
+   línea en flex container y hundía las palabras SIN nota (caja corta) al
+   fondo de las palabras CON nota (caja alta) — la sílaba dim caía a la
+   altura de la fila de notas en vez de compartir la fila de letra de
+   arriba. Se retira la regla del contenedor; `.syll`/`.syll__note`/
+   `.syll__text` quedan intactas por si se retoma la función algún día. */
 
 .syll {
   display: inline-flex;
@@ -1503,21 +1769,32 @@
    tema claro — no el token global, para no alterar el resaltado de voces v1.
    En tema oscuro el token (#ffe082) ya cumple, así que se restaura. */
 .lyrics__line--tono.voice-text--tenor .syll__note {
+  color: var(--color-voice-tenor);
+}
+[data-theme='light'] .lyrics__line--tono.voice-text--tenor .syll__note {
   color: #8a6800;
 }
-[data-theme='dark'] .lyrics__line--tono.voice-text--tenor .syll__note {
-  color: var(--color-voice-tenor);
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .lyrics__line--tono.voice-text--tenor .syll__note {
+    color: #8a6800;
+  }
 }
 
 /* Mismo fix de contraste para las notas Wave 4 (subrayadas, sin pill):
    tenor en tema claro baja a #8a6800; en oscuro el token ya cumple. */
 .float-label.tono-note.voice-text--tenor,
 .mix-rail--note.voice-text--tenor {
+  color: var(--color-voice-tenor);
+}
+[data-theme='light'] .float-label.tono-note.voice-text--tenor,
+[data-theme='light'] .mix-rail--note.voice-text--tenor {
   color: #8a6800;
 }
-[data-theme='dark'] .float-label.tono-note.voice-text--tenor,
-[data-theme='dark'] .mix-rail--note.voice-text--tenor {
-  color: var(--color-voice-tenor);
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .float-label.tono-note.voice-text--tenor,
+  :root:not([data-theme]) .mix-rail--note.voice-text--tenor {
+    color: #8a6800;
+  }
 }
 
 /* El texto de la sílaba se mantiene en el color de lectura normal; solo la
@@ -1538,63 +1815,6 @@
   opacity: 0.6;
 }
 
-/* ─── Modo Tono: fila de filtros (disclosure categoría → persona) ─── */
-.lyrics__tono-filters {
-  margin-bottom: var(--space-md);
-}
-
-.lyrics__tono-grid {
-  display: flex;
-  gap: var(--space-md);
-  align-items: flex-start;
-}
-.lyrics__tono-categories {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.5rem;
-  flex: 0 0 auto;
-}
-.lyrics__tono-voices {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding-left: var(--space-md);
-  border-left: 2px solid var(--color-border);
-}
-.lyrics__tono-voices:empty {
-  display: none;
-}
-.tono-chip__note {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--color-primary);
-  margin-left: 0.1rem;
-}
-.lyrics__tono-tune {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-
-.lyrics__tono-tune:empty {
-  margin-top: 0;
-}
-
-.lyrics__tono-tune .btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  min-height: 44px;
-}
-
-.lyrics__tono-active {
-  margin: 0.5rem 0 0;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-}
-
 .tono-chip {
   display: inline-flex;
   align-items: center;
@@ -1611,10 +1831,13 @@
   cursor: pointer;
 }
 
+/* Amber = accion activa — anillo exterior + fondo sutil + texto ambar.
+   .tono-chip no tiene overflow:hidden, el box-shadow exterior funciona. */
 .tono-chip--active {
-  border-color: var(--color-primary);
-  background: var(--color-primary-bg, var(--color-surface));
-  color: var(--color-primary);
+  border-color: var(--color-amber-500);
+  background: color-mix(in oklch, var(--color-amber-500) 12%, var(--color-surface));
+  color: var(--color-amber-500);
+  box-shadow: 0 0 0 2px var(--color-amber-500);
 }
 
 .voice-badge-extra--soprano {
@@ -1630,7 +1853,7 @@
   color: var(--color-voice-bass);
 }
 
-/* ─── Editor v2 (voz_tono): roster, silabación, tono por sílaba ─── */
+/* ─── Editor v2: roster, silabación, tono por sílaba ─── */
 
 .btn--sm {
   min-height: 44px;
@@ -1899,1317 +2122,277 @@
      otro modo retiene opacity:1 y deja el botón siempre visible. */
   opacity: 0 !important;
   pointer-events: none;
-  transform: translateY(-8px) !important;
+  /* Positivo: el FAB está anclado abajo, así que se oculta deslizándose
+     hacia el borde inferior en vez de hacia arriba. */
+  transform: translateY(8px) !important;
 }
 
-/* === Estudio de pistas (BETA) === */
-.studio {
-  max-width: var(--max-content-width);
+/* === Afinador flotante híbrido (T5 + T2 refino) — bajo demanda desde el mic
+   del hero. Modo libre por defecto: nota detectada + cents a la izquierda,
+   gauge lineal de 5 zonas (mismos porcentajes/colores que `.tuner-gauge` de
+   tuner.css, sin escala numérica) a la derecha; debajo, estado + chip
+   "Seguir nota". Entrada: translateY(8px) + opacity 200ms ease-out;
+   reduced-motion cae a solo fade (mismo criterio que `.lyrics--layer-fade`
+   más arriba). */
+.floating-tuner {
+  position: fixed;
+  left: var(--space-md);
+  right: var(--space-md);
+  bottom: calc(var(--space-md) + env(safe-area-inset-bottom, 0px));
+  z-index: var(--z-toast);
+  max-width: 480px;
   margin: 0 auto;
-  /* Sin padding horizontal: el gutter lo aporta .main__content */
-  padding: var(--space-md) 0 var(--space-2xl);
-}
-
-.studio__title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-bold);
-  margin-bottom: var(--space-lg);
-}
-
-.studio__desc {
-  color: var(--color-text-secondary);
-  margin-bottom: var(--space-lg);
-  line-height: var(--line-height-base, 1.6);
-}
-
-.studio__quota {
-  margin-top: var(--space-sm);
-}
-
-.studio__error {
-  color: var(--color-error, #c00);
-  margin-bottom: var(--space-sm);
-}
-
-.studio__expiry {
-  margin-bottom: var(--space-md);
-}
-
-/* Body copy del Estudio: el contenedor alinea a la izquierda. No heredar el
-   centrado de .empty-state__text (max-width + margin:0 auto), pensado para
-   estados vacíos, que dejaba expiry y el copy de Voces indentados al centro. */
-.studio .empty-state__text {
-  margin-left: 0;
-  margin-right: auto;
-}
-
-.studio__section-title {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  margin: var(--space-lg) 0 var(--space-sm);
-}
-
-.studio__section-title--sm {
-  font-size: var(--font-size-base);
-  margin-top: var(--space-md);
-}
-
-.studio__new-btn {
-  margin-top: var(--space-lg);
-}
-
-/* Estudio — animación de carga (ecualizador + etapas) */
-.studio__filename {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  margin-bottom: 1rem;
-}
-.studio__filename span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 80%;
-}
-.studio-loader {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1.25rem;
-  padding: 1.5rem 0;
-}
-.studio-eq {
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  height: 48px;
-}
-.studio-eq__bar {
-  width: 6px;
-  border-radius: 3px;
-  background: var(--color-primary);
-  animation: studio-eq 1s ease-in-out infinite;
-  animation-delay: calc(var(--i) * 0.12s);
-  height: 30%;
-}
-@keyframes studio-eq {
-  0%,
-  100% {
-    height: 25%;
-    opacity: 0.6;
-  }
-  50% {
-    height: 100%;
-    opacity: 1;
-  }
-}
-.studio-stages {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  width: 100%;
-  max-width: 320px;
-}
-.studio-stage {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-}
-.studio-stage--active {
-  color: var(--color-text);
-  font-weight: 600;
-}
-.studio-stage--done {
-  color: var(--color-primary);
-}
-.studio-stage__eta {
-  margin-left: auto;
-  font-size: var(--font-size-xs);
-  opacity: 0.7;
-}
-.studio-stage__dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid currentColor;
-  box-sizing: border-box;
-}
-.studio-stage__dot--active {
-  animation: studio-pulse 1.2s ease-in-out infinite;
-}
-.studio-stage__dot--wait {
-  opacity: 0.4;
-}
-@keyframes studio-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(0, 151, 167, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 5px rgba(0, 151, 167, 0);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .studio-eq__bar {
-    animation: none;
-    height: 60%;
-  }
-  .studio-stage__dot--active {
-    animation: none;
-  }
-}
-
-/* Drop zone */
-.studio-dropzone {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-xs);
-  border: 2px dashed var(--color-border);
-  border-radius: var(--border-radius-md);
-  padding: var(--space-2xl) var(--space-lg);
-  text-align: center;
-  cursor: pointer;
-  transition:
-    border-color var(--transition-fast),
-    background-color var(--transition-fast);
-}
-
-.studio-dropzone:hover,
-.studio-dropzone:focus-visible {
-  border-color: var(--color-primary);
-  background: var(--color-surface);
-  outline: none;
-}
-
-.studio-dropzone__hint {
-  margin: var(--space-xs) 0 0;
-}
-
-.studio-dropzone__sub {
-  margin: 0;
-}
-
-/* Processing steps */
-.studio-steps {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  padding: var(--space-lg);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
+  border-radius: var(--border-radius-lg);
+  box-shadow: 0 8px 32px var(--color-shadow);
+  padding: var(--space-sm) var(--space-md);
+  animation: floatingTunerIn 200ms ease-out;
 }
 
-.studio-steps__item {
-  margin: 0;
-}
-
-/* Segment list */
-.studio-segments {
-  list-style: none;
-  padding: 0;
-  margin: var(--space-sm) 0 0;
+.floating-tuner__close {
+  position: absolute;
+  top: var(--space-xs);
+  right: var(--space-xs);
   display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
-
-/* Barra de acciones (ZIP + Drive) */
-.studio-actions {
-  display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-sm);
-  margin: var(--space-sm) 0 var(--space-md);
-}
-.studio-actions__soon {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  opacity: 0.6;
-  cursor: default;
-}
-
-/* Botón de acción con máquina de estados (ZIP / Drive) */
-.studio-action {
-  /* base button look (reproducido de .btn / .btn--primary) */
-  padding: var(--space-sm) var(--space-xl);
-  border-radius: var(--border-radius-md);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  background: transparent;
   border: none;
-  background: var(--color-primary);
-  color: #fff;
-  transition:
-    background-color var(--transition-fast),
-    transform var(--transition-fast);
-  /* layout */
-  position: relative;
-  overflow: hidden;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-}
-.studio-action:hover {
-  background: var(--color-primary-dark);
-  transform: translateY(-1px);
-}
-.studio-action:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-.studio-action__fill {
-  position: absolute;
-  inset: 0;
-  width: 0;
-  z-index: 1;
-  background: var(--color-primary-dark);
-  transition: width 0.25s ease;
-}
-.studio-action__ico,
-.studio-action__lbl {
-  position: relative;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-}
-.studio-action__lbl {
-  transition: opacity 0.2s ease;
-}
-.studio-action.is-busy {
-  color: #fff;
-  background: var(--color-primary);
-}
-.studio-action.is-done {
-  color: #fff;
-  background: var(--color-success);
-}
-.studio-action.is-done .studio-action__ico svg {
-  animation: studio-action-pop 0.42s cubic-bezier(0.2, 1.4, 0.4, 1);
-}
-.studio-action.is-error {
-  color: #fff;
-  background: var(--color-error);
-  animation: studio-action-shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97);
-}
-@keyframes studio-action-pop {
-  0% {
-    transform: scale(0.2);
-    opacity: 0;
-  }
-  60% {
-    transform: scale(1.18);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-@keyframes studio-action-shake {
-  10%,
-  90% {
-    transform: translateX(-1px);
-  }
-  20%,
-  80% {
-    transform: translateX(2px);
-  }
-  30%,
-  50%,
-  70% {
-    transform: translateX(-4px);
-  }
-  40%,
-  60% {
-    transform: translateX(4px);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .studio-action__fill,
-  .studio-action__lbl {
-    transition: none;
-  }
-  .studio-action:hover {
-    transform: none;
-  }
-  .studio-action.is-done .studio-action__ico svg {
-    animation: none;
-  }
-  .studio-action.is-error {
-    animation: none;
-  }
-}
-
-/* -----------------------------------------------------------------------
-   Reproductor propio — Dirección A (Apilado claro)
-   Mobile-first: dos renglones por pista.
-     Renglón 1 (.studio-player__row1): [play][label flex][tiempo][descarga]
-     Renglón 2 (.studio-player__row2): scrubber full-width
-   Desktop (≥640px): colapsa a una sola fila elegante.
-   ----------------------------------------------------------------------- */
-.studio-player {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  margin: var(--space-sm) 0;
-}
-
-/* Renglón 1: controles e info */
-.studio-player__row1 {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  min-height: 40px;
-}
-
-/* Renglón 2: scrubber full-width; nunca colapsa en mobile */
-.studio-player__row2 {
-  display: flex;
-  align-items: center;
-  padding-top: 4px;
-}
-
-.studio-player__label {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Play: 38px visual, touch target ≥40px vía padding extendido */
-.studio-player__play {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  padding: 0;
-  background: var(--color-primary);
-  color: #fff;
-  border: none;
-  border-radius: 19px;
-  box-shadow: 0 2px 6px rgba(0, 151, 167, 0.3);
   cursor: pointer;
-  /* Área de toque extendida ≥40px sin agrandar el visual */
-  position: relative;
-  transition:
-    background 0.15s,
-    box-shadow 0.15s,
-    transform 0.12s;
-}
-.studio-player__play::after {
-  content: '';
-  position: absolute;
-  inset: -3px;
-}
-.studio-player__play:hover {
-  background: var(--color-primary-dark);
-  box-shadow: 0 4px 10px rgba(0, 151, 167, 0.4);
-  transform: translateY(-1px);
-}
-.studio-player__play:active {
-  transform: translateY(0);
-  box-shadow: 0 1px 4px rgba(0, 151, 167, 0.3);
-}
-.studio-player__play:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 3px;
 }
 
-.studio-player__time {
-  flex-shrink: 0;
-  font-size: var(--font-size-xs);
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-}
-
-.studio-player__dl {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  padding: 0;
-  /* Área de toque extendida ≥40px sin agrandar el visual */
-  position: relative;
-  transition:
-    transform 0.12s,
-    box-shadow 0.12s;
-}
-.studio-player__dl::after {
-  content: '';
-  position: absolute;
-  inset: -3px;
-}
-.studio-player__dl:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
-}
-.studio-player__dl:active {
-  transform: translateY(0);
-}
-
-/* Barra de scrubbing — full-width en mobile */
-.studio-player__bar {
-  position: relative;
-  flex: 1;
-  width: 100%;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  touch-action: none; /* el gesto de lupa no debe hacer scroll */
-}
-.studio-player__bar::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 5px;
-  background: var(--color-border);
-  border-radius: 3px;
-}
-.studio-player__fill {
-  position: absolute;
-  left: 0;
-  height: 5px;
-  background: var(--color-primary);
-  border-radius: 3px;
-  pointer-events: none;
-}
-
-/* Thumb: escala en estado grabbing (spring-like via cubic-bezier) */
-.studio-player__thumb {
-  position: absolute;
-  top: 50%;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--color-text);
-  transform: translate(-50%, -50%) scale(1);
-  pointer-events: none;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.studio-player__thumb--grabbing {
-  transform: translate(-50%, -50%) scale(1.45);
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-/* Burbuja de preview: aparece solo durante scrubbing */
-.studio-player__preview-bubble {
-  position: absolute;
-  bottom: calc(100% - 4px);
-  transform: translateX(-50%);
-  background: var(--color-text);
-  color: var(--color-bg);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  padding: 2px 6px;
-  border-radius: 4px;
-  white-space: nowrap;
-  pointer-events: none;
-  z-index: 6;
-}
-.studio-player__preview-bubble[hidden] {
-  display: none;
-}
-
-/* Lupa del reproductor propio */
-.studio-player__mag {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  z-index: 5;
-  background: var(--color-bg);
-  border: 1px solid var(--color-accent);
-  border-radius: 8px;
-  padding: 8px;
-}
-.studio-player__mag-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-accent);
-  margin-bottom: 6px;
-}
-.studio-player__mag-track {
-  position: relative;
-  height: 36px;
-  background: var(--color-surface);
-  border-radius: 6px;
-  overflow: hidden;
-}
-.studio-player__mag-needle {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 2px;
-  height: 100%;
-  background: var(--color-text);
-}
-.studio-player__mag-time {
-  text-align: center;
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  margin-top: 6px;
-}
-
-/* Desktop (≥640px): colapsa a una sola fila */
-@media (min-width: 640px) {
-  .studio-player {
-    flex-direction: row;
-    align-items: center;
-    gap: var(--space-sm);
-  }
-
-  .studio-player__row1 {
-    display: contents; /* los hijos se reordenan en el flex padre */
-  }
-
-  .studio-player__row2 {
-    flex: 1;
-    min-width: 180px;
-    padding-top: 0;
-  }
-
-  /* En desktop el label va primero (orden visual: label | play | bar | time | dl).
-     Usamos order para reordenar sin cambiar el DOM. */
-  .studio-player__label {
-    order: 0;
-    flex: 0 0 auto;
-    min-width: 5.5rem;
-    max-width: 8rem;
-  }
-  .studio-player__play {
-    order: 1;
-  }
-  .studio-player__row2 {
-    order: 2;
-  }
-  .studio-player__time {
-    order: 3;
-    min-width: 6rem;
-    text-align: right;
-  }
-  .studio-player__dl {
-    order: 4;
-  }
-}
-
-@media (min-width: 768px) {
-  .studio-player__label {
-    min-width: 7rem;
-    max-width: 10rem;
-  }
-}
-
-/* Sin animaciones de escala/pulso en reduced-motion */
-@media (prefers-reduced-motion: reduce) {
-  .studio-player__thumb,
-  .studio-player__thumb--grabbing {
-    transition: none;
-  }
-  .studio-player__play,
-  .studio-player__dl {
-    transition: none;
-  }
-}
-
-/* Lupa de la timeline de segmentos */
-.studio-tl__mag {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.studio-tl__mag-needle {
-  position: absolute;
-  top: 0;
-  width: 2px;
-  height: 100%;
-  background: var(--color-text);
-}
-.studio-tl__mag-time {
-  position: absolute;
-  top: 2px;
-  left: 6px;
-  font-size: var(--font-size-xs);
-  font-variant-numeric: tabular-nums;
+.floating-tuner__close:hover {
   color: var(--color-text);
-  background: var(--color-bg);
-  padding: 0 4px;
-  border-radius: 3px;
 }
 
-/* Estudio — línea de tiempo de voces + transporte */
-.studio-tl__legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin: 0.5rem 0;
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-}
-.studio-tl__legend-item {
+.floating-tuner__row {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-}
-.studio-tl__swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  display: inline-block;
-}
-.studio-tl {
-  width: 100%;
-  padding: 0.25rem 0;
-}
-.studio-tl__track {
-  position: relative;
-  height: 44px;
-  width: 100%;
-  background: var(--color-surface);
-  border-radius: 8px;
-  overflow: hidden;
-  cursor: pointer;
-  touch-action: none;
-}
-.studio-tl__block {
-  position: absolute;
-  top: 8px;
-  height: 28px;
-  min-width: 2px;
-  padding: 0;
-  border: none;
-  border-radius: 3px;
-  cursor: pointer;
-  opacity: 0.85;
-}
-.studio-tl__block:hover {
-  opacity: 1;
-}
-.studio-tl__playhead {
-  position: absolute;
-  top: 0;
-  width: 2px;
-  height: 100%;
-  background: var(--color-text);
-  pointer-events: none;
-}
-.studio-transport {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.6rem;
-}
-.studio-transport__btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-}
-.studio-transport__time {
-  margin-left: auto;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  font-variant-numeric: tabular-nums;
-}
-@media (prefers-reduced-motion: reduce) {
-  .studio-tl__playhead {
-    transition: none;
-  }
+  gap: var(--space-md);
+  padding-right: 44px; /* despeja la X absoluta */
 }
 
-/* ------------------------------------------------------------------ */
-/* Estudio — timeline de secciones estructurales (SongFormer)          */
-/* Namespace: .studio-sectl*  (no colisiona con .studio-tl* de voces)  */
-/* ------------------------------------------------------------------ */
-.studio-sectl {
-  width: 100%;
-}
-
-.studio-sectl__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.floating-tuner__pitch {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 4ch;
 }
 
-.studio-sectl__row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: 6px;
-  cursor: pointer;
-  border: 1.5px solid transparent;
-  transition: background 0.12s ease;
+.floating-tuner__note {
+  font-size: 1.875rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-teal-400);
+  line-height: 1;
 }
 
-.studio-sectl__row:hover {
-  background: rgba(0, 151, 167, 0.06);
-}
-
-.studio-sectl__row--active {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(0, 151, 167, 0.18);
-  background: rgba(0, 151, 167, 0.06);
-}
-
-/* Barra de color vertical de 5px */
-.studio-sectl__bar {
-  flex-shrink: 0;
-  width: 5px;
-  height: 1.4em;
-  border-radius: 3px;
-  align-self: stretch;
-}
-
-.studio-sectl__label {
-  flex: 1;
+.floating-tuner__cents {
   font-size: var(--font-size-sm);
-  color: var(--color-text);
-}
-
-.studio-sectl__range {
-  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  line-height: 1;
+  min-height: 1em;
 }
 
-/* Leyenda — sigue el mismo patrón visual de .studio-tl__legend */
-.studio-sectl__legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin: 0.5rem 0;
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+.floating-tuner__cents[data-status='ok'] {
+  color: var(--color-success);
 }
 
-.studio-sectl__legend-item {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
+.floating-tuner__cents[data-status='warn'] {
+  color: var(--color-warn);
 }
 
-.studio-sectl__swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  display: inline-block;
+.floating-tuner__cents[data-status='bad'] {
+  color: var(--color-danger);
 }
 
-@media (min-width: 768px) {
-  .studio-sectl__row {
-    padding: 0.4rem 0.75rem;
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/* Estudio — tarjetas acordeón de sección                              */
-/* Namespace: .studio-section-card*  (no colisiona con otros)         */
-/* ------------------------------------------------------------------ */
-.studio-section-card {
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  background: var(--color-surface);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  margin-bottom: var(--space-sm);
-  overflow: hidden;
-  transition: box-shadow 0.15s ease;
-}
-
-.studio-section-card:last-child {
-  margin-bottom: 0;
-}
-
-/* Header: botón que funciona como acordeón */
-.studio-section-card__header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  width: 100%;
-  padding: 0.75rem var(--space-md);
-  background: none;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-  color: var(--color-text);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  transition: background 0.12s ease;
-}
-
-.studio-section-card__header:hover {
-  background: rgba(0, 0, 0, 0.03);
-}
-
-.studio-section-card__title {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
+.floating-tuner__engine {
   flex: 1;
   min-width: 0;
 }
 
-/* Chip de estado */
-.studio-section-card__chip {
-  flex-shrink: 0;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  padding: 0.15rem 0.55rem;
-  border-radius: 99px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+/* Gauge propio del afinador flotante — NO reusa `.tuner-gauge*` de
+   tuner.css: esa hoja solo se importa desde Tuner.js (ruta /afinador,
+   chunk lazy en main.js), así que en SongView el gauge quedaría sin
+   estilos si el usuario no visitó /afinador antes en la sesión. Además
+   tuner.css no usa `@layer` y `components.css` sí, con lo que reusar los
+   mismos nombres de clase sería un hazard de cascada al visitar /afinador
+   (las reglas sin layer ganarían). Valores (porcentajes de zona, colores,
+   opacidad, indicador) espejan `.tuner-gauge*` al detalle — ver tuner.css
+   si cambian ahí, cambian acá igual. */
+.floating-tuner__gauge {
+  padding: 0;
 }
 
-.studio-section-card__chip--done {
-  background: color-mix(in srgb, var(--color-accent, #0097a7) 15%, transparent);
-  color: var(--color-accent, #0097a7);
-}
-
-.studio-section-card__chip--running {
-  background: color-mix(in srgb, var(--color-primary) 15%, transparent);
-  color: var(--color-primary);
-}
-
-.studio-section-card__chip--failed {
-  background: color-mix(in srgb, var(--color-error, #c00) 12%, transparent);
-  color: var(--color-error, #c00);
-}
-
-.studio-section-card__chip--pending {
-  background: var(--color-surface-hover);
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
-}
-
-.studio-section-card__chip--skipped {
-  background: transparent;
-  color: var(--color-text-secondary);
-  border: 1px dashed var(--color-border);
-}
-
-/* Cuerpo (colapsable) */
-.studio-section-card__body {
-  padding: 0 var(--space-md) var(--space-md);
+.floating-tuner__gauge-track {
+  position: relative;
+  height: 10px;
+  border-radius: var(--border-radius-full);
+  background: var(--color-border);
   overflow: hidden;
-  transition: max-height 0.22s ease;
 }
 
-/* Colapsado: cuerpo oculto */
-.studio-section-card--collapsed .studio-section-card__body {
-  display: none;
+.floating-tuner__gauge-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  opacity: 0.35;
 }
 
-/* Skeleton placeholder para estado pending */
-.studio-section-card__skeleton {
-  height: 2.5rem;
-  border-radius: var(--border-radius-sm);
-  background: linear-gradient(
-    90deg,
-    var(--color-border) 25%,
-    color-mix(in srgb, var(--color-border) 60%, transparent) 50%,
-    var(--color-border) 75%
-  );
-  background-size: 200% 100%;
-  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+.floating-tuner__gauge-zone--ok {
+  left: 40%;
+  width: 20%;
+  background: var(--color-success);
 }
 
-@keyframes skeleton-shimmer {
-  0% {
-    background-position: 200% center;
-  }
-  100% {
-    background-position: -200% center;
-  }
+.floating-tuner__gauge-zone--warn {
+  background: var(--color-warn);
 }
 
-/* EQ animado dentro de la tarjeta (running) */
-.studio-section-card__eq {
-  margin: 0.5rem 0;
+.floating-tuner__gauge-zone--warn-left {
+  left: 20%;
+  width: 20%;
 }
 
-/* Botón retry en failed */
-.studio-section-card__retry {
-  margin-top: var(--space-sm);
+.floating-tuner__gauge-zone--warn-right {
+  left: 60%;
+  width: 20%;
 }
 
-.studio-section-card__error-msg {
-  margin-bottom: var(--space-xs);
+.floating-tuner__gauge-zone--danger {
+  background: var(--color-danger);
 }
 
-/* Estado locked/beta (gender) */
-.studio-section-card__locked {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  padding: 0.25rem 0;
+.floating-tuner__gauge-zone--danger-left {
+  left: 0;
+  width: 20%;
 }
 
-/* Más pistas: details/summary */
-.studio-section-card__more {
-  margin-top: var(--space-sm);
+.floating-tuner__gauge-zone--danger-right {
+  left: 80%;
+  width: 20%;
 }
 
-.studio-section-card__more-summary {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  padding: 0.25rem 0;
-  list-style: none;
-  user-select: none;
+.floating-tuner__gauge-center {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  left: 50%;
+  width: 2px;
+  background: var(--color-text-secondary);
+  opacity: 0.6;
+  transform: translateX(-50%);
 }
 
-.studio-section-card__more-summary:hover {
-  color: var(--color-text);
+.floating-tuner__gauge-indicator {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  width: 5px;
+  border-radius: 3px;
+  background: var(--color-text-secondary);
+  transform: translateX(-50%);
+  transition:
+    left 120ms ease-out,
+    background-color 120ms ease-out;
+}
+
+.floating-tuner__gauge-indicator[data-status='ok'] {
+  background: var(--color-success);
+}
+
+.floating-tuner__gauge-indicator[data-status='warn'] {
+  background: var(--color-warn);
+}
+
+.floating-tuner__gauge-indicator[data-status='bad'] {
+  background: var(--color-danger);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .studio-section-card__skeleton {
-    animation: none;
+  .floating-tuner__gauge-indicator {
+    transition: none;
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* Estudio — keyframes propios (rise + blurin)                         */
-/* ------------------------------------------------------------------ */
-@keyframes studio-rise {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+.floating-tuner__gate {
+  display: flex;
+  justify-content: flex-end;
 }
 
-@keyframes studio-blurin {
-  from {
-    opacity: 0;
-    filter: blur(6px);
-  }
-  to {
-    opacity: 1;
-    filter: none;
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/* Estudio — panel de revision (paso antes de subir)                   */
-/* Namespace: .studio-review*                                           */
-/* ------------------------------------------------------------------ */
-.studio-review {
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  background: var(--color-surface);
-  padding: var(--space-md) var(--space-md) var(--space-lg);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .studio-review {
-    animation: studio-rise 0.45s cubic-bezier(0.23, 1, 0.32, 1) both;
-  }
-}
-
-.studio-review__filename {
+.floating-tuner__grant {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  margin: 0.4rem 0 var(--space-md);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.studio-review__field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  margin-bottom: var(--space-md);
-}
-
-.studio-review__field-label {
-  font-size: 0.68rem;
-  font-weight: var(--font-weight-bold);
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--color-text-secondary);
-}
-
-.studio-review__title-input {
-  width: 100%;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  color: var(--color-text);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  padding: 0.65rem 0.7rem;
-  font-family: inherit;
-  transition:
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast);
-}
-
-.studio-review__title-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
-}
-
-/* fieldset reset + columna en mobile */
-.studio-review__sections {
-  border: none;
-  padding: 0;
-  margin: 0 0 var(--space-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.studio-review__legend {
-  font-size: 0.68rem;
-  font-weight: var(--font-weight-bold);
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--color-text-secondary);
-  margin-bottom: 0.4rem;
-  float: left;
-  width: 100%;
-}
-
-/* Grid 2x2 en >= 560px */
-@media (min-width: 560px) {
-  .studio-review__sections {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.55rem;
-  }
-}
-
-/* Cada label actua como tile seleccionable */
-.studio-review__section {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  padding: 0.7rem;
-  border-radius: var(--border-radius-md);
-  border: 1.5px solid var(--color-border);
-  background: var(--color-bg);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  transition:
-    border-color 0.18s cubic-bezier(0.23, 1, 0.32, 1),
-    background 0.18s;
-}
-
-.studio-review__section:hover {
-  border-color: var(--color-primary-dark);
-}
-
-/* Estado activo cuando el checkbox esta marcado */
-.studio-review__section:has(.studio-review__section-check:checked) {
-  border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
-}
-
-/* Checkbox nativo oculto — la interaccion es via label */
-.studio-review__section-check {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-  pointer-events: none;
-}
-
-.studio-review__section-label {
-  flex: 1;
-  line-height: var(--line-height-tight);
-}
-
-.studio-review__actions {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  margin-top: var(--space-md);
-}
-
-@media (min-width: 560px) {
-  .studio-review__actions {
-    flex-direction: row;
-  }
-}
-
-.studio-review__submit {
-  order: -1;
-}
-
-.studio-review__cancel {
+  gap: var(--space-xs);
   background: transparent;
-  border-color: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-full);
+  padding: var(--space-xs) var(--space-sm);
   color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
 }
 
-.studio-review__cancel:hover {
-  color: var(--color-text);
-}
-
-/* ------------------------------------------------------------------ */
-/* Estudio — titulo editable inline                                     */
-/* ------------------------------------------------------------------ */
-.studio__title-row {
+.floating-tuner__footer {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-sm);
-  margin-bottom: var(--space-md);
+  margin-top: var(--space-xs);
+  min-height: 1.5em;
 }
 
-.studio__title-text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-bold);
-}
-
-.studio__title-edit {
-  flex-shrink: 0;
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg);
-  color: var(--color-text-secondary);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  transition:
-    color var(--transition-fast),
-    border-color var(--transition-fast);
-}
-
-.studio__title-edit:hover {
-  color: var(--color-text);
-  border-color: var(--color-primary);
-}
-
-.studio__title-input {
-  flex: 1;
-  min-width: 0;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  color: var(--color-text);
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  padding: 0.45rem 0.6rem;
-  font-family: inherit;
-  transition:
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast);
-}
-
-.studio__title-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
-}
-
-.studio__title-save {
-  flex-shrink: 0;
-}
-
-/* ------------------------------------------------------------------ */
-/* Estudio — tarjeta de seccion: elementos nuevos                       */
-/* ------------------------------------------------------------------ */
-.studio-section-card__resume {
-  margin-top: var(--space-sm);
-  width: 100%;
-}
-
-.studio-section-card__skipped-note {
+.floating-tuner__status {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
-  margin: 0 0 var(--space-sm);
-  text-align: left;
-  max-width: none;
 }
 
-.studio-section-card__dl {
-  margin-top: var(--space-sm);
-  width: 100%;
+.floating-tuner__chip {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-full);
+  padding: 4px var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out,
+    border-color 120ms ease-out;
 }
 
-/* ------------------------------------------------------------------ */
-/* Estudio — dropzone: estado drag-over enriquecido                    */
-/* ------------------------------------------------------------------ */
-.studio-dropzone.is-dragover {
-  border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 7%, transparent);
-  transform: scale(1.01);
+.floating-tuner__chip[aria-pressed='true'] {
+  background: var(--color-teal-400);
+  border-color: var(--color-teal-400);
+  color: var(--color-bg);
 }
 
-/* ------------------------------------------------------------------ */
-/* Estudio — tarjetas: blur-in + stagger al aparecer                   */
-/* ------------------------------------------------------------------ */
-@media (prefers-reduced-motion: no-preference) {
-  .studio-section-card {
-    animation: studio-blurin 0.4s cubic-bezier(0.23, 1, 0.32, 1) both;
-  }
-
-  .studio-section-card:nth-child(2) {
-    animation-delay: 0.06s;
-  }
-
-  .studio-section-card:nth-child(3) {
-    animation-delay: 0.12s;
-  }
-
-  .studio-section-card:nth-child(4) {
-    animation-delay: 0.18s;
-  }
-
-  .studio-section-card:nth-child(5) {
-    animation-delay: 0.24s;
-  }
-
-  .studio-section-card:nth-child(6) {
-    animation-delay: 0.3s;
+@media (prefers-reduced-motion: reduce) {
+  .floating-tuner__chip {
+    transition: none;
   }
 }
+
+@keyframes floatingTunerIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floating-tuner {
+    animation: fadeIn 200ms ease-out;
+  }
+}
+
+/* Estudio de pistas: extraido a src/styles/studio.css en F3b */
+/* (importado desde StudioPage.js) */

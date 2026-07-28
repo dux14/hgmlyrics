@@ -2,12 +2,16 @@
 // Vista virtual del álbum "Voces en off": tracklist de semanas, badge VIGENTE,
 // estado vacío, acceso al detalle de cada voz.
 
+import '../styles/voices.css';
 import { navigate } from '../router.js';
 import { isAdmin } from '../lib/authStore.js';
 import { liturgicalPalette, coverGradient } from '../lib/liturgicalColor.js';
 import { escapeHtml } from '../lib/escape.js';
-import { supabase } from '../lib/supabase.js';
 import { icon } from '../lib/icons.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelTracklist } from '../lib/skeleton.js';
+import { voiceoverHero } from '../lib/voiceoverHero.js';
+import { getWeeklyWords } from '../lib/weeklyWords.js';
 
 /**
  * Dado un sunday_date (YYYY-MM-DD), ¿es la del domingo más reciente (≤ hoy)?
@@ -34,105 +38,114 @@ function formatShortDate(isoDate) {
   });
 }
 
+function bindVozEvents(region, words) {
+  region.querySelectorAll('[data-voz-id]').forEach((item) => {
+    const word = words.find((w) => String(w.id) === item.dataset.vozId);
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('[data-edit-voz]')) return;
+      navigate(`/voz/${item.dataset.vozId}`);
+    });
+    if (!word) return;
+    const pal = liturgicalPalette(word.liturgical_color);
+    const cover = item.querySelector('.voz-album__cover');
+    if (cover) {
+      cover.style.setProperty('--liturgical-gradient', coverGradient(pal));
+      cover.style.setProperty('--liturgical-accent', pal.accent);
+    }
+  });
+  region.querySelectorAll('[data-edit-voz]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      navigate(`/admin/voz/${btn.dataset.editVoz}`);
+    });
+  });
+}
+
 /**
  * Renderiza la vista del álbum "Voces en off".
  * @param {HTMLElement} container
  */
 export async function renderVoicesAlbumView(container) {
+  // Shell instantáneo: hero estático + región async para meta+tracklist.
   container.innerHTML = `
-    <div class="empty-state fade-in">
-      <div class="empty-state__icon">${icon('gospel', { size: 40 })}</div>
-      <h2 class="empty-state__title">Cargando Voces en off…</h2>
+    <div class="voz-album page--headerless fade-in">
+      <div class="voz-album__hero">
+        <div class="voz-album__hero-icon">${icon('gospel', { size: 48 })}</div>
+        <h1 class="voz-album__hero-title">Voces en off</h1>
+      </div>
+      <div class="voz-album__region" aria-busy="true"></div>
     </div>
   `;
+  const region = container.querySelector('.voz-album__region');
 
-  let words = [];
-  try {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionData?.session?.access_token;
-    const res = await fetch('/api/weekly-words', {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (res.ok) {
-      const body = await res.json();
-      words = body.weeklyWords ?? [];
+  const fetcher = () => getWeeklyWords();
+
+  const paintList = (words) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const vigenteId = words.find((w) => isVigente(w.sunday_date, today))?.id ?? null;
+
+    // Colorea el hero con la paleta litúrgica de la voz vigente (si no hay
+    // vigente, cae a la primera) y devuelve el meta + botón de crear a su
+    // lugar dentro del banner.
+    const hero = container.querySelector('.voz-album__hero');
+    if (hero) {
+      const vigenteWord = words.find((w) => w.id === vigenteId) ?? words[0];
+      const pal = liturgicalPalette(vigenteWord?.liturgical_color);
+      hero.style.setProperty('--liturgical-gradient', coverGradient(pal));
+      hero.style.setProperty('--liturgical-accent', pal.accent);
+      hero.style.setProperty('--liturgical-text', pal.text);
+      hero.innerHTML = `
+        <p class="voz-album__hero-kicker">Palabra de la semana</p>
+        <div class="voz-album__hero-icon">${icon('gospel', { size: 48 })}</div>
+        <h1 class="voz-album__hero-title">Voces en off</h1>
+        <p class="voz-album__hero-meta">${words.length} entrada${words.length !== 1 ? 's' : ''}</p>
+        ${isAdmin() ? `<button class="btn btn--primary btn--sm" id="voz-create-btn">+ Nueva voz en off</button>` : ''}
+      `;
     }
-  } catch (_e) {
-    // silencioso
-  }
 
-  const today = new Date().toISOString().slice(0, 10);
-  // La más reciente publicada que sea ≤ hoy es la "vigente".
-  const vigenteId = words.find((w) => isVigente(w.sunday_date, today))?.id ?? null;
-
-  if (words.length === 0) {
-    container.innerHTML = `
-      <div class="empty-state fade-in" style="padding: 3rem 1rem; text-align: center;">
-        <div>${icon('gospel', { size: 40 })}</div>
-        <h2 class="empty-state__title">Aún no hay voces en off</h2>
-        <p class="empty-state__text">Cada domingo se publica una reflexión sobre el evangelio.</p>
-        ${isAdmin() ? `<button class="btn btn--primary" id="voz-create-btn" style="margin-top: 1rem;">Crear voz en off</button>` : ''}
-      </div>
-    `;
-    container
-      .querySelector('#voz-create-btn')
-      ?.addEventListener('click', () => navigate('/admin/voz/nueva'));
-    return;
-  }
-
-  const heroWord = words[0];
-  const heroPalette = liturgicalPalette(heroWord.liturgical_color);
-  const heroGradient = coverGradient(heroPalette);
-
-  container.innerHTML = `
-    <div class="voz-album fade-in" style="max-width: 680px; margin: 0 auto; padding: 1.5rem 1rem;">
-
-      <!-- Breadcrumb -->
-      <nav class="breadcrumb" aria-label="Breadcrumb">
-        <a href="#/" id="voz-album-home">Inicio</a>
-        <span class="breadcrumb__separator">›</span>
-        <span class="breadcrumb__current">Voces en off</span>
-      </nav>
-
-      <!-- Hero portada álbum -->
-      <div class="voz-album__hero" style="background: ${heroGradient}; border-radius: var(--border-radius-lg); padding: 2.5rem 1.5rem; margin: 1rem 0 1.5rem; color: ${heroPalette.text}; text-align: center;">
-        <div style="margin-bottom: 0.5rem; color: ${heroPalette.accent};">${icon('gospel', { size: 48 })}</div>
-        <h1 style="font-size: 1.6rem; font-weight: 700; margin: 0 0 0.25rem; color: inherit;">Voces en off</h1>
-        <p style="margin: 0; opacity: 0.8; font-size: 0.9rem;">${words.length} entrada${words.length !== 1 ? 's' : ''}</p>
-        ${isAdmin() ? `<button class="btn btn--sm" id="voz-create-btn" style="margin-top: 1rem;">+ Nueva voz en off</button>` : ''}
-      </div>
-
-      <!-- Tracklist -->
-      <ul class="voz-album__list" style="list-style: none; padding: 0; margin: 0;">
+    region.innerHTML = `
+      <ul class="voz-album__list">
         ${words
           .map((w) => {
-            const palette = liturgicalPalette(w.liturgical_color);
             const isVig = w.id === vigenteId;
+            const title = voiceoverHero(w).bigTitle || w.gospel_ref;
+            const sub = [formatShortDate(w.sunday_date), w.gospel_ref].filter(Boolean).join(' · ');
             return `
-          <li class="voz-album__item" data-voz-id="${escapeHtml(w.id)}" style="display: flex; align-items: center; gap: 1rem; padding: 0.875rem 0.75rem; border-radius: var(--border-radius); cursor: pointer; border-bottom: 1px solid var(--color-border);">
-            <!-- Mini portada generativa -->
-            <div style="width: 48px; height: 48px; flex-shrink: 0; border-radius: 8px; background: ${coverGradient(palette)}; display: flex; align-items: center; justify-content: center; color: ${palette.accent};">${icon('gospel', { size: 26 })}</div>
-            <div style="flex: 1; min-width: 0;">
-              <div style="font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(w.gospel_ref)}</div>
-              <div style="font-size: 0.8rem; color: var(--color-text-secondary);">${escapeHtml(formatShortDate(w.sunday_date))}</div>
+          <li class="voz-album__item" data-voz-id="${escapeHtml(w.id)}">
+            <div class="voz-album__cover">${icon('gospel', { size: 26 })}</div>
+            <div class="voz-album__meta">
+              <div class="voz-album__m-title">${escapeHtml(title)}</div>
+              <div class="voz-album__m-sub">${escapeHtml(sub)}</div>
             </div>
-            ${isVig ? `<span style="background: #2d7a4f; color: #fff; border-radius: 999px; padding: 0.15em 0.6em; font-size: 0.7rem; font-weight: 700; white-space: nowrap;">VIGENTE</span>` : ''}
+            ${isVig ? `<span class="voz-album__badge--vigente">VIGENTE</span>` : ''}
+            ${isAdmin() ? `<button class="voz-album__edit" data-edit-voz="${escapeHtml(w.id)}" aria-label="Editar voz en off">${icon('pencil', { size: 18 })}</button>` : ''}
           </li>`;
           })
           .join('')}
       </ul>
-    </div>
-  `;
+    `;
+    bindVozEvents(region, words);
+  };
 
-  container.querySelector('#voz-album-home')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    navigate('/');
+  renderAsyncRegion(region, {
+    skeleton: () => skelTracklist({ rows: 4 }),
+    fetcher,
+    render: paintList,
+    empty: () => `
+      <div class="empty-state">
+        <div class="empty-state__icon">${icon('gospel', { size: 40 })}</div>
+        <h2 class="empty-state__title">Aún no hay voces en off</h2>
+        <p class="empty-state__text">Cada domingo se publica una reflexión sobre el evangelio.</p>
+        ${isAdmin() ? `<button class="btn btn--primary" id="voz-create-btn">Crear voz en off</button>` : ''}
+      </div>`,
+    onError: () => `
+      <div class="empty-state">
+        <h2 class="empty-state__title">No se pudieron cargar las voces</h2>
+        <button class="btn btn--primary" data-retry>Reintentar</button>
+      </div>`,
   });
-  container
-    .querySelector('#voz-create-btn')
-    ?.addEventListener('click', () => navigate('/admin/voz/nueva'));
 
-  container.querySelectorAll('[data-voz-id]').forEach((item) => {
-    item.addEventListener('click', () => navigate(`/voz/${item.dataset.vozId}`));
+  container.addEventListener('click', (e) => {
+    if (e.target.closest('#voz-create-btn')) navigate('/admin/voz/nueva');
   });
 }

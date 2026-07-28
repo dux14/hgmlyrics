@@ -1,20 +1,20 @@
 # modal/sections/gender.py
 """
-S4 — separación de voces por género (male / female), DOS modelos en paralelo.
+S4 — separación de voces por género (male / female), UN solo modelo.
 
 Pasos:
   1. Re-extraer el stem vocal desde el audio original (input.getUrl) usando
-     extract_vocals_stem() de _common.py (BS-RoFormer ep_317). Se hace UNA sola
-     vez; ambos modelos reutilizan la misma pista vocal.
+     extract_vocals_stem() de _common.py (BS-RoFormer ep_317).
   2. Correr chorus_bs_roformer (ep_267, SDR 24.13) con overlap=16 → male/female.
-  3. Correr aufr33 (bs_roformer_male_female_by_aufr33, SDR 7.29) con overlap=16
-     → male/female.
-  4. Subir cada stem a uploads["gender"][modelo][track] (estructura anidada).
-  5. Reportar section="gender", status="done",
-     outputs={ "chorus": {male, female}, "aufr33": {male, female} }.
+  3. Subir cada stem a uploads["gender"]["chorus"][track] (estructura anidada).
+  4. Reportar section="gender", status="done",
+     outputs={ "chorus": {male, female} }.
 
-Aislamiento por modelo: si un modelo falla, el otro sigue. Solo lanza si AMBOS
-fallan (en cuyo caso postea webhook failed antes de propagar).
+Nota histórica: existió una rama alternativa 'aufr33'
+(bs_roformer_male_female_by_aufr33) evaluada en A/B contra chorus_bs_roformer.
+El probe de checkpoints de audio-separator 0.28.5 no encontró ningún Mel-Band
+RoFormer male/female de aufr33 disponible, así que se eliminó esa rama
+(quedó solo chorus_bs_roformer, ya validado en PoC v2).
 """
 
 from __future__ import annotations
@@ -24,8 +24,6 @@ import tempfile
 
 # ── Constante del modelo de separación por género ────────────────────────────
 # 'chorus_bs_roformer' → model_chorus_bs_roformer_ep_267_sdr_24.1275.ckpt (validado en PoC v2).
-# 'aufr33'            → bs_roformer_male_female_by_aufr33_sdr_7.2889.ckpt
-#                       (TODO: rama alternativa A/B — ver docstring de módulo arriba).
 S4_GENDER_MODEL = "chorus_bs_roformer"
 
 # Checkpoint de chorus_bs_roformer validado en PoC v2.
@@ -34,10 +32,6 @@ _CHORUS_MODEL_CKPT = "model_chorus_bs_roformer_ep_267_sdr_24.1275.ckpt"
 # Overlap subido a 16 (vs default 8) para mayor promediado entre chunks →
 # split de género más limpio, a costa de ~2x tiempo. Validado en PoC v2 (GENDER_OVERLAP_V2=16).
 _GENDER_OVERLAP = 16
-
-# Checkpoint alternativo del A/B (rama 'aufr33', ver docstring de módulo).
-# Se evalúa en el smoke full contra el default; NO se usa en producción todavía.
-_AUFR33_MODEL_CKPT = "bs_roformer_male_female_by_aufr33_sdr_7.2889.ckpt"
 
 
 def _classify_stem(filename: str) -> "str | None":
@@ -75,7 +69,6 @@ def separate_by_gender(
 
     Los args `model_ckpt`/`overlap` tienen los defaults de producción, de modo
     que run_gender (que llama sin argumentos) conserva su comportamiento exacto.
-    El smoke full los usa para el A/B (chorus_bs_roformer vs aufr33).
 
     NO re-extrae el vocal, NO sube nada, NO postea webhook. El llamador es
     responsable de los archivos temporales.
@@ -122,17 +115,17 @@ def separate_by_gender(
 
 def run_gender(payload: dict) -> None:
     """
-    Nodo S4: re-extrae el stem vocal (UNA vez), corre chorus_bs_roformer y aufr33
-    con overlap=16, sube cada par male/female a su slot en uploads["gender"][modelo]
-    y postea un webhook con outputs anidados por modelo.
+    Nodo S4: re-extrae el stem vocal, corre chorus_bs_roformer con overlap=16,
+    sube el par male/female a su slot en uploads["gender"]["chorus"] y postea
+    un webhook con outputs anidados por modelo (queda un solo modelo, pero se
+    conserva la forma anidada por compatibilidad con el contrato existente).
 
     Contrato del webhook (status=done):
       {
         "status": "done",
-        "model": "chorus_bs_roformer+aufr33",
+        "model": "chorus_bs_roformer",
         "outputs": {
-          "chorus": {"male": <storageKey>, "female": <storageKey>},
-          "aufr33": {"male": <storageKey>, "female": <storageKey>}
+          "chorus": {"male": <storageKey>, "female": <storageKey>}
         }
       }
 
@@ -140,9 +133,8 @@ def run_gender(payload: dict) -> None:
     service-role key de Supabase para firmar un GET del objeto de S1.
     Patrón idéntico al de S3 (medley_vox.py).
 
-    Aislamiento por modelo: si un modelo falla se registra su error y se continúa
-    con el siguiente. Solo se propaga si AMBOS fallan (en cuyo caso postea el webhook
-    failed antes de relanzar el último error).
+    Aislamiento por modelo: si el (único) modelo falla se registra su error y
+    se propaga (postea el webhook failed antes de relanzar el error).
     """
     # Imports dentro de la función para que el import-time no falle fuera del
     # contenedor Modal (igual que en extract.py y medley_vox.py).
@@ -158,11 +150,12 @@ def run_gender(payload: dict) -> None:
     uploads_g: dict = payload["uploads"].get("gender", {})
     webhook: dict = payload["webhook"]
 
-    # Definición de los dos modelos de producción.
+    # Definición del modelo de producción (rama aufr33 eliminada, ver docstring
+    # de módulo). Se conserva la lista para no tocar la lógica de aislamiento
+    # de errores de abajo.
     # Cada entrada: (label_en_outputs, model_ckpt)
     MODELS = [
         ("chorus", _CHORUS_MODEL_CKPT),
-        ("aufr33", _AUFR33_MODEL_CKPT),
     ]
 
     try:
@@ -196,15 +189,15 @@ def run_gender(payload: dict) -> None:
                 model_errors.append((model_label, model_exc))
 
         # ── 3. Evaluar resultado global ───────────────────────────────────────
+        # Con un solo modelo en MODELS, esto equivale a "el modelo falló";
+        # se conserva la forma genérica por si en el futuro vuelve a haber
+        # más de un modelo en la lista.
         if len(model_errors) == len(MODELS):
-            # Ambos modelos fallaron: relanzar el último error (el primero también
-            # se habrá registrado en model_errors).
             raise RuntimeError(
-                "Ambos modelos de género fallaron. "
+                "El modelo de género falló. "
                 + "; ".join(f"{lbl}: {exc}" for lbl, exc in model_errors)
             )
 
-        # Al menos un modelo tuvo éxito.
         # ── 4. Webhook de éxito ──────────────────────────────────────────────
         post_webhook(
             webhook,
@@ -212,7 +205,7 @@ def run_gender(payload: dict) -> None:
             section="gender",
             result={
                 "status": "done",
-                "model": "chorus_bs_roformer+aufr33",
+                "model": "chorus_bs_roformer",
                 "outputs": outputs,
             },
         )
@@ -226,7 +219,7 @@ def run_gender(payload: dict) -> None:
                 section="gender",
                 result={
                     "status": "failed",
-                    "model": "chorus_bs_roformer+aufr33",
+                    "model": "chorus_bs_roformer",
                     "outputs": {},
                 },
                 error=str(exc)[:400],

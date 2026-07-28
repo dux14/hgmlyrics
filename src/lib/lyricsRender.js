@@ -7,6 +7,7 @@
  */
 import { buildAnnotatedLineHTML, groupsForVoice } from './voiceSystem.js';
 import { escapeHtml as esc } from './escape.js';
+import { displayChord, displayNote, parseChordRoot } from './chordNotation.js';
 
 /**
  * Modo Letra (GA): texto blanco plano, escapado, sin etiquetas ni color.
@@ -27,13 +28,14 @@ const NORMALIZE = { Db: 'C#', Eb: 'D#', Fb: 'E', Gb: 'F#', Ab: 'G#', Bb: 'A#', C
  * @returns {string}
  */
 export function transposeChord(chord, semitones, useFlats) {
-  return chord.replace(/^([A-G][#b]?)/, (_, root) => {
-    const normalized = NORMALIZE[root] || root;
-    const idx = NOTES_SHARP.indexOf(normalized);
-    if (idx === -1) return root;
-    const newIdx = (((idx + semitones) % 12) + 12) % 12;
-    return useFlats ? NOTES_FLAT[newIdx] : NOTES_SHARP[newIdx];
-  });
+  const parsed = parseChordRoot(chord);
+  if (!parsed) return chord;
+  const root = parsed.root + parsed.accidental;
+  const normalized = NORMALIZE[root] || root;
+  const idx = NOTES_SHARP.indexOf(normalized);
+  if (idx === -1) return chord;
+  const newIdx = (((idx + semitones) % 12) + 12) % 12;
+  return (useFlats ? NOTES_FLAT[newIdx] : NOTES_SHARP[newIdx]) + parsed.rest;
 }
 
 /**
@@ -56,12 +58,63 @@ export function transposeNote(note, semitones, useFlats = false) {
   return `${useFlats ? NOTES_FLAT[newIdx] : NOTES_SHARP[newIdx]}${octave}`;
 }
 
+const KEY_RE = /^([A-G][#b]?)\s+(major|minor)$/i;
+
+/**
+ * Transpone el tono de una canción (formato "G major"/"D minor", constraint
+ * de la columna `songs.key`) a un símbolo de acorde anglo por semitonos, listo
+ * para `displayChord`. Entrada inválida/vacía → null (canción sin tono).
+ * @param {string} key
+ * @param {number} [semitones]
+ * @param {boolean} [useFlats]
+ * @returns {string|null}
+ */
+export function transposeKey(key, semitones = 0, useFlats = false) {
+  const m = KEY_RE.exec(String(key || '').trim());
+  if (!m) return null;
+  const symbol = m[2].toLowerCase() === 'minor' ? `${m[1]}m` : m[1];
+  return semitones ? transposeChord(symbol, semitones, useFlats) : symbol;
+}
+
+/**
+ * Etiqueta del bubble de tono (T3): "Sol · Original" / "La · +2" con key;
+ * "0 · Original" / "+2" sin key (la canción no tiene tono asignado).
+ * @param {string} key
+ * @param {number} semitones
+ * @param {boolean} useFlats
+ * @param {'anglo'|'latin'} notation
+ * @returns {string}
+ */
+export function buildTransposeBubbleLabel(key, semitones, useFlats, notation) {
+  const sign = semitones > 0 ? '+' : semitones < 0 ? '−' : '';
+  const deviation = semitones === 0 ? 'Original' : `${sign}${Math.abs(semitones)}`;
+  const transposedSymbol = transposeKey(key, semitones, useFlats);
+  if (!transposedSymbol) return semitones === 0 ? `0 · ${deviation}` : deviation;
+  return `${displayChord(transposedSymbol, notation)} · ${deviation}`;
+}
+
+/**
+ * Hint de cejilla (T3): "Cejilla {n} · suena en {tono real}" cuando hay key
+ * (la cejilla SUBE el tono sonante: +n semitonos sobre el tono original).
+ * Sin key, cae al texto plano previo.
+ * @param {string} key
+ * @param {number} cejilla
+ * @param {boolean} useFlats
+ * @param {'anglo'|'latin'} notation
+ * @returns {string}
+ */
+export function buildCejillaHint(key, cejilla, useFlats, notation) {
+  const symbol = transposeKey(key, cejilla, useFlats);
+  if (!symbol) return `Cejilla: ${cejilla}`;
+  return `Cejilla ${cejilla} · suena en ${displayChord(symbol, notation)}`;
+}
+
 /**
  * Modo Acordes (GA): letra atenuada (~55%) + acordes flotantes anclados a su
  * carácter (no parten palabras). `pos` se clampa a [0, len].
  * @param {string} text
  * @param {Array<{pos:number,ch:string}>} chords
- * @param {{ transposeSemitones?:number, useFlats?:boolean }} [opts]
+ * @param {{ transposeSemitones?:number, useFlats?:boolean, notation?:'anglo'|'latin' }} [opts]
  * @returns {string} HTML
  */
 export function buildChordsLineHTML(text, chords, opts = {}) {
@@ -69,9 +122,14 @@ export function buildChordsLineHTML(text, chords, opts = {}) {
   const len = str.length;
   const transposeSemitones = opts.transposeSemitones || 0;
   const useFlats = !!opts.useFlats;
+  const notation = opts.notation || 'anglo';
   const labels = (Array.isArray(chords) ? chords : []).map((c) => {
     const ch = transposeSemitones !== 0 ? transposeChord(c.ch, transposeSemitones, useFlats) : c.ch;
-    return { pos: Math.min(Math.max(c.pos || 0, 0), len), text: ch, className: 'chord-label' };
+    return {
+      pos: Math.min(Math.max(c.pos || 0, 0), len),
+      text: displayChord(ch, notation),
+      className: 'chord-label',
+    };
   });
   return buildAnnotatedLineHTML(str, { labels, baseClass: 'lyrics__letra-dim' });
 }
@@ -87,7 +145,7 @@ const hasNote = (g) => g.note !== null && g.note !== undefined && g.note !== '';
  */
 
 /**
- * Modo Tono (flag voz_tono): la letra cantada por la voz activa va neutra
+ * Modo Tono: la letra cantada por la voz activa va neutra
  * (clase `lyrics__tono-sung`, legible) y su NOTA flota sobre cada grupo con el
  * color de la voz (`colorClass`) para que resalte; el resto del texto se atenúa.
  *
@@ -100,12 +158,14 @@ const hasNote = (g) => g.note !== null && g.note !== undefined && g.note !== '';
  * @param {object} line  línea v3 con {text, groups}
  * @param {string} voiceId  id de la voz activa (roster)
  * @param {string} colorClass  clase de color de categoría, p.ej. 'voice-text--soprano'
+ * @param {{ notation?: 'anglo'|'latin' }} [opts]
  * @returns {string} HTML
  */
-export function buildTonoLineHTML(line, voiceId, colorClass) {
+export function buildTonoLineHTML(line, voiceId, colorClass, opts = {}) {
   const text = line?.text || '';
   const groups = groupsForVoice(line, voiceId);
   const cls = colorClass || '';
+  const notation = opts.notation || 'anglo';
   // Semántica Wave 4: el color vive en la palabra mientras el grupo no tiene
   // nota; cuando la nota existe, el color se muda a ella y la palabra va blanca.
   const spans = groups.map((g) => ({
@@ -115,14 +175,14 @@ export function buildTonoLineHTML(line, voiceId, colorClass) {
   }));
   const labels = groups.filter(hasNote).map((g) => ({
     pos: g.start,
-    text: g.note,
+    text: displayNote(g.note, notation),
     className: cls ? `${cls} tono-note` : 'tono-note',
   }));
   return buildAnnotatedLineHTML(text, { spans, labels, baseClass: 'lyrics__tono-dim' });
 }
 
 /**
- * Vista combinada (flag voz_tono): letra + acordes + tono de UNA voz en una
+ * Vista combinada: letra + acordes + tono de UNA voz en una
  * línea de 3 rieles ESTRICTOS de altura fija — acorde arriba / letra al medio /
  * nota abajo. Todo run de texto (incluido lo no cantado, comas, guiones) vive
  * en el riel de letra; los rieles existen en todos los segmentos para que nada
@@ -131,7 +191,7 @@ export function buildTonoLineHTML(line, voiceId, colorClass) {
  * @param {Array<{pos:number,ch:string}>} chords
  * @param {string} voiceId voz activa (roster)
  * @param {string} colorClass p.ej. 'voice-text--tenor'
- * @param {{ transposeSemitones?: number, useFlats?: boolean }} [opts]
+ * @param {{ transposeSemitones?: number, useFlats?: boolean, notation?:'anglo'|'latin' }} [opts]
  * @returns {string} HTML
  */
 export function buildMixedLineHTML(line, chords, voiceId, colorClass, opts = {}) {
@@ -139,6 +199,7 @@ export function buildMixedLineHTML(line, chords, voiceId, colorClass, opts = {})
   const len = text.length;
   const semis = opts.transposeSemitones || 0;
   const useFlats = !!opts.useFlats;
+  const notation = opts.notation || 'anglo';
   const cls = colorClass || '';
   const groups = groupsForVoice(line, voiceId);
 
@@ -146,13 +207,15 @@ export function buildMixedLineHTML(line, chords, voiceId, colorClass, opts = {})
   for (const c of Array.isArray(chords) ? chords : []) {
     const pos = Math.min(Math.max(c.pos || 0, 0), len);
     if (!chordByPos.has(pos)) {
-      chordByPos.set(pos, semis !== 0 ? transposeChord(c.ch, semis, useFlats) : c.ch);
+      const ch = semis !== 0 ? transposeChord(c.ch, semis, useFlats) : c.ch;
+      chordByPos.set(pos, displayChord(ch, notation));
     }
   }
   const noteByPos = new Map();
   for (const g of groups) {
     if (g.start < g.end && hasNote(g) && !noteByPos.has(g.start)) {
-      noteByPos.set(g.start, semis !== 0 ? transposeNote(g.note, semis, useFlats) : g.note);
+      const note = semis !== 0 ? transposeNote(g.note, semis, useFlats) : g.note;
+      noteByPos.set(g.start, displayNote(note, notation));
     }
   }
 
@@ -161,6 +224,11 @@ export function buildMixedLineHTML(line, chords, voiceId, colorClass, opts = {})
   for (const g of groups) {
     if (g.start >= 0 && g.start <= len) cuts.add(g.start);
     if (g.end >= 0 && g.end <= len) cuts.add(g.end);
+  }
+  // Corta también en los límites espacio/no-espacio: una palabra (run sin
+  // espacios) es la unidad de wrap; nunca se parte entre renglones.
+  for (let i = 1; i < len; i++) {
+    if (/\s/.test(text[i - 1]) !== /\s/.test(text[i])) cuts.add(i);
   }
   const points = [...cuts].sort((a, b) => a - b);
 
@@ -172,17 +240,45 @@ export function buildMixedLineHTML(line, chords, voiceId, colorClass, opts = {})
     `</span>`;
 
   let html = '';
+  let wordBuf = ''; // acumula los .mix-seg de la palabra en curso antes de volcarlos
+  const flushWord = () => {
+    if (!wordBuf) return;
+    html += `<span class="line-word">${wordBuf}</span>`;
+    wordBuf = '';
+  };
   for (let i = 0; i < points.length - 1; i++) {
     const a = points[i];
     const b = points[i + 1];
     if (a >= b) continue;
+    const slice = text.slice(a, b);
+    const hasAnchor = chordByPos.has(a) || noteByPos.has(a);
+    const isSpaceSlice = /^\s+$/.test(slice);
+    // Slice solo-espacios sin acorde/nota anclados en su inicio → texto plano
+    // fuera de cualquier wrapper (abre oportunidad de wrap entre palabras).
+    if (isSpaceSlice && !hasAnchor) {
+      flushWord();
+      html += esc(slice);
+      continue;
+    }
     const group = groups.find((g) => g.start <= a && g.end >= b && g.start < g.end);
     let lyricCls = 'lyrics__tono-dim';
     if (group) {
       lyricCls = hasNote(group) ? 'lyrics__tono-sung' : `lyrics__tono-pending ${cls}`.trim();
     }
-    html += seg(chordByPos.get(a), lyricCls, text.slice(a, b), noteByPos.get(a));
+    const segHtml = seg(chordByPos.get(a), lyricCls, slice, noteByPos.get(a));
+    if (isSpaceSlice) {
+      // Ancla cayó exactamente sobre un espacio (caso borde, p.ej. columnas
+      // de ChordPro alineadas al espacio entre palabras): el espacio SIGUE
+      // siendo punto de corte de línea válido, así que el .mix-seg va suelto
+      // — flushea la palabra previa ANTES y arranca una nueva después, para
+      // no fusionar las dos palabras vecinas en un .line-word inquebrantable.
+      flushWord();
+      html += segHtml;
+    } else {
+      wordBuf += segHtml;
+    }
   }
+  flushWord();
   // noteByPos.has(len) es defensivo — el esquema v3 impide g.start === len
   if (chordByPos.has(len) || noteByPos.has(len)) {
     html += seg(chordByPos.get(len), 'lyrics__tono-dim', '', noteByPos.get(len));

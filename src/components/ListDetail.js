@@ -34,11 +34,14 @@ import {
 } from '../lib/listDraft.js';
 import { songRowCompact } from './songRow.js';
 import { weeklyWordSearchRow } from '../lib/searchRow.js';
-import { navigate } from '../router.js';
+import { navigate, goBack } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { updateSidebarContent } from './Sidebar.js';
 import { escapeHtml } from '../lib/escape.js';
 import { voiceoverCoverHtml } from '../lib/voiceoverCover.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelRowList } from '../lib/skeleton.js';
+import { cachedSearchUsers } from '../lib/searchUsersCache.js';
 
 /* global CSS */
 
@@ -72,39 +75,32 @@ export async function renderListDetail(container, id, { mode = 'view' } = {}) {
     return;
   }
 
+  // Shell instantáneo: región async para el contenido de la lista.
   container.innerHTML = `
     <div class="list-detail__container">
-      <div class="empty-state fade-in">
-        <div class="empty-state__icon">${icon('list', { size: 40 })}</div>
-        <h2 class="empty-state__title">Cargando lista…</h2>
-      </div>
+      <div class="list-detail__region" aria-busy="true"></div>
     </div>
   `;
+  const region = container.querySelector('.list-detail__region');
 
-  let listData;
-  try {
-    listData = await getList(id);
-  } catch (err) {
-    container.innerHTML = `
-      <div class="list-detail__container">
-        <div class="empty-state fade-in">
-          <div class="empty-state__icon">${icon('frown', { size: 40 })}</div>
-          <h2 class="empty-state__title">Lista no encontrada</h2>
-          <p class="empty-state__text">${escapeHtml(err.message)}</p>
-          <button class="btn btn--secondary" id="list-detail-back">Volver</button>
-        </div>
-      </div>
-    `;
-    container.querySelector('#list-detail-back')?.addEventListener('click', () => navigate('/'));
-    return;
-  }
-
-  const isOwner = listData.role === 'owner';
-  if (mode === 'edit' && isOwner) {
-    renderEditor(container, listData);
-  } else {
-    renderReadonly(container, listData, { isOwner });
-  }
+  renderAsyncRegion(region, {
+    skeleton: () => skelRowList({ rows: 5 }),
+    fetcher: () => getList(id),
+    render: (listData) => {
+      const isOwner = listData.role === 'owner';
+      if (mode === 'edit' && isOwner) {
+        renderEditor(container, listData);
+      } else {
+        renderReadonly(container, listData, { isOwner });
+      }
+    },
+    onError: () => `
+      <div class="empty-state">
+        <div class="empty-state__icon">${icon('frown', { size: 40 })}</div>
+        <h2 class="empty-state__title">No se pudo cargar la lista</h2>
+        <button class="btn btn--primary" data-retry>Reintentar</button>
+      </div>`,
+  });
 }
 
 /* ── Editor (owner) ────────────────────────────────────────────── */
@@ -167,12 +163,20 @@ function renderEditor(container, listData, opts = {}) {
   const state = { step: 0 };
   const STEPS = [
     {
-      n: '01',
+      word: 'Cuándo',
       title: '¿Cuándo desaparece?',
       sub: 'Las listas son efímeras. Ponle nombre y elige cuándo caduca.',
     },
-    { n: '02', title: '¿Qué suena?', sub: 'Busca y arrastra para ordenar las canciones.' },
-    { n: '03', title: '¿Con quién?', sub: 'Invita amigos a tu lista efímera (opcional).' },
+    {
+      word: 'Qué suena',
+      title: '¿Qué suena?',
+      sub: 'Busca y arrastra para ordenar las canciones.',
+    },
+    {
+      word: 'Con quién',
+      title: '¿Con quién?',
+      sub: 'Invita amigos a tu lista efímera (opcional).',
+    },
   ];
 
   container.innerHTML = `
@@ -202,11 +206,12 @@ function renderEditor(container, listData, opts = {}) {
   const nextBtn = container.querySelector('#list-wizard-next');
 
   function renderRail() {
-    railEl.innerHTML = STEPS.map((s, i) => {
-      const cls =
-        i === state.step ? 'list-wizard__num--act' : i < state.step ? 'list-wizard__num--done' : '';
-      return `<div class="list-wizard__num ${cls}">${s.n}</div>`;
-    }).join('');
+    const label = isNew ? 'Paso' : 'Editar';
+    railEl.innerHTML = `
+      <p class="list-wizard__step-word">${label} ${state.step + 1} · ${STEPS[state.step].word}</p>
+      <div class="list-wizard__segs">
+        ${STEPS.map((_, i) => `<span class="list-wizard__seg ${i <= state.step ? 'is-on' : ''}"></span>`).join('')}
+      </div>`;
   }
 
   function renderStep() {
@@ -220,6 +225,7 @@ function renderEditor(container, listData, opts = {}) {
       state.step === STEPS.length - 1
         ? `${icon('check-circle', { size: 16 })} ${isNew ? 'Crear lista' : 'Guardar cambios'}`
         : 'Siguiente →';
+    nextBtn.classList.toggle('list-wizard__commit', state.step === STEPS.length - 1);
     if (state.step === 0) renderStep0(bodyEl);
     else if (state.step === 1) renderStep1(bodyEl);
     else renderStep2(bodyEl);
@@ -246,7 +252,9 @@ function renderEditor(container, listData, opts = {}) {
 
   backBtn.addEventListener('click', () => {
     if (state.step === 0) {
-      navigate('/');
+      // Paso 0 del asistente: salir a la pantalla desde la que se abrió (no al
+      // home fijo). Fallback a home si no hay pantalla anterior en la sesión.
+      goBack();
       return;
     }
     state.step -= 1;
@@ -265,26 +273,28 @@ function renderEditor(container, listData, opts = {}) {
 
   function renderStep0(el) {
     const lifeChip = expiresPreview();
+    const maxAttr = maxExpiresAt
+      ? (() => {
+          const d = new Date(maxExpiresAt);
+          const p = (x) => String(x).padStart(2, '0');
+          return `max="${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}"`;
+        })()
+      : '';
     el.innerHTML = `
+      <label class="list-wizard__label" for="list-detail-name">Nombre</label>
       <input class="list-detail__title-input" type="text" id="list-detail-name"
         value="${escapeHtml(draft.name)}" maxlength="80" placeholder="Nombre de la lista" aria-label="Nombre de la lista" />
       <label class="list-wizard__label" for="list-detail-datetime">Caduca el</label>
       <input class="list-wizard__datetime" type="datetime-local" id="list-detail-datetime"
-        value="${escapeHtml(draft.dateValue)}"
-        ${
-          maxExpiresAt
-            ? `max="${(() => {
-                const d = new Date(maxExpiresAt);
-                const p = (x) => String(x).padStart(2, '0');
-                return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-              })()}"`
-            : ''
-        } />
-      <div class="list-wizard__life-row">
-        <span>vida de la lista</span>
-        <span class="lists__expiry-chip ${lifeChip.urgent ? 'lists__expiry-chip--urgent' : ''}" id="list-detail-lifechip">${escapeHtml(lifeChip.text)}</span>
+        value="${escapeHtml(draft.dateValue)}" ${maxAttr} />
+      <div class="list-wizard__expiry">
+        <div class="list-wizard__expiry-row">
+          <span class="list-wizard__countdown ${lifeChip.urgent ? 'is-urgent' : ''}" id="list-detail-lifechip">${escapeHtml(lifeChip.text)}</span>
+          <span class="list-wizard__expiry-label">Vida de la lista</span>
+        </div>
+        <span class="list-wizard__expiry-date" id="list-detail-expdate">${escapeHtml(lifeChip.absolute)}</span>
+        <div class="list-wizard__life ${lifeChip.urgent ? 'is-urgent' : ''}"><i id="list-detail-lifebar" style="width:${lifeChip.pct}%"></i></div>
       </div>
-      <div class="list-wizard__life"><i id="list-detail-lifebar" style="width:${lifeChip.pct}%"></i></div>
       ${isNew ? '' : `<button class="btn btn--secondary list-wizard__delete" id="list-detail-delete" type="button">${icon('trash', { size: 14 })} Borrar lista</button>`}
     `;
     el.querySelector('#list-detail-name').addEventListener('input', (e) => {
@@ -308,22 +318,33 @@ function renderEditor(container, listData, opts = {}) {
         current: draft.expiresAt,
       });
     } catch {
-      return { text: 'fecha inválida', urgent: true, pct: 0 };
+      return { text: 'Fecha inválida', absolute: '', urgent: true, pct: 0 };
     }
     const days = Math.max(0, Math.round((new Date(iso) - Date.now()) / 86400000));
     const pct = Math.min(100, Math.round((days / 30) * 100));
-    return { text: formatExpiry(iso) || 'caduca hoy', urgent: isUrgent(iso), pct };
+    const absolute = new Date(iso).toLocaleString('es', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    return { text: formatExpiry(iso) || 'Caduca hoy', absolute, urgent: isUrgent(iso), pct };
   }
 
   function updateLife(el) {
     const p = expiresPreview();
     const chip = el.querySelector('#list-detail-lifechip');
     const bar = el.querySelector('#list-detail-lifebar');
+    const expdate = el.querySelector('#list-detail-expdate');
+    const lifeEl = el.querySelector('.list-wizard__life');
     if (chip) {
       chip.textContent = p.text;
-      chip.classList.toggle('lists__expiry-chip--urgent', p.urgent);
+      chip.classList.toggle('is-urgent', p.urgent);
     }
+    if (expdate) expdate.textContent = p.absolute;
     if (bar) bar.style.width = `${p.pct}%`;
+    if (lifeEl) lifeEl.classList.toggle('is-urgent', p.urgent);
   }
 
   async function onDelete() {
@@ -344,7 +365,10 @@ function renderEditor(container, listData, opts = {}) {
           : ''
       }
       <div class="list-detail__search-wrap">
-        <input class="list-detail__search-input" type="search" id="list-detail-search" placeholder="Buscar y agregar canciones…" autocomplete="off" />
+        <div class="list-detail__search">
+          ${icon('search', { size: 18 })}
+          <input class="list-detail__search-input" type="search" id="list-detail-search" placeholder="Buscar y agregar canciones…" autocomplete="off" />
+        </div>
         <div class="list-detail__search-results" id="list-detail-results" style="display:none"></div>
       </div>
       <div class="list-detail__songs" id="list-detail-songs"></div>
@@ -407,7 +431,7 @@ function renderEditor(container, listData, opts = {}) {
 
     function renderSongs(enteringId = null) {
       if (draft.order.length === 0) {
-        songsEl.innerHTML = `<p class="list-detail__empty">Busca arriba para agregar canciones.</p>`;
+        songsEl.innerHTML = `<div class="list-detail__empty-state">${icon('list', { size: 32 })}<p>Busca arriba para agregar canciones.</p></div>`;
         return;
       }
       songsEl.innerHTML = draft.order.map((it, idx) => draftItemRow(it, idx)).join('');
@@ -637,8 +661,11 @@ function renderEditor(container, listData, opts = {}) {
   function renderStep2(el) {
     const admin = isAdmin();
     el.innerHTML = `
-      <input class="list-detail__search-input" type="search" id="list-detail-friend-search"
-        placeholder="${admin ? 'Buscar entre todos los usuarios…' : 'Buscar entre tus amigos…'}" autocomplete="off" />
+      <div class="list-detail__search">
+        ${icon('search', { size: 18 })}
+        <input class="list-detail__search-input" type="search" id="list-detail-friend-search"
+          placeholder="${admin ? 'Buscar entre todos los usuarios…' : 'Buscar entre tus amigos…'}" autocomplete="off" />
+      </div>
       ${admin ? `<p class="list-detail__admin-hint">${icon('users', { size: 13 })} Modo admin · puedes invitar a cualquier usuario</p>` : ''}
       <div class="list-detail__friend-results" id="list-detail-friend-results"></div>
       <div class="list-detail__invitees" id="list-detail-invitees"></div>
@@ -715,7 +742,7 @@ function renderEditor(container, listData, opts = {}) {
       if (admin) {
         const seq = ++searchSeq;
         searchTimer = setTimeout(async () => {
-          const results = await searchUsers(q);
+          const results = await cachedSearchUsers(q, searchUsers);
           if (seq !== searchSeq) return; // llegó una respuesta vieja
           const matches = results.filter((u) => !excluded.has(u.id));
           friendResultsEl.innerHTML = matches.length
@@ -808,7 +835,7 @@ function renderReadonly(container, listData, { isOwner } = {}) {
 
   const songsPaneHtml =
     orderedItems.length === 0
-      ? `<p class="list-detail__empty">Esta lista no tiene canciones aún.</p>`
+      ? `<div class="list-detail__empty-state">${icon('list', { size: 32 })}<p>Esta lista no tiene canciones aún.</p></div>`
       : orderedItems
           .map((it, idx) => {
             if (it.item_type === 'weekly_word') {

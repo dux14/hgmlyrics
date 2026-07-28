@@ -140,4 +140,35 @@ describe('PUT /api/lists/[id]/songs — typed items', () => {
     await listSongsHandler(req, res);
     expect(res.statusCode).toBe(200);
   });
+
+  it('inserta las N filas en un solo INSERT multi-fila (no un round-trip por item)', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null });
+    sqlResponses.push([{ id: 'l1' }]); // ownership check
+
+    const req = {
+      method: 'PUT',
+      headers: { authorization: 'Bearer t' },
+      body: {
+        items: [
+          { item_type: 'song', item_id: 's1' },
+          { item_type: 'song', item_id: 's2' },
+          { item_type: 'weekly_word', item_id: 'ww1' },
+        ],
+      },
+      query: { id: 'l1' },
+    };
+    const res = makeRes();
+    await listSongsHandler(req, res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.count).toBe(3);
+
+    const insertCalls = sqlCalls.filter((c) => c.text.includes('INSERT INTO ephemeral_list_items'));
+    expect(insertCalls).toHaveLength(1); // una sola sentencia, no 3
+    const [rows] = insertCalls[0].values;
+    expect(rows).toEqual([
+      { list_id: 'l1', item_type: 'song', item_id: 's1', position: 0 },
+      { list_id: 'l1', item_type: 'song', item_id: 's2', position: 1 },
+      { list_id: 'l1', item_type: 'weekly_word', item_id: 'ww1', position: 2 },
+    ]);
+  });
 });

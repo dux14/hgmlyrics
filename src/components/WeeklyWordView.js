@@ -2,12 +2,14 @@
 // Vista de detalle de una "Palabra de la semana" (weekly_word).
 // Una columna centrada, max-width legible. No reutiliza SongView.
 
+import '../styles/weekly-word.css';
 import { navigate } from '../router.js';
 import { isAdmin } from '../lib/authStore.js';
-import { splitVoiceover } from '../lib/voiceover.js';
 import { liturgicalPalette, coverGradient } from '../lib/liturgicalColor.js';
-import { escapeHtml } from '../lib/escape.js';
+import { vozHeroBodyHtml } from '../lib/vozHeroBody.js';
 import { icon } from '../lib/icons.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelLongText } from '../lib/skeleton.js';
 
 // Tamaño de letra del lector de voces en off (persistido, propio del módulo).
 const VOZ_FONT_KEY = 'hkn-voz-font-size';
@@ -23,44 +25,6 @@ function getVozFontSize() {
 }
 
 /**
- * El título litúrgico del ordo suele traer la fecha y el color
- * ("14 Junio, Domingo. 11ª Sem. del Tiempo Ordinario, Verde"), redundantes con
- * la fecha formateada y el chip de color. Deja solo la descripción litúrgica.
- * @param {string|null|undefined} title
- * @returns {string}
- */
-function cleanLiturgicalTitle(title) {
-  if (!title) return '';
-  let t = String(title).trim();
-  // Quita el prefijo de fecha/día si lo hay: todo lo previo al primer ". "
-  // cuando ese prefijo contiene un número (la fecha).
-  const dotIdx = t.indexOf('. ');
-  if (dotIdx !== -1 && /\d/.test(t.slice(0, dotIdx))) {
-    t = t.slice(dotIdx + 2);
-  }
-  // Quita el color litúrgico al final (ya está en el chip).
-  return t.replace(/,\s*(verde|morado|blanco|rojo|rosa|rosáceo|púrpura|violeta)\s*$/i, '').trim();
-}
-
-/**
- * Formatea una fecha ISO (YYYY-MM-DD) como "15 de junio de 2026".
- * @param {string} isoDate
- * @returns {string}
- */
-function formatSundayDate(isoDate) {
-  if (!isoDate) return '';
-  // La columna es DATE pero la API puede devolver un timestamp ISO completo
-  // ("2026-06-14T00:00:00.000Z"); nos quedamos con la parte YYYY-MM-DD.
-  const [y, m, d] = String(isoDate).slice(0, 10).split('-').map(Number);
-  if (!y || !m || !d) return '';
-  return new Date(y, m - 1, d).toLocaleDateString('es', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-}
-
-/**
  * Renderiza la vista de detalle de una voz en off.
  * @param {HTMLElement} container
  * @param {object} word - Objeto weekly_word completo
@@ -68,104 +32,48 @@ function formatSundayDate(isoDate) {
 export async function renderWeeklyWordView(container, word) {
   const palette = liturgicalPalette(word.liturgical_color);
   const gradient = coverGradient(palette);
-  const { scripture, reflection } = splitVoiceover(word.voiceover_body, word.gospel_body);
-  const dateLabel = formatSundayDate(word.sunday_date);
-  const cleanTitle = cleanLiturgicalTitle(word.liturgical_title);
   const fontSize = getVozFontSize();
 
-  // Estilos compartidos por los bloques de texto: color pleno + buen interlineado.
-  const proseStyle =
-    'white-space: pre-wrap; font-family: inherit; margin: 0; color: var(--color-text); font-size: var(--voz-fs); line-height: 1.75;';
-
+  // Hero + cuerpo (cita/reflexión) + evangelio: helper compartido con el
+  // preview de VozEditor (F3c), para que ambas vistas nunca diverjan.
   container.innerHTML = `
-    <div class="voz-view fade-in" style="max-width: 680px; margin: 0 auto; padding: 1.5rem 1rem; --voz-fs: ${fontSize}rem;">
-
-      <!-- Breadcrumb -->
-      <nav class="breadcrumb" aria-label="Breadcrumb">
-        <a href="#/" id="voz-breadcrumb-home">Inicio</a>
-        <span class="breadcrumb__separator">›</span>
-        <a href="#/voces" id="voz-breadcrumb-album">Voces en off</a>
-        <span class="breadcrumb__separator">›</span>
-        <span class="breadcrumb__current">${escapeHtml(word.gospel_ref)}</span>
-      </nav>
-
-      <!-- Hero -->
-      <div class="voz-view__hero" style="background: ${gradient}; border-radius: var(--border-radius-lg); padding: 2rem 1.5rem; margin: 1rem 0 1.5rem; color: ${palette.text};">
-        <p class="voz-view__eyebrow" style="font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.85; margin: 0 0 0.5rem;">
-          <span style="display:inline-flex; align-items:center; gap:0.4em; color: inherit;">${icon('gospel', { size: 15 })} Palabra de la semana</span>
-        </p>
-        <h1 class="voz-view__title" style="font-size: 1.8rem; font-weight: 700; margin: 0 0 0.75rem; color: inherit;">
-          ${escapeHtml(word.gospel_ref)}
-        </h1>
-        <p style="margin: 0; opacity: 0.92; font-size: 0.9rem;">
-          ${escapeHtml(dateLabel)}${cleanTitle ? ` · ${escapeHtml(cleanTitle)}` : ''}
-        </p>
-        ${word.liturgical_color ? `<span class="voz-view__color-chip" style="display: inline-block; margin-top: 0.75rem; background: ${palette.accent}; color: ${palette.bg}; border-radius: 999px; padding: 0.2em 0.75em; font-size: 0.75rem; font-weight: 600;">${escapeHtml(palette.label)}</span>` : ''}
-      </div>
-
-      <!-- Barra de acciones: tamaño de letra (+ editar si admin) -->
-      <div class="voz-view__toolbar" style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1.25rem;">
-        <div class="font-controls" style="display: flex; align-items: center; gap: 0.4rem;" role="group" aria-label="Tamaño de letra">
-          <button class="font-controls__btn" id="voz-font-dec" aria-label="Reducir tamaño de letra">A−</button>
-          <span class="font-controls__label" id="voz-font-label" aria-live="polite">${Math.round(fontSize * 100)}%</span>
-          <button class="font-controls__btn" id="voz-font-inc" aria-label="Aumentar tamaño de letra">A+</button>
-        </div>
-        ${
-          isAdmin()
-            ? `<button class="btn btn--secondary" data-action="edit-voz">${icon('pencil', { size: 16 })} Editar</button>`
-            : ''
-        }
-      </div>
-
-      <!-- Bloque Voz en off -->
-      <section class="voz-view__block" aria-label="Voz en off">
-        ${
-          scripture
-            ? `
-        <div class="voz__scripture" style="border-left: 3px solid ${palette.accent}; padding-left: 1rem; margin-bottom: 1.25rem; font-style: italic;">
-          <pre style="${proseStyle}">${escapeHtml(scripture)}</pre>
-        </div>`
-            : ''
-        }
-
-        ${
-          reflection
-            ? `
-        <div class="voz__reflection-sep" style="display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0; color: ${palette.accent}; font-size: 0.85rem; font-weight: 600; letter-spacing: 0.08em;">
-          <span style="flex: 1; height: 1px; background: ${palette.accent}; opacity: 0.35;"></span>
-          ✦ Reflexión
-          <span style="flex: 1; height: 1px; background: ${palette.accent}; opacity: 0.35;"></span>
-        </div>
-        <pre class="voz__reflection" style="${proseStyle}">${escapeHtml(reflection)}</pre>`
-            : !scripture
-              ? `
-        <pre class="voz__reflection" style="${proseStyle}">${escapeHtml(word.voiceover_body || '')}</pre>`
-              : ''
-        }
-      </section>
-
-      <!-- Bloque Evangelio -->
-      ${
-        word.gospel_body
-          ? `
-      <section class="voz-view__block voz-view__gospel" style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--color-border);" aria-label="Evangelio">
-        <p class="voz-view__gospel-label" style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.1em; color: ${palette.accent}; font-weight: 600; margin: 0 0 0.75rem;">
-          Evangelio · ${escapeHtml(word.gospel_ref)}
-        </p>
-        <pre style="white-space: pre-wrap; font-family: inherit; margin: 0 0 0.5rem; color: var(--color-text); font-size: calc(var(--voz-fs) * 0.94); line-height: 1.7;">${escapeHtml(word.gospel_body)}</pre>
-        <p style="font-size: 0.7rem; color: var(--color-text-secondary); margin: 0;">
-          Fuente: Ordo · snapshot · editable
-        </p>
-      </section>`
-          : ''
-      }
-
+    <div class="voz-view fade-in">
+      ${vozHeroBodyHtml(word)}
     </div>
   `;
 
   const viewEl = container.querySelector('.voz-view');
+  const heroEl = container.querySelector('.voz-view__hero');
+
+  // Controles de tamaño de letra: chrome propio de esta vista, no vive en el
+  // helper compartido. Se inserta dentro del hero, esquina superior derecha.
+  heroEl.insertAdjacentHTML(
+    'beforeend',
+    `
+    <div class="font-controls voz-view__font-controls" role="group" aria-label="Tamaño de letra">
+      <button class="font-controls__btn" id="voz-font-dec" aria-label="Reducir tamaño de letra">A−</button>
+      <span class="font-controls__label" id="voz-font-label" aria-live="polite">${Math.round(fontSize * 100)}%</span>
+      <button class="font-controls__btn" id="voz-font-inc" aria-label="Aumentar tamaño de letra">A+</button>
+    </div>
+  `,
+  );
+
+  if (isAdmin()) {
+    viewEl.insertAdjacentHTML(
+      'beforeend',
+      `<button class="btn voz-view__edit-cta" data-action="edit-voz">${icon('pencil', { size: 16 })} Editar voz en off</button>`,
+    );
+  }
+
   const labelEl = container.querySelector('#voz-font-label');
   let currentSize = fontSize;
+
+  // Tamaño de letra inicial y vars litúrgicas del hero
+  viewEl.style.setProperty('--voz-fs', `${currentSize}rem`);
+  heroEl.style.setProperty('--liturgical-gradient', gradient);
+  heroEl.style.setProperty('--liturgical-accent', palette.accent);
+  heroEl.style.setProperty('--liturgical-text', palette.text);
+  heroEl.style.setProperty('--liturgical-bg', palette.bg);
 
   function applyFont(size) {
     currentSize = Math.min(VOZ_FONT_MAX, Math.max(VOZ_FONT_MIN, size));
@@ -181,14 +89,6 @@ export async function renderWeeklyWordView(container, word) {
     applyFont(currentSize + VOZ_FONT_STEP);
   });
 
-  container.querySelector('#voz-breadcrumb-home')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    navigate('/');
-  });
-  container.querySelector('#voz-breadcrumb-album')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    navigate('/voces');
-  });
   container.querySelector('[data-action="edit-voz"]')?.addEventListener('click', () => {
     navigate(`/admin/voz/${word.id}`);
   });
@@ -200,30 +100,32 @@ export async function renderWeeklyWordView(container, word) {
  * @param {string} id - weekly_words.id
  */
 export async function renderWeeklyWordById(container, id) {
+  // Shell + región async (sin caché previa).
   container.innerHTML = `
-    <div class="empty-state fade-in">
-      <div class="empty-state__icon">${icon('gospel', { size: 40 })}</div>
-      <h2 class="empty-state__title">Cargando...</h2>
+    <div class="voz-view__shell">
+      <div class="voz-view__region" aria-busy="true"></div>
     </div>
   `;
-  try {
-    const { supabase } = await import('../lib/supabase.js');
-    const { data: session } = await supabase.auth.getSession();
-    const token = session?.session?.access_token;
-    const res = await fetch(`/api/weekly-words/${id}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) throw new Error(`${res.status}`);
-    const word = await res.json();
-    await renderWeeklyWordView(container, word);
-  } catch (_e) {
-    container.innerHTML = `
-      <div class="empty-state fade-in">
+  const region = container.querySelector('.voz-view__region');
+
+  renderAsyncRegion(region, {
+    skeleton: () => skelLongText(),
+    fetcher: async () => {
+      const { getWeeklyWord } = await import('../lib/weeklyWords.js');
+      return getWeeklyWord(id);
+    },
+    render: (word) => renderWeeklyWordView(container, word),
+    empty: () => `
+      <div class="empty-state">
         <div class="empty-state__icon">${icon('frown', { size: 48 })}</div>
         <h2 class="empty-state__title">Voz en off no encontrada</h2>
-        <button class="btn btn--primary" id="voz-go-home" style="margin-top: 1rem;">Volver al inicio</button>
-      </div>
-    `;
-    container.querySelector('#voz-go-home')?.addEventListener('click', () => navigate('/'));
-  }
+        <a class="btn btn--primary" href="#/">Volver al inicio</a>
+      </div>`,
+    onError: () => `
+      <div class="empty-state">
+        <div class="empty-state__icon">${icon('frown', { size: 48 })}</div>
+        <h2 class="empty-state__title">No se pudo cargar la voz en off</h2>
+        <button class="btn btn--primary" data-retry>Reintentar</button>
+      </div>`,
+  });
 }

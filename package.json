@@ -14,6 +14,7 @@
     "format": "prettier --write 'src/**/*.{js,css,html,json}'",
     "format:check": "prettier --check 'src/**/*.{js,css,html,json}'",
     "optimize:covers": "node scripts/optimize-covers.mjs",
+    "extract:colors": "node scripts/extract-cover-colors.mjs",
     "dev:vercel": "vercel dev --listen 3000",
     "test:e2e:offline": "pnpm build && start-server-and-test 'pnpm preview --port 4173' http://localhost:4173 'playwright test e2e/offline.spec.js'",
     "lhci": "pnpm build && lhci autorun",
@@ -26,9 +27,11 @@
     ]
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.112.4",
     "@eslint/js": "^10.0.0",
     "@lhci/cli": "^0.13.0",
     "@playwright/test": "^1.61.1",
+    "@tailwindcss/vite": "^4.3.1",
     "@vitest/coverage-v8": "^4.1.0",
     "eslint": "^10.0.3",
     "husky": "^9.1.7",
@@ -46,7 +49,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.106.0",
     "fflate": "^0.8.3",
-    "flexsearch": "^0.8.212",
+    "file-type": "^22.0.1",
     "formidable": "^3.5.4",
     "idb-keyval": "^6.2.2",
     "phaser": "^4.1.0",

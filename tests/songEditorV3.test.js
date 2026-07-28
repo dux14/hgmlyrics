@@ -6,7 +6,6 @@ vi.mock('../src/lib/store.js', () => ({ fetchSongDetail: vi.fn(), refreshData: v
 vi.mock('../src/router.js', () => ({ navigate: vi.fn() }));
 vi.mock('../src/lib/authStore.js', () => ({
   getSession: vi.fn(() => null),
-  isFeatureEnabled: vi.fn(() => true),
 }));
 
 const { blocksToSectionsV3 } = await import('../src/components/SongEditor.js');
@@ -66,6 +65,43 @@ describe('blocksToSectionsV3', () => {
     ];
     const out = blocksToSectionsV3(blocks);
     expect(out[0].lines[0]).toEqual({ text: '(x4)', annotation: true });
+  });
+
+  it('conserva una línea con texto vacío si tiene voces asignadas (groups)', () => {
+    const blocks = [
+      {
+        type: 'verse',
+        label: 'E1',
+        lines: [
+          {
+            id: 'l1',
+            text: '',
+            groups: [{ start: 0, end: 2, voiceId: 'v1', note: 'A3' }],
+            chords: [],
+            annotation: false,
+            spoken: false,
+          },
+        ],
+      },
+    ];
+    const out = blocksToSectionsV3(blocks);
+    expect(out[0].lines).toHaveLength(1);
+    expect(out[0].lines[0]).toEqual({
+      text: '',
+      groups: [{ start: 0, end: 2, voiceId: 'v1', note: 'A3' }],
+    });
+  });
+
+  it('filtra una línea con texto vacío y sin groups/chords/annotation/spoken', () => {
+    const blocks = [
+      {
+        type: 'verse',
+        label: 'E1',
+        lines: [{ id: 'l1', text: '', groups: [], chords: [], annotation: false, spoken: false }],
+      },
+    ];
+    const out = blocksToSectionsV3(blocks);
+    expect(out[0].lines).toHaveLength(0);
   });
 
   it('normaliza note ausente a null', () => {

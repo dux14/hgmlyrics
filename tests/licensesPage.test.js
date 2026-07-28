@@ -19,16 +19,46 @@ describe('renderLicenses', () => {
     expect(text).toContain('MedleyVox');
   });
 
+  it('incluye los modelos del pipeline Partitura vocal (P1/P2)', () => {
+    renderLicenses(container);
+    const text = container.textContent;
+
+    expect(text).toContain('torchcrepe');
+    expect(text).toContain('CREPE');
+    expect(text).toContain('WhisperX');
+    expect(text).toContain('pyphen');
+    expect(text).toContain('librosa');
+  });
+
+  it('incluye las librerias de render/export del pipeline Partitura (P3)', () => {
+    renderLicenses(container);
+    const text = container.textContent;
+
+    expect(text).toContain('music21');
+    expect(text).toContain('pretty_midi');
+    expect(text).toContain('cairosvg');
+  });
+
+  it('incluye los modelos de coros del pipeline Partitura (P4)', () => {
+    renderLicenses(container);
+    const text = container.textContent;
+
+    expect(text).toContain('Basic Pitch');
+    expect(text).toContain('chorus_bs_roformer');
+    expect(text).toContain('esta ruta queda');
+    expect(text).toContain('bloqueada');
+  });
+
   it('incluye la nota de monetizacion', () => {
     renderLicenses(container);
     expect(container.textContent).toContain('monetizada');
     expect(container.textContent).toContain('NC');
   });
 
-  it('incluye el boton de volver', () => {
+  it('no incluye el boton de volver (rediseno: navegacion via bottom-nav)', () => {
     renderLicenses(container);
     const btn = container.querySelector('#back-btn');
-    expect(btn).not.toBeNull();
+    expect(btn).toBeNull();
   });
 
   it('reemplaza el contenido previo del container', () => {

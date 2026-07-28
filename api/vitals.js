@@ -18,11 +18,22 @@ export function validateVital(b) {
   if (b.attribution != null) {
     if (typeof b.attribution !== 'object') return false;
     if (!optStr(b.attribution.target, 512)) return false;
+    // El objeto completo (no solo `.target`) viaja entero a sql.json(...): sin
+    // este tope, un cliente puede mandar attribution.junk arbitrariamente
+    // grande (confirmado en vivo: 2MB → fila de 2.097.186 bytes en web_vitals,
+    // endpoint sin auth). 2048 alcanza de sobra al shape real de web-vitals
+    // (target + rects + IDs cortos).
+    if (JSON.stringify(b.attribution).length > 2048) return false;
   }
   return true;
 }
 
 // Rate-limit en memoria por IP (best-effort; Fluid Compute comparte instancia).
+// La clave es x-forwarded-for, que el cliente puede falsificar (no hay upstream
+// confiable que la fije) — no es una barrera de seguridad, es mitigación de
+// costo/ruido para el caso común de un cliente descontrolado. El tope real
+// contra payloads maliciosos es el límite de tamaño de arriba + el cron de
+// purga (api/vitals/cleanup.js).
 const hits = new Map();
 const MAX_TRACKED = 10000;
 function rateLimited(ip) {

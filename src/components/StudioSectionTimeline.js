@@ -102,7 +102,7 @@ export function renderTimeline(segments, { onSeek } = {}) {
  */
 export function markActive(rootEl, currentTimeS) {
   const rows = rootEl.querySelectorAll('.studio-sectl__row');
-  rows.forEach(row => {
+  rows.forEach((row) => {
     const start = parseFloat(row.dataset.start);
     const end = parseFloat(row.dataset.end);
     const active = currentTimeS >= start && currentTimeS < end;

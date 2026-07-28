@@ -14,7 +14,7 @@ describe('renderPrayerPage', () => {
     expect(root).not.toBeNull();
 
     // Etiqueta superior
-    expect(container.querySelector('.prayer__label').textContent).toMatch(/Oración del artista/i);
+    expect(container.querySelector('.prayer__title').textContent).toMatch(/Oración del artista/i);
 
     // 5 estrofas
     const stanzas = container.querySelectorAll('.prayer__stanza');

@@ -1,10 +1,21 @@
 /**
- * FriendsPanel.js — /amigos page with tabs: friends / incoming / outgoing + search.
+ * FriendsPanel.js — /amigos page: sections (solicitudes/amigos) + búsqueda inline.
  */
+import '../styles/friends.css';
 import { getSession } from '../lib/authStore.js';
 import { emitPendingChanged } from '../lib/friends.js';
 import { escapeHtml } from '../lib/escape.js';
 import { isFounder, founderCrownHtml } from '../lib/founders.js';
+import { icon } from '../lib/icons.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelRowList } from '../lib/skeleton.js';
+import { showToast } from '../lib/toast.js';
+import {
+  getFriends,
+  invalidateFriends,
+  invalidateMyProfile,
+  invalidatePublicProfile,
+} from '../lib/profileCache.js';
 
 let searchTimer = null;
 
@@ -19,16 +30,6 @@ async function api(path, opts = {}) {
     },
   });
   return { ok: res.ok, status: res.status, data: await res.json().catch(() => null) };
-}
-
-async function fetchList() {
-  return (
-    (await api('/api/social/friends')).data || {
-      accepted: [],
-      pendingIncoming: [],
-      pendingOutgoing: [],
-    }
-  );
 }
 
 async function searchUsers(q) {
@@ -54,27 +55,10 @@ async function removeFriendship(otherUserId) {
   });
 }
 
-export function buildTabs(activeTab, incomingCount) {
-  const tab = (key, label) => {
-    const sel = activeTab === key;
-    const count =
-      key === 'incoming' && incomingCount > 0
-        ? `<span class="seg-tab__count">${incomingCount}</span>`
-        : '';
-    return `<button class="seg-tab${sel ? ' seg-tab--active' : ''}" role="tab" aria-selected="${sel}" data-tab="${key}">${label}${count}</button>`;
-  };
-  return `
-    <div class="seg-tabs" role="tablist">
-      ${tab('accepted', 'Amigos')}
-      ${tab('incoming', 'Recibidas')}
-      ${tab('outgoing', 'Enviadas')}
-    </div>
-  `;
-}
-
-export function buildFriendItem(item, viewerId, kind) {
+/** Normaliza un item de friendship al "otro" usuario respecto al viewer. */
+export function normalizeOther(item, viewerId) {
   const otherIsRequester = item.requesterId !== viewerId;
-  const other = otherIsRequester
+  return otherIsRequester
     ? {
         id: item.requesterId,
         username: item.requesterUsername,
@@ -87,157 +71,287 @@ export function buildFriendItem(item, viewerId, kind) {
         displayName: item.addresseeDisplayName,
         avatarUrl: item.addresseeAvatarUrl,
       };
-  const initial = (other.displayName || other.username || '?').trim().charAt(0).toUpperCase();
-  const crown = isFounder(other.username) ? founderCrownHtml() : '';
-  const avatarInner = other.avatarUrl
-    ? `<img class="friend-card__avatar" src="${escapeHtml(other.avatarUrl || '')}" alt="" width="44" height="44" loading="lazy" decoding="async" />`
-    : `<span class="friend-card__avatar friend-card__avatar--initial">${initial}</span>`;
-  const avatar = `<span class="avatar-wrap">${avatarInner}${crown}</span>`;
-  const actions =
-    kind === 'incoming'
-      ? `<button class="pill pill--primary" data-act="accept" data-id="${other.id}">Aceptar</button>
-         <button class="pill pill--ghost" data-act="reject" data-id="${other.id}">Rechazar</button>`
-      : kind === 'outgoing'
-        ? `<button class="pill pill--ghost" data-act="cancel" data-id="${other.id}">Cancelar</button>`
-        : `<button class="pill pill--ghost" data-act="unfriend" data-id="${other.id}">Quitar</button>`;
+}
+
+function avatarHtml(person) {
+  const initial = (person.displayName || person.username || '?').trim().charAt(0).toUpperCase();
+  const crown = isFounder(person.username) ? founderCrownHtml() : '';
+  const inner = person.avatarUrl
+    ? `<img class="friend-row__avatar" src="${escapeHtml(person.avatarUrl || '')}" alt="" width="46" height="46" loading="lazy" decoding="async" />`
+    : `<span class="friend-row__avatar friend-row__avatar--initial">${initial}</span>`;
+  return `<span class="avatar-wrap">${inner}${crown}</span>`;
+}
+
+function rowShell(person, actionsHtml) {
   return `
-    <li class="friend-card">
-      ${avatar}
-      <div class="friend-card__id">
-        <a href="#/u/${encodeURIComponent(other.username)}" class="friend-card__name">${escapeHtml(other.displayName || other.username)}</a>
-        <div class="profile-username">@${escapeHtml(other.username)}</div>
-      </div>
-      <div class="friend-card__actions">${actions}</div>
-    </li>
-  `;
+    <li class="friend-row" data-username="${escapeHtml(person.username)}">
+      ${avatarHtml(person)}
+      <a class="friend-row__id" href="#/u/${encodeURIComponent(person.username)}">
+        <span class="friend-row__name">${escapeHtml(person.displayName || person.username)}</span>
+        <span class="friend-row__user">@${escapeHtml(person.username)}</span>
+      </a>
+      <div class="friend-row__act">${actionsHtml}</div>
+    </li>`;
+}
+
+const iconBtn = (act, id, cls, name, label) =>
+  `<button class="friend-ib friend-ib--${cls}" data-act="${act}" data-id="${id}" title="${label}" aria-label="${label}">${icon(name, { size: 20 })}</button>`;
+
+/** Fila de la lista por secciones. kind: 'friend' | 'incoming' | 'outgoing'. */
+export function buildFriendRow(person, { kind }) {
+  let actions;
+  if (kind === 'incoming') {
+    actions =
+      iconBtn('accept', person.id, 'accept', 'check', 'Aceptar') +
+      iconBtn('reject', person.id, 'reject', 'close', 'Rechazar');
+  } else if (kind === 'outgoing') {
+    actions = iconBtn('cancel', person.id, 'pending', 'clock', 'Cancelar solicitud');
+  } else {
+    actions = iconBtn('unfriend', person.id, 'friend', 'check', 'Amigos — quitar');
+  }
+  const html = rowShell(person, actions);
+  return kind === 'outgoing'
+    ? html.replace(`@${escapeHtml(person.username)}`, `@${escapeHtml(person.username)} · enviada`)
+    : html;
+}
+
+function sectionHeader(title, extraClass = '') {
+  return `<h2 class="friend-sec${extraClass ? ' ' + extraClass : ''}">${title}</h2>`;
+}
+
+/** Construye la vista por secciones (Solicitudes → Amigos) a partir del payload de /friends. */
+export function buildSections(data, viewerId) {
+  const accepted = data.accepted || [];
+  const incoming = data.pendingIncoming || [];
+  const outgoing = data.pendingOutgoing || [];
+
+  if (accepted.length === 0 && incoming.length === 0 && outgoing.length === 0) {
+    return `
+      <li class="empty-state">
+        <div class="empty-state__icon">${icon('user-plus', { size: 40 })}</div>
+        <h2 class="empty-state__title">Sin amigos aún</h2>
+        <p class="empty-state__text">Busca usuarios arriba para agregar a alguien.</p>
+      </li>`;
+  }
+
+  let html = '';
+  if (incoming.length || outgoing.length) {
+    html += sectionHeader('Solicitudes');
+    html += incoming
+      .map((it) => buildFriendRow(normalizeOther(it, viewerId), { kind: 'incoming' }))
+      .join('');
+    html += outgoing
+      .map((it) => buildFriendRow(normalizeOther(it, viewerId), { kind: 'outgoing' }))
+      .join('');
+  }
+  if (accepted.length) {
+    html += sectionHeader('Amigos', 'friend-sec--spaced');
+    html += accepted
+      .map((it) => buildFriendRow(normalizeOther(it, viewerId), { kind: 'friend' }))
+      .join('');
+  }
+  return html;
+}
+
+/** Fila de resultado de búsqueda; usa person.relation. */
+export function buildSearchRow(person) {
+  let actions;
+  if (person.relation === 'none') {
+    actions = `<button class="friend-pill friend-pill--add" data-act="add" data-username="${escapeHtml(person.username)}">Agregar</button>`;
+  } else if (person.relation === 'pending_out') {
+    actions = `<button class="friend-pill friend-pill--pending" data-act="cancel" data-id="${person.id}">Enviada</button>`;
+  } else if (person.relation === 'pending_in') {
+    actions = iconBtn('accept', person.id, 'accept', 'check', 'Aceptar solicitud');
+  } else {
+    actions = `<span class="friend-ib friend-ib--friend" title="Ya son amigos" aria-label="Ya son amigos">${icon('check', { size: 20 })}</span>`;
+  }
+  return rowShell(person, actions);
 }
 
 /**
  * Render the friends panel.
  * @param {HTMLElement} container
  */
-export async function renderFriendsPanel(container) {
+export function renderFriendsPanel(container) {
   const viewerId = getSession()?.user?.id;
-  let activeTab = 'accepted';
+  // Cache inicial vacío; se rellena en el primer ciclo async vía renderAsyncRegion.
+  let listCache = { accepted: [], pendingIncoming: [], pendingOutgoing: [] };
+  let searching = false;
 
-  async function reloadList() {
-    const data = await fetchList();
+  // fresh=true fuerza refetch (tras una mutacion propia); fresh=false permite
+  // servir la cache SWR compartida (getFriends, TTL 5 min).
+  async function reloadList({ fresh = false } = {}) {
+    if (fresh) invalidateFriends();
+    const data = await getFriends();
     emitPendingChanged(Array.isArray(data.pendingIncoming) ? data.pendingIncoming.length : 0);
     return data;
   }
 
-  let listCache = await reloadList();
-
   container.innerHTML = `
     <div class="friends-page fade-in">
-      <h1>Amigos</h1>
-
-      <div class="profile-field">
-        <input type="search" class="auth-input" id="friends-search" placeholder="Buscar usuarios..." />
-        <ul id="search-results" class="friends-list"></ul>
+      <div class="friends-head">
+        <h1 class="friends-title">Amigos</h1>
+        <div class="friends-search">
+          ${icon('search', { size: 18 })}
+          <input type="search" id="friends-search" placeholder="Buscar usuarios" autocomplete="off" />
+        </div>
       </div>
+      <div class="friends-list__region" aria-busy="true">
+        <ul class="friends-list" id="friends-list"></ul>
+      </div>
+    </div>`;
 
-      ${buildTabs(activeTab, listCache.pendingIncoming.length)}
+  // La región async es el <div> envolvente, no el <ul>: el skeleton es un <div>
+  // y un <div> hijo directo de <ul> es HTML inválido (Chrome/Firefox lo promueven).
+  const region = container.querySelector('.friends-list__region');
 
-      <ul class="friends-list" id="friends-list"><li>Cargando...</li></ul>
-    </div>
-  `;
-
-  function renderList() {
-    const listEl = container.querySelector('#friends-list');
-    const items =
-      activeTab === 'accepted'
-        ? listCache.accepted
-        : activeTab === 'incoming'
-          ? listCache.pendingIncoming
-          : listCache.pendingOutgoing;
-    if (items.length === 0) {
-      listEl.innerHTML = '<li style="color:var(--color-text-secondary);">Nada por aquí.</li>';
-      return;
+  // El skeleton (o un resultado de búsqueda previo) puede haber reemplazado el <ul>;
+  // restablecerlo antes de pintar y devolver la referencia vigente.
+  function ensureListEl() {
+    let listEl = container.querySelector('#friends-list');
+    if (!listEl) {
+      region.innerHTML = '<ul class="friends-list" id="friends-list"></ul>';
+      listEl = container.querySelector('#friends-list');
     }
-    listEl.innerHTML = items.map((it) => buildFriendItem(it, viewerId, activeTab)).join('');
-    listEl.querySelectorAll('.friend-card').forEach((li, i) => {
+    return listEl;
+  }
+
+  function renderSections() {
+    const listEl = ensureListEl();
+    listEl.innerHTML = buildSections(listCache, viewerId);
+    listEl.querySelectorAll('.friend-row').forEach((li, i) => {
       li.style.animationDelay = `${Math.min(i * 40, 240)}ms`;
     });
-    listEl.querySelectorAll('button[data-act]').forEach((b) => {
-      b.addEventListener('click', async () => {
-        const id = b.dataset.id;
+    wireActions(listEl);
+  }
+
+  async function runSearch(q) {
+    const results = await searchUsers(q);
+    const listEl = ensureListEl();
+    if (results.length === 0) {
+      listEl.innerHTML = `
+        <li class="empty-state" style="padding:var(--space-md) 0;">
+          <div class="empty-state__icon">${icon('search', { size: 32 })}</div>
+          <p class="empty-state__text">Sin resultados.</p>
+        </li>`;
+      return;
+    }
+    listEl.innerHTML = results.map((u) => buildSearchRow(u)).join('');
+    wireActions(listEl);
+  }
+
+  async function doAction(act, id, username) {
+    try {
+      if (act === 'accept') await respondRequest(id, 'accept');
+      else await removeFriendship(id); // reject | cancel | unfriend
+    } catch {
+      showToast('Sin conexión. Intenta de nuevo.', { type: 'error' });
+      return;
+    }
+    listCache = await reloadList({ fresh: true });
+    // accept/unfriend cambian friendCount propio; reject/cancel cambian el
+    // friendStatus visto desde el perfil de la contraparte. Invalidar ambos
+    // sin distinguir el caso exacto es más simple y el costo es un refetch.
+    invalidateMyProfile();
+    if (username) invalidatePublicProfile(username);
+    if (searching) {
+      const q = searchInput.value.trim();
+      if (q.length >= 2) await runSearch(q);
+      else {
+        searching = false;
+        renderSections();
+      }
+    } else {
+      renderSections();
+    }
+  }
+
+  function wireActions(scope) {
+    scope.querySelectorAll('button[data-act]').forEach((b) => {
+      b.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         const act = b.dataset.act;
-        if (act === 'accept') await respondRequest(id, 'accept');
-        if (act === 'reject') await removeFriendship(id);
-        if (act === 'cancel') await removeFriendship(id);
-        if (act === 'unfriend') await removeFriendship(id);
-        listCache = await reloadList();
-        renderList();
+        if (act === 'unfriend' && b.dataset.confirm !== '1') {
+          b.dataset.confirm = '1';
+          b.classList.add('friend-ib--confirm');
+          b.textContent = '¿Quitar?';
+          b.setAttribute('aria-label', '¿Quitar amistad?');
+          b.setAttribute('title', '¿Quitar amistad?');
+          setTimeout(() => {
+            if (b.dataset.confirm === '1') {
+              b.dataset.confirm = '';
+              b.classList.remove('friend-ib--confirm');
+              b.innerHTML = icon('check', { size: 20 });
+              b.setAttribute('aria-label', 'Amigos — quitar');
+              b.setAttribute('title', 'Amigos — quitar');
+            }
+          }, 2600);
+          return;
+        }
+        if (act === 'add') {
+          await sendAdd(b);
+          return;
+        }
+        const username = b.closest('.friend-row')?.dataset.username;
+        await doAction(act, b.dataset.id, username);
       });
     });
   }
 
-  container.querySelectorAll('.seg-tab').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      container.querySelectorAll('.seg-tab').forEach((b) => {
-        b.classList.remove('seg-tab--active');
-        b.setAttribute('aria-selected', 'false');
-      });
-      btn.classList.add('seg-tab--active');
-      btn.setAttribute('aria-selected', 'true');
-      activeTab = btn.dataset.tab;
-      renderList();
-    });
+  async function sendAdd(b) {
+    b.disabled = true;
+    const prev = b.textContent;
+    b.textContent = '...';
+    let r;
+    try {
+      r = await sendRequest(b.dataset.username);
+    } catch {
+      b.textContent = prev;
+      b.disabled = false;
+      showToast('Sin conexión. Intenta de nuevo.', { type: 'error' });
+      return;
+    }
+    if (r.ok) {
+      b.textContent = 'Enviada';
+      b.classList.remove('friend-pill--add');
+      b.classList.add('friend-pill--pending');
+      b.dataset.act = 'cancel';
+      b.disabled = false;
+      listCache = await reloadList({ fresh: true });
+      invalidatePublicProfile(b.dataset.username);
+    } else if (r.status === 409) {
+      b.textContent = 'Ya existe';
+    } else {
+      b.textContent = prev;
+      b.disabled = false;
+    }
+  }
+
+  renderAsyncRegion(region, {
+    skeleton: () => skelRowList({ rows: 5 }),
+    fetcher: reloadList,
+    render: (data) => {
+      listCache = data;
+      if (!searching) renderSections();
+    },
+    onError: () => `
+      <div class="empty-state">
+        <h2 class="empty-state__title">No se pudieron cargar los amigos</h2>
+        <button class="btn btn--primary" data-retry>Reintentar</button>
+      </div>`,
   });
 
   const searchInput = container.querySelector('#friends-search');
-  const searchResults = container.querySelector('#search-results');
   searchInput.addEventListener('input', () => {
     clearTimeout(searchTimer);
     const q = searchInput.value.trim();
     if (q.length < 2) {
-      searchResults.innerHTML = '';
+      searching = false;
+      renderSections();
       return;
     }
-    searchTimer = setTimeout(async () => {
-      const results = await searchUsers(q);
-      if (results.length === 0) {
-        searchResults.innerHTML =
-          '<li style="color:var(--color-text-secondary);">Sin resultados.</li>';
-        return;
-      }
-      searchResults.innerHTML = results
-        .map(
-          (u) => `
-        <li class="friend-item">
-          <span class="avatar-wrap">
-            <img class="profile-avatar" style="width:40px;height:40px;" src="${escapeHtml(u.avatarUrl || '')}" alt="" />${isFounder(u.username) ? founderCrownHtml() : ''}
-          </span>
-          <div>
-            <a href="#/u/${encodeURIComponent(u.username)}" style="color:inherit;text-decoration:none;font-weight:600;">${escapeHtml(u.displayName || u.username)}</a>
-            <div style="font-size:0.8em;color:var(--color-text-secondary);">@${escapeHtml(u.username)}</div>
-          </div>
-          <div class="friend-item__actions">
-            <button class="auth-btn" data-username="${u.username}" style="padding:4px 12px;">Agregar</button>
-          </div>
-        </li>
-      `,
-        )
-        .join('');
-      searchResults.querySelectorAll('button[data-username]').forEach((b) => {
-        b.addEventListener('click', async () => {
-          b.disabled = true;
-          b.textContent = '...';
-          const r = await sendRequest(b.dataset.username);
-          if (r.ok) {
-            b.textContent = 'Enviada';
-            listCache = await reloadList();
-          } else if (r.status === 409) {
-            b.textContent = 'Ya existe';
-          } else {
-            b.textContent = 'Error';
-            b.disabled = false;
-          }
-        });
-      });
-    }, 300);
+    searching = true;
+    searchTimer = setTimeout(() => runSearch(q), 300);
   });
-
-  renderList();
 }

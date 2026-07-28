@@ -18,11 +18,31 @@ vi.mock('../src/lib/store.js', () => ({ getSongById: vi.fn(() => null) }));
 vi.mock('../src/lib/search.js', () => ({ searchAll: vi.fn(() => []) }));
 vi.mock('../src/lib/friends.js', () => ({ getAcceptedFriends: vi.fn(async () => []) }));
 vi.mock('../src/lib/authStore.js', () => ({ isAdmin: vi.fn(() => false) }));
-vi.mock('../src/router.js', () => ({ navigate: vi.fn() }));
+vi.mock('../src/router.js', () => ({ navigate: vi.fn(), goBack: vi.fn() }));
 vi.mock('./Sidebar.js', () => ({ updateSidebarContent: vi.fn() }), { virtual: true });
 vi.mock('../src/components/Sidebar.js', () => ({ updateSidebarContent: vi.fn() }));
 
 import { renderListDetail, __renderEditorForTest } from '../src/components/ListDetail.js';
+
+// Helper: cede el event-loop hasta que fn() devuelve verdadero o se agotan los intentos.
+// Necesario porque renderAsyncRegion pinta la región async (fetcher().then(...)).
+const waitFor = async (fn, tries = 50) => {
+  for (let i = 0; i < tries; i++) {
+    await Promise.resolve();
+    if (fn()) return;
+  }
+};
+
+// Fechas futuras dinámicas: el wizard bloquea el avance si la caducidad no es futura,
+// así que fechas fijas caducan con el calendario. `futureISO(n)` para el tope del evento;
+// `futureLocal(n)` para el input datetime-local (formato YYYY-MM-DDTHH:MM, hora local).
+const DAY_MS = 86400000;
+const futureISO = (days) => new Date(Date.now() + days * DAY_MS).toISOString();
+const futureLocal = (days) => {
+  const d = new Date(Date.now() + days * DAY_MS);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 
 describe('wizard de listas', () => {
   let container;
@@ -186,7 +206,8 @@ describe('wizard de listas', () => {
       ],
     });
     const el = document.createElement('div');
-    await renderListDetail(el, 'evt1', { mode: 'view' });
+    renderListDetail(el, 'evt1', { mode: 'view' });
+    await waitFor(() => el.querySelector('.list-detail__seg'));
     expect(el.querySelector('.list-detail__seg')).toBeTruthy();
     expect(el.textContent).toContain('Ensayos');
     expect(el.textContent).toContain('Ensayo general');
@@ -217,7 +238,8 @@ describe('wizard de listas', () => {
       songs: ['s1'],
     });
     const el = document.createElement('div');
-    await renderListDetail(el, 'l1', { mode: 'view' });
+    renderListDetail(el, 'l1', { mode: 'view' });
+    await waitFor(() => el.querySelector('.list-detail__voz-row'));
     const vozRow = el.querySelector('.list-detail__voz-row');
     expect(vozRow).toBeTruthy();
     // muestra el título, no el UUID
@@ -243,7 +265,8 @@ describe('wizard de listas', () => {
       children: [],
     });
     const el = document.createElement('div');
-    await renderListDetail(el, 'sub1', { mode: 'view' });
+    renderListDetail(el, 'sub1', { mode: 'view' });
+    await waitFor(() => el.querySelector('.list-detail__crumb'));
     expect(el.querySelector('.list-detail__crumb')).toBeTruthy();
     expect(el.textContent).toContain('Concierto');
   });
@@ -288,14 +311,14 @@ describe('wizard de listas', () => {
         parent: {
           id: 'evt1',
           name: 'Concierto',
-          expires_at: '2026-06-20T00:00:00Z',
+          expires_at: futureISO(12),
           songs: ['s1', 's2'],
         },
       },
     );
     el.querySelector('#list-detail-name').value = 'Ensayo general';
     el.querySelector('#list-detail-name').dispatchEvent(new Event('input'));
-    el.querySelector('#list-detail-datetime').value = '2026-06-18T20:00';
+    el.querySelector('#list-detail-datetime').value = futureLocal(10);
     el.querySelector('#list-detail-datetime').dispatchEvent(new Event('input'));
     const nextBtn = el.querySelector('#list-wizard-next');
     nextBtn.click(); // paso 2

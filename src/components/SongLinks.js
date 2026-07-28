@@ -7,11 +7,13 @@
 
 import '../styles/song-links.css';
 import { fetchSongDetail } from '../lib/store.js';
-import { navigate } from '../router.js';
+import { goBack } from '../router.js';
 import { VOICE_LINK_TYPES, getVoiceColor } from '../lib/voiceSystem.js';
 import { isAdmin } from '../lib/authStore.js';
 import { icon } from '../lib/icons.js';
 import { escapeHtml, safeUrl } from '../lib/escape.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelRowList } from '../lib/skeleton.js';
 
 const escapeAttr = escapeHtml;
 
@@ -43,148 +45,147 @@ const DRIVE_ICON = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7.71 
  * @param {HTMLElement} container
  * @param {string} songId
  */
-export async function renderSongLinks(container, songId) {
-  container.innerHTML = `
-    <div class="empty-state fade-in">
-      <div class="empty-state__icon">${icon('music', { size: 48, className: 'loading-pulse' })}</div>
-      <h2 class="empty-state__title">Cargando...</h2>
-    </div>
-  `;
+export function renderSongLinks(container, songId) {
+  // Shell instantáneo: región async (skeleton → contenido real).
+  container.innerHTML = `<div class="slinks__region" aria-busy="true"></div>`;
+  const region = container.querySelector('.slinks__region');
 
-  const [song, linksRes] = await Promise.all([
-    fetchSongDetail(songId).catch(() => null),
-    fetch(`${API_URL}/songs/${songId}/links`)
-      .then((r) => (r.ok ? r.json() : { platforms: [], voices: [] }))
-      .catch(() => ({ platforms: [], voices: [] })),
-  ]);
-
-  if (!song) {
-    container.innerHTML = `
-      <div class="empty-state fade-in">
-        <div class="empty-state__icon">${icon('frown', { size: 48 })}</div>
-        <h2 class="empty-state__title">Canción no encontrada</h2>
-        <button class="btn btn--primary" style="margin-top:1rem" id="links-go-home">Volver</button>
-      </div>
-    `;
-    container.querySelector('#links-go-home')?.addEventListener('click', () => navigate('/'));
-    return;
-  }
-
-  const { platforms, voices } = linksRes;
-
-  const coverUrl = song.coverImage
-    ? song.coverImage.startsWith('/') || song.coverImage.startsWith('http')
-      ? song.coverImage
-      : `/covers/${song.coverImage}`
-    : '';
-
-  const hasPlatforms = platforms.length > 0;
-  const hasVoices = voices.length > 0;
-  const isEmpty = !hasPlatforms && !hasVoices;
-
-  const platformOrder = { youtube: 0, spotify: 1 };
-  const sorted = [...platforms].sort(
-    (a, b) => (platformOrder[a.platform] ?? 99) - (platformOrder[b.platform] ?? 99),
-  );
-
-  const platformCardsHtml = sorted
-    .map((link) => {
-      const meta = PLATFORMS.find((p) => p.id === link.platform);
-      if (!meta) return '';
-      const icon = PLATFORM_ICONS[link.platform] || '';
-      return `
-        <a class="slinks-platform-card" href="${safeUrl(link.url)}" target="_blank" rel="noopener" style="--platform-color: ${meta.color}">
-          <span class="slinks-platform-card__icon">${icon}</span>
-          <span class="slinks-platform-card__label">${escapeHtml(meta.label)}</span>
-        </a>
-      `;
-    })
-    .join('');
-
-  const voiceGroupsMap = {};
-  for (const v of voices) {
-    if (!voiceGroupsMap[v.voiceType]) voiceGroupsMap[v.voiceType] = [];
-    voiceGroupsMap[v.voiceType].push(v);
-  }
-
-  const voiceCardsHtml = VOICE_LINK_TYPES.filter((vt) => voiceGroupsMap[vt.id])
-    .map((vt) => {
-      const links = voiceGroupsMap[vt.id];
-      const linksHtml = links
-        .map(
-          (l) => `
-          <a class="slinks-voice-link" href="${safeUrl(l.url)}" target="_blank" rel="noopener">
-            <span class="slinks-voice-link__icon">${DRIVE_ICON}</span>
-            <span class="slinks-voice-link__text">${escapeHtml(l.label || 'Partitura')}</span>
-          </a>
-        `,
-        )
-        .join('');
-      return `
-        <div class="slinks-voice-card" style="--voice-color: ${getVoiceColor(vt.id)}">
-          <div class="slinks-voice-card__header">
-            <span class="slinks-voice-card__dot"></span>
-            <span class="slinks-voice-card__name">${escapeHtml(vt.label)}</span>
+  renderAsyncRegion(region, {
+    skeleton: () => skelRowList({ rows: 5 }),
+    fetcher: async () => {
+      const [song, linksRes] = await Promise.all([
+        fetchSongDetail(songId).catch(() => null),
+        fetch(`${API_URL}/songs/${songId}/links`)
+          .then((r) => (r.ok ? r.json() : { platforms: [], voices: [] }))
+          .catch(() => ({ platforms: [], voices: [] })),
+      ]);
+      return { song, platforms: linksRes.platforms ?? [], voices: linksRes.voices ?? [] };
+    },
+    render: ({ song, platforms, voices }) => {
+      if (!song) {
+        region.innerHTML = `
+          <div class="empty-state fade-in">
+            <div class="empty-state__icon">${icon('frown', { size: 48 })}</div>
+            <h2 class="empty-state__title">Canción no encontrada</h2>
+            <button class="btn btn--primary" style="margin-top:1rem" id="links-go-home">Volver</button>
           </div>
-          <div class="slinks-voice-card__links">${linksHtml}</div>
+        `;
+        region.querySelector('#links-go-home')?.addEventListener('click', () => goBack());
+        return;
+      }
+
+      const coverUrl = song.coverImage
+        ? song.coverImage.startsWith('/') || song.coverImage.startsWith('http')
+          ? song.coverImage
+          : `/covers/${song.coverImage}`
+        : '';
+
+      const hasPlatforms = platforms.length > 0;
+      const hasVoices = voices.length > 0;
+      const isEmptyLinks = !hasPlatforms && !hasVoices;
+
+      const platformOrder = { youtube: 0, spotify: 1 };
+      const sorted = [...platforms].sort(
+        (a, b) => (platformOrder[a.platform] ?? 99) - (platformOrder[b.platform] ?? 99),
+      );
+
+      const platformCardsHtml = sorted
+        .map((link) => {
+          const meta = PLATFORMS.find((p) => p.id === link.platform);
+          if (!meta) return '';
+          const platformIcon = PLATFORM_ICONS[link.platform] || '';
+          return `
+            <a class="slinks-platform-card" href="${safeUrl(link.url)}" target="_blank" rel="noopener" style="--platform-color: ${meta.color}">
+              <span class="slinks-platform-card__icon">${platformIcon}</span>
+              <span class="slinks-platform-card__label">${escapeHtml(meta.label)}</span>
+            </a>
+          `;
+        })
+        .join('');
+
+      const voiceGroupsMap = {};
+      for (const v of voices) {
+        if (!voiceGroupsMap[v.voiceType]) voiceGroupsMap[v.voiceType] = [];
+        voiceGroupsMap[v.voiceType].push(v);
+      }
+
+      const voiceCardsHtml = VOICE_LINK_TYPES.filter((vt) => voiceGroupsMap[vt.id])
+        .map((vt) => {
+          const links = voiceGroupsMap[vt.id];
+          const linksHtml = links
+            .map(
+              (l) => `
+              <a class="slinks-voice-link" href="${safeUrl(l.url)}" target="_blank" rel="noopener">
+                <span class="slinks-voice-link__icon">${DRIVE_ICON}</span>
+                <span class="slinks-voice-link__text">${escapeHtml(l.label || 'Partitura')}</span>
+              </a>
+            `,
+            )
+            .join('');
+          return `
+            <div class="slinks-voice-card" style="--voice-color: ${getVoiceColor(vt.id)}">
+              <div class="slinks-voice-card__header">
+                <span class="slinks-voice-card__dot"></span>
+                <span class="slinks-voice-card__name">${escapeHtml(vt.label)}</span>
+              </div>
+              <div class="slinks-voice-card__links">${linksHtml}</div>
+            </div>
+          `;
+        })
+        .join('');
+
+      region.innerHTML = `
+        <div class="slinks fade-in">
+          <div class="slinks__header">
+            ${coverUrl ? `<img class="slinks__cover" src="${safeUrl(coverUrl)}" alt="" onerror="this.style.display='none'" />` : ''}
+            <div class="slinks__meta">
+              <h1 class="slinks__title">${escapeHtml(song.title)}</h1>
+              <p class="slinks__artist">${escapeHtml(song.artist || '')} — ${escapeHtml(song.album || '')}</p>
+              <p class="slinks__year">${escapeHtml(String(song.year || ''))} ${song.genre ? `· ${escapeHtml(song.genre)}` : ''} ${song.key ? `· ${escapeHtml(song.key)}` : ''}</p>
+            </div>
+          </div>
+
+          ${
+            isEmptyLinks
+              ? `
+            <div class="slinks__empty">
+              <p>No hay links disponibles para esta canción.</p>
+              ${isAdmin() ? `<a href="#/admin/edit/${escapeAttr(songId)}" class="btn btn--primary" style="margin-top:1rem">Agregar links</a>` : ''}
+            </div>
+          `
+              : ''
+          }
+
+          ${
+            hasPlatforms
+              ? `
+            <section class="slinks__section">
+              <h2 class="slinks__section-title">Escuchar en</h2>
+              <div class="slinks-platforms">${platformCardsHtml}</div>
+            </section>
+          `
+              : ''
+          }
+
+          ${
+            hasVoices
+              ? `
+            <section class="slinks__section">
+              <h2 class="slinks__section-title">Voces</h2>
+              <div class="slinks-voices">${voiceCardsHtml}</div>
+            </section>
+          `
+              : ''
+          }
+
+          ${isAdmin() && !isEmptyLinks ? `<div class="slinks__admin"><a href="#/admin/edit/${escapeAttr(songId)}" class="btn btn--secondary">Editar links</a></div>` : ''}
         </div>
       `;
-    })
-    .join('');
-
-  container.innerHTML = `
-    <div class="slinks fade-in">
-      <nav class="breadcrumb" aria-label="Breadcrumb">
-        <a href="#/" id="slinks-home">Inicio</a>
-        <span class="breadcrumb__separator">›</span>
-        <a href="#/song/${escapeAttr(songId)}" id="slinks-song">${escapeHtml(song.title)}</a>
-        <span class="breadcrumb__separator">›</span>
-        <span class="breadcrumb__current">Links</span>
-      </nav>
-
-      <div class="slinks__header">
-        ${coverUrl ? `<img class="slinks__cover" src="${coverUrl}" alt="" onerror="this.style.display='none'" />` : ''}
-        <div class="slinks__meta">
-          <h1 class="slinks__title">${escapeHtml(song.title)}</h1>
-          <p class="slinks__artist">${escapeHtml(song.artist || '')} — ${escapeHtml(song.album || '')}</p>
-          <p class="slinks__year">${escapeHtml(String(song.year || ''))} ${song.genre ? `· ${escapeHtml(song.genre)}` : ''} ${song.key ? `· ${escapeHtml(song.key)}` : ''}</p>
-        </div>
-      </div>
-
-      ${
-        isEmpty
-          ? `
-        <div class="slinks__empty">
-          <p>No hay links disponibles para esta canción.</p>
-          ${isAdmin() ? `<a href="#/admin/edit/${escapeAttr(songId)}" class="btn btn--primary" style="margin-top:1rem">Agregar links</a>` : ''}
-        </div>
-      `
-          : ''
-      }
-
-      ${
-        hasPlatforms
-          ? `
-        <section class="slinks__section">
-          <h2 class="slinks__section-title">Escuchar en</h2>
-          <div class="slinks-platforms">${platformCardsHtml}</div>
-        </section>
-      `
-          : ''
-      }
-
-      ${
-        hasVoices
-          ? `
-        <section class="slinks__section">
-          <h2 class="slinks__section-title">Voces</h2>
-          <div class="slinks-voices">${voiceCardsHtml}</div>
-        </section>
-      `
-          : ''
-      }
-
-      ${isAdmin() && !isEmpty ? `<div class="slinks__admin"><a href="#/admin/edit/${escapeAttr(songId)}" class="btn btn--secondary">Editar links</a></div>` : ''}
-    </div>
-  `;
+    },
+    onError: () => `
+      <div class="empty-state">
+        <h2 class="empty-state__title">No se pudieron cargar los links</h2>
+        <button class="btn btn--primary" data-retry>Reintentar</button>
+      </div>`,
+  });
 }

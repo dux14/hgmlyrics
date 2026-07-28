@@ -2,11 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { initSections, applySectionResult, deriveJobStatus, validateEnabledSections } from '../api/stems/_sections.js';
 
 describe('sections', () => {
-  it('initSections crea las 4 en pending con gender.enabled=false', () => {
+  it('initSections crea las 5 en pending con gender/duet.enabled=false', () => {
     const s = initSections(['voiceInstrumental','structure','leadBacking']);
-    expect(Object.keys(s)).toEqual(['voiceInstrumental','structure','leadBacking','gender']);
+    expect(Object.keys(s)).toEqual(['voiceInstrumental','structure','leadBacking','gender','duet']);
     expect(s.voiceInstrumental.status).toBe('pending');
     expect(s.gender.enabled).toBe(false);
+    expect(s.duet.enabled).toBe(false);
     expect(s.leadBacking.enabled).toBe(true);
   });
   it('applySectionResult marca done e idempotente', () => {
@@ -29,39 +30,34 @@ describe('sections', () => {
 
 describe('validateEnabledSections', () => {
   it('devuelve el subconjunto saneado en orden canonico', () => {
-    expect(validateEnabledSections(['leadBacking', 'voiceInstrumental'], { genderEnabled: true }))
+    expect(validateEnabledSections(['leadBacking', 'voiceInstrumental']))
       .toEqual(['voiceInstrumental', 'leadBacking']);
   });
   it('dedup de claves repetidas', () => {
-    expect(validateEnabledSections(['structure', 'structure'], { genderEnabled: true }))
+    expect(validateEnabledSections(['structure', 'structure']))
       .toEqual(['structure']);
   });
-  it('elimina gender silenciosamente si genderEnabled=false', () => {
-    expect(validateEnabledSections(['voiceInstrumental', 'gender'], { genderEnabled: false }))
-      .toEqual(['voiceInstrumental']);
-  });
-  it('conserva gender si genderEnabled=true', () => {
-    expect(validateEnabledSections(['gender'], { genderEnabled: true })).toEqual(['gender']);
+  it('conserva gender: ya no depende de ningun flag', () => {
+    expect(validateEnabledSections(['voiceInstrumental', 'gender']))
+      .toEqual(['voiceInstrumental', 'gender']);
+    expect(validateEnabledSections(['gender'])).toEqual(['gender']);
   });
   it('lanza 400 si queda vacio', () => {
-    expect(() => validateEnabledSections([], { genderEnabled: true })).toThrow();
+    expect(() => validateEnabledSections([])).toThrow();
     try {
-      validateEnabledSections([], { genderEnabled: true });
+      validateEnabledSections([]);
     } catch (e) {
       expect(e.status).toBe(400);
     }
   });
   it('lanza 400 si todas las claves son invalidas', () => {
-    expect(() => validateEnabledSections(['noExiste'], { genderEnabled: true })).toThrow();
+    expect(() => validateEnabledSections(['noExiste'])).toThrow();
   });
   it('lanza 400 si input no es array', () => {
-    expect(() => validateEnabledSections('voiceInstrumental', { genderEnabled: true })).toThrow();
-    expect(() => validateEnabledSections(undefined, { genderEnabled: true })).toThrow();
-  });
-  it('lanza 400 si gender es la única sección y opts omitido', () => {
-    expect(() => validateEnabledSections(['gender'])).toThrow();
+    expect(() => validateEnabledSections('voiceInstrumental')).toThrow();
+    expect(() => validateEnabledSections(undefined)).toThrow();
   });
   it('lanza 400 si input es null', () => {
-    expect(() => validateEnabledSections(null, { genderEnabled: true })).toThrow();
+    expect(() => validateEnabledSections(null)).toThrow();
   });
 });

@@ -70,9 +70,10 @@ export function commitPreview({ previewTime }) {
  *   Desktop (≥640px): una fila: [label][play][scrubber flex:1][tiempo][descarga]
  * Scrub diferido (commit-on-release): audio.currentTime solo se escribe en pointerup.
  * @param {{label:string, url:string}} opts
- * @returns {{ el: HTMLElement, audio: HTMLAudioElement }}
+ * @returns {{ el: HTMLElement, audio: HTMLAudioElement, destroy: () => void }}
  */
 export function createStudioPlayer({ label, url }) {
+  const sanitizedUrl = safeUrl(url);
   const root = document.createElement('div');
   root.className = 'studio-player';
   root.innerHTML = `
@@ -80,7 +81,7 @@ export function createStudioPlayer({ label, url }) {
       <button class="studio-player__play" type="button" aria-label="Reproducir ${label}">${icon('play', { size: 16 })}</button>
       <span class="studio-player__label">${label}</span>
       <span class="studio-player__time" aria-hidden="true">0:00 / 0:00</span>
-      <a class="btn studio-player__dl" href="${safeUrl(url)}" download aria-label="Descargar ${label}">${icon('download', { size: 16 })}</a>
+      <a class="btn studio-player__dl" href="${sanitizedUrl}" download aria-label="Descargar ${label}">${icon('download', { size: 16 })}</a>
     </div>
     <div class="studio-player__row2">
       <div class="studio-player__bar" role="slider" tabindex="0"
@@ -95,7 +96,7 @@ export function createStudioPlayer({ label, url }) {
         </div>
       </div>
     </div>
-    <audio preload="none" src="${safeUrl(url)}"></audio>
+    <audio preload="none" crossorigin="anonymous" src="${sanitizedUrl}"></audio>
   `;
 
   const audio = root.querySelector('audio');
@@ -111,6 +112,11 @@ export function createStudioPlayer({ label, url }) {
   const magTime = root.querySelector('.studio-player__mag-time');
 
   const dur = () => (Number.isFinite(audio.duration) ? audio.duration : 0);
+
+  // Listeners colgados de `ac.signal`: destroy() los quita todos de una vez
+  // (mismo patrón que MultiTrackPlayer.js) en vez de desengancharlos uno a
+  // uno a mano.
+  const ac = new AbortController();
 
   // --- Scrub state ---
   let scrubbing = false;
@@ -141,31 +147,57 @@ export function createStudioPlayer({ label, url }) {
     playBtn.setAttribute('aria-label', `${audio.paused ? 'Reproducir' : 'Pausar'} ${label}`);
   };
 
-  audio.addEventListener('timeupdate', paint);
-  audio.addEventListener('loadedmetadata', paint);
-  audio.addEventListener('play', setPlayIcon);
-  audio.addEventListener('pause', setPlayIcon);
-  audio.addEventListener('ended', setPlayIcon);
-  playBtn.addEventListener('click', () => {
-    if (audio.paused) void audio.play();
-    else audio.pause();
-  });
-
-  bar.addEventListener('keydown', (e) => {
-    const d = dur();
-    if (e.key === ' ' || e.key === 'Enter') {
-      e.preventDefault();
-      if (audio.paused) void audio.play();
+  audio.addEventListener('timeupdate', paint, { signal: ac.signal });
+  audio.addEventListener('loadedmetadata', paint, { signal: ac.signal });
+  audio.addEventListener('play', setPlayIcon, { signal: ac.signal });
+  audio.addEventListener('pause', setPlayIcon, { signal: ac.signal });
+  audio.addEventListener('ended', setPlayIcon, { signal: ac.signal });
+  audio.addEventListener(
+    'error',
+    async () => {
+      // src inválido saneado por safeUrl (ej. javascript:) no es un fallo de
+      // reproducción en runtime: dispara 'error' al montar sin que el usuario
+      // haya hecho nada, y ya se ve en el <a> de descarga vacío.
+      if (!sanitizedUrl) return;
+      // Sin esto, offline el botón play parecía roto: ni icono ni aviso.
+      setPlayIcon();
+      const { showToast } = await import('../lib/toast.js');
+      showToast(`No se pudo reproducir ${label}`, { type: 'error' });
+    },
+    { signal: ac.signal },
+  );
+  playBtn.addEventListener(
+    'click',
+    () => {
+      // El listener 'error' del audio ya avisa al usuario si play() no arranca;
+      // aquí solo dejamos rastro para debugging (autoplay policy es casi
+      // imposible porque siempre parte de un gesto del usuario; AbortError es benigno).
+      if (audio.paused) audio.play().catch((e) => console.warn('StudioPlayer play() rechazado', e));
       else audio.pause();
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      // Teclas: seek inmediato (no es arrastre)
-      audio.currentTime = clamp(audio.currentTime + 1, 0, d);
-    } else if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      audio.currentTime = clamp(audio.currentTime - 1, 0, d);
-    }
-  });
+    },
+    { signal: ac.signal },
+  );
+
+  bar.addEventListener(
+    'keydown',
+    (e) => {
+      const d = dur();
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        if (audio.paused) {
+          audio.play().catch((e2) => console.warn('StudioPlayer play() rechazado', e2));
+        } else audio.pause();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        // Teclas: seek inmediato (no es arrastre)
+        audio.currentTime = clamp(audio.currentTime + 1, 0, d);
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        audio.currentTime = clamp(audio.currentTime - 1, 0, d);
+      }
+    },
+    { signal: ac.signal },
+  );
 
   // --- Puntero: tap/arrastre = scrub diferido; long-press = lupa ---
   let pressTimer = null;
@@ -235,53 +267,80 @@ export function createStudioPlayer({ label, url }) {
     paint(); // repinta con la posición real del audio
   };
 
-  bar.addEventListener('pointerdown', (e) => {
-    try {
-      bar.setPointerCapture(e.pointerId);
-    } catch {
-      // pointer capture not supported — no-op
-    }
-    const ratio = ratioOf(bar, e.clientX);
-    enterScrub(ratio);
-    // Long-press → lupa; se ancla al previewTime actual
-    pressTimer = setTimeout(openMag, LONGPRESS_MS);
-  });
+  bar.addEventListener(
+    'pointerdown',
+    (e) => {
+      try {
+        bar.setPointerCapture(e.pointerId);
+      } catch {
+        // pointer capture not supported — no-op
+      }
+      const ratio = ratioOf(bar, e.clientX);
+      enterScrub(ratio);
+      // Long-press → lupa; se ancla al previewTime actual
+      pressTimer = setTimeout(openMag, LONGPRESS_MS);
+    },
+    { signal: ac.signal },
+  );
 
-  bar.addEventListener('pointermove', (e) => {
-    if (!scrubbing) return;
-    if (magOpen && magRange) {
-      const ratio = ratioOf(magTrack, e.clientX);
-      const t = magnifyPosToTime(ratio, magRange);
-      needle.style.left = `${ratio * 100}%`;
-      magTime.textContent = fmtTimeCs(t);
-      // La lupa actualiza previewTime con precisión de centésimas — sin tocar audio
-      applyPreviewVisual(t);
-    } else {
-      // Arrastre grueso: solo actualiza el visual (previewTime), NO audio.currentTime
-      applyPreviewVisual(posToTime(ratioOf(bar, e.clientX), dur()));
-    }
-  });
+  bar.addEventListener(
+    'pointermove',
+    (e) => {
+      if (!scrubbing) return;
+      if (magOpen && magRange) {
+        const ratio = ratioOf(magTrack, e.clientX);
+        const t = magnifyPosToTime(ratio, magRange);
+        needle.style.left = `${ratio * 100}%`;
+        magTime.textContent = fmtTimeCs(t);
+        // La lupa actualiza previewTime con precisión de centésimas — sin tocar audio
+        applyPreviewVisual(t);
+      } else {
+        // Arrastre grueso: solo actualiza el visual (previewTime), NO audio.currentTime
+        applyPreviewVisual(posToTime(ratioOf(bar, e.clientX), dur()));
+      }
+    },
+    { signal: ac.signal },
+  );
 
-  bar.addEventListener('pointerup', (e) => {
-    clearPress();
-    if (magOpen) {
+  bar.addEventListener(
+    'pointerup',
+    (e) => {
+      clearPress();
+      if (magOpen) {
+        closeMag();
+      }
+      // Commit: escribe audio.currentTime = previewTime (única vez desde el scrubber)
+      commitScrub();
+      try {
+        bar.releasePointerCapture(e.pointerId);
+      } catch {
+        // pointer capture not supported — no-op
+      }
+    },
+    { signal: ac.signal },
+  );
+
+  bar.addEventListener(
+    'pointercancel',
+    () => {
+      clearPress();
       closeMag();
-    }
-    // Commit: escribe audio.currentTime = previewTime (única vez desde el scrubber)
-    commitScrub();
-    try {
-      bar.releasePointerCapture(e.pointerId);
-    } catch {
-      // pointer capture not supported — no-op
-    }
-  });
+      // Cancel: descarta previewTime, vuelve a la posición real sin commit
+      exitScrub();
+    },
+    { signal: ac.signal },
+  );
 
-  bar.addEventListener('pointercancel', () => {
-    clearPress();
-    closeMag();
-    // Cancel: descarta previewTime, vuelve a la posición real sin commit
-    exitScrub();
-  });
-
-  return { el: root, audio };
+  return {
+    el: root,
+    audio,
+    /** Libera listeners y desconecta el <audio> (pause+src vacío+load). */
+    destroy() {
+      clearPress();
+      ac.abort();
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load?.();
+    },
+  };
 }

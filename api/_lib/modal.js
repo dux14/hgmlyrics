@@ -1,8 +1,10 @@
 /**
  * modal.js — Cliente de la app de Modal del Estudio de pistas.
- * Espeja el rol de replicate.js: arrancar el orquestador DAG y verificar el callback firmado.
+ * Arranca el orquestador DAG y verifica el callback firmado.
  */
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac } from 'node:crypto';
+import { timingSafeEqualStr } from './crypto.js';
+import { fetchWithTimeout, MODAL_DISPATCH_TIMEOUT_MS } from './http.js';
 
 /**
  * Verifica el callback HMAC de Modal: hex(hmac-sha256(`${timestamp}.${body}`)).
@@ -10,12 +12,12 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
  */
 export function verifyModalSignature({ timestamp, signature, body, secret }) {
   if (!timestamp || !signature || !secret) return false;
-  if (Math.abs(Date.now() - Number(timestamp) * 1000) > 5 * 60 * 1000) return false;
+  // Fix 3: si timestamp no es numérico, Number() da NaN y `NaN > umbral` es siempre
+  // false — el chequeo anti-replay quedaba fail-open. Number.isFinite lo cierra.
+  const ts = Number(timestamp);
+  if (!Number.isFinite(ts) || Math.abs(Date.now() - ts * 1000) > 5 * 60 * 1000) return false;
   const expected = createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
-  const a = Buffer.from(signature, 'hex');
-  const b = Buffer.from(expected, 'hex');
-  if (a.length === 0) return false;
-  return a.length === b.length && timingSafeEqual(a, b);
+  return timingSafeEqualStr(signature, expected);
 }
 
 /**
@@ -34,11 +36,18 @@ export async function invokeModalPipeline(payload) {
     e.status = 500;
     throw e;
   }
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-inbound-secret': secret },
-    body: JSON.stringify({ fn: 'run_pipeline', ...payload }),
-  });
+  // Fix 3: timeout < maxDuration de plataforma — si Modal no responde a tiempo, fallar
+  // con un 502 claro en vez de colgar la función hasta su límite (el caller marca el job
+  // failed y conserva su reintento existente).
+  const res = await fetchWithTimeout(
+    endpoint,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-inbound-secret': secret },
+      body: JSON.stringify({ fn: 'run_pipeline', ...payload }),
+    },
+    { timeoutMs: MODAL_DISPATCH_TIMEOUT_MS, label: 'Modal' },
+  );
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
     const e = new Error(`Modal ${res.status}: ${detail.slice(0, 200)}`);

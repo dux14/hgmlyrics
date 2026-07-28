@@ -106,10 +106,10 @@ describe('validateAndNormalize', () => {
 
   it('SEC-05: accepts valid Supabase Storage URL', () => {
     const { out, errs } = validateAndNormalize({
-      avatarUrl: 'https://abc.supabase.co/storage/v1/object/public/avatars/x.png',
+      avatarUrl: 'https://x.supabase.co/storage/v1/object/public/avatars/x.png',
     });
     expect(errs).toEqual([]);
-    expect(out.avatar_url).toBe('https://abc.supabase.co/storage/v1/object/public/avatars/x.png');
+    expect(out.avatar_url).toBe('https://x.supabase.co/storage/v1/object/public/avatars/x.png');
   });
 
   it('SEC-05: accepts avatarUrl = null (clear avatar)', () => {
@@ -120,7 +120,7 @@ describe('validateAndNormalize', () => {
 
   // Hardened regex — canonical Storage path required
   it('SEC-05: accepts canonical signed path (sign/)', () => {
-    const url = 'https://abc.supabase.co/storage/v1/object/sign/avatars/x.png?token=t';
+    const url = 'https://x.supabase.co/storage/v1/object/sign/avatars/x.png?token=t';
     const { out, errs } = validateAndNormalize({ avatarUrl: url });
     expect(errs).toEqual([]);
     expect(out.avatar_url).toBe(url);
@@ -129,6 +129,14 @@ describe('validateAndNormalize', () => {
   it('SEC-05: rejects non-canonical storage path (/storage/otracosa)', () => {
     expect(() =>
       validateAndNormalize({ avatarUrl: 'https://x.supabase.co/storage/otracosa' }),
+    ).toThrow('avatar_url_invalida');
+  });
+
+  it('SEC-05: rejects storage URL de OTRO proyecto Supabase (host distinto a SUPABASE_URL)', () => {
+    expect(() =>
+      validateAndNormalize({
+        avatarUrl: 'https://otro-proyecto.supabase.co/storage/v1/object/public/avatars/x.png',
+      }),
     ).toThrow('avatar_url_invalida');
   });
 
@@ -142,7 +150,7 @@ describe('validateAndNormalize', () => {
 
   it('SEC-05: accepts public URL with cache-buster query param (uploadAvatar shape)', () => {
     const url =
-      'https://abc.supabase.co/storage/v1/object/public/avatars/uid/avatar.webp?t=1718000000000';
+      'https://x.supabase.co/storage/v1/object/public/avatars/uid/avatar.webp?t=1718000000000';
     const { out, errs } = validateAndNormalize({ avatarUrl: url });
     expect(errs).toEqual([]);
     expect(out.avatar_url).toBe(url);

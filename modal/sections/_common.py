@@ -33,17 +33,27 @@ def extract_storage_key(signed_put_url: str) -> str:
     El formato del URL es:
       https://<project>.supabase.co/storage/v1/object/upload/sign/<bucket>/<key>?token=...
 
-    Devuelve el <key> (p.ej. `<userId>/<jobId>/voiceInstrumental/vocals.mp3`).
+    Devuelve el <key> (p.ej. `<userId>/<jobId>/voiceInstrumental/vocals.mp3`),
+    relativa al bucket. Es bucket-agnóstico a propósito: el mismo helper lo
+    comparten el Estudio legacy (bucket 'stems-jobs') y el pipeline unificado
+    por canción (bucket 'song-audio'); el bucket se aplica del lado JS al firmar
+    la descarga, así que aquí solo importa la key relativa.
     Lanza ValueError si el URL no tiene el formato esperado.
     """
     path = urlparse(signed_put_url).path  # /storage/v1/object/upload/sign/<bucket>/<key>
-    marker = f"/object/upload/sign/{STEMS_BUCKET}/"
+    marker = "/object/upload/sign/"
     idx = path.find(marker)
     if idx == -1:
         raise ValueError(
-            f"No se pudo extraer la storage key del URL (bucket '{STEMS_BUCKET}' no encontrado): {signed_put_url[:120]}"
+            f"No se pudo extraer la storage key del URL (marker de upload firmado no encontrado): {signed_put_url[:120]}"
         )
-    return path[idx + len(marker):]
+    rest = path[idx + len(marker):]  # <bucket>/<key>
+    slash = rest.find("/")
+    if slash == -1:
+        raise ValueError(
+            f"No se pudo extraer la storage key del URL (falta la key tras el bucket): {signed_put_url[:120]}"
+        )
+    return rest[slash + 1:]
 
 
 def extract_vocals_stem(get_url: str) -> str:
@@ -93,10 +103,16 @@ def _extract_vocals_from_path(src_path: str) -> str:
 
     from audio_separator.separator import Separator  # solo en el contenedor
 
-    # ── BS-RoFormer ep_317 → solo stem Vocals ───────────────────────────────
+    # ── BS-RoFormer → solo stem Vocals ──────────────────────────────────────
+    # Modelo con rollback por env var (igual patrón que sections/extract.py):
+    # VOCAL_MODEL_CKPT=<filename> permite volver a ep_317 sin redeploy de código.
+    vocal_model_ckpt = os.environ.get(
+        "VOCAL_MODEL_CKPT",
+        "melband_roformer_big_beta4.ckpt",
+    )
     ep317_out = tempfile.mkdtemp()
     sep = Separator(output_dir=ep317_out, output_format="mp3")
-    sep.load_model(model_filename="model_bs_roformer_ep_317_sdr_12.9755.ckpt")
+    sep.load_model(model_filename=vocal_model_ckpt)
     # En audio-separator 0.28.5 `output_single_stem` NO es kwarg de separate()
     # (lanza TypeError). Se separan ambos stems (Vocals + Instrumental) y se
     # localiza el "(Vocals)" por nombre — patrón idéntico al de extract.py (S1).
@@ -128,6 +144,26 @@ def _extract_vocals_from_path(src_path: str) -> str:
         vocals_path = os.path.join(ep317_out, mp3s[0])
 
     return vocals_path
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Duración del audio (Task 7: server-side, reemplaza al best-effort del browser)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def duration_from_samples(samples, sr: int) -> float:
+    """
+    Duración en segundos de un array de audio ya decodificado.
+
+    `samples` puede ser 1D (mono, forma (n,)) o 2D (multicanal, p.ej. lo que
+    devuelve librosa.load con mono=False: forma (canales, n)) — en ambos
+    casos el eje temporal es el ULTIMO eje, por eso se usa `shape[-1]` y no
+    `len()` (que en el caso 2D daría la cantidad de canales, no la duración).
+    También acepta una lista/tupla plana (sin atributo `shape`), fallback a
+    `len()`. Función PURA, sin I/O, para poder testearla sin GPU ni Modal.
+    """
+    n_samples = samples.shape[-1] if hasattr(samples, "shape") else len(samples)
+    return n_samples / sr
 
 
 def upload_put(put_url: str, file_path: str, content_type: str = "audio/mpeg") -> None:

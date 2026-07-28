@@ -1,0 +1,371 @@
+/* tools-hub.css — Hub de Herramientas (/herramientas).
+   3 tarjetas full-width apiladas: icono con tono + nombre + descripcion + flecha. */
+
+.tools-hub {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Encabezado de pagina */
+.tools-hub__title {
+  font-size: 1.6rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  margin: 0;
+}
+
+.tools-hub__sub {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  margin: var(--space-xs) 0 var(--space-lg);
+}
+
+/* Pila de tarjetas */
+.tools-hub__grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* Tarjeta-herramienta */
+.tools-hub__tile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  padding: var(--space-md);
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease-out,
+    transform 0.15s ease-out,
+    box-shadow 0.15s ease-out;
+}
+
+.tools-hub__tile:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--color-teal-500) 35%, transparent);
+}
+
+.tools-hub__tile:focus-visible {
+  outline: none;
+  border-color: var(--color-teal-500);
+  box-shadow:
+    0 0 0 1px var(--color-teal-500),
+    0 0 8px color-mix(in srgb, var(--color-teal-500) 30%, transparent);
+}
+
+.tools-hub__tile:active {
+  transform: none;
+  background: color-mix(in srgb, var(--color-surface) 80%, var(--color-bg));
+}
+
+/* Contenedor del icono con tono por herramienta */
+.tools-hub__tile-icon {
+  flex: none;
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.tools-hub__tile-icon--teal {
+  color: var(--color-teal-400);
+  background: color-mix(in srgb, var(--color-teal-400) 16%, transparent);
+}
+
+.tools-hub__tile-icon--violet {
+  color: var(--color-violet-400);
+  background: color-mix(in srgb, var(--color-violet-400) 16%, transparent);
+}
+
+.tools-hub__tile-icon--amber {
+  color: var(--color-amber-500);
+  background: color-mix(in srgb, var(--color-amber-500) 16%, transparent);
+}
+
+.tools-hub__tile-icon--rose {
+  color: var(--color-rose-300);
+  background: color-mix(in srgb, var(--color-rose-300) 16%, transparent);
+}
+
+/* Texto (nombre + descripcion) */
+.tools-hub__tile-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tools-hub__tile-label {
+  font-size: 0.95rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.tools-hub__tile-desc {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--color-text-secondary);
+}
+
+/* Flecha de afordancia */
+.tools-hub__tile-arrow {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-secondary);
+}
+
+/* ─── Animaciones idle por tile ──────────────────────────────────────── */
+
+/* A1 · Ecualizador (afinador / teal) — 5 barras que pulsan */
+.tools-hub__anim-eq {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2.5px;
+  z-index: 1;
+}
+.tools-hub__anim-eq i {
+  width: 2.5px;
+  height: 40%;
+  background: currentColor;
+  border-radius: 2px;
+  transform-origin: center;
+  animation: tools-hub-anim-eq 1100ms cubic-bezier(0.22, 1, 0.36, 1) infinite alternate;
+}
+.tools-hub__anim-eq i:nth-child(1) {
+  animation-delay: 0ms;
+}
+.tools-hub__anim-eq i:nth-child(2) {
+  animation-delay: 150ms;
+}
+.tools-hub__anim-eq i:nth-child(3) {
+  animation-delay: 300ms;
+}
+.tools-hub__anim-eq i:nth-child(4) {
+  animation-delay: 120ms;
+}
+.tools-hub__anim-eq i:nth-child(5) {
+  animation-delay: 260ms;
+}
+@keyframes tools-hub-anim-eq {
+  from {
+    transform: scaleY(0.5);
+    opacity: 0.35;
+  }
+  to {
+    transform: scaleY(1.3);
+    opacity: 0.7;
+  }
+}
+/* oculta el icono SVG cuando hay barras de ecualizador */
+.tools-hub__tile-icon:has(.tools-hub__anim-eq) svg {
+  opacity: 0;
+}
+
+/* R1 · Destellos (recomendador / violet) — 4 puntos en esquinas de la placa 42px */
+.tools-hub__anim-sparkle {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.tools-hub__anim-sparkle span {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0;
+  animation: tools-hub-anim-sparkle 2200ms ease-in-out infinite;
+}
+/* esquinas de la placa 42×42px — fuera del área central del glyph (~10-32px) */
+.tools-hub__anim-sparkle span:nth-child(1) {
+  top: 4px;
+  left: 4px;
+  animation-delay: 0ms;
+}
+.tools-hub__anim-sparkle span:nth-child(2) {
+  top: 4px;
+  left: 35px;
+  animation-delay: 500ms;
+}
+.tools-hub__anim-sparkle span:nth-child(3) {
+  top: 35px;
+  left: 4px;
+  animation-delay: 1000ms;
+}
+.tools-hub__anim-sparkle span:nth-child(4) {
+  top: 35px;
+  left: 35px;
+  animation-delay: 1500ms;
+}
+@keyframes tools-hub-anim-sparkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.2);
+  }
+}
+/* el icono sparkles se mantiene visible — sin regla de ocultamiento */
+
+/* E3 · Capas drift (estudio / amber) — 3 barras que se desplazan lateralmente */
+.tools-hub__anim-layers {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 1;
+}
+.tools-hub__anim-layers i {
+  position: absolute;
+  width: 22px;
+  height: 4px;
+  border-radius: 3px;
+  background: currentColor;
+  opacity: 0.65;
+}
+.tools-hub__anim-layers i:nth-child(1) {
+  animation: tools-hub-anim-layers-a 3000ms ease-in-out infinite;
+}
+.tools-hub__anim-layers i:nth-child(2) {
+  animation: tools-hub-anim-layers-b 3000ms ease-in-out infinite;
+}
+.tools-hub__anim-layers i:nth-child(3) {
+  animation: tools-hub-anim-layers-c 3000ms ease-in-out infinite;
+}
+@keyframes tools-hub-anim-layers-a {
+  0%,
+  100% {
+    transform: translate(0, -6px);
+  }
+  50% {
+    transform: translate(-5px, -6px);
+  }
+}
+@keyframes tools-hub-anim-layers-b {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(5px, 0);
+  }
+}
+@keyframes tools-hub-anim-layers-c {
+  0%,
+  100% {
+    transform: translate(0, 6px);
+  }
+  50% {
+    transform: translate(-4px, 6px);
+  }
+}
+/* oculta el icono SVG cuando hay capas drift */
+.tools-hub__tile-icon:has(.tools-hub__anim-layers) svg {
+  opacity: 0;
+}
+
+/* P1 · Contorno melódico (partitura / rose) — un punto recorre el tiempo (izq→der)
+   subiendo y bajando según el tono, sobre un pentagrama tenue. Es "tono a lo largo
+   del tiempo": lo que define una partitura vocal. */
+.tools-hub__anim-notes {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+/* pentagrama tenue de referencia */
+.tools-hub__staff {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 1.4px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.16;
+}
+.tools-hub__staff:nth-child(1) {
+  top: 32%;
+}
+.tools-hub__staff:nth-child(2) {
+  top: 50%;
+}
+.tools-hub__staff:nth-child(3) {
+  top: 68%;
+}
+/* el runner avanza en el tiempo (X lineal); el punto marca el tono (Y ease-in-out) */
+.tools-hub__note-runner {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 8px;
+  width: 0;
+  animation: tools-hub-anim-notes-x 3200ms linear infinite;
+}
+.tools-hub__note-dot {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 5px currentColor;
+  animation: tools-hub-anim-notes-y 3200ms ease-in-out infinite;
+}
+@keyframes tools-hub-anim-notes-x {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(26px);
+  }
+}
+@keyframes tools-hub-anim-notes-y {
+  0% {
+    transform: translateY(7px);
+  }
+  22% {
+    transform: translateY(-7px);
+  }
+  48% {
+    transform: translateY(1px);
+  }
+  72% {
+    transform: translateY(-9px);
+  }
+  100% {
+    transform: translateY(7px);
+  }
+}
+/* oculta el icono SVG cuando hay contorno melódico */
+.tools-hub__tile-icon:has(.tools-hub__anim-notes) svg {
+  opacity: 0;
+}
+
+/* Respeta prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .tools-hub__anim-eq i,
+  .tools-hub__anim-sparkle span,
+  .tools-hub__anim-layers i,
+  .tools-hub__note-runner,
+  .tools-hub__note-dot {
+    animation: none !important;
+  }
+}

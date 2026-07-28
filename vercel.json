@@ -10,12 +10,73 @@
     "api/stems/webhook.js": {
       "maxDuration": 300
     },
+    "api/pipeline/webhook.js": {
+      "maxDuration": 300
+    },
+    "api/align/webhook.js": {
+      "maxDuration": 60
+    },
     "api/stems/cleanup.js": {
+      "maxDuration": 60
+    },
+    "api/pitch/webhook.js": {
+      "maxDuration": 300
+    },
+    "api/pitch/cleanup.js": {
+      "maxDuration": 60
+    },
+    "api/pipeline/cleanup.js": {
+      "maxDuration": 60
+    },
+    "api/vitals/cleanup.js": {
+      "maxDuration": 60
+    },
+    "api/pitch/jobs/\\[id\\]/approve.js": {
+      "maxDuration": 60
+    },
+    "api/pitch/jobs/\\[id\\]/retry.js": {
+      "maxDuration": 60
+    },
+    "api/songs/\\[id\\]/audio.js": {
+      "maxDuration": 60
+    },
+    "api/songs/\\[id\\]/pipeline/lyrics.js": {
+      "maxDuration": 60
+    },
+    "api/songs/\\[id\\]/pipeline/retry.js": {
+      "maxDuration": 60
+    },
+    "api/songs/\\[id\\]/pipeline/confirm.js": {
+      "maxDuration": 60
+    },
+    "api/stems/jobs/\\[id\\]/start.js": {
+      "maxDuration": 60
+    },
+    "api/stems/jobs/\\[id\\]/retry.js": {
       "maxDuration": 60
     },
     "api/**/*.js": {
       "maxDuration": 10
     }
   },
-  "crons": [{ "path": "/api/stems/cleanup", "schedule": "0 * * * *" }]
+  "crons": [
+    { "path": "/api/stems/cleanup", "schedule": "0 * * * *" },
+    { "path": "/api/pitch/cleanup", "schedule": "0 * * * *" },
+    { "path": "/api/pipeline/cleanup", "schedule": "0 * * * *" },
+    { "path": "/api/vitals/cleanup", "schedule": "0 * * * *" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        {
+          "key": "Content-Security-Policy-Report-Only",
+          "value": "default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https: wss:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        }
+      ]
+    }
+  ]
 }

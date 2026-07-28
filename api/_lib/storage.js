@@ -134,12 +134,188 @@ export async function signStemsDownload(key, expiresIn = 21600) {
 export async function deleteStemsPrefix(prefix) {
   const toDelete = [];
   // El bucket anida input/ stems/ voices/: listar cada nivel conocido.
-  for (const sub of ['input', 'stems', 'voices']) {
-    const { data, error } = await supabase.storage.from(STEMS_BUCKET).list(`${prefix}/${sub}`);
-    if (error || !data) continue;
+  // Los 3 list() son independientes entre sí: se resuelven en paralelo.
+  const subs = ['input', 'stems', 'voices'];
+  const results = await Promise.all(
+    subs.map((sub) => supabase.storage.from(STEMS_BUCKET).list(`${prefix}/${sub}`)),
+  );
+  results.forEach(({ data, error }, i) => {
+    if (error || !data) return;
+    const sub = subs[i];
     for (const f of data) toDelete.push(`${prefix}/${sub}/${f.name}`);
-  }
+  });
   if (toDelete.length > 0) {
     await supabase.storage.from(STEMS_BUCKET).remove(toDelete);
   }
+}
+
+// ──────────────────────────────────────────────
+// Audio por sección — bucket privado 'song-audio'
+// ──────────────────────────────────────────────
+const SONG_AUDIO_BUCKET = 'song-audio';
+
+/**
+ * Signed PUT URL para que el admin suba (o re-suba) el mp3 de una sección.
+ * upsert:true — lección del bug de pitch: re-subir la misma key no debe dar
+ * 400 "resource already exists".
+ * @param {string} key - p.ej. `${songId}/section-0-tenor.mp3`
+ * @returns {Promise<string>} URL firmada (PUT)
+ */
+export async function createSongAudioSignedPutUrl(key) {
+  const { data, error } = await supabase.storage
+    .from(SONG_AUDIO_BUCKET)
+    .createSignedUploadUrl(key, { upsert: true });
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+/**
+ * Signed URL de descarga (6h por defecto, mismo TTL que stems). Se re-firma
+ * en cada GET de listado para que la URL nunca quede vieja en el front.
+ * @param {string} key
+ * @param {number} [expiresIn]
+ */
+export async function signSongAudioDownload(key, expiresIn = 21600) {
+  const { data, error } = await supabase.storage
+    .from(SONG_AUDIO_BUCKET)
+    .createSignedUrl(key, expiresIn);
+  if (error) throw error;
+  return data.signedUrl;
+}
+
+/**
+ * Firma varias keys de descarga en UNA sola llamada (createSignedUrls) en vez
+ * de N createSignedUrl en ráfaga. Un GET del Estudio/section-audio con muchas
+ * secciones × scopes podía disparar ~200 firmas en paralelo contra Storage y
+ * tropezar con el rate limit upstream de Supabase (429 "too many requests").
+ * Devuelve las URLs en el MISMO orden que `keys` (null si esa key falló).
+ * @param {string[]} keys
+ * @param {number} [expiresIn]
+ * @returns {Promise<(string|null)[]>}
+ */
+export async function signSongAudioDownloads(keys, expiresIn = 21600) {
+  if (keys.length === 0) return [];
+  const { data, error } = await supabase.storage
+    .from(SONG_AUDIO_BUCKET)
+    .createSignedUrls(keys, expiresIn);
+  if (error) throw error;
+  // createSignedUrls devuelve un array alineado con la entrada; cada item trae
+  // { path, error, signedUrl }. Se preserva el orden para mapear 1:1 con las filas.
+  return data.map((d) => d?.signedUrl ?? null);
+}
+
+/**
+ * Borra un objeto del bucket song-audio. Best-effort: ignora "not found" para
+ * que el DELETE de la fila no falle si el objeto ya no estaba (p.ej. borrado manual).
+ * @param {string} key
+ */
+export async function deleteSongAudioObject(key) {
+  const { error } = await supabase.storage.from(SONG_AUDIO_BUCKET).remove([key]);
+  if (error && !/not.*found/i.test(error.message || '')) throw error;
+}
+
+/**
+ * Borra varios objetos del bucket song-audio en UNA sola llamada (misma
+ * lógica de deleteSongAudioObject pero en batch, igual patrón que
+ * deleteAvatarObjects). Usado al borrar una canción entera: con muchas
+ * secciones x scopes, un loop de llamadas individuales podía acercarse al
+ * maxDuration de la función (vercel.json).
+ * @param {string[]} keys
+ */
+export async function deleteSongAudioObjects(keys) {
+  if (keys.length === 0) return;
+  const { error } = await supabase.storage.from(SONG_AUDIO_BUCKET).remove(keys);
+  if (error && !/not.*found/i.test(error.message || '')) throw error;
+}
+
+/**
+ * Borra TODOS los archivos bajo un prefijo del bucket song-audio (mismo
+ * patrón que deleteStemsPrefix, pero con subcarpetas del pipeline unificado:
+ * stems/ y clips/<kind>/). Usado por el cron de limpieza para barrer los
+ * objetos huérfanos de un run cancelado (#4: purgeRun cancela el run en DB
+ * pero los jobs de Modal ya despachados con signed PUT URLs pueden seguir
+ * subiendo después del borrado).
+ * @param {string} prefix - p.ej. `${songId}`
+ */
+export async function deleteSongAudioPrefix(prefix) {
+  const toDelete = [];
+  const { data: stemFiles, error: stemErr } = await supabase.storage
+    .from(SONG_AUDIO_BUCKET)
+    .list(`${prefix}/stems`);
+  if (!stemErr && stemFiles) {
+    for (const f of stemFiles) toDelete.push(`${prefix}/stems/${f.name}`);
+  }
+  const { data: clipKinds, error: clipKindsErr } = await supabase.storage
+    .from(SONG_AUDIO_BUCKET)
+    .list(`${prefix}/clips`);
+  if (!clipKindsErr && clipKinds) {
+    const clipLists = await Promise.all(
+      clipKinds.map((kind) =>
+        supabase.storage.from(SONG_AUDIO_BUCKET).list(`${prefix}/clips/${kind.name}`),
+      ),
+    );
+    clipLists.forEach(({ data, error }, i) => {
+      if (error || !data) return;
+      const kindName = clipKinds[i].name;
+      for (const f of data) toDelete.push(`${prefix}/clips/${kindName}/${f.name}`);
+    });
+  }
+  if (toDelete.length > 0) {
+    await supabase.storage.from(SONG_AUDIO_BUCKET).remove(toDelete);
+  }
+}
+
+// ──────────────────────────────────────────────
+// Pipeline unificado — keys dentro del mismo bucket 'song-audio' (spec fase A).
+// La firma PUT/GET reutiliza createSongAudioSignedPutUrl/signSongAudioDownload
+// de arriba; estas funciones solo arman la ruta.
+// ──────────────────────────────────────────────
+
+/**
+ * Key del mp3 completo subido como input de un run del pipeline.
+ * @param {string} songId
+ * @param {string} runId
+ * @returns {string}
+ */
+export function pipelineInputKey(songId, runId) {
+  return `${songId}/runs/${runId}/full.mp3`;
+}
+
+/**
+ * Key de una pista publicada del pipeline (p.ej. 'lead', 'backing', 'vocals').
+ * @param {string} songId
+ * @param {string} kind
+ * @returns {string}
+ */
+export function pipelineStemKey(songId, kind) {
+  return `${songId}/stems/${kind}.mp3`;
+}
+
+/**
+ * Key de un artefacto de la partitura vocal generado por el pipeline.
+ * @param {string} songId
+ * @param {string} name
+ * @returns {string}
+ */
+export function pipelinePartituraKey(songId, name) {
+  return `${songId}/partitura/${name}`;
+}
+
+/**
+ * Verifica que el input subido por el cliente (PUT firmado, sin confirmar
+ * server-side) exista realmente en Storage y su tamaño (spec Task B2: el
+ * cliente pudo cancelar la subida a mitad de camino, o el archivo puede
+ * superar el límite de 25MB que el PUT firmado no rechaza por sí solo).
+ * Mismo patrón `list()` que deleteStemsPrefix arriba.
+ * @param {string} key - p.ej. `${songId}/runs/${runId}/full.mp3`
+ * @returns {Promise<{ exists: boolean, size: number|null }>}
+ */
+export async function pipelineInputStat(key) {
+  const prefix = key.slice(0, key.lastIndexOf('/'));
+  const name = key.slice(key.lastIndexOf('/') + 1);
+  const { data, error } = await supabase.storage.from(SONG_AUDIO_BUCKET).list(prefix);
+  if (error || !data) return { exists: false, size: null };
+  const found = data.find((f) => f.name === name);
+  if (!found) return { exists: false, size: null };
+  return { exists: true, size: found.metadata?.size ?? null };
 }

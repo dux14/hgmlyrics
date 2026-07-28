@@ -125,4 +125,36 @@ describe('GET /api/stems/cleanup — auth fail-closed', () => {
       expiredLists: 0,
     });
   });
+
+  it('Promise.allSettled: un borrado que falla no aborta el resto ni marca el job como expired', async () => {
+    process.env.CRON_SECRET = 'supersecret';
+
+    // 2 jobs "expired": el borrado de job1 rechaza (no debe marcarse expired: quedaría
+    // storage huérfano irrecuperable); el de job2 resuelve y sí se marca. Solo 1 UPDATE.
+    sqlResponses.push([
+      { id: 'job1', user_id: 'u1' },
+      { id: 'job2', user_id: 'u2' },
+    ]); // expired SELECT
+    sqlResponses.push([]); // UPDATE expired job2 (job1 se salta por borrado fallido)
+    sqlResponses.push([]); // zombies
+    sqlResponses.push([]); // abandoned
+    sqlResponses.push([]); // orphanStorage
+    sqlResponses.push([]); // expiredLists
+
+    mockDeleteStemsPrefix
+      .mockReset()
+      .mockRejectedValueOnce(new Error('storage caído'))
+      .mockResolvedValue(undefined);
+
+    const res = makeRes();
+    await handler(makeReq({ headers: { authorization: 'Bearer supersecret' } }), res);
+
+    // El cron no debe abortar ni devolver 5xx por el fallo de un solo borrado.
+    expect(res.statusCode).toBe(200);
+    expect(mockDeleteStemsPrefix).toHaveBeenCalledTimes(2);
+    expect(mockDeleteStemsPrefix).toHaveBeenCalledWith('u1/job1');
+    expect(mockDeleteStemsPrefix).toHaveBeenCalledWith('u2/job2');
+    // job1 (borrado fallido) sigue 'done' y se reintentará; solo job2 quedó expired.
+    expect(res.body.expired).toBe(1);
+  });
 });

@@ -3,6 +3,7 @@ import { requireAdmin } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { isValidKey } from '../../src/lib/musicKeys.js';
 import { validateSongV2, validateSongV3 } from '../../src/lib/voiceSystem.js';
+import { persistLinksInTx } from '../_lib/songLinks.js';
 
 function normalizeKey(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -80,22 +81,30 @@ async function createSong(req, res) {
       return;
     }
   }
-  await sql`
-    INSERT INTO songs (
-      id, title, artist, album, album_slug, year, genre,
-      voice_type, voice_percent_male, voice_percent_female,
-      cover_image, sections, album_order, cejilla, key,
-      voice_roster, schema_version
-    ) VALUES (
-      ${s.id}, ${s.title}, ${s.artist ?? null}, ${s.album ?? null},
-      ${s.albumSlug ?? null}, ${s.year ?? null}, ${s.genre ?? null},
-      ${s.voiceType ?? null},
-      ${s.voicePercent?.male ?? 50}, ${s.voicePercent?.female ?? 50},
-      ${s.coverImage ?? null}, ${sql.json(s.sections ?? [])},
-      ${s.albumOrder ?? 0}, ${s.cejilla ?? null}, ${key},
-      ${sql.json(s.voiceRoster ?? [])}, ${s.schemaVersion ?? 1}
-    )
-  `;
+  // platformLinks/voiceLinks son opcionales (mismo criterio que en update()):
+  // si vienen, se insertan en la MISMA transacción que la canción.
+  const hasLinks = s.platformLinks !== undefined || s.voiceLinks !== undefined;
+  await sql.begin(async (tx) => {
+    await tx`
+      INSERT INTO songs (
+        id, title, artist, album, album_slug, year, genre,
+        voice_type, voice_percent_male, voice_percent_female,
+        cover_image, sections, album_order, cejilla, key,
+        voice_roster, schema_version
+      ) VALUES (
+        ${s.id}, ${s.title}, ${s.artist ?? null}, ${s.album ?? null},
+        ${s.albumSlug ?? null}, ${s.year ?? null}, ${s.genre ?? null},
+        ${s.voiceType ?? null},
+        ${s.voicePercent?.male ?? 50}, ${s.voicePercent?.female ?? 50},
+        ${s.coverImage ?? null}, ${sql.json(s.sections ?? [])},
+        ${s.albumOrder ?? 0}, ${s.cejilla ?? null}, ${key},
+        ${sql.json(s.voiceRoster ?? [])}, ${s.schemaVersion ?? 1}
+      )
+    `;
+    if (hasLinks) {
+      await persistLinksInTx(tx, s.id, s.platformLinks ?? [], s.voiceLinks ?? []);
+    }
+  });
   invalidateListCache();
   res.status(201).json({ success: true, id: s.id });
 }

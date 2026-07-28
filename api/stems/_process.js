@@ -4,6 +4,10 @@
  */
 import { SECTION_KEYS, applySectionResult, deriveJobStatus } from './_sections.js';
 
+// El webhook solo reporta el desenlace de una sección: terminó (done) o falló (failed).
+// Aceptar 'pending'/'running'/'skipped' permitiría "des-terminar" una sección ya resuelta.
+const TERMINAL_SECTION_STATUS = ['done', 'failed'];
+
 /**
  * Aplica el resultado de una sección al job en una transacción con row-lock (FOR UPDATE).
  * Serializa escrituras concurrentes: Modal puede postear las 4 secciones simultáneamente.
@@ -17,6 +21,15 @@ import { SECTION_KEYS, applySectionResult, deriveJobStatus } from './_sections.j
 export async function applySectionWebhook(sql, jobId, section, result) {
   if (!SECTION_KEYS.includes(section)) {
     const e = new Error(`Sección desconocida: ${section}`);
+    e.status = 400;
+    throw e;
+  }
+
+  // Fix 4: sin esto, applySectionResult asigna result.status tal cual, sin validar —
+  // un status arbitrario del webhook quedaría persistido. Solo se aceptan terminales:
+  // un 'running'/'pending'/'skipped' entrante revertiría una sección ya resuelta.
+  if (!TERMINAL_SECTION_STATUS.includes(result.status)) {
+    const e = new Error('status de sección no válido');
     e.status = 400;
     throw e;
   }

@@ -1,11 +1,17 @@
 /**
  * Profile.js — Own profile view + edit + avatar upload.
  */
-import { getSession, getProfile, refreshProfile } from '../lib/authStore.js';
+import { getSession, getProfile, refreshProfile, signOut } from '../lib/authStore.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelProfile } from '../lib/skeleton.js';
+import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
-import { compressImageToLimit } from '../lib/imageCompress.js';
+import { compressImageToLimit } from '../lib/imageCompress.js'; // usados por renderProfileEdit (Task 3)
 import { escapeHtml } from '../lib/escape.js';
+import { createWaveRange } from './vocal-range/waveRange.js';
 import { isFounder, founderCrownHtml } from '../lib/founders.js';
+import { getMyProfile, invalidateMyProfile } from '../lib/profileCache.js';
+import '../styles/profile.css';
 
 const VOICE_TYPES = [
   ['', '—'],
@@ -31,46 +37,89 @@ export function voiceLabel(voiceType, voiceSubtype) {
   return { text: `${VOICE_LABELS[voiceType]}${sub}`, cls: `voice-pill--${voiceType}` };
 }
 
-/** Cabecera Variante C: banner + avatar + nombre/@ + voz + viz rango + quick-buttons + chips. */
+/** Cabecera Ambient Kinetic: ambient blob + avatar + nombre + voz + rango (onda) + instrumentos + accesos. */
 export function buildProfileHeader(profile) {
   const avatarUrl = profile.avatarUrl || '';
   const voice = voiceLabel(profile.voiceType, profile.voiceSubtype);
-  const voicePill = voice ? `<span class="voice-pill ${voice.cls}">${voice.text}</span>` : '';
+  const crown = isFounder(profile.username) ? founderCrownHtml() : '';
+  const vbadge = voice
+    ? `<div class="pf-vbadge pf-vbadge--${profile.voiceType}"><span class="pf-dot"></span>${voice.text}</div>`
+    : '';
+  const bio = profile.bio ? `<p class="pf-bio">${escapeHtml(profile.bio)}</p>` : '';
   const hasRange = profile.vocalRangeLow || profile.vocalRangeHigh;
-  const rangeViz = hasRange
-    ? `<div class="range-viz">
-         <div class="range-viz__bars" aria-hidden="true">${Array.from({ length: 7 })
-           .map((_, i) => `<span style="height:${30 + ((i * 11) % 70)}%"></span>`)
-           .join('')}</div>
-         <span class="range-viz__label">Rango vocal · ${escapeHtml(profile.vocalRangeLow || '?')} — ${escapeHtml(profile.vocalRangeHigh || '?')}</span>
+  const rangeLbl = hasRange
+    ? `<div class="pf-range-lbl">
+         <span class="lo"><span class="pf-dot"></span><b>${escapeHtml(profile.vocalRangeLow || '?')}</b> grave</span>
+         <span class="hi">agudo <b>${escapeHtml(profile.vocalRangeHigh || '?')}</b><span class="pf-dot"></span></span>
        </div>`
     : '';
-  const chips = (profile.instrumentRoles || [])
-    .filter(Boolean)
-    .map((r) => `<span class="profile-chip">${escapeHtml(r)}</span>`)
-    .join('');
-  const chipsRow = chips ? `<div class="profile-chips">${chips}</div>` : '';
-  const crown = isFounder(profile.username) ? founderCrownHtml() : '';
+  const rnote = profile.vocalRangeNotes
+    ? `<div class="pf-rnote">${escapeHtml(profile.vocalRangeNotes)}</div>`
+    : '';
+  const rangeCard = hasRange
+    ? `<div class="pf-card">
+         <div class="pf-ctop"><span class="pf-cl">Rango vocal</span></div>
+         <div class="pf-wave-host"></div>
+         ${rangeLbl}
+         ${rnote}
+       </div>`
+    : '';
+  const chips = (profile.instrumentRoles || []).filter(Boolean);
+  const instrCard = chips.length
+    ? `<div class="pf-card">
+         <div class="pf-ctop"><span class="pf-cl">Instrumentos</span></div>
+         <div class="pf-chips">${chips.map((r) => `<span class="pf-chip">${escapeHtml(r)}</span>`).join('')}</div>
+       </div>`
+    : '';
+  const favCount = Number.isFinite(profile.favoriteCount) ? profile.favoriteCount : '';
+  const friendCount = Number.isFinite(profile.friendCount) ? profile.friendCount : '';
+  const adminRow = profile.isAdmin
+    ? `<a class="pf-accrow" href="#/admin">
+         <span class="pf-ai pf-ai--admin">${icon('shield', { size: 16 })}</span>
+         <span class="pf-an">Panel de admin</span>
+         ${icon('chevron-right', { size: 15, className: 'pf-arr' })}
+       </a>`
+    : '';
   return `
-    <div class="profile-banner">
-      ${voicePill}
+    <div class="pf-top">
+      <div class="pf-amb" aria-hidden="true"></div>
       <span class="avatar-wrap">
-        <img class="profile-banner__avatar" id="avatar-preview" src="${escapeHtml(avatarUrl)}" alt="Avatar" />${crown}
+        <img class="pf-av" id="avatar-preview" src="${escapeHtml(avatarUrl)}" alt="Avatar" />${crown}
       </span>
-      <div class="profile-banner__id">
-        <h1 class="profile-banner__name">${escapeHtml(profile.displayName || profile.username)}</h1>
-        <div class="profile-username">@${escapeHtml(profile.username)}</div>
-      </div>
-      ${rangeViz}
+      <h1 class="pf-name">${escapeHtml(profile.displayName || profile.username)}</h1>
+      <div class="pf-user">@${escapeHtml(profile.username)}</div>
+      ${vbadge}
+      ${bio}
     </div>
-    <div class="profile-quick">
-      <a class="profile-quick__btn" href="#/favoritos">Mis favoritos</a>
-      <a class="profile-quick__btn" href="#/amigos">Amigos</a>
+    <a class="pf-edit-primary" href="#/perfil/editar">${icon('edit', { size: 17 })}Editar perfil</a>
+    ${rangeCard}
+    ${instrCard}
+    <div class="pf-divlabel">Cuenta</div>
+    <div class="pf-acc">
+      <a class="pf-accrow" href="#/amigos">
+        <span class="pf-ai pf-ai--friends">${icon('user', { size: 16 })}</span>
+        <span class="pf-an">Amigos</span><span class="pf-ac">${friendCount}</span>
+        ${icon('chevron-right', { size: 15, className: 'pf-arr' })}
+      </a>
+      <a class="pf-accrow" href="#/favoritos">
+        <span class="pf-ai pf-ai--fav">${icon('heart', { size: 16 })}</span>
+        <span class="pf-an">Favoritos</span><span class="pf-ac">${favCount}</span>
+        ${icon('chevron-right', { size: 15, className: 'pf-arr' })}
+      </a>
+      ${adminRow}
+      <button class="pf-accrow pf-accrow--logout" id="pf-logout" type="button">
+        <span class="pf-ai pf-ai--logout">${icon('log-out', { size: 16 })}</span>
+        <span class="pf-an">Cerrar sesión</span>
+      </button>
     </div>
-    ${chipsRow}
+    <a class="pf-lic" href="#/licencias">
+      <span>Licencias y créditos</span>
+      ${icon('chevron-right', { size: 15, className: 'pf-arr' })}
+    </a>
   `;
 }
 
+// Las funciones y constantes siguientes se reusarán en renderProfileEdit (Task 3).
 async function patchProfile(payload) {
   const token = getSession()?.access_token;
   const res = await fetch('/api/profile/me', {
@@ -117,184 +166,314 @@ function isCustomAvatar(url) {
 }
 
 /**
- * Render the profile page (own profile editor).
+ * Pantalla de edición de perfil (Task 3).
+ * Mismo flujo que el form original; solo cambia markup + clases (pf-*).
  * @param {HTMLElement} container
  */
-export async function renderProfile(container) {
-  const profile = getProfile();
-  if (!profile) {
-    container.innerHTML = '<div class="profile-page"><p>Cargando...</p></div>';
-    return;
-  }
+export async function renderProfileEdit(container) {
+  // Shell + región async; siempre va por el fetcher (sin SWR) para evitar que
+  // una re-renderización por caché borre ediciones en progreso del formulario.
+  container.innerHTML = `<div class="pf-edit-region" aria-busy="true"></div>`;
+  const editRegion = container.querySelector('.pf-edit-region');
 
-  container.innerHTML = `
+  renderAsyncRegion(editRegion, {
+    skeleton: () => skelProfile(),
+    fetcher: async () => {
+      await refreshProfile();
+      return getProfile();
+    },
+    render: paintEditForm,
+    empty: () => `<p class="pf-hint">Sin sesión. <a href="#/login">Iniciar sesión</a></p>`,
+    onError: () => `
+      <div class="empty-state">
+        <h2 class="empty-state__title">No se pudo cargar el perfil</h2>
+        <button class="btn btn--primary" data-retry>Reintentar</button>
+      </div>`,
+  });
+
+  function paintEditForm(profile) {
+    const avatarUrl = profile.avatarUrl || '';
+
+    container.innerHTML = `
     <div class="profile-page fade-in">
-      ${buildProfileHeader(profile)}
-
-      <input type="file" id="avatar-input" accept="image/webp,image/png,image/jpeg" style="display:none;" />
-      <div style="display:flex; gap:var(--space-sm); flex-wrap:wrap; max-width:480px;">
-        <button class="auth-btn" id="avatar-btn" style="flex:1; min-width:160px;">Cambiar avatar</button>
-        <button class="auth-btn" id="avatar-remove-btn" style="flex:1; min-width:160px; display:${isCustomAvatar(profile.avatarUrl) ? 'flex' : 'none'};">Eliminar avatar</button>
+      <div class="pf-etop">
+        <a class="pf-bk" href="#/perfil" aria-label="Volver">${icon('chevron-left', { size: 16 })}</a>
+        <h1>Editar perfil</h1>
+        <span class="pf-saved" id="form-success" style="display:none">${icon('check', { size: 12 })}Guardado</span>
       </div>
-      <div class="auth-error" id="avatar-error" style="display:none;"></div>
 
-      <div class="profile-edit-card">
-      <form id="profile-form">
-        <div class="profile-field">
-          <label class="profile-field__label" for="display-input">Nombre a mostrar</label>
-          <input type="text" class="auth-input" id="display-input" maxlength="32" value="${profile.displayName || ''}" />
+      <div class="pf-av-edit">
+        <div class="pf-av-lg">
+          <img class="pf-av" id="avatar-preview" src="${escapeHtml(avatarUrl)}" alt="Avatar" />
+          <span class="pf-cam">${icon('camera', { size: 12 })}</span>
         </div>
-
-        <div class="profile-field">
-          <label class="profile-field__label" for="bio-input">Bio (≤200 chars)</label>
-          <textarea class="auth-input" id="bio-input" maxlength="200" rows="3">${profile.bio || ''}</textarea>
+        <div class="pf-ava">
+          <button class="pf-ab" type="button" id="avatar-btn">Cambiar avatar</button>
+          <button class="pf-ab rm" type="button" id="avatar-remove-btn"
+                  style="display:${isCustomAvatar(profile.avatarUrl) ? 'flex' : 'none'}">Eliminar</button>
         </div>
+      </div>
+      <input type="file" id="avatar-input" accept="image/*" style="display:none" />
+      <p class="pf-av-note" id="avatar-error" style="display:none"></p>
+      <p class="pf-av-note">WEBP, PNG o JPEG &middot; hasta 2&nbsp;MB (se comprime).</p>
 
-        <div class="profile-field">
-          <label class="profile-field__label" for="voice-type-input">Tipo de voz</label>
-          <select class="auth-input" id="voice-type-input">
-            ${VOICE_TYPES.map(([v, l]) => `<option value="${v}" ${profile.voiceType === v ? 'selected' : ''}>${l}</option>`).join('')}
-          </select>
+      <form class="pf-form" id="profile-form">
+        <div class="pf-fld">
+          <div class="pf-fl"><span>Nombre a mostrar</span></div>
+          <input class="pf-inp" id="display-input" type="text"
+                 value="${escapeHtml(profile.displayName || '')}" maxlength="60" />
         </div>
-
-        <div class="profile-field">
-          <label class="profile-field__label" for="voice-subtype-input">Subtipo de voz</label>
-          <select class="auth-input" id="voice-subtype-input">
-            ${VOICE_SUBTYPES.map(([v, l]) => `<option value="${v}" ${profile.voiceSubtype === v ? 'selected' : ''}>${l}</option>`).join('')}
-          </select>
+        <div class="pf-two">
+          <div class="pf-fld">
+            <div class="pf-fl">Tipo de voz</div>
+            <select class="pf-inp" id="voice-type-input">
+              ${VOICE_TYPES.map(
+                ([v, l]) =>
+                  `<option value="${escapeHtml(v)}"${profile.voiceType === v ? ' selected' : ''}>${escapeHtml(l)}</option>`,
+              ).join('')}
+            </select>
+          </div>
+          <div class="pf-fld">
+            <div class="pf-fl">Subtipo de voz</div>
+            <select class="pf-inp" id="voice-subtype-input">
+              ${VOICE_SUBTYPES.map(
+                ([v, l]) =>
+                  `<option value="${escapeHtml(v)}"${profile.voiceSubtype === v ? ' selected' : ''}>${escapeHtml(l)}</option>`,
+              ).join('')}
+            </select>
+          </div>
         </div>
-
-        <div class="profile-field">
-          <label class="profile-field__label" for="range-low-input">Rango vocal bajo (ej C3)</label>
-          <input type="text" class="auth-input" id="range-low-input" maxlength="3" value="${profile.vocalRangeLow || ''}" />
+        <div class="pf-fld">
+          <div class="pf-fl"><span>Biografía</span></div>
+          <textarea class="pf-inp pf-inp--area" id="bio-input"
+                    rows="3" maxlength="400">${escapeHtml(profile.bio || '')}</textarea>
         </div>
-
-        <div class="profile-field">
-          <label class="profile-field__label" for="range-high-input">Rango vocal alto (ej A5)</label>
-          <input type="text" class="auth-input" id="range-high-input" maxlength="3" value="${profile.vocalRangeHigh || ''}" />
+        <div class="pf-fld">
+          <div class="pf-fl">Instrumentos</div>
+          <input class="pf-inp" id="instruments-input" type="text"
+                 value="${escapeHtml((profile.instrumentRoles || []).join(', '))}" />
+          <p class="pf-hint">Separa con comas. Aparecen como chips en tu perfil.</p>
         </div>
-
-        <div class="profile-field">
-          <a class="auth-btn" href="#/afinador?mode=range" style="display:block; text-decoration:none; text-align:center;">
-            ${icon('mic', { size: 16 })} Medir mi rango con el afinador
+        <div class="pf-card" style="margin: 2px 0 0">
+          <div class="pf-ctop"><span class="pf-cl">Vista previa del rango</span></div>
+          <div class="pf-wave-host" id="edit-wave-host" style="height: 96px"></div>
+          <div class="pf-two" style="margin-top: 10px">
+            <div class="pf-fld">
+              <div class="pf-fl">Grave</div>
+              <input class="pf-inp" id="range-low-input" type="text"
+                     value="${escapeHtml(profile.vocalRangeLow || '')}" placeholder="Ej. C3" />
+            </div>
+            <div class="pf-fld">
+              <div class="pf-fl">Agudo</div>
+              <input class="pf-inp" id="range-high-input" type="text"
+                     value="${escapeHtml(profile.vocalRangeHigh || '')}" placeholder="Ej. A5" />
+            </div>
+          </div>
+        </div>
+        <div class="pf-fld">
+          <div class="pf-fl">Notas del rango</div>
+          <input class="pf-inp" id="range-notes-input" type="text"
+                 value="${escapeHtml(profile.vocalRangeNotes || '')}" />
+        </div>
+        <div class="pf-fld">
+          <a class="pf-linkrow" href="#/afinador?mode=range">
+            <span class="pf-li">${icon('activity', { size: 15 })}</span>
+            <div class="pf-lt">
+              <div class="pf-lt-a">Medir mi rango con el afinador</div>
+              <div class="pf-lt-b">Abre el afinador en modo rango</div>
+            </div>
+            ${icon('chevron-right', { size: 15, className: 'pf-li-arr' })}
           </a>
         </div>
-
-        <div class="profile-field">
-          <label class="profile-field__label" for="range-notes-input">Notas del rango (opcional, ≤80 chars)</label>
-          <input type="text" class="auth-input" id="range-notes-input" maxlength="80" placeholder="ej. falsete G4-D2, zona segura D2-D4" value="${(profile.vocalRangeNotes || '').replace(/"/g, '&quot;')}" />
+        <div class="pf-fld" style="margin-bottom:14px">
+          <div class="pf-linkrow">
+            <span class="pf-li pf-li--eye">${icon('eye', { size: 15 })}</span>
+            <div class="pf-lt">
+              <div class="pf-lt-a">Perfil público</div>
+              <div class="pf-lt-b">Otros pueden verte y agregarte</div>
+            </div>
+            <label class="pf-sw">
+              <input type="checkbox" id="public-input"${profile.isPublic ? ' checked' : ''}
+                     style="position:absolute;opacity:0;pointer-events:none;width:0;height:0" />
+            </label>
+          </div>
         </div>
-
-        <div class="profile-field">
-          <label class="profile-field__label" for="instruments-input">Instrumentos (separados por coma)</label>
-          <input type="text" class="auth-input" id="instruments-input" value="${(profile.instrumentRoles || []).join(', ')}" />
-        </div>
-
-        <div class="profile-field">
-          <label class="profile-field__label">
-            <input type="checkbox" id="public-input" ${profile.isPublic ? 'checked' : ''} />
-            Perfil público (visible para otros usuarios autenticados)
-          </label>
-        </div>
-
-        <div class="auth-error" id="form-error" style="display:none;"></div>
-        <div class="auth-success" id="form-success" style="display:none;"></div>
-        <button type="submit" class="auth-btn" id="submit-btn">Guardar</button>
+        <div id="form-error" style="display:none;color:var(--color-error);font-size:12px;padding:4px 0;"></div>
       </form>
+
+      <div class="pf-actbar">
+        <a class="pf-btn-ghost" href="#/perfil">Cancelar</a>
+        <button class="pf-btn-pri" type="submit" form="profile-form" id="submit-btn">
+          ${icon('check', { size: 15 })}Guardar
+        </button>
       </div>
-      <a class="profile-licenses-link" href="#/licencias">Licencias y créditos</a>
     </div>
   `;
 
-  const avatarBtn = container.querySelector('#avatar-btn');
-  const avatarRemoveBtn = container.querySelector('#avatar-remove-btn');
-  const avatarInput = container.querySelector('#avatar-input');
-  const avatarPreview = container.querySelector('#avatar-preview');
-  const avatarError = container.querySelector('#avatar-error');
+    // Listeners (lógica idéntica al original; solo cambia markup/clases)
+    const avatarBtn = container.querySelector('#avatar-btn');
+    const avatarRemoveBtn = container.querySelector('#avatar-remove-btn');
+    const avatarInput = container.querySelector('#avatar-input');
+    const avatarPreview = container.querySelector('#avatar-preview');
+    const avatarError = container.querySelector('#avatar-error');
 
-  avatarBtn.addEventListener('click', () => avatarInput.click());
-  avatarInput.addEventListener('change', async () => {
-    const file = avatarInput.files?.[0];
-    if (!file) return;
-
-    // Show a neutral "processing" status (override the red error style temporarily).
-    avatarError.textContent = 'Procesando imagen…';
-    avatarError.style.color = 'var(--color-text-muted, #888)';
-    avatarError.style.display = 'block';
-    avatarBtn.disabled = true;
-
-    try {
-      const prepared = await compressImageToLimit(file);
-
-      if (prepared.size > 2 * 1024 * 1024) {
-        avatarError.textContent =
-          'No pudimos reducir la imagen por debajo de 2 MB. Intenta con otra foto.';
+    avatarBtn.addEventListener('click', () => avatarInput.click());
+    avatarInput.addEventListener('change', async () => {
+      const file = avatarInput.files?.[0];
+      if (!file) return;
+      avatarError.textContent = 'Procesando imagen…';
+      avatarError.style.color = 'var(--color-text-secondary)';
+      avatarError.style.display = 'block';
+      avatarBtn.disabled = true;
+      try {
+        const prepared = await compressImageToLimit(file);
+        if (prepared.size > 2 * 1024 * 1024) {
+          avatarError.textContent =
+            'No pudimos reducir la imagen por debajo de 2 MB. Intenta con otra foto.';
+          avatarError.style.color = '';
+          return;
+        }
+        const url = await uploadAvatar(prepared);
+        await refreshProfile();
+        invalidateMyProfile();
+        avatarPreview.src = url;
+        avatarRemoveBtn.style.display = 'flex';
+        avatarError.style.display = 'none';
         avatarError.style.color = '';
-        return;
+      } catch (e) {
+        avatarError.textContent = `Error: ${e.message}`;
+        avatarError.style.color = '';
+        avatarError.style.display = 'block';
+      } finally {
+        avatarBtn.disabled = false;
       }
+    });
 
-      const url = await uploadAvatar(prepared);
-      await refreshProfile();
-      avatarPreview.src = url;
-      avatarRemoveBtn.style.display = 'flex';
+    avatarRemoveBtn.addEventListener('click', async () => {
       avatarError.style.display = 'none';
-      avatarError.style.color = '';
-    } catch (e) {
-      avatarError.textContent = `Error: ${e.message}`;
-      avatarError.style.color = '';
-      avatarError.style.display = 'block';
-    } finally {
-      avatarBtn.disabled = false;
+      avatarRemoveBtn.disabled = true;
+      try {
+        const url = await deleteAvatar();
+        await refreshProfile();
+        invalidateMyProfile();
+        avatarPreview.src = url || '';
+        avatarRemoveBtn.style.display = 'none';
+      } catch (e) {
+        avatarError.textContent = `Error: ${e.message}`;
+        avatarError.style.display = 'block';
+      } finally {
+        avatarRemoveBtn.disabled = false;
+      }
+    });
+
+    container.querySelector('#profile-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const errEl = container.querySelector('#form-error');
+      const okEl = container.querySelector('#form-success');
+      errEl.style.display = 'none';
+      okEl.style.display = 'none';
+      const payload = {
+        displayName: container.querySelector('#display-input').value.trim(),
+        bio: container.querySelector('#bio-input').value.trim() || null,
+        voiceType: container.querySelector('#voice-type-input').value || null,
+        voiceSubtype: container.querySelector('#voice-subtype-input').value || null,
+        vocalRangeLow: container.querySelector('#range-low-input').value.trim() || null,
+        vocalRangeHigh: container.querySelector('#range-high-input').value.trim() || null,
+        vocalRangeNotes: container.querySelector('#range-notes-input').value.trim() || null,
+        instrumentRoles: container
+          .querySelector('#instruments-input')
+          .value.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        isPublic: container.querySelector('#public-input').checked,
+      };
+      const submitBtn = container.querySelector('#submit-btn');
+      submitBtn.disabled = true;
+      try {
+        const { ok, data } = await patchProfile(payload);
+        if (!ok) {
+          errEl.textContent = data?.details?.join(', ') || data?.error || 'Error al guardar';
+          errEl.style.display = 'block';
+          return;
+        }
+        await refreshProfile();
+        invalidateMyProfile();
+        okEl.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    // Monta y actualiza la onda de rango en vivo al editar Grave/Agudo
+    const waveHost = container.querySelector('#edit-wave-host');
+    const lowEl = container.querySelector('#range-low-input');
+    const highEl = container.querySelector('#range-high-input');
+    let waveTimer;
+    function remountWave() {
+      if (!waveHost || !lowEl || !highEl) return;
+      clearTimeout(waveTimer);
+      waveTimer = setTimeout(() => {
+        waveHost.innerHTML = '';
+        const w = createWaveRange({
+          low: lowEl.value.trim(),
+          high: highEl.value.trim(),
+          height: 96,
+        });
+        if (w) waveHost.appendChild(w.el);
+      }, 200);
     }
-  });
+    lowEl?.addEventListener('input', remountWave);
+    highEl?.addEventListener('input', remountWave);
+    remountWave();
+  } // fin paintEditForm
+}
 
-  avatarRemoveBtn.addEventListener('click', async () => {
-    avatarError.style.display = 'none';
-    avatarRemoveBtn.disabled = true;
-    try {
-      const url = await deleteAvatar();
-      await refreshProfile();
-      avatarPreview.src = url || '';
-      avatarRemoveBtn.style.display = 'none';
-    } catch (e) {
-      avatarError.textContent = `Error: ${e.message}`;
-      avatarError.style.display = 'block';
-    } finally {
-      avatarRemoveBtn.disabled = false;
-    }
-  });
+/**
+ * Render the profile page (vista de solo lectura).
+ * El formulario de edición se mueve a renderProfileEdit (Task 3).
+ * @param {HTMLElement} container
+ */
+export async function renderProfile(container) {
+  // Shell + región async; si el store ya tiene el perfil, se pinta al instante (SWR).
+  container.innerHTML = `<div class="pf-profile-region" aria-busy="true"></div>`;
+  const profileRegion = container.querySelector('.pf-profile-region');
 
-  container.querySelector('#profile-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const errEl = container.querySelector('#form-error');
-    const okEl = container.querySelector('#form-success');
-    errEl.style.display = 'none';
-    okEl.style.display = 'none';
-
-    const payload = {
-      displayName: container.querySelector('#display-input').value.trim(),
-      bio: container.querySelector('#bio-input').value.trim() || null,
-      voiceType: container.querySelector('#voice-type-input').value || null,
-      voiceSubtype: container.querySelector('#voice-subtype-input').value || null,
-      vocalRangeLow: container.querySelector('#range-low-input').value.trim() || null,
-      vocalRangeHigh: container.querySelector('#range-high-input').value.trim() || null,
-      vocalRangeNotes: container.querySelector('#range-notes-input').value.trim() || null,
-      instrumentRoles: container
-        .querySelector('#instruments-input')
-        .value.split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
-      isPublic: container.querySelector('#public-input').checked,
-    };
-
-    const { ok, data } = await patchProfile(payload);
-    if (!ok) {
-      errEl.textContent = data?.details?.join(', ') || data?.error || 'Error al guardar';
-      errEl.style.display = 'block';
-      return;
-    }
-    await refreshProfile();
-    okEl.textContent = 'Guardado';
-    okEl.style.display = 'block';
+  renderAsyncRegion(profileRegion, {
+    cached: getProfile() || undefined,
+    skeleton: () => skelProfile(),
+    fetcher: getMyProfile,
+    render: (profile) => {
+      // Pintar en la región (regionEl), no en el container compartido: así se
+      // respeta el contrato de renderAsyncRegion. Si el usuario ya navego fuera
+      // de /perfil, la region quedo desprendida del DOM y este render tardio es
+      // invisible en vez de clobberear la pantalla nueva (bug de navegacion #3).
+      profileRegion.innerHTML = `
+        <div class="profile-page fade-in">
+          ${buildProfileHeader(profile)}
+        </div>
+      `;
+      // Monta la onda de rango vocal
+      const host = profileRegion.querySelector('.pf-wave-host');
+      if (host && (profile.vocalRangeLow || profile.vocalRangeHigh)) {
+        const wave = createWaveRange({ low: profile.vocalRangeLow, high: profile.vocalRangeHigh });
+        if (wave) host.appendChild(wave.el);
+      }
+      // Logout desde la vista de perfil en móvil
+      profileRegion.querySelector('#pf-logout')?.addEventListener('click', async () => {
+        try {
+          await signOut();
+        } catch (_e) {
+          // Continuar aunque falle el signOut remoto
+        }
+        navigate('/login', { replace: true });
+      });
+    },
+    empty: () =>
+      `<div class="profile-page"><p>Sin sesión. <a href="#/login">Iniciar sesión</a></p></div>`,
+    onError: () => `
+      <div class="empty-state">
+        <h2 class="empty-state__title">No se pudo cargar el perfil</h2>
+        <button class="btn btn--primary" data-retry>Reintentar</button>
+      </div>`,
   });
 }

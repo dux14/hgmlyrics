@@ -9,6 +9,7 @@ vi.mock('../api/_lib/db.js', () => ({ default: mockSql }));
 vi.mock('../api/_lib/http.js', () => ({
   allowMethods: vi.fn(() => false),
   withErrors: (fn) => fn,
+  cachePublic: vi.fn(),
 }));
 
 process.env.DATABASE_URL = 'postgresql://test';

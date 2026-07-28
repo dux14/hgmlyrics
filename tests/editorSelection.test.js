@@ -5,6 +5,11 @@ import {
   addGroupEntry,
   deleteGroupAt,
   applyGroupsForRange,
+  collectUsedChords,
+  createSelectionState,
+  selectionRange,
+  advanceSelection,
+  resetSelection,
 } from '../src/lib/editorSelection.js';
 
 describe('normalizeRange', () => {
@@ -140,5 +145,86 @@ describe('applyGroupsForRange', () => {
     const out = applyGroupsForRange(groups, range, [{ voiceId: 'v1', included: true, note: 'B3' }]);
     expect(out).not.toBe(groups);
     expect(groups).toHaveLength(0);
+  });
+});
+
+describe('selección tap-inicio→tap-fin (createSelectionState/advanceSelection/selectionRange)', () => {
+  it('estado inicial: sin rango', () => {
+    const sel = createSelectionState();
+    expect(selectionRange(sel)).toBeNull();
+  });
+
+  it('un solo tap selecciona ese carácter', () => {
+    const sel = createSelectionState();
+    advanceSelection(sel, 3);
+    expect(selectionRange(sel)).toEqual({ start: 3, end: 4 });
+  });
+
+  it('segundo tap cierra el rango (orden ascendente o descendente)', () => {
+    const sel = createSelectionState();
+    advanceSelection(sel, 2);
+    advanceSelection(sel, 5);
+    expect(selectionRange(sel)).toEqual({ start: 2, end: 6 });
+
+    const sel2 = createSelectionState();
+    advanceSelection(sel2, 5);
+    advanceSelection(sel2, 2);
+    expect(selectionRange(sel2)).toEqual({ start: 2, end: 6 });
+  });
+
+  it('un tercer tap tras un rango cerrado empieza una selección nueva', () => {
+    const sel = createSelectionState();
+    advanceSelection(sel, 2);
+    advanceSelection(sel, 5);
+    advanceSelection(sel, 9);
+    expect(selectionRange(sel)).toEqual({ start: 9, end: 10 });
+  });
+
+  it('resetSelection vuelve al estado sin tocar', () => {
+    const sel = createSelectionState();
+    advanceSelection(sel, 2);
+    advanceSelection(sel, 5);
+    resetSelection(sel);
+    expect(selectionRange(sel)).toBeNull();
+  });
+});
+
+describe('collectUsedChords', () => {
+  function block(lines) {
+    return { lines };
+  }
+
+  it('cuenta y ordena por frecuencia descendente', () => {
+    const blocks = [
+      block([
+        { chords: [{ pos: 0, ch: 'D' }, { pos: 4, ch: 'G' }] },
+        { chords: [{ pos: 0, ch: 'D' }] },
+      ]),
+      block([{ chords: [{ pos: 0, ch: 'D' }] }]),
+    ];
+    expect(collectUsedChords(blocks)).toEqual(['D', 'G']);
+  });
+
+  it('únicos: no repite un acorde ya contado', () => {
+    const blocks = [block([{ chords: [{ pos: 0, ch: 'Am' }, { pos: 2, ch: 'Am' }] }])];
+    expect(collectUsedChords(blocks)).toEqual(['Am']);
+  });
+
+  it('empate → conserva el orden de primera aparición', () => {
+    const blocks = [
+      block([{ chords: [{ pos: 0, ch: 'F' }, { pos: 2, ch: 'C' }] }]),
+    ];
+    expect(collectUsedChords(blocks)).toEqual(['F', 'C']);
+  });
+
+  it('sin acordes en ninguna línea → array vacío', () => {
+    const blocks = [block([{ chords: [] }, { text: 'hola' }])];
+    expect(collectUsedChords(blocks)).toEqual([]);
+  });
+
+  it('tolera blocks/lines/chords ausentes', () => {
+    expect(collectUsedChords(null)).toEqual([]);
+    expect(collectUsedChords([{}])).toEqual([]);
+    expect(collectUsedChords([{ lines: [{}] }])).toEqual([]);
   });
 });

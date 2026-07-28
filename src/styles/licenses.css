@@ -1,0 +1,173 @@
+/* licenses.css — Licencias y creditos · Ambient Kinetic (F3d)
+ * Tokens: --color-text · --color-text-secondary · --color-border · --color-surface
+ *         --color-primary · --color-success · --color-danger
+ *         --space-* · --border-radius-* · --font-size-*
+ */
+
+/* ── Contenedor de pagina ── */
+.lc-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-xl) var(--space-md);
+  padding-bottom: calc(var(--bottom-nav-height, 60px) + var(--space-xl));
+}
+
+/* ── Bloque de cabecera ── */
+.lc-top {
+  padding: 0 0 var(--space-md);
+}
+
+.lc-title {
+  margin: 0 0 var(--space-xs, 6px);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+/* ── Parrafo introductorio ── */
+.lc-intro {
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-md);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+/* ── Tarjeta de seccion ── */
+.lc-card {
+  margin-bottom: var(--space-sm, 10px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg, 16px);
+  background: var(--color-surface);
+  padding: var(--space-md);
+}
+
+.lc-card--muted {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--color-border) 60%, transparent);
+}
+
+/* ── Cabecera de tarjeta: numero + titulo ── */
+.lc-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm, 9px);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  margin-bottom: var(--space-sm);
+}
+
+/* Numero/etiqueta de seccion (S1, S4, icono) */
+.lc-card__num {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: var(--border-radius-sm, 8px);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  color: var(--color-primary);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+}
+
+.lc-card__num--muted {
+  background: color-mix(in srgb, var(--color-text-secondary) 12%, transparent);
+  color: var(--color-text-secondary);
+}
+
+/* ── Fila de modelo/credito dentro de la tarjeta ── */
+.lc-model {
+  padding: var(--space-sm, 10px) 0;
+  border-top: 1px solid var(--color-border);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.lc-model:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.lc-model strong {
+  color: var(--color-text);
+}
+
+/* Fila nombre + badge(s) en linea */
+.lc-model__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+/* Detalle / descripcion del modelo */
+.lc-model__detail {
+  margin: 0;
+  font-size: calc(var(--font-size-sm) * 0.92);
+  color: var(--color-text-secondary);
+  line-height: 1.55;
+}
+
+/* ── Badges de licencia ── */
+.lc-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: var(--font-weight-bold, 700);
+  padding: 2px 8px;
+  border-radius: 99px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Verde: licencia permisiva / uso comercial permitido */
+.lc-badge--ok {
+  color: var(--color-success, #4caf50);
+  background: color-mix(in srgb, var(--color-success, #4caf50) 12%, transparent);
+}
+
+/* Rojo: NC o sin confirmar (criterio conservador) */
+.lc-badge--nc {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+}
+
+/* ── Nota al pie dentro de tarjeta ── */
+.lc-note {
+  color: var(--color-text-secondary);
+  margin: var(--space-sm) 0 0;
+  font-size: 0.85em;
+}
+
+/* ── Estado de error (carga fallida del componente) ── */
+.lc-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  min-height: 240px;
+  text-align: center;
+  padding: var(--space-xl);
+}
+
+.lc-error__icon {
+  color: var(--color-danger);
+  opacity: 0.8;
+}
+
+.lc-error__title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-danger);
+  margin: 0;
+}
+
+.lc-error__text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
+}

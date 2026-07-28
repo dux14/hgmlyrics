@@ -1,7 +1,6 @@
 import sql from '../_lib/db.js';
 import { requireUser } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
-import { resolveEnabledFlags } from '../../src/lib/featureFlags.js';
 
 function isAdminFromEnv(email) {
   const list = (process.env.ADMIN_EMAILS || '')
@@ -25,26 +24,23 @@ export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['GET'])) return;
   const user = await requireUser(req);
 
-  // Sync is_admin from ADMIN_EMAILS env (cheap; runs each /me call).
+  // Sync is_admin from ADMIN_EMAILS env + backfill de OAuth (avatar/nombre) en un
+  // solo UPDATE: ambos escriben la misma fila (profiles.id = user.id) sin depender
+  // entre sí, así que se fusionan en vez de 2 round-trips. El WHERE solo dispara
+  // la escritura si hace falta (is_admin distinto, o hay dato de proveedor que
+  // ofrecer); COALESCE evita pisar valores ya existentes.
   const expectedAdmin = isAdminFromEnv(user.email);
-  await sql`
-    UPDATE profiles
-    SET is_admin = ${expectedAdmin}
-    WHERE id = ${user.id} AND is_admin IS DISTINCT FROM ${expectedAdmin}
-  `;
-
-  // First-load hydration from OAuth provider (Google): backfill avatar_url
-  // and display_name when null, so the user has a sensible default.
   const providerAvatar = avatarFromMetadata(user);
   const providerName = displayNameFromMetadata(user);
-  if (providerAvatar || providerName) {
-    await sql`
-      UPDATE profiles
-      SET avatar_url   = COALESCE(avatar_url, ${providerAvatar}),
-          display_name = COALESCE(display_name, ${providerName})
-      WHERE id = ${user.id}
-    `;
-  }
+  const hasProviderData = Boolean(providerAvatar || providerName);
+  await sql`
+    UPDATE profiles
+    SET is_admin     = ${expectedAdmin},
+        avatar_url   = COALESCE(avatar_url, ${providerAvatar}),
+        display_name = COALESCE(display_name, ${providerName})
+    WHERE id = ${user.id}
+      AND (is_admin IS DISTINCT FROM ${expectedAdmin} OR ${hasProviderData})
+  `;
 
   let rows = await sql`
     SELECT id, username, display_name AS "displayName", bio, avatar_url AS "avatarUrl",
@@ -77,33 +73,10 @@ export default withErrors(async (req, res) => {
     rows = retry;
   }
 
-  // Feature flags habilitados para este usuario. Las consultas van SECUENCIALES
-  // (no Promise.all): la única conexión del pooler de transacciones —max:1— no
-  // tolera bien queries concurrentes en conexiones reutilizadas. Y son NO
-  // fatales: /api/auth/me es la puerta de toda la app (login wall), así que un
-  // problema resolviendo flags degrada a flags:[] en vez de tumbar la sesión.
   const profile = rows[0];
-  let flags;
-  try {
-    const flagCatalog = await sql`SELECT key, enabled_global AS "enabledGlobal" FROM feature_flags`;
-    const flagAssignments = await sql`
-      SELECT flag_key AS "flagKey", email, username
-      FROM feature_flag_users
-      WHERE lower(email) = lower(${user.email ?? ''})
-         OR lower(username) = lower(${profile?.username ?? ''})
-    `;
-    flags = resolveEnabledFlags(flagCatalog, flagAssignments, {
-      email: user.email,
-      username: profile?.username,
-    });
-  } catch (e) {
-    console.warn('flag resolution failed; defaulting to []', e);
-    flags = [];
-  }
 
   res.status(200).json({
     user: { id: user.id, email: user.email },
     profile,
-    flags,
   });
 });

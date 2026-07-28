@@ -1,0 +1,243 @@
+/* song-actions-sheet.css — Bottom-sheet "Más" de la vista de canción (Task 18)
+   Mismo patrón visual que options-sheet.css (overlay + sheet centrado en
+   desktop, animación in/out); acá la sheet pinta una lista de acciones en
+   vez de controles. */
+
+.sasheet-dim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 300;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.sasheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 301;
+  border-radius: 22px 22px 0 0;
+  background: color-mix(in srgb, var(--color-surface) 90%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid var(--color-border);
+  border-bottom: none;
+  padding: var(--space-md) var(--space-md) calc(var(--space-md) + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+@media (min-width: 768px) {
+  .sasheet {
+    left: 50%;
+    right: auto;
+    bottom: var(--space-lg, 2rem);
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 480px;
+    border-radius: 22px;
+    border-bottom: 1px solid var(--color-border);
+  }
+}
+
+.sasheet__grab {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border);
+  margin: 0 auto var(--space-xs);
+  flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+  .sasheet__grab {
+    display: none;
+  }
+}
+
+.sasheet__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.sasheet__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm);
+  border-radius: var(--border-radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.sasheet__item:hover {
+  background: var(--color-surface-hover);
+}
+
+.sasheet__item-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
+.sasheet__item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sasheet__item-label {
+  font-weight: var(--font-weight-medium);
+}
+
+.sasheet__item-sub {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+/* === Animación de entrada/salida (espeja options-sheet.css) === */
+
+@keyframes sasheet-in {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes sasheet-out {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+}
+@keyframes sasheet-dim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sasheet-dim-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes sasheet-in-desktop {
+  from {
+    transform: translateX(-50%) translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes sasheet-out-desktop {
+  from {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-50%) translateY(12px);
+    opacity: 0;
+  }
+}
+
+.sasheet {
+  animation: sasheet-in 180ms ease-out;
+}
+.sasheet-dim {
+  animation: sasheet-dim-in 180ms ease-out;
+}
+.sasheet--closing,
+.sasheet-dim--closing {
+  pointer-events: none;
+}
+.sasheet--closing {
+  animation: sasheet-out 150ms ease-in forwards;
+}
+.sasheet-dim--closing {
+  animation: sasheet-dim-out 150ms ease-in forwards;
+}
+
+@media (min-width: 768px) {
+  .sasheet {
+    animation: sasheet-in-desktop 180ms ease-out;
+  }
+  .sasheet--closing {
+    animation: sasheet-out-desktop 150ms ease-in forwards;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sasheet,
+  .sasheet-dim,
+  .sasheet--closing,
+  .sasheet-dim--closing {
+    animation: none;
+  }
+}
+
+/* === Badge de estado del run — punto sobre #open-song-actions-btn ===
+   need (ámbar) = requiere acción del admin, fijo. proc (cyan) = en proceso,
+   pulso infinito con box-shadow expansivo. Reemplaza el punto que antes vivía
+   directo sobre #open-pipeline-btn. */
+#open-song-actions-btn {
+  position: relative;
+}
+
+.song-actions-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.song-actions-badge.need {
+  background: var(--color-action);
+}
+
+.song-actions-badge.proc {
+  background: var(--color-brand);
+  animation: songActionsBadgePulse 1.6s infinite;
+}
+
+@keyframes songActionsBadgePulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-brand) 50%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-brand) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .song-actions-badge.proc {
+    animation: none;
+  }
+}

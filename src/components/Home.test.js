@@ -1,0 +1,678 @@
+// Home.test.js — TDD Fase 4: Home estilo Spotify (6 secciones dinámicas)
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// ── Mocks (hoisted antes de los imports) ─────────────────────────────
+vi.mock('../styles/home.css', () => ({}));
+vi.mock('../router.js', () => ({ navigate: vi.fn() }));
+vi.mock('../lib/store.js', () => ({ getState: vi.fn(), getAlbums: vi.fn() }));
+vi.mock('../lib/authStore.js', () => ({ isAuthenticated: vi.fn(), getSession: vi.fn() }));
+vi.mock('../lib/lists.js', () => ({ listMyLists: vi.fn(), warmList: vi.fn() }));
+vi.mock('../lib/prefetch.js', () => ({
+  cached: vi.fn((key, fetcher) => fetcher().then((data) => ({ data, fromCache: false }))),
+  readCached: vi.fn(() => undefined),
+  warm: vi.fn(),
+}));
+vi.mock('../lib/favorites.js', () => ({ getFavoriteIds: vi.fn() }));
+vi.mock('../lib/recentVisits.js', () => ({ getRecentVisitIds: vi.fn(), subscribe: vi.fn() }));
+vi.mock('../lib/icons.js', () => ({ icon: vi.fn((name) => `[${name}]`) }));
+vi.mock('../lib/escape.js', () => ({ escapeHtml: (s) => String(s ?? '') }));
+vi.mock('./SongList.js', () => ({
+  createSongCard: vi.fn((song) => {
+    const d = document.createElement('div');
+    d.className = 'song-card';
+    d.dataset.songId = song.id;
+    return d;
+  }),
+}));
+vi.mock('./songRow.js', () => ({
+  resolveCoverUrl: vi.fn((a) => `/covers/${a.slug}.jpg`),
+}));
+vi.mock('../lib/voiceoverCover.js', () => ({
+  voiceoverCoverHtml: vi.fn(() => '<div class="voz-cover"></div>'),
+}));
+vi.mock('./VoicesAlbumView.js', () => ({
+  isVigente: vi.fn((date, today) => String(date).slice(0, 10) <= today),
+}));
+
+import { selectRecent, selectRecentlyVisited, renderHome, renderListsBody } from './Home.js';
+import { getState, getAlbums } from '../lib/store.js';
+import { isAuthenticated } from '../lib/authStore.js';
+import { listMyLists } from '../lib/lists.js';
+import { getFavoriteIds } from '../lib/favorites.js';
+import { getRecentVisitIds, subscribe as subscribeRecentVisits } from '../lib/recentVisits.js';
+import { navigate } from '../router.js';
+
+// ── Fixtures ─────────────────────────────────────────────────────────
+const SONGS = [
+  { id: 's1', title: 'Cancion A', year: 2024, albumOrder: 1 },
+  { id: 's2', title: 'Cancion B', year: 2023, albumOrder: 2 },
+  { id: 's3', title: 'Cancion C', year: 2022, albumOrder: 1 },
+];
+
+const ALBUMS = [
+  { slug: 'album-1', name: 'Album Uno', coverImage: '', artist: 'Artista A' },
+  { slug: 'album-2', name: 'Album Dos', coverImage: '', artist: 'Artista B' },
+  { slug: 'album-3', name: 'Album Tres', coverImage: '', artist: 'Artista C' },
+  { slug: 'album-4', name: 'Album Cuatro', coverImage: '', artist: 'Artista D' },
+  { slug: 'album-5', name: 'Album Cinco', coverImage: '', artist: 'Artista E' },
+];
+
+/** fetch que falla (no hay voces) */
+const FETCH_FAIL = vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) });
+
+/** Crea un contenedor limpio y lo adjunta al body. */
+function mkContainer() {
+  const c = document.createElement('div');
+  document.body.appendChild(c);
+  return c;
+}
+
+beforeEach(() => {
+  document.body.innerHTML = '';
+  vi.clearAllMocks();
+  getState.mockReturnValue({ songs: SONGS });
+  getAlbums.mockReturnValue(ALBUMS);
+  isAuthenticated.mockReturnValue(false);
+  getFavoriteIds.mockReturnValue([]);
+  getRecentVisitIds.mockReturnValue([]);
+  subscribeRecentVisits.mockImplementation(() => () => {});
+  vi.stubGlobal('fetch', FETCH_FAIL);
+});
+
+// ── selectRecent ──────────────────────────────────────────────────────
+describe('selectRecent', () => {
+  it('ordena por año desc y acota al límite', () => {
+    const result = selectRecent(SONGS, 2);
+    expect(result.length).toBe(2);
+    expect(result[0].year).toBe(2024);
+    expect(result[1].year).toBe(2023);
+  });
+
+  it('devuelve array vacío si songs es null', () => {
+    expect(selectRecent(null, 6)).toEqual([]);
+  });
+
+  it('devuelve array vacío si songs es undefined', () => {
+    expect(selectRecent(undefined, 6)).toEqual([]);
+  });
+});
+
+// ── selectRecentlyVisited ─────────────────────────────────────────────
+describe('selectRecentlyVisited', () => {
+  it('prioriza las visitadas en el orden de visita', () => {
+    const result = selectRecentlyVisited(SONGS, ['s3', 's1'], 6);
+    expect(result.map((s) => s.id)).toEqual(['s3', 's1', 's2']);
+  });
+
+  it('rellena con selectRecent (year desc) hasta el límite', () => {
+    const result = selectRecentlyVisited(SONGS, ['s3'], 2);
+    expect(result.map((s) => s.id)).toEqual(['s3', 's1']);
+  });
+
+  it('ignora ids visitados que ya no existen en el catálogo', () => {
+    const result = selectRecentlyVisited(SONGS, ['s9', 's2'], 2);
+    expect(result.map((s) => s.id)).toEqual(['s2', 's1']);
+  });
+
+  it('respeta el límite', () => {
+    const result = selectRecentlyVisited(SONGS, ['s1', 's2', 's3'], 1);
+    expect(result.map((s) => s.id)).toEqual(['s1']);
+  });
+
+  it('sin visitas, se comporta como selectRecent', () => {
+    const result = selectRecentlyVisited(SONGS, [], 6);
+    expect(result.map((s) => s.id)).toEqual(selectRecent(SONGS, 6).map((s) => s.id));
+  });
+});
+
+// ── Estructura y orden de secciones ──────────────────────────────────
+describe('renderHome — estructura y orden', () => {
+  it('renderiza secciones en el orden: Reciente, Listas, Álbumes', async () => {
+    isAuthenticated.mockReturnValue(true);
+    listMyLists.mockResolvedValue([]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const titles = [...c.querySelectorAll('.home__hd-title')].map((h) => h.textContent.trim());
+    expect(titles[0]).toBe('Reciente');
+    expect(titles[1]).toBe('Listas');
+    expect(titles[2]).toBe('Álbumes');
+  });
+
+  it('cabecera Reciente tiene enlace Ver todos → /buscar', async () => {
+    isAuthenticated.mockReturnValue(false);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const btn = [...c.querySelectorAll('.home__all')].find((b) =>
+      b.closest('[aria-labelledby="home-recent-hd"]'),
+    );
+    expect(btn).not.toBeNull();
+    btn.click();
+    expect(navigate).toHaveBeenCalledWith('/buscar');
+  });
+
+  it('cabecera Álbumes tiene enlace Ver todos → /albumes', async () => {
+    isAuthenticated.mockReturnValue(false);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const btn = [...c.querySelectorAll('.home__all')].find((b) =>
+      b.closest('[aria-labelledby="home-albums-hd"]'),
+    );
+    expect(btn).not.toBeNull();
+    btn.click();
+    expect(navigate).toHaveBeenCalledWith('/albumes');
+  });
+
+  it('cabecera Voz en off tiene enlace Ver todos → /voces cuando hay vigente', async () => {
+    isAuthenticated.mockReturnValue(false);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          weeklyWords: [
+            {
+              id: 'w1',
+              sunday_date: '2026-06-29',
+              gospel_ref: 'Jn 1:1',
+              liturgical_color: 'green',
+            },
+          ],
+        }),
+      }),
+    );
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const btn = [...c.querySelectorAll('.home__all')].find((b) => b.closest('#section-voz'));
+    expect(btn).not.toBeNull();
+    btn.click();
+    expect(navigate).toHaveBeenCalledWith('/voces');
+  });
+
+  it('cabecera Favoritos tiene enlace Ver todos → /favoritos cuando hay favoritos', async () => {
+    isAuthenticated.mockReturnValue(false);
+    getFavoriteIds.mockReturnValue(['s1']);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const btn = [...c.querySelectorAll('.home__all')].find((b) =>
+      b.closest('[aria-labelledby="home-fav-hd"]'),
+    );
+    expect(btn).not.toBeNull();
+    btn.click();
+    expect(navigate).toHaveBeenCalledWith('/favoritos');
+  });
+
+  it('el teaser Oración navega a /oracion', async () => {
+    isAuthenticated.mockReturnValue(false);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    c.querySelector('[data-nav="/oracion"]')?.click();
+    expect(navigate).toHaveBeenCalledWith('/oracion');
+  });
+});
+
+// ── Reciente ──────────────────────────────────────────────────────────
+describe('renderHome — Reciente', () => {
+  it('renderiza cards para cada canción reciente', async () => {
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const strip = c.querySelector('#home-recent-strip');
+    expect(strip).not.toBeNull();
+    expect(strip.querySelectorAll('.song-card').length).toBe(SONGS.length);
+  });
+
+  it('el strip existe aunque songs sea vacío', async () => {
+    getState.mockReturnValue({ songs: [] });
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    expect(c.querySelector('#home-recent-strip')).not.toBeNull();
+  });
+
+  it('repinta solo el rail Reciente cuando recentVisits notifica', async () => {
+    let notifyCb;
+    subscribeRecentVisits.mockImplementation((fn) => {
+      notifyCb = fn;
+      return () => {};
+    });
+    getRecentVisitIds.mockReturnValue(['s2']);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const stripBefore = c.querySelector('#home-recent-strip');
+    getRecentVisitIds.mockReturnValue(['s3', 's1']);
+    notifyCb();
+
+    const strip = c.querySelector('#home-recent-strip');
+    // Mismo nodo (repintado in-place, sin re-render completo de la vista).
+    expect(strip).toBe(stripBefore);
+    const ids = [...strip.querySelectorAll('.song-card')].map((el) => el.dataset.songId);
+    expect(ids).toEqual(['s3', 's1', 's2']);
+  });
+
+  it('cancela la suscripción anterior al re-renderizar el Home', async () => {
+    const unsubs = [];
+    subscribeRecentVisits.mockImplementation(() => {
+      const u = vi.fn();
+      unsubs.push(u);
+      return u;
+    });
+    await renderHome(mkContainer(), { today: '2026-06-30' });
+    await renderHome(mkContainer(), { today: '2026-06-30' });
+
+    expect(unsubs).toHaveLength(2);
+    expect(unsubs[0]).toHaveBeenCalled();
+    expect(unsubs[1]).not.toHaveBeenCalled();
+  });
+});
+
+// ── Listas ────────────────────────────────────────────────────────────
+describe('renderHome — Listas', () => {
+  it('oculta la sección si el usuario no está autenticado', async () => {
+    isAuthenticated.mockReturnValue(false);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    expect(c.querySelector('#section-listas')).toBeNull();
+  });
+
+  it('oculta la sección si listMyLists lanza un error', async () => {
+    isAuthenticated.mockReturnValue(true);
+    listMyLists.mockRejectedValue(new Error('red caída'));
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    expect(c.querySelector('#section-listas')).toBeNull();
+  });
+
+  it('muestra N filas + botón crear cuando hay N listas', async () => {
+    isAuthenticated.mockReturnValue(true);
+    listMyLists.mockResolvedValue([
+      { id: 'l1', name: 'Lista Alpha', expires_at: null, songs_count: 3 },
+      { id: 'l2', name: 'Lista Beta', expires_at: '2026-08-01', songs_count: 5 },
+    ]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    expect(c.querySelectorAll('[data-list-id]').length).toBe(2);
+    const createBtn = c.querySelector('[data-create-list]');
+    expect(createBtn).not.toBeNull();
+    expect(createBtn.textContent).toContain('Crear nueva lista');
+  });
+
+  it('muestra estado vacío con mensaje y botón cuando listas es []', async () => {
+    isAuthenticated.mockReturnValue(true);
+    listMyLists.mockResolvedValue([]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const createBtn = c.querySelector('[data-create-list]');
+    expect(createBtn).not.toBeNull();
+    expect(createBtn.textContent).toContain('Crear tu primera lista');
+  });
+
+  it('navega a /lista/:id al hacer clic en una fila', async () => {
+    isAuthenticated.mockReturnValue(true);
+    listMyLists.mockResolvedValue([
+      { id: 'l1', name: 'Lista Alpha', expires_at: null, songs_count: 2 },
+    ]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    c.querySelector('[data-list-id]').click();
+    expect(navigate).toHaveBeenCalledWith('/lista/l1');
+  });
+
+  it('navega a /lista/nueva al hacer clic en crear', async () => {
+    isAuthenticated.mockReturnValue(true);
+    listMyLists.mockResolvedValue([]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    c.querySelector('[data-create-list]').click();
+    expect(navigate).toHaveBeenCalledWith('/lista/nueva');
+  });
+
+  it('muestra el conteo real desde song_count (plural)', async () => {
+    isAuthenticated.mockReturnValue(true);
+    listMyLists.mockResolvedValue([
+      { id: 'l1', name: 'Concierto', song_count: 12, expires_at: null },
+    ]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const meta = c.querySelector('.home__list-meta');
+    expect(meta).not.toBeNull();
+    expect(meta.textContent).toContain('12 canciones');
+  });
+
+  it('muestra singular cuando song_count es 1', async () => {
+    isAuthenticated.mockReturnValue(true);
+    listMyLists.mockResolvedValue([{ id: 'l2', name: 'Sola', song_count: 1, expires_at: null }]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const meta = c.querySelector('.home__list-meta');
+    expect(meta).not.toBeNull();
+    expect(meta.textContent).toContain('1 canción');
+    expect(meta.textContent).not.toContain('1 canciones');
+  });
+
+  it('ordena las listas por proximidad a vencer y aplica clase de urgencia', async () => {
+    isAuthenticated.mockReturnValue(true);
+    listMyLists.mockResolvedValue([
+      { id: 'lejana', name: 'Lejana', song_count: 2, expires_at: '2026-09-06' }, // verde
+      { id: 'roja', name: 'Inminente', song_count: 2, expires_at: '2026-07-02' }, // rojo (1 día)
+      { id: 'amarilla', name: 'Media', song_count: 2, expires_at: '2026-07-06' }, // amarillo (5 días)
+    ]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-07-01' });
+
+    const ids = [...c.querySelectorAll('[data-list-id]')].map((b) => b.dataset.listId);
+    expect(ids).toEqual(['roja', 'amarilla', 'lejana']);
+
+    const first = c.querySelector('[data-list-id="roja"]');
+    expect(first.classList.contains('-red')).toBe(true);
+    expect(first.querySelector('.home__list-dot.-red')).not.toBeNull();
+    expect(first.querySelector('.home__list-pill').textContent.trim()).toBe('mañana');
+  });
+
+  it('cabecera Listas tiene enlace Ver todos → /listas', async () => {
+    isAuthenticated.mockReturnValue(true);
+    listMyLists.mockResolvedValue([
+      { id: 'l1', name: 'Lista Alpha', expires_at: null, songs_count: 2 },
+    ]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const btn = [...c.querySelectorAll('.home__all')].find((b) => b.closest('#section-listas'));
+    expect(btn).not.toBeNull();
+    btn.click();
+    expect(navigate).toHaveBeenCalledWith('/listas');
+  });
+
+  it('muestra sólo 3 filas cuando hay más de 3 listas', async () => {
+    isAuthenticated.mockReturnValue(true);
+    listMyLists.mockResolvedValue([
+      { id: 'l1', name: 'Lista Uno', song_count: 1, expires_at: '2026-07-02' },
+      { id: 'l2', name: 'Lista Dos', song_count: 1, expires_at: '2026-07-06' },
+      { id: 'l3', name: 'Lista Tres', song_count: 1, expires_at: '2026-07-10' },
+      { id: 'l4', name: 'Lista Cuatro', song_count: 1, expires_at: '2026-07-20' },
+    ]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    expect(c.querySelectorAll('[data-list-id]').length).toBe(3);
+  });
+
+  it('precalienta el detalle de las primeras listas visibles', async () => {
+    isAuthenticated.mockReturnValue(true);
+    const { warmList } = await import('../lib/lists.js');
+    listMyLists.mockResolvedValue([
+      { id: 'roja', name: 'A', song_count: 1, expires_at: '2026-07-02' },
+      { id: 'amarilla', name: 'B', song_count: 1, expires_at: '2026-07-06' },
+    ]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-07-01' });
+
+    const warmedIds = warmList.mock.calls.map((call) => call[0]);
+    expect(warmedIds).toContain('roja');
+    expect(warmedIds).toContain('amarilla');
+  });
+});
+
+// ── Álbumes ───────────────────────────────────────────────────────────
+describe('renderHome — Álbumes', () => {
+  it('muestra exactamente 5 cards de álbum', async () => {
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    expect(c.querySelectorAll('[data-album-slug]').length).toBe(5);
+  });
+
+  it('las cards de álbum navegan a /album/:slug', async () => {
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const first = c.querySelector('[data-album-slug="album-1"]');
+    expect(first).not.toBeNull();
+    first.click();
+    expect(navigate).toHaveBeenCalledWith('/album/album-1');
+  });
+
+  it('muestra el nombre del álbum en cada card', async () => {
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const names = [...c.querySelectorAll('.home__album-name')].map((el) => el.textContent.trim());
+    expect(names).toContain('Album Uno');
+    expect(names).toContain('Album Cinco');
+  });
+
+  it('renderiza los álbumes del home como rail horizontal', async () => {
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+    const rail = c.querySelector('.home__albums-rail');
+    expect(rail).toBeTruthy();
+    expect(rail.querySelector('.home__album-plus')).toBeNull(); // la card "+" fue eliminada
+  });
+});
+
+// ── Voz en off ────────────────────────────────────────────────────────
+describe('renderHome — Voz en off', () => {
+  it('oculta la sección si no hay palabras vigentes (futura)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          weeklyWords: [
+            {
+              id: 'w-future',
+              sunday_date: '2026-07-06',
+              gospel_ref: 'Jn 1:1',
+              liturgical_color: 'green',
+            },
+          ],
+        }),
+      }),
+    );
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    expect(c.querySelector('#section-voz')).toBeNull();
+  });
+
+  it('oculta la sección si fetch lanza error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('sin red')));
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    expect(c.querySelector('#section-voz')).toBeNull();
+  });
+
+  it('oculta la sección si weekly-words devuelve lista vacía', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ weeklyWords: [] }) }),
+    );
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    expect(c.querySelector('#section-voz')).toBeNull();
+  });
+
+  it('muestra la card con badge VIGENTE cuando hay palabra vigente', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          weeklyWords: [
+            {
+              id: 'w1',
+              sunday_date: '2026-06-29',
+              gospel_ref: 'Jn 1:1',
+              liturgical_color: 'green',
+            },
+          ],
+        }),
+      }),
+    );
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    expect(c.querySelector('.home__voz-badge')?.textContent.trim()).toBe('VIGENTE');
+    expect(c.querySelector('[data-voz-id]')).not.toBeNull();
+  });
+
+  it('navega a /voz/:id al hacer clic en la card', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          weeklyWords: [
+            {
+              id: 'w42',
+              sunday_date: '2026-06-22',
+              gospel_ref: 'Mt 5:3',
+              liturgical_color: 'green',
+            },
+          ],
+        }),
+      }),
+    );
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    c.querySelector('[data-voz-id]').click();
+    expect(navigate).toHaveBeenCalledWith('/voz/w42');
+  });
+
+  it('usa el parámetro today para filtrar vigentes (futura excluida)', async () => {
+    // w-future (2026-07-06) está en futuro → no vigente con today=2026-06-30
+    // w-past   (2026-06-22) está en pasado → vigente
+    const words = [
+      { id: 'w-future', sunday_date: '2026-07-06', gospel_ref: 'A', liturgical_color: 'green' },
+      { id: 'w-past', sunday_date: '2026-06-22', gospel_ref: 'B', liturgical_color: 'purple' },
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ weeklyWords: words }) }),
+    );
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    expect(c.querySelector('[data-voz-id]')?.dataset.vozId).toBe('w-past');
+  });
+
+  it('elige la más reciente (max sunday_date) entre varias vigentes, sin depender del orden del array', async () => {
+    // Array en orden ASCENDENTE (más antigua primero) para probar que no usamos find().
+    // Con find() devolvería w-old (primera); con reduce(max) devuelve w-recent.
+    const words = [
+      { id: 'w-old', sunday_date: '2026-06-01', gospel_ref: 'A', liturgical_color: 'green' },
+      { id: 'w-mid', sunday_date: '2026-06-15', gospel_ref: 'B', liturgical_color: 'purple' },
+      { id: 'w-recent', sunday_date: '2026-06-29', gospel_ref: 'C', liturgical_color: 'white' },
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ weeklyWords: words }) }),
+    );
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    // Debe mostrar la más reciente, no la primera del array
+    expect(c.querySelector('[data-voz-id]')?.dataset.vozId).toBe('w-recent');
+  });
+});
+
+// ── Skeletons ─────────────────────────────────────────────────────────
+describe('renderHome — skeletons', () => {
+  it('muestra skeleton de Listas antes de que resuelva el fetch', async () => {
+    isAuthenticated.mockReturnValue(true);
+    let resolve;
+    const { cached } = await import('../lib/prefetch.js');
+    cached.mockReturnValueOnce(new Promise((r) => (resolve = r)));
+
+    const c = mkContainer();
+    const done = renderHome(c, { today: '2026-07-01' });
+
+    // Antes de resolver: skeleton presente
+    expect(c.querySelector('.home__list-skeleton')).not.toBeNull();
+
+    resolve({ data: [], fromCache: false });
+    await done;
+    // Tras resolver: skeleton reemplazado por el estado vacío
+    expect(c.querySelector('.home__list-skeleton')).toBeNull();
+    expect(c.querySelector('[data-create-list]')).not.toBeNull();
+  });
+});
+
+// ── Favoritos ─────────────────────────────────────────────────────────
+describe('renderHome — Favoritos', () => {
+  it('oculta la sección si no hay favoritos', async () => {
+    getFavoriteIds.mockReturnValue([]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    expect(c.querySelector('#home-fav-strip')).toBeNull();
+    expect(c.querySelector('[aria-labelledby="home-fav-hd"]')).toBeNull();
+  });
+
+  it('muestra el strip de favoritos con las cards cuando hay favoritos', async () => {
+    getFavoriteIds.mockReturnValue(['s1', 's2']);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const strip = c.querySelector('#home-fav-strip');
+    expect(strip).not.toBeNull();
+    expect(strip.querySelectorAll('.song-card').length).toBe(2);
+  });
+
+  it('ignora IDs de favoritos que no están en songs', async () => {
+    getFavoriteIds.mockReturnValue(['s1', 'no-existe']);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-06-30' });
+
+    const strip = c.querySelector('#home-fav-strip');
+    expect(strip?.querySelectorAll('.song-card').length).toBe(1);
+  });
+});
+
+// ── renderListsBody (helper exportado) ───────────────────────────────
+describe('renderListsBody (helper exportado)', () => {
+  const today = '2026-07-01';
+  it('estado vacío muestra CTA de crear', () => {
+    const html = renderListsBody([], today);
+    expect(html).toContain('data-create-list');
+    expect(html).toContain('Aún no tienes listas');
+  });
+  it('renderiza una fila por lista + botón crear', () => {
+    const html = renderListsBody([{ id: 'l1', name: 'Domingo', song_count: 3 }], today);
+    expect(html).toContain('data-list-id="l1"');
+    expect(html).toContain('Domingo');
+    expect(html).toContain('data-create-list');
+  });
+
+  it('con limit acota a N filas; sin limit devuelve todas', () => {
+    const lists = [
+      { id: 'l1', name: 'Uno', song_count: 1, expires_at: '2026-07-02' },
+      { id: 'l2', name: 'Dos', song_count: 1, expires_at: '2026-07-06' },
+      { id: 'l3', name: 'Tres', song_count: 1, expires_at: '2026-07-10' },
+      { id: 'l4', name: 'Cuatro', song_count: 1, expires_at: '2026-07-20' },
+      { id: 'l5', name: 'Cinco', song_count: 1, expires_at: '2026-07-25' },
+    ];
+    const limited = renderListsBody(lists, today, { limit: 3 });
+    expect((limited.match(/data-list-id/g) || []).length).toBe(3);
+
+    const all = renderListsBody(lists, today);
+    expect((all.match(/data-list-id/g) || []).length).toBe(5);
+  });
+});

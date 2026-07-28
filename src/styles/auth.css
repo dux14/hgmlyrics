@@ -1,28 +1,64 @@
 /* ============================================
    Auth pages — Login, Register, Callback, Onboarding, Profile, Friends
    Mobile-first (min-width media queries only).
+   ============================================
+
+   DISEÑO Ambient Kinetic — Login / Register / Onboarding (F3d)
+   ─────────────────────────────────────────────────────────────
+   Tarjeta principal (.auth-card):
+   · Fondo: var(--color-surface) — neutral-900 dark / neutral-100 light.
+   · Borde: 1px solid var(--color-border) con border-radius-lg.
+   · Sombra: 0 4px 20px var(--color-shadow) — sin blur extra.
+   · Máx. ancho: 420px; padding xl (desktop 2xl).
+
+   Cabecera de la tarjeta (no implementada aún — espacio para logo HKN):
+   · Logo HKN centrado sobre el título con margin-bottom var(--space-md).
+   · El logo usa fill var(--color-brand) (teal).
+
+   Inputs (.auth-input):
+   · Fondo var(--color-bg), borde var(--color-border).
+   · Focus: borde var(--color-primary) — sin glow extra.
+   · Estado error: var(--color-error) / éxito: var(--color-success).
+
+   Botón primario de acción (.auth-btn como submit):
+   · Usa el token de acción ámbar solo en el botón de SUBMIT (CTA principal).
+   · Botones secundarios (Google, volver) mantienen fondo var(--color-bg).
+   · Implementación pendiente: .auth-btn--primary { background: var(--color-action); color: var(--color-bg); }
+
+   Tipografía:
+   · Título: Montserrat 800, var(--font-size-2xl), var(--color-text).
+   · Subtítulo: var(--font-size-sm), var(--color-text-secondary).
+   · Links: var(--color-primary), sin subrayado por defecto.
+   ─────────────────────────────────────────────────────────────
    ============================================ */
+
+/* Rutas de auth: ocultar shell y centrar el card en TODA la pantalla.
+   El shell oculto deja residuos de layout (margin-left del sidebar en desktop,
+   padding-top reservado para header/bottom-nav): se anulan aquí para que
+   .auth-page ocupe el viewport completo y el card quede centrado en ambos ejes. */
+body.auth-route .header,
+body.auth-route .bottom-nav,
+body.auth-route .sidebar {
+  display: none;
+}
+body.auth-route .main {
+  margin-left: 0;
+  padding: 0;
+}
+body.auth-route .main__content {
+  padding: 0;
+}
 
 .auth-page {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  /* `.main` reserves space for header + search row + filter bar even when the
-     filter bar is hidden. Pull the auth-page up so the card visually centers
-     against the actual viewport below the fixed search row, not below the
-     reserved 48px filter slot + main__content padding. */
-  min-height: calc(100dvh - var(--header-height, 64px) - 56px);
-  margin-top: calc(-48px - var(--space-lg));
-  padding: var(--space-md) 0;
+  /* Con el shell oculto (body.auth-route) el card centra en toda la pantalla. */
+  min-height: 100dvh;
+  padding: var(--space-md);
   gap: var(--space-md);
-}
-
-@media (min-width: 768px) {
-  .auth-page {
-    /* Desktop: search row lives inside the header; only the filter slot pads. */
-    min-height: calc(100dvh - var(--header-height, 64px));
-  }
+  background: var(--color-bg);
 }
 
 .auth-card {
@@ -35,9 +71,20 @@
   box-shadow: 0 4px 20px var(--color-shadow);
 }
 
+.auth-logo {
+  display: flex;
+  justify-content: center;
+  color: var(--color-primary);
+  margin-bottom: var(--space-md);
+}
+
 .auth-title {
+  /* Montserrat (no Syncopate): Syncopate es para micro-etiquetas en mayúsculas
+     (VERSO/CORO, EN VIVO); en una frase como "Inicia sesión" deforma el texto. */
+  font-family: var(--font-family);
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-bold);
+  letter-spacing: -0.01em;
   margin-bottom: var(--space-sm);
   color: var(--color-text);
 }
@@ -158,22 +205,12 @@
   color: var(--color-text-secondary);
 }
 
-/* Profile + friends shared */
-.profile-page,
-.friends-page {
-  max-width: 720px;
-  margin: 0 auto;
-  /* Sin padding horizontal: el gutter lo aporta .main__content */
-  padding: var(--space-lg) 0;
+.auth-offline__icon {
+  color: var(--color-text-secondary);
 }
 
-.profile-header {
-  display: flex;
-  gap: var(--space-md);
-  align-items: center;
-  margin-bottom: var(--space-xl);
-}
-
+/* profile-avatar / profile-username / profile-field se comparten con
+   OnboardingPage y LicensesPage — permanecen aquí hasta su migración (F3). */
 .profile-avatar {
   width: 80px;
   height: 80px;
@@ -188,16 +225,6 @@
   color: var(--color-text-secondary);
 }
 
-.profile-section {
-  margin-bottom: var(--space-xl);
-}
-
-.profile-section__title {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  margin-bottom: var(--space-sm);
-}
-
 .profile-field {
   margin-bottom: var(--space-md);
 }
@@ -209,66 +236,7 @@
   margin-bottom: var(--space-xs);
 }
 
-.profile-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
-}
-
-.profile-tag {
-  padding: var(--space-xs) var(--space-sm);
-  background: var(--color-surface);
-  border-radius: var(--border-radius-full);
-  font-size: var(--font-size-sm);
-}
-
-/* Friends panel */
-.friends-tabs {
-  display: flex;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-md);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.friends-tab {
-  padding: var(--space-sm) var(--space-md);
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-base);
-  cursor: pointer;
-}
-
-.friends-tab--active {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
-}
-
-.friends-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  list-style: none;
-  padding: 0;
-}
-
-.friend-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-sm);
-  border-radius: var(--border-radius-md);
-  background: var(--color-surface);
-}
-
-.friend-item__actions {
-  margin-left: auto;
-  display: flex;
-  gap: var(--space-xs);
-}
-
-/* AuthButton in header */
+/* Botón de cuenta en el header */
 .auth-button {
   display: flex;
   align-items: center;
@@ -351,7 +319,7 @@
 }
 
 .auth-menu__item--danger:hover {
-  background: rgba(244, 67, 54, 0.08);
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
   color: var(--color-error);
 }
 
@@ -444,288 +412,8 @@
   }
 }
 
-/* === Rediseño: Amigos === */
-.seg-tabs {
-  display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  margin-bottom: var(--space-md);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-full);
-}
-.seg-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  padding: var(--space-xs) var(--space-md);
-  border: none;
-  border-radius: var(--border-radius-full);
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-  transition:
-    background var(--transition-fast),
-    color var(--transition-fast);
-}
-.seg-tab--active {
-  background: var(--color-bg);
-  color: var(--color-text);
-  box-shadow: 0 1px 3px var(--color-shadow);
-}
-.seg-tab__count {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--border-radius-full);
-  background: var(--color-accent);
-  color: #1a1a1a;
-  font-size: var(--font-size-xs);
-  font-variant-numeric: tabular-nums;
-  animation: count-pop 220ms var(--ease-out);
-}
-@keyframes count-pop {
-  from {
-    transform: scale(0.6);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-.friend-card {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  background: var(--color-surface);
-  animation: friend-in 260ms var(--ease-out) both;
-  transition:
-    transform var(--transition-fast),
-    border-color var(--transition-fast);
-}
-@keyframes friend-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.friend-card:hover {
-  transform: translateY(-1px);
-  border-color: var(--color-primary-light);
-}
-.friend-card__avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  object-fit: cover;
-  flex-shrink: 0;
-}
-.friend-card__avatar--initial {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: var(--font-weight-bold);
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
-}
-.friend-card__id {
-  min-width: 0;
-}
-.friend-card__name {
-  color: inherit;
-  text-decoration: none;
-  font-weight: var(--font-weight-semibold);
-}
-.friend-card__actions {
-  margin-left: auto;
-  display: flex;
-  gap: var(--space-xs);
-}
-.pill {
-  padding: 6px var(--space-md);
-  border-radius: var(--border-radius-full);
-  border: 1px solid transparent;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-  transition:
-    transform var(--transition-fast),
-    background var(--transition-fast);
-}
-.pill:active {
-  transform: scale(0.96);
-}
-.pill--primary {
-  background: var(--color-primary);
-  color: #1a1a1a;
-}
-.pill--primary:hover {
-  background: var(--color-primary-light);
-}
-.pill--ghost {
-  background: var(--color-surface-hover);
-  color: var(--color-text);
-  border-color: var(--color-border);
-}
-.pill:focus-visible,
-.seg-tab:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .friend-card,
-  .seg-tab__count {
-    animation: none;
-  }
-  .friend-card:hover {
-    transform: none;
-  }
-  .pill:active {
-    transform: none;
-  }
-}
+/* seg-tabs / friend-card / pill → friends.css (F2b) */
 
-/* === Rediseño: Perfil Variante C === */
-.profile-banner {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-lg);
-  margin-bottom: var(--space-lg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  background:
-    radial-gradient(120% 140% at 15% 0%, rgba(0, 151, 167, 0.18), transparent 60%),
-    linear-gradient(135deg, rgba(0, 151, 167, 0.4), rgba(255, 183, 77, 0.16));
-  flex-wrap: wrap;
-}
-.profile-banner__avatar {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  object-fit: cover;
-  background: var(--color-surface);
-  border: 2px solid rgba(255, 255, 255, 0.5);
-  flex-shrink: 0;
-}
-.profile-banner__id {
-  min-width: 0;
-}
-.profile-banner__name {
-  margin: 0;
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-extrabold);
-  line-height: var(--line-height-tight);
-}
-.voice-pill {
-  position: absolute;
-  top: var(--space-md);
-  right: var(--space-md);
-  padding: 2px var(--space-sm);
-  border-radius: var(--border-radius-full);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-bold);
-  color: #1a1a1a;
-}
-.voice-pill--soprano {
-  background: var(--color-voice-soprano);
-  color: #fff;
-}
-.voice-pill--contralto {
-  background: var(--color-voice-contralto);
-  color: #fff;
-}
-.voice-pill--tenor {
-  background: var(--color-voice-tenor);
-}
-.voice-pill--bass {
-  background: var(--color-voice-bass);
-  color: #fff;
-}
-.range-viz {
-  flex-basis: 100%;
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--border-radius-md);
-  background: rgba(0, 0, 0, 0.28);
-}
-.range-viz__bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 3px;
-  height: 24px;
-}
-.range-viz__bars span {
-  width: 4px;
-  border-radius: 2px;
-  background: var(--color-primary-light);
-}
-.range-viz__label {
-  font-size: var(--font-size-sm);
-  color: #fff;
-  font-weight: var(--font-weight-medium);
-}
-.profile-quick {
-  display: flex;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-md);
-}
-.profile-quick__btn {
-  flex: 1;
-  text-align: center;
-  text-decoration: none;
-  padding: var(--space-md);
-  border-radius: var(--border-radius-md);
-  border: 1px solid var(--color-border);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--color-text);
-  font-weight: var(--font-weight-semibold);
-  transition:
-    transform var(--transition-fast),
-    background var(--transition-fast);
-}
-.profile-quick__btn:hover {
-  background: var(--color-surface-hover);
-}
-.profile-quick__btn:active {
-  transform: scale(0.97);
-}
-.profile-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
-  margin-bottom: var(--space-lg);
-}
-.profile-chip {
-  padding: var(--space-xs) var(--space-sm);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-full);
-  font-size: var(--font-size-sm);
-}
-.profile-edit-card {
-  padding: var(--space-lg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  background: var(--color-surface);
-  margin-top: var(--space-md);
-}
 .profile-licenses-link {
   display: block;
   text-align: center;
@@ -733,15 +421,9 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
 }
-.profile-quick__btn:focus-visible,
 .profile-licenses-link:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .profile-quick__btn {
-    transition: none;
-  }
 }
 
 /* === Distintivo de corona (fundadores) === */
@@ -767,112 +449,4 @@
   right: 8%;
 }
 
-/* === Rediseño: Favoritos grid === */
-.fav-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-lg);
-  flex-wrap: wrap;
-}
-.fav-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-md);
-}
-@media (min-width: 600px) {
-  .fav-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-@media (min-width: 900px) {
-  .fav-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-@media (min-width: 1200px) {
-  .fav-grid {
-    grid-template-columns: repeat(5, 1fr);
-  }
-}
-.fav-cover {
-  position: relative;
-  display: block;
-  aspect-ratio: 1;
-  border-radius: var(--border-radius-md);
-  overflow: hidden;
-  text-decoration: none;
-  transition: transform var(--transition-fast);
-}
-.fav-cover:hover {
-  transform: translateY(-3px) scale(1.02);
-}
-.fav-cover:active {
-  transform: scale(0.98);
-}
-.fav-cover__img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  transition: transform var(--transition-base);
-}
-.fav-cover:hover .fav-cover__img {
-  transform: scale(1.05);
-}
-.fav-cover__veil {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent 55%);
-}
-.fav-cover__title {
-  position: absolute;
-  left: var(--space-sm);
-  right: var(--space-sm);
-  bottom: var(--space-sm);
-  color: #fff;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.fav-cover__heart {
-  position: absolute;
-  top: var(--space-sm);
-  right: var(--space-sm);
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(0, 0, 0, 0.4);
-  color: var(--color-accent);
-  font-size: 16px;
-  cursor: pointer;
-  transition:
-    transform var(--transition-fast),
-    background var(--transition-fast);
-}
-.fav-cover:hover .fav-cover__heart {
-  background: rgba(0, 0, 0, 0.6);
-  transform: scale(1.12);
-}
-.fav-cover:focus-visible,
-.fav-cover__heart:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .fav-cover,
-  .fav-cover__img,
-  .fav-cover__heart {
-    transition: none;
-  }
-  .fav-cover:hover {
-    transform: none;
-  }
-  .fav-cover:hover .fav-cover__img {
-    transform: none;
-  }
-}
+/* fav-grid / fav-cover / fav-header → favorites.css (F2b) */

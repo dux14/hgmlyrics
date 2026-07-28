@@ -50,9 +50,16 @@ export function validateAndNormalize(input) {
       out.avatar_url = null;
     } else {
       const url = String(v);
-      const ok = /^https:\/\/[a-z0-9-]+\.supabase\.co\/storage\/v1\/object\/(public|sign)\//i.test(
-        url,
-      );
+      // Anclado al proyecto Supabase propio (SUPABASE_URL), no a cualquier
+      // *.supabase.co: sin esto un usuario podía apuntar su avatar a un
+      // bucket ajeno y registrar la IP de quien viera su perfil (cada carga
+      // de imagen es un request a ese storage de terceros).
+      const projectUrl = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
+      const ok =
+        projectUrl.length > 0 &&
+        new RegExp(`^${projectUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/storage/v1/object/(public|sign)/`).test(
+          url,
+        );
       if (!ok) {
         const e = new Error('avatar_url_invalida');
         e.status = 400;

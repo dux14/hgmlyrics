@@ -60,7 +60,6 @@ def smoke_full(name: str, original_bytes: bytes) -> dict:
         "s1": {track: bytes, ...},          # 7 pistas
         "s2_segments": [{label,start,end}],  # estructura
         "s3": {"lead": bytes, "backing": bytes},
-        "s3_rms": {"lead": float, "backing": float},
         "s4": {"male": bytes, "female": bytes},
       }
     """
@@ -72,11 +71,10 @@ def smoke_full(name: str, original_bytes: bytes) -> dict:
         _run_inference,
         _normalize_label,
     )
-    from sections.medley_vox import separate_lead_backing
+    from sections.lead_backing import separate_lead_backing
     from sections.gender import (
         separate_by_gender,
         _CHORUS_MODEL_CKPT,
-        _AUFR33_MODEL_CKPT,
     )
 
     fd, src = tempfile.mkstemp(suffix=".mp3")
@@ -115,20 +113,20 @@ def smoke_full(name: str, original_bytes: bytes) -> dict:
         s2_error = f"{type(exc).__name__}: {exc}"
         print(f"[{name}] S2 FALLÓ (no fatal): {s2_error}")
 
-    # ── S3: MedleyVox (lead/backing) sobre el vocal de S1 ────────────────────
-    print(f"[{name}] S3 — MedleyVox…")
+    # ── S3: Mel-RoFormer Karaoke (lead/backing) sobre el vocal de S1 ─────────
+    print(f"[{name}] S3 — Mel-RoFormer Karaoke…")
     sep3 = separate_lead_backing(vocals_path)
-    with open(sep3["lead_mp3"], "rb") as f:
+    with open(sep3["lead"], "rb") as f:
         s3_lead = f.read()
-    with open(sep3["backing_mp3"], "rb") as f:
+    with open(sep3["backing"], "rb") as f:
         s3_backing = f.read()
 
-    # ── S4: A/B de género sobre el vocal de S1 — 2 modelos ───────────────────
-    # A = chorus_bs_roformer (Sucial, default actual); B = aufr33 (alternativa).
-    # Mismo vocal ep_317 para ambos → comparación limpia modelo-vs-modelo.
+    # ── S4: género sobre el vocal de S1 — chorus_bs_roformer ─────────────────
+    # Rama 'aufr33' eliminada (ver docstring de sections/gender.py): el probe
+    # de checkpoints no encontró ningún Mel-Band RoFormer male/female de aufr33.
     s4: dict[str, dict] = {}
     s4_errors: dict[str, str] = {}
-    for tag, ckpt in (("chorus", _CHORUS_MODEL_CKPT), ("aufr33", _AUFR33_MODEL_CKPT)):
+    for tag, ckpt in (("chorus", _CHORUS_MODEL_CKPT),):
         print(f"[{name}] S4 — {tag} ({ckpt})…")
         try:
             st = separate_by_gender(vocals_path, model_ckpt=ckpt)
@@ -147,7 +145,6 @@ def smoke_full(name: str, original_bytes: bytes) -> dict:
         "s2_segments": s2_segments,
         "s2_error": s2_error,
         "s3": {"lead": s3_lead, "backing": s3_backing},
-        "s3_rms": {"lead": sep3["rms_lead"], "backing": sep3["rms_backing"]},
         "s4": s4,
         "s4_errors": s4_errors,
     }
@@ -200,16 +197,14 @@ def main(mp3: str = "/Users/samu/Downloads/huracan.mp3"):
         fname = f"S3 - {i} {es}.mp3"
         with open(f"{song_dir}/{fname}", "wb") as f:
             f.write(res["s3"][track])
-        rms = res["s3_rms"][track]
-        manifest[fname] = f"S3 lider/coros — {es} (RMS {rms:.4f})"
+        manifest[fname] = f"S3 lider/coros — {es} (mel-roformer karaoke)"
 
-    # ── S4: A/B de género (2 modelos) renombrados S4 - N ─────────────────────
-    # chorus = S4 - 1/2, aufr33 = S4 - 3/4. Mismo vocal ep_317 para ambos.
+    # ── S4: género (chorus_bs_roformer) renombrado S4 - N ────────────────────
     s4 = res["s4"]
     s4_errors = res.get("s4_errors", {})
     i = 1
-    for tag in ("chorus", "aufr33"):
-        modelo = "chorus_bs_roformer" if tag == "chorus" else "aufr33"
+    for tag in ("chorus",):
+        modelo = "chorus_bs_roformer"
         if tag not in s4:
             err = s4_errors.get(tag, "sin salida")
             manifest[f"S4 ({modelo})"] = f"S4 genero {modelo} — FALLO: {err[:60]}"
@@ -228,16 +223,8 @@ def main(mp3: str = "/Users/samu/Downloads/huracan.mp3"):
         f.write(f"Smoke full — «{name}»\n\n")
         for k, v in manifest.items():
             f.write(f"  {k:<28}  {v}\n")
-        f.write(
-            f"\nS3 RMS: lead={res['s3_rms']['lead']:.4f} "
-            f"backing={res['s3_rms']['backing']:.4f} "
-            f"(heuristica: lead = mayor RMS)\n"
-        )
+        f.write("\nS3 lead/backing: Mel-RoFormer Karaoke (lead=(Vocals), backing=resto)\n")
 
     print("OK — escrito a", song_dir)
     print("  S1:", len(_S1_ORDER), "pistas | S2:", len(seg), "segmentos |",
           "S3: lead/backing | S4: male/female")
-    print(
-        f"  S3 RMS lead={res['s3_rms']['lead']:.4f} "
-        f"backing={res['s3_rms']['backing']:.4f}"
-    )

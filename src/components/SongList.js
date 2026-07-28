@@ -1,19 +1,18 @@
 /**
- * SongList.js — Song grid/list component
+ * SongList.js — Song card component
  *
- * Displays filtered songs as cards with album covers, titles, and voice badges.
+ * Crea la card de canción (carátula, título, badge de voz, favorito) usada
+ * por Home.js. El grid/lista con toggle de vista, la fila de lista y el
+ * skeleton viejos se eliminaron: sin usuarios tras el rediseño de Home.
  */
 
 import { navigate } from '../router.js';
 import { isPWA, isSongCached } from '../lib/offlineCache.js';
 import { isAuthenticated } from '../lib/authStore.js';
-import { isFavorite, toggleFavorite, subscribe as subscribeFavorites } from '../lib/favorites.js';
+import { isFavorite, toggleFavorite } from '../lib/favorites.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
 import { resolveCoverUrl, voiceBadge } from './songRow.js';
 import { escapeHtml } from '../lib/escape.js';
-
-let currentViewMode = localStorage.getItem('hkn-view-mode') || 'grid';
-let favUnsubscribe = null;
 
 function paintFavBtn(btn, on) {
   btn.classList.toggle('is-on', on);
@@ -24,103 +23,12 @@ function paintFavBtn(btn, on) {
 }
 
 /**
- * Render the song list
- * @param {HTMLElement} container - Mount point
- * @param {Array} songs - Songs to display
- */
-export function renderSongList(container, songs) {
-  container.innerHTML = '';
-  if (favUnsubscribe) {
-    favUnsubscribe();
-    favUnsubscribe = null;
-  }
-
-  if (songs.length === 0) {
-    container.innerHTML = `
-      <div class="empty-state fade-in">
-        <div class="empty-state__icon">${icon('music', { size: 48 })}</div>
-        <h2 class="empty-state__title">No se encontraron canciones</h2>
-        <p class="empty-state__text">Intenta ajustar los filtros o busca por otro término.</p>
-      </div>
-    `;
-    return;
-  }
-
-  const toolbar = document.createElement('div');
-  toolbar.className = 'song-view-toolbar';
-  toolbar.innerHTML = `
-    <span style="color: var(--color-text-secondary); font-size: 0.875rem;">${songs.length} resultados</span>
-    <div class="song-view-toggle">
-      <button class="view-btn ${currentViewMode === 'grid' ? 'active' : ''}" data-view="grid" title="Cuadrícula" aria-label="Vista en cuadrícula">${icon('grid', { size: 18 })}</button>
-      <button class="view-btn ${currentViewMode === 'list' ? 'active' : ''}" data-view="list" title="Lista" aria-label="Vista en lista">${icon('list', { size: 18 })}</button>
-    </div>
-  `;
-  container.appendChild(toolbar);
-
-  toolbar.querySelectorAll('.view-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      currentViewMode = btn.dataset.view;
-      localStorage.setItem('hkn-view-mode', currentViewMode);
-      renderSongList(container, songs);
-    });
-  });
-
-  const listContainer = document.createElement('div');
-  listContainer.className = currentViewMode === 'grid' ? 'song-grid' : 'song-table-container';
-
-  if (currentViewMode === 'grid') {
-    songs.forEach((song, index) => {
-      listContainer.appendChild(createSongCard(song, index));
-    });
-  } else {
-    listContainer.appendChild(createSongTable(songs));
-  }
-
-  container.appendChild(listContainer);
-
-  if (isAuthenticated()) {
-    favUnsubscribe = subscribeFavorites((toggledId) => {
-      container.querySelectorAll('.song-card__fav[data-song-id]').forEach((btn) => {
-        if (toggledId && btn.dataset.songId !== toggledId) return;
-        paintFavBtn(btn, isFavorite(btn.dataset.songId));
-      });
-    });
-  }
-}
-
-/**
- * Render skeleton loading cards
- * @param {HTMLElement} container
- * @param {number} count
- */
-export function renderSongListSkeleton(container, count = 6) {
-  const grid = document.createElement('div');
-  grid.className = 'song-grid';
-
-  for (let i = 0; i < count; i++) {
-    const card = document.createElement('div');
-    card.className = 'song-card song-card--skeleton';
-    card.innerHTML = `
-      <div class="song-card__cover skeleton"></div>
-      <div class="song-card__info">
-        <div class="song-card__title skeleton">&nbsp;</div>
-        <div class="song-card__album skeleton">&nbsp;</div>
-      </div>
-    `;
-    grid.appendChild(card);
-  }
-
-  container.innerHTML = '';
-  container.appendChild(grid);
-}
-
-/**
  * Create a song card element
  * @param {object} song
  * @param {number} index - For staggered animation
  * @returns {HTMLElement}
  */
-function createSongCard(song, index) {
+export function createSongCard(song, index) {
   const card = document.createElement('article');
   card.className = 'song-card fade-in';
   card.style.animationDelay = `${index * 50}ms`;
@@ -186,8 +94,7 @@ function createSongCard(song, index) {
     }
   });
 
-  // Favorite toggle (intercept before card click). Cross-card sync handled by
-  // a single list-level subscription registered in renderSongList.
+  // Favorite toggle (intercept before card click).
   const favBtn = card.querySelector('.song-card__fav');
   if (favBtn) {
     favBtn.dataset.songId = song.id;
@@ -213,59 +120,4 @@ function createSongCard(song, index) {
   }
 
   return card;
-}
-
-/**
- * Create a song table element
- * @param {Array} songs
- * @returns {HTMLElement}
- */
-function createSongTable(songs) {
-  const table = document.createElement('table');
-  table.className = 'song-table';
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th style="width: 50px;"></th>
-        <th>Título</th>
-        <th>Artista</th>
-        <th>Álbum</th>
-        <th>Año / Género</th>
-        <th>Tipo Voz</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${songs
-        .map((song, i) => {
-          const coverUrl = resolveCoverUrl(song);
-          const { class: voiceBadgeClass, label: voiceLabel } = voiceBadge(song);
-
-          return `
-          <tr class="song-table__row fade-in" style="animation-delay: ${i * 30}ms" data-id="${song.id}" tabindex="0">
-            <td>
-              <img src="${coverUrl}" class="song-table__thumb" width="40" height="40" loading="lazy" decoding="async" onerror="this.src='${COVER_PLACEHOLDER}'" />
-            </td>
-            <td class="song-table__title">${escapeHtml(song.title)}</td>
-            <td>${escapeHtml(song.artist)}</td>
-            <td class="song-table__meta">${escapeHtml(song.album)}</td>
-            <td class="song-table__meta">${song.year || ''} <span style="font-size:0.75rem;opacity:0.7">${escapeHtml(song.genre || '')}</span></td>
-            <td><span class="voice-badge ${voiceBadgeClass}">${voiceLabel}</span></td>
-          </tr>
-        `;
-        })
-        .join('')}
-    </tbody>
-  `;
-
-  table.querySelectorAll('.song-table__row').forEach((row) => {
-    row.addEventListener('click', () => navigate(`/song/${row.dataset.id}`));
-    row.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        navigate(`/song/${row.dataset.id}`);
-      }
-    });
-  });
-
-  return table;
 }

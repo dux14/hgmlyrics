@@ -1,7 +1,7 @@
 /**
  * store.js — State management & IndexedDB cache
  *
- * Manages song data, filtering, sorting, and persistent offline cache.
+ * Manages song data, album filtering/ordering, and persistent offline cache.
  */
 
 import { get, set } from 'idb-keyval';
@@ -16,13 +16,12 @@ const CACHE_KEY = 'hkn-songs-cache';
 const CACHE_VERSION_KEY = 'hkn-songs-version';
 const API_URL = '/api';
 
-/** @type {{ songs: Array, filtered: Array, activeAlbum: string|null, sortMode: string, voiceFilter: string|null }} */
+/** @type {{ songs: Array, filtered: Array, activeAlbum: string|null, sortMode: string }} */
 const state = {
   songs: [],
   filtered: [],
   activeAlbum: null,
   sortMode: 'a-z',
-  voiceFilter: null,
   listeners: new Set(),
 };
 
@@ -49,7 +48,6 @@ export function getState() {
     filtered: state.filtered,
     activeAlbum: state.activeAlbum,
     sortMode: state.sortMode,
-    voiceFilter: state.voiceFilter,
   };
 }
 
@@ -92,7 +90,6 @@ export async function initStore() {
       state.songs = [];
       state.filtered = [];
       state.activeAlbum = null;
-      state.voiceFilter = null;
       try {
         await set(CACHE_KEY, null);
       } catch (_e) {
@@ -126,21 +123,62 @@ export async function refreshData() {
 }
 
 /**
- * Get unique albums from all songs
- * @returns {Array<{slug: string, name: string, coverImage: string}>}
+ * Get unique albums from all songs.
+ *
+ * El campo `artist` se calcula como el artista más frecuente entre las
+ * canciones del álbum. Desempate: gana el primer artista encontrado (orden
+ * de inserción). Si ninguna canción del álbum tiene artista, `artist` es
+ * `undefined`.
+ *
+ * @returns {Array<{slug: string, name: string, coverImage: string, artist: string|undefined, year: number|undefined}>}
  */
 export function getAlbums() {
-  const albumMap = new Map();
+  // Primera pasada: registrar metadatos del álbum y contar artistas.
+  const albumMeta = new Map(); // slug → { slug, name, coverImage, year }
+  const artistCount = new Map(); // slug → Map<artist, count>
+
   state.songs.forEach((song) => {
-    if (!albumMap.has(song.albumSlug)) {
-      albumMap.set(song.albumSlug, {
+    if (!albumMeta.has(song.albumSlug)) {
+      albumMeta.set(song.albumSlug, {
         slug: song.albumSlug,
         name: song.album,
         coverImage: song.coverImage,
+        year: undefined,
       });
+      artistCount.set(song.albumSlug, new Map());
+    }
+    if (typeof song.year === 'number') {
+      const meta = albumMeta.get(song.albumSlug);
+      meta.year = meta.year === undefined ? song.year : Math.max(meta.year, song.year);
+    }
+    if (song.artist) {
+      const counts = artistCount.get(song.albumSlug);
+      counts.set(song.artist, (counts.get(song.artist) || 0) + 1);
     }
   });
-  return Array.from(albumMap.values());
+
+  // Segunda pasada: elegir el artista más frecuente por álbum.
+  return Array.from(albumMeta.entries()).map(([slug, meta]) => {
+    const counts = artistCount.get(slug);
+    let artist;
+    let maxCount = 0;
+    counts.forEach((count, name) => {
+      if (count > maxCount) {
+        maxCount = count;
+        artist = name;
+      }
+    });
+    return { ...meta, artist };
+  });
+}
+
+/**
+ * Solo para tests: reemplaza el array de canciones en el estado interno.
+ * No invocar en código de producción.
+ * @param {Array} songs
+ */
+export function _setSongs(songs) {
+  state.songs = songs;
 }
 
 export function getVoiceTypes() {
@@ -174,16 +212,24 @@ export async function fetchSongDetail(id) {
       }
       return song;
     }
+    // 4xx es autoritativo (no existe / sin permiso): no usar el cache,
+    // que puede estar stale y resucitar una canción borrada. Precedente:
+    // fetchWithRetry.js trata 4xx como definitivo, 5xx/red como transitorio.
+    if (res.status < 500) {
+      return null;
+    }
   } catch (e) {
     console.warn('Could not fetch song detail:', e);
-    // F8: Fallback — try offline cache
-    try {
-      const { getOfflineSong } = await import('./offlineCache.js');
-      const cached = await getOfflineSong(id);
-      if (cached) return cached;
-    } catch (_) {
-      // offlineCache not available
-    }
+  }
+  // F8: Fallback offline — cubre fetch lanzado (red caída) Y respuesta 5xx
+  // (backend caído, portal cautivo): en ambos casos la copia de IndexedDB
+  // es mejor que "no encontrada" (H3 auditoría).
+  try {
+    const { getOfflineSong } = await import('./offlineCache.js');
+    const cached = await getOfflineSong(id);
+    if (cached) return cached;
+  } catch (_) {
+    // offlineCache not available
   }
   return null;
 }
@@ -224,27 +270,7 @@ export function filterByAlbum(albumSlug) {
 }
 
 /**
- * Set sort mode
- * @param {'a-z'|'z-a'|'recent'|'album'} mode
- */
-export function setSortMode(mode) {
-  state.sortMode = mode;
-  applyFilters();
-  notify();
-}
-
-/**
- * Filter by voice type
- * @param {string|null} voiceType - 'male', 'female', 'mixed', or null
- */
-export function filterByVoice(voiceType) {
-  state.voiceFilter = voiceType;
-  applyFilters();
-  notify();
-}
-
-/**
- * Apply all active filters and sorting
+ * Apply active album filter and sorting
  */
 function applyFilters() {
   let result = [...state.songs];
@@ -254,35 +280,11 @@ function applyFilters() {
     result = result.filter((s) => s.albumSlug === state.activeAlbum);
   }
 
-  // Voice filter
-  if (state.voiceFilter) {
-    result = result.filter((s) => s.voiceType === state.voiceFilter);
-  }
-
   // Sorting
-  switch (state.sortMode) {
-    case 'a-z':
-      result.sort((a, b) => a.title.localeCompare(b.title, 'es'));
-      break;
-    case 'z-a':
-      result.sort((a, b) => b.title.localeCompare(a.title, 'es'));
-      break;
-    case 'recent':
-      result.sort(
-        (a, b) => (b.year || 0) - (a.year || 0) || (b.albumOrder || 0) - (a.albumOrder || 0),
-      );
-      break;
-    case 'album':
-      result.sort(
-        (a, b) =>
-          a.album.localeCompare(b.album, 'es') ||
-          (a.albumOrder || 0) - (b.albumOrder || 0) ||
-          a.title.localeCompare(b.title, 'es'),
-      );
-      break;
-    case 'album-order':
-      result.sort((a, b) => (a.albumOrder || 0) - (b.albumOrder || 0));
-      break;
+  if (state.sortMode === 'album-order') {
+    result.sort((a, b) => (a.albumOrder || 0) - (b.albumOrder || 0));
+  } else {
+    result.sort((a, b) => a.title.localeCompare(b.title, 'es'));
   }
 
   state.filtered = result;

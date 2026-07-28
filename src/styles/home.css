@@ -1,0 +1,577 @@
+/* ============================================================
+   home.css — Vista de inicio (renderHome)
+   Ambient Kinetic: dark primario, teal = identidad, ámbar = acción.
+   Sin hex de marca suelto; todo via tokens.
+   ============================================================ */
+
+.home {
+  padding: 0 0 var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+/* ── Módulo (sección genérica) ── */
+.home__module {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* ── Cabecera estilo Spotify: título grande + enlace "Ver todos" ── */
+.home__hd {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.home__hd-title {
+  font-size: 1.25rem; /* ~20px */
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  margin: 0;
+  line-height: var(--line-height-tight, 1.2);
+}
+
+.home__all {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+  transition: color var(--transition-fast);
+}
+
+.home__all:hover,
+.home__all:focus-visible {
+  color: var(--color-primary);
+  outline: none;
+}
+
+/* ── Strip horizontal (recientes / favoritos) ── */
+.home__strip {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  /* Primera card alineada al gutter de .main__content (16px); sangra al borde
+     derecho cancelando el gutter del padre y restaurándolo como padding interno. */
+  padding-left: 0;
+  padding-right: var(--space-md);
+  padding-bottom: 0;
+  margin-right: calc(-1 * var(--space-md));
+}
+
+.home__strip::-webkit-scrollbar {
+  display: none;
+}
+
+.home__strip .song-card {
+  flex: 0 0 auto;
+  width: 160px;
+  scroll-snap-align: start;
+  /* El strip solo monta ≤6 cards: anular content-visibility:auto evita que las
+     cards fuera de viewport reserven contain-intrinsic-size (1px×420px) y
+     estiren el alto del strip, dejando un hueco vacío bajo Reciente. */
+  content-visibility: visible;
+}
+
+/* ── Rail horizontal de álbumes (5 portadas cuadradas + card "+") ── */
+.home__albums-rail {
+  display: flex;
+  gap: var(--space-sm);
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* Mismo patrón que .home__strip: primera card al gutter (16px), bleed derecho. */
+  padding-left: 0;
+  padding-right: var(--space-md);
+  padding-bottom: var(--space-xs);
+  margin-right: calc(-1 * var(--space-md));
+}
+
+.home__albums-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.home__albums-rail .home__album-card {
+  flex: 0 0 auto;
+  width: 132px;
+  scroll-snap-align: start;
+}
+
+.home__albums-rail .home__album-cover {
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  object-fit: cover;
+}
+
+/* ── Card de álbum (home) ── */
+.home__album-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  transition:
+    transform var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+.home__album-card:hover,
+.home__album-card:focus-visible {
+  transform: translateY(-3px);
+  box-shadow:
+    0 6px 18px var(--color-shadow),
+    0 0 0 1px var(--color-primary);
+  outline: none;
+}
+
+.home__album-cover {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  background: var(--color-bg);
+  display: block;
+}
+
+.home__album-body {
+  padding: var(--space-xs) var(--space-sm) var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.home__album-name {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home__album-artist {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Filas de listas ── */
+.home__list-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: 12px var(--space-md) 12px calc(var(--space-md) + 3px);
+  margin-bottom: 7px;
+  background: transparent;
+  border: none;
+  border-radius: var(--border-radius-md);
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+.home__list-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 3px;
+  background: #4a4a4a;
+}
+.home__list-row.-red::before {
+  background: var(--color-error);
+  box-shadow: 0 0 12px 0 rgba(244, 67, 54, 0.45);
+}
+.home__list-row.-amber::before {
+  background: var(--color-warning);
+  box-shadow: 0 0 10px -1px rgba(255, 152, 0, 0.4);
+}
+.home__list-row.-green::before {
+  background: var(--color-success);
+  box-shadow: 0 0 10px -1px rgba(76, 175, 80, 0.35);
+}
+.home__list-row.-neutral::before {
+  background: #4a4a4a;
+  box-shadow: none;
+}
+.home__list-row:hover,
+.home__list-row:focus-visible {
+  background: var(--color-surface-hover);
+  outline: none;
+}
+
+.home__list-ic {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
+.home__list-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.home__list-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home__list-meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.home__list-arr {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
+.home__list-empty {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.home__list-create {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-primary);
+  transition: opacity var(--transition-fast);
+}
+
+.home__list-create:hover,
+.home__list-create:focus-visible {
+  opacity: 0.75;
+  outline: none;
+}
+
+/* Punto de urgencia junto al nombre */
+.home__list-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: #5a5a5a;
+}
+.home__list-dot.-red {
+  background: var(--color-error);
+}
+.home__list-dot.-amber {
+  background: var(--color-warning);
+}
+.home__list-dot.-green {
+  background: var(--color-success);
+}
+.home__list-dot.-neutral {
+  background: #5a5a5a;
+}
+
+/* Píldora de cuenta regresiva */
+.home__list-pill {
+  flex: 0 0 auto;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  background: #242424;
+  color: var(--color-text-secondary);
+}
+.home__list-pill.-red {
+  background: rgba(244, 67, 54, 0.16);
+  color: #ff7a70;
+}
+.home__list-pill.-amber {
+  background: rgba(255, 152, 0, 0.15);
+  color: #ffb24d;
+}
+.home__list-pill.-green {
+  background: rgba(76, 175, 80, 0.14);
+  color: #6fce73;
+}
+
+/* Skeletons de carga */
+.home__list-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.home__skel-row,
+.home__voz-skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+.home__skel-row {
+  height: 56px;
+}
+.home__voz-skeleton {
+  height: 68px;
+}
+.home__skel-row::after,
+.home__voz-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+  transform: translateX(-100%);
+  animation: home-shimmer 1.2s infinite;
+}
+@keyframes home-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* ── Card de voz en off vigente ── */
+.home__voz-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  padding: var(--space-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.home__voz-card:hover,
+.home__voz-card:focus-visible {
+  background: var(--color-surface-hover);
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.home__voz-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.home__voz-ref {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home__voz-date {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.home__voz-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+  background: color-mix(in oklch, var(--color-primary) 15%, transparent);
+  border-radius: 3px;
+  padding: 1px 5px;
+  margin-top: 2px;
+  align-self: flex-start;
+}
+
+.home__voz-arr {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
+/* ── Teaser: oración del artista — superficie glass ── */
+.home__teaser {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  background: color-mix(in oklch, var(--color-surface) 75%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-md);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.home__teaser:hover,
+.home__teaser:focus-visible {
+  background: color-mix(in oklch, var(--color-surface) 90%, transparent);
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.home__teaser-ic {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklch, var(--color-accent) 14%, transparent);
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.home__teaser-tx {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.home__teaser-t {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.home__teaser-s {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.home__teaser-arr {
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
+/* ══ Animaciones (Ambient Kinetic) ══════════════════════════════════
+   Keyframes y animaciones activos por defecto.
+   Guard al final: prefers-reduced-motion: reduce los desactiva.
+   Patrón del proyecto idéntico al de editor.css (commit 3210434). */
+
+@keyframes home-rise {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes home-slide-x {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Fade escalonado por sección (solo opacidad; sin movimiento) */
+.home__module {
+  animation: home-rise var(--transition-page) ease both;
+}
+
+.home__module:nth-child(1) {
+  animation-delay: 0.03s;
+}
+.home__module:nth-child(2) {
+  animation-delay: 0.06s;
+}
+.home__module:nth-child(3) {
+  animation-delay: 0.09s;
+}
+.home__module:nth-child(4) {
+  animation-delay: 0.12s;
+}
+.home__module:nth-child(5) {
+  animation-delay: 0.15s;
+}
+.home__module:nth-child(6) {
+  animation-delay: 0.18s;
+}
+
+/* Hover lift en cards de álbum (performance hint) */
+.home__album-card {
+  will-change: transform;
+}
+
+/* Fade escalonado en filas de listas (solo opacidad; sin movimiento) */
+.home__list-row {
+  animation: home-slide-x var(--transition-page) ease both;
+}
+
+.home__list-row:nth-child(1) {
+  animation-delay: 0s;
+}
+.home__list-row:nth-child(2) {
+  animation-delay: 0.04s;
+}
+.home__list-row:nth-child(3) {
+  animation-delay: 0.08s;
+}
+.home__list-row:nth-child(4) {
+  animation-delay: 0.12s;
+}
+.home__list-row:nth-child(5) {
+  animation-delay: 0.16s;
+}
+
+/* ── Accesibilidad: movimiento reducido ── */
+@media (prefers-reduced-motion: reduce) {
+  .home__module,
+  .home__list-row {
+    animation: none;
+  }
+  .home__list-row::before {
+    box-shadow: none;
+  }
+  .home__skel-row::after,
+  .home__voz-skeleton::after {
+    animation: none;
+  }
+}

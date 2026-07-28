@@ -851,7 +851,7 @@ describe('buildAnnotatedLineHTML', () => {
       ],
     });
     // El texto de la letra (quitando las etiquetas flotantes) sigue siendo "universo".
-    const noLabels = html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '');
+    const noLabels = html.replace(/<span class="float-label[^"]*"><i>[^<]*<\/i><\/span>/g, '');
     expect(visibleText(noLabels)).toBe('universo');
   });
 
@@ -870,12 +870,187 @@ describe('buildAnnotatedLineHTML', () => {
     expect(html).toContain('float-label');
     expect(html).toContain('>G<');
     // el texto visible de la letra sigue siendo "ab" (la G es etiqueta flotante)
-    const noLabels = html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '');
+    const noLabels = html.replace(/<span class="float-label[^"]*"><i>[^<]*<\/i><\/span>/g, '');
     expect(visibleText(noLabels)).toBe('ab');
   });
 
   it('escapa el texto de la etiqueta', () => {
     const html = buildAnnotatedLineHTML('x', { labels: [{ pos: 0, text: 'F#<' }] });
     expect(html).toContain('F#&lt;');
+  });
+});
+
+describe('buildAnnotatedLineHTML — integridad de palabra (line-word)', () => {
+  it('modo Letra puro (sin labels/spans/baseClass) no genera .line-word', () => {
+    const html = buildAnnotatedLineHTML('Llevame contigooo caminando', {});
+    expect(html).not.toContain('line-word');
+  });
+
+  it('con anotaciones, agrupa una palabra partida por una anotación intra-palabra en UN solo .line-word', () => {
+    const html = buildAnnotatedLineHTML('contigooo', {
+      labels: [{ pos: 5, text: 'G', className: 'chord-label' }],
+    });
+    const wordMatches = html.match(/<span class="line-word">/g) || [];
+    expect(wordMatches.length).toBe(1);
+  });
+
+  it('ninguna .line-word contiene un caracter de espacio', () => {
+    const html = buildAnnotatedLineHTML('Llevame contigooo', {
+      labels: [{ pos: 13, text: 'G', className: 'chord-label' }],
+      baseClass: 'lyrics__letra-dim',
+    });
+    const words = [
+      ...html.matchAll(
+        /<span class="line-word">(.*?)<\/span><\/span>|<span class="line-word">(.*?)<\/span>/g,
+      ),
+    ];
+    // Extrae el contenido visible (sin tags) de cada .line-word y verifica que no tenga espacios.
+    const container = html;
+    const wordBlocks = [];
+    let idx = 0;
+    while ((idx = container.indexOf('<span class="line-word">', idx)) !== -1) {
+      let depth = 1;
+      let cursor = idx + '<span class="line-word">'.length;
+      while (depth > 0) {
+        const nextOpen = container.indexOf('<span', cursor);
+        const nextClose = container.indexOf('</span>', cursor);
+        if (nextClose === -1) break;
+        if (nextOpen !== -1 && nextOpen < nextClose) {
+          depth++;
+          cursor = nextOpen + 5;
+        } else {
+          depth--;
+          cursor = nextClose + 7;
+        }
+      }
+      wordBlocks.push(container.slice(idx, cursor));
+      idx = cursor;
+    }
+    expect(wordBlocks.length).toBeGreaterThan(0);
+    for (const block of wordBlocks) {
+      const visible = block.replace(/<[^>]*>/g, '');
+      expect(visible).not.toMatch(/\s/);
+    }
+  });
+
+  it('preserva el textContent exacto (incluidos espacios) con anotaciones', () => {
+    const html = buildAnnotatedLineHTML('Llevame contigooo caminando siempre', {
+      labels: [{ pos: 13, text: 'G', className: 'chord-label' }],
+      baseClass: 'lyrics__letra-dim',
+    });
+    const visible = html.replace(/<[^>]*>/g, '');
+    // El texto visible incluye la etiqueta "G" además de la letra — se remueve por separado.
+    const withoutLabel = html.replace(/<span class="float-label[^"]*"><i>[^<]*<\/i><\/span>/g, '');
+    expect(withoutLabel.replace(/<[^>]*>/g, '')).toBe('Llevame contigooo caminando siempre');
+    expect(visible).toContain('G');
+  });
+
+  it('separa palabras distintas en .line-word distintos, con el espacio como texto plano entre ellos', () => {
+    const html = buildAnnotatedLineHTML('ab cd', { baseClass: 'dim' });
+    const wordMatches = html.match(/<span class="line-word">/g) || [];
+    expect(wordMatches.length).toBe(2);
+    // El espacio no debe quedar envuelto en ningún span — debe ser texto plano entre wrappers.
+    expect(html).toMatch(/<\/span><\/span> <span class="line-word">/);
+  });
+
+  it('REGRESIÓN (review Important): un label anclado exactamente sobre el espacio entre "ab" y "cd" NO debe fusionar ambas palabras en un solo .line-word', () => {
+    const html = buildAnnotatedLineHTML('ab cd', { labels: [{ pos: 2, text: 'G' }] });
+    const wordMatches = html.match(/<span class="line-word">/g) || [];
+    expect(wordMatches.length).toBe(2); // "ab" y "cd" siguen siendo .line-word independientes
+    // El textContent se preserva exacto (letra + etiqueta, espacio ni se pierde ni se duplica).
+    const withoutLabel = html.replace(/<span class="float-label[^"]*"><i>[^<]*<\/i><\/span>/g, '');
+    expect(withoutLabel.replace(/<[^>]*>/g, '')).toBe('ab cd');
+    expect(html).toContain('>G<');
+  });
+});
+
+import { validateSongPreSave } from '../src/lib/voiceSystem.js';
+
+describe('validateSongPreSave', () => {
+  const base = () => ({
+    sections: [
+      {
+        label: 'Verso 1',
+        lines: [
+          { text: 'Santo', chords: [{ pos: 0, ch: 'D' }] },
+          { text: 'Es el Señor', chords: [] },
+        ],
+      },
+    ],
+  });
+
+  it('acepta una canción v1 sin problemas', () => {
+    const result = validateSongPreSave(base());
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  it('rechaza un acorde con pos fuera del texto, con mensaje por sección/línea', () => {
+    const s = base();
+    s.sections[0].lines[0].chords[0].pos = 99;
+    const result = validateSongPreSave(s);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toMatch(/Verso 1, línea 1/);
+    expect(result.errors[0]).toMatch(/fuera del texto/);
+  });
+
+  it('usa "Sección N" cuando la sección no tiene label', () => {
+    const s = { sections: [{ lines: [{ text: 'ab', chords: [{ pos: 9, ch: 'D' }] }] }] };
+    const result = validateSongPreSave(s);
+    expect(result.errors[0]).toMatch(/Sección 1, línea 1/);
+  });
+
+  it('rechaza un acorde vacío', () => {
+    const s = base();
+    s.sections[0].lines[0].chords[0].ch = '   ';
+    const result = validateSongPreSave(s);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toMatch(/acorde vacío/);
+  });
+
+  it('rechaza un group v3 con nota inválida, ubicado por sección/línea', () => {
+    const s = {
+      schemaVersion: 3,
+      voiceRoster: [{ id: 'sop1', category: 'soprano' }],
+      sections: [
+        {
+          label: 'Coro',
+          lines: [{ text: 'Santo', groups: [{ start: 0, end: 5, voiceId: 'sop1', note: 'X1' }] }],
+        },
+      ],
+    };
+    const result = validateSongPreSave(s);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toMatch(/Coro, línea 1/);
+    expect(result.errors[0]).toMatch(/nota asignada no es válida/);
+  });
+
+  it('rechaza un group que referencia una voz fuera del elenco', () => {
+    const s = {
+      schemaVersion: 3,
+      voiceRoster: [{ id: 'sop1', category: 'soprano' }],
+      sections: [
+        {
+          lines: [{ text: 'Santo', groups: [{ start: 0, end: 5, voiceId: 'ghost', note: null }] }],
+        },
+      ],
+    };
+    const result = validateSongPreSave(s);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toMatch(/no está en el elenco/);
+  });
+
+  it('traduce el mensaje técnico de validateSongV3 cuando no hay error de sección/línea', () => {
+    const s = {
+      schemaVersion: 3,
+      voiceRoster: [
+        { id: 'sop1', category: 'soprano' },
+        { id: 'sop1', category: 'tenor' },
+      ],
+      sections: [],
+    };
+    const result = validateSongPreSave(s);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).not.toMatch(/roster/); // sin jerga técnica
+    expect(result.errors[0]).toMatch(/identificador repetido/);
   });
 });

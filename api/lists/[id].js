@@ -52,24 +52,29 @@ export default withErrors(async (req, res) => {
     const items = itemRows.map((r) =>
       r.item_type === 'weekly_word' ? { ...r, word: wwMap[String(r.item_id)] ?? null } : r,
     );
-    const members = await sql`
-      SELECT m.user_id, p.username FROM ephemeral_list_members m
-      JOIN profiles p ON p.id = m.user_id WHERE m.list_id = ${id}
-    `;
-    const children = await sql`
-      SELECT c.id, c.name, c.expires_at,
-             (SELECT count(*)::int FROM ephemeral_list_items i WHERE i.list_id = c.id) AS song_count
-      FROM ephemeral_lists c
-      WHERE c.parent_id = ${id} AND c.expires_at > now()
-      ORDER BY c.expires_at ASC
-    `;
-    let parent = null;
-    if (list.parent_id) {
-      const prows = await sql`
-        SELECT id, name, expires_at FROM ephemeral_lists WHERE id = ${list.parent_id}
-      `;
-      parent = prows[0] || null;
-    }
+    // members, children y parent son independientes entre sí, ya con el `id`
+    // (y el list.parent_id, si aplica) resueltos → Promise.all.
+    const [members, children, parentRows] = await Promise.all([
+      sql`
+        SELECT m.user_id, p.username FROM ephemeral_list_members m
+        JOIN profiles p ON p.id = m.user_id WHERE m.list_id = ${id}
+      `,
+      sql`
+        SELECT c.id, c.name, c.expires_at, COALESCE(i.song_count, 0) AS song_count
+        FROM ephemeral_lists c
+        LEFT JOIN (
+          SELECT list_id, count(*)::int AS song_count
+          FROM ephemeral_list_items
+          GROUP BY list_id
+        ) i ON i.list_id = c.id
+        WHERE c.parent_id = ${id} AND c.expires_at > now()
+        ORDER BY c.expires_at ASC
+      `,
+      list.parent_id
+        ? sql`SELECT id, name, expires_at FROM ephemeral_lists WHERE id = ${list.parent_id}`
+        : Promise.resolve([]),
+    ]);
+    const parent = parentRows[0] || null;
     res.status(200).json({
       id: list.id,
       name: list.name,

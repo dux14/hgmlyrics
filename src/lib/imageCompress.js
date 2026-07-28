@@ -127,7 +127,7 @@ export async function compressImageToLimit(
   }
 
   if (!result) {
-    throw new Error('No se pudo reducir la imagen por debajo del limite de tamano.');
+    throw new Error('No se pudo reducir la imagen por debajo del límite de tamaño.');
   }
 
   const ext = result.type === 'image/webp' ? 'webp' : 'jpg';
@@ -147,7 +147,8 @@ export async function compressImageToLimit(
  */
 async function encodeCanvas(bitmap, width, height, format, quality) {
   const useOffscreen =
-    typeof OffscreenCanvas !== 'undefined' && typeof OffscreenCanvas.prototype.convertToBlob === 'function';
+    typeof OffscreenCanvas !== 'undefined' &&
+    typeof OffscreenCanvas.prototype.convertToBlob === 'function';
 
   if (useOffscreen) {
     const canvas = new OffscreenCanvas(width, height);

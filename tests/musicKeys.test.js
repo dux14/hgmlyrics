@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { MUSICAL_KEYS, isValidKey } from '../src/lib/musicKeys.js';
+import {
+  MUSICAL_KEYS,
+  isValidKey,
+  chordProKeyToCanonical,
+  canonicalToChordProKey,
+} from '../src/lib/musicKeys.js';
 
 describe('MUSICAL_KEYS', () => {
   it('contains 24 keys (12 tonics × 2 modes)', () => {
@@ -45,5 +50,51 @@ describe('isValidKey', () => {
     expect(isValidKey(null)).toBe(false);
     expect(isValidKey(undefined)).toBe(false);
     expect(isValidKey(42)).toBe(false);
+  });
+});
+
+describe('chordProKeyToCanonical', () => {
+  it('convierte tonica mayor sin sufijo', () => {
+    expect(chordProKeyToCanonical('C')).toBe('C major');
+  });
+
+  it('convierte menor con sufijo m', () => {
+    expect(chordProKeyToCanonical('Am')).toBe('A minor');
+  });
+
+  it('convierte sostenidos', () => {
+    expect(chordProKeyToCanonical('F#m')).toBe('F# minor');
+  });
+
+  it('normaliza bemoles a su equivalente sostenido', () => {
+    expect(chordProKeyToCanonical('Bbm')).toBe('A# minor');
+    expect(chordProKeyToCanonical('Db')).toBe('C# major');
+  });
+
+  it('devuelve null para entradas no reconocibles', () => {
+    expect(chordProKeyToCanonical('Hm')).toBeNull();
+    expect(chordProKeyToCanonical('')).toBeNull();
+    expect(chordProKeyToCanonical(null)).toBeNull();
+  });
+});
+
+describe('canonicalToChordProKey', () => {
+  it('convierte mayor a notacion compacta', () => {
+    expect(canonicalToChordProKey('C major')).toBe('C');
+  });
+
+  it('convierte menor a notacion compacta con m', () => {
+    expect(canonicalToChordProKey('A minor')).toBe('Am');
+  });
+
+  it('devuelve string vacio para claves no canonicas', () => {
+    expect(canonicalToChordProKey('Bb major')).toBe('');
+    expect(canonicalToChordProKey(null)).toBe('');
+  });
+
+  it('hace round-trip con chordProKeyToCanonical', () => {
+    for (const k of MUSICAL_KEYS) {
+      expect(chordProKeyToCanonical(canonicalToChordProKey(k))).toBe(k);
+    }
   });
 });

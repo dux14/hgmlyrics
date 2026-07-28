@@ -37,14 +37,20 @@ export function startBackgroundCache() {
 }
 
 /**
- * Cache songs if not already cached (or force-refresh on version change / online event).
- * @param {boolean} [force=false] — skip version check and always re-fetch
+ * Cache songs, revalidando SIEMPRE contra el servidor.
+ * prefetchAllSongs ya evita la escritura si data.version coincide con lo
+ * cacheado, así que el costo de revalidar en cada boot es solo el fetch
+ * (CDN s-maxage 60). Antes retornaba temprano si existía CUALQUIER versión
+ * cacheada, dejando el catálogo offline congelado para siempre (H2 auditoría).
  */
-export async function ensureSongsCached(force = false) {
+export async function ensureSongsCached() {
   if (isCaching) return;
-  const cachedVersion = await get(OFFLINE_VERSION_KEY);
-  if (!force && cachedVersion) return; // already cached; re-validate via online/force only
-  return prefetchAllSongs(cachedVersion);
+  try {
+    const cachedVersion = await get(OFFLINE_VERSION_KEY);
+    return prefetchAllSongs(cachedVersion);
+  } catch (_) {
+    // IndexedDB no disponible (ej. Safari private mode); se reintenta en el próximo boot.
+  }
 }
 
 async function prefetchAllSongs(cachedVersion) {
@@ -80,7 +86,7 @@ async function prefetchAllSongs(cachedVersion) {
 // Re-trigger on reconnect so stale caches get refreshed when coming back online
 if (typeof globalThis.addEventListener === 'function') {
   globalThis.addEventListener('online', () => {
-    ensureSongsCached(true);
+    ensureSongsCached();
   });
 }
 

@@ -2,7 +2,7 @@ import sql from '../_lib/db.js';
 import { requireUser } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { createStemsUploadUrl, deleteStemsPrefix } from '../_lib/storage.js';
-import { DAILY_QUOTA, validateUploadMeta, checkStudioAccess, sanitizeTitle } from '../_lib/stems.js';
+import { DAILY_QUOTA, validateUploadMeta, sanitizeTitle } from '../_lib/stems.js';
 
 async function quotaUsedToday(userId) {
   // Solo cuenta jobs que realmente entraron a procesamiento o terminaron OK.
@@ -21,15 +21,19 @@ export default withErrors(async (req, res) => {
   const user = await requireUser(req);
 
   if (req.method === 'GET') {
-    const jobs = await sql`
-      SELECT id, status, input_meta, stems, voices, error, created_at, expires_at
-      FROM stem_jobs
-      WHERE user_id = ${user.id} AND status <> 'expired'
-        AND created_at > now() - interval '3 days'
-      ORDER BY created_at DESC
-    `;
-    const used = await quotaUsedToday(user.id);
-    const getProfileRows = await sql`SELECT is_admin FROM profiles WHERE id = ${user.id}`;
+    // jobs, quota usada y perfil son lecturas independientes (todas dependen
+    // solo de user.id, ya resuelto) → Promise.all.
+    const [jobs, used, getProfileRows] = await Promise.all([
+      sql`
+        SELECT id, status, input_meta, stems, voices, error, created_at, expires_at
+        FROM stem_jobs
+        WHERE user_id = ${user.id} AND status <> 'expired'
+          AND created_at > now() - interval '3 days'
+        ORDER BY created_at DESC
+      `,
+      quotaUsedToday(user.id),
+      sql`SELECT is_admin FROM profiles WHERE id = ${user.id}`,
+    ]);
     const isAdmin = getProfileRows[0]?.is_admin ?? false;
     const quota = isAdmin ? { used, limit: null, unlimited: true } : { used, limit: DAILY_QUOTA };
     res.status(200).json({ jobs, quota });
@@ -37,14 +41,8 @@ export default withErrors(async (req, res) => {
   }
 
   // POST: crear job.
-  // Verificar acceso beta antes de cualquier operación de escritura.
-  const profileRows = await sql`SELECT is_admin, studio_beta FROM profiles WHERE id = ${user.id}`;
+  const profileRows = await sql`SELECT is_admin FROM profiles WHERE id = ${user.id}`;
   const profile = profileRows[0] ?? {};
-  const access = checkStudioAccess(profile);
-  if (!access.ok) {
-    res.status(403).json({ error: 'beta', reason: access.reason });
-    return;
-  }
 
   // Reclama intentos previos sin empezar (created/uploaded): no consumen cuota y, si
   // quedaron huérfanos por una subida fallida, bloquearían nuevos uploads hasta el
@@ -84,11 +82,26 @@ export default withErrors(async (req, res) => {
 
   const safe = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80);
   const cleanTitle = sanitizeTitle(title, filename);
-  const rows = await sql`
-    INSERT INTO stem_jobs (user_id, status, input_meta)
-    VALUES (${user.id}, 'created', ${sql.json({ filename: safe, title: cleanTitle, size, mime })})
-    RETURNING id, status, created_at
-  `;
+  let rows;
+  try {
+    rows = await sql`
+      INSERT INTO stem_jobs (user_id, status, input_meta)
+      VALUES (${user.id}, 'created', ${sql.json({ filename: safe, title: cleanTitle, size, mime })})
+      RETURNING id, status, created_at
+    `;
+  } catch (err) {
+    // Fix 1 (TOCTOU de cuota): el índice único parcial stem_jobs_one_active_per_user
+    // rechaza el INSERT si ya hay un job activo para este usuario (dos POST /jobs casi
+    // simultáneos pasaron el check de arriba antes de que ninguno insertara). El
+    // perdedor de la carrera recibe el mismo error que el path de cuota, no un 500.
+    // Se discrimina por constraint: otra violación de unicidad (bug de esquema) no debe
+    // enmascararse como "cuota" — se relanza para que salga un 500 y quede en logs.
+    if (err?.code === '23505' && err?.constraint_name === 'stem_jobs_one_active_per_user') {
+      res.status(429).json({ error: 'quota', reason: 'quota' });
+      return;
+    }
+    throw err;
+  }
   const job = rows[0];
   const inputPath = `${user.id}/${job.id}/input/${safe}`;
   await sql`UPDATE stem_jobs SET input_path = ${inputPath}, updated_at = now() WHERE id = ${job.id}`;

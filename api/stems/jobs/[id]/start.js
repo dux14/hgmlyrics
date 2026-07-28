@@ -41,63 +41,79 @@ export default withErrors(async (req, res) => {
 
   // ── 1. Secciones habilitadas ────────────────────────────────────────────────
   // El cliente elige qué secciones procesar (mínimo 1). Sin selección explícita,
-  // se procesan las 4 (compatibilidad con el flujo anterior).
-  // STUDIO_GENDER_FLAG: 'off' apaga gender sin redeploy.
-  const genderEnabled = process.env.STUDIO_GENDER_FLAG !== 'off';
+  // se procesan las 5 (compatibilidad con el flujo anterior).
   const raw = req.body?.enabledSections;
   if (raw !== undefined && !Array.isArray(raw)) {
     res.status(400).json({ error: 'enabledSections debe ser un arreglo' });
     return;
   }
   const requested = Array.isArray(raw) ? raw : SECTION_KEYS;
-  const enabledSections = validateEnabledSections(requested, { genderEnabled });
+  const enabledSections = validateEnabledSections(requested);
 
   const sections = initSections(enabledSections);
 
   // ── 2. Persistir estado inicial (processing) ────────────────────────────────
+  // Fix 1 (TOCTOU de cuota): transición atómica created -> processing. El WHERE
+  // status='created' + RETURNING hace que, si dos /start corren en paralelo para
+  // el mismo job, solo uno gane la fila; el perdedor recibe 0 filas y NO debe
+  // invocar Modal (evita disparar 2 jobs GPU). No se re-consulta con un SELECT
+  // aparte: eso reintroduciría el TOCTOU que este UPDATE atómico cierra.
   // Fix 1: usar sql.array() para serializar text[] correctamente en Postgres.
-  await sql`
+  const claimed = await sql`
     UPDATE stem_jobs
     SET status = 'processing',
         sections = ${sql.json(sections)},
         enabled_sections = ${sql.array(enabledSections)},
         updated_at = now()
     WHERE id = ${job.id} AND status = 'created'
+    RETURNING id
   `;
+  if (claimed.length === 0) {
+    res.status(409).json({ error: 'El job ya no se puede iniciar (ya está en proceso).' });
+    return;
+  }
 
   // ── 3. Pre-firmar URLs de upload (PUT) por sección y track ─────────────────
   // Fix 2: si algo falla aquí o en Modal, marcar el job como failed.
+  // Perf: hasta 13 firmados independientes (PUT signing es HTTP suelto, sin pool) —
+  // se resuelven todos en paralelo con Promise.all, preservando la forma sección→track→url.
   try {
-    const uploads = {};
-    for (const section of enabledSections) {
-      // gender usa estructura anidada por modelo: { chorus: {male,female}, aufr33: {male,female} }
-      if (section === 'gender') {
-        const genderModels = ['chorus', 'aufr33'];
-        const genderTracks = ['male', 'female'];
-        const genderUrls = {};
-        for (const model of genderModels) {
-          genderUrls[model] = {};
-          for (const track of genderTracks) {
-            const key = `${user.id}/${job.id}/gender/${model}/${track}.mp3`;
-            genderUrls[model][track] = await createStemsSignedPutUrl(key);
+    const sectionEntries = await Promise.all(
+      enabledSections.map(async (section) => {
+        // gender usa estructura anidada por modelo: { chorus: {male,female}, aufr33: {male,female} }
+        if (section === 'gender') {
+          const genderModels = ['chorus', 'aufr33'];
+          const genderTracks = ['male', 'female'];
+          const signed = await Promise.all(
+            genderModels.flatMap((model) =>
+              genderTracks.map(async (track) => {
+                const key = `${user.id}/${job.id}/gender/${model}/${track}.mp3`;
+                return { model, track, url: await createStemsSignedPutUrl(key) };
+              }),
+            ),
+          );
+          const genderUrls = {};
+          for (const { model, track, url } of signed) {
+            genderUrls[model] = genderUrls[model] ?? {};
+            genderUrls[model][track] = url;
           }
+          return [section, genderUrls];
         }
-        uploads[section] = genderUrls;
-        continue;
-      }
-      const tracks = SECTION_OUTPUTS[section];
-      if (!tracks || tracks.length === 0) {
-        // structure: sin outputs de audio
-        uploads[section] = {};
-        continue;
-      }
-      const trackUrls = {};
-      for (const track of tracks) {
-        const key = `${user.id}/${job.id}/${section}/${track}.mp3`;
-        trackUrls[track] = await createStemsSignedPutUrl(key);
-      }
-      uploads[section] = trackUrls;
-    }
+        const tracks = SECTION_OUTPUTS[section];
+        if (!tracks || tracks.length === 0) {
+          // structure: sin outputs de audio
+          return [section, {}];
+        }
+        const trackEntries = await Promise.all(
+          tracks.map(async (track) => {
+            const key = `${user.id}/${job.id}/${section}/${track}.mp3`;
+            return [track, await createStemsSignedPutUrl(key)];
+          }),
+        );
+        return [section, Object.fromEntries(trackEntries)];
+      }),
+    );
+    const uploads = Object.fromEntries(sectionEntries);
 
     // ── 4. URL del webhook ──────────────────────────────────────────────────────
     const base =

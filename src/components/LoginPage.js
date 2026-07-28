@@ -3,8 +3,10 @@
  * Renders Google OAuth button + email magic link form.
  * Detects offline and shows a fallback message.
  */
-import { signInWithGoogle, signInWithMagicLink } from '../lib/authStore.js';
+import { signInWithGoogle, signInWithMagicLink, verifyEmailOtp } from '../lib/authStore.js';
 import { icon } from '../lib/icons.js';
+import { navigate } from '../router.js';
+import { getNextParam, isSafeRedirect } from '../lib/urlParams.js';
 
 const GOOGLE_ICON_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true">
   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -17,7 +19,7 @@ function offlinePane(container) {
   container.innerHTML = `
     <div class="auth-page fade-in">
       <div class="auth-card auth-offline">
-        <div style="color: var(--color-text-secondary);">${icon('wifi-off', { size: 48 })}</div>
+        <div class="auth-offline__icon">${icon('wifi-off', { size: 48 })}</div>
         <h2 class="auth-title">Sin conexión</h2>
         <p class="auth-subtitle">Necesitas conexión para iniciar sesión.</p>
         <button class="auth-btn" id="retry-btn">Reintentar</button>
@@ -52,6 +54,11 @@ function render(container, opts = {}) {
   container.innerHTML = `
     <div class="auth-page fade-in">
       <div class="auth-card">
+        <div class="auth-logo" aria-hidden="true">
+          <svg width="34" height="43" viewBox="0 0 23 29" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M5.8 0H0V29H5.8V23.2002H16.5195V29H22.3195V0H16.5195V5.79997L5.8 5.79998V0ZM16.5195 11.6L5.8 11.6V17.4002L16.5195 17.4002V11.6Z" fill="currentColor"/>
+          </svg>
+        </div>
         <h1 class="auth-title">${title}</h1>
         <p class="auth-subtitle">${subtitle}</p>
 
@@ -79,6 +86,26 @@ function render(container, opts = {}) {
           </button>
         </form>
 
+        <form id="otp-form" autocomplete="off" style="display:none;">
+          <input
+            type="text"
+            class="auth-input"
+            id="otp-input"
+            placeholder="Código del correo"
+            aria-label="Código del correo"
+            aria-describedby="otp-error"
+            required
+            inputmode="numeric"
+            pattern="[0-9]*"
+            maxlength="8"
+            autocomplete="one-time-code"
+          />
+          <div class="auth-error" id="otp-error" style="display:none;"></div>
+          <button type="submit" class="auth-btn" id="otp-btn">
+            Entrar con código
+          </button>
+        </form>
+
         <a href="${switchHash}" class="auth-link">${switchLabel}</a>
       </div>
     </div>
@@ -100,6 +127,13 @@ function render(container, opts = {}) {
     }
   });
 
+  // Email que se acaba de usar para pedir el enlace: el formulario de código
+  // lo reutiliza para verifyEmailOtp, sin pedirlo de nuevo.
+  let sentEmail = null;
+  const otpForm = container.querySelector('#otp-form');
+  const otpInput = container.querySelector('#otp-input');
+  const otpErrEl = container.querySelector('#otp-error');
+
   container.querySelector('#magic-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const email = container.querySelector('#email-input').value.trim();
@@ -108,6 +142,9 @@ function render(container, opts = {}) {
     const btn = container.querySelector('#magic-btn');
     errEl.style.display = 'none';
     okEl.style.display = 'none';
+    otpForm.style.display = 'none';
+    otpErrEl.style.display = 'none';
+    otpInput.value = '';
     btn.disabled = true;
     btn.textContent = 'Enviando...';
 
@@ -119,9 +156,41 @@ function render(container, opts = {}) {
       errEl.textContent = error.message;
       errEl.style.display = 'block';
     } else {
+      sentEmail = email;
       okEl.textContent = 'Listo. Revisa tu correo para iniciar sesión.';
       okEl.style.display = 'block';
+      otpForm.style.display = 'block';
     }
+  });
+
+  otpForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!sentEmail) return;
+    const token = otpInput.value.trim();
+    // Guard temprano: sin esto un submit vacío gastaría el rate limit de
+    // verifyOtp contra Supabase sin ninguna chance de acertar.
+    if (!token) return;
+    const okEl = container.querySelector('#email-success');
+    const btn = container.querySelector('#otp-btn');
+    otpErrEl.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = 'Verificando...';
+
+    const { error } = await verifyEmailOtp(sentEmail, token);
+    btn.disabled = false;
+    btn.textContent = 'Entrar con código';
+
+    if (error) {
+      // Oculta el banner de éxito del enlace: con un código inválido no
+      // deben quedar ambos mensajes apilados.
+      okEl.style.display = 'none';
+      otpErrEl.textContent = error.message;
+      otpErrEl.style.display = 'block';
+      return;
+    }
+
+    const next = getNextParam();
+    navigate(isSafeRedirect(next) ? next : '/');
   });
 }
 

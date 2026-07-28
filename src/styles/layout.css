@@ -10,34 +10,48 @@
   min-height: 100dvh;
 }
 
-/* === Header === */
+/* === Header ===
+   Seamless: mismo fondo que el contenido (--color-bg), sin borde ni blur.
+   Solo el footer conserva el estilo translúcido. */
 .header {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  height: auto;
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
+  height: var(--header-height);
+  box-sizing: border-box;
+  background: var(--color-bg);
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  padding: var(--space-sm) var(--space-md);
-  gap: var(--space-md);
+  padding: 0 var(--space-md);
+  padding-top: var(--safe-top);
+  gap: var(--space-sm);
   z-index: var(--z-header);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  background: rgba(var(--color-surface), 0.85);
-  transition: background-color var(--transition-base);
+  transform: translateY(0);
+  transition:
+    background-color var(--transition-base),
+    transform 200ms ease-out;
 }
 
-[data-theme='light'] .header,
-:root:not([data-theme='dark']) .header {
-  background: rgba(248, 249, 250, 0.85);
+/* El atributo [hidden] pierde contra `display: flex` de autor; forzar ocultado. */
+.header[hidden] {
+  display: none;
 }
 
-[data-theme='dark'] .header {
-  background: rgba(26, 26, 26, 0.85);
+/* Auto-ocultable al desplazarse. Motor único en scrollChrome.js: por ruta,
+   ver CHROME_AUTOHIDE en main.js. */
+.header--auto-hide {
+  transform: translateY(-100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .header {
+    transition: background-color var(--transition-base);
+  }
+  .bottom-nav,
+  .section-player {
+    transition: none;
+  }
 }
 
 .header__logo {
@@ -53,70 +67,38 @@
   color: var(--color-accent);
 }
 
-.header__search {
-  flex: 0 0 100%;
-  max-width: none;
-  order: 3;
-  position: relative;
-  margin-top: var(--space-sm);
-}
-
-.header__search-input {
-  width: 100%;
-  height: 40px;
-  padding: 0 var(--space-md) 0 40px;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-full);
-  color: var(--color-text);
-  /* 16px mínimo en mobile: evita el auto-zoom de iOS Safari al enfocar */
-  font-size: var(--font-size-base);
-  transition:
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast);
-}
-
-@media (min-width: 768px) {
-  .header__search-input {
-    font-size: var(--font-size-sm);
-  }
-}
-
-.header__search-input::placeholder {
-  color: var(--color-text-secondary);
-}
-
-.header__search-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(0, 151, 167, 0.15);
-}
-
-.header__search-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 18px;
-  height: 18px;
-  color: var(--color-text-secondary);
-  pointer-events: none;
-}
-
 .header__actions {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
-  /* min-width:0 permite que el bloque se encoja en mobile para que los
-     botones + nombre del usuario no salten a un segundo renglón. */
-  min-width: 0;
+  gap: var(--space-xs);
   margin-left: auto;
 }
 
-/* Contenedor del AuthButton dentro de .header__actions. Necesita min-width:0
-   para que el flex shrink se propague hasta el span del nombre. */
-#auth-button-mount {
-  min-width: 0;
+/* Avatar del header → perfil. Círculo, mismo alto que el touch target. */
+.header__avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--border-radius-full);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.header__avatar-img {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  transition: box-shadow var(--transition-fast);
+}
+
+.header__avatar:hover .header__avatar-img,
+.header__avatar:focus-visible .header__avatar-img {
+  box-shadow: 0 0 0 2px var(--color-primary);
+  outline: none;
 }
 
 .header__btn {
@@ -138,10 +120,6 @@
 .header__btn:hover {
   background: var(--color-surface-hover);
   color: var(--color-text);
-}
-
-.header__btn--menu {
-  display: flex;
 }
 
 /* === Search Results Dropdown === */
@@ -180,23 +158,6 @@
 }
 
 /* === Sidebar === */
-.sidebar-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: var(--z-sidebar);
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity var(--transition-base),
-    visibility var(--transition-base);
-}
-
-.sidebar-overlay.active {
-  opacity: 1;
-  visibility: visible;
-}
-
 .sidebar {
   position: fixed;
   top: 0;
@@ -209,17 +170,26 @@
   transform: translateX(-100%);
   transition: transform var(--transition-base);
   overflow-y: auto;
-  padding-top: calc(var(--header-height) + 56px + 48px);
+  padding-top: calc(var(--header-height) + 48px);
+  /* Evita que el último ítem quede bajo el bottom-nav en móvil */
+  padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
 }
 
-.sidebar.open {
-  transform: translateX(0);
+/* [hidden] pierde contra `display: flex` de autor (mismo caso que .header,
+   ver arriba): forzar ocultado. Usado por las vistas de tarea del pipeline
+   (Task 2, `nav: false` en chromeRoutes.js). */
+.sidebar[hidden] {
+  display: none;
 }
 
 .sidebar__section {
   padding: var(--space-sm) var(--space-md);
+}
+
+.sidebar__footer {
+  margin-top: auto;
 }
 
 .sidebar__section-title {
@@ -313,178 +283,149 @@
 /* === Main Content === */
 .main {
   flex: 1;
-  /* Reserve space for the fixed header + mobile search row only. The filter
-     bar's height is added on demand (see .main--filtered) so pages without it
-     (song detail, links, admin, profile…) don't leave dead space up top. */
-  padding-top: calc(var(--header-height) + 56px);
-  transition: margin-left var(--transition-base);
-}
-
-/* List views show the sticky filter bar → reserve its 48px. */
-.main--filtered {
-  padding-top: calc(var(--header-height) + 56px + 48px);
+  /* Reserve space for the fixed header. */
+  padding-top: var(--header-height);
+  /* Reserva espacio inferior en móvil para el bottom-nav fijo. */
+  padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
 }
 
 .main__content {
-  /* Gutter base: ajustado en mobile (--space-md lateral) para no desperdiciar
-     espacio en pantallas pequeñas. El padding vertical se mantiene en --space-lg.
-     Las páginas individuales NO deben añadir su propio padding horizontal. */
-  padding: var(--space-lg) var(--space-md);
-  max-width: 1200px;
-  margin: 0 auto;
+  /* Gutter unico: 16px lateral (--space-md) en todos los breakpoints.
+     Las vistas individuales NO añaden padding horizontal propio.
+     Sin max-width ni centrado: el contenido ocupa todo el ancho disponible. */
+  padding: var(--space-md) var(--space-md) var(--space-lg);
 }
 
 @media (min-width: 768px) {
   .main__content {
-    padding: var(--space-lg);
+    /* Solo ajusta vertical en desktop; el lateral se mantiene en --space-md. */
+    padding-top: var(--space-md);
+    padding-bottom: var(--space-xl);
   }
 }
 
-/* === Song Grid === */
-.song-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-md);
+/* Utilidad full-bleed: permite que strips y carruseles sangren hasta el borde
+   del gutter sin romper el padding lateral del contenedor padre. */
+.full-bleed {
+  margin-left: calc(-1 * var(--space-md));
+  margin-right: calc(-1 * var(--space-md));
+  padding-left: var(--space-md);
+  padding-right: var(--space-md);
 }
 
-/* === Filter Bar (F4) === */
-.filter-bar {
+/* === Bottom nav (solo móvil) ===
+   Translúcido con blur (único elemento del chrome que lo conserva), tintado
+   con --color-bg para fundirse con el contenido. Sin borde superior. */
+.bottom-nav {
   position: fixed;
-  top: calc(var(--header-height) + 56px);
   left: 0;
   right: 0;
-  z-index: calc(var(--z-header) - 1);
-  background: var(--color-bg);
-  border-bottom: 1px solid var(--color-border);
-  padding: var(--space-sm) var(--space-md);
+  bottom: 0;
   display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  justify-content: stretch;
+  padding: 6px 6px calc(8px + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--color-bg) 80%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: var(--z-bottom-nav);
+  transition: transform 200ms ease-out;
+}
+.bottom-nav--auto-hide {
+  transform: translateY(100%);
 }
 
-.filter-bar::-webkit-scrollbar {
+/* [hidden] pierde contra `display: flex` de autor (mismo caso que .header,
+   ver arriba): forzar ocultado. Usado por las vistas de tarea del pipeline
+   (Task 2, `nav: false` en chromeRoutes.js). */
+.bottom-nav[hidden] {
   display: none;
 }
 
-.filter-chip {
-  flex-shrink: 0;
-  padding: 6px 14px;
-  border-radius: var(--border-radius-full);
-  border: 1px solid var(--color-border);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  white-space: nowrap;
-  transition: all var(--transition-fast);
+/* Base (todos los navegadores): el contenido se disuelve en el tinte del nav. */
+.bottom-nav::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -18px;
+  height: 18px;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--color-bg) 80%, transparent),
+    transparent
+  );
+  pointer-events: none;
+}
+
+/* Enhancement: blur progresivo real donde mask-image es confiable. */
+@supports (mask-image: linear-gradient(#000, #000)) or
+  (-webkit-mask-image: linear-gradient(#000, #000)) {
+  :root {
+    /* La máscara suma altura real al nav (el padding-top ya no es solapado
+       por el fade); otros elementos anclados al bottom-nav (ej. go-to-sheet)
+       deben sumar este extra para no quedar tapados. */
+    --bottom-nav-fade-extra: 8px;
+  }
+  .bottom-nav {
+    padding-top: 14px; /* zona de fade; los iconos quedan en la parte opaca */
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 14px);
+    mask-image: linear-gradient(to bottom, transparent, #000 14px);
+  }
+  .bottom-nav::before {
+    display: none;
+  }
+}
+.bottom-nav__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.62rem;
+  color: var(--color-text-secondary);
+  text-decoration: none;
   -webkit-tap-highlight-color: transparent;
-  min-height: 32px;
-  cursor: pointer;
-  background: transparent;
-  color: var(--color-text);
+  min-height: 44px; /* touch target a11y */
+  justify-content: center;
+  flex: 1;
+  line-height: 1;
+  text-align: center;
 }
-
-.filter-chip:hover {
-  background: var(--color-surface-hover);
-  border-color: var(--color-primary);
+.bottom-nav__item svg {
+  width: 24px;
+  height: 24px;
 }
-
-.filter-chip--active {
-  background: var(--color-primary);
-  color: #fff;
-  border-color: var(--color-primary);
+.bottom-nav__item--active {
+  color: var(--color-primary);
 }
-
-.filter-chip--clear {
-  color: var(--color-error);
-  border-color: var(--color-error);
+.bottom-nav__item--active svg {
+  filter: drop-shadow(0 0 6px color-mix(in oklch, var(--color-primary) 55%, transparent));
 }
-
-.filter-chip--clear:hover {
-  background: rgba(244, 67, 54, 0.1);
-}
-
-.filter-separator {
-  width: 1px;
-  height: 20px;
-  background: var(--color-border);
-  flex-shrink: 0;
+@media (min-width: 768px) {
+  .bottom-nav {
+    display: none;
+  } /* desktop conserva sidebar */
 }
 
 /* === Responsive === */
 
 /* Tablet */
 @media (min-width: 768px) {
-  .header {
-    height: var(--header-height);
-    flex-wrap: nowrap;
-    padding: 0 var(--space-md);
-  }
-
-  .header__search {
-    order: 0;
-    flex: 1;
-    max-width: 480px;
-    margin-top: 0;
-  }
-
-  .header__actions {
-    margin-left: auto;
-  }
-
-  .header__btn--menu {
-    display: none;
-  }
-
   .sidebar {
     transform: translateX(0);
     top: var(--header-height);
     padding-top: 0;
   }
 
-  .sidebar-overlay {
-    display: none;
-  }
-
   .main {
     margin-left: var(--sidebar-width);
     padding-top: var(--header-height); /* search is inline in the header here */
-  }
-
-  .main--filtered {
-    padding-top: calc(var(--header-height) + 48px); /* +48px for the filter bar */
-  }
-
-  .filter-bar {
-    top: var(--header-height);
-    left: var(--sidebar-width); /* Start after sidebar */
-    right: 0;
-  }
-
-  .song-grid {
-    grid-template-columns: repeat(2, 1fr);
+    padding-bottom: 0; /* sin bottom-nav en desktop */
   }
 }
 
-/* Desktop */
-@media (min-width: 1024px) {
-  .song-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
-  .header__search {
-    max-width: 560px;
-  }
-
-  .filter-bar {
-    padding-left: var(--space-lg);
-  }
-}
-
-@media (min-width: 1280px) {
-  .song-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
+/* Patrón /perfil generalizado (Task 4, chrome sin fin): cancela la reserva
+   del header oculto + gutter para que la página arranque en el píxel 0 del
+   viewport. Usado por las 6 rutas headerless del Grupo B. */
+.page--headerless {
+  margin-top: calc(-1 * (var(--header-height) + var(--space-md)));
 }

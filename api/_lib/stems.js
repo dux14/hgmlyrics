@@ -53,17 +53,6 @@ export function expiresAt(from = new Date()) {
 }
 
 /**
- * Comprueba si un perfil tiene acceso al Estudio (beta gate).
- * @param {{ is_admin?: boolean, studio_beta?: boolean }} profile
- * @returns {{ ok: boolean, reason?: string }}
- */
-export function checkStudioAccess(profile = {}) {
-  if (profile?.is_admin) return { ok: true };
-  if (profile?.studio_beta) return { ok: true };
-  return { ok: false, reason: 'beta' };
-}
-
-/**
  * Valida los metadatos del archivo a subir. Lanza { status: 400 } si no pasa.
  * @param {{ filename?: string, size?: number, mime?: string }} meta
  */

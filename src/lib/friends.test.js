@@ -5,13 +5,17 @@ vi.mock('./authStore.js', () => ({
 }));
 
 import { getPendingIncomingCount } from './friends.js';
+import { _clearCache } from './prefetch.js';
 
 function mockFetchOnce(payload, ok = true) {
   global.fetch = vi.fn(() => Promise.resolve({ ok, json: () => Promise.resolve(payload) }));
 }
 
 describe('getPendingIncomingCount', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    _clearCache(); // getFriends() cachea 'social:friends' — evita fugas entre tests
+  });
 
   it('devuelve la cantidad de pendingIncoming', async () => {
     mockFetchOnce({ accepted: [], pendingIncoming: [{}, {}, {}], pendingOutgoing: [] });

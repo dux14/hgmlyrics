@@ -10,11 +10,13 @@
  */
 import { supabase } from '../lib/supabase.js';
 import { icon } from '../lib/icons.js';
-import { validateTiledMap } from '../../api/_lib/validateTiledMap.js';
+import { validateTiledMap } from '../lib/validateTiledMap.js';
 import { listMaps, saveMap, activate } from '../world/worldMapStore.js';
 import { joinWorldAdmin } from '../lib/worldAdminChannel.js';
 import { diffZoneChannels } from '../world/zoneChannelsDiff.js';
 import { escapeHtml as esc } from '../lib/escape.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelRowList } from '../lib/skeleton.js';
 
 // ---------------------------------------------------------------------------
 // Formatear fecha ISO a local legible
@@ -57,7 +59,7 @@ function buildChannelWarning(currentZones, nextZones) {
   }
 
   return `
-    <div style="margin-top:var(--space-sm);padding:var(--space-sm);background:var(--color-warning-bg,#fff8e1);border:1px solid var(--color-warning,#f59e0b);border-radius:var(--border-radius-sm);font-size:var(--font-size-sm);color:var(--color-warning-text,#92400e);">
+    <div class="wm-warning">
       <strong>Aviso:</strong> ${lines.join(' ')}
     </div>
   `;
@@ -66,88 +68,87 @@ function buildChannelWarning(currentZones, nextZones) {
 // ---------------------------------------------------------------------------
 // Renderizar la lista de versiones
 // ---------------------------------------------------------------------------
-async function renderVersions(listEl, statusEl, adminChannel) {
-  listEl.innerHTML =
-    '<p style="color:var(--color-text-secondary);font-size:var(--font-size-sm);">Cargando versiones…</p>';
-  try {
-    const maps = await listMaps({});
-    if (!maps.length) {
-      listEl.innerHTML =
-        '<p style="color:var(--color-text-secondary);font-size:var(--font-size-sm);">No hay mapas guardados.</p>';
-      return;
-    }
+function renderVersions(listEl, statusEl, adminChannel) {
+  renderAsyncRegion(listEl, {
+    skeleton: () => skelRowList({ rows: 3 }),
+    fetcher: () => listMaps({}),
+    render: (maps) => {
+      // Zonas del mapa actualmente activo (para la comparación E4.3)
+      const activeMap = maps.find((m) => m.isActive);
+      const activeZones = activeMap?.zones ?? [];
 
-    // Zonas del mapa actualmente activo (para la comparación E4.3)
-    const activeMap = maps.find((m) => m.isActive);
-    const activeZones = activeMap?.zones ?? [];
-
-    listEl.innerHTML = maps
-      .map((m) => {
-        // Aviso de impacto en channelIds para mapas inactivos
-        const warning = !m.isActive ? buildChannelWarning(activeZones, m.zones ?? []) : '';
-        return `
-      <div class="ff-item wm-version-item" data-id="${esc(m.id)}">
-        <div class="ff-item__head">
-          <strong>${esc(m.name)}</strong>
-          <span>${fmtDate(m.updatedAt)}</span>
+      listEl.innerHTML = maps
+        .map((m) => {
+          // Aviso de impacto en channelIds para mapas inactivos
+          const warning = !m.isActive ? buildChannelWarning(activeZones, m.zones ?? []) : '';
+          return `
+        <div class="ff-item wm-version-item" data-id="${esc(m.id)}">
+          <div class="ff-item__head">
+            <strong>${esc(m.name)}</strong>
+            <span>${fmtDate(m.updatedAt)}</span>
+          </div>
+          <div class="wm-badge-row">
+            <span class="wm-badge ${m.isActive ? 'wm-badge--active' : 'wm-badge--inactive'}">
+              ${m.isActive ? `${icon('check', { size: 14 })} Activo` : 'Inactivo'}
+            </span>
+            ${
+              !m.isActive
+                ? `<button class="btn btn--action btn--sm wm-activate-btn">Activar</button>`
+                : ''
+            }
+          </div>
+          ${warning}
         </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-sm);">
-          <span class="wm-badge ${m.isActive ? 'wm-badge--active' : 'wm-badge--inactive'}">
-            ${m.isActive ? `${icon('check', { size: 14 })} Activo` : 'Inactivo'}
-          </span>
-          ${
-            !m.isActive
-              ? `<button class="btn btn--primary btn--sm wm-activate-btn">Activar</button>`
-              : ''
-          }
-        </div>
-        ${warning}
-      </div>
-    `;
-      })
-      .join('');
+      `;
+        })
+        .join('');
 
-    // Eventos de activar
-    listEl.querySelectorAll('.wm-activate-btn').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const item = btn.closest('.wm-version-item');
-        const mapId = item?.dataset.id;
-        if (!mapId) return;
-        // Obtener el nombre del mapa activado (para el payload del broadcast)
-        const targetMap = maps.find((m) => m.id === mapId);
-        btn.disabled = true;
-        btn.textContent = 'Activando…';
-        try {
-          const result = await activate({ id: mapId });
-          // Notificar a todos los clientes conectados que el mapa cambió (E4.1).
-          // Fire-and-forget; no bloqueamos el UX de éxito. Un fallo silencioso
-          // se volvería invisible, así que lo registramos como advertencia.
-          adminChannel
-            ?.broadcastMapUpdated({
-              mapId: result.map?.id ?? mapId,
-              mapName: result.map?.name ?? targetMap?.name ?? '',
-            })
-            ?.catch((err) => {
-              console.warn('[mundo] No se pudo difundir map-updated a los clientes:', err);
-            });
-          if (statusEl) {
-            statusEl.textContent = 'Mapa activado correctamente.';
-            statusEl.style.color = 'var(--color-success, green)';
+      // Eventos de activar
+      listEl.querySelectorAll('.wm-activate-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const item = btn.closest('.wm-version-item');
+          const mapId = item?.dataset.id;
+          if (!mapId) return;
+          // Obtener el nombre del mapa activado (para el payload del broadcast)
+          const targetMap = maps.find((m) => m.id === mapId);
+          btn.disabled = true;
+          btn.textContent = 'Activando…';
+          try {
+            const result = await activate({ id: mapId });
+            // Notificar a todos los clientes conectados que el mapa cambió (E4.1).
+            // Fire-and-forget; no bloqueamos el UX de éxito. Un fallo silencioso
+            // se volvería invisible, así que lo registramos como advertencia.
+            adminChannel
+              ?.broadcastMapUpdated({
+                mapId: result.map?.id ?? mapId,
+                mapName: result.map?.name ?? targetMap?.name ?? '',
+              })
+              ?.catch((err) => {
+                console.warn('[mundo] No se pudo difundir map-updated a los clientes:', err);
+              });
+            if (statusEl) {
+              statusEl.textContent = 'Mapa activado correctamente.';
+              statusEl.style.color = 'var(--color-success, green)';
+            }
+            renderVersions(listEl, statusEl, adminChannel);
+          } catch (err) {
+            if (statusEl) {
+              statusEl.textContent = `Error al activar: ${err.message}`;
+              statusEl.style.color = 'var(--color-error)';
+            }
+            btn.disabled = false;
+            btn.textContent = 'Activar';
           }
-          await renderVersions(listEl, statusEl, adminChannel);
-        } catch (err) {
-          if (statusEl) {
-            statusEl.textContent = `Error al activar: ${err.message}`;
-            statusEl.style.color = 'var(--color-error)';
-          }
-          btn.disabled = false;
-          btn.textContent = 'Activar';
-        }
+        });
       });
-    });
-  } catch (err) {
-    listEl.innerHTML = `<p style="color:var(--color-error);font-size:var(--font-size-sm);">Error al cargar versiones: ${esc(err.message)}</p>`;
-  }
+    },
+    empty: () => `<p class="wm-text-secondary">No hay mapas guardados.</p>`,
+    onError: () => `
+      <div class="empty-state">
+        <h2 class="empty-state__title">No se pudieron cargar las versiones</h2>
+        <button class="btn btn--primary" data-retry>Reintentar</button>
+      </div>`,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -156,12 +157,12 @@ async function renderVersions(listEl, statusEl, adminChannel) {
 function renderZones(zonesContainer, zones, tiledJsonRef) {
   if (!zones.length) {
     zonesContainer.innerHTML =
-      '<p style="color:var(--color-text-secondary);font-size:var(--font-size-sm);">No se detectaron zonas en el mapa.</p>';
+      '<p class="wm-text-secondary">No se detectaron zonas en el mapa.</p>';
     return;
   }
 
   zonesContainer.innerHTML = `
-    <p style="font-size:var(--font-size-sm);color:var(--color-text-secondary);margin-bottom:var(--space-sm);">
+    <p class="wm-zones-header">
       Zonas detectadas (${zones.length}). Puedes editar el nombre y channelId antes de guardar.
     </p>
     <div class="ff-list wm-zones-list">
@@ -169,10 +170,10 @@ function renderZones(zonesContainer, zones, tiledJsonRef) {
         .map(
           (z, idx) => `
         <div class="ff-item wm-zone-item" data-idx="${idx}">
-          <div class="ff-item__add" style="flex-direction:column;gap:var(--space-xs);">
-            <label style="font-size:var(--font-size-sm);font-weight:var(--font-weight-semibold);">Nombre</label>
+          <div class="ff-item__add wm-zone-fields">
+            <label class="wm-zone-label">Nombre</label>
             <input class="ff-input wm-zone-name" value="${esc(z.name)}" placeholder="Nombre de la zona" />
-            <label style="font-size:var(--font-size-sm);font-weight:var(--font-weight-semibold);">channelId</label>
+            <label class="wm-zone-label">channelId</label>
             <input class="ff-input wm-zone-channel" value="${esc(z.channelId)}" placeholder="channelId único" />
           </div>
         </div>
@@ -236,12 +237,10 @@ export function mountAdminWorldPanel(container) {
       <h2 class="ff-section__title">${icon('upload', { size: 18 })} Mundo Virtual — Mapas</h2>
 
       <!-- Subir nuevo mapa -->
-      <div class="ff-item" id="wm-upload-card">
-        <h3 style="font-size:var(--font-size-base);font-weight:var(--font-weight-semibold);margin-bottom:var(--space-md);">
-          Subir nuevo mapa
-        </h3>
+      <div class="ff-item wm-upload-card" id="wm-upload-card">
+        <h3 class="ff-section__title">Subir nuevo mapa</h3>
 
-        <div style="display:flex;flex-direction:column;gap:var(--space-md);">
+        <div class="wm-upload-form">
           <div>
             <label class="wm-label" for="wm-name">Nombre del mapa</label>
             <input id="wm-name" class="ff-input" type="text" maxlength="80" placeholder="ej. Sala Principal v2" />
@@ -249,34 +248,34 @@ export function mountAdminWorldPanel(container) {
 
           <div>
             <label class="wm-label" for="wm-map-file">Archivo map.json (Tiled)</label>
-            <input id="wm-map-file" class="ff-input" type="file" accept=".json,application/json" style="height:auto;padding:var(--space-sm);" />
+            <input id="wm-map-file" class="ff-input wm-file-input" type="file" accept=".json,application/json" />
           </div>
 
           <div>
             <label class="wm-label" for="wm-tileset-file">Imagen del tileset (PNG/JPEG)</label>
-            <input id="wm-tileset-file" class="ff-input" type="file" accept="image/png,image/jpeg,image/webp" style="height:auto;padding:var(--space-sm);" />
+            <input id="wm-tileset-file" class="ff-input wm-file-input" type="file" accept="image/png,image/jpeg,image/webp" />
           </div>
         </div>
 
         <!-- Errores de validacion del JSON -->
-        <div id="wm-validation-errors" style="display:none;margin-top:var(--space-md);padding:var(--space-sm);background:var(--color-error-bg,#fff0f0);border:1px solid var(--color-error);border-radius:var(--border-radius-sm);font-size:var(--font-size-sm);color:var(--color-error);"></div>
+        <div id="wm-validation-errors" class="wm-validation-errors"></div>
 
         <!-- Zonas detectadas -->
-        <div id="wm-zones-container" style="margin-top:var(--space-md);display:none;"></div>
+        <div id="wm-zones-container" class="wm-zones-container"></div>
 
-        <div style="margin-top:var(--space-lg);display:flex;gap:var(--space-sm);">
+        <div class="wm-save-row">
           <button id="wm-save-btn" class="btn btn--primary" disabled>
             ${icon('upload', { size: 16 })} Guardar mapa
           </button>
-          <span id="wm-save-status" style="font-size:var(--font-size-sm);align-self:center;"></span>
+          <span id="wm-save-status" class="wm-save-status"></span>
         </div>
       </div>
 
       <!-- Estado general (activar, etc.) -->
-      <div id="wm-status" style="font-size:var(--font-size-sm);min-height:1.2em;margin-top:var(--space-sm);"></div>
+      <div id="wm-status" class="wm-status"></div>
 
       <!-- Lista de versiones -->
-      <div id="wm-versions-list" class="ff-list" style="margin-top:var(--space-lg);"></div>
+      <div id="wm-versions-list" class="ff-list wm-versions-list"></div>
     </section>
   `;
 
@@ -390,7 +389,7 @@ export function mountAdminWorldPanel(container) {
       updateSaveEnabled();
 
       // Refrescar lista de versiones
-      await renderVersions(versionsList, statusEl, adminChannel);
+      renderVersions(versionsList, statusEl, adminChannel);
     } catch (err) {
       const msgs = err.errors ? err.errors.map((m) => `• ${m}`).join('\n') : err.message;
       saveStatus.textContent = `Error: ${msgs}`;

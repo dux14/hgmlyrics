@@ -2,12 +2,18 @@
 """
 Orquestador DAG del Estudio de pistas — HKN Lyrics.
 
-DAG:
-  S1 (extract ep_317+htdemucs_6s) ─┐
-  S2 (structure SongFormer)  ├─ paralelo al inicio
-                              │
-  S3 (leadBacking MedleyVox) ┤ arranca cuando S1 termina (necesita vocals key)
-  S4 (gender chorus_bs_roformer) ┘ arranca cuando S1 termina (idem, flag OFF)
+DAG (Task 9 — paralelización total, ver plan_sections en run_pipeline):
+  S1 (extract ep_317+htdemucs_6s)
+  S2 (structure SongFormer)
+  S3 (leadBacking Mel-RoFormer Karaoke)
+  S4 (gender chorus_bs_roformer, flag OFF)
+  S5 (duet MedleyVox, opt-in)
+
+  Las 5 se lanzan JUNTAS, en una sola fase, sin dependencia S1→(S3,S4,S5):
+  S3/S4/S5 re-extraen su propio stem vocal del audio original, nunca
+  consumieron la salida de S1 (solo recibían vocals_key por compatibilidad
+  de firma). Antes arrancaban en una Fase B tras esperar a S1, lo que
+  causaba progresividad (las pistas aparecían de a una en el front).
 
 Cada nodo postea su propio webhook al terminar (éxito o fallo).
 La Vercel API acumula los resultados en la columna `sections` del job.
@@ -33,6 +39,7 @@ import modal
 from sections._common import extract_storage_key, post_webhook
 from sections.extract import run_extract as _run_extract_impl
 from sections.gender import run_gender as _run_gender_impl
+from sections.lead_backing import run_lead_backing as _run_lead_backing_impl
 from sections.medley_vox import run_medley_vox as _run_medley_vox_impl
 from sections.songformer import run_songformer as _run_songformer_impl
 
@@ -83,12 +90,39 @@ songformer_image = (
     .add_local_python_source("sections")
 )
 
+# Imagen del ENDPOINT HTTP (`start`). Solo valida el payload y hace
+# `.spawn()` de run_pipeline, asi que no necesita nada de `image` (demucs,
+# MedleyVox, etc.): con la imagen pesada, un endpoint frio tardaba mas de 8s
+# solo en levantar, el POST de dispatch de Vercel abortaba por timeout y la
+# fase quedaba 'failed' mientras la GPU ya estaba procesando -- trabajo
+# pagado y tirado (mismo incidente que align_app.py, 27-jul-2026).
+#
+# Que lleva y por que: fastapi para el decorador de endpoint, y
+# add_local_python_source("sections") porque stems_app importa
+# `sections._common`/`extract`/`gender`/`lead_backing`/`medley_vox`/
+# `songformer` a nivel de MODULO -- el contenedor del endpoint carga el
+# archivo entero aunque solo ejecute `start`. Ninguno de esos modulos de
+# `sections` importa nada pesado (torch/demucs/httpx) a nivel de modulo, asi
+# que la imagen liviana alcanza para que el import global resuelva.
+dispatch_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("fastapi[standard]")
+    .add_local_python_source("sections")
+)
+
 # Sólo necesitamos el secret de webhook en el orquestador principal.
 # S1 accede a él a través del payload; el secret de Supabase ya no hace falta
 # porque usamos signed PUT URLs pre-firmadas por Vercel (sin service role key).
 _webhook_secrets = [
     modal.Secret.from_name("hkn-webhook"),  # MODAL_INBOUND_SECRET, MODAL_WEBHOOK_SECRET
 ]
+
+# Dict persistente para idempotencia por jobId (jobId -> callId de run_pipeline).
+# Mismo patron que modal/pitch/pitch_app.py::_seen: sin esto, un timeout del
+# POST de confirm.js (el job SI pudo haber arrancado en Modal) hace que el
+# reintento con el mismo jobId lance un SEGUNDO run_pipeline sobre las mismas
+# storage keys (fix CRITICAL 2, auditoria de pipeline 27-jul).
+_seen = modal.Dict.from_name("stems-jobs-seen", create_if_missing=True)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -138,25 +172,43 @@ def s2_structure(payload: dict) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# S3 — lead / backing (MedleyVox real, GPU)
+# S3 — lead / backing (Mel-RoFormer Karaoke, GPU)
 # ──────────────────────────────────────────────────────────────────────────────
 
-@app.function(image=image, secrets=_webhook_secrets, gpu="T4", timeout=900)
+@app.function(image=image, secrets=_webhook_secrets, gpu="T4", timeout=600)
 def s3_lead_backing(payload: dict, vocals_key: str | None) -> None:
     """
-    S3: separa voz líder (lead) y coros (backing) con MedleyVox.
+    S3: separa voz líder (lead) y coros (backing) con Mel-RoFormer Karaoke
+    (checkpoint elegido en Task 4, SDR ~10.2, reemplaza a MedleyVox SDR ~6.9).
 
-    Usa el checkpoint Cyru5/MedleyVox@"vocals 238" (Conv-TasNet STFT, 24 kHz).
     Re-extrae el stem vocal desde el audio original (payload["input"]["getUrl"])
     porque Modal no tiene la service-role key de Supabase para firmar un GET
     del objeto ya subido por S1. vocals_key se recibe por compatibilidad con el
     spawn del orquestador pero NO se usa para descargar audio.
 
-    Timeout: 900 s para dar margen a la descarga de pesos desde HuggingFace
-    (~466 MB vocals.pth) en cold start + extracción vocal BS-RoFormer (~120 s)
-    + inferencia MedleyVox (~60-120 s en T4).
+    Timeout: bajado de 900 a 600 s — el checkpoint karaoke se resuelve como
+    cualquier otro modelo de audio-separator (sin descarga de pesos vía
+    huggingface_hub ni carga de asteroid/TDConvNet), cold start más corto que
+    MedleyVox. Sigue dando margen a extracción vocal BS-RoFormer (~120 s) +
+    inferencia karaoke (~60-120 s en T4).
     """
-    _run_medley_vox_impl(payload)
+    _run_lead_backing_impl(payload)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# S5 — dúo por identidad de cantante (MedleyVox, GPU, opt-in)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.function(image=image, secrets=_webhook_secrets, gpu="T4", timeout=900)
+def s5_duet(payload: dict, vocals_key: str | None) -> None:
+    """
+    S5 (opt-in): separacion de DUOS por identidad de cantante con MedleyVox
+    (Cyru5/MedleyVox "vocals 238"). A diferencia de S3 (karaoke: lead vs
+    backing por rol), MedleyVox separa dos cantantes simultaneos (p. ej.
+    hombre+mujer cantando juntos). Solo corre si "duet" esta en
+    enabledSections. Reusa run_medley_vox (sube a uploads["duet"]).
+    """
+    _run_medley_vox_impl(payload, section="duet", labels=("voice_a", "voice_b"))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -188,83 +240,117 @@ def s4_gender(payload: dict, vocals_key: str | None) -> None:
 # Orquestador principal
 # ──────────────────────────────────────────────────────────────────────────────
 
+def plan_sections(enabled: list[str]) -> list[str]:
+    """
+    Plan PURO (sin I/O, sin Modal) de qué secciones lanzar en la fase inicial
+    ÚNICA del DAG (Task 9 — paralelización total).
+
+    Antes: Fase A (S1+S2) → esperar S1 → Fase B (S3/S4/S5, dependían de la
+    vocals_key de S1). Eso causaba progresividad (las pistas aparecían de a
+    una) y era una dependencia FALSA: S3/S4/S5 re-extraen su propio stem
+    vocal desde el audio original (ver docstrings de s3_lead_backing,
+    s4_gender, s5_duet más arriba) — nunca usaron vocals_key para descargar
+    audio, solo la recibían por compatibilidad de firma.
+
+    Ahora: TODAS las secciones habilitadas se lanzan juntas, en una sola
+    fase. S1 (voiceInstrumental) corre siempre, sin importar `enabled`
+    (mismo criterio que ENABLED_SECTIONS en
+    api/songs/[id]/pipeline/_dispatch.js); S2/S3/S4/S5 solo si están en
+    `enabled`.
+    """
+    sections = ["voiceInstrumental"]
+    for key in ("structure", "leadBacking", "gender", "duet"):
+        if key in enabled:
+            sections.append(key)
+    return sections
+
+
 @app.function(image=image, secrets=_webhook_secrets, timeout=1200)
 def run_pipeline(payload: dict) -> None:
     """
-    Orquestador DAG de las 4 secciones del Estudio.
+    Orquestador DAG de las secciones del Estudio.
 
-    DAG:
-      Fase A (paralelo): S1 (extract) + S2 (structure stub)
-      Fase B (tras S1):  S3 (leadBacking stub) + S4 (gender stub, si habilitado)
+    DAG (Task 9 — paralelización total, ver plan_sections): TODAS las
+    secciones habilitadas se lanzan en una fase inicial única. Ya no hay
+    dependencia S1→(S3,S4,S5): esas 3 re-extraen su propia vocal del audio
+    original, no consumen la salida de S1.
 
     Cada nodo postea su webhook de forma independiente; un fallo en un nodo
     no cancela los demás (Modal registra el error en el log del nodo).
-
-    Nota sobre S3/S4: si S1 lanza una excepción, el call de S1 también lanza
-    y los nodos S3/S4 recibirán vocals_key=None. El stub igual postea un
-    webhook done (con keys vacías) para que el front no quede esperando.
     """
     enabled: list[str] = payload.get("enabledSections", [])
+    sections = plan_sections(enabled)
 
-    # ── Fase A: S1 y S2 en paralelo ─────────────────────────────────────────
-    s1_call = s1_extract.spawn(payload)
-    s2_call = s2_structure.spawn(payload) if "structure" in enabled else None
-
-    # Esperar S1 para obtener la vocals_key que necesitan S3 y S4.
-    # s1_call.get() propaga la excepción si S1 falló; capturamos para no matar el pipeline.
+    # vocals_key: se mantiene la firma s3/s4/s5(payload, vocals_key) por
+    # compatibilidad, pero ahora siempre es None (ya no se espera a S1 antes
+    # de spawnear el resto) — ninguno de los 3 la usa para descargar audio.
     vocals_key: str | None = None
-    try:
-        vocals_key = s1_call.get()
-    except Exception:
-        # S1 ya posteó su webhook `failed`; continuamos para que S3/S4 también reporten.
-        pass
 
-    # Esperar S2 de forma no bloqueante (ya que la Fase B no depende de S2).
-    if s2_call is not None:
+    spawners = {
+        "voiceInstrumental": lambda: s1_extract.spawn(payload),
+        "structure": lambda: s2_structure.spawn(payload),
+        "leadBacking": lambda: s3_lead_backing.spawn(payload, vocals_key),
+        "gender": lambda: s4_gender.spawn(payload, vocals_key),
+        "duet": lambda: s5_duet.spawn(payload, vocals_key),
+    }
+    calls = [spawners[section]() for section in sections]
+
+    # Esperar a que todas terminen (para que el orquestador no muera antes de
+    # que posteen sus webhooks; Modal cobra mientras el contenedor está
+    # vivo). S3 (karaoke) puede tardar hasta ~600 s; el orquestador tiene
+    # timeout=1200 s de margen.
+    for call in calls:
         try:
-            s2_call.get(timeout=60)
+            call.get(timeout=950)
         except Exception:
-            pass  # S2 ya posteó su webhook de fallo
-
-    # ── Fase B: S3 y S4 (dependen de vocals_key de S1) ──────────────────────
-    s3_call = (
-        s3_lead_backing.spawn(payload, vocals_key)
-        if "leadBacking" in enabled
-        else None
-    )
-    s4_call = (
-        s4_gender.spawn(payload, vocals_key)
-        if "gender" in enabled
-        else None
-    )
-
-    # Esperar a que S3/S4 terminen (para que el orquestador no muera antes de
-    # que posteen sus webhooks; Modal cobra mientras el contenedor está vivo).
-    # S3 (MedleyVox) puede tardar hasta ~900 s en cold start (descarga de pesos
-    # + extracción vocal + inferencia); el orquestador tiene timeout=1200 s.
-    for call in (s3_call, s4_call):
-        if call is not None:
-            try:
-                call.get(timeout=950)
-            except Exception:
-                pass  # cada nodo ya posteó su propio webhook de fallo
+            pass  # cada nodo ya posteó su propio webhook de fallo
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Web endpoint — recibe la invocación de Vercel
 # ──────────────────────────────────────────────────────────────────────────────
 
-@app.function(image=image, secrets=_webhook_secrets)
+def _validate_stems_payload(payload: dict) -> str | None:
+    """Valida el payload ANTES de lanzar run_pipeline. Devuelve un mensaje de
+    error (string) si falta algo requerido, o None si es válido. Mismo
+    patrón que _validate_align_payload (align_app.py): un dispatch
+    malformado que pasara igual no dejaría rastro hasta que el contenedor
+    arrancara y fallara adentro — validar aquí, antes del .spawn(), evita
+    crear ese job huérfano (el caller, invokeModalPipeline en
+    api/_lib/modal.js, recibe un 400 inmediato).
+
+    Contrato de payload (ver api/_lib/modal.js): { jobId, input:{getUrl},
+    enabledSections, uploads, webhook:{url,secret} }."""
+    if not payload.get("jobId"):
+        return "falta jobId"
+    if not payload.get("input", {}).get("getUrl"):
+        return "falta input.getUrl"
+    if not payload.get("uploads"):
+        return "uploads vacio o ausente"
+    if not payload.get("webhook"):
+        return "falta webhook"
+    return None
+
+
+@app.function(image=dispatch_image, secrets=_webhook_secrets)
 @modal.fastapi_endpoint(method="POST")
 def start(payload: dict, x_inbound_secret: str = Header(default="")):
     """
     Punto de entrada HTTP para el orquestador.
 
-    Verifica el header `x-inbound-secret` contra MODAL_INBOUND_SECRET.
-    Lanza el pipeline de forma asíncrona (.spawn) y devuelve el callId
-    inmediatamente para no bloquear el request de Vercel.
+    Verifica el header `x-inbound-secret` contra MODAL_INBOUND_SECRET, valida
+    el payload (400 si falta algo requerido) y lanza el pipeline de forma
+    asíncrona (.spawn), devolviendo el callId inmediatamente para no
+    bloquear el request de Vercel.
 
-    Respuesta: { "callId": "<modal call object_id>" }
+    Idempotencia (mismo patron que modal/pitch/pitch_app.py::start): si el
+    jobId ya fue lanzado, NO relanza run_pipeline (evita dos escrituras
+    concurrentes sobre las mismas storage keys) y devuelve el callId
+    cacheado con `dedup: true`. `payload.reset=true` fuerza un run nuevo y
+    sobrescribe el cache -- reservado para un reintento deliberado del
+    admin, ya serializado por su propio CAS.
+
+    Respuesta: { "callId": "<modal call object_id>", "dedup"?: true }
     """
     if not hmac.compare_digest(
         x_inbound_secret,
@@ -272,5 +358,14 @@ def start(payload: dict, x_inbound_secret: str = Header(default="")):
     ):
         raise HTTPException(status_code=401, detail="bad inbound secret")
 
+    validation_error = _validate_stems_payload(payload)
+    if validation_error:
+        raise HTTPException(status_code=400, detail=validation_error)
+
+    job_id = payload["jobId"]
+    if not payload.get("reset") and job_id in _seen:
+        return {"callId": _seen[job_id], "dedup": True}
+
     call = run_pipeline.spawn(payload)
+    _seen[job_id] = call.object_id
     return {"callId": call.object_id}

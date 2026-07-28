@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { vi } from 'vitest';
-import { zipFilename, buildTrackList, buildZipBlob, songBaseName, buildSectionTrackList } from './studioZip.js';
+import {
+  zipFilename,
+  buildTrackList,
+  buildZipBlob,
+  songBaseName,
+  buildSectionTrackList,
+} from './studioZip.js';
 
 describe('zipFilename', () => {
   it('usa el nombre original sin extensión + label + .mp3', () => {
@@ -139,8 +145,15 @@ describe('songBaseName con title', () => {
 
 describe('buildSectionTrackList', () => {
   const labels = {
-    vocals: 'Voz', instrumental: 'Instrumental', drums: 'Batería', bass: 'Bajo',
-    guitar: 'Guitarra', piano: 'Piano', other: 'Otros', lead: 'Voz líder', backing: 'Coros',
+    vocals: 'Voz',
+    instrumental: 'Instrumental',
+    drums: 'Batería',
+    bass: 'Bajo',
+    guitar: 'Guitarra',
+    piano: 'Piano',
+    other: 'Otros',
+    lead: 'Voz líder',
+    backing: 'Coros',
   };
   it('voiceInstrumental: solo pistas de stems', () => {
     const job = {
@@ -154,7 +167,11 @@ describe('buildSectionTrackList', () => {
     ]);
   });
   it('leadBacking: solo voces', () => {
-    const job = { input_meta: { filename: 'c.mp3' }, voices: { lead: 'u/l', backing: 'u/b' }, stems: { vocals: 'u/v' } };
+    const job = {
+      input_meta: { filename: 'c.mp3' },
+      voices: { lead: 'u/l', backing: 'u/b' },
+      stems: { vocals: 'u/v' },
+    };
     expect(buildSectionTrackList(job, labels, 'leadBacking')).toEqual([
       { url: 'u/l', filename: 'c - Voz líder.mp3' },
       { url: 'u/b', filename: 'c - Coros.mp3' },
@@ -163,7 +180,10 @@ describe('buildSectionTrackList', () => {
   it('gender: incluye ambos modelos', () => {
     const job = {
       input_meta: { filename: 'c.mp3' },
-      genderVoices: { chorus: { male: 'u/cm', female: 'u/cf' }, aufr33: { male: 'u/am', female: 'u/af' } },
+      genderVoices: {
+        chorus: { male: 'u/cm', female: 'u/cf' },
+        aufr33: { male: 'u/am', female: 'u/af' },
+      },
     };
     expect(buildSectionTrackList(job, labels, 'gender')).toEqual([
       { url: 'u/cm', filename: 'c - Voz masculina (Opción A).mp3' },
@@ -173,7 +193,9 @@ describe('buildSectionTrackList', () => {
     ]);
   });
   it('structure: lista vacía (no genera audio)', () => {
-    expect(buildSectionTrackList({ input_meta: { filename: 'c.mp3' } }, labels, 'structure')).toEqual([]);
+    expect(
+      buildSectionTrackList({ input_meta: { filename: 'c.mp3' } }, labels, 'structure'),
+    ).toEqual([]);
   });
 });
 

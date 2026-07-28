@@ -72,9 +72,13 @@ test('recarga offline en ruta hash profunda no rompe la app', async ({ page, con
   const hashRoute = songId ? `#/song/${songId}` : '#/buscar';
 
   // Capturar requests del origen fallidas para detectar filtraciones de red.
+  // Se excluye /api/*: telemetría (vitals), polling (versión) y datos (lists)
+  // fallan offline POR DISEÑO (no hay runtimeCaching para ellas); el gate es
+  // que los ASSETS vengan del cache del SW.
   const failedRequests = [];
   page.on('requestfailed', (req) => {
-    if (req.url().startsWith(BASE)) failedRequests.push(req.url());
+    const u = new URL(req.url());
+    if (u.origin === BASE && !u.pathname.startsWith('/api/')) failedRequests.push(req.url());
   });
 
   // Cortar la red, navegar a la ruta hash profunda y recargar.

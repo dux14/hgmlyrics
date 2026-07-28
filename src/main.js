@@ -4,80 +4,122 @@
  * Initializes theme, store, search index, router, and renders the app shell.
  */
 
-// Styles
-import './styles/variables.css';
-import './styles/base.css';
-import './styles/layout.css';
-import './styles/components.css';
-import './styles/admin.css';
-import './styles/auth.css';
-import './styles/offline-chip.css';
+// Styles (orden de capas centralizado en app.css)
+import './styles/app.css';
 
 // Modules
 import { initTheme } from './components/ThemeToggle.js';
 import { initStore, subscribe, getState } from './lib/store.js';
 import { buildIndex } from './lib/search.js';
-import { route, initRouter, onNotFound, navigate } from './router.js';
+import {
+  route,
+  initRouter,
+  onNotFound,
+  navigate,
+  getCurrentPath,
+  onRouteChange,
+} from './router.js';
 import { initAuthStore, isAuthenticated, needsOnboarding, isAdmin } from './lib/authStore.js';
 import { initFavorites } from './lib/favorites.js';
+import { initRecentVisits } from './lib/recentVisits.js';
 import { icon } from './lib/icons.js';
 import { configureAuth, guardedRoute } from './router.js';
 import { renderLoginPage, renderRegisterPage } from './components/LoginPage.js';
 import { renderAuthCallback } from './components/AuthCallback.js';
 import { renderOnboardingPage } from './components/OnboardingPage.js';
-import { renderProfile } from './components/Profile.js';
+import { renderProfile, renderProfileEdit } from './components/Profile.js';
 import { renderPublicProfile } from './components/PublicProfile.js';
 import { renderFriendsPanel } from './components/FriendsPanel.js';
 import { renderFavoritesPage } from './components/FavoritesPage.js';
 import { renderRecommenderPage } from './components/RecommenderPage.js';
-import { renderHeader } from './components/Header.js';
-import { renderSidebar, toggleSidebar, updateSidebarContent } from './components/Sidebar.js';
-import {
-  renderFilterBar,
-  updateFilterBar,
-  showFilterBar,
-  hideFilterBar,
-} from './components/FilterBar.js';
-import { renderSongList, renderSongListSkeleton } from './components/SongList.js';
+import { renderHeader, hideHeader, showHeader } from './components/Header.js';
+import { renderSidebar, updateSidebarContent } from './components/Sidebar.js';
+import { skelLongText } from './lib/skeleton.js';
 import { renderSongView } from './components/SongView.js';
-import { renderSongEditor } from './components/SongEditor.js';
-import { renderAdminDashboard, renderAdminEditList } from './components/AdminDashboard.js';
 import { renderPrayerPage } from './components/PrayerPage.js';
 import { renderListDetail } from './components/ListDetail.js';
 import { initUpdateNotifier } from './components/UpdateNotifier.js';
+import { renderToolsHub } from './components/ToolsHub.js';
+import { renderHome } from './components/Home.js';
+import { renderBottomNav, updateBottomNavActive } from './components/BottomNav.js';
+import { closeGoToSheet } from './components/GoToSheet.js';
+import { getWeeklyWords, warmWeeklyWords } from './lib/weeklyWords.js';
+import { initChromeAutoHide, setChromeAutoHide } from './lib/scrollChrome.js';
+import { initPreloadErrorGuard, clearPreloadErrorGuard } from './lib/preloadErrorGuard.js';
+import { chromeFor, isHeaderless, isNavHidden } from './lib/chromeRoutes.js';
 
 // Initialize theme immediately to avoid flash
 initTheme();
+
+// Recuperación de chunks lazy con hash viejo tras un deploy (H6 auditoría).
+initPreloadErrorGuard();
 
 /** @type {HTMLElement} */
 let mainContent;
 
 /**
+ * Oculta bottom-nav + sidebar de forma permanente (vistas de tarea del
+ * pipeline, Task 2 — chrome propio, sin nav global). Clase `chrome-hidden`
+ * en body para que pipeline.css cancele la reserva de espacio de `.main`
+ * (margin-left de sidebar, padding-bottom de bottom-nav). Mismo patrón de
+ * `hideHeader`/`showHeader` (Header.js): atributo `hidden`, no display
+ * inline — layout.css ya define `.bottom-nav[hidden]`/`.sidebar[hidden]`.
+ */
+function hideNavChrome() {
+  document.querySelector('.bottom-nav')?.setAttribute('hidden', '');
+  document.querySelector('.sidebar')?.setAttribute('hidden', '');
+  document.body.classList.add('chrome-hidden');
+}
+
+/** Restaura bottom-nav + sidebar. */
+function showNavChrome() {
+  document.querySelector('.bottom-nav')?.removeAttribute('hidden');
+  document.querySelector('.sidebar')?.removeAttribute('hidden');
+  document.body.classList.remove('chrome-hidden');
+}
+
+/**
+ * Skeleton neutro instantáneo para rutas con import() diferido. Se pinta de
+ * forma síncrona ANTES de esperar el chunk para que la navegación no deje la
+ * pantalla anterior visible bajo la URL ya cambiada (el módulo repinta su
+ * propio shell al resolver el import).
+ */
+function showPageSkeleton() {
+  if (mainContent) mainContent.innerHTML = skelLongText();
+}
+
+/**
  * Carga weekly_words publicadas para incluirlas en el índice de búsqueda.
+ * Fuente única SWR: `getWeeklyWords()` (fetch autenticado + cache compartida).
  * @returns {Promise<Array>}
  */
 async function loadWeeklyWordsForIndex() {
   try {
-    const { supabase } = await import('./lib/supabase.js');
-    const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionData?.session?.access_token;
-    const res = await fetch('/api/weekly-words', {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (res.ok) {
-      const body = await res.json();
-      return body.weeklyWords ?? [];
-    }
+    return await getWeeklyWords();
   } catch (_e) {
-    /* ignore */
+    return [];
   }
-  return [];
 }
 
 /**
  * Boot the app
  */
 async function boot() {
+  // finally (no el inicio de la función) porque un chunk lazy puede fallar
+  // A MITAD de boot: si el guard se limpiara al inicio, el listener de
+  // vite:preloadError vería el guard ya limpio en cada intento y recargaría
+  // sin límite. Con finally, mientras boot está en curso el guard sigue
+  // seteado (si se seteó al fallar un import previo) y solo se rearma
+  // cuando boot termina, exitoso o no, dejando la protección lista para el
+  // próximo error real (H6 auditoría).
+  try {
+    await bootBody();
+  } finally {
+    clearPreloadErrorGuard();
+  }
+}
+
+async function bootBody() {
   const app = document.querySelector('#app');
   app.innerHTML = '';
 
@@ -85,19 +127,18 @@ async function boot() {
   app.innerHTML = `<main class="main"><div class="main__content" id="main-content"></div></main>`;
   mainContent = app.querySelector('#main-content');
 
-  // Render header
-  renderHeader(app, {
-    onMenuToggle: toggleSidebar,
-  });
+  // Render header — logo + oración + tema + avatar. La navegación por menú
+  // vive en el footer (móvil, hoja "Ir a…") y en la sidebar (desktop).
+  renderHeader(app);
 
   // Render sidebar
   renderSidebar(app);
 
-  // Render filter bar (F4)
-  renderFilterBar(app);
+  // Bottom-nav móvil (F1b)
+  renderBottomNav(app);
 
   // Show skeleton while loading
-  renderSongListSkeleton(mainContent);
+  showPageSkeleton();
 
   // Initialize auth FIRST (before any guarded routes resolve).
   await initAuthStore();
@@ -107,202 +148,278 @@ async function boot() {
   if (isAuthenticated()) {
     await initStore();
     const { songs } = getState();
-    const weeklyWords = await loadWeeklyWordsForIndex();
-    buildIndex(songs, weeklyWords);
+    // B5 (perf): weekly-words solo alimenta el índice de búsqueda — no
+    // bloquear el primer render por ese round-trip. Se indexa primero sin
+    // ellas y, cuando resuelva en paralelo, buildIndex se vuelve a correr.
+    buildIndex(songs, []);
     updateSidebarContent();
-    updateFilterBar();
+    loadWeeklyWordsForIndex().then((weeklyWords) => buildIndex(songs, weeklyWords));
   }
 
-  // Favorites cache — loads once, refreshes on sign-in, clears on sign-out.
-  await initFavorites();
+  // Favoritos (cache en memoria) y recientes ligados a la cuenta: solo
+  // alimentan iconos de favorito y la lista de recientes, no el primer
+  // render ni el índice — se disparan sin await para no sumar round-trips
+  // al TTI.
+  initFavorites();
+  initRecentVisits();
 
   // Subscribe to state changes — re-render song list when on home page
   subscribe(async (state) => {
     const weeklyWords = await loadWeeklyWordsForIndex();
     buildIndex(state.songs, weeklyWords);
     updateSidebarContent();
-    updateFilterBar();
 
     const currentHash = globalThis.location.hash.slice(1) || '/';
-    if (currentHash === '/' || currentHash === '') {
-      renderSongList(mainContent, state.filtered);
+    if (currentHash === '/buscar') {
+      const { renderSearchPage } = await import('./components/SearchPage.js');
+      await renderSearchPage(mainContent, weeklyWords);
+    } else if (currentHash === '/' || currentHash === '') {
+      renderHome(mainContent);
     }
   });
 
   // ============ Public routes ============
+  // Wrapper: marca rutas privadas/guardadas quitando la clase de shell oculto
+  // y la clase de bleed del browse hub (se vuelve a añadir solo en /buscar).
+  const privateRoute = (path, cb, opts) =>
+    guardedRoute(
+      path,
+      (...args) => {
+        document.body.classList.remove('auth-route');
+        document.querySelector('.main')?.classList.remove('main--bleed');
+        // Rutas con carga diferida (handler async → await import): pinta un
+        // skeleton al instante para que la pantalla anterior no quede visible
+        // bajo la URL nueva mientras se resuelve el chunk. Las síncronas ya
+        // pintan su propio shell de inmediato, así que no lo necesitan.
+        if (cb.constructor.name === 'AsyncFunction') showPageSkeleton();
+        return cb(...args);
+      },
+      opts,
+    );
+
   route('/login', () => {
-    hideFilterBar();
+    document.querySelector('.main')?.classList.remove('main--bleed');
+    document.body.classList.add('auth-route');
     renderLoginPage(mainContent);
   });
 
   route('/register', () => {
-    hideFilterBar();
+    document.querySelector('.main')?.classList.remove('main--bleed');
+    document.body.classList.add('auth-route');
     renderRegisterPage(mainContent);
   });
 
   route('/auth/callback', () => {
-    hideFilterBar();
+    document.querySelector('.main')?.classList.remove('main--bleed');
+    document.body.classList.add('auth-route');
     renderAuthCallback(mainContent);
   });
 
   // ============ Guarded routes ============
-  guardedRoute('/onboarding', () => {
-    hideFilterBar();
+  privateRoute('/onboarding', () => {
     renderOnboardingPage(mainContent);
   });
 
-  guardedRoute('/', () => {
-    showFilterBar();
-    const { filtered } = getState();
-    renderSongList(mainContent, filtered);
+  privateRoute('/', () => {
+    renderHome(mainContent);
   });
 
-  guardedRoute('/song/:id', ({ params }) => {
-    hideFilterBar();
+  privateRoute('/buscar', async () => {
+    const { renderSearchPage } = await import('./components/SearchPage.js');
+    // El bleed se añade justo antes de montar el contenido nuevo para que la ruta
+    // anterior no pierda su gutter durante el import dinamico.
+    document.querySelector('.main')?.classList.add('main--bleed');
+    // Ya no se hace await de /api/weekly-words aqui: renderSearchPage pinta el shell
+    // al instante y la seccion "Voces en off" carga en su propia region async.
+    await renderSearchPage(mainContent);
+  });
+
+  privateRoute('/herramientas', () => {
+    renderToolsHub(mainContent);
+  });
+
+  privateRoute('/song/:id', ({ params }) => {
     renderSongView(mainContent, params.id);
   });
 
   route('/song/:id/links', async ({ params }) => {
-    hideFilterBar();
+    document.body.classList.remove('auth-route');
+    showPageSkeleton();
     const { renderSongLinks } = await import('./components/SongLinks.js');
     renderSongLinks(mainContent, params.id);
   });
 
-  guardedRoute(
+  privateRoute(
+    '/song/:id/procesamiento',
+    async ({ params }) => {
+      const { renderSongPipelineView } = await import('./components/pipeline/SongPipelineView.js');
+      renderSongPipelineView(mainContent, params.id);
+    },
+    { adminOnly: true },
+  );
+
+  privateRoute('/song/:id/estudio', async ({ params }) => {
+    const { renderSongStudioView } = await import('./components/pipeline/SongStudioView.js');
+    renderSongStudioView(mainContent, params.id);
+  });
+
+  privateRoute('/song/:id/partitura', async ({ params }) => {
+    const { renderSongPartituraView } = await import('./components/pipeline/SongPartituraView.js');
+    renderSongPartituraView(mainContent, params.id);
+  });
+
+  privateRoute(
     '/admin',
-    () => {
-      hideFilterBar();
+    async () => {
+      const { renderAdminDashboard } = await import('./components/AdminDashboard.js');
       renderAdminDashboard(mainContent);
     },
     { adminOnly: true },
   );
 
-  guardedRoute(
+  privateRoute(
     '/admin/create',
-    () => {
-      hideFilterBar();
+    async () => {
+      const { renderSongEditor } = await import('./components/SongEditor.js');
       renderSongEditor(mainContent);
     },
     { adminOnly: true },
   );
 
-  guardedRoute(
+  privateRoute(
     '/admin/edit',
-    () => {
-      hideFilterBar();
+    async () => {
+      const { renderAdminEditList } = await import('./components/AdminDashboard.js');
       renderAdminEditList(mainContent);
     },
     { adminOnly: true },
   );
 
-  guardedRoute(
+  privateRoute(
     '/admin/edit/:id',
-    ({ params, query }) => {
-      hideFilterBar();
+    async ({ params, query }) => {
       const from = new URLSearchParams(query || '').get('from');
+      const { renderSongEditor } = await import('./components/SongEditor.js');
       renderSongEditor(mainContent, params.id, { from });
     },
     { adminOnly: true },
   );
 
-  guardedRoute(
+  privateRoute(
     '/admin/voz/nueva',
     async () => {
-      hideFilterBar();
       const { renderVozEditor } = await import('./components/VozEditor.js');
       renderVozEditor(mainContent, null);
     },
     { adminOnly: true },
   );
 
-  guardedRoute(
+  privateRoute(
     '/admin/voz/:id',
     async ({ params }) => {
-      hideFilterBar();
       const { renderVozEditor } = await import('./components/VozEditor.js');
       renderVozEditor(mainContent, params.id);
     },
     { adminOnly: true },
   );
 
-  guardedRoute('/perfil', () => {
-    hideFilterBar();
+  privateRoute(
+    '/admin/mundo',
+    async () => {
+      const { renderAdminWorldPage } = await import('./components/AdminWorldPage.js');
+      renderAdminWorldPage(mainContent);
+    },
+    { adminOnly: true },
+  );
+
+  privateRoute('/perfil', () => {
     renderProfile(mainContent);
   });
 
-  guardedRoute('/u/:username', ({ params }) => {
-    hideFilterBar();
+  privateRoute('/perfil/editar', () => {
+    renderProfileEdit(mainContent);
+  });
+
+  privateRoute('/u/:username', ({ params }) => {
     renderPublicProfile(mainContent, params.username);
   });
 
-  guardedRoute('/amigos', () => {
-    hideFilterBar();
+  privateRoute('/amigos', () => {
     renderFriendsPanel(mainContent);
   });
 
-  guardedRoute('/favoritos', () => {
-    hideFilterBar();
+  privateRoute('/favoritos', () => {
     renderFavoritesPage(mainContent);
   });
 
-  guardedRoute('/afinador', async ({ query }) => {
-    hideFilterBar();
+  privateRoute('/afinador', async ({ query }) => {
     const { renderTuner } = await import('./components/Tuner.js');
     renderTuner(mainContent, { query });
   });
 
-  guardedRoute('/recomendador', () => {
-    hideFilterBar();
+  privateRoute('/recomendador', () => {
     renderRecommenderPage(mainContent);
   });
 
-  guardedRoute('/oracion', () => {
-    hideFilterBar();
+  privateRoute('/oracion', () => {
     renderPrayerPage(mainContent);
   });
 
-  guardedRoute('/voces', async () => {
-    hideFilterBar();
+  privateRoute('/voces', async () => {
     const { renderVoicesAlbumView } = await import('./components/VoicesAlbumView.js');
     renderVoicesAlbumView(mainContent);
   });
 
-  guardedRoute('/voz/:id', async ({ params }) => {
-    hideFilterBar();
+  privateRoute('/albumes', async () => {
+    const { renderAlbumsView } = await import('./components/AlbumsView.js');
+    renderAlbumsView(mainContent);
+  });
+
+  privateRoute('/listas', async () => {
+    const { renderListsPage } = await import('./components/ListsPage.js');
+    await renderListsPage(mainContent);
+  });
+
+  privateRoute('/album/:id', async ({ params }) => {
+    const { renderAlbumDetail } = await import('./components/AlbumDetail.js');
+    renderAlbumDetail(mainContent, params.id);
+  });
+
+  privateRoute('/voz/:id', async ({ params }) => {
     const { renderWeeklyWordById } = await import('./components/WeeklyWordView.js');
     renderWeeklyWordById(mainContent, params.id);
   });
 
-  guardedRoute('/lista/nueva', () => {
-    hideFilterBar();
+  privateRoute('/lista/nueva', () => {
     renderListDetail(mainContent, null, { mode: 'edit' });
   });
 
-  guardedRoute('/lista/:id', ({ params }) => {
-    hideFilterBar();
+  privateRoute('/lista/:id', ({ params }) => {
     renderListDetail(mainContent, params.id, { mode: 'view' });
   });
 
-  guardedRoute('/estudio', async () => {
-    hideFilterBar();
+  privateRoute('/estudio', async () => {
     const { renderStudioPage } = await import('./components/StudioPage.js');
     renderStudioPage(mainContent);
   });
 
-  guardedRoute('/licencias', async () => {
-    hideFilterBar();
+  privateRoute('/partitura', async () => {
+    const { renderPartituraPage } = await import('./components/PartituraPage.js');
+    renderPartituraPage(mainContent);
+  });
+
+  privateRoute('/licencias', async () => {
     const { renderLicenses } = await import('./components/LicensesPage.js');
     renderLicenses(mainContent);
   });
 
-  guardedRoute('/mundo', async () => {
-    hideFilterBar();
+  privateRoute('/mundo', async () => {
     const { renderWorldPage } = await import('./components/WorldPage.js');
     renderWorldPage(mainContent);
   });
 
   onNotFound(() => {
-    hideFilterBar();
+    document.body.classList.remove('auth-route');
     mainContent.innerHTML = `
       <div class="empty-state fade-in">
         <div class="empty-state__icon">${icon('frown', { size: 48 })}</div>
@@ -314,7 +431,32 @@ async function boot() {
     mainContent.querySelector('#not-found-home')?.addEventListener('click', () => navigate('/'));
   });
 
-  // Start router
+  // Motor único de auto-hide de header + bottom-nav (chrome sin fin, Task 2).
+  // Debe engancharse ANTES de la suscripción de abajo: esta llama a
+  // setChromeAutoHide ya en el resolve() inicial de initRouter().
+  initChromeAutoHide({
+    headerEl: document.getElementById('app-header'),
+    navEl: document.querySelector('.bottom-nav'),
+  });
+
+  // Decide header, tab activo del bottom-nav y política de auto-hide en CADA
+  // resolución de ruta (push, replace o popstate) — no solo 'hashchange', que
+  // replaceState no dispara (dejaba el header desincronizado tras
+  // navigate(path, { replace: true }): SearchPage a /song/:id o /voz/:id,
+  // Profile.js a /login al salir de /perfil). Se registra ANTES
+  // de initRouter() para que el resolve() inicial del arranque ya lo cubra
+  // (deep link directo a una ruta headerless del Grupo B), sin necesitar una
+  // llamada de arranque aparte.
+  onRouteChange(() => {
+    closeGoToSheet(); // cierra la hoja "Ir a" al navegar (incl. botón atrás)
+    const path = getCurrentPath();
+    updateBottomNavActive(path);
+    isHeaderless(path) ? hideHeader() : showHeader();
+    isNavHidden(path) ? hideNavChrome() : showNavChrome();
+    setChromeAutoHide(chromeFor(path));
+  });
+
+  // Start router (dispara el resolve() inicial, ya cubierto por la suscripción de arriba).
   initRouter();
 
   // F1: Initialize update notifier
@@ -326,7 +468,9 @@ async function boot() {
       const persisted = await navigator.storage.persisted();
       if (!persisted) await navigator.storage.persist();
     }
-  } catch (_) { /* no critico */ }
+  } catch (_) {
+    /* no critico */
+  }
 
   // F8: Start background caching for all visitors (not only installed PWA)
   try {
@@ -335,6 +479,9 @@ async function boot() {
   } catch (_) {
     // offlineCache module not critical
   }
+
+  // Precalienta weekly-words en idle solo si hay sesion (el endpoint exige auth).
+  if (isAuthenticated()) warmWeeklyWords();
 
   // PWA: chip global de estado offline
   try {

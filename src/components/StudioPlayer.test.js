@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   fmtTimeCs,
   fmtTime,
@@ -109,5 +109,49 @@ describe('createStudioPlayer — SEC-X1: safeUrl bloquea javascript: en href y s
 
     const audio = el.querySelector('audio');
     expect(audio.getAttribute('src')).toBe(url);
+  });
+
+  it('src inválido saneado: el evento error al montar NO dispara toast', async () => {
+    const { audio } = createStudioPlayer({ label: 'Voz', url: 'javascript:alert(1)' });
+    audio.dispatchEvent(new Event('error'));
+    await Promise.resolve();
+    await Promise.resolve();
+    const toast = document.querySelector('.toast');
+    expect(toast?.classList.contains('visible')).not.toBe(true);
+  });
+});
+
+describe('createStudioPlayer — destroy()', () => {
+  it('pausa el audio, le quita el src y no reacciona a eventos posteriores', () => {
+    const { el, audio, destroy } = createStudioPlayer({ label: 'Voz', url: 'https://x/voz.mp3' });
+    const playBtn = el.querySelector('.studio-player__play');
+    const pauseSpy = vi.spyOn(audio, 'pause');
+    const loadSpy = vi.spyOn(audio, 'load');
+
+    destroy();
+
+    expect(pauseSpy).toHaveBeenCalled();
+    expect(audio.hasAttribute('src')).toBe(false);
+    expect(loadSpy).toHaveBeenCalled();
+
+    // Listeners colgados de ac.signal ya no reaccionan tras destroy().
+    const labelBefore = playBtn.getAttribute('aria-label');
+    audio.dispatchEvent(new Event('play'));
+    expect(playBtn.getAttribute('aria-label')).toBe(labelBefore);
+  });
+});
+
+describe('createStudioPlayer — evento error', () => {
+  it('avisa con un toast y restaura el ícono de play cuando el audio falla', async () => {
+    const { el, audio } = createStudioPlayer({ label: 'Voz', url: 'https://x/voz.mp3' });
+    const playBtn = el.querySelector('.studio-player__play');
+    audio.dispatchEvent(new Event('error'));
+    await vi.waitFor(() => {
+      const toast = document.querySelector('.toast');
+      expect(toast?.classList.contains('visible')).toBe(true);
+    });
+    const toast = document.querySelector('.toast');
+    expect(toast.textContent).toBe('No se pudo reproducir Voz');
+    expect(playBtn.getAttribute('aria-label')).toBe('Reproducir Voz');
   });
 });

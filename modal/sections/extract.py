@@ -28,11 +28,15 @@ import tempfile
 # 'ensemble' → TODO: upgrade (ver docstring de módulo arriba). No implementado.
 S1_EXTRACTOR = "ep_317"
 
-# Modelo BS-RoFormer para separación vocal.
-_BS_ROFORMER_MODEL = "model_bs_roformer_ep_317_sdr_12.9755.ckpt"
+# Modelo de separación vocal. Swap SOTA jul-2026 con rollback por env var.
+# VOCAL_MODEL_CKPT=<filename> permite volver a ep_317 sin redeploy de código.
+_BS_ROFORMER_MODEL = os.environ.get(
+    "VOCAL_MODEL_CKPT",
+    "melband_roformer_big_beta4.ckpt",
+)
 
 # Etiqueta de modelo que se reporta en los webhooks (éxito y fallo).
-_MODEL_LABEL = "bs_roformer_ep_317+htdemucs_6s"
+_MODEL_LABEL = f"{_BS_ROFORMER_MODEL.removesuffix('.ckpt')}+htdemucs_6s"
 
 # Pistas de percusión/melodía que extraemos de demucs htdemucs_6s.
 # La pista `vocals` de demucs se descarta (usamos la de ep_317).
@@ -46,20 +50,23 @@ _OUTPUT_STEMS = ["vocals", "instrumental"] + _DEMUCS_INSTRUMENT_STEMS
 
 def _classify_ep317_stem(filename: str) -> "str | None":
     """
-    Mapea el nombre de archivo de un stem de ep_317 a 'vocals' o 'instrumental'.
+    Mapea el nombre de archivo de un stem del separador vocal a 'vocals' o
+    'instrumental'.
 
     audio-separator produce nombres del tipo:
       song_(Vocals)_model_bs_roformer_ep_317_sdr_12.9755.ckpt.mp3
       song_(Instrumental)_model_bs_roformer_ep_317_sdr_12.9755.ckpt.mp3
 
-    Devuelve None si el nombre no es reconocido (el llamador lanzará).
+    El nombre del stem no-vocal depende del checkpoint: ep_317 lo llama
+    '(Instrumental)', pero melband_roformer_big_beta4 (SOTA actual) lo llama
+    '(other)'. Como el modelo produce EXACTAMENTE 2 stems (vocal + su
+    compañero), cualquier stem que no sea '(vocals)' se mapea a
+    'instrumental' sin importar cómo lo nombre el checkpoint.
     """
     low = filename.lower()
     if "(vocals)" in low:
         return "vocals"
-    if "(instrumental)" in low:
-        return "instrumental"
-    return None
+    return "instrumental"
 
 
 def extract_all_stems(src_path: str) -> dict:
@@ -153,8 +160,14 @@ def run_extract(payload: dict) -> None:
     """
     # Import aquí para evitar que el import-time falle fuera del contenedor Modal.
     import httpx  # noqa: F401 — ya disponible en la imagen
+    import librosa  # noqa: F401 — solo disponible dentro del contenedor Modal
     # Absolute import: cuando Modal ejecuta, `modal/` es el cwd y `sections` es top-level.
-    from sections._common import extract_storage_key, upload_put, post_webhook
+    from sections._common import (
+        duration_from_samples,
+        extract_storage_key,
+        upload_put,
+        post_webhook,
+    )
 
     if S1_EXTRACTOR != "ep_317":
         raise NotImplementedError(
@@ -176,6 +189,13 @@ def run_extract(payload: dict) -> None:
             with open(src_path, "wb") as f:
                 for chunk in r.iter_bytes():
                     f.write(chunk)
+
+        # ── 1.5. Duración del audio de entrada (Task 7, server-side) ─────────
+        # Reemplaza al cálculo best-effort del browser (readAudioDuration):
+        # se decodifica el audio original con librosa y se calcula
+        # len(samples)/sr, la misma cuenta que hace el browser pero confiable.
+        samples, sr = librosa.load(src_path, sr=None, mono=True)
+        duration_sec = duration_from_samples(samples, sr)
 
         # ── 2-3. Separación S1 (ep_317 vocals/instrumental + demucs 6s) ──────
         # Inferencia pura compartida con el smoke full (mismo código que prod).
@@ -199,6 +219,7 @@ def run_extract(payload: dict) -> None:
                 "status": "done",
                 "model": _MODEL_LABEL,
                 "outputs": outputs,
+                "durationSec": duration_sec,
             },
         )
 

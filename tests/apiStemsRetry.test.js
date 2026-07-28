@@ -145,6 +145,13 @@ const jobWithFailedVI = () => ({
       enabled: false,
       outputs: { male: null, female: null },
     },
+    duet: {
+      status: 'skipped',
+      model: null,
+      error: null,
+      enabled: false,
+      outputs: { voice_a: null, voice_b: null },
+    },
   },
 });
 
@@ -191,9 +198,46 @@ describe('POST /api/stems/jobs/[id]/retry — DAG retry flow', () => {
     expect(mockInvokeModalPipeline).not.toHaveBeenCalled();
   });
 
+  it('Fix 2: 429 en el 4º intento — MAX_RETRIES=3 agotado, no invoca Modal', async () => {
+    const job = jobWithFailedVI();
+    job.sections.voiceInstrumental.retries = 3; // ya usó los 3 reintentos permitidos
+    sqlResponses.push([job]); // SELECT
+    const res = makeRes();
+    await handler(authedReq(), res);
+    expect(res.statusCode).toBe(429);
+    expect(res.body?.error).toMatch(/máximo de reintentos/i);
+    expect(mockInvokeModalPipeline).not.toHaveBeenCalled();
+  });
+
+  it('Fix TOCTOU: 409 si el UPDATE atómico no reclama la fila (otra request ya reintentó la sección), no invoca Modal', async () => {
+    sqlResponses.push([jobWithFailedVI()]); // SELECT
+    sqlResponses.push([]); // UPDATE CAS → 0 filas: el estado de la sección ya cambió
+    const res = makeRes();
+    await handler(authedReq(), res);
+    expect(res.statusCode).toBe(409);
+    expect(mockInvokeModalPipeline).not.toHaveBeenCalled();
+  });
+
+  it('Fix 2: reintentos 1-3 permitidos, incrementan el contador en la misma escritura', async () => {
+    const job = jobWithFailedVI();
+    job.sections.voiceInstrumental.retries = 2; // este será el 3er intento, aún permitido
+    sqlResponses.push([job]); // SELECT
+    sqlResponses.push([{ id: 'job1' }]); // UPDATE CAS a processing → reclama la fila
+    const res = makeRes();
+    await handler(authedReq(), res);
+    expect(res.statusCode).toBe(200);
+    const updateCall = sqlCalls.find(
+      (c) => c.text.includes('processing') && c.text.includes('stem_jobs'),
+    );
+    const sectionsArg = updateCall.values.find(
+      (v) => v && typeof v === 'object' && 'voiceInstrumental' in v,
+    );
+    expect(sectionsArg.voiceInstrumental.retries).toBe(3);
+  });
+
   it('skipped → running: 200, sección pasa a running y se añade a enabled_sections', async () => {
     sqlResponses.push([jobWithFailedVI()]); // SELECT (gender está skipped)
-    sqlResponses.push([]); // UPDATE
+    sqlResponses.push([{ id: 'job1' }]); // UPDATE CAS → reclama la fila
     const res = makeRes();
     await handler(authedReq({ query: { id: 'job1', section: 'gender' } }), res);
 
@@ -217,7 +261,7 @@ describe('POST /api/stems/jobs/[id]/retry — DAG retry flow', () => {
 
   it('happy path voiceInstrumental failed: 200, UPDATE a processing, sección pasa a running, otras intactas', async () => {
     sqlResponses.push([jobWithFailedVI()]); // SELECT
-    sqlResponses.push([]); // UPDATE a processing
+    sqlResponses.push([{ id: 'job1' }]); // UPDATE CAS a processing → reclama la fila
     const res = makeRes();
     await handler(authedReq(), res);
 
@@ -246,7 +290,7 @@ describe('POST /api/stems/jobs/[id]/retry — DAG retry flow', () => {
 
   it('happy path voiceInstrumental: invokeModalPipeline llamado 1 vez con enabledSections y uploads correctos', async () => {
     sqlResponses.push([jobWithFailedVI()]);
-    sqlResponses.push([]);
+    sqlResponses.push([{ id: 'job1' }]); // UPDATE CAS → reclama la fila
     await handler(authedReq(), makeRes());
 
     expect(mockInvokeModalPipeline).toHaveBeenCalledTimes(1);
@@ -270,7 +314,7 @@ describe('POST /api/stems/jobs/[id]/retry — DAG retry flow', () => {
 
   it('happy path structure failed: uploads.structure es {} y enabledSections es [structure]', async () => {
     sqlResponses.push([jobWithFailedStructure()]); // SELECT
-    sqlResponses.push([]); // UPDATE
+    sqlResponses.push([{ id: 'job1' }]); // UPDATE CAS → reclama la fila
     const res = makeRes();
     await handler(authedReq({ query: { id: 'job1', section: 'structure' } }), res);
 
@@ -294,7 +338,7 @@ describe('POST /api/stems/jobs/[id]/retry — DAG retry flow', () => {
 
   it('error de modal: UPDATE revierte sección a failed con error y status >= 500', async () => {
     sqlResponses.push([jobWithFailedVI()]); // SELECT
-    sqlResponses.push([]); // UPDATE a processing
+    sqlResponses.push([{ id: 'job1' }]); // UPDATE CAS a processing → reclama la fila
     sqlResponses.push([]); // UPDATE revertida a failed
 
     const modalError = new Error('Modal 502: timeout');

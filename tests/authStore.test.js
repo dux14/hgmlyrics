@@ -11,6 +11,7 @@ const mockSignInWithOtp = vi.fn();
 const mockSignOut = vi.fn();
 
 vi.mock('../src/lib/supabase.js', () => ({
+  AUTH_STORAGE_KEY: 'sb-test-ref-auth-token',
   supabase: {
     auth: {
       getSession: mockGetSession,
@@ -32,8 +33,6 @@ const {
   signInWithGoogle,
   signInWithMagicLink,
   signOut,
-  isFeatureEnabled,
-  __setFlagsForTest,
 } = await import('../src/lib/authStore.js');
 
 describe('authStore', () => {
@@ -82,7 +81,7 @@ describe('authStore', () => {
     expect(isAdmin()).toBe(true);
   });
 
-  it('subscribers notified on SIGNED_OUT', async () => {
+  it('subscribers notified on SIGNED_OUT (logout propio, sin recheck)', async () => {
     mockGetSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } });
     globalThis.fetch.mockResolvedValueOnce({
       ok: true,
@@ -91,8 +90,15 @@ describe('authStore', () => {
     await initAuthStore();
     const spy = vi.fn();
     subscribe(spy);
+
+    // signOut() marca el SIGNED_OUT que sigue como propio: el handler debe
+    // saltarse el recheck de T2 por completo (sin timers reales de 1.5s) e
+    // ir directo al kick. Si esto no funcionara, el segundo getSession()
+    // (sin mock encolado) lanzaría y el test tardaría ~1.5s reales en CI.
+    await signOut();
     await authStateChangeHandler('SIGNED_OUT', null);
-    expect(spy).toHaveBeenCalledWith({ session: null, profile: null });
+
+    expect(spy).toHaveBeenCalledWith({ session: null, profile: null, pending: false });
     expect(isAuthenticated()).toBe(false);
   });
 
@@ -118,17 +124,5 @@ describe('authStore', () => {
     mockSignOut.mockResolvedValueOnce({ error: null });
     await signOut();
     expect(mockSignOut).toHaveBeenCalled();
-  });
-});
-
-describe('isFeatureEnabled', () => {
-  it('devuelve false cuando no hay flags', () => {
-    __setFlagsForTest([]);
-    expect(isFeatureEnabled('voz_tono')).toBe(false);
-  });
-  it('devuelve true cuando el flag está presente', () => {
-    __setFlagsForTest(['voz_tono']);
-    expect(isFeatureEnabled('voz_tono')).toBe(true);
-    expect(isFeatureEnabled('afinador_shortcut')).toBe(false);
   });
 });

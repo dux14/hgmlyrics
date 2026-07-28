@@ -1,0 +1,625 @@
+/* immersive.css — Vista inmersiva (karaoke estilo Apple Music), Task C4.
+   Overlay negro fijo, independiente del theme (fondo #000 siempre).
+   `body.immersive-active` oculta el chrome de navegación (header/bottom-nav/
+   sidebar) mientras la vista está abierta — reemplazo del extinto modo
+   escenario (Task C5). */
+
+body.immersive-active .header,
+body.immersive-active .bottom-nav,
+body.immersive-active .sidebar {
+  display: none !important;
+}
+body.immersive-active {
+  overflow: hidden;
+}
+
+/* Defensa en profundidad (Task 1.3, Fix 2): ningún control flotante del
+   normal view puede pintarse ni clickearse bajo el overlay inmersivo. El
+   acordeón de sección ya se colapsa/pausa en JS al entrar (SongView →
+   collapseSectionAudioPanels), pero esta regla cubre la hipótesis de leak
+   por z-index/orden del DOM aunque el JS falle o quede desincronizado.
+   `.section-audio` y `.autoscroll-fab` son exclusivos del normal view (nunca
+   se montan dentro de `.imm-v1`), así que el selector amplio es seguro para
+   ellos. */
+body.immersive-active .section-audio,
+body.immersive-active .autoscroll-fab {
+  display: none !important;
+}
+
+/* `.floating-tuner` SÍ se reutiliza dentro del escenario (afinador híbrido
+   in-stage, `.imm-v1__tuner-panel .floating-tuner` más abajo — toggle
+   legítimo del propio overlay). El selector amplio de arriba lo ocultaría
+   también ahí porque `body.immersive-active` está presente durante TODA la
+   sesión de full view, no solo mientras hay un leak detrás. Se acota al
+   HIJO DIRECTO de `<body>` — SongView monta el suyo con
+   `openFloatingTuner(document.body, …)` (ver `SongView.js`), mientras que la
+   instancia in-stage cuelga varios niveles adentro de `.imm-v1` (nunca hijo
+   directo de body), así que este selector nunca puede alcanzarla. */
+body.immersive-active > .floating-tuner {
+  display: none !important;
+}
+
+/* Z-index: el rollo/overlay debe quedar SIEMPRE por debajo del bottom-sheet
+   compartido (`.osheet-dim`/`.osheet` en options-sheet.css, z-index 300/301)
+   — openOptionsSheet monta su DOM directo en <body>, hermano de `.imm-v1`
+   (no anidado dentro), así que el orden depende 100% de z-index explícito,
+   no del DOM. 260/261 deja margen debajo de 300 sin tocar la escala
+   compartida (var(--z-overlay)=300 en variables.css) y sigue por encima de
+   header/sidebar/bottom-nav (max 200, que además `body.immersive-active`
+   oculta arriba). Bug real cazado por el e2e Playwright: con 1000/1001 (por
+   encima del sheet) cualquier `.imm-line` con transform/filter — que crea su
+   propio stacking context — podía interceptar el click de un botón del sheet
+   si su caja pisaba ese pixel; el primer click de MODO "funcionaba" solo por
+   suerte geométrica (ningún <div data-i> cubría ese punto todavía), y
+   `applyMode` reventaba el segundo porque el reflow (línea activa más
+   grande/otro wrap) sí lo cubría. La causa raíz nunca fue el reflow en sí —
+   era el z-index invertido desde el día uno. */
+.song-view--immersive {
+  position: fixed;
+  inset: 0;
+  z-index: 260;
+  /* Mismo patrón que .imm-v1 (unifica sizing, Task 1.3): sin esto el
+     contenedor sigue el 100vh clásico mientras el overlay usa small/dynamic
+     viewport, dejando un gap de viewport dinámico entre ambos en iOS Safari
+     cuando la UI del navegador se colapsa/expande. */
+  height: 100svh;
+  height: 100dvh;
+}
+
+.imm-v1 {
+  --imm-font-scale: 1;
+  --imm-gutter: 10px;
+  /* Overlay autocontenido: paleta propia, inmune a data-theme (D9). El full
+     view es SIEMPRE oscuro por decisión de producto (como Apple Music). */
+  --imm-bg: #121212;
+  --imm-text: #fff;
+  --imm-dim: rgba(255, 255, 255, 0.55);
+  --imm-accent: var(--color-brand, #01ccd9);
+  --imm-chord: #a5d6a7;
+  /* Re-pin de los tokens del tema que components.css usa dentro del overlay:
+     en data-theme=light se volverían oscuros sobre el fondo negro fijo. */
+  --color-text: #f0f0f0;
+  --color-chord: #a5d6a7;
+  --color-chord-bg: rgba(165, 214, 167, 0.12);
+  --color-voice-soprano: #f48fb1;
+  --color-voice-contralto: #ce93d8;
+  --color-voice-tenor: #ffe082;
+  --color-voice-bass: #90caf9;
+  position: fixed;
+  inset: 0;
+  z-index: 261;
+  display: flex;
+  flex-direction: column;
+  background: var(--imm-bg);
+  color: var(--imm-text);
+  height: 100svh;
+  height: 100dvh;
+  overflow: hidden;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* ── Chrome superior (auto-hide 3s, fijo en pausa) ── */
+
+.imm-v1__chrome {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: max(0.75rem, env(safe-area-inset-top)) var(--imm-gutter) 0.5rem;
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+.imm-v1__chrome--hidden {
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+}
+
+.imm-v1__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  flex: none;
+}
+
+.imm-v1__section {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-brand, #01ccd9);
+  opacity: 0.85;
+}
+
+.imm-v1__voice-chips {
+  display: flex;
+  gap: 0.25rem;
+  flex: none;
+}
+
+/* ── Viewport + rollo ── */
+
+.imm-v1__viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  padding: 0 var(--imm-gutter);
+}
+
+.imm-roll {
+  will-change: transform;
+}
+
+.imm-line {
+  /* espaciado vertical generoso entre renglones, cercano al aire de Apple Music */
+  padding: 0.85rem 0;
+  font-weight: 700;
+  line-height: 1.28;
+  text-align: left;
+  transform-origin: left center;
+  word-wrap: break-word;
+  transition:
+    opacity 0.22s cubic-bezier(0.33, 1, 0.68, 1),
+    filter 0.22s cubic-bezier(0.33, 1, 0.68, 1),
+    transform 0.22s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.imm-line--active {
+  font-size: calc(2.1rem * var(--imm-font-scale));
+  opacity: 1;
+  filter: none;
+  transform: scale(1);
+  color: var(--imm-text, #fff);
+}
+/* Siguiente línea: legible sin blur para anticipar la letra. */
+.imm-line--next {
+  font-size: calc(1.5rem * var(--imm-font-scale));
+  opacity: 0.68;
+  filter: none;
+}
+/* Línea anterior: casi nítida, escala progresiva estilo Apple Music. */
+.imm-line--prev {
+  font-size: calc(1.5rem * var(--imm-font-scale));
+  opacity: 0.5;
+  filter: blur(0.5px);
+}
+.imm-line--d2 {
+  font-size: calc(1.5rem * var(--imm-font-scale));
+  opacity: 0.32;
+  filter: blur(1.5px);
+}
+.imm-line--d3 {
+  font-size: calc(1.5rem * var(--imm-font-scale));
+  opacity: 0.24;
+  filter: blur(2.5px);
+}
+/* Blur leve más allá de ±3 líneas (spec §1: costo acotado, sin filter fuerte). */
+.imm-line--far {
+  font-size: calc(1.5rem * var(--imm-font-scale));
+  opacity: 0.15;
+  filter: blur(3px);
+}
+
+.imm-line--spoken {
+  font-style: italic;
+  font-weight: 600;
+}
+
+/* ── Anotaciones (acordes/tono) subordinadas a la letra ──────────────────
+   Los tamaños de components.css (chord-label, mix-rail) están calibrados
+   para la vista normal; sobre las fuentes del rollo (2.1rem activa / 1.5rem
+   resto) quedaban ilegiblemente grandes e inflaban la línea activa. Escala
+   fija: la anotación nunca pasa de ~0.55em de su línea (jerarquía por
+   escala, la letra manda). Scoped a `.imm-v1` — el modo lectura normal
+   (SongView/components.css) queda intacto. */
+.imm-v1 .float-label.chord-label {
+  font-size: 0.5em;
+}
+.imm-v1 .float-label.tono-note {
+  font-size: 0.52em;
+}
+.imm-v1 .lyrics__line--chords .float-label {
+  margin-bottom: 0.15em;
+}
+.imm-v1 .lyrics__line--tono .float-label {
+  margin-top: 0.3em;
+}
+/* Rieles del mix compactos: la línea activa (2.1rem) no debe explotar.
+   OJO: height/padding se resuelven contra el font-size YA reducido del riel.
+   La altura debe cubrir el contenido real (padding del riel + padding y
+   borde de la nota + 1em de texto); si queda corta, la nota se desborda
+   hacia abajo y se cruza con los acordes de la fila siguiente al hacer
+   wrap la línea. */
+.imm-v1 .mix-rail--chord {
+  font-size: 0.5em;
+  height: 1.4em;
+}
+.imm-v1 .mix-rail--note {
+  font-size: 0.52em;
+  height: 1.75em;
+  padding-top: 0.3em;
+}
+.imm-v1 .mix-rail--note i {
+  padding-top: 0.2em;
+}
+/* Aire entre filas cuando la línea mixta hace wrap: separa el riel de
+   notas de una fila de las píldoras de acorde de la siguiente. */
+.imm-v1 .mix-seg {
+  margin-bottom: 0.3em;
+}
+/* Sin margen doble: .imm-line ya trae padding vertical propio. */
+.imm-v1 .lyrics__line--tono,
+.imm-v1 .lyrics__line--mix {
+  margin-bottom: 0;
+}
+
+/* ─── Nota promovida en Tono-solo dentro de immersive (bug real, captura de
+   usuario: "dormir tranquiiilo", Bb3 montada sobre la "o") ───
+   El `top: -1.35em` de components.css (nota promovida, ver ese archivo) se
+   calibró para vista normal, donde la nota y la sílaba comparten el MISMO
+   font-size — ahí el lift despeja el glifo sin ambigüedad. En immersive la
+   nota vive a 0.52em de la línea (regla de arriba) mientras la sílaba se
+   pinta con el font-size GRANDE de la línea (2.1rem activa / 1.5rem
+   vecinas): mismo `-1.35em`, pero resuelto contra un font mucho más chico
+   → el lift real en píxeles es una fracción de lo que necesita el glifo
+   grande, la nota queda encima de la letra en vez de despejarla.
+   Como la nota SIEMPRE es 0.52em de la línea en cualquiera de los DOS
+   tamaños de fila que muestran notas (activa y vecina comparten el mismo
+   ratio fijo, ver `.imm-v1 .float-label.tono-note` arriba), un único
+   offset más grande EXPRESADO EN em-de-nota (no en rem ni en unidades de
+   línea) escala correctamente para ambos tamaños sin duplicar reglas por
+   fila — no hace falta una variable CSS aparte. Calibrado con Playwright
+   (harness `e2e/immersive-nota-promovida.spec.js`, árbol real de
+   ImmersiveView + components.css + immersive.css, mismo fixture de la
+   captura): `-1.75em` despeja el glifo con margen en fila activa (2.1rem)
+   y vecina (1.5rem). */
+.imm-v1 .lyrics__line--tono .line-seg--note-flip .float-label {
+  top: -1.75em;
+}
+/* El conector (`::after`, ver components.css) es hijo del `.float-label` y
+   se traslada CON él — su propio `top` (relativo al float-label, no a la
+   línea) sigue arrancando en el mismo punto, justo bajo el subrayado de la
+   nota. Lo único que cambia es que la sílaba quedó más lejos: la `height`
+   crece la misma distancia extra que ganó el lift de arriba (0.4em) para
+   seguir llegando justo hasta la sílaba sin pisarla ni quedar corto. */
+.imm-v1 .lyrics__line--tono .line-seg--note-flip .float-label.tono-note::after {
+  height: 0.84em;
+}
+/* La fila con nota promovida necesita más aire arriba: el lift creció
+   0.4em-de-nota (0.52em-de-línea), así que el headroom (en em-de-línea,
+   este sí ya estaba en la unidad correcta — ver comentario en
+   components.css) crece la misma distancia real para que la nota no roce
+   la fila anterior del rollo. */
+.imm-v1 .lyrics__line--tono.lyrics__line--has-flip {
+  padding-top: 1.85em;
+}
+
+/* ─── Nota promovida en MIXTO dentro de immersive (bug real iter. 6, captura
+   de usuario: línea activa "dormir tranquiiilo", G3 montada sobre la "o") ───
+   En full view la línea EN FOCO siempre se pinta con el builder MIXTO
+   (`.lyrics__line--mix`, ver ImmersiveView.buildLine) sin importar el toggle
+   Tono/Acordes. El `top: 1.75em` de components.css (nota promovida mixta) se
+   calibró para la vista normal; resuelto contra el font-size chico del riel de
+   nota en immersive (0.52em de la línea, ver `.imm-v1 .mix-rail--note` arriba)
+   deja la nota promovida DENTRO del glifo grande de la línea activa (2.1rem):
+   medido en vivo (preview 7b0858ed) la nota caía en t266–b291 sobre el glifo
+   t258–b325.
+   La banda de acorde vacía sobre la letra (segTop→lyricTop, ~26px a este
+   tamaño) es exactamente donde debe subir la nota. `top: -0.35em` (em-de-nota)
+   la sube a t226–b250 → ~8px de aire limpio sobre el glifo (top 258), sin
+   invadir la fila anterior del rollo (queda dentro del padding-top de línea).
+   Escala igual para la fila activa y la vecina porque la nota es 0.52em en
+   ambas. Calibrado midiendo rects en Playwright sobre el preview real (no
+   harness: en full view el foco es MIXTO, el harness tono-solo dio verde
+   falso — ver labels-sin-empuje iter. 6). */
+.imm-v1 .mix-seg--note-flip .mix-rail--note i {
+  top: -0.35em;
+}
+/* Conector (leader line) recalibrado para immersive: el `::after` de
+   components.css apunta a la posición NORMAL de la nota (top 3.15em, ~292px),
+   pero acá la nota subió a la banda de acorde, así que el conector quedaría
+   colgando bajo la letra. Reubicado para tender el punteado desde el borde
+   inferior de la nota (~b250, 0.94em bajo segTop en em-de-riel) hasta el tope
+   del glifo (~t258), cubriendo el hueco de ~8px sin pisar ninguno de los dos.
+   Calibrado en el mismo pase Playwright. */
+.imm-v1 .mix-seg--note-flip .mix-rail--note::after {
+  top: 0.94em;
+  height: 0.42em;
+}
+
+/* Legibilidad del acorde en la línea ACTIVA (hallazgo "acordes casi
+   invisibles" en modo mixed): la garantiza el color propio --imm-chord sobre
+   el fondo oscuro del overlay (independiente del token compartido). El
+   opacity: 0.9 es un ajuste fino de la pill, no un aumento — estos
+   elementos no tenían opacity explícito antes (default 1). */
+.imm-v1 .float-label.chord-label {
+  color: var(--imm-chord);
+  opacity: 0.9;
+}
+.imm-v1 .mix-rail--chord i {
+  color: var(--imm-chord);
+  opacity: 0.9;
+}
+
+/* Foco en blanco pleno (Task 4): components.css atenúa la letra del modo
+   Acordes (`lyrics__letra-dim` → #8f8f8f) y lo no cantado del modo Tono/Mixto
+   (`lyrics__tono-dim` → #5a5a5a) para que predominen acordes/notas — esos
+   grises están calibrados para la vista normal (fondo claro/oscuro variable).
+   En el rollo (`.imm-v1`) el color del foco debe venir del contenedor
+   (`.imm-line--active{color:#fff}` + opacidad por distancia en las vecinas),
+   no de un gris incrustado por el builder: si no, el renglón en foco queda
+   casi tan apagado como sus vecinas y no resalta. */
+.imm-v1 .lyrics__letra-dim {
+  color: inherit;
+}
+/* Opción B: lo que la voz activa NO canta se sigue leyendo (82% blanco), no
+   casi invisible (#5a5a5a rompía la lectura del renglón en foco). */
+.imm-v1 .lyrics__tono-dim {
+  color: rgba(255, 255, 255, 0.82);
+}
+/* Lo que SÍ canta la voz activa (con o sin nota asignada todavía) va blanco
+   pleno — el color de la voz en el rollo vive en la nota/acorde flotante,
+   no en la palabra (a diferencia de la vista normal). */
+.imm-v1 .lyrics__tono-sung,
+.imm-v1 .lyrics__tono-pending {
+  color: #fff;
+}
+
+/* Vencer la trampa de especificidad (D9, parte B): components.css fuerza
+   #8a6800 (marrón oscuro, fix de contraste correcto SOLO sobre fondo blanco)
+   en tenor cuando data-theme='light' o el sistema está en claro sin
+   override. Dentro del overlay negro eso es ilegible — el full view es
+   SIEMPRE oscuro, así que restauramos el color dark del token (ya
+   re-pinneado arriba a #ffe082). Especificidad: la regla original es
+   `[data-theme='light'] .lyrics__line--tono.voice-text--tenor .syll__note`
+   = (0,4,0) (atributo + 3 clases); sumarle `.imm-v1` da (0,5,0) → gana sobre
+   la original sin depender del orden de aparición en la hoja. */
+[data-theme='light'] .imm-v1 .lyrics__line--tono.voice-text--tenor .syll__note,
+[data-theme='light'] .imm-v1 .float-label.tono-note.voice-text--tenor,
+[data-theme='light'] .imm-v1 .mix-rail--note.voice-text--tenor {
+  color: var(--color-voice-tenor);
+}
+@media (prefers-color-scheme: light) {
+  /* Mismo caso para "auto" (sistema en claro, sin data-theme explícito):
+     la gemela de components.css es
+     `:root:not([data-theme]) .lyrics__line--tono.voice-text--tenor .syll__note`
+     = (0,5,0) dentro del @media (:root + [data-theme] en :not() + 3 clases);
+     sumarle `.imm-v1` da (0,6,0) → gana. */
+  :root:not([data-theme]) .imm-v1 .lyrics__line--tono.voice-text--tenor .syll__note,
+  :root:not([data-theme]) .imm-v1 .float-label.tono-note.voice-text--tenor,
+  :root:not([data-theme]) .imm-v1 .mix-rail--note.voice-text--tenor {
+    color: var(--color-voice-tenor);
+  }
+}
+
+/* ── FAB pausa (modo timer) ── */
+
+.imm-v1__fab {
+  position: absolute;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(6rem, calc(6rem + env(safe-area-inset-bottom)));
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-brand, #01ccd9);
+  color: #000;
+  z-index: 2;
+}
+
+/* ── Barra inferior: toggle afinador + slot player (Fase D) ── */
+
+.imm-v1__bottombar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem var(--imm-gutter) max(0.75rem, env(safe-area-inset-bottom));
+}
+
+/* El afinador es el widget híbrido aprobado (`.floating-tuner`, estilos en
+   components.css) montado dentro de este panel, que va ANTES del bottombar
+   en el DOM: queda encima de la barra del player, no la tapa. */
+.imm-v1__tuner-panel {
+  padding: 0 var(--imm-gutter) 0.5rem;
+}
+
+/* El widget llega con position:fixed (components.css, pensado para flotar
+   sobre SongView): acá debe FLUIR dentro de la columna del overlay — sin
+   este override se ancla al borde inferior de la pantalla y oculta el
+   bottombar completo (player + toggle del mic). */
+.imm-v1__tuner-panel .floating-tuner {
+  position: static;
+  max-width: none;
+  margin: 0;
+}
+
+/* Desktop/tablet: el afinador recupera un tope de ancho centrado en vez de
+   estirarse a todo el ancho de la columna de lectura (auditoria 12-jul). */
+@media (min-width: 768px) {
+  .imm-v1__tuner-panel .floating-tuner {
+    max-width: 480px;
+    margin-inline: auto;
+  }
+}
+
+/* Slot del player de pista (Fase D): oculto hasta que exista audio+flag. */
+.imm-v1__player-slot[hidden] {
+  display: none;
+}
+
+/* ── Player de pista sincronizada (D3) ── */
+
+.imm-player {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.imm-player__play {
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-brand, #01ccd9);
+  color: #000;
+}
+
+.imm-player__time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  opacity: 0.7;
+  min-width: 2.2em;
+  text-align: center;
+}
+
+.imm-player__scrubber {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--color-brand, #01ccd9);
+}
+
+/* Altavoz: silencia la pista sin pausarla (muted). */
+.imm-player__mute {
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.imm-player__mute[aria-pressed='true'] {
+  color: var(--color-brand, #01ccd9);
+}
+
+/* ── Interludio (hueco > 5s entre líneas, solo modo sync) ── */
+
+.imm-interlude {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+}
+
+.imm-interlude__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--color-brand, #01ccd9);
+  opacity: calc(0.25 + 0.65 * var(--imm-dot-scale, 0));
+  transform: scale(calc(0.6 + 0.4 * var(--imm-dot-scale, 0)));
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+/* Count-in por beats: reemplaza los puntos cuando quedan >=2 beats para la
+   siguiente línea (más legible que puntitos difusos a esa distancia). */
+.imm-interlude__count {
+  font-size: 1.3rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-brand, #01ccd9);
+  text-align: center;
+  min-width: 1.6em;
+}
+
+/* ── BPM badge (chrome) + pulso de metrónomo (F4) ── */
+
+.imm-v1__bpm {
+  flex: none;
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-brand, #01ccd9);
+}
+
+/* Sibling del chrome (NO hijo): debe seguir visible aunque el chrome se
+   auto-oculte a los 3s — decisión de producto, el pulso es referencia
+   constante mientras haya rejilla de beats. */
+.imm-v1__pulse {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0;
+}
+
+.imm-v1__pulse-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+  transition: background 0.08s ease;
+}
+
+.imm-v1__pulse-dot.is-active {
+  width: 0.75rem;
+  height: 0.75rem;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.imm-v1__pulse-dot.is-accent {
+  background: var(--color-brand, #01ccd9);
+  box-shadow: 0 0 0.5rem var(--color-brand, #01ccd9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imm-v1__pulse-dot {
+    transition: none;
+  }
+}
+
+.imm-v1__metronome-toggle[aria-pressed='true'] {
+  color: var(--color-brand, #01ccd9);
+}
+
+/* Capa desktop/tablet: columna de lectura centrada (auditoria 12-jul) */
+@media (min-width: 768px) {
+  .imm-v1 {
+    --imm-gutter: 32px;
+  }
+  .imm-v1__viewport {
+    max-width: 920px;
+    margin-inline: auto;
+    width: 100%;
+  }
+}
+@media (min-width: 1280px) {
+  .imm-v1 {
+    --imm-gutter: 48px;
+  }
+}

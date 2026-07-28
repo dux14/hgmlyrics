@@ -3,6 +3,7 @@
  * Bloquea avance hasta que ambos sean válidos.
  */
 import { getSession, refreshProfile } from '../lib/authStore.js';
+import { invalidateMyProfile } from '../lib/profileCache.js';
 import { navigate } from '../router.js';
 
 let usernameCheckTimer = null;
@@ -136,6 +137,7 @@ export function renderOnboardingPage(container) {
     }
 
     await refreshProfile();
+    invalidateMyProfile();
     navigate('/');
   });
 }

@@ -7,24 +7,24 @@
  *
  * Debug: Call `window.__showUpdateBanner()` in console to test the banner.
  */
+import { createPoller } from '../lib/poller.js';
 
 const DATA_POLL_INTERVAL = 10 * 60_000; // Check every 10 min while tab is visible
 const FORCE_UPDATE_MS = 24 * 60 * 60 * 1000; // 24 hours
 let lastDataVersion = null;
 let updateAvailableSince = null;
-let swRegistration = null;
+const dataPoller = createPoller(pollDataVersion, DATA_POLL_INTERVAL);
 
 export function initUpdateNotifier() {
   // 1. Listen for SW updates (app code changes)
   listenForSWUpdate();
 
-  // 2. Poll for data changes (new songs)
-  pollDataVersion();
+  // 2. Poll for data changes (new songs) — pausa con la pestaña oculta.
+  dataPoller.start({ immediate: true });
 
   // 3. Debug helper — accessible from browser console
   globalThis.__showUpdateBanner = () => {
     showUpdateBanner();
-    console.log('✅ Update banner shown (debug mode)');
   };
 }
 
@@ -33,7 +33,6 @@ function listenForSWUpdate() {
 
   navigator.serviceWorker.ready
     .then((reg) => {
-      swRegistration = reg;
       if (reg.waiting) {
         showUpdateBanner();
         return;
@@ -54,10 +53,6 @@ function listenForSWUpdate() {
 }
 
 async function pollDataVersion() {
-  if (document.visibilityState === 'hidden') {
-    setTimeout(pollDataVersion, DATA_POLL_INTERVAL);
-    return;
-  }
   try {
     const res = await fetch('/api/version');
     if (res.ok) {
@@ -65,14 +60,16 @@ async function pollDataVersion() {
       if (lastDataVersion && dataVersion !== lastDataVersion) {
         const { refreshData } = await import('../lib/store.js');
         await refreshData();
+        // El catálogo offline (IndexedDB) también debe enterarse del cambio,
+        // no solo el store en memoria (H2 auditoría).
+        const { ensureSongsCached } = await import('../lib/offlineCache.js');
+        ensureSongsCached();
       }
       lastDataVersion = dataVersion;
     }
   } catch (_) {
     /* offline — skip */
   }
-
-  setTimeout(pollDataVersion, DATA_POLL_INTERVAL);
 }
 
 function showUpdateBanner() {
@@ -99,9 +96,9 @@ function showUpdateBanner() {
 }
 
 function applyUpdate() {
-  if (swRegistration?.waiting) {
-    swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
-  }
+  // El SW generado por Workbox corre skipWaiting+clientsClaim incondicionales
+  // y NO escucha mensajes (el antiguo postMessage SKIP_WAITING era dead code):
+  // recargar basta para tomar el código nuevo.
   globalThis.location.reload();
 }
 

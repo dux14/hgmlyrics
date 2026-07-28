@@ -1,5 +1,5 @@
 import sql from '../_lib/db.js';
-import { allowMethods, withErrors } from '../_lib/http.js';
+import { allowMethods, cachePublic, withErrors } from '../_lib/http.js';
 
 export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['GET'])) return;
@@ -13,6 +13,8 @@ export default withErrors(async (req, res) => {
            sections,
            album_order AS "albumOrder",
            cejilla,
+           voice_roster AS "voiceRoster",
+           schema_version AS "schemaVersion",
            key,
            created_at AS "createdAt",
            updated_at AS "updatedAt"
@@ -26,10 +28,14 @@ export default withErrors(async (req, res) => {
   });
 
   // sections is already a JS array from JSONB — no JSON.parse needed.
-  const versionRow =
-    await sql`SELECT COALESCE(EXTRACT(EPOCH FROM MAX(updated_at)) * 1000, 0)::bigint AS v FROM songs`;
-  const version = Number(versionRow[0].v);
+  const version = rows.reduce((m, r) => {
+    const t = r.updatedAt ? new Date(r.updatedAt).getTime() : 0;
+    return t > m ? t : m;
+  }, 0);
 
-  res.setHeader('Cache-Control', 'no-store');
+  // swr:0 — sin ventana de stale-while-revalidate: tras publicar/editar una
+  // canción el edge no debe servir la copia vieja hasta 24h mientras revalida
+  // en background (regresión vs. no-store de master).
+  cachePublic(res, { sMaxage: 60, swr: 0 });
   res.status(200).json({ songs, version });
 });

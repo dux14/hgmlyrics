@@ -42,28 +42,50 @@ export default withErrors(async (req, res) => {
     res.status(404).json({ error: 'Not found' });
     return;
   }
-  const { visible: _v, ...profile } = profileRows[0];
+  const profile = { ...profileRows[0] };
+  delete profile.visible;
 
-  const favoritesRows = await sql`
-    SELECT s.id, s.title, s.album, s.album_slug AS "albumSlug", s.cover_image AS "coverImage",
-           f.created_at AS "favoritedAt"
-    FROM favorites f
-    JOIN songs s ON s.id = f.song_id
-    WHERE f.user_id = ${profile.id}
-    ORDER BY f.created_at DESC
-  `;
-
-  const friendCountRow = await sql`
-    SELECT COUNT(*)::int AS count
-    FROM friendships
-    WHERE status = 'accepted'
-      AND (requester_id = ${profile.id} OR addressee_id = ${profile.id})
-  `;
+  // favorites, friendCount y friendStatus solo dependen de profile.id (ya
+  // resuelto arriba) y son lecturas independientes entre sí → Promise.all.
+  const [favoritesRows, friendCountRow, friendRows] = await Promise.all([
+    sql`
+      SELECT s.id, s.title, s.album, s.album_slug AS "albumSlug", s.cover_image AS "coverImage",
+             f.created_at AS "favoritedAt"
+      FROM favorites f
+      JOIN songs s ON s.id = f.song_id
+      WHERE f.user_id = ${profile.id}
+      ORDER BY f.created_at DESC
+    `,
+    sql`
+      SELECT COUNT(*)::int AS count
+      FROM friendships
+      WHERE status = 'accepted'
+        AND (requester_id = ${profile.id} OR addressee_id = ${profile.id})
+    `,
+    // Estado de amistad entre el visitante y el perfil consultado
+    sql`
+      SELECT status, requester_id, addressee_id
+      FROM friendships
+      WHERE (requester_id = ${viewer.id} AND addressee_id = ${profile.id})
+         OR (requester_id = ${profile.id} AND addressee_id = ${viewer.id})
+      LIMIT 1
+    `,
+  ]);
+  let friendStatus = 'none';
+  if (friendRows.length) {
+    const r = friendRows[0];
+    if (r.status === 'accepted') {
+      friendStatus = 'accepted';
+    } else if (r.status === 'pending') {
+      friendStatus = r.requester_id === viewer.id ? 'pending_out' : 'pending_in';
+    }
+  }
 
   res.status(200).json({
     profile,
     favorites: favoritesRows,
     friendCount: friendCountRow[0]?.count ?? 0,
     isOwn: profile.id === viewer.id,
+    friendStatus,
   });
 });

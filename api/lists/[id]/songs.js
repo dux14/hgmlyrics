@@ -76,9 +76,15 @@ export default withErrors(async (req, res) => {
 
   await sql.begin(async (tx) => {
     await tx`DELETE FROM ephemeral_list_items WHERE list_id = ${id}`;
-    for (let i = 0; i < ordered.length; i++) {
-      await tx`INSERT INTO ephemeral_list_items (list_id, item_type, item_id, position)
-               VALUES (${id}, ${ordered[i].item_type}, ${ordered[i].item_id}, ${i})`;
+    if (ordered.length > 0) {
+      // Un solo INSERT multi-fila en vez de un round-trip por item (hasta MAX_ITEMS).
+      const rows = ordered.map((item, i) => ({
+        list_id: id,
+        item_type: item.item_type,
+        item_id: item.item_id,
+        position: i,
+      }));
+      await tx`INSERT INTO ephemeral_list_items ${tx(rows, 'list_id', 'item_type', 'item_id', 'position')}`;
     }
     await tx`UPDATE ephemeral_lists SET updated_at = now() WHERE id = ${id}`;
   });

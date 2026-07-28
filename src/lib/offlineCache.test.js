@@ -35,16 +35,37 @@ describe('offlineCache prefetch gating', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/songs/all');
   });
 
-  it('no re-descarga si version no cambio', async () => {
+  it('siempre revalida contra el servidor pero no re-escribe si version no cambio', async () => {
     globalThis.matchMedia = () => ({ matches: false });
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ songs: [{ id: 1 }], version: 'v1' }),
     });
     vi.doMock('./fetchWithRetry.js', () => ({ fetchWithRetry: fetchMock }));
+    const idb = await import('idb-keyval');
     const { ensureSongsCached } = await import('./offlineCache.js');
     await ensureSongsCached();
+    const writesAfterFirst = idb.set.mock.calls.length;
     await ensureSongsCached();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2); // revalida SIEMPRE
+    expect(idb.set.mock.calls.length).toBe(writesAfterFirst); // pero no re-escribe
+  });
+
+  it('re-escribe cuando la version del servidor cambia', async () => {
+    globalThis.matchMedia = () => ({ matches: false });
+    let v = 'v1';
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ songs: [{ id: 1 }], version: v }),
+      }),
+    );
+    vi.doMock('./fetchWithRetry.js', () => ({ fetchWithRetry: fetchMock }));
+    const idb = await import('idb-keyval');
+    const { ensureSongsCached } = await import('./offlineCache.js');
+    await ensureSongsCached();
+    v = 'v2';
+    await ensureSongsCached();
+    expect(await idb.get('hkn-offline-version')).toBe('v2');
   });
 });

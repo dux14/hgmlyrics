@@ -72,8 +72,38 @@ function makeReq() {
   };
 }
 
+/** Construye un chunk PNG mínimo (length + tipo + data + CRC, sin validar CRC). */
+function pngChunk(type, data) {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length, 0);
+  return Buffer.concat([length, Buffer.from(type, 'ascii'), data, Buffer.alloc(4)]);
+}
+
+// Firmas reales (magic bytes) por mimetype, para que la detección real de
+// file-type (SEC: validación de contenido, no solo mimetype declarado) pase
+// en los casos que deben aceptarse. PNG requiere firma + chunk IHDR + IDAT,
+// no basta con los 8 bytes de cabecera.
+const MAGIC_BYTES = {
+  'image/png': Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk('IHDR', Buffer.alloc(13)),
+    pngChunk('IDAT', Buffer.alloc(0)),
+  ]),
+  'image/jpeg': Buffer.from([0xff, 0xd8, 0xff, 0xdb]),
+  'image/webp': Buffer.concat([
+    Buffer.from('RIFF', 'ascii'),
+    Buffer.from([0x00, 0x00, 0x00, 0x00]),
+    Buffer.from('WEBP', 'ascii'),
+  ]),
+};
+
 /** Simula formidable devolviendo un archivo con el mimetype dado. */
 function stubFile(mimetype) {
+  // Si conocemos la firma real de este mimetype, escríbela para que
+  // detectImageType (validación de contenido) coincida con lo declarado.
+  const bytes = MAGIC_BYTES[mimetype];
+  if (bytes) writeFileSync('/tmp/hgm-upload-test.bin', bytes);
+
   mockParse.mockResolvedValueOnce([
     {},
     {

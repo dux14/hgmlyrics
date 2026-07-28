@@ -1,0 +1,29 @@
+torch==2.4.1
+torchaudio==2.4.1
+audio-separator[gpu]==0.28.5
+demucs==4.0.1
+huggingface_hub==0.25.2
+httpx==0.27.2
+soundfile==0.12.1
+librosa==0.10.2
+numpy==1.26.4
+fastapi[standard]==0.115.6
+pyphen==0.15.0
+# whisperx 3.3.1: la 3.1.5 pinnea faster-whisper==1.0.1 -> av==11.* (sin wheel en
+# el mirror de Modal, que solo trae av>=12; compilar PyAV 11 falla por pkg-config
+# + ffmpeg 6). 3.3.1 usa faster-whisper==1.1.0 (av>=11 -> wheel de av 12) y mantiene
+# torch>=2 (compatible con torch==2.4.1) + pyannote.audio==3.3.2 (mismo que el
+# Estudio). La 3.3.4+ exige torch>=2.5.1 y rompe el pin. API de lyrics.py sin cambios.
+whisperx==3.3.1
+pyloudnorm==0.1.1
+torchcrepe==0.0.23
+torchfcpe==0.0.4
+git+https://github.com/asteroid-team/asteroid
+# ── M2 render/export (CPU puro, sin GPU) ─────────────────────────────────────
+cairosvg==2.7.1
+pretty_midi==0.2.10
+music21==9.1.0
+# NOTA: basic-pitch (M5 coro) NO va aqui a proposito. Arrastra tensorflow como
+# dependencia dura que chocaria con torch/whisperx/av — se instala aislado en
+# `choir_image` (pitch_app.py), solo para el nodo n_choir, para no poner en
+# riesgo el build del pipeline principal.

@@ -3,6 +3,11 @@ import { buildLetraLineHTML } from '../src/lib/lyricsRender.js';
 import { transposeChord, transposeNote, buildChordsLineHTML } from '../src/lib/lyricsRender.js';
 import { buildTonoLineHTML } from '../src/lib/lyricsRender.js';
 import { buildMixedLineHTML } from '../src/lib/lyricsRender.js';
+import {
+  transposeKey,
+  buildTransposeBubbleLabel,
+  buildCejillaHint,
+} from '../src/lib/lyricsRender.js';
 
 describe('buildLetraLineHTML', () => {
   it('devuelve texto escapado plano, sin wrappers ni color', () => {
@@ -38,7 +43,9 @@ describe('transposeChord', () => {
 describe('buildChordsLineHTML', () => {
   // visibleText: texto sin tags — la letra (sin las etiquetas flotantes) no debe partirse.
   const lyricsOnly = (html) =>
-    html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '').replace(/<[^>]*>/g, '');
+    html
+      .replace(/<span class="float-label[^"]*"><i>[^<]*<\/i><\/span>/g, '')
+      .replace(/<[^>]*>/g, '');
 
   it('acorde flota sin partir la palabra', () => {
     const html = buildChordsLineHTML('universo', [{ pos: 0, ch: 'D' }]);
@@ -77,7 +84,9 @@ describe('buildTonoLineHTML', () => {
     groups: [{ start: 0, end: 5, voiceId: 'sop1', note: 'B3' }],
   };
   const lyricsOnly = (html) =>
-    html.replace(/<span class="float-label[^"]*">[^<]*<\/span>/g, '').replace(/<[^>]*>/g, '');
+    html
+      .replace(/<span class="float-label[^"]*"><i>[^<]*<\/i><\/span>/g, '')
+      .replace(/<[^>]*>/g, '');
 
   it('la letra cantada de la voz activa va neutra (lyrics__tono-sung), no con el color de voz', () => {
     const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano');
@@ -129,6 +138,35 @@ describe('buildTonoLineHTML', () => {
     expect(html).not.toContain('voice-text--tenor');
     expect(html).toContain('lyrics__tono-dim');
     expect(lyricsOnly(html)).toBe('Santo es el Señor');
+  });
+
+  it('notation latin traduce la nota flotante preservando octava (FIX 2)', () => {
+    const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano', { notation: 'latin' });
+    expect(html).toContain('>Si3<');
+  });
+
+  it('sin opts (default anglo) deja la nota intacta', () => {
+    const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano');
+    expect(html).toContain('>B3<');
+  });
+
+  // Task 3 (renglon-foco-consistente-modos): CSS pinta la nota DEBAJO de la
+  // silaba con `flex-direction: column-reverse` sobre `.line-seg` — para que
+  // eso funcione, el label (float-label) debe seguir emitido ANTES que el
+  // texto de la silaba dentro del mismo .line-seg (mismo orden DOM que ya
+  // usa el modo Acordes; jsdom no mide layout, así que el contrato se
+  // verifica sobre el orden de los nodos, no sobre píxeles).
+  it('el label de la nota precede al texto de la sílaba dentro del mismo .line-seg (contrato de orden para CSS column-reverse)', () => {
+    const html = buildTonoLineHTML(line, 'sop1', 'voice-text--soprano');
+    document.body.innerHTML = `<div class="lyrics__line lyrics__line--tono">${html}</div>`;
+    const seg = document.querySelector('.line-seg.lyrics__tono-sung');
+    expect(seg).not.toBeNull();
+    const label = seg.querySelector(':scope > .float-label.tono-note');
+    expect(label).not.toBeNull();
+    expect(seg.firstElementChild).toBe(label);
+    // El label convive con el texto de la sílaba en el mismo .line-seg.
+    expect(seg.textContent).toContain('B3');
+    expect(seg.textContent).toContain('Santo');
   });
 });
 
@@ -250,7 +288,7 @@ describe('buildMixedLineHTML — carriles estrictos', () => {
 
   it('texto plano sin grupos ni acordes devuelve una línea dim íntegra', () => {
     const html = buildMixedLineHTML({ text: 'solo texto', groups: [] }, [], 'v1', '', {});
-    expect(html).toContain('solo texto');
+    expect(html.replace(/<[^>]*>/g, '')).toBe('solo texto');
     expect(html).toContain('lyrics__tono-dim');
   });
 
@@ -289,5 +327,116 @@ describe('buildMixedLineHTML — carriles estrictos', () => {
     const html = buildMixedLineHTML({ text: 'abc', groups: [] }, [], 'v1', '', {});
     expect(html).not.toContain('mix-rail--note "');
     expect(html).toContain('class="mix-rail mix-rail--note"');
+  });
+
+  it('notation latin traduce acorde Y nota del riel (FIX 2)', () => {
+    const html = buildMixedLineHTML(line, chords, 'v1', 'voice-text--tenor', { notation: 'latin' });
+    expect(html).toContain('>Re</i>');
+    expect(html).toContain('>Si3</i>');
+    expect(html).toContain('>La3</i>');
+  });
+
+  it('agrupa los .mix-seg de una palabra partida por una anotación en un .line-word, y el espacio va como texto plano entre palabras', () => {
+    const l = { text: 'contigooo caminando', groups: [] };
+    const html = buildMixedLineHTML(l, [{ pos: 5, ch: 'G' }], 'v1', 'voice-text--tenor', {});
+    const wordMatches = html.match(/<span class="line-word">/g) || [];
+    expect(wordMatches.length).toBe(2); // "contigooo" (partida por el ancla) + "caminando"
+    // el textContent del riel de letra (sin acorde/nota) se preserva exacto,
+    // incluido el espacio entre palabras.
+    const lyricOnly = html
+      .replace(/<span class="mix-rail mix-rail--chord">.*?<\/span>/g, '')
+      .replace(/<span class="mix-rail mix-rail--note[^"]*">.*?<\/span>/g, '')
+      .replace(/<[^>]*>/g, '');
+    expect(lyricOnly).toBe('contigooo caminando');
+  });
+
+  it('REGRESIÓN (review Important): un acorde anclado exactamente sobre el espacio entre "ab" y "cd" NO debe fusionar ambas palabras en un solo .line-word', () => {
+    const html = buildMixedLineHTML(
+      { text: 'ab cd', groups: [] },
+      [{ pos: 2, ch: 'G' }],
+      'v1',
+      'voice-text--tenor',
+      {},
+    );
+    const wordMatches = html.match(/<span class="line-word">/g) || [];
+    expect(wordMatches.length).toBe(2); // "ab" y "cd" siguen siendo .line-word independientes
+    const lyricOnly = html
+      .replace(/<span class="mix-rail mix-rail--chord">.*?<\/span>/g, '')
+      .replace(/<span class="mix-rail mix-rail--note[^"]*">.*?<\/span>/g, '')
+      .replace(/<[^>]*>/g, '');
+    expect(lyricOnly).toBe('ab cd');
+    expect(html).toContain('>G</i>');
+  });
+});
+
+describe('transposeKey (T3)', () => {
+  it('key mayor sin semitonos devuelve el símbolo anglo tal cual', () => {
+    expect(transposeKey('G major', 0)).toBe('G');
+  });
+
+  it('key menor agrega el sufijo m', () => {
+    expect(transposeKey('D minor', 0)).toBe('Dm');
+  });
+
+  it('transpone la raíz conservando el modo (Sol +2 → La)', () => {
+    expect(transposeKey('G major', 2)).toBe('A');
+  });
+
+  it('cejilla en 2 sobre D major suena en E', () => {
+    expect(transposeKey('D minor', 2)).toBe('Em');
+  });
+
+  it('respeta useFlats', () => {
+    expect(transposeKey('A major', 1, true)).toBe('Bb');
+  });
+
+  it('key inválida o vacía devuelve null', () => {
+    expect(transposeKey('')).toBeNull();
+    expect(transposeKey(null)).toBeNull();
+    expect(transposeKey('no es un tono')).toBeNull();
+  });
+});
+
+describe('buildTransposeBubbleLabel (T3)', () => {
+  it('con key y semitonos 0: "{tono} · Original" en notación latina', () => {
+    expect(buildTransposeBubbleLabel('G major', 0, false, 'latin')).toBe('Sol · Original');
+  });
+
+  it('con key transpuesta +2: Sol → La (latina)', () => {
+    expect(buildTransposeBubbleLabel('G major', 2, false, 'latin')).toBe('La · +2');
+  });
+
+  it('con key transpuesta negativa muestra el signo −', () => {
+    expect(buildTransposeBubbleLabel('G major', -1, false, 'latin')).toBe('Fa# · −1');
+  });
+
+  it('en notación anglo no traduce', () => {
+    expect(buildTransposeBubbleLabel('G major', 0, false, 'anglo')).toBe('G · Original');
+  });
+
+  it('sin key y semitonos 0: "0 · Original"', () => {
+    expect(buildTransposeBubbleLabel(null, 0, false, 'latin')).toBe('0 · Original');
+  });
+
+  it('sin key y semitonos +2: solo "+2"', () => {
+    expect(buildTransposeBubbleLabel(null, 2, false, 'latin')).toBe('+2');
+  });
+
+  it('sin key y semitonos negativos: "−3"', () => {
+    expect(buildTransposeBubbleLabel(undefined, -3, false, 'latin')).toBe('−3');
+  });
+});
+
+describe('buildCejillaHint (T3)', () => {
+  it('con key: "Cejilla {n} · suena en {tono real}" (D + cejilla 2 → Mi)', () => {
+    expect(buildCejillaHint('D major', 2, false, 'latin')).toBe('Cejilla 2 · suena en Mi');
+  });
+
+  it('en notación anglo no traduce', () => {
+    expect(buildCejillaHint('D major', 2, false, 'anglo')).toBe('Cejilla 2 · suena en E');
+  });
+
+  it('sin key cae al texto plano previo', () => {
+    expect(buildCejillaHint(null, 2, false, 'latin')).toBe('Cejilla: 2');
   });
 });

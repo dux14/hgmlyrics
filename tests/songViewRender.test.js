@@ -23,10 +23,9 @@ vi.mock('../src/router.js', () => ({
   navigate: vi.fn(),
 }));
 
-// Stub authStore — enable voz_tono for preview parity tests.
+// Stub authStore para tests de paridad de preview.
 vi.mock('../src/lib/authStore.js', () => ({
   isAdmin: vi.fn().mockReturnValue(false),
-  isFeatureEnabled: vi.fn((key) => key === 'voz_tono'),
 }));
 
 const { renderSections, renderVoicePanel } = await import('../src/components/SongView.js');
@@ -52,6 +51,32 @@ describe('renderSections (modo Letra)', () => {
     expect(html).not.toContain('voice-text--soprano');
     expect(html).not.toContain('voice-badge-extra');
     expect(html).not.toContain('chord-label');
+  });
+});
+
+describe('renderSections — identidad visual por tipo de sección', () => {
+  it('type conocido (coro) produce la clase del tipo', () => {
+    const html = renderSections(
+      [{ type: 'chorus', label: 'Coro', lines: [{ text: 'la la' }] }],
+      { viewMode: 'lyrics' },
+    );
+    expect(html).toContain('lyrics__section--chorus');
+  });
+
+  it('sinónimo en español (estribillo) normaliza a chorus', () => {
+    const html = renderSections(
+      [{ type: 'estribillo', label: 'Coro', lines: [{ text: 'la la' }] }],
+      { viewMode: 'lyrics' },
+    );
+    expect(html).toContain('lyrics__section--chorus');
+  });
+
+  it('type desconocido cae al fallback verse', () => {
+    const html = renderSections(
+      [{ type: 'algo-raro', label: 'X', lines: [{ text: 'la la' }] }],
+      { viewMode: 'lyrics' },
+    );
+    expect(html).toContain('lyrics__section--verse');
   });
 });
 
@@ -195,7 +220,7 @@ describe('renderVoicePanel', () => {
 });
 
 describe('preview del editor — paridad de voz', () => {
-  it('renderSongView en modo preview incluye filtros de Tono y panel Voz', async () => {
+  it('renderSongView en modo preview incluye el panel Voz (selector único, sin chips del hero)', async () => {
     const { renderSongView } = await import('../src/components/SongView.js');
     const container = document.createElement('div');
     const draft = {
@@ -218,7 +243,7 @@ describe('preview del editor — paridad de voz', () => {
       ],
     };
     await renderSongView(container, draft);
-    expect(container.querySelector('#tono-filters')).not.toBeNull();
+    expect(container.querySelector('#hero-voice-chips')).toBeNull();
     expect(container.querySelector('#voice-panel')).not.toBeNull();
   });
 });

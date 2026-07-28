@@ -1,5 +1,6 @@
 import sql from '../_lib/db.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
+import { timingSafeEqualStr } from '../_lib/crypto.js';
 import { deleteStemsPrefix } from '../_lib/storage.js';
 
 // Vercel cron manda Authorization: Bearer ${CRON_SECRET}
@@ -7,7 +8,8 @@ export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['GET'])) return;
   const auth = req.headers?.authorization ?? '';
   const secret = process.env.CRON_SECRET;
-  if (!secret || auth !== `Bearer ${secret}`) {
+  const expected = secret ? `Bearer ${secret}` : null;
+  if (!expected || !timingSafeEqualStr(auth, expected)) {
     res.status(401).json({ error: 'No autorizado' });
     return;
   }
@@ -17,8 +19,16 @@ export default withErrors(async (req, res) => {
     SELECT id, user_id FROM stem_jobs
     WHERE status = 'done' AND expires_at < now()
   `;
-  for (const job of expired) {
-    await deleteStemsPrefix(`${job.user_id}/${job.id}`);
+  // Perf: el borrado de Storage de cada job es independiente — Promise.allSettled evita
+  // que un borrado fallido aborte el resto (y por ende el cron, maxDuration=60s).
+  const purgeResults = await Promise.allSettled(
+    expired.map((job) => deleteStemsPrefix(`${job.user_id}/${job.id}`)),
+  );
+  // Solo marcar 'expired' los jobs cuyo storage se borró de verdad. Si el borrado falla,
+  // el job sigue 'done' con expires_at pasado y el próximo cron lo reintenta — evita
+  // storage huérfano que un 'expired' (que nunca se revisita) dejaría para siempre.
+  const purged = expired.filter((_, i) => purgeResults[i].status === 'fulfilled');
+  for (const job of purged) {
     await sql`
       UPDATE stem_jobs SET status = 'expired', stems = NULL, voices = NULL,
         input_path = NULL, updated_at = now()
@@ -35,9 +45,7 @@ export default withErrors(async (req, res) => {
       AND updated_at < now() - interval '30 minutes'
     RETURNING id, user_id
   `;
-  for (const job of zombies) {
-    await deleteStemsPrefix(`${job.user_id}/${job.id}`);
-  }
+  await Promise.allSettled(zombies.map((job) => deleteStemsPrefix(`${job.user_id}/${job.id}`)));
 
   // 3) Uploads abandonados: created/uploaded > 24h → failed + limpiar
   const abandoned = await sql`
@@ -45,9 +53,7 @@ export default withErrors(async (req, res) => {
     WHERE status IN ('created', 'uploaded') AND created_at < now() - interval '24 hours'
     RETURNING id, user_id
   `;
-  for (const job of abandoned) {
-    await deleteStemsPrefix(`${job.user_id}/${job.id}`);
-  }
+  await Promise.allSettled(abandoned.map((job) => deleteStemsPrefix(`${job.user_id}/${job.id}`)));
 
   // 4) Failed con storage huérfano: borrar archivos y limpiar paths (una sola vez).
   // Cubre los reclamados por POST /jobs, zombis y fallos del webhook: ninguno de esos
@@ -57,9 +63,9 @@ export default withErrors(async (req, res) => {
     WHERE status = 'failed' AND input_path IS NOT NULL
     RETURNING id, user_id
   `;
-  for (const job of orphanStorage) {
-    await deleteStemsPrefix(`${job.user_id}/${job.id}`);
-  }
+  await Promise.allSettled(
+    orphanStorage.map((job) => deleteStemsPrefix(`${job.user_id}/${job.id}`)),
+  );
 
   // Listas efímeras caducadas: borrar (cascadea a songs y members)
   const expiredLists = await sql`
@@ -67,7 +73,7 @@ export default withErrors(async (req, res) => {
   `;
 
   res.status(200).json({
-    expired: expired.length,
+    expired: purged.length,
     zombies: zombies.length,
     abandoned: abandoned.length,
     failedStorage: orphanStorage.length,

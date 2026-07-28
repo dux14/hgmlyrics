@@ -27,45 +27,80 @@ describe('WeeklyWordView', () => {
     container.remove();
   });
 
-  it('renderiza el hero con gospel_ref y eyebrow (logo gospel, sin paloma)', async () => {
+  it('renderiza el hero con el título litúrgico y eyebrow (logo gospel, sin paloma)', async () => {
     await renderWeeklyWordView(container, SAMPLE_WORD);
     expect(container.innerHTML).not.toContain('🕊');
     expect(container.innerHTML).toContain('Palabra de la semana');
     expect(container.innerHTML).toContain('<svg');
-    expect(container.innerHTML).toContain('Jn 14,6');
+    const titleEl = container.querySelector('.voz-view__title');
+    expect(titleEl).toBeTruthy();
+    expect(titleEl.textContent).toContain('XI Domingo del Tiempo Ordinario');
   });
 
-  it('renderiza el separador 6b ✦ Reflexión', async () => {
+  it('renderiza la píldora de tiempo litúrgico con el label del color', async () => {
     await renderWeeklyWordView(container, SAMPLE_WORD);
-    expect(container.innerHTML).toContain('✦ Reflexión');
+    const pillEl = container.querySelector('.voz-view__pill');
+    expect(pillEl).toBeTruthy();
+    expect(pillEl.textContent).toContain('Tiempo Ordinario');
+    expect(pillEl.querySelector('.voz-view__pill-dot')).toBeTruthy();
   });
 
-  it('la reflexión usa white-space: pre-wrap', async () => {
-    await renderWeeklyWordView(container, SAMPLE_WORD);
-    const reflectionEl = container.querySelector('.voz__reflection');
-    expect(reflectionEl).toBeTruthy();
-    expect(reflectionEl.style.whiteSpace).toMatch(/pre-wrap/);
-  });
-
-  it('el separador ✦ Reflexión tiene color según liturgical_color green', async () => {
+  it('renderiza el separador Reflexión con icono SVG (F2c: icono lucide, no ✦)', async () => {
     await renderWeeklyWordView(container, SAMPLE_WORD);
     const sepEl = container.querySelector('.voz__reflection-sep');
     expect(sepEl).toBeTruthy();
-    // El color accent de 'green' es #4caf82; jsdom lo normaliza a rgb()
-    const colorVal = sepEl.style.color;
-    expect(colorVal === '#4caf82' || colorVal === 'rgb(76, 175, 130)').toBe(true);
+    // F2c: el separador contiene el texto "Reflexión" y un SVG lucide (no el carácter ✦)
+    expect(sepEl.textContent).toContain('Reflexión');
+    expect(sepEl.querySelector('svg')).toBeTruthy();
   });
 
-  it('renderiza el bloque evangelio con gospel_body', async () => {
+  it('la reflexión tiene clase voz__prose (F2c: white-space via CSS, no inline)', async () => {
     await renderWeeklyWordView(container, SAMPLE_WORD);
+    const reflectionEl = container.querySelector('.voz__reflection');
+    expect(reflectionEl).toBeTruthy();
+    // F2c: white-space: pre-wrap vive en .voz__prose; el elemento tiene ambas clases
+    expect(reflectionEl.classList.contains('voz__prose')).toBe(true);
+  });
+
+  it('el separador Reflexión usa --color-action via CSS (F2c: sin inline color)', async () => {
+    await renderWeeklyWordView(container, SAMPLE_WORD);
+    const sepEl = container.querySelector('.voz__reflection-sep');
+    expect(sepEl).toBeTruthy();
+    // F2c: color gestionado por CSS (.voz__reflection-sep { color: var(--color-action) }),
+    // no por inline style — el inline color debe estar vacío
+    expect(sepEl.style.color).toBe('');
+  });
+
+  it('renderiza el bloque evangelio como details colapsado con gospel_body', async () => {
+    await renderWeeklyWordView(container, SAMPLE_WORD);
+    const detailsEl = container.querySelector('details.voz-view__gospel');
+    expect(detailsEl).toBeTruthy();
+    expect(detailsEl.open).toBe(false);
     expect(container.innerHTML).toContain('Fuente: Ordo');
     expect(container.innerHTML).toContain('Nadie llega al Padre sino por mí');
   });
 
-  it('muestra botón Editar solo para admins', async () => {
+  it('muestra botón Editar ancho-completo solo para admins, fuera de la toolbar', async () => {
     const { isAdmin } = await import('../src/lib/authStore.js');
     isAdmin.mockReturnValue(true);
     await renderWeeklyWordView(container, SAMPLE_WORD);
-    expect(container.querySelector('[data-action="edit-voz"]')).toBeTruthy();
+    const editBtn = container.querySelector('[data-action="edit-voz"]');
+    expect(editBtn).toBeTruthy();
+    expect(editBtn.classList.contains('voz-view__edit-cta')).toBe(true);
+    expect(container.querySelector('.voz-view__toolbar [data-action="edit-voz"]')).toBeNull();
+  });
+
+  it('no muestra botón Editar para no-admins', async () => {
+    const { isAdmin } = await import('../src/lib/authStore.js');
+    isAdmin.mockReturnValue(false);
+    await renderWeeklyWordView(container, SAMPLE_WORD);
+    expect(container.querySelector('[data-action="edit-voz"]')).toBeNull();
+  });
+
+  it('integra los controles de fuente dentro del hero, sin toolbar aparte', async () => {
+    await renderWeeklyWordView(container, SAMPLE_WORD);
+    expect(container.querySelector('.voz-view__hero #voz-font-inc')).toBeTruthy();
+    expect(container.querySelector('.voz-view__hero #voz-font-dec')).toBeTruthy();
+    expect(container.querySelector('.voz-view__toolbar')).toBeNull();
   });
 });

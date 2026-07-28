@@ -9,7 +9,7 @@ vi.mock('../styles/song-links.css', () => ({}));
 vi.mock('../lib/store.js', () => ({
   fetchSongDetail: vi.fn(),
 }));
-vi.mock('../router.js', () => ({ navigate: vi.fn() }));
+vi.mock('../router.js', () => ({ navigate: vi.fn(), goBack: vi.fn() }));
 vi.mock('../lib/voiceSystem.js', () => ({
   VOICE_TYPES: [],
   VOICE_LINK_TYPES: [],
@@ -20,6 +20,15 @@ vi.mock('../lib/icons.js', () => ({ icon: vi.fn(() => '') }));
 
 import { renderSongLinks } from './SongLinks.js';
 import { fetchSongDetail } from '../lib/store.js';
+
+// Helper: cede el event-loop hasta que fn() devuelve verdadero o se agotan los intentos.
+// Necesario porque renderAsyncRegion pinta la región async (fetcher().then(...)).
+const waitFor = async (fn, tries = 50) => {
+  for (let i = 0; i < tries; i++) {
+    await Promise.resolve();
+    if (fn()) return;
+  }
+};
 
 const BASE_SONG = {
   id: 'song-1',
@@ -55,7 +64,8 @@ describe('renderSongLinks — SEC-03: year, genre, key escapados', () => {
     fetchSongDetail.mockResolvedValue(song);
 
     const container = document.createElement('div');
-    await renderSongLinks(container, 'song-1');
+    renderSongLinks(container, 'song-1');
+    await waitFor(() => container.querySelector('.slinks__year'));
 
     // No debe haber <img> con onerror en el DOM
     expect(container.querySelector('img[onerror]')).toBeNull();
@@ -84,7 +94,8 @@ describe('renderSongLinks — SEC-X1: javascript: href bloqueado en platform lin
 
     // VOICE_TYPES vacío → no voice cards; necesitamos PLATFORMS con youtube definido
     const container = document.createElement('div');
-    await renderSongLinks(container, 'song-1');
+    renderSongLinks(container, 'song-1');
+    await waitFor(() => container.querySelector('.slinks-platform-card'));
 
     const link = container.querySelector('.slinks-platform-card');
     // safeUrl devuelve '' para javascript: → href queda vacío
@@ -108,7 +119,8 @@ describe('renderSongLinks — SEC-X1: javascript: href bloqueado en platform lin
     );
 
     const container = document.createElement('div');
-    await renderSongLinks(container, 'song-1');
+    renderSongLinks(container, 'song-1');
+    await waitFor(() => container.querySelector('.slinks-platform-card'));
 
     const link = container.querySelector('.slinks-platform-card');
     expect(link).not.toBeNull();

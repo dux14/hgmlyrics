@@ -12,10 +12,18 @@ vi.mock('../src/lib/stemsApi.js', () => ({
 }));
 vi.mock('../src/lib/authStore.js', () => ({
   getSession: () => ({ access_token: 'tok' }),
+  signOut: vi.fn(() => Promise.resolve()),
 }));
 
 const stemsApi = await import('../src/lib/stemsApi.js');
+const authStore = await import('../src/lib/authStore.js');
 const { renderStudioPage } = await import('../src/components/StudioPage.js');
+const { initRouter, navigate } = await import('../src/router.js');
+
+// El teardown de StudioPage cuelga de onRouteChange (B2, no de 'hashchange'
+// crudo): initRouter() activa el listener real que traduce hashchange/
+// navigate() en la notificacion de ruta.
+initRouter();
 
 // Fixture de job done con las 4 secciones y datos firmados
 const JOB_DONE_FIXTURE = {
@@ -65,7 +73,6 @@ describe('renderStudioPage', () => {
     renderStudioPage(container);
     await vi.waitFor(() => expect(container.querySelector('.studio-dropzone')).not.toBeNull());
     expect(container.textContent).toContain('Estudio');
-    expect(container.querySelector('.badge--beta')).not.toBeNull();
     expect(container.textContent).toContain('25 MB');
     expect(container.textContent).toContain('2 de 3'); // cuota restante hoy
   });
@@ -219,8 +226,9 @@ describe('renderStudioPage', () => {
     const callsAfterFirstTick = stemsApi.getJob.mock.calls.length;
     expect(callsAfterFirstTick).toBeGreaterThan(0);
 
-    // Disparar hashchange — en jsdom el hash es '' (no '#/estudio'), la guarda detiene el polling
-    window.dispatchEvent(new Event('hashchange'));
+    // Disparar hashchange real (no synthetic Event): jsdom pasa a '#/otra',
+    // fuera de #/estudio, la guarda detiene el polling.
+    window.location.hash = '#/otra';
 
     // Forzar que cualquier promesa pendiente se resuelva antes de avanzar timers
     await Promise.resolve();
@@ -228,6 +236,50 @@ describe('renderStudioPage', () => {
     // Avanzar 3 ticks más — no debe haber nuevas llamadas a getJob
     await vi.advanceTimersByTimeAsync(15100);
     expect(stemsApi.getJob.mock.calls.length).toBe(callsAfterFirstTick);
+  });
+
+  it('B2: navigate(path, {replace:true}) tambien detiene el polling (no solo hashchange)', async () => {
+    stemsApi.listJobs.mockResolvedValueOnce({
+      jobs: [{ id: 'j1', status: 'processing' }],
+      quota: { used: 1, limit: 3 },
+    });
+    stemsApi.getJob.mockResolvedValue({ job: { id: 'j1', status: 'processing' } });
+
+    renderStudioPage(container);
+    await vi.waitFor(() => expect(stemsApi.getJob).toHaveBeenCalled());
+    await vi.advanceTimersByTimeAsync(5100);
+    const callsAfterFirstTick = stemsApi.getJob.mock.calls.length;
+    expect(callsAfterFirstTick).toBeGreaterThan(0);
+
+    // replaceState (logout/expiracion de sesion via guardedRoute) no dispara
+    // 'hashchange' — solo onRouteChange lo cubre.
+    navigate('/otra-pantalla-replace', { replace: true });
+    await Promise.resolve();
+
+    await vi.advanceTimersByTimeAsync(15100);
+    expect(stemsApi.getJob.mock.calls.length).toBe(callsAfterFirstTick);
+  });
+
+  it('#1 sesión expirada (401) durante el polling: corta el poll y lleva al login, sin quedar "procesando" para siempre', async () => {
+    stemsApi.listJobs.mockResolvedValueOnce({
+      jobs: [{ id: 'j1', status: 'processing' }],
+      quota: { used: 1, limit: 3 },
+    });
+    stemsApi.getJob.mockResolvedValueOnce({ job: { id: 'j1', status: 'processing' } });
+    const authErr = new Error('No autorizado');
+    authErr.status = 401;
+    stemsApi.getJob.mockRejectedValue(authErr);
+
+    window.location.hash = '#/estudio';
+    renderStudioPage(container);
+    await vi.waitFor(() => expect(stemsApi.getJob).toHaveBeenCalled());
+    // El tick de seguridad (30s) dispara el próximo getJob, que ahora rechaza con 401.
+    await vi.advanceTimersByTimeAsync(30100);
+    await vi.waitFor(() => expect(authStore.signOut).toHaveBeenCalled());
+
+    expect(window.location.hash).toBe('#/login?next=%2Festudio');
+    // No debe quedar mostrando "procesando" indefinidamente.
+    expect(container.textContent).not.toContain('Procesando');
   });
 
   it('job failed: mensaje y reintentar', async () => {

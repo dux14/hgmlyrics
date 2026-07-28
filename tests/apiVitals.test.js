@@ -37,4 +37,22 @@ describe('validateVital', () => {
   it('rechaza attribution.target no serializable', () => {
     expect(validateVital({ metric: 'INP', value: 50, attribution: { target: { a: 1 } } })).toBe(false);
   });
+  it('rechaza attribution con un campo extra arbitrariamente grande (evita filas de varios MB)', () => {
+    expect(
+      validateVital({
+        metric: 'INP',
+        value: 50,
+        attribution: { target: 'ok', junk: 'A'.repeat(3000) },
+      }),
+    ).toBe(false);
+  });
+  it('acepta attribution dentro del tope de tamaño', () => {
+    expect(
+      validateVital({
+        metric: 'INP',
+        value: 50,
+        attribution: { target: 'ok', eventTarget: 'button', loadState: 'complete' },
+      }),
+    ).toBe(true);
+  });
 });

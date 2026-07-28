@@ -212,17 +212,27 @@ def separate_lead_backing(vocals_path: str) -> dict:
     }
 
 
-def run_medley_vox(payload: dict) -> None:
+def run_medley_vox(
+    payload: dict,
+    section: str = "leadBacking",
+    labels: tuple[str, str] = ("lead", "backing"),
+) -> None:
     """
-    Nodo S3: separa voz líder y coros de la pista vocal con MedleyVox.
+    Nodo MedleyVox: separa dos fuentes de la pista vocal (lead/backing por
+    energía RMS, o dos identidades de cantante en el caso de `duet`).
+
+    Generalizado en Task 12 para servir tanto a la sección legacy
+    `leadBacking` (defaults de esta función, sin cambio de comportamiento)
+    como a la nueva sección opt-in `duet` (section="duet",
+    labels=("voice_a", "voice_b")), reusando la misma inferencia MedleyVox.
 
     Flujo:
       1. Re-extrae vocal desde el audio original (get_url del payload).
       2. Carga el checkpoint Cyru5/MedleyVox@"vocals 238" via huggingface_hub.
       3. Inferencia MedleyVox → dos fuentes (out_wav_1, out_wav_2).
-      4. Asigna lead/backing por energía RMS.
-      5. Sube ambas pistas con upload_put.
-      6. Postea webhook leadBacking.
+      4. Asigna las etiquetas `labels` por energía RMS (mayor RMS = labels[0]).
+      5. Sube ambas pistas con upload_put a payload["uploads"][section].
+      6. Postea webhook `section`.
 
     En excepción postea webhook failed y re-lanza (Modal registra el fallo).
     """
@@ -238,22 +248,26 @@ def run_medley_vox(payload: dict) -> None:
 
     job_id: str = payload["jobId"]
     get_url: str = payload["input"]["getUrl"]
-    uploads_lb: dict = payload.get("uploads", {}).get("leadBacking", {})
+    uploads_section: dict = payload.get("uploads", {}).get(section, {})
     webhook: dict = payload["webhook"]
+    label_a, label_b = labels
 
     try:
         # ── 1. Re-extraer stem vocal desde el audio original ─────────────────
         vocals_path = extract_vocals_stem(get_url)
 
-        # ── 2. Inferencia MedleyVox (lead/backing por RMS + transcode mp3) ───
+        # ── 2. Inferencia MedleyVox (RMS mayor → labels[0] + transcode mp3) ──
         sep = separate_lead_backing(vocals_path)
 
         # ── 3. Subir pistas y recopilar keys ─────────────────────────────────
         outputs: dict[str, str] = {}
-        for track, tmp_path in (("lead", sep["lead_mp3"]), ("backing", sep["backing_mp3"])):
-            put_url = uploads_lb.get(track)
+        for track, tmp_path in (
+            (label_a, sep["lead_mp3"]),
+            (label_b, sep["backing_mp3"]),
+        ):
+            put_url = uploads_section.get(track)
             if not put_url:
-                # SUPUESTO: si no hay PUT URL para la pista (leadBacking no habilitado
+                # SUPUESTO: si no hay PUT URL para la pista (sección no habilitada
                 # en el payload), se omite silenciosamente y el output queda vacío.
                 continue
             upload_put(put_url, tmp_path, content_type="audio/mpeg")
@@ -270,7 +284,7 @@ def run_medley_vox(payload: dict) -> None:
         post_webhook(
             webhook,
             job_id,
-            section="leadBacking",
+            section=section,
             result={
                 "status": "done",
                 "model": _MODEL_LABEL,
@@ -284,7 +298,7 @@ def run_medley_vox(payload: dict) -> None:
             post_webhook(
                 webhook,
                 job_id,
-                section="leadBacking",
+                section=section,
                 result={
                     "status": "failed",
                     "model": _MODEL_LABEL,

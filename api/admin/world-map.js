@@ -1,7 +1,7 @@
 import sql from '../_lib/db.js';
 import { requireAdmin } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
-import { validateTiledMap } from '../_lib/validateTiledMap.js';
+import { validateTiledMap } from '../../src/lib/validateTiledMap.js';
 
 // GET  → { maps: [{ id, name, is_active, updated_at }] }  (ordenados por updated_at desc)
 // POST action:"create"   body: { action:"create", name, tiledJson, tilesetUrl }

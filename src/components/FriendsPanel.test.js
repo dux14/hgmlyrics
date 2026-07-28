@@ -1,66 +1,97 @@
-import { describe, it, expect, vi } from 'vitest';
+// FriendsPanel.test.js — T4.1: no debe atascarse offline (botón + toast).
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+vi.mock('../styles/friends.css', () => ({}));
 vi.mock('../lib/authStore.js', () => ({
-  getSession: vi.fn(() => ({ user: { id: 'me' }, access_token: 't' })),
+  getSession: () => ({ user: { id: 'viewer1' }, access_token: 'tok' }),
 }));
 vi.mock('../lib/friends.js', () => ({ emitPendingChanged: vi.fn() }));
 
-import { buildTabs, buildFriendItem } from './FriendsPanel.js';
+const showToastMock = vi.fn();
+vi.mock('../lib/toast.js', () => ({ showToast: (...args) => showToastMock(...args) }));
 
-describe('buildTabs', () => {
-  it('pinta el contador en Recibidas y roles ARIA', () => {
-    const el = document.createElement('div');
-    el.innerHTML = buildTabs('accepted', 3);
-    const inc = el.querySelector('[data-tab="incoming"]');
-    expect(inc.getAttribute('role')).toBe('tab');
-    expect(inc.querySelector('.seg-tab__count').textContent).toBe('3');
+import { renderFriendsPanel } from './FriendsPanel.js';
+
+const jsonRes = (body) => ({ ok: true, status: 200, json: () => Promise.resolve(body) });
+
+const FRIENDS_PAYLOAD = {
+  accepted: [],
+  pendingIncoming: [
+    {
+      requesterId: 'u3',
+      requesterUsername: 'bob',
+      requesterDisplayName: 'Bob',
+      requesterAvatarUrl: null,
+      addresseeId: 'viewer1',
+    },
+  ],
+  pendingOutgoing: [],
+};
+
+const SEARCH_PAYLOAD = {
+  results: [{ id: 'u2', username: 'ana', displayName: 'Ana', avatarUrl: null, relation: 'none' }],
+};
+
+/** Reads GET (búsqueda/lista) resuelven ok; cualquier mutación (POST/PATCH/DELETE) simula offline. */
+function makeOfflineMutationsFetch() {
+  return vi.fn((url, opts = {}) => {
+    const method = opts.method || 'GET';
+    if (method !== 'GET') return Promise.reject(new TypeError('Failed to fetch'));
+    if (url.includes('/api/social/search')) return Promise.resolve(jsonRes(SEARCH_PAYLOAD));
+    if (url.includes('/api/social/friends')) return Promise.resolve(jsonRes(FRIENDS_PAYLOAD));
+    return Promise.reject(new TypeError('Failed to fetch'));
   });
-  it('marca aria-selected en la tab activa', () => {
-    const el = document.createElement('div');
-    el.innerHTML = buildTabs('incoming', 0);
-    expect(el.querySelector('[data-tab="incoming"]').getAttribute('aria-selected')).toBe('true');
-  });
-  it('oculta el contador cuando es 0', () => {
-    const el = document.createElement('div');
-    el.innerHTML = buildTabs('accepted', 0);
-    expect(el.querySelector('[data-tab="incoming"] .seg-tab__count')).toBeFalsy();
-  });
+}
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function mount() {
+  const container = document.createElement('div');
+  renderFriendsPanel(container);
+  return container;
+}
+
+beforeEach(() => {
+  showToastMock.mockClear();
+  vi.stubGlobal('fetch', makeOfflineMutationsFetch());
 });
 
-describe('buildFriendItem', () => {
-  const item = {
-    requesterId: 'other',
-    requesterUsername: 'leo',
-    requesterDisplayName: 'Leo',
-    requesterAvatarUrl: '',
-  };
-  it('Aceptar usa la píldora primary en incoming', () => {
-    const el = document.createElement('div');
-    el.innerHTML = buildFriendItem(item, 'me', 'incoming');
-    const accept = el.querySelector('[data-act="accept"]');
-    expect(accept.classList.contains('pill--primary')).toBe(true);
-  });
-  it('avatar a color cuando no hay imagen', () => {
-    const el = document.createElement('div');
-    el.innerHTML = buildFriendItem(item, 'me', 'accepted');
-    expect(el.querySelector('.friend-card__avatar')).toBeTruthy();
+describe('FriendsPanel offline', () => {
+  it('(a)+(b) sendAdd restaura el botón y avisa con toast si la red falla', async () => {
+    const container = mount();
+    await wait(10); // deja resolver la carga inicial (GET friends)
+
+    const searchInput = container.querySelector('#friends-search');
+    searchInput.value = 'an';
+    searchInput.dispatchEvent(new Event('input'));
+    await wait(350); // debounce interno de 300ms + runSearch
+
+    const btn = container.querySelector('button[data-act="add"]');
+    expect(btn).toBeTruthy();
+    const prevLabel = btn.textContent;
+
+    btn.click();
+    await wait(10);
+
+    expect(btn.disabled).toBe(false);
+    expect(btn.textContent).toBe(prevLabel);
+    expect(showToastMock).toHaveBeenCalledWith('Sin conexión. Intenta de nuevo.', {
+      type: 'error',
+    });
   });
 
-  it('SEC-01: avatarUrl XSS payload no produce atributo onerror en el DOM', () => {
-    const maliciousItem = {
-      requesterId: 'attacker',
-      requesterUsername: 'attacker',
-      requesterDisplayName: 'Attacker',
-      requesterAvatarUrl: '" onerror="alert(1)" x="',
-    };
-    const el = document.createElement('div');
-    el.innerHTML = buildFriendItem(maliciousItem, 'me', 'incoming');
-    const img = el.querySelector('img.friend-card__avatar');
-    // The img must exist (avatar was non-empty) and must NOT have an onerror attribute
-    expect(img).toBeTruthy();
-    expect(img.getAttribute('onerror')).toBeNull();
-    // The src attribute value must contain the literal payload text (escaped), not execute it
-    // i.e. the double-quote in the payload must have been escaped to &quot; so the attribute
-    // boundary was never broken — confirmed by the absence of the onerror DOM attribute above.
+  it('(c) doAction no deja el estado colgado y avisa con el mismo toast si la red falla', async () => {
+    const container = mount();
+    await wait(10);
+
+    const btn = container.querySelector('button[data-act="accept"]');
+    expect(btn).toBeTruthy();
+
+    btn.click();
+    await wait(10);
+
+    expect(showToastMock).toHaveBeenCalledWith('Sin conexión. Intenta de nuevo.', {
+      type: 'error',
+    });
   });
 });

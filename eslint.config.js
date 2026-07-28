@@ -14,6 +14,8 @@ export default [
         sessionStorage: 'readonly',
         location: 'readonly',
         fetch: 'readonly',
+        AbortSignal: 'readonly',
+        AbortController: 'readonly',
         caches: 'readonly',
         crypto: 'readonly',
         indexedDB: 'readonly',
@@ -54,6 +56,8 @@ export default [
         alert: 'readonly',
         NodeFilter: 'readonly',
         IntersectionObserver: 'readonly',
+        ResizeObserver: 'readonly',
+        getComputedStyle: 'readonly',
         XMLHttpRequest: 'readonly',
       },
     },
@@ -62,7 +66,9 @@ export default [
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       'prefer-const': 'error',
       'no-var': 'error',
-      eqeqeq: ['error', 'always'],
+      // `null: 'ignore'` permite el idiom `x == null`, que captura null y
+      // undefined en una sola comparación.
+      eqeqeq: ['error', 'always', { null: 'ignore' }],
       curly: ['error', 'multi-line'],
     },
   },
@@ -82,6 +88,7 @@ export default [
         clearInterval: 'readonly',
         URL: 'readonly',
         global: 'readonly',
+        structuredClone: 'readonly',
       },
     },
     rules: {
@@ -89,10 +96,20 @@ export default [
     },
   },
   {
+    // Archivos de configuración de build (Node, ESM): usan `process.env`.
+    files: ['vite.config.js', 'vitest.config.js'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+      },
+    },
+  },
+  {
     // Vitest test files use globals (`describe`, `it`, `expect`, `beforeEach`, …)
-    // because `globals: true` is set in vitest.config.js.
-    // Pattern covers both tests/ (integration) and src/**/*.test.js (unit).
-    files: ['tests/**/*.js', 'src/**/*.test.js'],
+    // because `globals: true` is set in vitest.config.js. e2e/**/*.js son specs
+    // Playwright (Node, sin globals de vitest) pero comparten process/Buffer/etc.
+    // Pattern covers tests/ (integration), src/**/*.test.js (unit) y e2e/ (Playwright).
+    files: ['tests/**/*.js', 'src/**/*.test.js', 'e2e/**/*.js'],
     languageOptions: {
       globals: {
         describe: 'readonly',
@@ -112,6 +129,8 @@ export default [
         Headers: 'readonly',
         KeyboardEvent: 'readonly',
         queueMicrotask: 'readonly',
+        getComputedStyle: 'readonly',
+        structuredClone: 'readonly',
       },
     },
   },

@@ -1,8 +1,9 @@
 /**
- * StudioPage.js — Estudio de pistas (BETA): sube un audio, sepáralo en stems
+ * StudioPage.js — Estudio de pistas: sube un audio, sepáralo en stems
  * y divide la pista vocal (líder/coros + segmentos por cantante).
  * Estados: idle → uploading → processing → done | failed.
  */
+import '../styles/studio.css';
 import { icon } from '../lib/icons.js';
 import { SECTION_KEYS, sectionLabel } from '../lib/studioSections.js';
 import {
@@ -15,8 +16,13 @@ import {
   watchJobRealtime,
   updateJobTitle,
 } from '../lib/stemsApi.js';
-import { getSession } from '../lib/authStore.js';
-import { downloadAllZip, buildTrackList, songBaseName, downloadSectionZip } from '../lib/studioZip.js';
+import { getSession, signOut } from '../lib/authStore.js';
+import {
+  downloadAllZip,
+  buildTrackList,
+  songBaseName,
+  downloadSectionZip,
+} from '../lib/studioZip.js';
 import { getDriveToken } from '../lib/driveAuth.js';
 import { uploadTracksToDrive } from '../lib/driveUpload.js';
 import { createActionButton } from '../lib/studioActionButton.js';
@@ -27,9 +33,13 @@ import { renderTimeline, markActive } from './StudioSectionTimeline.js';
 import { renderSectionCard } from './StudioSectionCard.js';
 import { escapeHtml as escHtml, safeUrl } from '../lib/escape.js';
 import { subscribe, isOffline } from '../lib/offlineState.js';
+import { renderAsyncRegion } from '../lib/renderAsync.js';
+import { skelRowList } from '../lib/skeleton.js';
+import { createPoller } from '../lib/poller.js';
+import { onRouteChange, navigate, getCurrentPath } from '../router.js';
 
 const MAX_DURATION_S = 10.5 * 60;
-let pollTimer = null;
+let poller = null;
 let jobChannel = null; // { leave } del Realtime del job activo
 const SAFETY_POLL_MS = 30000; // red de seguridad + reconciliación server-side
 const NO_PUSH_POLL_MS = 10000; // si el canal no conecta, refrescar más seguido
@@ -39,29 +49,52 @@ let _unsubOffline = null; // suscripción al estado de red (panel de revisión)
 // Teardown completo: detiene el timer Y desregistra la guarda de navegación.
 // Se usa al desmontar la página o al navegar fuera de #/estudio.
 function stopPolling() {
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = null;
+  if (poller) poller.stop();
+  poller = null;
   if (jobChannel) {
     jobChannel.leave();
     jobChannel = null;
   }
   if (hashChangeHandler) {
-    window.removeEventListener('hashchange', hashChangeHandler);
+    hashChangeHandler();
     hashChangeHandler = null;
   }
-  if (_unsubOffline) { _unsubOffline(); _unsubOffline = null; }
+  if (_unsubOffline) {
+    _unsubOffline();
+    _unsubOffline = null;
+  }
 }
 
-// Registra (una sola vez) la guarda que corta el polling cuando el usuario sale
-// de #/estudio. Idempotente: si ya hay guarda, no añade otra.
+// Registra (una sola vez) la guarda que corta el polling y el canal Realtime
+// cuando el usuario sale de #/estudio. Idempotente: si ya hay guarda, no
+// añade otra. onRouteChange (no solo 'hashchange'): navigate(path,
+// {replace:true}) usa history.replaceState y no dispara 'hashchange'
+// (logout, expiración de sesión vía guardedRoute) — sin esto el poller y el
+// canal Realtime quedaban vivos tras salir.
 function startHashGuard() {
   if (hashChangeHandler) return;
-  hashChangeHandler = () => {
+  hashChangeHandler = onRouteChange(() => {
     if (!window.location.hash.startsWith('#/estudio')) {
       stopPolling();
     }
-  };
-  window.addEventListener('hashchange', hashChangeHandler);
+  });
+}
+
+// Distingue una sesión vencida (401/403) del resto de errores de red: el
+// resto se reintenta en silencio en el próximo tick, esto NO — dejar
+// reintentando un poll con token vencido congela la UI en "procesando" para
+// siempre (job de GPU puede tardar minutos, más que la vida del token).
+function isAuthError(err) {
+  return err?.status === 401 || err?.status === 403;
+}
+
+// Corta el polling, cierra la sesión local y lleva al login con el path
+// actual como `next` (mismo destino que guardedRoute ante sesión inválida).
+async function handleSessionExpired(body) {
+  stopPolling();
+  body.innerHTML = `<p class="studio__error" role="alert">Tu sesión expiró. Inicia sesión de nuevo para continuar.</p>`;
+  await signOut().catch(() => {});
+  navigate(`/login?next=${encodeURIComponent(getCurrentPath())}`, { replace: true });
 }
 
 function hoursLeft(expiresAt) {
@@ -89,30 +122,33 @@ export function renderStudioPage(container) {
   container.innerHTML = `
     <div class="studio fade-in">
       <h1 class="studio__title">
-        ${icon('layers', { size: 28 })} Estudio <span class="badge--beta">BETA</span>
+        ${icon('layers', { size: 28 })} Estudio
       </h1>
       <div id="studio-body" aria-live="polite"></div>
     </div>
   `;
   const body = container.querySelector('#studio-body');
-  void loadInitial(body);
+  // El ciclo de carga async lo maneja renderAsyncRegion dentro de loadInitial.
+  loadInitial(body);
 }
 
-async function loadInitial(body) {
-  body.innerHTML = `<p class="empty-state__text">Cargando…</p>`;
-  try {
-    const { jobs, quota } = await listJobs();
-    // Solo vigilamos jobs realmente en proceso. Un created/uploaded al cargar la página
-    // es una subida abandonada (el upload en memoria se perdió): no lo seguimos para no
-    // dejar un spinner eterno; el backend lo reclama en la próxima subida.
-    const active = jobs.find((j) => j.status === 'processing');
-    const recent = jobs.find((j) => ['done', 'partial', 'failed'].includes(j.status));
-    if (active) return watchJob(body, active.id, quota, active.input_meta?.filename);
-    if (recent) return showJob(body, recent.id, quota);
-    renderIdle(body, quota);
-  } catch {
-    body.innerHTML = `<p class="empty-state__text">No pudimos cargar el Estudio. Intenta de nuevo.</p>`;
-  }
+function loadInitial(body) {
+  renderAsyncRegion(body, {
+    skeleton: () => skelRowList({ rows: 5 }),
+    fetcher: () => listJobs(),
+    render: ({ jobs, quota }) => {
+      // Solo vigilamos jobs realmente en proceso. Un created/uploaded al cargar la página
+      // es una subida abandonada (el upload en memoria se perdió): no lo seguimos para no
+      // dejar un spinner eterno; el backend lo reclama en la próxima subida.
+      const active = jobs.find((j) => j.status === 'processing');
+      const recent = jobs.find((j) => ['done', 'partial', 'failed'].includes(j.status));
+      if (active) return watchJob(body, active.id, quota, active.input_meta?.filename);
+      if (recent) return showJob(body, recent.id, quota);
+      renderIdle(body, quota);
+    },
+    onError: () =>
+      `<p class="empty-state__text">No pudimos cargar el Estudio. <button class="btn btn--primary" data-retry>Reintentar</button></p>`,
+  });
 }
 
 function renderIdle(body, quota) {
@@ -125,7 +161,7 @@ function renderIdle(body, quota) {
     bajo, guitarra, piano y otros) más la voz dividida en <strong>líder/coros</strong> y segmentos
     por cantante.</p>
     <div class="studio-dropzone" role="button" tabindex="0" aria-label="Subir archivo de audio">
-      ${icon('upload', { size: 32 })}
+      <span class="studio-dropzone__icon" aria-hidden="true">${icon('upload', { size: 26 })}</span>
       <p class="studio-dropzone__hint"><strong>Arrastra tu audio aquí</strong> o toca para elegir</p>
       <p class="empty-state__text studio-dropzone__sub">MP3 · máx 25 MB / 10 min</p>
     </div>
@@ -199,7 +235,10 @@ function renderReviewPanel(body, file, quota) {
   const sectionRows = SECTION_KEYS.map(
     (key) => `
       <label class="studio-review__section">
-        <input type="checkbox" class="studio-review__section-check" data-section="${key}" checked />
+        <span class="studio-review__section-box">
+          <input type="checkbox" class="studio-review__section-check" data-section="${key}" checked />
+          <span class="studio-review__section-check-icon" aria-hidden="true">${icon('check', { size: 14 })}</span>
+        </span>
         <span class="studio-review__section-label">${escHtml(sectionLabel(key))}</span>
       </label>`,
   ).join('');
@@ -216,10 +255,10 @@ function renderReviewPanel(body, file, quota) {
         ${sectionRows}
       </fieldset>
       <div class="studio-review__actions">
-        <button type="button" class="btn studio-review__cancel">Cancelar</button>
-        <button type="button" class="btn btn--primary studio-review__submit">
+        <button type="button" class="btn studio-review__submit">
           ${icon('play', { size: 16 })} <span class="studio-review__submit-label"></span>
         </button>
+        <button type="button" class="btn studio-review__cancel">Cancelar</button>
       </div>
     </div>
   `;
@@ -242,17 +281,26 @@ function renderReviewPanel(body, file, quota) {
   syncSubmit();
   // Suscribir al estado de red para bloquear/desbloquear el botón en tiempo real.
   // Limpiar suscripción anterior si el panel se re-renderizó sin pasar por stopPolling.
-  if (_unsubOffline) { _unsubOffline(); _unsubOffline = null; }
+  if (_unsubOffline) {
+    _unsubOffline();
+    _unsubOffline = null;
+  }
   _unsubOffline = subscribe(() => syncSubmit());
 
   body.querySelector('.studio-review__cancel').addEventListener('click', () => {
-    if (_unsubOffline) { _unsubOffline(); _unsubOffline = null; }
+    if (_unsubOffline) {
+      _unsubOffline();
+      _unsubOffline = null;
+    }
     renderIdle(body, quota);
   });
   submit.addEventListener('click', () => {
     const sections = selected();
     if (sections.length === 0) return;
-    if (_unsubOffline) { _unsubOffline(); _unsubOffline = null; }
+    if (_unsubOffline) {
+      _unsubOffline();
+      _unsubOffline = null;
+    }
     const title = titleInput.value.trim() || deriveTitleFromFilename(file.name);
     void startUpload(body, file, title, sections, quota);
   });
@@ -276,7 +324,7 @@ async function startUpload(body, file, title, enabledSections, quota) {
 
 function watchJob(body, jobId, quota, filename) {
   // Teardown previo del timer/canal (sin tocar la guarda de navegación).
-  if (pollTimer) clearInterval(pollTimer);
+  if (poller) poller.stop();
   if (jobChannel) {
     jobChannel.leave();
     jobChannel = null;
@@ -299,7 +347,11 @@ function watchJob(body, jobId, quota, filename) {
       const { job } = await getJob(jobId);
       if (finishIfDone(job)) return;
       renderProcessing(body, job, job.input_meta?.filename ?? filename, quota);
-    } catch {
+    } catch (err) {
+      if (isAuthError(err)) {
+        void handleSessionExpired(body);
+        return;
+      }
       /* el siguiente tick reintenta */
     }
   };
@@ -321,18 +373,21 @@ function watchJob(body, jobId, quota, filename) {
   });
 
   // Render inicial + poll de seguridad (también dispara la reconciliación).
+  // Pausa sola con la pestaña oculta (createPoller).
   void refresh();
-  pollTimer = setInterval(refresh, SAFETY_POLL_MS);
+  poller = createPoller(refresh, SAFETY_POLL_MS);
+  poller.start();
 
   // Si el push no conectó en ~6s, refrescar más seguido (modo sin push).
-  // Capturamos la referencia del interval activo: si para entonces stopPolling
+  // Capturamos la referencia del poller activo: si para entonces stopPolling
   // o una nueva llamada a watchJob lo reemplazaron, este timeout no debe tocar
   // el poll vigente (evita resucitar un poll fantasma de un job anterior).
-  const safetyTimer = pollTimer;
+  const safetyPoller = poller;
   setTimeout(() => {
-    if (!pushAlive && pollTimer === safetyTimer) {
-      clearInterval(pollTimer);
-      pollTimer = setInterval(refresh, NO_PUSH_POLL_MS);
+    if (!pushAlive && poller === safetyPoller) {
+      poller.stop();
+      poller = createPoller(refresh, NO_PUSH_POLL_MS);
+      poller.start();
     }
   }, 6000);
 }
@@ -344,6 +399,21 @@ async function showJob(body, jobId, quota) {
   } catch {
     renderIdle(body, quota);
   }
+}
+
+/**
+ * Pausa y desconecta todos los `<audio>` montados en `body` antes de un
+ * `innerHTML = ''`. El polling (cada 10 s, o antes por Realtime) re-renderiza
+ * el body mientras el job sigue en 'processing'; sin esto, el <audio> de una
+ * sección ya terminada que el usuario esté escuchando queda huérfano (fuera
+ * del DOM pero sonando, sin ningún control visible para pararlo).
+ */
+function pauseMountedAudios(body) {
+  body.querySelectorAll('audio').forEach((audio) => {
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load?.();
+  });
 }
 
 /**
@@ -487,6 +557,33 @@ function mountSectionUI(body, job, quota) {
   });
 }
 
+// Alturas (px) de las barras de la onda: silueta de forma de onda, no uniforme.
+const WAVE_BAR_HEIGHTS = [10, 18, 28, 16, 32, 22, 14, 26, 18, 12];
+
+/**
+ * Cabecera decorativa del estado 'processing': una onda que se desdobla en tres
+ * capas horizontales (metáfora de separar la pista en stems). CSS puro, tinte
+ * ámbar; `prefers-reduced-motion` la deja estática (ver studio.css).
+ */
+function renderProcessingWave() {
+  const wave = document.createElement('div');
+  wave.className = 'studio-processing__wave';
+  wave.setAttribute('aria-hidden', 'true');
+  for (const layer of ['top', 'mid', 'bottom']) {
+    const layerEl = document.createElement('div');
+    layerEl.className = `studio-processing__wave-layer studio-processing__wave-layer--${layer}`;
+    WAVE_BAR_HEIGHTS.forEach((h, i) => {
+      const bar = document.createElement('span');
+      bar.className = 'studio-processing__wave-bar';
+      bar.style.setProperty('--h', `${h}px`);
+      bar.style.setProperty('--i', String(i));
+      layerEl.appendChild(bar);
+    });
+    wave.appendChild(layerEl);
+  }
+  return wave;
+}
+
 /**
  * Renderiza las 4 tarjetas de sección con su estado actual.
  * Sirve tanto para 'processing' (estados parciales) como para 'done' (unificado con renderJob).
@@ -511,6 +608,8 @@ function renderProcessing(body, job, filename, quota) {
     frag.appendChild(filenameEl);
   }
 
+  frag.appendChild(renderProcessingWave());
+
   const cardsEl = document.createElement('div');
   cardsEl.className = 'studio-sections';
   cardsEl.setAttribute('aria-label', 'Estado del procesamiento');
@@ -527,6 +626,7 @@ function renderProcessing(body, job, filename, quota) {
   hint.textContent = 'Puedes salir de esta página; el proceso sigue solo.';
   frag.appendChild(hint);
 
+  pauseMountedAudios(body);
   body.innerHTML = '';
   body.appendChild(frag);
 
@@ -590,7 +690,10 @@ function renderJob(body, job, quota) {
     input.focus();
     const commit = async () => {
       const next = input.value.trim();
-      if (!next) { renderJob(body, job, quota); return; }
+      if (!next) {
+        renderJob(body, job, quota);
+        return;
+      }
       save.disabled = true;
       try {
         const { job: updated } = await updateJobTitle(job.id, next);
@@ -607,8 +710,11 @@ function renderJob(body, job, quota) {
   });
 
   // Acciones ZIP + Drive — solo cuando todas las secciones activas (no skipped) están done.
-  const activeSections = SECTION_KEYS.map((k) => sections[k]).filter((s) => s && s.status !== 'skipped');
-  const allActiveDone = activeSections.length > 0 && activeSections.every((s) => s.status === 'done');
+  const activeSections = SECTION_KEYS.map((k) => sections[k]).filter(
+    (s) => s && s.status !== 'skipped',
+  );
+  const allActiveDone =
+    activeSections.length > 0 && activeSections.every((s) => s.status === 'done');
   if (allActiveDone) {
     const actions = document.createElement('div');
     actions.className = 'studio-actions';
@@ -642,6 +748,7 @@ function renderJob(body, job, quota) {
   newBtn.textContent = 'Procesar otra canción';
   frag.appendChild(newBtn);
 
+  pauseMountedAudios(body);
   body.innerHTML = '';
   body.appendChild(frag);
 

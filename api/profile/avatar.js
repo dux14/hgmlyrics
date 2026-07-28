@@ -4,6 +4,7 @@ import sql from '../_lib/db.js';
 import { requireUser } from '../_lib/auth.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { uploadAvatar, deleteAvatarObjects } from '../_lib/storage.js';
+import { detectImageType } from '../_lib/uploads.js';
 
 export const config = {
   api: { bodyParser: false },
@@ -47,12 +48,15 @@ export default withErrors(async (req, res) => {
     return;
   }
 
-  const ext = contentType === 'image/png' ? 'png' : contentType === 'image/jpeg' ? 'jpg' : 'webp';
+  // El mimetype declarado por el cliente no es fiable; validar la firma real del archivo.
+  const detectedType = await detectImageType(file.filepath, ALLOWED);
+  const ext =
+    detectedType === 'image/png' ? 'png' : detectedType === 'image/jpeg' ? 'jpg' : 'webp';
 
   const url = await uploadAvatar({
     userId: user.id,
     ext,
-    contentType,
+    contentType: detectedType,
     body: createReadStream(file.filepath),
   });
 

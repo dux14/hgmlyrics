@@ -40,6 +40,15 @@ export default withErrors(async (req, res) => {
     return;
   }
 
+  // Fix 2: tope de reintentos por sección — sin esto, retry es GPU gratis ilimitada.
+  const MAX_RETRIES = 3;
+  const currentRetries = job.sections?.[section]?.retries ?? 0;
+  if (currentRetries >= MAX_RETRIES) {
+    const e = new Error('Alcanzaste el máximo de reintentos para esta sección.');
+    e.status = 429;
+    throw e;
+  }
+
   // Re-firmar la URL de descarga del input para que Modal pueda leerlo.
   let inputGetUrl;
   try {
@@ -50,9 +59,15 @@ export default withErrors(async (req, res) => {
   }
 
   // Construir nuevas sections: copia superficial, solo la sección objetivo pasa a running.
+  // Fix 2: se incrementa `retries` en la misma escritura que dispara el reintento.
   const sections = {
     ...job.sections,
-    [section]: { ...job.sections[section], status: 'running', error: null },
+    [section]: {
+      ...job.sections[section],
+      status: 'running',
+      error: null,
+      retries: currentRetries + 1,
+    },
   };
 
   // Persistir estado de reinicio (processing). Si la sección venía skipped,
@@ -61,14 +76,26 @@ export default withErrors(async (req, res) => {
   enabledSet.add(section);
   const nextEnabled = SECTION_KEYS.filter((k) => enabledSet.has(k));
 
-  await sql`
+  // Fix TOCTOU (mismo patrón que start.js): compare-and-swap sobre el estado de la
+  // sección leído arriba. Si dos /retry corren en paralelo para la misma sección,
+  // solo uno matchea el WHERE (status+retries aún iguales) y reclama la fila; el
+  // perdedor recibe 0 filas y NO invoca Modal (evita disparar 2 jobs GPU por el
+  // mismo reintento — el bypass de cuota que el tope MAX_RETRIES no cierra por sí solo).
+  const claimed = await sql`
     UPDATE stem_jobs
     SET status = 'processing',
         sections = ${sql.json(sections)},
         enabled_sections = ${sql.array(nextEnabled)},
         updated_at = now()
     WHERE id = ${job.id}
+      AND sections -> ${section} ->> 'status' = ${currentStatus}
+      AND COALESCE((sections -> ${section} ->> 'retries')::int, 0) = ${currentRetries}
+    RETURNING id
   `;
+  if (claimed.length === 0) {
+    res.status(409).json({ error: 'La sección ya se está reintentando.' });
+    return;
+  }
 
   // Pre-firmar uploads y lanzar Modal para la sección retried.
   try {
@@ -78,12 +105,14 @@ export default withErrors(async (req, res) => {
       // structure: no genera archivos de audio
       uploads = { [section]: {} };
     } else {
-      const trackUrls = {};
-      for (const track of tracks) {
-        const key = `${user.id}/${job.id}/${section}/${track}.mp3`;
-        trackUrls[track] = await createStemsSignedPutUrl(key);
-      }
-      uploads = { [section]: trackUrls };
+      // Perf: firmar las pistas de la sección en paralelo (Promise.all) en vez de secuencial.
+      const trackEntries = await Promise.all(
+        tracks.map(async (track) => {
+          const key = `${user.id}/${job.id}/${section}/${track}.mp3`;
+          return [track, await createStemsSignedPutUrl(key)];
+        }),
+      );
+      uploads = { [section]: Object.fromEntries(trackEntries) };
     }
 
     const base =

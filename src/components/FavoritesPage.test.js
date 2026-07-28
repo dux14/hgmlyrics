@@ -9,37 +9,32 @@ vi.mock('../lib/favorites.js', () => ({
   isFavorite: vi.fn(() => false),
   toggleFavorite: vi.fn(),
 }));
-vi.mock('./SongList.js', () => ({ renderSongList: vi.fn() }));
 vi.mock('../router.js', () => ({ navigate: vi.fn(), getCurrentPath: vi.fn(() => '/favoritos') }));
 vi.mock('../lib/icons.js', () => ({ icon: vi.fn(() => '') }));
 vi.mock('./songRow.js', () => ({ resolveCoverUrl: vi.fn((s) => `/covers/${s.coverImage || ''}`) }));
 
-import { getFavView, setFavView, FAV_VIEW_KEY, renderFavoritesPage } from './FavoritesPage.js';
+import { renderFavoritesPage } from './FavoritesPage.js';
 import { getState } from '../lib/store.js';
 import { isFavorite } from '../lib/favorites.js';
 
-describe('preferencia de vista de favoritos', () => {
-  beforeEach(() => localStorage.clear());
+it('no renderiza botón Volver ni toggle de vista', async () => {
+  const container = document.createElement('div');
+  renderFavoritesPage(container);
+  await Promise.resolve();
+  expect(container.querySelector('#back-btn')).toBeNull();
+  expect(container.querySelector('.fav-toggle')).toBeNull();
+});
 
-  it('por defecto es grid', () => {
-    expect(getFavView()).toBe('grid');
-  });
-  it('persiste y relee la preferencia', () => {
-    setFavView('list');
-    expect(localStorage.getItem(FAV_VIEW_KEY)).toBe('list');
-    expect(getFavView()).toBe('list');
-  });
-  it('ignora valores inválidos y cae a grid', () => {
-    localStorage.setItem(FAV_VIEW_KEY, 'banana');
-    expect(getFavView()).toBe('grid');
-  });
+it('muestra título discreto y contador', async () => {
+  const container = document.createElement('div');
+  renderFavoritesPage(container);
+  await Promise.resolve();
+  expect(container.querySelector('.fav-page__title')?.textContent).toContain('Favoritos');
 });
 
 describe('SEC-14: FavoritesPage escapa title con payload XSS', () => {
   beforeEach(() => {
     localStorage.clear();
-    // Forzar vista grid
-    setFavView('grid');
   });
 
   it('no crea elementos script ni atributos onerror en el grid de favoritos', () => {

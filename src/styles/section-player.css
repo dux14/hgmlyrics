@@ -1,0 +1,88 @@
+/* section-player.css — Acordeón de audio por sección (Task 1.2).
+   Cada sección con audio abre un panel .section-audio colapsado tras su
+   encabezado en la letra (no un widget global fijo/sticky). Paridad visual
+   con #imm-player del player inmersivo (immersive.css): play circular brand,
+   tiempos tabular-nums atenuados, scrubber con accent-color brand. */
+
+.section-audio {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs, 0.5rem);
+  padding: 0.6rem 0.75rem;
+  margin: 0.25rem 0 0.75rem;
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--color-surface) 94%, transparent);
+}
+
+.section-audio[hidden] {
+  display: none;
+}
+
+.section-audio__chips {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.section-audio__chip {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: var(--font-size-xs);
+}
+
+.section-audio__chip--active {
+  border-color: var(--color-brand, #01ccd9);
+  color: var(--color-brand, #01ccd9);
+}
+
+.section-audio__player {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.section-audio__play {
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-brand, #01ccd9);
+  color: #000;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.section-audio__time {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  opacity: 0.7;
+  flex: none;
+}
+
+.section-audio__scrubber {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--color-brand, #01ccd9);
+}
+
+/* Icono play junto al label de una sección con audio */
+.lyrics__section-play {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+/* T7: sin barra lateral — la sección en reproducción se marca solo en el
+   color del label (antes también tenía --color-teal-500 en border-left). */
+.lyrics__section--playing .lyrics__section-label {
+  color: var(--color-teal-500);
+}

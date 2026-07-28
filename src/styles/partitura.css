@@ -1,0 +1,208 @@
+/* ==========================================================================
+   partitura.css — Partitura vocal (PartituraPage).
+   Tono: --color-rose-300 (mismo acento rosa que usa el tile del hub de
+   herramientas para esta feature).
+   ========================================================================== */
+
+/* ------------------------------------------------------------------ */
+/* Partitura — contenedor raiz                                          */
+/* ------------------------------------------------------------------ */
+.partitura {
+  max-width: var(--max-content-width);
+  margin: 0 auto;
+  /* Sin padding horizontal: el gutter lo aporta .main__content (regla de
+     plataforma: sin espacio muerto arriba ni padding lateral doblado). */
+  padding: var(--space-md) 0 var(--space-2xl);
+}
+
+.partitura__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--space-sm);
+}
+
+.partitura__title svg {
+  color: var(--color-rose-300);
+}
+
+.partitura__sub {
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-lg);
+  line-height: var(--line-height-base, 1.6);
+}
+
+.partitura__error {
+  color: var(--color-danger);
+  margin-top: var(--space-sm);
+}
+
+.partitura__quota {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-sm);
+}
+
+/* ------------------------------------------------------------------ */
+/* Perfiles (oss / precision)                                           */
+/* ------------------------------------------------------------------ */
+.partitura__profiles {
+  display: flex;
+  gap: var(--space-sm);
+  border: 0;
+  padding: 0;
+  margin: 0 0 var(--space-md);
+}
+
+.partitura__profile {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.partitura__profile:has(input:checked) {
+  border-color: var(--color-rose-300);
+  background: color-mix(in srgb, var(--color-rose-300) 10%, transparent);
+}
+
+.partitura__profile-name {
+  font-size: var(--font-size-sm);
+}
+
+/* ------------------------------------------------------------------ */
+/* Dropzone                                                              */
+/* ------------------------------------------------------------------ */
+.partitura__dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-2xl) var(--space-lg);
+  border: 1px dashed var(--color-border);
+  border-radius: 14px;
+  text-align: center;
+  cursor: pointer;
+  color: var(--color-rose-300);
+}
+
+.partitura__dropzone-hint {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+/* ------------------------------------------------------------------ */
+/* Resultado — partitura letra↔nota (hoja tipo karaoke)                  */
+/* ------------------------------------------------------------------ */
+
+/* Selector de voz (lead/backing…): pastillas horizontales, misma familia
+   visual que .chord-toggle. overflow-x:auto para no romper el layout si a
+   futuro hay muchas voces. */
+.partitura__voice-tabs {
+  display: flex;
+  gap: var(--space-xs);
+  overflow-x: auto;
+  margin-bottom: var(--space-md);
+}
+
+.partitura__voice-tab {
+  padding: 8px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  background: transparent;
+  color: var(--color-text);
+  transition: all var(--transition-fast);
+}
+
+.partitura__voice-tab:hover {
+  background: var(--color-surface-hover);
+}
+
+.partitura__voice-tab.is-active {
+  border-color: var(--color-rose-300);
+  background: color-mix(in srgb, var(--color-rose-300) 15%, transparent);
+  color: var(--color-rose-300);
+}
+
+.partitura__voice {
+  margin-bottom: var(--space-xl);
+}
+
+.partitura__voice h3 {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-rose-300);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--space-sm);
+}
+
+.partitura__line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.partitura__syl {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 2ch;
+}
+
+.partitura__syl-text {
+  font-weight: var(--font-weight-bold);
+}
+
+.partitura__syl-note {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  min-height: 1.2em;
+}
+
+.partitura__downloads {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-lg);
+  list-style: none;
+  padding: 0;
+}
+
+.partitura__downloads a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-rose-300);
+}
+
+/* Aviso secundario de expiración del resultado (48h): mismo tratamiento
+   atenuado que otros avisos secundarios del flujo (tamaño chico, color
+   secundario, icono alineado). */
+.partitura__expires {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-lg);
+}
+
+/* Voz sin datos (una pestaña de voz aislada sin partitura): aviso atenuado en
+   lugar de un panel vacío sin feedback. */
+.partitura__empty-voice {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  padding: var(--space-md) 0;
+}

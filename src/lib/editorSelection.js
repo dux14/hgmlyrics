@@ -17,6 +17,54 @@ export function normalizeRange(anchorIdx, focusIdx) {
   return { start: lo, end: hi + 1 };
 }
 
+/**
+ * Estado de selección tap-inicio→tap-fin, compartido por los popups de
+ * Acordes y Tono (antes duplicado en cada uno). `anchor`/`focus` son índices
+ * de carácter o `null`. Se muta in-place por diseño: los modales la guardan
+ * en una variable de closure y la pasan a `advanceSelection`/`resetSelection`.
+ * @returns {{anchor: number|null, focus: number|null}}
+ */
+export function createSelectionState() {
+  return { anchor: null, focus: null };
+}
+
+/**
+ * Rango actual de una selección, o `null` si no se ha tocado nada. Un solo
+ * tap (anchor sin focus) selecciona ese único carácter.
+ * @param {{anchor:number|null, focus:number|null}} sel
+ * @returns {{start:number,end:number}|null}
+ */
+export function selectionRange(sel) {
+  if (sel.anchor === null) return null;
+  if (sel.focus === null) return { start: sel.anchor, end: sel.anchor + 1 };
+  return normalizeRange(sel.anchor, sel.focus);
+}
+
+/**
+ * Avanza la máquina de estados al tocar el carácter `index`: primer tap (o
+ * tap tras un rango ya cerrado) fija el ancla; el segundo tap fija el fin.
+ * Muta `sel` in-place.
+ * @param {{anchor:number|null, focus:number|null}} sel
+ * @param {number} index
+ */
+export function advanceSelection(sel, index) {
+  if (sel.anchor === null || sel.focus !== null) {
+    sel.anchor = index;
+    sel.focus = null;
+  } else {
+    sel.focus = index;
+  }
+}
+
+/**
+ * Limpia la selección (vuelve a "sin tocar"). Muta `sel` in-place.
+ * @param {{anchor:number|null, focus:number|null}} sel
+ */
+export function resetSelection(sel) {
+  sel.anchor = null;
+  sel.focus = null;
+}
+
 function escapeChar(c) {
   if (c === '&') return '&amp;';
   if (c === '<') return '&lt;';
@@ -89,6 +137,27 @@ export function deleteGroupAt(groups, idx) {
  * @param {Array<{voiceId:string, included:boolean, note:string|null}>} perVoice
  * @returns {Array}
  */
+/**
+ * Acordes únicos ya usados en toda la canción, ordenados por frecuencia
+ * descendente (empates conservan el orden de primera aparición — Map
+ * preserva orden de inserción y Array#sort es estable). Pura: no toca DOM.
+ * Usada por la quick-chord-bar del editor de acordes (tap = re-uso rápido).
+ * @param {Array<{lines:Array<{chords?:Array<{ch:string,pos:number}>}>}>} blocks
+ * @returns {string[]}
+ */
+export function collectUsedChords(blocks) {
+  const counts = new Map();
+  for (const block of blocks || []) {
+    for (const line of block.lines || []) {
+      for (const c of line.chords || []) {
+        if (!c?.ch) continue;
+        counts.set(c.ch, (counts.get(c.ch) || 0) + 1);
+      }
+    }
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([ch]) => ch);
+}
+
 export function applyGroupsForRange(groups, range, perVoice) {
   let list = Array.isArray(groups) ? groups.slice() : [];
   const items = Array.isArray(perVoice) ? perVoice : [];

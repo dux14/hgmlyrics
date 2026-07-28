@@ -19,6 +19,7 @@
  *   en voiceLevel.js.
  */
 
+import '../styles/voice-controls.css';
 import { computeRms, makeSpeakingSmoother } from '../world/voiceLevel.js';
 
 /** Umbral RMS para considerar que alguien esta hablando. */
@@ -93,27 +94,11 @@ function createLevelMonitor(ctx, stream, onSpeaking) {
 function createPeerIndicator(peerId, label) {
   const el = document.createElement('div');
   el.dataset.peerId = peerId;
-  el.style.cssText = [
-    'display:flex',
-    'align-items:center',
-    'gap:6px',
-    'padding:2px 0',
-    'font-size:12px',
-    'font-family:sans-serif',
-    'color:#e0e0e0',
-  ].join(';');
+  el.className = 'vc-peer';
 
   const dot = document.createElement('span');
   dot.setAttribute('aria-hidden', 'true');
-  dot.style.cssText = [
-    'display:inline-block',
-    'width:8px',
-    'height:8px',
-    'border-radius:50%',
-    'background:#555',
-    'transition:background 0.1s',
-    'flex-shrink:0',
-  ].join(';');
+  dot.className = 'vc-dot';
 
   const nameEl = document.createElement('span');
   nameEl.textContent = label || peerId.slice(0, 8);
@@ -124,7 +109,7 @@ function createPeerIndicator(peerId, label) {
   return {
     el,
     setSpeaking(speaking) {
-      dot.style.background = speaking ? '#4caf50' : '#555';
+      dot.classList.toggle('vc-dot--speaking', speaking);
       dot.title = speaking ? 'Hablando' : 'En silencio';
     },
     remove() {
@@ -179,7 +164,7 @@ export function VoiceControls({
   /**
    * Map peerId → { stream: MediaStream, monitor: { stop: () => void } | null, indicator }
    * Se guarda stream para poder arrancar el monitor retroactivamente cuando
-   * audioCtx se crea despues de que llego el stream remoto.
+   * audioCtx se crea después de que llegó el stream remoto.
    * @type {Map<string, { stream: MediaStream, monitor: { stop: () => void }|null, indicator: object }>}
    */
   const remotePeers = new Map();
@@ -202,30 +187,19 @@ export function VoiceControls({
   const btnRow = document.createElement('div');
   btnRow.style.cssText = 'display:flex;gap:6px;';
 
-  const btnBaseStyle = [
-    'background:rgba(0,0,0,0.6)',
-    'border:1px solid rgba(255,255,255,0.2)',
-    'border-radius:5px',
-    'color:#e0e0e0',
-    'font-size:12px',
-    'font-family:sans-serif',
-    'padding:5px 10px',
-    'cursor:pointer',
-  ].join(';');
-
   // Boton activar / desactivar voz
   const activateBtn = document.createElement('button');
   activateBtn.type = 'button';
   activateBtn.textContent = 'Activar voz';
   activateBtn.setAttribute('aria-label', 'Activar microfono');
-  activateBtn.style.cssText = btnBaseStyle;
+  activateBtn.className = 'vc-btn';
 
   // Boton silencio (oculto hasta que la voz este activa)
   const muteBtn = document.createElement('button');
   muteBtn.type = 'button';
   muteBtn.textContent = 'Silenciar';
   muteBtn.setAttribute('aria-label', 'Silenciar microfono');
-  muteBtn.style.cssText = btnBaseStyle;
+  muteBtn.className = 'vc-btn';
   muteBtn.hidden = true;
 
   btnRow.appendChild(activateBtn);
@@ -275,7 +249,7 @@ export function VoiceControls({
       });
 
       // Arrancar monitores para peers remotos que llegaron antes de activar la voz.
-      // Tambien los añadimos al DOM ahora que la voz esta activa (Minor 1).
+      // También los añadimos al DOM ahora que la voz está activa (Minor 1).
       remotePeers.forEach((entry, peerId) => {
         if (!entry.monitor) {
           entry.monitor = createLevelMonitor(audioCtx, entry.stream, (speaking) => {

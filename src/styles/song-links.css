@@ -54,11 +54,12 @@
 }
 
 .slinks__section-title {
+  font-family: var(--font-display);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-text-secondary);
+  letter-spacing: 0.1em;
+  color: var(--color-teal-500);
   margin: 0 0 var(--space-md);
 }
 
@@ -75,8 +76,10 @@
   align-items: center;
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
-  background: var(--color-surface);
+  background: color-mix(in srgb, var(--color-surface) 85%, transparent);
+  backdrop-filter: blur(4px);
   border: 1px solid var(--color-border);
+  border-left: 3px solid var(--platform-color, var(--color-border));
   border-radius: var(--border-radius-md);
   text-decoration: none;
   color: var(--color-text);

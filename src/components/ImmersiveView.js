@@ -14,6 +14,7 @@
  * `getSongAudio` hay timings `ready` + audio. Si el <audio> falla en
  * runtime, degrada de vuelta a TimerEngine sin salir de la vista (D3, spec §3).
  */
+import { onRouteChange } from '../router.js';
 import { icon } from '../lib/icons.js';
 import { getSongAudio } from '../lib/songAudioApi.js';
 import { createTimingEngine } from '../lib/timingEngine.js';
@@ -1390,6 +1391,13 @@ export function enterImmersive(songViewEl, ctx = {}) {
   window.addEventListener('hashchange', onNav);
   window.addEventListener('popstate', onNav);
 
+  // onRouteChange (no solo 'hashchange'/'popstate'): navigate(path,
+  // {replace:true}) usa history.replaceState y no dispara ninguno de los dos
+  // (logout, expiracion de sesion via guardedRoute) — sin esto el overlay
+  // quedaba congelado sobre la pantalla nueva con audio, microfono y
+  // wakeLock vivos. Mismo patrón que SongView.js/Tuner.js.
+  const unsubscribeImmersiveRoute = onRouteChange(() => exitImmersive());
+
   Object.assign(session, {
     onViewportClick,
     onPointerDown,
@@ -1403,6 +1411,7 @@ export function enterImmersive(songViewEl, ctx = {}) {
     onKey,
     onVis,
     onNav,
+    unsubscribeImmersiveRoute,
   });
 
   // Modo 'tono'/'mixed' sin voz elegida al entrar (p.ej. heredado de
@@ -1432,6 +1441,7 @@ export function exitImmersive() {
     onKey,
     onVis,
     onNav,
+    unsubscribeImmersiveRoute,
   } = session;
 
   clearTimeout(timer);
@@ -1470,6 +1480,7 @@ export function exitImmersive() {
   document.removeEventListener('visibilitychange', onVis);
   window.removeEventListener('hashchange', onNav);
   window.removeEventListener('popstate', onNav);
+  unsubscribeImmersiveRoute();
 
   // Mic nunca queda abierto al salir, esté el toggle en on o off.
   floatingTuner?.destroy();

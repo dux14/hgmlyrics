@@ -13,6 +13,7 @@ vi.mock('./OptionsSheet.js', () => ({
 
 import { enterImmersive, exitImmersive } from './ImmersiveView.js';
 import { openOptionsSheet, isOptionsSheetOpen } from './OptionsSheet.js';
+import { navigate } from '../router.js';
 
 /**
  * Canción fixture: 2 líneas cantables con acordes + grupos de nota para una
@@ -218,6 +219,50 @@ describe('ImmersiveView — clases de modo por línea + paridad de voz', () => {
     opts.onModeChange('mixed');
 
     expect(openOptionsSheet).not.toHaveBeenCalled();
+  });
+});
+
+describe('ImmersiveView — desmontaje ante navegación con replaceState', () => {
+  let songViewEl;
+
+  beforeEach(() => {
+    localStorage.clear();
+    window.location.hash = '';
+    songViewEl = document.createElement('div');
+    document.body.appendChild(songViewEl);
+  });
+
+  afterEach(() => {
+    exitImmersive();
+    songViewEl.remove();
+    document.body.innerHTML = '';
+    window.location.hash = '';
+    vi.clearAllMocks();
+  });
+
+  it('navigate(path, {replace:true}) — que no dispara hashchange/popstate — desmonta el overlay igual', () => {
+    const song = buildSong();
+    const ctx = buildCtx(song);
+    enterImmersive(songViewEl, ctx);
+
+    expect(document.getElementById('imm-roll')).not.toBeNull();
+    expect(songViewEl.classList.contains('song-view--immersive')).toBe(true);
+
+    // Mismo camino que logout / expiración de sesión vía guardedRoute.
+    navigate('/otra-ruta', { replace: true });
+
+    expect(document.getElementById('imm-roll')).toBeNull();
+    expect(songViewEl.classList.contains('song-view--immersive')).toBe(false);
+    expect(document.body.classList.contains('immersive-active')).toBe(false);
+    expect(ctx.onExit).toHaveBeenCalled();
+  });
+
+  it('exitImmersive es idempotente: llamarlo dos veces (p.ej. onRouteChange + exit manual) no lanza', () => {
+    const song = buildSong();
+    enterImmersive(songViewEl, buildCtx(song));
+
+    navigate('/otra-ruta-2', { replace: true });
+    expect(() => exitImmersive()).not.toThrow();
   });
 });
 

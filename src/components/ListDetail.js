@@ -46,6 +46,29 @@ import { cachedSearchUsers } from '../lib/searchUsersCache.js';
 
 /* global CSS */
 
+/**
+ * Avatar de una persona con inicial de respaldo.
+ *
+ * La inicial se pinta SIEMPRE debajo y la foto va encima en absoluto: si la
+ * URL falta, o si la imagen falla (avatar de Google caducado, transformación
+ * de Storage rechazada), el `onerror` quita el `<img>` y queda la inicial en
+ * vez del hueco invisible que dejaba el `visibility:hidden` anterior.
+ *
+ * @param {{displayName?: string, username?: string, avatarUrl?: string}} person
+ * @param {number} size Lado del avatar en px CSS (debe coincidir con el CSS).
+ * @param {string} imgClass Clase que define el tamaño del hueco.
+ * @returns {string} HTML del avatar.
+ */
+function personAvatarHtml(person, size, imgClass) {
+  const initial =
+    (person.displayName || person.username || '?').trim().charAt(0).toUpperCase() || '?';
+  const url = person.avatarUrl ? avatarThumb(person.avatarUrl, size) : '';
+  const img = url
+    ? `<img class="${imgClass}" src="${escapeHtml(url)}" alt="" width="${size}" height="${size}" loading="lazy" decoding="async" onerror="this.remove()" />`
+    : '';
+  return `<span class="list-detail__avatar-wrap"><span class="${imgClass} list-detail__avatar-initial">${escapeHtml(initial)}</span>${img}</span>`;
+}
+
 function expiryChipHtml(expiresAt) {
   const text = formatExpiry(expiresAt);
   if (!text) return '';
@@ -686,7 +709,7 @@ function renderEditor(container, listData, opts = {}) {
         .map(
           (f) => `
         <div class="list-detail__invitee-row" data-id="${escapeHtml(f.id)}">
-          <img class="list-detail__invitee-avatar" src="${escapeHtml(avatarThumb(f.avatarUrl, 40))}" alt="" width="40" height="40" loading="lazy" decoding="async" onerror="this.style.visibility='hidden'" />
+          ${personAvatarHtml(f, 32, 'list-detail__invitee-avatar')}
           <span class="list-detail__invitee-name">${escapeHtml(f.displayName || f.username)}</span>
           <button class="list-detail__row-btn list-detail__row-btn--danger" data-action="uninvite" title="Quitar">${icon('close', { size: 14 })}</button>
         </div>`,
@@ -708,7 +731,7 @@ function renderEditor(container, listData, opts = {}) {
         .map(
           (f) => `
         <div class="list-detail__friend-result" data-id="${escapeHtml(f.id)}">
-          <img class="list-detail__friend-result-avatar" src="${escapeHtml(avatarThumb(f.avatarUrl, 40))}" alt="" width="40" height="40" loading="lazy" decoding="async" onerror="this.style.visibility='hidden'" />
+          ${personAvatarHtml(f, 36, 'list-detail__friend-result-avatar')}
           <div class="list-detail__friend-result-info">
             <span class="list-detail__friend-result-name">${escapeHtml(f.displayName || f.username)}</span>
             <span class="list-detail__friend-result-handle">@${escapeHtml(f.username)}</span>

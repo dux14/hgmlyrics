@@ -430,6 +430,33 @@
   background: var(--color-surface-hover);
 }
 
+/* Avatar con inicial de respaldo: la inicial da el tamaño al contenedor y la
+   foto se apila encima. Si el `<img>` falla, su `onerror` lo quita y la
+   inicial queda visible. */
+.list-detail__avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.list-detail__avatar-wrap > img {
+  position: absolute;
+  inset: 0;
+}
+
+/* Selector con el wrap para ganarle por especificidad al `background` propio
+   de las clases de tamaño (`--friend-result-avatar`), sin depender del orden. */
+.list-detail__avatar-wrap > .list-detail__avatar-initial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-bg);
+  font-weight: var(--font-weight-bold);
+  font-size: 0.85rem;
+  background: linear-gradient(135deg, var(--color-brand), var(--color-accent-2));
+  user-select: none;
+}
+
 .list-detail__friend-result-avatar {
   width: 36px;
   height: 36px;

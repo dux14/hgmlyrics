@@ -42,7 +42,8 @@ export default withErrors(async (req, res) => {
     res.status(404).json({ error: 'Not found' });
     return;
   }
-  const { visible: _v, ...profile } = profileRows[0];
+  const profile = { ...profileRows[0] };
+  delete profile.visible;
 
   // favorites, friendCount y friendStatus solo dependen de profile.id (ya
   // resuelto arriba) y son lecturas independientes entre sí → Promise.all.
@@ -73,9 +74,11 @@ export default withErrors(async (req, res) => {
   let friendStatus = 'none';
   if (friendRows.length) {
     const r = friendRows[0];
-    if (r.status === 'accepted') friendStatus = 'accepted';
-    else if (r.status === 'pending')
+    if (r.status === 'accepted') {
+      friendStatus = 'accepted';
+    } else if (r.status === 'pending') {
       friendStatus = r.requester_id === viewer.id ? 'pending_out' : 'pending_in';
+    }
   }
 
   res.status(200).json({

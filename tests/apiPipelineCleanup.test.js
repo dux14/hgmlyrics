@@ -10,10 +10,10 @@ import { initialPhases } from '../api/_lib/pipeline/state.js';
 
 // ── Mock de storage ───────────────────────────────────────────────────────────
 const mockDeleteSongAudioObject = vi.fn();
-const mockDeleteSongAudioPrefix = vi.fn();
+const mockDeleteSongAudioObjects = vi.fn();
 vi.mock('../api/_lib/storage.js', () => ({
   deleteSongAudioObject: mockDeleteSongAudioObject,
-  deleteSongAudioPrefix: mockDeleteSongAudioPrefix,
+  deleteSongAudioObjects: mockDeleteSongAudioObjects,
 }));
 
 // ── Mock de retryPhase (Tarea 5): el cron NO despacha directo, delega en el
@@ -68,7 +68,7 @@ beforeEach(() => {
   capturedTopLevelQueries.length = 0;
   capturedInnerQueries.length = 0;
   mockDeleteSongAudioObject.mockReset().mockResolvedValue(undefined);
-  mockDeleteSongAudioPrefix.mockReset().mockResolvedValue(undefined);
+  mockDeleteSongAudioObjects.mockReset().mockResolvedValue(undefined);
   mockRetryPhase.mockReset().mockResolvedValue({ ok: true });
   process.env.CRON_SECRET = 'supersecret';
 });
@@ -281,34 +281,69 @@ describe('GET /api/pipeline/cleanup — runs superseded', () => {
 });
 
 describe('GET /api/pipeline/cleanup — runs cancelled (#4: objetos huérfanos de purgeRun)', () => {
-  it('barre <songId>/stems|clips/ y el input del run, luego limpia input_path', async () => {
+  function pushPreCancelledPhases() {
     topLevelResponses.push([]); // reintentos diferidos (dueRuns)
     topLevelResponses.push([]); // candidatos fases running
     topLevelResponses.push([]); // DELETE runs abandonados
     topLevelResponses.push([]); // SELECT runs superseded
+  }
+
+  it('borra solo los objetos del run cancelado y su input, luego limpia input_path', async () => {
+    pushPreCancelledPhases();
     topLevelResponses.push([
       { id: 'run-7', song_id: 'song-1', input_path: 'song-1/runs/run-7/full.mp3' },
     ]); // SELECT runs cancelled
+    topLevelResponses.push([
+      { storage_key: 'song-1/stems/lead.mp3' },
+      { storage_key: 'song-1/clips/lead/0.mp3' },
+    ]); // SELECT keys propias del run cancelado
     topLevelResponses.push([]); // UPDATE input_path = NULL
 
     const res = makeRes();
     await handler(makeReq({ headers: { authorization: 'Bearer supersecret' } }), res);
 
-    expect(mockDeleteSongAudioPrefix).toHaveBeenCalledWith('song-1');
+    expect(mockDeleteSongAudioObjects).toHaveBeenCalledWith([
+      'song-1/stems/lead.mp3',
+      'song-1/clips/lead/0.mp3',
+    ]);
     expect(mockDeleteSongAudioObject).toHaveBeenCalledWith('song-1/runs/run-7/full.mp3');
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ cancelledCleaned: 1 }));
   });
 
+  // Regresión (incidente 28-jul, "A Ti te alabo"): el barrido listaba el prefijo
+  // <songId>/stems|clips/ entero, así que un run cancelado se llevaba las pistas
+  // publicadas de la canción y las de cualquier otro run de la misma. El SELECT
+  // debe acotar por run_id y descartar las keys que otra fila referencia — las
+  // rutas son por canción, no por run, y un run posterior reescribe la misma key.
+  it('la consulta se acota al run y excluye keys compartidas con otro run', async () => {
+    pushPreCancelledPhases();
+    topLevelResponses.push([
+      { id: 'run-9', song_id: 'song-3', input_path: 'song-3/runs/run-9/full.mp3' },
+    ]);
+    topLevelResponses.push([]); // ninguna key le pertenece en exclusiva
+    topLevelResponses.push([]); // UPDATE input_path = NULL
+
+    const res = makeRes();
+    await handler(makeReq({ headers: { authorization: 'Bearer supersecret' } }), res);
+
+    const keysQuery = capturedTopLevelQueries.find((q) => /FROM song_stems/i.test(q));
+    expect(keysQuery).toMatch(/run_id\s*=/i);
+    expect(keysQuery).toMatch(/NOT EXISTS/i);
+    expect(keysQuery).toMatch(/IS DISTINCT FROM/i);
+    expect(keysQuery).toMatch(/song_section_audio/i);
+    // Sin keys propias no se emite ningún borrado de pistas publicadas.
+    expect(mockDeleteSongAudioObjects).toHaveBeenCalledWith([]);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ cancelledCleaned: 1 }));
+  });
+
   it('un sweep que falla no marca el run cancelado como limpio (se reintenta después)', async () => {
-    topLevelResponses.push([]); // reintentos diferidos (dueRuns)
-    topLevelResponses.push([]);
-    topLevelResponses.push([]);
-    topLevelResponses.push([]);
+    pushPreCancelledPhases();
     topLevelResponses.push([
       { id: 'run-8', song_id: 'song-2', input_path: 'song-2/runs/run-8/full.mp3' },
     ]);
+    topLevelResponses.push([{ storage_key: 'song-2/stems/lead.mp3' }]);
 
-    mockDeleteSongAudioPrefix.mockReset().mockRejectedValue(new Error('storage caído'));
+    mockDeleteSongAudioObjects.mockReset().mockRejectedValue(new Error('storage caído'));
 
     const res = makeRes();
     await handler(makeReq({ headers: { authorization: 'Bearer supersecret' } }), res);

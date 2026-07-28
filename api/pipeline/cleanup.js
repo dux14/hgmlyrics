@@ -17,15 +17,18 @@
  * 3) Runs 'superseded' → se borra el storage de su input (el prefijo
  *    runs/<runId>/ solo contiene ese objeto); los stems publicados viven en
  *    <songId>/stems/ y no se tocan.
- * 4) Runs 'cancelled' (purgeRun, api/songs/[id]/pipeline.js) → barre
- *    <songId>/stems|clips/ por si un job de Modal ya despachado (signed PUT
- *    URLs) siguió subiendo después del borrado del run; process.js ignora
- *    esos jobs por run cancelado, pero nadie más barría esos objetos.
+ * 4) Runs 'cancelled' (purgeRun, api/songs/[id]/pipeline.js) → barre las pistas
+ *    y clips que registró ESE run (song_stems/song_section_audio por run_id),
+ *    por si un job de Modal ya despachado (signed PUT URLs) siguió subiendo
+ *    después del borrado del run; process.js ignora esos jobs por run
+ *    cancelado, pero nadie más barría esos objetos. Nunca por prefijo de
+ *    canción: <songId>/stems|clips/ es espacio compartido con los runs vivos y
+ *    con lo ya publicado.
  */
 import sql from '../_lib/db.js';
 import { allowMethods, withErrors } from '../_lib/http.js';
 import { timingSafeEqualStr } from '../_lib/crypto.js';
-import { deleteSongAudioObject, deleteSongAudioPrefix } from '../_lib/storage.js';
+import { deleteSongAudioObject, deleteSongAudioObjects } from '../_lib/storage.js';
 import { applyPhaseEvent, runStatusFromPhases, PHASES } from '../_lib/pipeline/state.js';
 import { shouldAutoRetry } from '../_lib/pipeline/autoRetry.js';
 import { retryPhase } from '../_lib/pipeline/retryPhase.js';
@@ -181,18 +184,45 @@ export default withErrors(async (req, res) => {
     `;
   }
 
-  // 4) Runs 'cancelled' (purgeRun) con input_path aún seteado: barrer el
-  // prefijo <songId>/stems|clips/ (jobs de Modal despachados antes del purge
-  // que siguieron subiendo después) además del input propio del run. Igual
-  // criterio que 'superseded': solo se limpia input_path (marca "ya barrido")
-  // si el sweep tuvo éxito; si falla, la próxima corrida reintenta.
+  // 4) Runs 'cancelled' (purgeRun) con input_path aún seteado: barrer lo que
+  // subió ESE run (jobs de Modal despachados antes del purge que siguieron
+  // subiendo después) además de su input. Igual criterio que 'superseded':
+  // solo se limpia input_path (marca "ya barrido") si el sweep tuvo éxito; si
+  // falla, la próxima corrida reintenta.
+  //
+  // El barrido va por `run_id`, NUNCA por prefijo de canción: <songId>/stems|clips/
+  // guarda las pistas PUBLICADAS que la app reproduce, compartidas por todos los
+  // runs de esa canción. Listar el prefijo (lo que hacía deleteSongAudioPrefix
+  // hasta el 28-jul-2026) borraba las pistas del run vivo y las ya publicadas —
+  // el run quedaba con song_stems apuntando a objetos inexistentes y sus fases
+  // morían con "Object not found" al firmar.
+  //
+  // El NOT EXISTS es la otra mitad de la guarda: las keys son por canción
+  // (`<songId>/stems/lead.mp3`), así que un run posterior reescribe la misma
+  // ruta que registró el cancelado. Solo se borra la key que ninguna otra fila
+  // referencia — ni de otro run, ni manual (run_id NULL).
   const cancelledRuns = await sql`
     SELECT id, song_id, input_path FROM song_pipeline_runs
     WHERE status = 'cancelled' AND input_path IS NOT NULL
   `;
   const cancelledResults = await Promise.allSettled(
     cancelledRuns.map(async (run) => {
-      await deleteSongAudioPrefix(run.song_id);
+      const owned = await sql`
+        SELECT s.storage_key FROM song_stems s
+         WHERE s.run_id = ${run.id}
+           AND NOT EXISTS (
+             SELECT 1 FROM song_stems o
+              WHERE o.storage_key = s.storage_key
+                AND o.run_id IS DISTINCT FROM ${run.id})
+        UNION
+        SELECT a.storage_key FROM song_section_audio a
+         WHERE a.run_id = ${run.id}
+           AND NOT EXISTS (
+             SELECT 1 FROM song_section_audio o
+              WHERE o.storage_key = a.storage_key
+                AND o.run_id IS DISTINCT FROM ${run.id})
+      `;
+      await deleteSongAudioObjects(owned.map((row) => row.storage_key));
       await deleteSongAudioObject(run.input_path);
     }),
   );

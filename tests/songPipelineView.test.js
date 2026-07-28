@@ -292,24 +292,56 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     expect(retryPipelinePhase).toHaveBeenCalledWith(SONG_ID, 'pitch');
   });
 
-  it('fase stale: boton reprocesa sincronia y tono (sync + pitch)', async () => {
+  it('fase stale: boton reprocesa sincronia, tono y clips (#8)', async () => {
     renderSongPipelineView(container, SONG_ID);
     watchOnChange({
       run: buildRun({
         lyrics_review: { status: 'done' },
         sync: { status: 'stale' },
         pitch: { status: 'stale' },
+        clips: { status: 'stale' },
       }),
     });
 
     const row = container.querySelector('[data-phase="sync"]');
     const btn = row.querySelector('.phase__action');
-    expect(btn.textContent).toBe('Re-procesar sincronía y tono');
+    expect(btn.textContent).toBe('Re-procesar sincronía, tono y clips');
 
     btn.click();
     await flushPromises();
     expect(retryPipelinePhase).toHaveBeenCalledWith(SONG_ID, 'sync');
     expect(retryPipelinePhase).toHaveBeenCalledWith(SONG_ID, 'pitch');
+    expect(retryPipelinePhase).toHaveBeenCalledWith(SONG_ID, 'clips');
+  });
+
+  it('fila clips (#8): tiene su propia fila en el stepper y bloquea si la letra no está aprobada', () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({ run: buildRun() });
+
+    const row = container.querySelector('[data-phase="clips"]');
+    expect(row).toBeTruthy();
+    expect(row.querySelector('.dot.wait')).toBeTruthy();
+    expect(row.textContent).toContain('Arranca al aprobar la letra');
+  });
+
+  it('fila clips failed (#8): pinta "Reintentar fase" y reintenta clips al click', () => {
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({
+      run: buildRun({
+        lyrics_review: { status: 'done' },
+        sync: { status: 'done' },
+        pitch: { status: 'done' },
+        clips: { status: 'failed', error: 'boom' },
+      }),
+    });
+
+    const row = container.querySelector('[data-phase="clips"]');
+    const btn = row.querySelector('.phase__action');
+    expect(btn).toBeTruthy();
+    expect(btn.textContent).toBe('Reintentar fase');
+
+    btn.click();
+    expect(retryPipelinePhase).toHaveBeenCalledWith(SONG_ID, 'clips');
   });
 
   it('re-render por evento del watcher no recrea el contenedor', () => {
@@ -333,7 +365,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     });
 
     const pill = container.querySelector('.pipeline-view__pill');
-    expect(pill.textContent).toBe('3 de 6 fases');
+    expect(pill.textContent).toBe('3 de 7 fases');
   });
 
   it('suscribe watchPipelineRun al montar', () => {
@@ -354,7 +386,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     watchOnChange({ run: buildRun({ upload: { status: 'done' } }) });
     expect(container.querySelector('.pipeline-view')).toBe(view);
     const pill = container.querySelector('.pipeline-view__pill');
-    expect(pill.textContent).toBe('0 de 6 fases');
+    expect(pill.textContent).toBe('0 de 7 fases');
   });
 
   it('teardown: llama uploadCard.dispose() para limpiar runs huérfanos', () => {
@@ -472,7 +504,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
   it('esqueleto inmediato: las 5 filas existen antes de que watchPipelineRun emita nada', () => {
     renderSongPipelineView(container, SONG_ID);
 
-    expect(container.querySelectorAll('[data-phase]').length).toBe(6);
+    expect(container.querySelectorAll('[data-phase]').length).toBe(7);
   });
 
   it('error del watcher: muestra el banner con boton Reintentar sin borrar las filas', () => {
@@ -484,7 +516,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     expect(banner.hidden).toBe(false);
     expect(banner.getAttribute('role')).toBe('alert');
     expect(banner.textContent).toContain('Reintentar');
-    expect(container.querySelectorAll('[data-phase]').length).toBe(6);
+    expect(container.querySelectorAll('[data-phase]').length).toBe(7);
   });
 
   it('el boton Reintentar del banner de error fuerza un refresh del watcher', () => {
@@ -504,7 +536,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
 
     const banner = container.querySelector('.pipeline-view__error');
     expect(banner.hidden).toBe(true);
-    expect(container.querySelectorAll('[data-phase]').length).toBe(6);
+    expect(container.querySelectorAll('[data-phase]').length).toBe(7);
   });
 
   it('skip por firma: dos eventos con el mismo estado no reconstruyen las filas', () => {

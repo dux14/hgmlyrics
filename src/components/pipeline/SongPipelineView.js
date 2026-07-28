@@ -1,11 +1,11 @@
 /**
  * SongPipelineView.js — vista admin "stepper" del procesamiento por canción
- * (pipeline unificado, plan D, Task D3a). Muestra las 5 fases visibles
- * (Audio, Pistas, Letra, Sincronía, Tono por sílaba — `clips` no es fila
- * propia, D3b la muestra como sub-línea de Pistas) con estado progresivo vía
- * `watchPipelineRun`. Esta sub-tarea es el esqueleto: dot + copy + retry +
- * stale + montaje del panel de letra (C3). El detalle de Audio/Pistas/
- * Sincronía lo montan D3b/D3c/D3d dentro del slot que deja cada `PhaseRow`.
+ * (pipeline unificado, plan D, Task D3a). Muestra las fases visibles (Audio,
+ * Pistas, Secciones, Letra, Sincronía, Tono por sílaba, Clips por sección)
+ * con estado progresivo vía `watchPipelineRun`. Esta sub-tarea es el
+ * esqueleto: dot + copy + retry + stale + montaje del panel de letra (C3). El
+ * detalle de Audio/Pistas/Sincronía lo montan D3b/D3c/D3d dentro del slot que
+ * deja cada `PhaseRow`.
  */
 import '../../styles/pipeline.css';
 import { icon } from '../../lib/icons.js';
@@ -34,6 +34,10 @@ import { createConfidenceSummary } from './ConfidenceSummary.js';
 // 'structure' (Task 16) es best-effort (ver CRITICAL_PHASES en
 // api/_lib/pipeline/state.js): nunca bloquea el run, así que no participa
 // del gate de sync/pitch ni ofrece reintento (describePhase la trata aparte).
+// 'clips' (#8, review): SÍ es CRITICAL_PHASES/RETRYABLE_PHASES en el backend
+// y queda 'stale' tras editar la letra igual que sync/pitch — sin fila propia
+// el run podía quedar sin llegar a 'done' sin que nada en pantalla lo
+// explicara (la sub-línea de StemTracksDetail solo pinta el caso 'done').
 const ROWS = [
   { key: 'upload', title: 'Audio' },
   { key: 'stems', title: 'Pistas' },
@@ -41,6 +45,7 @@ const ROWS = [
   { key: 'lyrics_review', title: 'Letra' },
   { key: 'sync', title: 'Sincronía' },
   { key: 'pitch', title: 'Tono por sílaba' },
+  { key: 'clips', title: 'Clips por sección' },
 ];
 
 const SUBTITLES = {
@@ -83,6 +88,14 @@ const SUBTITLES = {
     running: 'Calculando tono por sílaba...',
     done: 'Tono por sílaba listo',
     failed: 'No se pudo calcular el tono',
+    stale: 'Desactualizado respecto a la letra',
+  },
+  clips: {
+    pending: 'En espera',
+    blocked: 'Arranca al aprobar la letra',
+    running: 'Generando clips por sección...',
+    done: 'Clips por sección listos',
+    failed: 'No se pudieron generar los clips',
     stale: 'Desactualizado respecto a la letra',
   },
 };
@@ -395,13 +408,14 @@ export function renderSongPipelineView(container, songId) {
       return {
         state: 'stale',
         subtitle: table.stale,
-        actionLabel: 'Re-procesar sincronía y tono',
+        actionLabel: 'Re-procesar sincronía, tono y clips',
         onRetry: async () => {
           try {
             await retryPipelinePhase(songId, 'sync');
             await retryPipelinePhase(songId, 'pitch');
+            await retryPipelinePhase(songId, 'clips');
           } catch (err) {
-            console.error('SongPipelineView: no se pudo reprocesar sincronía y tono', err);
+            console.error('SongPipelineView: no se pudo reprocesar sincronía, tono y clips', err);
             showToast('No se pudo reintentar la fase. Intentá de nuevo.');
           }
         },
@@ -464,7 +478,7 @@ export function renderSongPipelineView(container, songId) {
     if (key === 'lyrics_review' && runStatus === 'awaiting_lyrics') {
       return { state: 'act', subtitle: table.awaiting };
     }
-    if ((key === 'sync' || key === 'pitch') && !lyricsApproved) {
+    if ((key === 'sync' || key === 'pitch' || key === 'clips') && !lyricsApproved) {
       return { state: 'blocked', subtitle: table.blocked };
     }
     return { state: 'pending', subtitle: table.pending };

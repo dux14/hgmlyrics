@@ -304,6 +304,15 @@ body.chrome-hidden .main {
   }
 }
 
+/* Pista de teclado del editor de renglón: partir a mano (Enter) no tiene
+   affordance visible propia — las tijeras solo aparecen en los cortes
+   sugeridos — así que se enuncia acá, bajo los botones. */
+.lrp .lrp__edit-hint {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+}
+
 .lrp .lrp__edit-input {
   flex: 1;
   min-width: 0;

@@ -355,7 +355,8 @@ export async function LyricsReviewPanel({ songId, onApproved, onRetry } = {}) {
     lineEl.innerHTML = `
       <textarea class="lrp__edit-input" rows="1" aria-label="Texto editado del renglón">${escapeHtml(line.text)}</textarea>
       <button type="button" class="btn lrp__edit-save">Guardar</button>
-      <button type="button" class="btn2 lrp__edit-cancel">Cancelar</button>`;
+      <button type="button" class="btn2 lrp__edit-cancel">Cancelar</button>
+      <p class="lrp__edit-hint">Enter parte el renglón · Cmd/Ctrl+Enter guarda</p>`;
     const textarea = lineEl.querySelector('.lrp__edit-input');
     const save = () => {
       const text = textarea.value;

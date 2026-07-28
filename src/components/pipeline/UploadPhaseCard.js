@@ -24,6 +24,12 @@ import {
 // medio escribir o el botón Reintentar de un confirm fallido.
 const LOCAL_STATES = new Set(['validating', 'warning', 'uploading', 'renaming', 'confirmError']);
 
+// Estados terminales del run (song_pipeline_runs.status): ninguno de estos
+// sigue "procesando en segundo plano". Sin este set completo, un run
+// failed/cancelled/superseded mostraba el spinner para siempre (#7),
+// contradiciendo las filas del stepper que sí pintan el error.
+const TERMINAL_RUN_STATUSES = new Set(['done', 'failed', 'cancelled', 'superseded']);
+
 /**
  * @param {{ songId: string, onAfterConfirm?: () => void }} opts
  * @returns {{ el: HTMLElement, update: (run: object|null) => void, dispose: () => void }}
@@ -137,7 +143,7 @@ export function createUploadPhaseCard({ songId, onAfterConfirm }) {
     const meta = run?.inputMeta || {};
     const displayName = meta.displayName || meta.filename || '';
     const showOriginal = meta.displayName && meta.filename && meta.displayName !== meta.filename;
-    const isProcessing = Boolean(run) && run.status !== 'done';
+    const isProcessing = Boolean(run) && !TERMINAL_RUN_STATUSES.has(run.status);
 
     el.innerHTML = `
       <div class="upload-card__confirmed">

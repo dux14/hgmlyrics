@@ -146,6 +146,33 @@ describe('UploadPhaseCard — subida del audio (Task D3b)', () => {
     expect(el.querySelector('.upload-card__replace')).toBeTruthy();
   });
 
+  it.each(['failed', 'cancelled', 'superseded'])(
+    'run %s con upload done: NO muestra "Procesando en segundo plano" (#7)',
+    (status) => {
+      const { el, update } = createUploadPhaseCard({ songId: SONG_ID });
+      update({
+        status,
+        phases: { upload: { status: 'done' } },
+        inputMeta: { filename: 'original.mp3' },
+      });
+
+      expect(el.querySelector('.upload-card__status')).toBeFalsy();
+    },
+  );
+
+  it('run processing con upload done: SÍ muestra "Procesando en segundo plano"', () => {
+    const { el, update } = createUploadPhaseCard({ songId: SONG_ID });
+    update({
+      status: 'processing',
+      phases: { upload: { status: 'done' } },
+      inputMeta: { filename: 'original.mp3' },
+    });
+
+    expect(el.querySelector('.upload-card__status')?.textContent).toContain(
+      'Procesando en segundo plano',
+    );
+  });
+
   it('confirmed → click en lapiz → Guardar: llama renamePipelineAudio', async () => {
     const { el, update } = createUploadPhaseCard({ songId: SONG_ID });
     update({

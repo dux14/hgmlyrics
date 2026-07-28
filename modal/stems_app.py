@@ -153,7 +153,7 @@ def s1_extract(payload: dict) -> str | None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# S2 — estructura (SongFormer, CPU)
+# S2 — estructura (SongFormer, GPU L4)
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.function(image=songformer_image, secrets=_webhook_secrets, gpu="L4", timeout=900)

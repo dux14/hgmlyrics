@@ -127,6 +127,34 @@ describe('onStatus — sin render optimista parcial', () => {
     document.body.innerHTML = '';
   });
 
+  it('un refresh silencioso pausa y desconecta los <audio> huérfanos antes de vaciar el body', async () => {
+    const { getJob } = await import('../lib/stemsApi.js');
+    const body = document.querySelector('#studio-body');
+
+    // Simula un <audio> de una sección ya terminada, montado por un render
+    // previo, que el usuario podría estar escuchando cuando llega el refresh.
+    const orphanAudio = document.createElement('audio');
+    orphanAudio.src = 'https://example.com/voz.mp3';
+    body.appendChild(orphanAudio);
+    const pauseSpy = vi.spyOn(orphanAudio, 'pause');
+
+    getJob.mockResolvedValueOnce({
+      job: {
+        id: 'job-1',
+        status: 'processing',
+        sections: { s1: { status: 'done' } },
+        stems: {},
+        voices: {},
+      },
+    });
+    capturedOnStatus({ status: 'processing', sections: { s1: { status: 'done' } } });
+    await vi.waitFor(() => expect(pauseSpy).toHaveBeenCalled());
+
+    expect(orphanAudio.hasAttribute('src')).toBe(false);
+    // El nodo huérfano ya no cuelga del body tras el re-render.
+    expect(body.contains(orphanAudio)).toBe(false);
+  });
+
   it('cuando llega un push con sections, dispara getJob (refresh) exactamente una vez adicional', async () => {
     const { getJob } = await import('../lib/stemsApi.js');
     const callsBefore = getJob.mock.calls.length;

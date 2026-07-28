@@ -121,6 +121,26 @@ describe('createStudioPlayer — SEC-X1: safeUrl bloquea javascript: en href y s
   });
 });
 
+describe('createStudioPlayer — destroy()', () => {
+  it('pausa el audio, le quita el src y no reacciona a eventos posteriores', () => {
+    const { el, audio, destroy } = createStudioPlayer({ label: 'Voz', url: 'https://x/voz.mp3' });
+    const playBtn = el.querySelector('.studio-player__play');
+    const pauseSpy = vi.spyOn(audio, 'pause');
+    const loadSpy = vi.spyOn(audio, 'load');
+
+    destroy();
+
+    expect(pauseSpy).toHaveBeenCalled();
+    expect(audio.hasAttribute('src')).toBe(false);
+    expect(loadSpy).toHaveBeenCalled();
+
+    // Listeners colgados de ac.signal ya no reaccionan tras destroy().
+    const labelBefore = playBtn.getAttribute('aria-label');
+    audio.dispatchEvent(new Event('play'));
+    expect(playBtn.getAttribute('aria-label')).toBe(labelBefore);
+  });
+});
+
 describe('createStudioPlayer — evento error', () => {
   it('avisa con un toast y restaura el ícono de play cuando el audio falla', async () => {
     const { el, audio } = createStudioPlayer({ label: 'Voz', url: 'https://x/voz.mp3' });

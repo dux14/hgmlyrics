@@ -385,6 +385,21 @@ async function showJob(body, jobId, quota) {
 }
 
 /**
+ * Pausa y desconecta todos los `<audio>` montados en `body` antes de un
+ * `innerHTML = ''`. El polling (cada 10 s, o antes por Realtime) re-renderiza
+ * el body mientras el job sigue en 'processing'; sin esto, el <audio> de una
+ * sección ya terminada que el usuario esté escuchando queda huérfano (fuera
+ * del DOM pero sonando, sin ningún control visible para pararlo).
+ */
+function pauseMountedAudios(body) {
+  body.querySelectorAll('audio').forEach((audio) => {
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load?.();
+  });
+}
+
+/**
  * Monta la UI viva de las tarjetas ya renderizadas en `body`: players de audio,
  * timeline de structure (con seek + markActive) y botones de reintento por sección.
  * Compartido por `renderProcessing` (revelado progresivo) y `renderJob` (terminal),
@@ -594,6 +609,7 @@ function renderProcessing(body, job, filename, quota) {
   hint.textContent = 'Puedes salir de esta página; el proceso sigue solo.';
   frag.appendChild(hint);
 
+  pauseMountedAudios(body);
   body.innerHTML = '';
   body.appendChild(frag);
 
@@ -709,6 +725,7 @@ function renderJob(body, job, quota) {
   newBtn.textContent = 'Procesar otra canción';
   frag.appendChild(newBtn);
 
+  pauseMountedAudios(body);
   body.innerHTML = '';
   body.appendChild(frag);
 

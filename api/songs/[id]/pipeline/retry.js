@@ -8,7 +8,7 @@ import { allowMethods, withErrors } from '../../../_lib/http.js';
 import { canStartPhase, retriesLeft, runStatusFromPhases } from '../../../_lib/pipeline/state.js';
 import { dispatchPhase } from './_dispatch.js';
 
-const RETRYABLE_PHASES = new Set(['stems', 'transcription', 'sync', 'pitch', 'clips']);
+const RETRYABLE_PHASES = new Set(['stems', 'structure', 'transcription', 'sync', 'pitch', 'clips']);
 
 export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['POST'])) return;

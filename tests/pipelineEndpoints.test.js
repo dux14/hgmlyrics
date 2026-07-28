@@ -1161,6 +1161,35 @@ describe('POST /api/songs/:id/pipeline/retry', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'Reintentos agotados' });
     expect(dispatchPhase.mock.calls.length).toBe(dispatchCallsBefore);
   });
+
+  // Tarea 4 (structure reintentable): 'structure' ahora admite reintento
+  // propio, independiente de 'stems' -- antes daba 400 "no admite reintento".
+  it("'structure' admite reintento (Tarea 4): resetea a pending/running y re-despacha", async () => {
+    let persisted;
+    const phases = initialPhases();
+    phases.upload.status = 'done';
+    phases.structure = { status: 'failed', error: 'boom', tracks: undefined, artifacts: undefined };
+    routeSql([
+      [
+        "status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')",
+        [{ id: 'r1', songId: 's1', status: 'processing', phases, inputPath: 'p' }],
+      ],
+      [
+        'UPDATE song_pipeline_runs SET phases = ',
+        (values) => {
+          persisted = values.find((v) => v && v.structure);
+          return { count: 1 };
+        },
+      ],
+    ]);
+    const res = makeRes();
+    await retryHandler({ method: 'POST', query: { id: 's1' }, body: { phase: 'structure' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(dispatchPhase).toHaveBeenCalledWith('structure', expect.objectContaining({ id: 'r1' }), {
+      isRetry: true,
+    });
+    expect(persisted.structure.status).toBe('running');
+  });
 });
 
 describe('PATCH /api/songs/:id/pipeline (renombrar audio)', () => {

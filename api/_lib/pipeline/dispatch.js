@@ -143,6 +143,54 @@ export async function dispatchPitch({
 }
 
 /**
+ * structure: web function `structure` de `modal/stems_app.py` (fase best-effort
+ * del DAG, SongFormer). Mismo `x-inbound-secret` que el resto de las apps
+ * Modal (MODAL_INBOUND_SECRET). El webhook NO es el de stems: `/api/stems/webhook`
+ * es del modelo legado del Estudio (`applySectionWebhook`, `api/stems/_process.js`)
+ * y espera un `jobId` de la tabla `stem_jobs` — nuestro `jobId` es un id de
+ * `song_pipeline_runs`, así que ese endpoint siempre devolvería 404. Por eso
+ * `webhookUrl` viaja como parámetro, igual que el resto de las fases: lo arma
+ * `webhookUrl()` en `_dispatch.js` apuntando a `/api/pipeline/webhook`, que sí
+ * traduce el evento con `sectionEventToPhaseEvent` y llega a `applyPipelinePhaseEvent`.
+ * `reset` (Task 4, structure reintentable): lo pasa `dispatchPhase` como
+ * `isRetry`, mismo criterio que `pitch` — sin esto un reintento reusaría el
+ * `jobId` (=run.id) ya visto por Modal y quedaría deduplicado sin relanzar.
+ * @param {{ run:{id:string, songId:string}, inputGetUrl:string, reset?:boolean,
+ *           webhookUrl:string }} args
+ * @returns {Promise<{id:string}>}
+ */
+export async function dispatchStructure({ run, inputGetUrl, reset = false, webhookUrl }) {
+  const endpoint = process.env.MODAL_STRUCTURE_ENDPOINT;
+  const secret = process.env.MODAL_INBOUND_SECRET;
+  if (!endpoint || !secret) {
+    const e = new Error('MODAL_STRUCTURE_ENDPOINT / MODAL_INBOUND_SECRET no configurados');
+    e.status = 500;
+    throw e;
+  }
+  const res = await fetchWithTimeout(
+    endpoint,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-inbound-secret': secret },
+      body: JSON.stringify({
+        jobId: run.id,
+        input: { getUrl: inputGetUrl },
+        webhook: { url: webhookUrl, secret: process.env.MODAL_WEBHOOK_SECRET },
+        reset,
+      }),
+    },
+    { timeoutMs: MODAL_DISPATCH_TIMEOUT_MS, label: 'Modal (structure)' },
+  );
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    const e = new Error(`Modal ${res.status}: ${detail.slice(0, 200)}`);
+    e.status = 502;
+    throw e;
+  }
+  return { id: (await res.json()).callId };
+}
+
+/**
  * clips: función hkn-clips (Task B6, `modal/clips_app.py` `run_clips` +
  * endpoint `start`). Payload EXACTO del contrato real (ver docstring del
  * módulo + `_validate_clips_payload`): { runId, webhookUrl, snapshotHash?,

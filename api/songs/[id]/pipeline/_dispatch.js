@@ -3,6 +3,7 @@
 // run persistido. Prefijo `_`: no es una ruta, mismo criterio que api/pitch/_lib.
 import {
   dispatchStems,
+  dispatchStructure,
   dispatchTranscribe,
   dispatchAlign,
   dispatchPitch,
@@ -95,7 +96,7 @@ async function stemsUploads(songId) {
  * de estado antes de invocar, igual criterio que dispatch.js). `transcription`
  * y `clips` dependen de apps Modal que aún no existen (Task B5/B6, ver
  * comentarios en dispatch.js) — fallan igual con un 500 claro, sin guard especial.
- * @param {'stems'|'transcription'|'sync'|'pitch'|'clips'} phase
+ * @param {'stems'|'structure'|'transcription'|'sync'|'pitch'|'clips'} phase
  * @param {{id:string, songId:string, inputPath:string, phases:object}} run
  * @param {{isRetry?:boolean}} [opts] `isRetry` solo lo pasa retry.js (acción
  *   deliberada del admin sobre una fase failed/stale) — hoy únicamente lo
@@ -114,6 +115,20 @@ export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
       run: { id: run.id, songId: run.songId, inputGetUrl },
       uploads,
       enabledSections: ENABLED_SECTIONS,
+      webhookUrl: webhook,
+    });
+  }
+  if (phase === 'structure') {
+    // Reintentable de forma independiente de 'stems' (fase best-effort del
+    // DAG, fuera de CRITICAL_PHASES — ver state.js). Firma inputGetUrl igual
+    // que 'stems' arriba: la web function `structure` de modal/stems_app.py
+    // corre SongFormer sobre el mismo audio de entrada del run, no depende
+    // de que 'stems' haya terminado.
+    const inputGetUrl = await signSongAudioDownload(run.inputPath);
+    return dispatchStructure({
+      run: { id: run.id, songId: run.songId },
+      inputGetUrl,
+      reset: isRetry,
       webhookUrl: webhook,
     });
   }

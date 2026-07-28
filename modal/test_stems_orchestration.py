@@ -10,7 +10,7 @@ Correr con: cd modal && python3 -m pytest test_stems_orchestration.py -q
 
 from __future__ import annotations
 
-from stems_app import _validate_stems_payload, plan_sections
+from stems_app import _validate_stems_payload, _validate_structure_payload, plan_sections
 
 
 def test_plan_sections_lanza_las_5_en_una_sola_fase():
@@ -77,3 +77,39 @@ def test_validate_stems_payload_sin_webhook():
         "uploads": {"voiceInstrumental": {}},
     }
     assert _validate_stems_payload(payload) is not None
+
+
+def test_validate_structure_payload_ok_sin_uploads():
+    # S2 no sube nada: a diferencia de _validate_stems_payload, este
+    # validador NO debe exigir `uploads`.
+    payload = {
+        "jobId": "job1",
+        "input": {"getUrl": "https://example.com/audio.mp3"},
+        "webhook": {"url": "https://example.com/webhook", "secret": "s3cr3t"},
+    }
+    assert _validate_structure_payload(payload) is None
+
+
+def test_validate_structure_payload_sin_jobId():
+    payload = {
+        "input": {"getUrl": "https://example.com/audio.mp3"},
+        "webhook": {"url": "https://example.com/webhook", "secret": "s3cr3t"},
+    }
+    assert _validate_structure_payload(payload) is not None
+
+
+def test_validate_structure_payload_sin_input_getUrl():
+    payload = {
+        "jobId": "job1",
+        "input": {},
+        "webhook": {"url": "https://example.com/webhook", "secret": "s3cr3t"},
+    }
+    assert _validate_structure_payload(payload) is not None
+
+
+def test_validate_structure_payload_sin_webhook():
+    payload = {
+        "jobId": "job1",
+        "input": {"getUrl": "https://example.com/audio.mp3"},
+    }
+    assert _validate_structure_payload(payload) is not None

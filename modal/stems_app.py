@@ -379,3 +379,51 @@ def start(payload: dict, x_inbound_secret: str = Header(default="")):
     call = run_pipeline.spawn(payload)
     _seen[job_id] = call.object_id
     return {"callId": call.object_id}
+
+
+def _validate_structure_payload(payload: dict) -> str | None:
+    """Valida el payload de un dispatch de S2 en solitario, ANTES de lanzar
+    s2_structure. Paralelo a _validate_stems_payload, pero SIN exigir
+    `uploads`: S2 no sube nada, y ese requisito es justo lo que impide
+    reusar `start` para reintentar solo la fase de estructura."""
+    if not payload.get("jobId"):
+        return "falta jobId"
+    if not payload.get("input", {}).get("getUrl"):
+        return "falta input.getUrl"
+    if not payload.get("webhook"):
+        return "falta webhook"
+    return None
+
+
+@app.function(image=dispatch_image, secrets=_webhook_secrets)
+@modal.fastapi_endpoint(method="POST")
+def structure(payload: dict, x_inbound_secret: str = Header(default="")):
+    """
+    Punto de entrada HTTP para reintentar SOLO la fase S2 (SongFormer), sin
+    correr el pipeline completo. Mismo patrón que `start`/`transcribe`.
+
+    Idempotencia: usa el mismo Dict `_seen` que `start`, pero con clave
+    prefijada `structure:<jobId>` -- el jobId que llega acá es el MISMO
+    runId que ya usó `start`, y sin el prefijo colisionaría con la entrada
+    de `start` (el retry de structure no spawnearía nada). `payload.reset`
+    fuerza un run nuevo, igual que en `start`.
+
+    Respuesta: { "callId": "<modal call object_id>", "dedup"?: true }
+    """
+    if not hmac.compare_digest(
+        x_inbound_secret,
+        os.environ.get("MODAL_INBOUND_SECRET", ""),
+    ):
+        raise HTTPException(status_code=401, detail="bad inbound secret")
+
+    validation_error = _validate_structure_payload(payload)
+    if validation_error:
+        raise HTTPException(status_code=400, detail=validation_error)
+
+    seen_key = f"structure:{payload['jobId']}"
+    if not payload.get("reset") and seen_key in _seen:
+        return {"callId": _seen[seen_key], "dedup": True}
+
+    call = s2_structure.spawn(payload)
+    _seen[seen_key] = call.object_id
+    return {"callId": call.object_id}

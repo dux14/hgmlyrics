@@ -25,11 +25,56 @@ process.env.MODAL_INBOUND_SECRET = 'inbound-secret';
 const { fetchWithTimeout } = await import('../api/_lib/http.js');
 const { invokeModalPipeline } = await import('../api/_lib/modal.js');
 const { invokePitchPipeline } = await import('../api/pitch/_lib/modal.js');
-const { dispatchStems, dispatchTranscribe, dispatchPitch } = await import('../api/_lib/pipeline/dispatch.js');
+const { dispatchStems, dispatchStructure, dispatchTranscribe, dispatchPitch } = await import(
+  '../api/_lib/pipeline/dispatch.js'
+);
 
 beforeEach(() => {
   vi.clearAllMocks();
   fetchWithTimeout.mockResolvedValue({ ok: true, json: async () => ({ callId: 'call1' }) });
+  process.env.MODAL_STRUCTURE_ENDPOINT = 'https://modal.example/structure';
+  process.env.PUBLIC_BASE_URL = 'https://hgmlyrics.vercel.app';
+  process.env.MODAL_WEBHOOK_SECRET = 'webhook-secret';
+});
+
+// Task 2 (structure reintentable): dispatchStructure llama a la web function
+// `structure` de modal/stems_app.py con el mismo header x-inbound-secret que
+// el resto de las apps Modal. webhookUrl viaja como parámetro (igual que
+// stems/transcribe/pitch) y debe apuntar a /api/pipeline/webhook, el único
+// que traduce el evento de sección 'structure' con sectionEventToPhaseEvent
+// hasta applyPipelinePhaseEvent — /api/stems/webhook es del modelo legado de
+// stem_jobs y con un jobId de song_pipeline_runs siempre da 404.
+describe('dispatchStructure', () => {
+  it('postea jobId/input/webhook/reset al endpoint de structure con x-inbound-secret', async () => {
+    await dispatchStructure({
+      run: { id: 'run1', songId: 'song1' },
+      inputGetUrl: 'https://get/input.mp3',
+      webhookUrl: 'https://hgmlyrics.vercel.app/api/pipeline/webhook',
+    });
+
+    expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+    const [endpoint, opts] = fetchWithTimeout.mock.calls[0];
+    expect(endpoint).toBe('https://modal.example/structure');
+    expect(opts.headers['x-inbound-secret']).toBe('inbound-secret');
+    const body = JSON.parse(opts.body);
+    expect(body).toEqual({
+      jobId: 'run1',
+      input: { getUrl: 'https://get/input.mp3' },
+      webhook: { url: 'https://hgmlyrics.vercel.app/api/pipeline/webhook', secret: 'webhook-secret' },
+      reset: false,
+    });
+  });
+
+  it('reset:true se propaga al payload (reintento explícito vía retry.js)', async () => {
+    await dispatchStructure({
+      run: { id: 'run1', songId: 'song1' },
+      inputGetUrl: 'https://get/input.mp3',
+      reset: true,
+      webhookUrl: 'https://hgmlyrics.vercel.app/api/pipeline/webhook',
+    });
+    const body = JSON.parse(fetchWithTimeout.mock.calls[0][1].body);
+    expect(body.reset).toBe(true);
+  });
 });
 
 describe('dispatchStems', () => {

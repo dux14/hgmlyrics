@@ -12,6 +12,7 @@ vi.mock('../api/_lib/storage.js', () => ({
 }));
 vi.mock('../api/_lib/pipeline/dispatch.js', () => ({
   dispatchStems: vi.fn(async () => ({ id: 'stems-call' })),
+  dispatchStructure: vi.fn(async () => ({ id: 'structure-call' })),
   dispatchTranscribe: vi.fn(async () => ({ id: 'transcribe-call' })),
   dispatchAlign: vi.fn(async () => ({ id: 'align-call' })),
   dispatchPitch: vi.fn(async () => ({ id: 'pitch-call' })),
@@ -28,9 +29,8 @@ vi.mock('../api/_lib/db.js', () => ({ default: sqlMock }));
 process.env.PUBLIC_BASE_URL = 'https://hgmlyrics.vercel.app';
 
 const { dispatchPhase } = await import('../api/songs/[id]/pipeline/_dispatch.js');
-const { dispatchStems, dispatchTranscribe, dispatchAlign, dispatchPitch, dispatchClips } = await import(
-  '../api/_lib/pipeline/dispatch.js'
-);
+const { dispatchStems, dispatchStructure, dispatchTranscribe, dispatchAlign, dispatchPitch, dispatchClips } =
+  await import('../api/_lib/pipeline/dispatch.js');
 
 const SANTO_SECTIONS = [
   { type: 'verse', lines: [{ text: 'Santo, Santo, Santo' }, { text: '(instrumental)', annotation: true }] },
@@ -94,6 +94,39 @@ describe("dispatchPhase('stems')", () => {
     });
     // structure no sube archivos: no debe aparecer en uploads.
     expect(args.uploads.structure).toBeUndefined();
+  });
+});
+
+// structure reintentable (docs/plans/2026-07-28-structure-reintentable.md
+// Tarea 3): antes 'structure' no tenía rama propia en dispatchPhase y caía
+// al fallback final, que despacha CLIPS -- bug grave que este test cierra.
+describe("dispatchPhase('structure')", () => {
+  it('llama a dispatchStructure con inputGetUrl firmado, no a dispatchClips (fallback de clips)', async () => {
+    const run = { id: 'run1', songId: 'song1', inputPath: 'song1/input.mp3' };
+    await dispatchPhase('structure', run);
+
+    expect(dispatchStructure).toHaveBeenCalledTimes(1);
+    expect(dispatchClips).not.toHaveBeenCalled();
+    const args = dispatchStructure.mock.calls[0][0];
+    expect(args.run).toEqual({ id: 'run1', songId: 'song1' });
+    expect(args.inputGetUrl).toBe('https://signed/get/song1/input.mp3');
+    // FIX BLOCKER (docs/plans/2026-07-28-structure-reintentable.md, Tarea 2):
+    // debe recibir el webhookUrl compartido del pipeline unificado, no armar
+    // uno propio apuntando a /api/stems/webhook (modelo legado sin fila en
+    // song_pipeline_runs, 404 seguro).
+    expect(args.webhookUrl).toBe('https://hgmlyrics.vercel.app/api/pipeline/webhook');
+  });
+
+  it('dispatch inicial (sin isRetry) pasa reset:false', async () => {
+    const run = { id: 'run1', songId: 'song1', inputPath: 'song1/input.mp3' };
+    await dispatchPhase('structure', run);
+    expect(dispatchStructure).toHaveBeenCalledWith(expect.objectContaining({ reset: false }));
+  });
+
+  it('retry.js (isRetry:true) fuerza reset:true', async () => {
+    const run = { id: 'run1', songId: 'song1', inputPath: 'song1/input.mp3' };
+    await dispatchPhase('structure', run, { isRetry: true });
+    expect(dispatchStructure).toHaveBeenCalledWith(expect.objectContaining({ reset: true }));
   });
 });
 

@@ -69,7 +69,13 @@ export default withErrors(async (req, res) => {
   const user = await requireUser(req);
   const { id } = req.query;
 
-  let rows = await sql`SELECT * FROM stem_jobs WHERE id = ${id} AND user_id = ${user.id}`;
+  // SEC-15: columnas explícitas (no SELECT *) — una columna sensible agregada
+  // mañana no queda expuesta al cliente sin que se note en el diff.
+  let rows = await sql`
+    SELECT id, user_id, status, input_path, input_meta, stems, voices, predictions,
+           error, created_at, updated_at, expires_at, sections, enabled_sections
+    FROM stem_jobs WHERE id = ${id} AND user_id = ${user.id}
+  `;
   if (rows.length === 0) {
     res.status(404).json({ error: 'Job no encontrado' });
     return;
@@ -84,7 +90,8 @@ export default withErrors(async (req, res) => {
       UPDATE stem_jobs
       SET input_meta = ${sql.json({ ...meta, title: cleanTitle })}
       WHERE id = ${job.id} AND user_id = ${user.id}
-      RETURNING *
+      RETURNING id, user_id, status, input_path, input_meta, stems, voices, predictions,
+                error, created_at, updated_at, expires_at, sections, enabled_sections
     `;
     if (!updated[0]) {
       res.status(404).json({ error: 'Job no encontrado' });
@@ -103,7 +110,11 @@ export default withErrors(async (req, res) => {
           error = 'El procesamiento expiró. Intenta de nuevo (no consumió tu cuota).', updated_at = now()
         WHERE id = ${job.id} AND status = 'processing'
       `;
-      rows = await sql`SELECT * FROM stem_jobs WHERE id = ${id} AND user_id = ${user.id}`;
+      rows = await sql`
+        SELECT id, user_id, status, input_path, input_meta, stems, voices, predictions,
+               error, created_at, updated_at, expires_at, sections, enabled_sections
+        FROM stem_jobs WHERE id = ${id} AND user_id = ${user.id}
+      `;
       job = rows[0];
     }
   }
@@ -112,7 +123,9 @@ export default withErrors(async (req, res) => {
   // `input_path` expone claves de Storage internas; `predictions` es interno del pipeline.
   // `input_meta` se CONSERVA: el front lo usa para mostrar el nombre del archivo.
   function toClientJob(j) {
-    const { input_path: _ip, predictions: _pr, ...rest } = j;
+    const rest = { ...j };
+    delete rest.input_path;
+    delete rest.predictions;
     return rest;
   }
 

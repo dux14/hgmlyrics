@@ -12,9 +12,19 @@ export default withErrors(async (req, res) => {
     // El admin puede ver borradores (no publicadas) para preview/edición;
     // el resto solo ve publicadas.
     const admin = await isAdminUser(user, sql);
+    // Columnas explícitas (no SELECT *): una columna sensible agregada mañana
+    // no queda expuesta al cliente sin que se note en el diff.
     const rows = admin
-      ? await sql`SELECT * FROM weekly_words WHERE id = ${id}`
-      : await sql`SELECT * FROM weekly_words WHERE id = ${id} AND published = true`;
+      ? await sql`
+          SELECT id, sunday_date, gospel_ref, liturgical_title, liturgical_color,
+                 voiceover_body, gospel_body, published, title, created_at, updated_at
+          FROM weekly_words WHERE id = ${id}
+        `
+      : await sql`
+          SELECT id, sunday_date, gospel_ref, liturgical_title, liturgical_color,
+                 voiceover_body, gospel_body, published, title, created_at, updated_at
+          FROM weekly_words WHERE id = ${id} AND published = true
+        `;
     if (!rows[0]) {
       const e = new Error('Voz en off no encontrada');
       e.status = 404;

@@ -19,6 +19,10 @@ import { freshShuffle } from '../lib/shuffle.js';
 let colorMap = {};
 let colorsLoaded = false;
 
+// B6 (perf): debounce del input de búsqueda — sin él, cada pulsación
+// recorre songRecords/weeklyRecords de inmediato.
+const SEARCH_DEBOUNCE_MS = 120;
+
 async function ensureColors() {
   if (colorsLoaded) return;
   try {
@@ -204,6 +208,7 @@ export async function renderSearchPage(container, weeklyWords = null) {
   const input = bar.querySelector('input');
   const clearBtn = bar.querySelector('.search-bar__clear');
   let overlayOpen = false;
+  let searchDebounceTimer = null;
 
   const resultsBox = document.createElement('div');
   resultsBox.className = 'search-inline-results';
@@ -326,15 +331,18 @@ export async function renderSearchPage(container, weeklyWords = null) {
     if (input.value.trim()) showResults(input.value);
   });
 
-  // Actualizar resultados al escribir
+  // Actualizar resultados al escribir — debounced (SEARCH_DEBOUNCE_MS): vaciar
+  // el campo sí es inmediato, no necesita esperar al debounce.
   input.addEventListener('input', () => {
-    if (input.value.trim()) {
-      showResults(input.value);
-    } else {
+    clearTimeout(searchDebounceTimer);
+    const value = input.value;
+    if (!value.trim()) {
       hub.hidden = false;
       clearBtn.hidden = true;
       resultsBox.innerHTML = '';
+      return;
     }
+    searchDebounceTimer = setTimeout(() => showResults(value), SEARCH_DEBOUNCE_MS);
   });
 
   // Escape sale del focus

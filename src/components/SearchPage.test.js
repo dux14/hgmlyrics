@@ -323,6 +323,7 @@ describe('renderSearchPage', () => {
     input.dispatchEvent(new Event('focus'));
     input.value = 'refug';
     input.dispatchEvent(new Event('input'));
+    await new Promise((r) => setTimeout(r, 130)); // B6: debounce de busqueda
 
     // Con texto: hub oculto
     expect(container.querySelector('.search-hub').hidden).toBe(true);
@@ -353,6 +354,7 @@ describe('renderSearchPage', () => {
     input.dispatchEvent(new Event('focus'));
     input.value = 'gracia';
     input.dispatchEvent(new Event('input'));
+    await new Promise((r) => setTimeout(r, 130)); // B6: debounce de busqueda
 
     const row = container.querySelector('.search-row');
     expect(row).not.toBeNull();
@@ -383,6 +385,7 @@ describe('renderSearchPage', () => {
     input.dispatchEvent(new Event('focus'));
     input.value = 'gracia';
     input.dispatchEvent(new Event('input'));
+    await new Promise((r) => setTimeout(r, 130)); // B6: debounce de busqueda
     clearBackable.mockClear(); // ignora el clearBackable del montaje
 
     container.querySelector('.search-row').click();
@@ -407,6 +410,7 @@ describe('renderSearchPage', () => {
     input.dispatchEvent(new Event('focus'));
     input.value = 'nuevo';
     input.dispatchEvent(new Event('input'));
+    await new Promise((r) => setTimeout(r, 130)); // B6: debounce de busqueda
 
     const rows = container.querySelectorAll('.search-row');
     expect(rows).toHaveLength(3);
@@ -428,6 +432,7 @@ describe('renderSearchPage', () => {
     input.dispatchEvent(new Event('focus'));
     input.value = 'xyzzy';
     input.dispatchEvent(new Event('input'));
+    await new Promise((r) => setTimeout(r, 130)); // B6: debounce de busqueda
 
     const empty = container.querySelector('.search-empty');
     expect(empty).not.toBeNull();

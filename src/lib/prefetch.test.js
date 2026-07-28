@@ -46,6 +46,38 @@ describe('cached', () => {
     }, { ttl: 0 }); // ttl 0 fuerza revalidación
     expect(r).toEqual({ data: ['viejo'], fromCache: true });
   });
+
+  it('B7: peticiones concurrentes a la misma key en frío dedupan — el fetcher llama una sola vez', async () => {
+    let resolveFetch;
+    const fetcher = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+    // 3 lecturas "simultáneas" antes de que el fetcher resuelva.
+    const p1 = cached('dedup-k', fetcher);
+    const p2 = cached('dedup-k', fetcher);
+    const p3 = cached('dedup-k', fetcher);
+
+    resolveFetch(['solo-una-vez']);
+    const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(r1).toEqual({ data: ['solo-una-vez'], fromCache: false });
+    expect(r2).toEqual(r1);
+    expect(r3).toEqual(r1);
+  });
+
+  it('B7: tras resolver, una lectura posterior en frio dispara un fetch nuevo (no queda colgado en inFlight)', async () => {
+    const fetcher = vi.fn(async () => ['primero']);
+    await cached('dedup-k2', fetcher);
+    invalidate('dedup-k2'); // fuerza frio de nuevo
+    const fetcher2 = vi.fn(async () => ['segundo']);
+    const r = await cached('dedup-k2', fetcher2);
+    expect(fetcher2).toHaveBeenCalledTimes(1);
+    expect(r).toEqual({ data: ['segundo'], fromCache: false });
+  });
 });
 
 describe('warm', () => {

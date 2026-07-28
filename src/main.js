@@ -148,15 +148,20 @@ async function bootBody() {
   if (isAuthenticated()) {
     await initStore();
     const { songs } = getState();
-    const weeklyWords = await loadWeeklyWordsForIndex();
-    buildIndex(songs, weeklyWords);
+    // B5 (perf): weekly-words solo alimenta el índice de búsqueda — no
+    // bloquear el primer render por ese round-trip. Se indexa primero sin
+    // ellas y, cuando resuelva en paralelo, buildIndex se vuelve a correr.
+    buildIndex(songs, []);
     updateSidebarContent();
+    loadWeeklyWordsForIndex().then((weeklyWords) => buildIndex(songs, weeklyWords));
   }
 
-  // Favoritos (cache en memoria) y recientes ligados a la cuenta (merge
-  // local+servidor). Independientes entre sí: en paralelo para no sumar
-  // round-trips al arranque.
-  await Promise.all([initFavorites(), initRecentVisits()]);
+  // Favoritos (cache en memoria) y recientes ligados a la cuenta: solo
+  // alimentan iconos de favorito y la lista de recientes, no el primer
+  // render ni el índice — se disparan sin await para no sumar round-trips
+  // al TTI.
+  initFavorites();
+  initRecentVisits();
 
   // Subscribe to state changes — re-render song list when on home page
   subscribe(async (state) => {

@@ -4,6 +4,9 @@ import { get, set, del, keys } from 'idb-keyval';
 
 const TTL_MS = 60_000; // frescura en memoria
 const mem = new Map(); // key -> { data, ts }
+// B7 (perf): dedup de peticiones en vuelo — sin esto, N consumidores de la
+// misma key (p. ej. weekly-words) disparaban N fetches concurrentes idénticos.
+const inFlight = new Map(); // key -> Promise<{data, fromCache}>
 
 async function idbGet(key) {
   try {
@@ -31,6 +34,7 @@ export function readCached(key) {
 /** Vacía la cache (solo para tests). */
 export function _clearCache() {
   mem.clear();
+  inFlight.clear();
 }
 
 /** Invalida una key: borra memoria + idb para forzar refetch en la próxima lectura. */
@@ -71,15 +75,27 @@ export function invalidatePrefix(prefix) {
 export async function cached(key, fetcher, { ttl = TTL_MS } = {}) {
   const entry = mem.get(key);
   if (entry && Date.now() - entry.ts < ttl) return { data: entry.data, fromCache: true };
+
+  const existing = inFlight.get(key);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    try {
+      const data = await fetcher();
+      mem.set(key, { data, ts: Date.now() });
+      idbSet(key, data);
+      return { data, fromCache: false };
+    } catch (err) {
+      const fallback = entry?.data ?? (await idbGet(key));
+      if (fallback !== undefined) return { data: fallback, fromCache: true };
+      throw err;
+    }
+  })();
+  inFlight.set(key, promise);
   try {
-    const data = await fetcher();
-    mem.set(key, { data, ts: Date.now() });
-    idbSet(key, data);
-    return { data, fromCache: false };
-  } catch (err) {
-    const fallback = entry?.data ?? (await idbGet(key));
-    if (fallback !== undefined) return { data: fallback, fromCache: true };
-    throw err;
+    return await promise;
+  } finally {
+    inFlight.delete(key);
   }
 }
 

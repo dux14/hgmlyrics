@@ -6,6 +6,7 @@ import { renderAsyncRegion } from '../lib/renderAsync.js';
 import { skelProfile } from '../lib/skeleton.js';
 import { navigate } from '../router.js';
 import { icon } from '../lib/icons.js';
+import { avatarThumb } from '../lib/avatarUrl.js';
 import { compressImageToLimit } from '../lib/imageCompress.js'; // usados por renderProfileEdit (Task 3)
 import { escapeHtml } from '../lib/escape.js';
 import { createWaveRange } from './vocal-range/waveRange.js';
@@ -84,7 +85,7 @@ export function buildProfileHeader(profile) {
     <div class="pf-top">
       <div class="pf-amb" aria-hidden="true"></div>
       <span class="avatar-wrap">
-        <img class="pf-av" id="avatar-preview" src="${escapeHtml(avatarUrl)}" alt="Avatar" />${crown}
+        <img class="pf-av" id="avatar-preview" src="${escapeHtml(avatarThumb(avatarUrl, 104))}" alt="Avatar" />${crown}
       </span>
       <h1 class="pf-name">${escapeHtml(profile.displayName || profile.username)}</h1>
       <div class="pf-user">@${escapeHtml(profile.username)}</div>
@@ -161,6 +162,12 @@ async function deleteAvatar() {
   return data.url;
 }
 
+// El avatar se pinta como mucho a 104px, así que 512px de lado alcanzan de
+// sobra. Con el límite en 2 MB (el del endpoint), una foto de cámara entraba
+// por el atajo de compressImageToLimit y se subía intacta: 3024×4032 y ~1,6 MB
+// por fila de amigos, que es lo que hacía fallar la decodificación en mobile.
+const AVATAR_COMPRESSION = { maxBytes: 300 * 1024, maxDimension: 512 };
+
 function isCustomAvatar(url) {
   return !!url && /\/storage\/v\d+\/object\/public\/avatars\//.test(url);
 }
@@ -204,7 +211,7 @@ export async function renderProfileEdit(container) {
 
       <div class="pf-av-edit">
         <div class="pf-av-lg">
-          <img class="pf-av" id="avatar-preview" src="${escapeHtml(avatarUrl)}" alt="Avatar" />
+          <img class="pf-av" id="avatar-preview" src="${escapeHtml(avatarThumb(avatarUrl, 104))}" alt="Avatar" />
           <span class="pf-cam">${icon('camera', { size: 12 })}</span>
         </div>
         <div class="pf-ava">
@@ -326,7 +333,7 @@ export async function renderProfileEdit(container) {
       avatarError.style.display = 'block';
       avatarBtn.disabled = true;
       try {
-        const prepared = await compressImageToLimit(file);
+        const prepared = await compressImageToLimit(file, AVATAR_COMPRESSION);
         if (prepared.size > 2 * 1024 * 1024) {
           avatarError.textContent =
             'No pudimos reducir la imagen por debajo de 2 MB. Intenta con otra foto.';
@@ -336,7 +343,7 @@ export async function renderProfileEdit(container) {
         const url = await uploadAvatar(prepared);
         await refreshProfile();
         invalidateMyProfile();
-        avatarPreview.src = url;
+        avatarPreview.src = avatarThumb(url, 104);
         avatarRemoveBtn.style.display = 'flex';
         avatarError.style.display = 'none';
         avatarError.style.color = '';

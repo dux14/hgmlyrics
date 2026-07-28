@@ -92,7 +92,7 @@ describe('renderPublicProfile — SEC-X1: avatarUrl escapado en img src', () => 
     expect(img.hasAttribute('onerror')).toBe(false);
   });
 
-  it('avatarUrl legítima (https) se muestra como src sin modificaciones', async () => {
+  it('avatarUrl legítima (https) se sirve como miniatura del mismo objeto', async () => {
     const legitUrl = 'https://example.supabase.co/storage/v1/object/public/avatars/ana.webp';
     globalThis.fetch = vi.fn(() =>
       Promise.resolve({
@@ -122,8 +122,12 @@ describe('renderPublicProfile — SEC-X1: avatarUrl escapado en img src', () => 
     await flush(); // la región se pinta async tras el fetch
     const img = container.querySelector('img.pf-av');
     expect(img).not.toBeNull();
-    // escapeHtml no altera una URL legítima que no contiene &<>"'
-    expect(img.getAttribute('src')).toBe(legitUrl);
+    // La URL pasa por avatarThumb: mismo origen y mismo objeto, servido por el
+    // transformador de Storage. escapeHtml no altera una URL sin &<>"'.
+    const src = new URL(img.getAttribute('src'));
+    expect(src.origin).toBe('https://example.supabase.co');
+    expect(src.pathname).toBe('/storage/v1/render/image/public/avatars/ana.webp');
+    expect(src.searchParams.get('width')).toBe('104');
   });
 });
 

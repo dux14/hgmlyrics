@@ -2,6 +2,7 @@
  * PublicProfile.js — /u/:username (lectura, dentro del login wall).
  */
 import { getSession } from '../lib/authStore.js';
+import { avatarThumb } from '../lib/avatarUrl.js';
 import { escapeHtml } from '../lib/escape.js';
 import { isFounder, founderCrownHtml } from '../lib/founders.js';
 import { icon, COVER_PLACEHOLDER } from '../lib/icons.js';
@@ -134,7 +135,7 @@ export async function renderPublicProfile(container, username) {
           <div class="pf-top">
             <div class="pf-amb"></div>
             <span class="avatar-wrap">
-              ${avatar ? `<img class="pf-av" src="${escapeHtml(avatar)}" alt="" />` : `<div class="pf-av"></div>`}${crown}
+              ${avatar ? `<img class="pf-av" src="${escapeHtml(avatarThumb(avatar, 104))}" alt="" />` : `<div class="pf-av"></div>`}${crown}
             </span>
             <div class="pf-name">${displayName}</div>
             <div class="pf-user">@${escapeHtml(profile.username)} · ${friendCount} amigo${friendCount === 1 ? '' : 's'}</div>

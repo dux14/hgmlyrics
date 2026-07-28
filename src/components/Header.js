@@ -10,6 +10,7 @@
 import { navigate } from '../router.js';
 import { renderThemeToggle } from './ThemeToggle.js';
 import { icon } from '../lib/icons.js';
+import { avatarThumb } from '../lib/avatarUrl.js';
 import { getProfile, subscribe } from '../lib/authStore.js';
 
 /**
@@ -18,7 +19,7 @@ import { getProfile, subscribe } from '../lib/authStore.js';
  * @returns {string}
  */
 function avatarSrc(profile) {
-  if (profile?.avatarUrl) return profile.avatarUrl;
+  if (profile?.avatarUrl) return avatarThumb(profile.avatarUrl, 30);
   const initial = (profile?.displayName || profile?.username || '?').trim().charAt(0).toUpperCase();
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='0 0 30 30'><rect width='30' height='30' fill='#01ccd9'/><text x='15' y='20' text-anchor='middle' font-family='sans-serif' font-size='15' fill='#0b0b0b'>${initial}</text></svg>`;
   return 'data:image/svg+xml;base64,' + btoa(svg);

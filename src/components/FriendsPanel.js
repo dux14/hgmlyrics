@@ -4,6 +4,7 @@
 import '../styles/friends.css';
 import { getSession } from '../lib/authStore.js';
 import { emitPendingChanged } from '../lib/friends.js';
+import { avatarThumb } from '../lib/avatarUrl.js';
 import { escapeHtml } from '../lib/escape.js';
 import { isFounder, founderCrownHtml } from '../lib/founders.js';
 import { icon } from '../lib/icons.js';
@@ -77,7 +78,7 @@ function avatarHtml(person) {
   const initial = (person.displayName || person.username || '?').trim().charAt(0).toUpperCase();
   const crown = isFounder(person.username) ? founderCrownHtml() : '';
   const inner = person.avatarUrl
-    ? `<img class="friend-row__avatar" src="${escapeHtml(person.avatarUrl || '')}" alt="" width="46" height="46" loading="lazy" decoding="async" />`
+    ? `<img class="friend-row__avatar" src="${escapeHtml(avatarThumb(person.avatarUrl, 46))}" alt="" width="46" height="46" loading="lazy" decoding="async" />`
     : `<span class="friend-row__avatar friend-row__avatar--initial">${initial}</span>`;
   return `<span class="avatar-wrap">${inner}${crown}</span>`;
 }

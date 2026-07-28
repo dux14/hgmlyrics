@@ -179,6 +179,23 @@ export async function applyPipelinePhaseEvent(sql, jobId, event) {
         ON CONFLICT (song_id)
         DO UPDATE SET run_id = EXCLUDED.run_id, segments = EXCLUDED.segments, model = EXCLUDED.model, beats = EXCLUDED.beats, updated_at = now()
       `;
+      // Relleno de segunda oportunidad (fix Important code review): structure
+      // (SongFormer, inferencia GPU) no bloquea el gate de letra, asi que es
+      // comun que el admin apruebe ANTES de que termine. El approve lee los
+      // beats una sola vez (api/songs/[id]/pipeline/lyrics.js); si structure
+      // llega tarde, bpm_detected queda NULL para siempre porque nada mas
+      // vuelve a escribir song_line_timings despues del approve. Las tres
+      // condiciones del WHERE son necesarias: song_id acota a esta cancion;
+      // status = 'ready' evita crear una fila de timing antes de que exista
+      // (el approve es quien la crea); bpm_detected IS NULL evita pisar un
+      // tempo ya detectado (p. ej. el de un align standalone previo).
+      if (beats) {
+        await tx`
+          UPDATE song_line_timings
+          SET bpm_detected = ${beats.bpm}, beats = ${tx.json(beats)}
+          WHERE song_id = ${run.songId} AND status = 'ready' AND bpm_detected IS NULL
+        `;
+      }
     }
 
     let lyricsReview = run.lyricsReview ?? {};

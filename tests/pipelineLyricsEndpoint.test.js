@@ -876,9 +876,19 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
 
   it('repone bpm_detected/beats desde song_structure.beats (fase structure de este run, ya no se pierden en el swap)', async () => {
     let timingShimInsert;
+    let structureSelectValues;
     routeSql([
       ['AS "lyricsReview"', [runRow({ lyricsReview: { review: approvableReviewV2() } })]],
-      ['SELECT beats FROM song_structure', [{ beats: { bpm: 128, beatsMs: [0, 469, 938] } }]],
+      [
+        'SELECT beats FROM song_structure',
+        (values, text) => {
+          structureSelectValues = values;
+          // fix Important code review: el WHERE ahora filtra tambien por
+          // run_id, no solo por song_id.
+          expect(text).toContain('run_id');
+          return [{ beats: { bpm: 128, beatsMs: [0, 469, 938] } }];
+        },
+      ],
       ['INSERT INTO song_pipeline_lyrics', { count: 1 }],
       [
         'INSERT INTO song_line_timings',
@@ -893,8 +903,44 @@ describe('POST /api/songs/:id/pipeline/lyrics (aprobar)', () => {
     const res = makeRes();
     await lyricsHandler({ method: 'POST', query: { id: 's1' } }, res);
     expect(res.status).toHaveBeenCalledWith(200);
+    // El SELECT filtra por el run.id ('r1' de runRow) ademas del song_id.
+    expect(structureSelectValues).toContain('r1');
     expect(timingShimInsert).toContain(128);
     expect(timingShimInsert).toContainEqual({ bpm: 128, beatsMs: [0, 469, 938] });
+  });
+
+  it('no toma los beats de song_structure si son de un run_id distinto al run actual (fix Important: structure corre en paralelo con lyrics_review, un reprocesamiento no debe heredar el tempo del run viejo)', async () => {
+    let timingShimInsert;
+    routeSql([
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { review: approvableReviewV2() } })]],
+      [
+        'SELECT beats FROM song_structure',
+        (values) => {
+          // Simula el WHERE real filtrando por song_id Y run_id: la fila
+          // persistida es de un run VIEJO ('run-anterior', ej. de un audio
+          // reemplazado) y no calza con el run_id del run actual ('r1') que
+          // llega en el bind -- la query real no la devolveria.
+          return values.includes('r1') ? [] : [{ beats: { bpm: 128, beatsMs: [0] } }];
+        },
+      ],
+      ['INSERT INTO song_pipeline_lyrics', { count: 1 }],
+      [
+        'INSERT INTO song_line_timings',
+        (values) => {
+          timingShimInsert = values;
+          return { count: 1 };
+        },
+      ],
+      ['lyrics_review = ', { count: 1 }],
+      ['INSERT INTO song_audio', { count: 1 }],
+    ]);
+    const res = makeRes();
+    await lyricsHandler({ method: 'POST', query: { id: 's1' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    // Sin fila que calce por run_id, cae al mismo NULL de siempre (nunca se
+    // atribuye en silencio el bpm de otro run).
+    expect(timingShimInsert).toContain(null);
+    expect(timingShimInsert).not.toContainEqual({ bpm: expect.anything() });
   });
 
   it('sin fila en song_structure (o sin beats): bpm_detected/beats siguen en NULL, igual que antes', async () => {

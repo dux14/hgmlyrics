@@ -381,8 +381,15 @@ async function approveGate(res, songId) {
     // porque sync (el unico lugar que persistia bpm/beats) nunca se despacha
     // en el path pipeline (ver dispatchSync mas abajo). Sin beats validos
     // (Modal no detecto nada usable) sigue quedando NULL, igual que antes.
+    // Filtro por run_id (fix Important code review): song_structure es una
+    // fila por cancion y createRun no la purga al abrir un run nuevo (solo lo
+    // hace el purge explicito de "reemplazar audio"). Como structure corre en
+    // paralelo con transcription/lyrics_review, sin este filtro un
+    // reprocesamiento podria aprobar la letra mientras song_structure todavia
+    // tiene el beats del run ANTERIOR (de otro audio) y atribuirselo en
+    // silencio al run actual. Sin fila que calce cae al mismo NULL de siempre.
     const structureRows = await tx`
-      SELECT beats FROM song_structure WHERE song_id = ${songId}
+      SELECT beats FROM song_structure WHERE song_id = ${songId} AND run_id = ${run.id}
     `;
     const structureBeats = structureRows[0]?.beats ?? null;
     const bpmDetected = structureBeats?.bpm ?? null;

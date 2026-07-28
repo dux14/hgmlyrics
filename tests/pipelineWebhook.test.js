@@ -850,6 +850,73 @@ describe('POST /api/pipeline/webhook — structure (SongFormer)', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('beats invalidos'));
     warnSpy.mockRestore();
   });
+
+  it('structure con beats válidos → relleno de segunda oportunidad en song_line_timings (fix Important: structure puede terminar despues del approve)', async () => {
+    const phases = initialPhases();
+    phases.upload.status = 'done';
+    phases.structure.status = 'running';
+    sqlResponses.push([runRow({ phases })]); // SELECT FOR UPDATE
+    sqlResponses.push([]); // upsert song_structure
+    sqlResponses.push([]); // UPDATE song_line_timings (relleno)
+    sqlResponses.push([]); // UPDATE song_pipeline_runs
+
+    const res = makeRes();
+    await handler(
+      signedReq({
+        runId: 'run-1',
+        phase: 'structure',
+        ok: true,
+        payload: {
+          segments: [{ label: 'coro', startMs: 64200, endMs: 105800 }],
+          model: 'songformer',
+          beats: { bpm: 128, beatsMs: [0, 469, 938] },
+        },
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    const fill = sqlCalls.find((c) => c.text.includes('UPDATE song_line_timings'));
+    expect(fill).toBeDefined();
+    // Las tres condiciones son necesarias: song_id acota a la cancion,
+    // status = 'ready' exige que el approve ya haya creado la fila, y
+    // bpm_detected IS NULL evita pisar un tempo ya detectado (ej. un align
+    // standalone previo).
+    expect(fill.text).toContain("status = 'ready'");
+    expect(fill.text).toContain('bpm_detected IS NULL');
+    expect(fill.values).toContain(128);
+    expect(fill.values).toContain('song-1');
+    expect(fill.values).toContainEqual({ bpm: 128, beatsMs: [0, 469, 938] });
+  });
+
+  it('structure sin beats válidos (invalidos) → no dispara el relleno de song_line_timings', async () => {
+    const phases = initialPhases();
+    phases.upload.status = 'done';
+    phases.structure.status = 'running';
+    sqlResponses.push([runRow({ phases })]); // SELECT FOR UPDATE
+    sqlResponses.push([]); // upsert song_structure
+    sqlResponses.push([]); // UPDATE song_pipeline_runs
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const res = makeRes();
+    await handler(
+      signedReq({
+        runId: 'run-1',
+        phase: 'structure',
+        ok: true,
+        payload: {
+          segments: [{ label: 'coro', startMs: 64200, endMs: 105800 }],
+          model: 'songformer',
+          beats: { bpm: 999, beatsMs: [0, 469, 938] }, // bpm fuera de rango
+        },
+      }),
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(sqlCalls.some((c) => c.text.includes('UPDATE song_line_timings'))).toBe(false);
+    warnSpy.mockRestore();
+  });
 });
 
 describe('applyPipelinePhaseEvent — CAS directo (reuso B7)', () => {

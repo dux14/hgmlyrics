@@ -24,7 +24,6 @@
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-sm);
-  padding: 0 var(--space-md);
 }
 
 .home__hd-title {
@@ -260,7 +259,6 @@
 .home__list-empty {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
-  padding: 0 var(--space-md);
   margin: 0;
 }
 

@@ -72,6 +72,13 @@ function requireLine(section, lineIdx) {
   return line;
 }
 
+// Cuenta de tokens por espacios en blanco (mismo criterio que buildSuggestions
+// y splitLineByText en lyricsSplit.js): usado para detectar si `words` sigue
+// alineado 1:1 con el texto tras una edición (#6).
+function tokenCount(text) {
+  return (text || '').split(/\s+/).filter(Boolean).length;
+}
+
 // Los índices de acción (afterWord, etc.) se usan tanto como índice de array
 // (donde undefined/NaN/no-entero simplemente no calzan y ya revientan vía
 // requireSection/Line) como en comparaciones aritméticas (`< 0`, `>= len-1`)
@@ -305,13 +312,23 @@ export function applyReviewAction(doc, action) {
     // vocalización a propósito (una corrección menor no debe destruir el
     // timing de karaoke por un typo). Re-derivar confidence/vocalización tras
     // una edición mayor es decisión de F4 (resolución de fuente del karaoke),
-    // cuando exista el store; no se resuelve en F2.
+    // cuando exista el store; no se resuelve en F2. EXCEPCIÓN (#6, review):
+    // si la cantidad de tokens cambió (el admin acortó/alargó el renglón),
+    // words ya no corresponde 1:1 al texto nuevo — pipelineLinesFor toma
+    // endMs de la ÚLTIMA word para acotar el segmento del forced align, así
+    // que arrastrar words viejas manda un rango mucho más largo (o corto) que
+    // el renglón real. buildSuggestions/splitLineByText ya se protegen
+    // comparando longitudes; acá se descartan las words para que
+    // pipelineLinesFor caiga al fallback (startMs de la línea siguiente).
     case 'editLine': {
       const line = requireLine(requireSection(next, action.section), action.line);
       if (typeof action.text !== 'string' || action.text.trim() === '') {
         throw new RangeError(`text inválido: ${action.text}`);
       }
       line.text = action.text;
+      if (Array.isArray(line.words) && line.words.length !== tokenCount(action.text)) {
+        line.words = [];
+      }
       break;
     }
     // setLineText (P2): el admin escribe un salto de línea en el editor.
@@ -324,6 +341,14 @@ export function applyReviewAction(doc, action) {
         throw new RangeError(`text inválido: ${action.text}`);
       }
       const pieces = splitLineByText(line, action.text);
+      // Misma excepción que editLine: splitLineByText solo reparte words
+      // cuando el conteo de tokens de la pieza coincide (frontera/glued); si
+      // alguna pieza quedó con words desalineadas por otra vía, se descartan.
+      for (const piece of pieces) {
+        if (Array.isArray(piece.words) && piece.words.length !== tokenCount(piece.text)) {
+          piece.words = [];
+        }
+      }
       section.lines.splice(action.line, 1, ...pieces);
       break;
     }

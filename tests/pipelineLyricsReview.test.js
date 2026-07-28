@@ -376,6 +376,20 @@ describe('applyReviewAction v2', () => {
       .toThrow(RangeError);
   });
 
+  it('editLine descarta words si cambió la cantidad de tokens (#6: pipelineLinesFor no debe heredar endMs viejo)', () => {
+    const doc = base();
+    expect(doc.sections[0].lines[0].words).toHaveLength(2); // 'uno dos'
+    const next = applyReviewAction(doc, { type: 'editLine', section: 0, line: 0, text: 'uno' });
+    expect(next.sections[0].lines[0].text).toBe('uno');
+    expect(next.sections[0].lines[0].words).toEqual([]);
+  });
+
+  it('editLine conserva words si la cantidad de tokens no cambió', () => {
+    const doc = base();
+    const next = applyReviewAction(doc, { type: 'editLine', section: 0, line: 0, text: 'una dos' });
+    expect(next.sections[0].lines[0].words).toHaveLength(2);
+  });
+
   it('splitLine parte texto y words', () => {
     const next = applyReviewAction(base(), { type: 'splitLine', section: 0, line: 0, afterWord: 0 });
     expect(next.sections[0].lines.map((l) => l.text)).toEqual(['uno', 'dos', 'tres cuatro']);
@@ -503,6 +517,14 @@ describe('applyReviewAction v2', () => {
     const next = applyReviewAction(base(), { type: 'setLineText', section: 0, line: 0, text: 'uno dos editado' });
     expect(next.sections[0].lines.map((l) => l.text)).toEqual(['uno dos editado', 'tres cuatro']);
     expect(next.sections[0].lines[0].startMs).toBe(0); // conserva timing, como editLine
+  });
+
+  it('setLineText sin \\n descarta words si cambió la cantidad de tokens (#6)', () => {
+    const doc = base();
+    expect(doc.sections[0].lines[0].words).toHaveLength(2); // 'uno dos'
+    const next = applyReviewAction(doc, { type: 'setLineText', section: 0, line: 0, text: 'uno' });
+    expect(next.sections[0].lines[0].text).toBe('uno');
+    expect(next.sections[0].lines[0].words).toEqual([]);
   });
 
   it('setLineText con \\n parte el renglón en piezas (splice conserva el resto)', () => {

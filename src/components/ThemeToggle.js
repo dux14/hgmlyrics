@@ -26,7 +26,9 @@ export function getTheme() {
     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
       return 'light';
     }
-  } catch (_e) { /* matchMedia unavailable */ }
+  } catch (_e) {
+    /* matchMedia unavailable */
+  }
   return 'dark';
 }
 

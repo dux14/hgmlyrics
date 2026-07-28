@@ -42,7 +42,9 @@
   font-family: var(--font-family);
   padding: 5px 10px;
   cursor: pointer;
-  transition: border-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .world-topbar-btn:hover {
@@ -105,7 +107,11 @@
 }
 
 .world-overlay--reconnect {
-  background: color-mix(in srgb, var(--color-danger) 20%, color-mix(in srgb, black 80%, transparent));
+  background: color-mix(
+    in srgb,
+    var(--color-danger) 20%,
+    color-mix(in srgb, black 80%, transparent)
+  );
 }
 
 .world-overlay--no-session {

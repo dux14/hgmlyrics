@@ -310,7 +310,10 @@ describe('ImmersiveView — toggle maestro del metrónomo (TANDA B)', () => {
       audio: { url: 'https://example.com/full.mp3', bpmManual: 120, timeSignature: '4/4' },
       timings: {
         status: 'ready',
-        lines: [{ i: 0, startMs: 0 }, { i: 1, startMs: 4000 }],
+        lines: [
+          { i: 0, startMs: 0 },
+          { i: 1, startMs: 4000 },
+        ],
         beats: [0, 500, 1000, 1500, 2000, 2500, 3000, 3500],
       },
     });
@@ -337,7 +340,10 @@ describe('ImmersiveView — toggle maestro del metrónomo (TANDA B)', () => {
       audio: { url: 'https://example.com/full.mp3', bpmManual: 120, timeSignature: '4/4' },
       timings: {
         status: 'ready',
-        lines: [{ i: 0, startMs: 0 }, { i: 1, startMs: 12000 }],
+        lines: [
+          { i: 0, startMs: 0 },
+          { i: 1, startMs: 12000 },
+        ],
         beats: Array.from({ length: 25 }, (_, i) => i * 500),
       },
     });

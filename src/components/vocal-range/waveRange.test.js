@@ -4,8 +4,13 @@ import { createWaveRange } from './waveRange.js';
 beforeEach(() => {
   // jsdom no implementa getContext; devolvemos un stub que registre llamadas.
   HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
-    setTransform: vi.fn(), clearRect: vi.fn(), beginPath: vi.fn(),
-    moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(), fillText: vi.fn(),
+    setTransform: vi.fn(),
+    clearRect: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
+    fillText: vi.fn(),
     createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
   }));
 });

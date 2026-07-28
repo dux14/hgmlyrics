@@ -116,7 +116,10 @@ function teardown() {
     _joystick.el.remove();
     _joystick = null;
   }
-  if (_unsubNetWorld) { _unsubNetWorld(); _unsubNetWorld = null; }
+  if (_unsubNetWorld) {
+    _unsubNetWorld();
+    _unsubNetWorld = null;
+  }
   if (_reconnectEl) {
     _reconnectEl.remove();
     _reconnectEl = null;

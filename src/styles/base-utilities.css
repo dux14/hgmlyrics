@@ -44,20 +44,61 @@
 }
 
 /* === Skeleton: layout de composición === */
-.sk-line, .sk-block, .sk-circle, .sk-thumb { display: block; margin-bottom: var(--space-sm, 8px); }
-.sk-gap { height: var(--space-md, 16px); }
-.sk-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; }
-.sk-row .sk-thumb { flex: 0 0 auto; margin-bottom: 0; }
-.sk-rtx { flex: 1; }
-.sk-rtx .sk-line:last-child { margin-bottom: 0; }
-.sk-actions { display: flex; gap: 10px; margin: 6px 0 20px; }
-.sk-para .sk-line { margin-bottom: 9px; }
-.sk-prof-top { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
-.sk-stats { display: flex; gap: 22px; margin-bottom: 20px; }
-.sk-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.sk-line,
+.sk-block,
+.sk-circle,
+.sk-thumb {
+  display: block;
+  margin-bottom: var(--space-sm, 8px);
+}
+.sk-gap {
+  height: var(--space-md, 16px);
+}
+.sk-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+}
+.sk-row .sk-thumb {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+}
+.sk-rtx {
+  flex: 1;
+}
+.sk-rtx .sk-line:last-child {
+  margin-bottom: 0;
+}
+.sk-actions {
+  display: flex;
+  gap: 10px;
+  margin: 6px 0 20px;
+}
+.sk-para .sk-line {
+  margin-bottom: 9px;
+}
+.sk-prof-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.sk-stats {
+  display: flex;
+  gap: 22px;
+  margin-bottom: 20px;
+}
+.sk-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .skeleton { animation: none; }
+  .skeleton {
+    animation: none;
+  }
 }
 
 /* === Fade transitions === */

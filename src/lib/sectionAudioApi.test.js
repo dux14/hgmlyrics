@@ -50,7 +50,8 @@ describe('createSectionAudio', () => {
   it('POST con auth headers y body, devuelve uploadUrl/key/id en éxito', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ uploadUrl: 'https://put/x', key: 'song-1/section-0.mp3', id: 'a1' }),
+      json: () =>
+        Promise.resolve({ uploadUrl: 'https://put/x', key: 'song-1/section-0.mp3', id: 'a1' }),
     });
     global.fetch = fetchMock;
 
@@ -108,7 +109,9 @@ describe('deleteSectionAudio', () => {
   });
 
   it('DELETE con auth headers y id en el body', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ success: true }) });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: () => Promise.resolve({ success: true }) });
     global.fetch = fetchMock;
 
     await deleteSectionAudio('song-1', 'a1');

@@ -12,7 +12,9 @@ describe('extractCoverColor', () => {
   it('devuelve null si getImageData lanza (CORS / canvas tainted)', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       drawImage: () => {},
-      getImageData: () => { throw new Error('tainted'); },
+      getImageData: () => {
+        throw new Error('tainted');
+      },
     });
     expect(extractCoverColor({})).toBeNull();
   });
@@ -21,7 +23,10 @@ describe('extractCoverColor', () => {
     const size = 32;
     const data = new Uint8ClampedArray(size * size * 4);
     for (let i = 0; i < data.length; i += 4) {
-      data[i] = 0xcc; data[i + 1] = 0x66; data[i + 2] = 0x00; data[i + 3] = 255;
+      data[i] = 0xcc;
+      data[i + 1] = 0x66;
+      data[i + 2] = 0x00;
+      data[i + 3] = 255;
     }
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       drawImage: () => {},

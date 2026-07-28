@@ -137,12 +137,18 @@ export function buildSections(data, viewerId) {
   let html = '';
   if (incoming.length || outgoing.length) {
     html += sectionHeader('Solicitudes');
-    html += incoming.map((it) => buildFriendRow(normalizeOther(it, viewerId), { kind: 'incoming' })).join('');
-    html += outgoing.map((it) => buildFriendRow(normalizeOther(it, viewerId), { kind: 'outgoing' })).join('');
+    html += incoming
+      .map((it) => buildFriendRow(normalizeOther(it, viewerId), { kind: 'incoming' }))
+      .join('');
+    html += outgoing
+      .map((it) => buildFriendRow(normalizeOther(it, viewerId), { kind: 'outgoing' }))
+      .join('');
   }
   if (accepted.length) {
     html += sectionHeader('Amigos', 'friend-sec--spaced');
-    html += accepted.map((it) => buildFriendRow(normalizeOther(it, viewerId), { kind: 'friend' })).join('');
+    html += accepted
+      .map((it) => buildFriendRow(normalizeOther(it, viewerId), { kind: 'friend' }))
+      .join('');
   }
   return html;
 }

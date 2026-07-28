@@ -290,10 +290,18 @@
   flex: 0 0 auto;
   background: #5a5a5a;
 }
-.home__list-dot.-red { background: var(--color-error); }
-.home__list-dot.-amber { background: var(--color-warning); }
-.home__list-dot.-green { background: var(--color-success); }
-.home__list-dot.-neutral { background: #5a5a5a; }
+.home__list-dot.-red {
+  background: var(--color-error);
+}
+.home__list-dot.-amber {
+  background: var(--color-warning);
+}
+.home__list-dot.-green {
+  background: var(--color-success);
+}
+.home__list-dot.-neutral {
+  background: #5a5a5a;
+}
 
 /* Píldora de cuenta regresiva */
 .home__list-pill {
@@ -306,9 +314,18 @@
   background: #242424;
   color: var(--color-text-secondary);
 }
-.home__list-pill.-red { background: rgba(244, 67, 54, 0.16); color: #ff7a70; }
-.home__list-pill.-amber { background: rgba(255, 152, 0, 0.15); color: #ffb24d; }
-.home__list-pill.-green { background: rgba(76, 175, 80, 0.14); color: #6fce73; }
+.home__list-pill.-red {
+  background: rgba(244, 67, 54, 0.16);
+  color: #ff7a70;
+}
+.home__list-pill.-amber {
+  background: rgba(255, 152, 0, 0.15);
+  color: #ffb24d;
+}
+.home__list-pill.-green {
+  background: rgba(76, 175, 80, 0.14);
+  color: #6fce73;
+}
 
 /* Skeletons de carga */
 .home__list-skeleton {
@@ -323,8 +340,12 @@
   border-radius: 12px;
   background: var(--color-surface);
 }
-.home__skel-row { height: 56px; }
-.home__voz-skeleton { height: 68px; }
+.home__skel-row {
+  height: 56px;
+}
+.home__voz-skeleton {
+  height: 68px;
+}
 .home__skel-row::after,
 .home__voz-skeleton::after {
   content: '';
@@ -335,7 +356,9 @@
   animation: home-shimmer 1.2s infinite;
 }
 @keyframes home-shimmer {
-  to { transform: translateX(100%); }
+  to {
+    transform: translateX(100%);
+  }
 }
 
 /* ── Card de voz en off vigente ── */

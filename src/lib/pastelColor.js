@@ -6,9 +6,14 @@
  */
 
 export function rgbToHsl(r, g, b) {
-  r /= 255; g /= 255; b /= 255;
-  const max = Math.max(r, g, b), min = Math.min(r, g, b);
-  let h = 0, s = 0; const l = (max + min) / 2;
+  r /= 255;
+  g /= 255;
+  b /= 255;
+  const max = Math.max(r, g, b),
+    min = Math.min(r, g, b);
+  let h = 0,
+    s = 0;
+  const l = (max + min) / 2;
   if (max !== min) {
     const d = max - min;
     s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
@@ -25,7 +30,9 @@ export function hslToHex(h, s, l) {
     const k = (n + h * 12) % 12;
     const a = s * Math.min(l, 1 - l);
     const c = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
-    return Math.round(c * 255).toString(16).padStart(2, '0');
+    return Math.round(c * 255)
+      .toString(16)
+      .padStart(2, '0');
   };
   return `#${f(0)}${f(8)}${f(4)}`;
 }
@@ -40,15 +47,21 @@ export function hslToHex(h, s, l) {
  * @returns {{base:string, light:string}}
  */
 export function dominantColors(rawRGB, width, height) {
-  let r = 0, g = 0, b = 0;
+  let r = 0,
+    g = 0,
+    b = 0;
   const n = width * height;
   for (let i = 0; i < rawRGB.length; i += 3) {
-    r += rawRGB[i]; g += rawRGB[i + 1]; b += rawRGB[i + 2];
+    r += rawRGB[i];
+    g += rawRGB[i + 1];
+    b += rawRGB[i + 2];
   }
-  r = r / n; g = g / n; b = b / n;
+  r = r / n;
+  g = g / n;
+  b = b / n;
   const [h, s0, l0] = rgbToHsl(r, g, b);
-  const s = Math.min(0.40, s0 * 0.6);
+  const s = Math.min(0.4, s0 * 0.6);
   const l = Math.max(0.52, Math.min(0.68, l0 * 0.6 + 0.42));
-  const lightL = Math.min(0.78, l + 0.10);
+  const lightL = Math.min(0.78, l + 0.1);
   return { base: hslToHex(h, s, l), light: hslToHex(h, s, lightL) };
 }

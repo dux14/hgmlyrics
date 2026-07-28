@@ -41,9 +41,13 @@ describe('cached', () => {
 
   it('cae al respaldo en memoria si el refetch falla', async () => {
     await cached('k', async () => ['viejo']);
-    const r = await cached('k', async () => {
-      throw new Error('red');
-    }, { ttl: 0 }); // ttl 0 fuerza revalidación
+    const r = await cached(
+      'k',
+      async () => {
+        throw new Error('red');
+      },
+      { ttl: 0 },
+    ); // ttl 0 fuerza revalidación
     expect(r).toEqual({ data: ['viejo'], fromCache: true });
   });
 

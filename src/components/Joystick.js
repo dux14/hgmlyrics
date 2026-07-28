@@ -59,8 +59,8 @@ export function Joystick({ onChange, radius = 60 }) {
   thumb.className = 'joy-thumb';
   thumb.style.width = thumbSize + 'px';
   thumb.style.height = thumbSize + 'px';
-  thumb.style.top = (radius - thumbSize / 2) + 'px';
-  thumb.style.left = (radius - thumbSize / 2) + 'px';
+  thumb.style.top = radius - thumbSize / 2 + 'px';
+  thumb.style.left = radius - thumbSize / 2 + 'px';
   base.appendChild(thumb);
 
   let active = false;

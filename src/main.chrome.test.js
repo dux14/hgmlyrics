@@ -29,11 +29,7 @@ describe('chromeFor — vistas de pipeline (Task 2)', () => {
   });
 
   it('isHeaderless() e isNavHidden() true en las 3 vistas de pipeline', () => {
-    for (const path of [
-      '/song/abc/procesamiento',
-      '/song/abc/estudio',
-      '/song/abc/partitura',
-    ]) {
+    for (const path of ['/song/abc/procesamiento', '/song/abc/estudio', '/song/abc/partitura']) {
       expect(isHeaderless(path)).toBe(true);
       expect(isNavHidden(path)).toBe(true);
     }

@@ -167,8 +167,16 @@ function renderEditor(container, listData, opts = {}) {
       title: '¿Cuándo desaparece?',
       sub: 'Las listas son efímeras. Ponle nombre y elige cuándo caduca.',
     },
-    { word: 'Qué suena', title: '¿Qué suena?', sub: 'Busca y arrastra para ordenar las canciones.' },
-    { word: 'Con quién', title: '¿Con quién?', sub: 'Invita amigos a tu lista efímera (opcional).' },
+    {
+      word: 'Qué suena',
+      title: '¿Qué suena?',
+      sub: 'Busca y arrastra para ordenar las canciones.',
+    },
+    {
+      word: 'Con quién',
+      title: '¿Con quién?',
+      sub: 'Invita amigos a tu lista efímera (opcional).',
+    },
   ];
 
   container.innerHTML = `
@@ -314,7 +322,13 @@ function renderEditor(container, listData, opts = {}) {
     }
     const days = Math.max(0, Math.round((new Date(iso) - Date.now()) / 86400000));
     const pct = Math.min(100, Math.round((days / 30) * 100));
-    const absolute = new Date(iso).toLocaleString('es', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const absolute = new Date(iso).toLocaleString('es', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
     return { text: formatExpiry(iso) || 'Caduca hoy', absolute, urgent: isUrgent(iso), pct };
   }
 

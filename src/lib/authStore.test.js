@@ -169,10 +169,7 @@ describe('refreshProfile — fallo transitorio vs. definitivo', () => {
   });
 
   it('fetch que lanza sin profile en memoria restaura el snapshot cacheado (H4)', async () => {
-    localStorage.setItem(
-      PROFILE_CACHE_KEY,
-      JSON.stringify({ profile: { username: 'cached' } }),
-    );
+    localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ profile: { username: 'cached' } }));
     const { store, supabase } = await loadStore();
     supabase.auth.getSession.mockResolvedValue({ data: { session: makeSession() } });
     supabase.auth.onAuthStateChange.mockImplementation(() => {});
@@ -225,10 +222,7 @@ describe('initAuthStore — restauracion optimista (T1)', () => {
   it('en modo pending restaura el profile desde el cache en vez de hacer fetch', async () => {
     vi.useFakeTimers();
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
-    localStorage.setItem(
-      PROFILE_CACHE_KEY,
-      JSON.stringify({ profile: { username: 'cached' } }),
-    );
+    localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ profile: { username: 'cached' } }));
     const { store, supabase } = await loadStore();
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
     supabase.auth.onAuthStateChange.mockImplementation(() => {});
@@ -441,10 +435,7 @@ describe('initAuthStore — restauracion optimista (T1)', () => {
     // interpretarse como un logout.
     vi.useFakeTimers();
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
-    localStorage.setItem(
-      PROFILE_CACHE_KEY,
-      JSON.stringify({ profile: { username: 'cached' } }),
-    );
+    localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ profile: { username: 'cached' } }));
     const { store, supabase } = await loadStore();
     supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
     let handler;
@@ -471,10 +462,7 @@ describe('initAuthStore — restauracion optimista (T1)', () => {
   it('SIGNED_OUT definitivo tras pendingSession limpia el cache de perfil', async () => {
     vi.useFakeTimers();
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ refresh_token: 'rtok' }));
-    localStorage.setItem(
-      PROFILE_CACHE_KEY,
-      JSON.stringify({ profile: { username: 'cached' } }),
-    );
+    localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ profile: { username: 'cached' } }));
     const { store, supabase } = await loadStore();
     supabase.auth.getSession.mockResolvedValueOnce({ data: { session: null } });
     let handler;
@@ -661,10 +649,7 @@ describe('verifyEmailOtp', () => {
 
 describe('signOut', () => {
   it('limpia el cache de perfil', async () => {
-    localStorage.setItem(
-      PROFILE_CACHE_KEY,
-      JSON.stringify({ profile: { username: 'ana' } }),
-    );
+    localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ profile: { username: 'ana' } }));
     const { store, supabase } = await loadStore();
     supabase.auth.signOut.mockResolvedValue({});
 

@@ -12,7 +12,8 @@ import { canonicalToChordProKey } from './musicKeys.js';
 // dim7, aug, y slash chords (Am/E). Antes solo aceptaba UNA calidad + UN
 // dígito, por eso Dm7b5/Cmaj7 no hacían round-trip (ver tests).
 const CHORD_ROOT = '[A-G][#b]?';
-const CHORD_BODY = '(?:(?:maj|min|dim|aug|sus|add|m)?[0-9]{0,2}(?:[#b][0-9]{1,2})?){0,3}(?:/[A-G][#b]?)?';
+const CHORD_BODY =
+  '(?:(?:maj|min|dim|aug|sus|add|m)?[0-9]{0,2}(?:[#b][0-9]{1,2})?){0,3}(?:/[A-G][#b]?)?';
 const CHORD_FULL_RE = new RegExp(`^${CHORD_ROOT}${CHORD_BODY}$`);
 // El lookbehind negativo excluye `\[acorde]`: un corchete de apertura escapado
 // es letra literal, no delimitador de acorde (ver escape/unescapeLiteralBrackets).

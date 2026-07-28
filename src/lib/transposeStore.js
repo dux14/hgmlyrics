@@ -22,7 +22,7 @@ export function normalizeSemitones(value) {
   // n % 12 ya cae en (-11..11) cuando |n| < 144 (rango real de uso); el `|| 0`
   // convierte -0 → 0 (múltiplos negativos de 12) para que el signo del bubble
   // ('Original' vs '−n') sea correcto.
-  return (value % 12) || 0;
+  return value % 12 || 0;
 }
 
 // Alias interno: validación defensiva de datos persistidos con la misma

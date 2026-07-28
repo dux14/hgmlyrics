@@ -22,5 +22,8 @@ export function isMp3File(file) {
  */
 export function deriveTitleFromFilename(name) {
   if (typeof name !== 'string') return '';
-  return name.replace(/\.[^/.]+$/, '').trim().slice(0, 120);
+  return name
+    .replace(/\.[^/.]+$/, '')
+    .trim()
+    .slice(0, 120);
 }

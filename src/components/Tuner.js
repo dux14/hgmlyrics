@@ -60,23 +60,48 @@ const HUB_GROUPS = [
   {
     label: 'Afinar',
     items: [
-      { id: 'guitar', iconKey: 'audio-lines', name: 'Guitarra', desc: 'Afina las 6 cuerdas en estándar E.' },
+      {
+        id: 'guitar',
+        iconKey: 'audio-lines',
+        name: 'Guitarra',
+        desc: 'Afina las 6 cuerdas en estándar E.',
+      },
       { id: 'voice', iconKey: 'mic', name: 'Voz', desc: 'Afina tu voz nota por nota.' },
-      { id: 'song', iconKey: 'music', name: 'Canción', desc: 'Afina contra el tono de una canción.' },
+      {
+        id: 'song',
+        iconKey: 'music',
+        name: 'Canción',
+        desc: 'Afina contra el tono de una canción.',
+      },
     ],
   },
   {
     label: 'Practicar',
     items: [
       { id: 'range', iconKey: 'ruler', name: 'Rango', desc: 'Mide tu nota más grave y más aguda.' },
-      { id: 'entrenar', iconKey: 'activity', name: 'Entrenar', desc: 'Ejercicios de escalas y calentamiento.' },
-      { id: 'metronomo', iconKey: 'timer', name: 'Metrónomo', desc: 'Practica manteniendo el tempo.' },
+      {
+        id: 'entrenar',
+        iconKey: 'activity',
+        name: 'Entrenar',
+        desc: 'Ejercicios de escalas y calentamiento.',
+      },
+      {
+        id: 'metronomo',
+        iconKey: 'timer',
+        name: 'Metrónomo',
+        desc: 'Practica manteniendo el tempo.',
+      },
     ],
   },
   {
     label: 'Ajustes',
     items: [
-      { id: 'calibrar', iconKey: 'settings', name: 'Calibrar', desc: 'Ajusta la referencia A4 de tu dispositivo.' },
+      {
+        id: 'calibrar',
+        iconKey: 'settings',
+        name: 'Calibrar',
+        desc: 'Ajusta la referencia A4 de tu dispositivo.',
+      },
     ],
   },
 ];
@@ -1170,7 +1195,12 @@ export async function renderTuner(container, opts = {}) {
     const stepBpm = (delta) => {
       const next = metronome.setBpm(metronome.getBpm() + delta);
       if (numEl) numEl.textContent = String(next);
-      if (pendulumEl) pendulumEl.style.setProperty('--metro-pendulum-duration', `${Math.round(120000 / next)}ms`);
+      if (pendulumEl) {
+        pendulumEl.style.setProperty(
+          '--metro-pendulum-duration',
+          `${Math.round(120000 / next)}ms`,
+        );
+      }
       persistMetronome();
     };
 

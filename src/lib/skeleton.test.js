@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { skelLine, skelBlock, skelCircle, skelRow, skelCard, skelGrid } from './skeleton.js';
-import { skelTracklist, skelSongDetail, skelRowList, skelProfile, skelLongText } from './skeleton.js';
+import {
+  skelTracklist,
+  skelSongDetail,
+  skelRowList,
+  skelProfile,
+  skelLongText,
+} from './skeleton.js';
 
 describe('skeleton primitivas', () => {
   it('skelLine devuelve un div .skeleton con ancho/alto y aria-hidden', () => {

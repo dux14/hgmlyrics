@@ -54,14 +54,12 @@ describe('offlineCache prefetch gating', () => {
   it('re-escribe cuando la version del servidor cambia', async () => {
     globalThis.matchMedia = () => ({ matches: false });
     let v = 'v1';
-    const fetchMock = vi
-      .fn()
-      .mockImplementation(() =>
-        Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ songs: [{ id: 1 }], version: v }),
-        }),
-      );
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ songs: [{ id: 1 }], version: v }),
+      }),
+    );
     vi.doMock('./fetchWithRetry.js', () => ({ fetchWithRetry: fetchMock }));
     const idb = await import('idb-keyval');
     const { ensureSongsCached } = await import('./offlineCache.js');

@@ -11,7 +11,9 @@ describe('renderAsyncRegion', () => {
       cached: ['cache'],
       skeleton: () => '<span class="sk">s</span>',
       fetcher,
-      render: (d) => { el.innerHTML = `<p>${d[0]}</p>`; },
+      render: (d) => {
+        el.innerHTML = `<p>${d[0]}</p>`;
+      },
     });
     expect(el.innerHTML).toContain('cache'); // pinta cache ya
     await flush();
@@ -22,8 +24,17 @@ describe('renderAsyncRegion', () => {
     vi.useFakeTimers();
     const el = document.createElement('div');
     let resolveFetch;
-    const fetcher = () => new Promise((res) => { resolveFetch = res; });
-    renderAsyncRegion(el, { skeleton: () => '<span class="sk">s</span>', fetcher, render: (d) => { el.innerHTML = `<p>${d}</p>`; } });
+    const fetcher = () =>
+      new Promise((res) => {
+        resolveFetch = res;
+      });
+    renderAsyncRegion(el, {
+      skeleton: () => '<span class="sk">s</span>',
+      fetcher,
+      render: (d) => {
+        el.innerHTML = `<p>${d}</p>`;
+      },
+    });
     vi.advanceTimersByTime(200);
     expect(el.innerHTML).toContain('sk'); // skeleton montado
     resolveFetch('ok');
@@ -34,7 +45,13 @@ describe('renderAsyncRegion', () => {
 
   it('anti-flash: si resuelve <150ms nunca monta skeleton', async () => {
     const el = document.createElement('div');
-    renderAsyncRegion(el, { skeleton: () => '<span class="sk">s</span>', fetcher: () => Promise.resolve('ok'), render: (d) => { el.innerHTML = `<p>${d}</p>`; } });
+    renderAsyncRegion(el, {
+      skeleton: () => '<span class="sk">s</span>',
+      fetcher: () => Promise.resolve('ok'),
+      render: (d) => {
+        el.innerHTML = `<p>${d}</p>`;
+      },
+    });
     await flush();
     expect(el.innerHTML).not.toContain('sk');
     expect(el.innerHTML).toContain('ok');
@@ -46,7 +63,9 @@ describe('renderAsyncRegion', () => {
     renderAsyncRegion(el, {
       skeleton: () => '<span class="sk">s</span>',
       fetcher,
-      render: (d) => { el.innerHTML = `<p>${d}</p>`; },
+      render: (d) => {
+        el.innerHTML = `<p>${d}</p>`;
+      },
       onError: () => '<button data-retry>Reintentar</button>',
     });
     await flush();
@@ -59,7 +78,12 @@ describe('renderAsyncRegion', () => {
 
   it('data vacía usa empty()', async () => {
     const el = document.createElement('div');
-    renderAsyncRegion(el, { skeleton: () => 's', fetcher: () => Promise.resolve([]), render: () => {}, empty: () => '<p>vacío</p>' });
+    renderAsyncRegion(el, {
+      skeleton: () => 's',
+      fetcher: () => Promise.resolve([]),
+      render: () => {},
+      empty: () => '<p>vacío</p>',
+    });
     await flush();
     expect(el.innerHTML).toContain('vacío');
   });

@@ -21,7 +21,12 @@ export function phaseProgress(phases) {
     if (p[key]?.status === 'done') done += 1;
     else if (p[key]?.status === 'failed') failed += 1;
   }
-  return { done, failed, total: PHASE_ORDER.length, pct: Math.round((done / PHASE_ORDER.length) * 100) };
+  return {
+    done,
+    failed,
+    total: PHASE_ORDER.length,
+    pct: Math.round((done / PHASE_ORDER.length) * 100),
+  };
 }
 
 const TERMINAL = new Set(['succeeded', 'partial', 'failed', 'cancelled', 'expired']);

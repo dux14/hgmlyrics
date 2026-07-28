@@ -144,7 +144,7 @@ describe('markActive', () => {
   it('no marca ninguna si currentTime fuera de todos los rangos', () => {
     markActive(el, 999);
     const rows = el.querySelectorAll('.studio-sectl__row');
-    rows.forEach(row => {
+    rows.forEach((row) => {
       expect(row.classList.contains('studio-sectl__row--active')).toBe(false);
     });
   });

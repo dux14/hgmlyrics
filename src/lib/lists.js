@@ -65,7 +65,7 @@ export const inviteMember = (id, username) =>
     (r) => {
       invalidate(listKey(id));
       return r;
-    }
+    },
   );
 export const removeMember = (id, userId) =>
   req(`/api/lists/${id}/members/${userId}`, { method: 'DELETE' }).then((r) => {

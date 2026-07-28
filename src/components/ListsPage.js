@@ -12,7 +12,10 @@ import { skelRowList } from '../lib/skeleton.js';
  * @param {HTMLElement} container
  * @param {{ today?: string }} [opts]
  */
-export async function renderListsPage(container, { today = new Date().toISOString().slice(0, 10) } = {}) {
+export async function renderListsPage(
+  container,
+  { today = new Date().toISOString().slice(0, 10) } = {},
+) {
   container.innerHTML = `
     <div class="lists-page fade-in">
       <div class="home__hd">
@@ -31,9 +34,9 @@ export async function renderListsPage(container, { today = new Date().toISOStrin
   }
   body.removeAttribute('aria-busy');
   body.innerHTML = renderListsBody(lists, today);
-  body.querySelectorAll('[data-list-id]').forEach((el) =>
-    el.addEventListener('click', () => navigate(`/lista/${el.dataset.listId}`)),
-  );
+  body
+    .querySelectorAll('[data-list-id]')
+    .forEach((el) => el.addEventListener('click', () => navigate(`/lista/${el.dataset.listId}`)));
   body
     .querySelector('[data-create-list]')
     ?.addEventListener('click', () => navigate('/lista/nueva'));

@@ -2,10 +2,32 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { buildIndex, searchEverything } from './search.js';
 
 const SONGS = [
-  { id: '1', title: 'Eres Mi Refugio', album: 'Adoracion I', albumSlug: 'adoracion-i', artist: 'Hakuna', coverImage: 'misa.webp' },
-  { id: '2', title: 'Aguas Vivas', album: 'Refugio', albumSlug: 'refugio', artist: 'Hakuna', coverImage: 'tu.webp' },
+  {
+    id: '1',
+    title: 'Eres Mi Refugio',
+    album: 'Adoracion I',
+    albumSlug: 'adoracion-i',
+    artist: 'Hakuna',
+    coverImage: 'misa.webp',
+  },
+  {
+    id: '2',
+    title: 'Aguas Vivas',
+    album: 'Refugio',
+    albumSlug: 'refugio',
+    artist: 'Hakuna',
+    coverImage: 'tu.webp',
+  },
 ];
-const WW = [{ id: 'w1', title: 'Refugio del Alma', gospel_ref: 'Sal 90', liturgical_title: '', voiceover_body: '' }];
+const WW = [
+  {
+    id: 'w1',
+    title: 'Refugio del Alma',
+    gospel_ref: 'Sal 90',
+    liturgical_title: '',
+    voiceover_body: '',
+  },
+];
 
 describe('searchEverything', () => {
   beforeEach(() => buildIndex(SONGS, WW));

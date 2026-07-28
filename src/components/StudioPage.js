@@ -17,7 +17,12 @@ import {
   updateJobTitle,
 } from '../lib/stemsApi.js';
 import { getSession, signOut } from '../lib/authStore.js';
-import { downloadAllZip, buildTrackList, songBaseName, downloadSectionZip } from '../lib/studioZip.js';
+import {
+  downloadAllZip,
+  buildTrackList,
+  songBaseName,
+  downloadSectionZip,
+} from '../lib/studioZip.js';
 import { getDriveToken } from '../lib/driveAuth.js';
 import { uploadTracksToDrive } from '../lib/driveUpload.js';
 import { createActionButton } from '../lib/studioActionButton.js';
@@ -54,7 +59,10 @@ function stopPolling() {
     hashChangeHandler();
     hashChangeHandler = null;
   }
-  if (_unsubOffline) { _unsubOffline(); _unsubOffline = null; }
+  if (_unsubOffline) {
+    _unsubOffline();
+    _unsubOffline = null;
+  }
 }
 
 // Registra (una sola vez) la guarda que corta el polling y el canal Realtime
@@ -273,17 +281,26 @@ function renderReviewPanel(body, file, quota) {
   syncSubmit();
   // Suscribir al estado de red para bloquear/desbloquear el botón en tiempo real.
   // Limpiar suscripción anterior si el panel se re-renderizó sin pasar por stopPolling.
-  if (_unsubOffline) { _unsubOffline(); _unsubOffline = null; }
+  if (_unsubOffline) {
+    _unsubOffline();
+    _unsubOffline = null;
+  }
   _unsubOffline = subscribe(() => syncSubmit());
 
   body.querySelector('.studio-review__cancel').addEventListener('click', () => {
-    if (_unsubOffline) { _unsubOffline(); _unsubOffline = null; }
+    if (_unsubOffline) {
+      _unsubOffline();
+      _unsubOffline = null;
+    }
     renderIdle(body, quota);
   });
   submit.addEventListener('click', () => {
     const sections = selected();
     if (sections.length === 0) return;
-    if (_unsubOffline) { _unsubOffline(); _unsubOffline = null; }
+    if (_unsubOffline) {
+      _unsubOffline();
+      _unsubOffline = null;
+    }
     const title = titleInput.value.trim() || deriveTitleFromFilename(file.name);
     void startUpload(body, file, title, sections, quota);
   });
@@ -673,7 +690,10 @@ function renderJob(body, job, quota) {
     input.focus();
     const commit = async () => {
       const next = input.value.trim();
-      if (!next) { renderJob(body, job, quota); return; }
+      if (!next) {
+        renderJob(body, job, quota);
+        return;
+      }
       save.disabled = true;
       try {
         const { job: updated } = await updateJobTitle(job.id, next);
@@ -690,8 +710,11 @@ function renderJob(body, job, quota) {
   });
 
   // Acciones ZIP + Drive — solo cuando todas las secciones activas (no skipped) están done.
-  const activeSections = SECTION_KEYS.map((k) => sections[k]).filter((s) => s && s.status !== 'skipped');
-  const allActiveDone = activeSections.length > 0 && activeSections.every((s) => s.status === 'done');
+  const activeSections = SECTION_KEYS.map((k) => sections[k]).filter(
+    (s) => s && s.status !== 'skipped',
+  );
+  const allActiveDone =
+    activeSections.length > 0 && activeSections.every((s) => s.status === 'done');
   if (allActiveDone) {
     const actions = document.createElement('div');
     actions.className = 'studio-actions';

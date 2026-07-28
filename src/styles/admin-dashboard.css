@@ -1,177 +1,177 @@
 @layer components {
-/* ============================================
+  /* ============================================
    HKN Lyrics — Admin Dashboard
    ============================================ */
 
-/* === Panel principal de administracion (hub) === */
-.admin-dashboard {
-  /* Sin padding: el gutter lo aporta .main__content */
-}
+  /* === Panel principal de administracion (hub) === */
+  .admin-dashboard {
+    /* Sin padding: el gutter lo aporta .main__content */
+  }
 
-.admin-dashboard__title {
-  margin-bottom: var(--space-lg);
-}
+  .admin-dashboard__title {
+    margin-bottom: var(--space-lg);
+  }
 
-/* Grid de tarjetas de navegación del hub */
-.admin-hub {
-  display: grid;
-  gap: var(--space-md);
-}
+  /* Grid de tarjetas de navegación del hub */
+  .admin-hub {
+    display: grid;
+    gap: var(--space-md);
+  }
 
-.admin-hub__card {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-lg);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  text-align: left;
-  transition:
-    border-color var(--transition-fast),
-    transform var(--transition-fast);
-}
+  .admin-hub__card {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-lg);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-lg);
+    text-align: left;
+    transition:
+      border-color var(--transition-fast),
+      transform var(--transition-fast);
+  }
 
-.admin-hub__card:hover {
-  border-color: var(--color-brand);
-  transform: translateY(-1px);
-}
+  .admin-hub__card:hover {
+    border-color: var(--color-brand);
+    transform: translateY(-1px);
+  }
 
-.admin-hub__card-text {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2xs);
-}
+  .admin-hub__card-text {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2xs);
+  }
 
-.admin-hub__card-title {
-  font-weight: var(--font-weight-semibold);
-  font-size: var(--font-size-base);
-}
+  .admin-hub__card-title {
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-base);
+  }
 
-.admin-hub__card-desc {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
+  .admin-hub__card-desc {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+  }
 
-/* === Sub-páginas admin: cabecera con botón volver === */
-.admin-section {
-  /* Sin padding: el gutter lo aporta .main__content */
-}
+  /* === Sub-páginas admin: cabecera con botón volver === */
+  .admin-section {
+    /* Sin padding: el gutter lo aporta .main__content */
+  }
 
-.admin-section__header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  margin-bottom: var(--space-lg);
-}
+  .admin-section__header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-bottom: var(--space-lg);
+  }
 
-.admin-section__title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin: 0;
-}
+  .admin-section__title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: 0;
+  }
 
-/* === Lista de edicion de canciones === */
-.admin-edit-list {
-  /* Sin padding: el gutter lo aporta .main__content */
-}
+  /* === Lista de edicion de canciones === */
+  .admin-edit-list {
+    /* Sin padding: el gutter lo aporta .main__content */
+  }
 
-.admin-header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-}
+  .admin-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+  }
 
-.admin-header-row h1 {
-  margin: 0;
-}
+  .admin-header-row h1 {
+    margin: 0;
+  }
 
-.admin-song-list {
-  margin-top: 2rem;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-  max-height: 500px;
-  overflow-y: auto;
-}
+  .admin-song-list {
+    margin-top: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    max-height: 500px;
+    overflow-y: auto;
+  }
 
-.admin-empty {
-  text-align: center;
-  color: var(--color-text-secondary);
-  padding: 2rem 0;
-}
+  .admin-empty {
+    text-align: center;
+    color: var(--color-text-secondary);
+    padding: 2rem 0;
+  }
 
-.admin-song-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--space-md);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  cursor: pointer;
-  transition: border-color var(--transition-fast);
-}
+  .admin-song-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-md);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+    transition: border-color var(--transition-fast);
+  }
 
-.admin-song-item:hover {
-  border-color: var(--color-brand);
-}
+  .admin-song-item:hover {
+    border-color: var(--color-brand);
+  }
 
-.admin-song-item__title {
-  font-weight: var(--font-weight-semibold);
-  font-size: var(--font-size-base);
-}
+  .admin-song-item__title {
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-base);
+  }
 
-.admin-song-item__meta {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-  margin-top: var(--space-xs);
-}
+  .admin-song-item__meta {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    margin-top: var(--space-xs);
+  }
 
-.admin-edit-btn {
-  padding: var(--space-sm) var(--space-md);
-}
+  .admin-edit-btn {
+    padding: var(--space-sm) var(--space-md);
+  }
 
-/* === Chips de rol (BEM) === */
-.admin-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.15em 0.6em;
-  border-radius: var(--border-radius-sm);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
+  /* === Chips de rol (BEM) === */
+  .admin-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15em 0.6em;
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
 
-.admin-badge--admin {
-  background: color-mix(in oklch, var(--color-brand) 20%, transparent);
-  color: var(--color-brand);
-}
-
-.admin-badge--user {
-  background: color-mix(in oklch, var(--color-text-secondary) 15%, transparent);
-  color: var(--color-text-secondary);
-}
-
-/* === Overrides tema claro === */
-@media (prefers-color-scheme: light) {
   .admin-badge--admin {
-    background: color-mix(in oklch, var(--color-brand) 15%, white);
+    background: color-mix(in oklch, var(--color-brand) 20%, transparent);
+    color: var(--color-brand);
   }
 
   .admin-badge--user {
+    background: color-mix(in oklch, var(--color-text-secondary) 15%, transparent);
+    color: var(--color-text-secondary);
+  }
+
+  /* === Overrides tema claro === */
+  @media (prefers-color-scheme: light) {
+    .admin-badge--admin {
+      background: color-mix(in oklch, var(--color-brand) 15%, white);
+    }
+
+    .admin-badge--user {
+      background: color-mix(in oklch, var(--color-text-secondary) 10%, white);
+    }
+  }
+
+  [data-theme='light'] .admin-badge--admin {
+    background: color-mix(in oklch, var(--color-brand) 15%, white);
+  }
+
+  [data-theme='light'] .admin-badge--user {
     background: color-mix(in oklch, var(--color-text-secondary) 10%, white);
   }
-}
-
-[data-theme='light'] .admin-badge--admin {
-  background: color-mix(in oklch, var(--color-brand) 15%, white);
-}
-
-[data-theme='light'] .admin-badge--user {
-  background: color-mix(in oklch, var(--color-text-secondary) 10%, white);
-}
 }

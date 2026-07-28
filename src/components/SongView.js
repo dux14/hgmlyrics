@@ -1631,7 +1631,10 @@ function setupAutoscroll(_container, songId) {
   const docResizeObserver =
     typeof ResizeObserver === 'function'
       ? new ResizeObserver(() => {
-          cachedDocHeight = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+          cachedDocHeight = Math.max(
+            document.body.scrollHeight,
+            document.documentElement.scrollHeight,
+          );
         })
       : null;
   docResizeObserver?.observe(document.body);

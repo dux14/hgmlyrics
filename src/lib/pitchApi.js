@@ -37,7 +37,14 @@ export async function createJob(file, { title, profile } = {}) {
   const res = await fetch('/api/pitch/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ filename: file.name, size: file.size, mime: file.type, title, profile, sha256 }),
+    body: JSON.stringify({
+      filename: file.name,
+      size: file.size,
+      mime: file.type,
+      title,
+      profile,
+      sha256,
+    }),
   });
   return jsonOrThrow(res);
 }

@@ -147,9 +147,7 @@ describe('router — handler lazy que rechaza', () => {
     await tick();
 
     expect(handler).toHaveBeenCalled();
-    expect(document.getElementById('main-content').textContent).not.toContain(
-      'No se pudo cargar',
-    );
+    expect(document.getElementById('main-content').textContent).not.toContain('No se pudo cargar');
   });
 });
 

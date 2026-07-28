@@ -245,9 +245,7 @@ describe('PartituraPage — resultado (letra-nota + descargas)', () => {
           voices_present: ['lead'],
           voices: {
             lead: {
-              lines: [
-                { syllables: [{ text: 'Me', note: 'C4', ditto: false, blank: false }] },
-              ],
+              lines: [{ syllables: [{ text: 'Me', note: 'C4', ditto: false, blank: false }] }],
             },
           },
         }),

@@ -48,15 +48,21 @@ export function segmentToPct(seg, durationS) {
  */
 export function labelColor(label) {
   switch (label) {
-    case 'verso':        return 'var(--color-primary)';
-    case 'coro':         return 'var(--color-accent)';
-    case 'puente':       return 'var(--color-voice-contralto)';
-    case 'instrumental': return 'var(--color-voice-bass)';
-    case 'pre-coro':     return 'var(--color-primary-light)';
+    case 'verso':
+      return 'var(--color-primary)';
+    case 'coro':
+      return 'var(--color-accent)';
+    case 'puente':
+      return 'var(--color-voice-contralto)';
+    case 'instrumental':
+      return 'var(--color-voice-bass)';
+    case 'pre-coro':
+      return 'var(--color-primary-light)';
     case 'intro':
     case 'outro':
     case 'silencio':
-    default:             return 'var(--color-text-secondary)';
+    default:
+      return 'var(--color-text-secondary)';
   }
 }
 

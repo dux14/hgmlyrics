@@ -29,12 +29,15 @@ export function skelCard() {
 }
 
 export function skelGrid(n = 6) {
-  const tiles = Array.from({ length: n }, () => box('sk-tile', 'aspect-ratio:1;border-radius:12px')).join('');
+  const tiles = Array.from({ length: n }, () =>
+    box('sk-tile', 'aspect-ratio:1;border-radius:12px'),
+  ).join('');
   return `<div class="sk-grid" aria-hidden="true">${tiles}</div>`;
 }
 
 const rows = (n) => Array.from({ length: n }, () => skelRow()).join('');
-const para = (widths) => `<div class="sk-para" aria-hidden="true">${widths.map((w) => skelLine({ w, h: 12 })).join('')}</div>`;
+const para = (widths) =>
+  `<div class="sk-para" aria-hidden="true">${widths.map((w) => skelLine({ w, h: 12 })).join('')}</div>`;
 
 export function skelTracklist({ rows: n = 4 } = {}) {
   return `<div class="sk-arch" aria-hidden="true">${skelBlock({ h: 150, radius: 16 })}${skelLine({ w: '62%', h: 22 })}${skelLine({ w: '40%', h: 12 })}<div class="sk-gap"></div>${rows(n)}</div>`;

@@ -26,7 +26,11 @@ export function renderAsyncRegion(regionEl, opts) {
   // SWR: si hay cache, pinta ya y revalida en silencio.
   if (cached !== null && cached !== undefined) {
     paint(cached);
-    fetcher().then((fresh) => { if (!isEmpty(fresh)) paint(fresh); }).catch(() => {});
+    fetcher()
+      .then((fresh) => {
+        if (!isEmpty(fresh)) paint(fresh);
+      })
+      .catch(() => {});
     return;
   }
 
@@ -34,7 +38,10 @@ export function renderAsyncRegion(regionEl, opts) {
   let settled = false;
   let mounted = false;
   const timer = setTimeout(() => {
-    if (!settled) { regionEl.innerHTML = skeleton(); mounted = true; }
+    if (!settled) {
+      regionEl.innerHTML = skeleton();
+      mounted = true;
+    }
   }, FLASH_DELAY_MS);
 
   fetcher()
@@ -50,7 +57,8 @@ export function renderAsyncRegion(regionEl, opts) {
       regionEl.setAttribute('aria-busy', 'false');
       if (!onError) throw err;
       regionEl.innerHTML = onError();
-      regionEl.querySelector('[data-retry]')
+      regionEl
+        .querySelector('[data-retry]')
         ?.addEventListener('click', () => renderAsyncRegion(regionEl, opts));
     });
 }

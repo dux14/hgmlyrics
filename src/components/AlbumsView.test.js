@@ -92,5 +92,4 @@ describe('renderAlbumsView', () => {
     expect(container.querySelectorAll('.album-card')).toHaveLength(0);
     expect(container.textContent).toContain('Álbumes');
   });
-
 });

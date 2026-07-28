@@ -12,7 +12,9 @@ export function createWakeLock(nav = typeof navigator !== 'undefined' ? navigato
     try {
       sentinel = await nav.wakeLock.request('screen');
       // El SO suelta el lock en background; reflejarlo en el estado.
-      sentinel.addEventListener?.('release', () => { sentinel = null; });
+      sentinel.addEventListener?.('release', () => {
+        sentinel = null;
+      });
       return sentinel;
     } catch {
       sentinel = null;
@@ -22,7 +24,11 @@ export function createWakeLock(nav = typeof navigator !== 'undefined' ? navigato
 
   async function release() {
     if (!sentinel) return;
-    try { await sentinel.release(); } catch { /* ya liberado */ }
+    try {
+      await sentinel.release();
+    } catch {
+      /* ya liberado */
+    }
     sentinel = null;
   }
 
@@ -30,6 +36,8 @@ export function createWakeLock(nav = typeof navigator !== 'undefined' ? navigato
     supported,
     acquire,
     release,
-    get held() { return !!sentinel; },
+    get held() {
+      return !!sentinel;
+    },
   };
 }

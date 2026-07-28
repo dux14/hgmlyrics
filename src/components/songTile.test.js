@@ -4,7 +4,13 @@ import { songTile } from './songTile.js';
 vi.mock('../router.js', () => ({ navigate: vi.fn() }));
 import { navigate } from '../router.js';
 
-const SONG = { id: '42', title: 'El Arte de Vivir', album: 'Manantial', artist: 'Hakuna', coverImage: 'elartedevivir.webp' };
+const SONG = {
+  id: '42',
+  title: 'El Arte de Vivir',
+  album: 'Manantial',
+  artist: 'Hakuna',
+  coverImage: 'elartedevivir.webp',
+};
 const COLORS = { 'elartedevivir.webp': { base: '#564733', light: '#897252' } };
 
 describe('songTile', () => {
@@ -12,7 +18,9 @@ describe('songTile', () => {
     const el = songTile(SONG, COLORS);
     expect(el.querySelector('.song-tile__title').textContent).toBe('El Arte de Vivir');
     expect(el.querySelector('.song-tile__group')).toBeTruthy();
-    expect(el.querySelector('img.song-tile__art').getAttribute('src')).toContain('elartedevivir.webp');
+    expect(el.querySelector('img.song-tile__art').getAttribute('src')).toContain(
+      'elartedevivir.webp',
+    );
     expect(el.querySelector('.voice-badge')).toBeNull(); // sin label de voz
   });
 
@@ -41,7 +49,13 @@ describe('songTile color/cover por álbum', () => {
   const coverBySlug = { 'el-arte-de-vivir': 'elartedevivir.webp' };
 
   it('usa el color del cover del álbum vía coverBySlug', () => {
-    const song = { id: 's1', title: 'Ojalá', album: 'El Arte de vivir', albumSlug: 'el-arte-de-vivir', coverImage: null };
+    const song = {
+      id: 's1',
+      title: 'Ojalá',
+      album: 'El Arte de vivir',
+      albumSlug: 'el-arte-de-vivir',
+      coverImage: null,
+    };
     const el = songTile(song, colorMap, coverBySlug);
     expect(el.style.getPropertyValue('--tile-c1')).toBe('#6a817a');
     expect(el.querySelector('.song-tile__art').getAttribute('src')).toContain('elartedevivir.webp');
@@ -54,11 +68,13 @@ describe('songTile color/cover por álbum', () => {
   });
 
   it('preserva la URL http del cover del álbum (Storage) sin prefijar /covers/', () => {
-    const remote =
-      'https://x.supabase.co/storage/v1/object/public/covers-uploads/abc-reina.webp';
+    const remote = 'https://x.supabase.co/storage/v1/object/public/covers-uploads/abc-reina.webp';
     const song = {
-      id: 's3', title: 'Reina de Colombia', album: 'Reina de Colombia',
-      albumSlug: 'reina-de-colombia', coverImage: remote,
+      id: 's3',
+      title: 'Reina de Colombia',
+      album: 'Reina de Colombia',
+      albumSlug: 'reina-de-colombia',
+      coverImage: remote,
     };
     const el = songTile(song, {}, { 'reina-de-colombia': remote });
     expect(el.querySelector('.song-tile__art').getAttribute('src')).toBe(remote);

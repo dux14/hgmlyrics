@@ -589,12 +589,35 @@
   outline: none;
   border-color: color-mix(in srgb, var(--color-brand) 45%, transparent);
 }
-.list-wizard__expiry { margin-top: var(--space-md); }
-.list-wizard__expiry-row { display: flex; align-items: baseline; justify-content: space-between; }
-.list-wizard__countdown { font-size: 1.05rem; font-weight: 700; color: var(--color-action); }
-.list-wizard__countdown.is-urgent { color: var(--color-danger); }
-.list-wizard__expiry-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-text-secondary); }
-.list-wizard__expiry-date { display: block; font-size: 0.82rem; color: var(--color-text-secondary); margin: 2px 0 10px; }
+.list-wizard__expiry {
+  margin-top: var(--space-md);
+}
+.list-wizard__expiry-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.list-wizard__countdown {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-action);
+}
+.list-wizard__countdown.is-urgent {
+  color: var(--color-danger);
+}
+.list-wizard__expiry-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+.list-wizard__expiry-date {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+  margin: 2px 0 10px;
+}
 .list-wizard__life {
   height: 6px;
   border-radius: var(--border-radius-full);

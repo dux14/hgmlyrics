@@ -162,5 +162,4 @@ describe('renderAlbumDetail', () => {
     renderAlbumDetail(container, 'no-existe');
     expect(songRowCompact).not.toHaveBeenCalled();
   });
-
 });

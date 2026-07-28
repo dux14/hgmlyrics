@@ -147,7 +147,8 @@ export async function compressImageToLimit(
  */
 async function encodeCanvas(bitmap, width, height, format, quality) {
   const useOffscreen =
-    typeof OffscreenCanvas !== 'undefined' && typeof OffscreenCanvas.prototype.convertToBlob === 'function';
+    typeof OffscreenCanvas !== 'undefined' &&
+    typeof OffscreenCanvas.prototype.convertToBlob === 'function';
 
   if (useOffscreen) {
     const canvas = new OffscreenCanvas(width, height);

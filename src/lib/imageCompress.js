@@ -11,10 +11,17 @@ const ALLOWED_TYPES = new Set(['image/webp', 'image/png', 'image/jpeg']);
 const MAX_ITERATIONS = 20;
 
 /**
- * Returns true if the file needs to go through canvas compression.
- * A file does NOT need compression when:
+ * Returns true if the file needs to go through canvas compression based on
+ * type and byte size alone. A file does NOT need compression when:
  *   - its MIME type is already an allowed upload type, AND
  *   - its size is within the byte limit.
+ *
+ * NOTA: esta función es deliberadamente síncrona y no mira las dimensiones
+ * en píxeles (leerlas requiere decodificar la imagen, que es asíncrono).
+ * Un archivo liviano en bytes pero con muchos megapíxeles (p.ej. un PNG bien
+ * comprimido de 12 MP) pasa este chequeo igual. `compressImageToLimit` cubre
+ * ese caso decodificando el bitmap y comparando el ancho/alto contra
+ * `maxDimension` antes de decidir el fast path.
  *
  * @param {File} file
  * @param {number} maxBytes
@@ -68,15 +75,22 @@ export async function compressImageToLimit(
     throw new Error(`El archivo no es una imagen (tipo: ${file.type})`);
   }
 
-  // Fast path: already a valid type and within the size limit.
-  if (!needsCompression(file, maxBytes)) return file;
-
-  // Decode the image once.
+  // needsCompression() solo mira tipo/bytes; las dimensiones exigen decodificar
+  // la imagen primero (async), así que ese chequeo vive acá y no en
+  // needsCompression. Se decodifica siempre, incluso si el archivo ya pasa el
+  // chequeo de bytes, para poder confirmar que tampoco excede maxDimension.
   const bitmap = await createImageBitmap(file);
 
   let result = null;
 
   try {
+    // Fast path: ya es un tipo permitido, pesa poco Y las dimensiones están
+    // dentro del límite. Si algo de eso falla, se comprime igual.
+    const withinDimensions = bitmap.width <= maxDimension && bitmap.height <= maxDimension;
+    if (!needsCompression(file, maxBytes) && withinDimensions) {
+      return file;
+    }
+
     const initial = computeTargetDimensions(bitmap.width, bitmap.height, maxDimension);
     let width = initial.width;
     let height = initial.height;

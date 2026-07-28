@@ -6,8 +6,8 @@
  * createImageBitmap, HTMLCanvasElement.toBlob, or OffscreenCanvas.
  * That path is verified via Playwright E2E in the browser.
  */
-import { describe, it, expect } from 'vitest';
-import { needsCompression, computeTargetDimensions } from './imageCompress.js';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { needsCompression, computeTargetDimensions, compressImageToLimit } from './imageCompress.js';
 
 const MB = 1024 * 1024;
 
@@ -101,5 +101,68 @@ describe('computeTargetDimensions', () => {
 
   it('does not upscale an image smaller than maxDimension', () => {
     expect(computeTargetDimensions(100, 100, 1024)).toEqual({ width: 100, height: 100 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// compressImageToLimit — chequeo de dimensiones aunque el archivo pese poco.
+//
+// needsCompression() no puede evaluar esto porque leer el ancho/alto real
+// exige decodificar la imagen (async). Acá se mockean createImageBitmap y
+// OffscreenCanvas (ausentes en jsdom, ver nota arriba) solo para probar que
+// compressImageToLimit NO toma el fast path cuando la imagen excede
+// maxDimension, aunque esté muy por debajo del límite de bytes.
+// ---------------------------------------------------------------------------
+describe('compressImageToLimit — dimensiones sin exceder bytes', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('comprime un archivo liviano en bytes pero con megapíxeles de sobra', async () => {
+    const file = new File(['x'], 'huge.webp', { type: 'image/webp' });
+    Object.defineProperty(file, 'size', { value: 100 * 1024 }); // 100KB, muy por debajo de 2MB
+
+    // Simula un decode de 4000x3000 (12 MP) pese a que el archivo pesa poco.
+    const bitmap = { width: 4000, height: 3000, close: vi.fn() };
+    vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue(bitmap));
+
+    class FakeOffscreenCanvas {
+      constructor(width, height) {
+        this.width = width;
+        this.height = height;
+      }
+      getContext() {
+        return { fillStyle: '', fillRect() {}, drawImage() {} };
+      }
+      async convertToBlob({ type }) {
+        return new Blob(['y'], { type });
+      }
+    }
+    vi.stubGlobal('OffscreenCanvas', FakeOffscreenCanvas);
+
+    const resultFile = await compressImageToLimit(file, {
+      maxBytes: 2 * 1024 * 1024,
+      maxDimension: 1024,
+    });
+
+    // Si hubiera tomado el fast path, devolvería la MISMA instancia de File.
+    expect(resultFile).not.toBe(file);
+    expect(bitmap.close).toHaveBeenCalled();
+  });
+
+  it('no recomprime cuando pesa poco Y las dimensiones están dentro del límite', async () => {
+    const file = new File(['x'], 'small.webp', { type: 'image/webp' });
+    Object.defineProperty(file, 'size', { value: 100 * 1024 });
+
+    const bitmap = { width: 800, height: 600, close: vi.fn() };
+    vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue(bitmap));
+
+    const resultFile = await compressImageToLimit(file, {
+      maxBytes: 2 * 1024 * 1024,
+      maxDimension: 1024,
+    });
+
+    expect(resultFile).toBe(file);
+    expect(bitmap.close).toHaveBeenCalled();
   });
 });

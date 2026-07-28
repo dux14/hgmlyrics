@@ -187,9 +187,15 @@ function sectionHtml(section, sIdx, byLine, textByLine, { disabled, isLast } = {
 
 /**
  * @param {{songId: string, onApproved?: () => void}} opts
+ * @param {{songId:string, onApproved:() => void, onRetry?: () => void}} opts
+ *   `onRetry` (opcional): si el primer fetch falla, se cuelga de un botón
+ *   "Reintentar" en el estado de error. Quien monta el panel (SongPipelineView)
+ *   lo usa para soltar su caché de `lyricsPanelEl` y volver a invocar la
+ *   factory — sin esto, el nodo de error quedaba cacheado para siempre y el
+ *   gate de letra moría hasta recargar la página.
  * @returns {Promise<HTMLElement>}
  */
-export async function LyricsReviewPanel({ songId, onApproved } = {}) {
+export async function LyricsReviewPanel({ songId, onApproved, onRetry } = {}) {
   const el = document.createElement('div');
   el.className = 'lrp';
 
@@ -198,7 +204,11 @@ export async function LyricsReviewPanel({ songId, onApproved } = {}) {
     const initial = await getLyricsReview(songId);
     state = { ...initial, busy: false };
   } catch (err) {
-    el.innerHTML = `<p class="lrp__error">${escapeHtml(err.message || 'No se pudo cargar la revisión de letra')}</p>`;
+    el.innerHTML = `
+      <p class="lrp__error">${escapeHtml(err.message || 'No se pudo cargar la revisión de letra')}</p>
+      <button type="button" class="btn lrp__error-retry">Reintentar</button>
+    `;
+    el.querySelector('.lrp__error-retry').addEventListener('click', () => onRetry?.());
     return el;
   }
 

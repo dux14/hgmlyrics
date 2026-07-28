@@ -363,6 +363,14 @@ export function renderSongPipelineView(container, songId) {
   async function ensureLyricsPanel() {
     if (lyricsPanelEl || lyricsPanelLoading) return;
     lyricsPanelLoading = true;
+    // Compartido por ambos catches de abajo (el interno de LyricsReviewPanel
+    // y el de esta factory): suelta el sentinel cacheado y reintenta el
+    // montaje. Sin esto el gate de letra quedaba muerto tras un fallo del
+    // primer fetch, con recargar la página como única salida.
+    const retry = () => {
+      lyricsPanelEl = null;
+      ensureLyricsPanel();
+    };
     try {
       lyricsPanelEl = await LyricsReviewPanel({
         songId,
@@ -370,14 +378,18 @@ export function renderSongPipelineView(container, songId) {
           // El próximo evento del watcher (broadcast o polling) trae
           // lyrics_review en done y renderPhases suelta el panel solo.
         },
+        onRetry: retry,
       });
     } catch (err) {
       console.error('SongPipelineView: no se pudo montar el panel de letra', err);
       // Sentinel de error: sin esto, cada poll de 3s reintenta la factory
       // indefinidamente (retry-storm) porque el catch no dejaba nada montado.
-      const errorEl = document.createElement('p');
-      errorEl.className = 'lrp__error';
-      errorEl.textContent = 'No se pudo cargar la revisión de letra';
+      const errorEl = document.createElement('div');
+      errorEl.innerHTML = `
+        <p class="lrp__error">No se pudo cargar la revisión de letra</p>
+        <button type="button" class="btn lrp__error-retry">Reintentar</button>
+      `;
+      errorEl.querySelector('.lrp__error-retry').addEventListener('click', retry);
       lyricsPanelEl = errorEl;
     } finally {
       lyricsPanelLoading = false;

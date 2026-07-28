@@ -260,6 +260,29 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     expect(LyricsReviewPanel).toHaveBeenCalledTimes(1);
   });
 
+  it('si LyricsReviewPanel falla al montar, pinta un boton Reintentar que reintenta la factory', async () => {
+    LyricsReviewPanel.mockRejectedValueOnce(new Error('boom'));
+
+    renderSongPipelineView(container, SONG_ID);
+    watchOnChange({ run: buildRun({}, { status: 'awaiting_lyrics' }) });
+    await flushPromises();
+
+    const row = container.querySelector('[data-phase="lyrics_review"]');
+    const errorEl = row.querySelector('.lrp__error');
+    expect(errorEl).toBeTruthy();
+    const retryBtn = row.querySelector('.lrp__error-retry');
+    expect(retryBtn).toBeTruthy();
+    expect(LyricsReviewPanel).toHaveBeenCalledTimes(1);
+
+    retryBtn.click();
+    await flushPromises();
+
+    // El segundo intento (ya sin rechazo forzado) reemplaza el sentinel de
+    // error por el panel real: el gate de letra no queda muerto.
+    expect(LyricsReviewPanel).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('[data-phase="lyrics_review"] .lrp__error')).toBeNull();
+  });
+
   it('fase failed: boton Reintentar fase llama retryPipelinePhase con la fase', () => {
     renderSongPipelineView(container, SONG_ID);
     watchOnChange({ run: buildRun({ upload: { status: 'failed', error: 'boom' } }) });

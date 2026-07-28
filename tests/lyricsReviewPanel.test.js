@@ -734,4 +734,18 @@ describe('LyricsReviewPanel', () => {
     expect(errorEl.textContent).toBe('No se pudo cargar la revisión de letra');
     expect(el.querySelector('.lrp__approve')).toBeNull();
   });
+
+  it('el estado de error trae un botón Reintentar que invoca onRetry', async () => {
+    getLyricsReview.mockRejectedValueOnce(new Error('boom'));
+    const onRetry = vi.fn();
+
+    const el = await LyricsReviewPanel({ songId: 'song-1', onRetry });
+    document.body.appendChild(el);
+
+    const retryBtn = el.querySelector('.lrp__error-retry');
+    expect(retryBtn).not.toBeNull();
+    retryBtn.click();
+
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
 });

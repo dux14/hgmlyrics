@@ -34,6 +34,10 @@ body.chrome-hidden .main {
   color: var(--color-danger);
 }
 
+.lrp__error-retry {
+  margin: 0 var(--space-md) var(--space-md);
+}
+
 .lrp__header {
   position: sticky;
   top: 0;

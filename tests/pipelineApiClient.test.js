@@ -334,6 +334,40 @@ describe('watchPipelineRun', () => {
     });
   });
 
+  // 404 queda fuera de este parametrizado: getPipelineRun devuelve `null`
+  // (no lanza) en 404, así que refresh() nunca entra al catch por esa vía;
+  // el guard de status===404 en refresh() queda como defensa para el resto
+  // de las funciones del cliente que sí lanzan en 404 vía readError().
+  it.each([401, 403])(
+    'un error %i persistente corta el polling en vez de martillar /pipeline cada 3s',
+    async (status) => {
+      global.fetch.mockResolvedValue(jsonResponse(status, { error: 'nope' }));
+      const onChange = vi.fn();
+      watchPipelineRun('s1', onChange);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+
+      // Sin el fix, el setInterval de 3s seguiría vivo y golpearía el backend
+      // indefinidamente pese a que el error nunca va a resolverse solo.
+      await vi.advanceTimersByTimeAsync(9000);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledWith({
+        error: expect.objectContaining({ status }),
+      });
+    },
+  );
+
+  it('un error 500 (no 401/403/404) SIGUE polleando: puede resolverse solo', async () => {
+    global.fetch.mockResolvedValue(jsonResponse(500, { error: 'boom' }));
+    const onChange = vi.fn();
+    watchPipelineRun('s1', onChange);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
   it('guard stopped: un rechazo que llega despues de unsubscribe no emite {error}', async () => {
     let rejectFetch;
     global.fetch = vi.fn(

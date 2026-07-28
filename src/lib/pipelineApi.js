@@ -298,6 +298,15 @@ export function watchPipelineRun(songId, onChange) {
       // vez de quedar en blanco (el catch previo tragaba el error entero).
       console.error('watchPipelineRun: no se pudo refrescar el run', err);
       if (stopped || reqId !== lastReqId) return;
+      // Sesión expirada o acceso revocado (401/403) o run inexistente (404):
+      // reintentar cada 3 s de por vida solo martillea el backend sin ninguna
+      // chance de éxito. Se corta el setInterval y el botón "Reintentar" del
+      // banner de error (que llama a `.refresh()` a mano) queda como único
+      // disparador; si ese refresh manual tiene éxito, refresh() reactiva el
+      // polling normalmente (startPolling en la rama no-terminal).
+      if (err.status === 401 || err.status === 403 || err.status === 404) {
+        stopPolling();
+      }
       onChange({ error: err });
       return;
     }

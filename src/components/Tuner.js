@@ -1196,10 +1196,7 @@ export async function renderTuner(container, opts = {}) {
       const next = metronome.setBpm(metronome.getBpm() + delta);
       if (numEl) numEl.textContent = String(next);
       if (pendulumEl) {
-        pendulumEl.style.setProperty(
-          '--metro-pendulum-duration',
-          `${Math.round(120000 / next)}ms`,
-        );
+        pendulumEl.style.setProperty('--metro-pendulum-duration', `${Math.round(120000 / next)}ms`);
       }
       persistMetronome();
     };

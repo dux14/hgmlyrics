@@ -271,6 +271,7 @@ export async function LyricsReviewPanel({ songId, onApproved, onRetry } = {}) {
   async function runAction(action, { rowEl = null } = {}) {
     if (state.busy || state.previewOpen) return;
     state.busy = true;
+    state.focusHint = focusHintFor(action);
     lockControls();
     if (rowEl && !reduceMotion()) {
       rowEl.classList.add('is-resolving');
@@ -346,6 +347,9 @@ export async function LyricsReviewPanel({ songId, onApproved, onRetry } = {}) {
     if (state.busy || state.previewOpen) return;
     const sIdx = Number(rowEl.dataset.section);
     const lIdx = Number(rowEl.dataset.line);
+    // Cancelar/Escape repinta el panel: sin el hint, el foco (y con él la
+    // vista) volvería al primer renglón del documento.
+    state.focusHint = { kind: 'line', section: sIdx, line: lIdx };
     const line = state.review.sections[sIdx].lines[lIdx];
     const lineEl = rowEl.querySelector('.lrp__line');
     lineEl.innerHTML = `
@@ -520,20 +524,91 @@ export async function LyricsReviewPanel({ songId, onApproved, onRetry } = {}) {
   }
 
   /**
+   * Scroller efectivo del panel: el ancestro con overflow scrollable, o el
+   * documento. Se recalcula en cada render porque el panel se monta en
+   * distintos contenedores según la vista que lo hospeda.
+   */
+  function findScroller() {
+    let node = el.parentElement;
+    while (node && node !== document.body) {
+      const overflowY = window.getComputedStyle?.(node).overflowY;
+      if (
+        (overflowY === 'auto' || overflowY === 'scroll') &&
+        node.scrollHeight > node.clientHeight
+      ) {
+        return node;
+      }
+      node = node.parentElement;
+    }
+    return document.scrollingElement || document.documentElement;
+  }
+
+  /**
+   * Ancla de foco tras el render: el control equivalente al que se acaba de
+   * usar, no el primero del documento. Sin esto, editar el renglón 30 dejaba
+   * el foco en el renglón 1 y el navegador arrastraba el scroll hasta arriba.
+   */
+  function focusHintFor(action) {
+    switch (action.type) {
+      case 'moveLine':
+        return { kind: 'line', section: action.toSection, line: action.toLine };
+      case 'setSectionType':
+      case 'mergeSections':
+      case 'splitSection':
+        return { kind: 'sectionType', section: action.section };
+      case 'renameSection':
+        return { kind: 'sectionName', section: action.section };
+      case 'setLanguage':
+        return { kind: 'language' };
+      default:
+        return typeof action.section === 'number'
+          ? { kind: 'line', section: action.section, line: action.line ?? 0 }
+          : null;
+    }
+  }
+
+  /** Resuelve el hint contra el DOM recién pintado; los índices pueden haber
+   * quedado fuera de rango (borrar el último renglón, unir secciones), así
+   * que cada caso degrada al control más cercano que sí exista. */
+  function focusTargetFromHint(hint) {
+    if (!hint) return null;
+    if (hint.kind === 'language') return el.querySelector('.lrp__language-select');
+    if (hint.kind === 'sectionType' || hint.kind === 'sectionName') {
+      const cls = hint.kind === 'sectionType' ? 'lrp__type-select' : 'lrp__rename-input';
+      return (
+        el.querySelector(`.${cls}[data-section="${hint.section}"]`) ||
+        el.querySelector(`.${cls}[data-section="${hint.section - 1}"]`)
+      );
+    }
+    const rowIn = (section, line) =>
+      el.querySelector(`.lrp__line-row[data-section="${section}"][data-line="${line}"]`);
+    const row =
+      rowIn(hint.section, hint.line) ||
+      rowIn(hint.section, hint.line - 1) ||
+      el.querySelector(`.lrp__line-row[data-section="${hint.section}"]`);
+    return row?.querySelector('.lrp__line-edit') ?? null;
+  }
+
+  /**
    * Restaura el foco tras cada render (el innerHTML completo se reemplaza
    * en cada pintura, así que sin esto el foco cae a <body> — regresión de
-   * teclado). Orden de prioridad: primer renglón editable > Aprobar (si ya
-   * se puede aprobar) > header (contenedor con tabindex -1, último recurso).
+   * teclado). Orden de prioridad: control de la última acción > primer
+   * renglón editable > Aprobar (si ya se puede aprobar) > header (contenedor
+   * con tabindex -1, último recurso). Siempre con `preventScroll`: el foco no
+   * debe mover la vista, el admin se queda donde estaba editando.
    */
   function restoreFocus() {
     const target =
+      focusTargetFromHint(state.focusHint) ||
       el.querySelector('.lrp__line-edit') ||
       (state.canApprove ? el.querySelector('.lrp__approve') : null) ||
       el.querySelector('.lrp__header');
-    target?.focus();
+    target?.focus({ preventScroll: true });
   }
 
   function render() {
+    const scroller = findScroller();
+    const scrollTop = scroller?.scrollTop ?? 0;
     const byLine = suggestionsByLine(state.suggestions || []);
     const textByLine = textSuggestionsByLine(state.textSuggestions);
     const motion = reduceMotion() ? '' : ' lrp--motion';
@@ -563,6 +638,9 @@ export async function LyricsReviewPanel({ songId, onApproved, onRetry } = {}) {
       </div>`;
     bind();
     restoreFocus();
+    // El repintado completo puede acortar el contenido por un instante y el
+    // navegador clampa el scroll: se devuelve a donde estaba.
+    if (scroller && scroller.scrollTop !== scrollTop) scroller.scrollTop = scrollTop;
   }
 
   render();

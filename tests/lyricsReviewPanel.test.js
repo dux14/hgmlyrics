@@ -655,7 +655,12 @@ describe('LyricsReviewPanel', () => {
     textarea.value = 'primera parte\nsegunda parte';
 
     textarea.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true, cancelable: true }),
+      new KeyboardEvent('keydown', {
+        key: 'Enter',
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
     );
     await flush();
 
@@ -747,5 +752,43 @@ describe('LyricsReviewPanel', () => {
     retryBtn.click();
 
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('tras una acción el foco queda en la fila editada, no en el primer renglón (no salta la vista)', async () => {
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const row = el.querySelector('.lrp__line-row[data-section="1"][data-line="0"]');
+    row.querySelector('.lrp__line-voc').click();
+    await flush();
+
+    const focused = el.querySelector(
+      '.lrp__line-row[data-section="1"][data-line="0"] .lrp__line-edit',
+    );
+    expect(document.activeElement).toBe(focused);
+  });
+
+  it('"Dividir aquí" deja el foco en la sección dividida, no al principio del documento', async () => {
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    el.querySelector('.lrp__section-split[data-section="0"]').click();
+    await flush();
+
+    expect(document.activeElement).toBe(el.querySelector('.lrp__type-select[data-section="0"]'));
+  });
+
+  it('cancelar la edición devuelve el foco a la misma fila', async () => {
+    const el = await LyricsReviewPanel({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const row = el.querySelector('.lrp__line-row[data-section="0"][data-line="1"]');
+    row.querySelector('.lrp__line-edit').click();
+    row.querySelector('.lrp__edit-cancel').click();
+
+    const focused = el.querySelector(
+      '.lrp__line-row[data-section="0"][data-line="1"] .lrp__line-edit',
+    );
+    expect(document.activeElement).toBe(focused);
   });
 });

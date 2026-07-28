@@ -28,6 +28,9 @@
     "api/pipeline/cleanup.js": {
       "maxDuration": 60
     },
+    "api/vitals/cleanup.js": {
+      "maxDuration": 60
+    },
     "api/pitch/jobs/\\[id\\]/approve.js": {
       "maxDuration": 60
     },
@@ -59,7 +62,8 @@
   "crons": [
     { "path": "/api/stems/cleanup", "schedule": "0 * * * *" },
     { "path": "/api/pitch/cleanup", "schedule": "0 * * * *" },
-    { "path": "/api/pipeline/cleanup", "schedule": "0 * * * *" }
+    { "path": "/api/pipeline/cleanup", "schedule": "0 * * * *" },
+    { "path": "/api/vitals/cleanup", "schedule": "0 * * * *" }
   ],
   "headers": [
     {

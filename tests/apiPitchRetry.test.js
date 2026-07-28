@@ -8,6 +8,7 @@ vi.mock('../api/pitch/_lib/storage.js', () => ({
 vi.mock('../api/pitch/_lib/modal.js', () => ({ invokePitchPipeline: vi.fn(async () => ({ id: 'call1' })) }));
 import sql from '../api/_lib/db.js';
 import { invokePitchPipeline } from '../api/pitch/_lib/modal.js';
+import { deletePitchPrefix } from '../api/pitch/_lib/storage.js';
 import handler from '../api/pitch/jobs/[id]/retry.js';
 import { makeRes } from './helpers/makeRes.js';
 beforeEach(() => vi.clearAllMocks());
@@ -88,6 +89,30 @@ describe('api/pitch/jobs/[id]/retry', () => {
     await handler({ method: 'POST', query: { id: 'j' }, headers: {} }, res);
     expect(res.status).toHaveBeenCalledWith(429);
     expect(invokePitchPipeline).not.toHaveBeenCalled();
+  });
+
+  it('Modal falla ambos intentos por timeout → marca failed pero NO purga storage (job puede seguir vivo en GPU)', async () => {
+    sql.json = (o) => o;
+    let failedUpdateCalled = false;
+    sql.mockImplementation(async (strings) => {
+      const q = strings.join('?');
+      if (/SELECT .* FROM pitch_jobs/.test(q)) {
+        return [{ id: 'j', user_id: 'u1', status: 'failed', profile: 'oss', input_path: 'u1/j/input/a.mp3' }];
+      }
+      if (/UPDATE pitch_jobs SET status = 'running'/.test(q)) return { count: 1 };
+      if (/UPDATE pitch_jobs SET status = 'failed'/.test(q)) { failedUpdateCalled = true; return { count: 1 }; }
+      return { count: 1 };
+    });
+    const timeoutErr = new Error('Modal (pitch) no respondió a tiempo.');
+    timeoutErr.status = 502;
+    timeoutErr.timeout = true;
+    invokePitchPipeline.mockRejectedValueOnce(timeoutErr).mockRejectedValueOnce(timeoutErr);
+    const res = makeRes();
+    await handler({ method: 'POST', query: { id: 'j' }, headers: {} }, res);
+    expect(invokePitchPipeline).toHaveBeenCalledTimes(2);
+    expect(failedUpdateCalled).toBe(true);
+    expect(deletePitchPrefix).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(502);
   });
 
   it('reinicia phases/artifacts para no arrastrar fases previas al recomputar succeeded/partial', async () => {

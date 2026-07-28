@@ -79,6 +79,28 @@ describe('api/pitch/jobs/[id]/approve', () => {
     expect(res.status).toHaveBeenCalledWith(502);
   });
 
+  it('Modal falla ambos intentos por timeout → marca failed pero NO purga storage (job puede seguir vivo en GPU)', async () => {
+    sql.json = (o) => o;
+    let failedUpdateCalled = false;
+    sql.mockImplementation(async (strings) => {
+      const q = strings.join('?');
+      if (/SELECT .* FROM pitch_jobs/.test(q)) return [{ id: 'j', user_id: 'u1', status: 'awaiting_approval', profile: 'oss', input_path: 'u1/j/input/a.mp3' }];
+      if (/UPDATE pitch_jobs SET status = 'running'/.test(q)) return { count: 1 };
+      if (/UPDATE pitch_jobs SET status = 'failed'/.test(q)) { failedUpdateCalled = true; return { count: 1 }; }
+      return { count: 1 };
+    });
+    const timeoutErr = new Error('Modal (pitch) no respondió a tiempo.');
+    timeoutErr.status = 502;
+    timeoutErr.timeout = true;
+    invokePitchPipeline.mockRejectedValue(timeoutErr);
+    const res = makeRes();
+    await handler({ method: 'POST', query: { id: 'j' }, headers: {} }, res);
+    expect(invokePitchPipeline).toHaveBeenCalledTimes(2);
+    expect(failedUpdateCalled).toBe(true);
+    expect(deletePitchPrefix).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(502);
+  });
+
   it('Modal falla ambos intentos pero el job ya cambió de estado (cancelado) → 409, sin purgar storage', async () => {
     sql.json = (o) => o;
     sql.mockImplementation(async (strings) => {

@@ -57,7 +57,13 @@ export default withErrors(async (req, res) => {
         UPDATE pitch_jobs SET status = 'failed', error = ${String(err2?.message ?? err2).slice(0, 300)}, updated_at = now()
         WHERE id = ${id} AND status = 'running'`;
       if (marked.count === 1) {
-        await deletePitchPrefix(`${user.id}/${id}`).catch(() => {}); // #3: liberar storage del job fallido
+        // Si err2.timeout es true, no sabemos si Modal llegó a arrancar el job
+        // (fetchWithTimeout no distingue "no respondió" de "no llegamos a saber
+        // si recibió el request"): purgar el input aquí borraría el mp3 de un
+        // job que puede seguir vivo en GPU. Se deja esa limpieza al cron.
+        if (!err2?.timeout) {
+          await deletePitchPrefix(`${user.id}/${id}`).catch(() => {}); // #3: liberar storage del job fallido
+        }
         const e = new Error('No se pudo iniciar el procesamiento. Intenta de nuevo.');
         e.status = 502;
         throw e;

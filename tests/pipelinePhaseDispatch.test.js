@@ -137,15 +137,36 @@ describe("dispatchPhase('transcription')", () => {
 });
 
 describe("dispatchPhase('pitch')", () => {
-  it('pasa snapshotHash desde run.lyricsReview.approvedHash cuando está presente', async () => {
-    sqlResponses.push([]); // getPipelineLyrics → sin fila
+  it('pasa snapshotHash desde pipelineLyrics.hash (getPipelineLyrics) cuando hay letra aprobada', async () => {
+    sqlResponses.push([{ sections: [], hash: 'hash123' }]); // getPipelineLyrics → fila con hash
     const run = {
       id: 'run1',
       songId: 'song1',
       phases: { stems: { tracks: { lead: 'song1/stems/lead.mp3', backing: 'song1/stems/backing.mp3' } } },
-      lyricsReview: { approvedHash: 'hash123' },
     };
     await dispatchPhase('pitch', run);
+
+    expect(dispatchPitch).toHaveBeenCalledWith(
+      expect.objectContaining({ snapshotHash: 'hash123' }),
+    );
+  });
+
+  // Regresión (revisión pre-merge): retry.js NUNCA trae `lyrics_review` en su
+  // SELECT (api/songs/[id]/pipeline/retry.js:34-41), así que `run.lyricsReview`
+  // queda undefined en ese llamador. Antes del fix, snapshotHash dependía de
+  // run.lyricsReview?.approvedHash y quedaba undefined pese a existir letra
+  // aprobada real en song_pipeline_lyrics — deshabilitando el guard de
+  // staleness de process.js en un reintento manual. pipelineLyrics.hash no
+  // depende de qué columnas trajo el llamador.
+  it('reintento vía retry.js (run sin lyricsReview): snapshotHash sale de pipelineLyrics.hash igual', async () => {
+    sqlResponses.push([{ sections: [], hash: 'hash123' }]); // getPipelineLyrics → fila con hash
+    const run = {
+      id: 'run1',
+      songId: 'song1',
+      phases: { stems: { tracks: { lead: 'song1/stems/lead.mp3', backing: 'song1/stems/backing.mp3' } } },
+      // sin lyricsReview: exactamente el shape que arma retry.js
+    };
+    await dispatchPhase('pitch', run, { isRetry: true });
 
     expect(dispatchPitch).toHaveBeenCalledWith(
       expect.objectContaining({ snapshotHash: 'hash123' }),
@@ -421,24 +442,52 @@ describe("dispatchPhase('clips')", () => {
   // deterministas (`songId/clips/kind/section-N.mp3`) sin el hash del ciclo
   // de letra -- un job del ciclo viejo que sigue vivo cuando ya se aprobó un
   // ciclo nuevo pisaba en silencio el mp3 del ciclo nuevo (misma key).
-  it('con run.lyricsReview.approvedHash: las uploadKeys llevan el sufijo del snapshot', async () => {
+  it('con pipelineLyrics.hash: las uploadKeys y el snapshotHash del dispatch llevan el sufijo/hash del snapshot', async () => {
     sqlResponses.push([{ sections: CLIPS_SECTIONS }]); // SELECT sections FROM songs
     sqlResponses.push([{ lines: CLIPS_LINE_TIMINGS }]); // SELECT lines FROM song_line_timings
     sqlResponses.push([{ durationSec: '8.5' }]); // SELECT duration_sec FROM song_audio
     sqlResponses.push([]); // SELECT segments FROM song_structure → sin fila
-    sqlResponses.push([]); // getPipelineLyrics → sin fila, cae a songs.sections
+    sqlResponses.push([{ sections: CLIPS_SECTIONS, hash: 'abcdef1234567890' }]); // getPipelineLyrics → fila con hash (mismas sections que songs, no altera lineSections)
 
     const run = {
       id: 'run1',
       songId: 'song1',
       phases: { stems: { tracks: { vocals: 'song1/stems/vocals.mp3' } } },
-      lyricsReview: { approvedHash: 'abcdef1234567890' },
     };
     await dispatchPhase('clips', run);
 
     const args = dispatchClips.mock.calls[0][0];
     expect(args.uploadKeys.vocals['0']).toBe('song1/clips/vocals/section-0-abcdef12.mp3');
     expect(args.uploadKeys.vocals['1']).toBe('song1/clips/vocals/section-1-abcdef12.mp3');
+    expect(args.snapshotHash).toBe('abcdef1234567890');
+  });
+
+  // Regresión (revisión pre-merge): retry.js NUNCA trae `lyrics_review` en su
+  // SELECT (api/songs/[id]/pipeline/retry.js:34-41). Antes del fix,
+  // snapshotHash/clipsKeySuffix dependían de run.lyricsReview?.approvedHash y
+  // quedaban undefined en un reintento manual pese a existir letra aprobada
+  // real — deshabilitando el guard de staleness de process.js y reintroduciendo
+  // storage keys deterministas sin sufijo (patrón ya corregido en la auditoría
+  // del 27-jul). pipelineLyrics.hash no depende de qué columnas trajo el
+  // llamador.
+  it('reintento vía retry.js (run sin lyricsReview): snapshotHash y sufijo salen de pipelineLyrics.hash igual', async () => {
+    sqlResponses.push([{ sections: CLIPS_SECTIONS }]); // SELECT sections FROM songs
+    sqlResponses.push([{ lines: CLIPS_LINE_TIMINGS }]); // SELECT lines FROM song_line_timings
+    sqlResponses.push([{ durationSec: '8.5' }]); // SELECT duration_sec FROM song_audio
+    sqlResponses.push([]); // SELECT segments FROM song_structure → sin fila
+    sqlResponses.push([{ sections: CLIPS_SECTIONS, hash: 'abcdef1234567890' }]); // getPipelineLyrics → fila con hash (mismas sections que songs, no altera lineSections)
+
+    const run = {
+      id: 'run1',
+      songId: 'song1',
+      phases: { stems: { tracks: { vocals: 'song1/stems/vocals.mp3' } } },
+      // sin lyricsReview: exactamente el shape que arma retry.js
+    };
+    await dispatchPhase('clips', run, { isRetry: true });
+
+    const args = dispatchClips.mock.calls[0][0];
+    expect(args.uploadKeys.vocals['0']).toBe('song1/clips/vocals/section-0-abcdef12.mp3');
+    expect(args.snapshotHash).toBe('abcdef1234567890');
   });
 
   it('sin run.lyricsReview.approvedHash: las uploadKeys quedan sin sufijo (fallback intacto)', async () => {

@@ -170,9 +170,12 @@ export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
       run: { id: run.id, songId: run.songId },
       leadGetUrl,
       backingGetUrl,
-      // ver nota de transcription arriba: run.lyricsReview aún no viaja desde
-      // confirm.js/retry.js, undefined por ahora si no hay aprobación.
-      snapshotHash: run.lyricsReview?.approvedHash,
+      // Fix (revisión pre-merge): antes usaba run.lyricsReview?.approvedHash,
+      // que retry.js nunca trae en su SELECT (siempre undefined ahí) y
+      // deshabilitaba el guard de staleness de process.js para un reintento
+      // manual de pitch. pipelineLyrics.hash es el mismo valor, ya cargado
+      // arriba, y no depende de qué columnas seleccionó cada llamador.
+      snapshotHash: pipelineLyrics?.hash,
       lines,
       language: pipelineLyrics?.language,
       webhookUrl: webhook,
@@ -261,7 +264,12 @@ export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
   // UI muestra los metadatos nuevos pero suena el recorte viejo. Sin
   // approvedHash (canción standalone/manual, sin gate de letra) se conserva
   // la key sin sufijo, mismo comportamiento que antes de este fix.
-  const clipsSnapshotHash = run.lyricsReview?.approvedHash;
+  // Fix (revisión pre-merge): antes usaba run.lyricsReview?.approvedHash, que
+  // retry.js nunca trae en su SELECT (siempre undefined ahí) y deshabilitaba
+  // tanto el guard de staleness de process.js como este sufijo de storage key
+  // en un reintento manual de clips. pipelineLyrics.hash es el mismo valor,
+  // ya cargado arriba, y no depende de qué columnas seleccionó cada llamador.
+  const clipsSnapshotHash = pipelineLyrics?.hash;
   const clipsKeySuffix = clipsSnapshotHash ? `-${clipsSnapshotHash.slice(0, 8)}` : '';
   // Firmado en paralelo (fix HIGH 2, auditoría 27-jul): con ~200 clips
   // (kinds × secciones) firmando en serie, el handler agotaba el maxDuration
@@ -284,7 +292,7 @@ export async function dispatchPhase(phase, run, { isRetry = false } = {}) {
     totalMs,
     uploads,
     uploadKeys,
-    snapshotHash: run.lyricsReview?.approvedHash,
+    snapshotHash: clipsSnapshotHash,
     webhookUrl: webhook,
   });
 }

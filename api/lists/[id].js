@@ -56,7 +56,9 @@ export default withErrors(async (req, res) => {
     // (y el list.parent_id, si aplica) resueltos → Promise.all.
     const [members, children, parentRows] = await Promise.all([
       sql`
-        SELECT m.user_id, p.username FROM ephemeral_list_members m
+        SELECT m.user_id, p.username,
+               p.display_name AS "displayName", p.avatar_url AS "avatarUrl"
+        FROM ephemeral_list_members m
         JOIN profiles p ON p.id = m.user_id WHERE m.list_id = ${id}
       `,
       sql`

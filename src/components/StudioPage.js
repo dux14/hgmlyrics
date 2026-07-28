@@ -16,7 +16,7 @@ import {
   watchJobRealtime,
   updateJobTitle,
 } from '../lib/stemsApi.js';
-import { getSession } from '../lib/authStore.js';
+import { getSession, signOut } from '../lib/authStore.js';
 import { downloadAllZip, buildTrackList, songBaseName, downloadSectionZip } from '../lib/studioZip.js';
 import { getDriveToken } from '../lib/driveAuth.js';
 import { uploadTracksToDrive } from '../lib/driveUpload.js';
@@ -31,7 +31,7 @@ import { subscribe, isOffline } from '../lib/offlineState.js';
 import { renderAsyncRegion } from '../lib/renderAsync.js';
 import { skelRowList } from '../lib/skeleton.js';
 import { createPoller } from '../lib/poller.js';
-import { onRouteChange } from '../router.js';
+import { onRouteChange, navigate, getCurrentPath } from '../router.js';
 
 const MAX_DURATION_S = 10.5 * 60;
 let poller = null;
@@ -70,6 +70,23 @@ function startHashGuard() {
       stopPolling();
     }
   });
+}
+
+// Distingue una sesión vencida (401/403) del resto de errores de red: el
+// resto se reintenta en silencio en el próximo tick, esto NO — dejar
+// reintentando un poll con token vencido congela la UI en "procesando" para
+// siempre (job de GPU puede tardar minutos, más que la vida del token).
+function isAuthError(err) {
+  return err?.status === 401 || err?.status === 403;
+}
+
+// Corta el polling, cierra la sesión local y lleva al login con el path
+// actual como `next` (mismo destino que guardedRoute ante sesión inválida).
+async function handleSessionExpired(body) {
+  stopPolling();
+  body.innerHTML = `<p class="studio__error" role="alert">Tu sesión expiró. Inicia sesión de nuevo para continuar.</p>`;
+  await signOut().catch(() => {});
+  navigate(`/login?next=${encodeURIComponent(getCurrentPath())}`, { replace: true });
 }
 
 function hoursLeft(expiresAt) {
@@ -313,7 +330,11 @@ function watchJob(body, jobId, quota, filename) {
       const { job } = await getJob(jobId);
       if (finishIfDone(job)) return;
       renderProcessing(body, job, job.input_meta?.filename ?? filename, quota);
-    } catch {
+    } catch (err) {
+      if (isAuthError(err)) {
+        void handleSessionExpired(body);
+        return;
+      }
       /* el siguiente tick reintenta */
     }
   };

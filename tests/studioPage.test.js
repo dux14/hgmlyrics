@@ -12,9 +12,11 @@ vi.mock('../src/lib/stemsApi.js', () => ({
 }));
 vi.mock('../src/lib/authStore.js', () => ({
   getSession: () => ({ access_token: 'tok' }),
+  signOut: vi.fn(() => Promise.resolve()),
 }));
 
 const stemsApi = await import('../src/lib/stemsApi.js');
+const authStore = await import('../src/lib/authStore.js');
 const { renderStudioPage } = await import('../src/components/StudioPage.js');
 const { initRouter, navigate } = await import('../src/router.js');
 
@@ -256,6 +258,28 @@ describe('renderStudioPage', () => {
 
     await vi.advanceTimersByTimeAsync(15100);
     expect(stemsApi.getJob.mock.calls.length).toBe(callsAfterFirstTick);
+  });
+
+  it('#1 sesión expirada (401) durante el polling: corta el poll y lleva al login, sin quedar "procesando" para siempre', async () => {
+    stemsApi.listJobs.mockResolvedValueOnce({
+      jobs: [{ id: 'j1', status: 'processing' }],
+      quota: { used: 1, limit: 3 },
+    });
+    stemsApi.getJob.mockResolvedValueOnce({ job: { id: 'j1', status: 'processing' } });
+    const authErr = new Error('No autorizado');
+    authErr.status = 401;
+    stemsApi.getJob.mockRejectedValue(authErr);
+
+    window.location.hash = '#/estudio';
+    renderStudioPage(container);
+    await vi.waitFor(() => expect(stemsApi.getJob).toHaveBeenCalled());
+    // El tick de seguridad (30s) dispara el próximo getJob, que ahora rechaza con 401.
+    await vi.advanceTimersByTimeAsync(30100);
+    await vi.waitFor(() => expect(authStore.signOut).toHaveBeenCalled());
+
+    expect(window.location.hash).toBe('#/login?next=%2Festudio');
+    // No debe quedar mostrando "procesando" indefinidamente.
+    expect(container.textContent).not.toContain('Procesando');
   });
 
   it('job failed: mensaje y reintentar', async () => {

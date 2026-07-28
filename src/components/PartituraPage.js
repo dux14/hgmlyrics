@@ -11,7 +11,8 @@ import { PHASE_ORDER, phaseLabel, phaseProgress, isTerminalStatus } from '../lib
 import { escapeHtml, safeUrl } from '../lib/escape.js';
 import { createPoller } from '../lib/poller.js';
 import { renderVoiceLines } from '../lib/partituraRender.js';
-import { onRouteChange } from '../router.js';
+import { onRouteChange, navigate, getCurrentPath } from '../router.js';
+import { signOut } from '../lib/authStore.js';
 
 const POLL_MS = 3000;
 let poller = null;
@@ -173,7 +174,7 @@ function renderUploadError(body, err, quota) {
       ? 'Llegaste al límite de jobs de hoy. Intenta mañana.'
       : (err.message ?? 'No se pudo procesar el audio. Intenta de nuevo.');
   body.innerHTML = `
-    <p class="partitura__error" role="alert">${msg}</p>
+    <p class="partitura__error" role="alert">${escapeHtml(msg)}</p>
     <button type="button" data-action="retry">Volver a intentar</button>
   `;
   body
@@ -188,7 +189,7 @@ function renderCostGate(body, jobId, estimate, quota) {
   const items = breakdown
     .map((item) => {
       const label = item.label ?? item.phase ?? '';
-      return `<li>${label}${item.confirmed ? '' : ' (*)'}</li>`;
+      return `<li>${escapeHtml(label)}${item.confirmed ? '' : ' (*)'}</li>`;
     })
     .join('');
   const note = hasUnconfirmed
@@ -221,6 +222,23 @@ function renderCostGate(body, jobId, estimate, quota) {
   });
 }
 
+// Distingue una sesión vencida (401/403) del resto de errores de red: el
+// resto se reintenta en silencio en el próximo tick, esto NO — dejar
+// reintentando un poll con token vencido congela la UI en "procesando" para
+// siempre (el job de GPU puede tardar minutos, más que la vida del token).
+function isAuthError(err) {
+  return err?.status === 401 || err?.status === 403;
+}
+
+// Corta el polling, cierra la sesión local y lleva al login con el path
+// actual como `next` (mismo destino que guardedRoute ante sesión inválida).
+async function handleSessionExpired(body) {
+  stopPolling();
+  body.innerHTML = `<p class="partitura__error" role="alert">Tu sesión expiró. Inicia sesión de nuevo para continuar.</p>`;
+  await signOut().catch(() => {});
+  navigate(`/login?next=${encodeURIComponent(getCurrentPath())}`, { replace: true });
+}
+
 // Poll de progreso: consulta getJob cada POLL_MS hasta que el status sea terminal.
 function startPolling(body, jobId, quota) {
   stopPolling();
@@ -228,7 +246,11 @@ function startPolling(body, jobId, quota) {
     let job;
     try {
       job = await pitchApi.getJob(jobId);
-    } catch {
+    } catch (err) {
+      if (isAuthError(err)) {
+        void handleSessionExpired(body);
+        return;
+      }
       // Red intermitente: reintenta en el próximo tick, no corta el poll.
       return;
     }

@@ -158,7 +158,7 @@ export function SheetDrag(opts) {
 
     // La edición se cierra ANTES de empezar a mover: el textarea tiene su
     // propio listener de Escape y, con el foco puesto, consumiría la tecla que
-    // acá cancela el arrastre. El texto sucio no se pierde — `runAction` llama
+    // aquí cancela el arrastre. El texto sucio no se pierde — `runAction` llama
     // `flushAllLines()` antes de cualquier acción que no sea setLineText.
     lineEl.flushText?.();
 

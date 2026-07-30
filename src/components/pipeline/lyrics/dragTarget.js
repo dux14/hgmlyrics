@@ -4,7 +4,7 @@
  * Recibe los rects ya medidos (en coordenadas de DOCUMENTO, no de viewport: el
  * autoscroll mueve el viewport e invalidaría medidas relativas a él) y devuelve
  * el hueco visual donde caería el renglón. La conversión de ese hueco al índice
- * del backend es de `movePayload.js`, no de acá.
+ * del backend es de `movePayload.js`, no de aquí.
  */
 
 /** Hueco dentro de una sección con renglones: el primer renglón cuyo centro

@@ -62,7 +62,9 @@ beforeEach(() => {
 // escucha en fase de captura, que también recibe el evento).
 function failAudio() {
   const inner = document.createElement('audio');
-  fakePlayer.el.appendChild(inner);
+  // Siempre contra el player VIVO (el más recién montado): tras una renovación
+  // exitosa el que sigue conectado al contenedor es el nuevo, no el original.
+  lastPlayer.el.appendChild(inner);
   inner.dispatchEvent(new Event('error'));
   return Promise.resolve().then(() => Promise.resolve());
 }
@@ -112,6 +114,19 @@ describe('SheetAudio', () => {
     a.open();
     await failAudio();
     await failAudio();
+    expect(getPipelineRun).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith('No se pudo cargar la voz aislada');
+  });
+
+  it('si la renovación tuvo éxito pero la URL nueva también falla, avisa sin reintentar', async () => {
+    getPipelineRun.mockResolvedValue({
+      run: { phases: { stems: { tracks: { vocals: 'https://x/v2.mp3' } } } },
+    });
+    const onError = vi.fn();
+    const a = SheetAudio({ songId: 's1', url: 'https://x/v1.mp3', onError });
+    a.open();
+    await failAudio(); // renueva y remonta con éxito sobre el player nuevo
+    await failAudio(); // la URL nueva también falla
     expect(getPipelineRun).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledWith('No se pudo cargar la voz aislada');
   });

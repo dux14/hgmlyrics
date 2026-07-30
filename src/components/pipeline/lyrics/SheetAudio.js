@@ -46,7 +46,15 @@ export function SheetAudio({ songId, url, onError }) {
   el.addEventListener(
     'error',
     () => {
-      if (renewed || !player) return;
+      if (!player) return;
+      // Ya renovamos una vez: la URL nueva también murió. No hay segundo
+      // refetch (un solo refetch por vida, nunca un bucle sobre una URL
+      // muerta) — solo avisar, que si no el usuario queda sin transporte y
+      // sin explicación.
+      if (renewed) {
+        onError?.('No se pudo cargar la voz aislada');
+        return;
+      }
       renewed = true;
       const resumeAt = lastSec;
       getPipelineRun(songId)

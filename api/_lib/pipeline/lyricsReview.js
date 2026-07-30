@@ -444,8 +444,24 @@ export function applyReviewAction(doc, action) {
       if (toLine < 0 || toLine > to.lines.length) {
         throw new RangeError(`toLine fuera de rango: ${toLine}`);
       }
+      // Envelopes previos capturados ANTES de los splices: son el fallback de
+      // sectionEnvelope para una sección que se queda sin ningún renglón con
+      // timing (mismo criterio que splitSection y mergeSections).
+      const fromFallback = { startMs: from.startMs, endMs: from.endMs };
+      const toFallback = { startMs: to.startMs, endMs: to.endMs };
       from.lines.splice(action.fromLine, 1);
       to.lines.splice(toLine, 0, line);
+      // El renglón viaja con sus tiempos intactos (decisión del spec padre),
+      // pero el envelope de la sección no puede quedarse en el valor viejo: es
+      // lo que leen sheetTiming.js y el rango de la banda instrumental. Si
+      // origen y destino son la misma sección, el segundo cálculo ve el mismo
+      // array y da lo mismo — no hace falta ramificar.
+      const fromEnv = sectionEnvelope(from.lines, fromFallback);
+      from.startMs = fromEnv.startMs;
+      from.endMs = fromEnv.endMs;
+      const toEnv = sectionEnvelope(to.lines, toFallback);
+      to.startMs = toEnv.startMs;
+      to.endMs = toEnv.endMs;
       break;
     }
     case 'deleteLine': {

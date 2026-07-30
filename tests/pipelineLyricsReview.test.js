@@ -673,6 +673,149 @@ describe('applyReviewAction v2', () => {
     expect(next.sections[0].lines.map((l) => l.text)).toEqual(['b', 'a']);
   });
 
+  it('moveLine recalcula el envelope de origen y destino', () => {
+    const doc = {
+      version: 2,
+      language: 'es',
+      sections: [
+        {
+          type: 'verse',
+          label: null,
+          startMs: 0,
+          endMs: 2000,
+          lines: [
+            { text: 'a', startMs: 0, endMs: 900, words: [], confidence: null, vocalization: false },
+            {
+              text: 'b',
+              startMs: 1000,
+              endMs: 2000,
+              words: [],
+              confidence: null,
+              vocalization: false,
+            },
+          ],
+        },
+        {
+          type: 'chorus',
+          label: null,
+          startMs: 3000,
+          endMs: 4000,
+          lines: [
+            {
+              text: 'c',
+              startMs: 3000,
+              endMs: 4000,
+              words: [],
+              confidence: null,
+              vocalization: false,
+            },
+          ],
+        },
+      ],
+    };
+
+    const next = applyReviewAction(doc, {
+      type: 'moveLine',
+      fromSection: 0,
+      fromLine: 1,
+      toSection: 1,
+      toLine: 0,
+    });
+
+    // Origen: se queda solo con 'a'.
+    expect(next.sections[0].startMs).toBe(0);
+    expect(next.sections[0].endMs).toBe(900);
+    // Destino: absorbe el renglón 1000-2000 sin perder su propio final.
+    expect(next.sections[1].startMs).toBe(1000);
+    expect(next.sections[1].endMs).toBe(4000);
+    // Los tiempos del renglón viajan intactos.
+    expect(next.sections[1].lines[0]).toMatchObject({ text: 'b', startMs: 1000, endMs: 2000 });
+  });
+
+  it('moveLine dentro de la misma sección no altera su envelope', () => {
+    const doc = {
+      version: 2,
+      language: 'es',
+      sections: [
+        {
+          type: 'verse',
+          label: null,
+          startMs: 0,
+          endMs: 2000,
+          lines: [
+            { text: 'a', startMs: 0, endMs: 900, words: [], confidence: null, vocalization: false },
+            {
+              text: 'b',
+              startMs: 1000,
+              endMs: 2000,
+              words: [],
+              confidence: null,
+              vocalization: false,
+            },
+          ],
+        },
+      ],
+    };
+
+    const next = applyReviewAction(doc, {
+      type: 'moveLine',
+      fromSection: 0,
+      fromLine: 0,
+      toSection: 0,
+      toLine: 1,
+    });
+
+    expect(next.sections[0].lines.map((l) => l.text)).toEqual(['b', 'a']);
+    expect(next.sections[0].startMs).toBe(0);
+    expect(next.sections[0].endMs).toBe(2000);
+  });
+
+  it('moveLine sobre una sección sin renglones con timing conserva el envelope previo', () => {
+    const doc = {
+      version: 2,
+      language: 'es',
+      sections: [
+        {
+          type: 'verse',
+          label: null,
+          startMs: 0,
+          endMs: 2000,
+          lines: [
+            {
+              text: 'a',
+              startMs: null,
+              endMs: null,
+              words: [],
+              confidence: null,
+              vocalization: false,
+            },
+            {
+              text: 'b',
+              startMs: null,
+              endMs: null,
+              words: [],
+              confidence: null,
+              vocalization: false,
+            },
+          ],
+        },
+        { type: 'instrumental', label: null, startMs: 3000, endMs: 4000, lines: [] },
+      ],
+    };
+
+    const next = applyReviewAction(doc, {
+      type: 'moveLine',
+      fromSection: 0,
+      fromLine: 0,
+      toSection: 1,
+      toLine: 0,
+    });
+
+    expect(next.sections[0]).toMatchObject({ startMs: 0, endMs: 2000 });
+    expect(next.sections[1]).toMatchObject({ startMs: 3000, endMs: 4000 });
+    expect(next.sections[1].lines.map((l) => l.text)).toEqual(['a']);
+  });
+
   it('deleteLine elimina el renglón', () => {
     const next = applyReviewAction(base(), { type: 'deleteLine', section: 0, line: 0 });
     expect(next.sections[0].lines.map((l) => l.text)).toEqual(['tres cuatro']);

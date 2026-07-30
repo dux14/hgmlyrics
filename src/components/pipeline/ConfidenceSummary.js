@@ -18,7 +18,10 @@ import { escapeHtml } from '../../lib/escape.js';
 import { icon } from '../../lib/icons.js';
 import { getSongAudio } from '../../lib/songAudioApi.js';
 
-const SCORE_THRESHOLD = 0.6;
+// Exportado: SheetStatusStrip.js (hoja viva, Task 7) lo reusa para el
+// conteo de renglones «dudosos» — un solo umbral de confianza para todo el
+// pipeline, no uno por componente.
+export const SCORE_THRESHOLD = 0.6;
 
 /** score puede llegar como string (NUMERIC de Postgres, ver nota de
  * CLAUDE.md) aunque el webhook de align ya lo persiste como number 0-1. */

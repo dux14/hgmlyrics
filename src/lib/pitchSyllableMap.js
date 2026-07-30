@@ -72,3 +72,32 @@ export function mapSyllablesToChars(text, syllables) {
 
   return out;
 }
+
+/**
+ * Nota que corresponde a un rango de caracteres, y la secuencia de notas que el
+ * rango contiene (para el aviso cuando hay más de una). El grupo lleva UNA
+ * nota: se usa la de la primera sílaba con nota, que es lo predecible.
+ * Las sílabas de ancho cero (melisma) cuentan si su posición cae en el rango.
+ * @param {Array<{charStart:number, charEnd:number, note:string|null}>|null} mapped
+ * @param {{start:number, end:number}|null} range
+ * @returns {{note:string|null, notes:string[]}}
+ */
+export function noteForRange(mapped, range) {
+  const list = Array.isArray(mapped) ? mapped : [];
+  const start = Number.isFinite(range?.start) ? range.start : null;
+  const end = Number.isFinite(range?.end) ? range.end : null;
+  if (start === null || end === null) return { note: null, notes: [] };
+
+  const notes = [];
+  for (const syl of list) {
+    const touches =
+      syl.charStart === syl.charEnd
+        ? syl.charStart >= start && syl.charStart <= end
+        : syl.charStart < end && syl.charEnd > start;
+    if (!touches || syl.note === null) continue;
+    // Sin duplicados consecutivos: el aviso dice «B3 C4», no «B3 B3 C4».
+    if (notes[notes.length - 1] !== syl.note) notes.push(syl.note);
+  }
+
+  return { note: notes[0] ?? null, notes };
+}

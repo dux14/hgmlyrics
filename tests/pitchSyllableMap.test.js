@@ -5,7 +5,7 @@
  * reconstruye el texto, con la puntuación pegada a la última sílaba.
  */
 import { describe, it, expect } from 'vitest';
-import { mapSyllablesToChars } from '../src/lib/pitchSyllableMap.js';
+import { mapSyllablesToChars, noteForRange } from '../src/lib/pitchSyllableMap.js';
 
 // Línea 3 de 22ac3453… (real). Notas de las 5 primeras sílabas verificadas en
 // la base; la de "pre" se completa como repetición para el fixture.
@@ -100,5 +100,52 @@ describe('mapSyllablesToChars', () => {
     expect(mapSyllablesToChars('hola', [])).toEqual([]);
     expect(mapSyllablesToChars('hola', null)).toEqual([]);
     expect(mapSyllablesToChars(null, [])).toEqual([]);
+  });
+});
+
+describe('noteForRange', () => {
+  const mapped = mapSyllablesToChars(LINEA_DECISION.text, LINEA_DECISION.syllables);
+
+  it('toma la nota de la primera sílaba con nota del rango', () => {
+    // "esta sea" = caracteres 4 a 12: sílabas es (en blanco), ta (B3), sea (C4).
+    expect(noteForRange(mapped, { start: 4, end: 12 })).toEqual({
+      note: 'B3',
+      notes: ['B3', 'C4'],
+    });
+  });
+
+  it('no repite notas consecutivas iguales en el aviso', () => {
+    // "sea siempre" = C4 en tres sílabas seguidas.
+    expect(noteForRange(mapped, { start: 9, end: 20 })).toEqual({ note: 'C4', notes: ['C4'] });
+  });
+
+  it('devuelve una sola nota cuando el rango cae dentro de una sílaba', () => {
+    expect(noteForRange(mapped, { start: 0, end: 2 })).toEqual({ note: 'B3', notes: ['B3'] });
+  });
+
+  it('toma las sílabas que el rango toca, aunque las corte a la mitad', () => {
+    // "e esta s": arranca en el último carácter de "Que" y termina dentro de "sea".
+    expect(noteForRange(mapped, { start: 2, end: 10 })).toEqual({
+      note: 'B3',
+      notes: ['B3', 'C4'],
+    });
+  });
+
+  it('devuelve note null si ninguna sílaba del rango tiene nota', () => {
+    const soloBlancas = mapSyllablesToChars('es', [{ text: 'es', midi: null, note: null }]);
+    expect(noteForRange(soloBlancas, { start: 0, end: 2 })).toEqual({ note: null, notes: [] });
+  });
+
+  it('incluye el extensor de melisma cuya posición cae dentro del rango', () => {
+    const conMelisma = mapSyllablesToChars('oh', [
+      { text: 'oh', midi: null, note: null },
+      { text: '', midi: 60, note: 'C4' },
+    ]);
+    expect(noteForRange(conMelisma, { start: 0, end: 2 })).toEqual({ note: 'C4', notes: ['C4'] });
+  });
+
+  it('es tolerante a entradas vacías', () => {
+    expect(noteForRange(null, { start: 0, end: 2 })).toEqual({ note: null, notes: [] });
+    expect(noteForRange(mapped, null)).toEqual({ note: null, notes: [] });
   });
 });

@@ -1163,6 +1163,20 @@ body.chrome-hidden .main {
   margin-left: 26px;
 }
 
+/* Estado "no se pudo cargar" de LyricsSheetView (fallo de getPipelineRun):
+   namespace propio `.sheet-view__error`, SIN depender de `.lrp__*` — ese
+   bloque pertenece a LyricsReviewPanel.js (panel viejo, se borra entero en
+   otra tarea de esta misma sesión). Padding de 16px alineado al borde. */
+.sheet-view__error {
+  padding: var(--space-md);
+  margin: 0;
+  color: var(--color-danger);
+}
+
+.sheet-view__error-retry {
+  margin: 0 var(--space-md) var(--space-md);
+}
+
 .lyrics-sync-warning {
   display: flex;
   align-items: flex-start;

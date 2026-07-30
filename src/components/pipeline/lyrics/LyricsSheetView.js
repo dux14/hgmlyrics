@@ -29,10 +29,10 @@ import { icon } from '../../../lib/icons.js';
 import { escapeHtml } from '../../../lib/escape.js';
 import { navigate, onRouteChange } from '../../../router.js';
 import { fetchSongDetail } from '../../../lib/store.js';
-import { getPipelineRun, reopenLyrics, publishLyricsToSongbook } from '../../../lib/pipelineApi.js';
+import { getPipelineRun, reopenLyrics } from '../../../lib/pipelineApi.js';
 import { confirmDialog } from '../../ConfirmDialog.js';
 import { showToast } from '../../../lib/toast.js';
-import { ROWS } from '../SongPipelineView.js';
+import { ROWS, createPublishToSongbookButton } from '../SongPipelineView.js';
 import { LyricsSheet } from './LyricsSheet.js';
 
 /**
@@ -80,15 +80,16 @@ export function renderLyricsSheetView(container, songId) {
   });
 
   /** Estado "no se pudo cargar" (fallo de `getPipelineRun`, p. ej. un 500):
-   * mismo patrón visual (`.lrp__error` + `.lrp__error-retry`) que el
-   * fallback de la propia `LyricsSheet` para un fallo dentro de la hoja. */
+   * namespace `.sheet-view__error` propio, sin depender del CSS del panel
+   * viejo `LyricsReviewPanel.js` (se borra entero en otra tarea de esta
+   * misma sesión). */
   function renderLoadError() {
     const el = document.createElement('div');
     el.innerHTML = `
-      <p class="lrp__error">No se pudo cargar el estado de la letra</p>
-      <button type="button" class="btn lrp__error-retry">Reintentar</button>
+      <p class="sheet-view__error">No se pudo cargar el estado de la letra</p>
+      <button type="button" class="btn sheet-view__error-retry">Reintentar</button>
     `;
-    el.querySelector('.lrp__error-retry').addEventListener('click', () => mountSheet());
+    el.querySelector('.sheet-view__error-retry').addEventListener('click', () => mountSheet());
     return el;
   }
 
@@ -96,9 +97,9 @@ export function renderLyricsSheetView(container, songId) {
    * "Editar letra" reusa el mismo mecanismo que `describePhase` en
    * `SongPipelineView.js` (confirmDialog + `reopenLyrics` + toast) — reabrir
    * mueve el run a `awaiting_lyrics` y remonta, cayendo en el camino feliz
-   * (`LyricsSheet` editable). "Publicar al cancionero" reimplementa el botón
-   * de `createPublishToSongbookButton` de `SongPipelineView.js` (no
-   * exportado desde ahí, fuera del alcance tocar ese archivo en esta tarea). */
+   * (`LyricsSheet` editable). "Publicar al cancionero" reusa
+   * `createPublishToSongbookButton`, exportada de `SongPipelineView.js`, en
+   * vez de duplicar el botón (Corrección 2, post-Task 3). */
   function renderApproved() {
     const el = document.createElement('div');
     el.className = 'lyrics-sheet-view__notice lyrics-sheet-view__notice--approved';
@@ -107,7 +108,6 @@ export function renderLyricsSheetView(container, songId) {
       <p class="lyrics-sheet-view__notice-text">Letra aprobada. Editarla recalcula sincronía y tono por sílaba.</p>
       <div class="lyrics-sheet-view__notice-actions">
         <button type="button" class="btn lyrics-sheet-view__edit">Editar letra</button>
-        <button type="button" class="btn btn--secondary lyrics-sheet-view__publish">Publicar al cancionero</button>
       </div>
     `;
     el.querySelector('.lyrics-sheet-view__edit').addEventListener('click', async () => {
@@ -128,23 +128,9 @@ export function renderLyricsSheetView(container, songId) {
         showToast(err.message || 'No se pudo reabrir la letra', { type: 'error' });
       }
     });
-    el.querySelector('.lyrics-sheet-view__publish').addEventListener('click', async () => {
-      const ok = await confirmDialog({
-        title: 'Publicar al cancionero',
-        body: '¿Publicar esta letra al cancionero? Se reemplazará la letra actual de la canción con el texto del pipeline.',
-        confirmLabel: 'Publicar',
-        cancelLabel: 'Cancelar',
-        danger: true,
-      });
-      if (!ok) return;
-      try {
-        await publishLyricsToSongbook(songId);
-        showToast('Letra publicada al cancionero');
-      } catch (err) {
-        console.error('LyricsSheetView: no se pudo publicar la letra al cancionero', err);
-        showToast(err.message || 'No se pudo publicar la letra al cancionero', { type: 'error' });
-      }
-    });
+    el.querySelector('.lyrics-sheet-view__notice-actions').appendChild(
+      createPublishToSongbookButton(songId),
+    );
     return el;
   }
 

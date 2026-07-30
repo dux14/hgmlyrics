@@ -124,7 +124,7 @@ function autoRetriesLeft(phase) {
  * karaoke ya consume el store del pipeline directamente). Vive en el slot de
  * detalle de la fila Letra, separado del botón "Editar letra" (que usa el
  * único `actionLabel`/`onRetry` de PhaseRow). */
-function createPublishToSongbookButton(songId) {
+export function createPublishToSongbookButton(songId) {
   const wrap = document.createElement('div');
   const btn = document.createElement('button');
   btn.type = 'button';

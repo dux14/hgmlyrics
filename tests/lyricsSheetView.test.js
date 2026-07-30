@@ -47,17 +47,32 @@ let mockRows = [
   { key: 'clips', title: 'Clips por sección' },
 ];
 
+// createPublishToSongbookButton se mockea acá también (Corrección 2): la
+// vista real la importa de SongPipelineView.js para no duplicar el botón —
+// el mock devuelve un nodo con la misma clase que la implementación real
+// (`.phase__publish-songbook`), suficiente para las aserciones de presencia.
+const createPublishToSongbookButton = vi.fn(() => {
+  const wrap = document.createElement('div');
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'phase__action phase__action--secondary phase__publish-songbook';
+  btn.textContent = 'Publicar al cancionero';
+  wrap.appendChild(btn);
+  return wrap;
+});
+
 vi.mock('../src/components/pipeline/SongPipelineView.js', () => ({
   get ROWS() {
     return mockRows;
   },
+  createPublishToSongbookButton: (...args) => createPublishToSongbookButton(...args),
 }));
 
 import { renderLyricsSheetView } from '../src/components/pipeline/lyrics/LyricsSheetView.js';
 import { navigate } from '../src/router.js';
 import { fetchSongDetail } from '../src/lib/store.js';
 import { LyricsSheet } from '../src/components/pipeline/lyrics/LyricsSheet.js';
-import { getPipelineRun, reopenLyrics, publishLyricsToSongbook } from '../src/lib/pipelineApi.js';
+import { getPipelineRun, reopenLyrics } from '../src/lib/pipelineApi.js';
 import { confirmDialog } from '../src/components/ConfirmDialog.js';
 import { showToast } from '../src/lib/toast.js';
 
@@ -176,14 +191,17 @@ describe('LyricsSheetView — estados de letra aprobada/error/divergencia (S3a-i
     await flushPromises();
 
     expect(LyricsSheet).not.toHaveBeenCalled();
-    expect(container.querySelector('.lrp__error')).toBeNull();
+    expect(container.querySelector('.sheet-view__error')).toBeNull();
     const notice = container.querySelector('.lyrics-sheet-view__notice--approved');
     expect(notice).not.toBeNull();
     expect(notice.textContent).toContain(
       'Letra aprobada. Editarla recalcula sincronía y tono por sílaba',
     );
     expect(container.querySelector('.lyrics-sheet-view__edit')).not.toBeNull();
-    expect(container.querySelector('.lyrics-sheet-view__publish')).not.toBeNull();
+    // Corrección 2: "Publicar al cancionero" reusa createPublishToSongbookButton
+    // de SongPipelineView.js (mockeado arriba) en vez de un botón local.
+    expect(createPublishToSongbookButton).toHaveBeenCalledWith(SONG_ID);
+    expect(container.querySelector('.phase__publish-songbook')).not.toBeNull();
   });
 
   it('un 500 pinta el rojo con «Reintentar» y el botón vuelve a cargar', async () => {
@@ -195,16 +213,16 @@ describe('LyricsSheetView — estados de letra aprobada/error/divergencia (S3a-i
     renderLyricsSheetView(container, SONG_ID);
     await flushPromises();
 
-    const errorEl = container.querySelector('.lrp__error');
+    const errorEl = container.querySelector('.sheet-view__error');
     expect(errorEl).not.toBeNull();
-    const retryBtn = container.querySelector('.lrp__error-retry');
+    const retryBtn = container.querySelector('.sheet-view__error-retry');
     expect(retryBtn.textContent).toBe('Reintentar');
 
     retryBtn.click();
     await flushPromises();
 
     expect(getPipelineRun).toHaveBeenCalledTimes(2);
-    expect(container.querySelector('.lrp__error')).toBeNull();
+    expect(container.querySelector('.sheet-view__error')).toBeNull();
     expect(LyricsSheet).toHaveBeenCalled();
   });
 

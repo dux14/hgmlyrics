@@ -185,6 +185,31 @@ describe('buildReviewDoc v2', () => {
     expect(doc.sections[1].lines.map((l) => l.text)).toEqual(['ad lib']); // coro (endMs 20000) es la más cercana
   });
 
+  it('un renglón cantado que solapa un instrumental nunca cae en él (pisaría su envelope)', () => {
+    const doc = buildReviewDoc({
+      transcription: trans([
+        {
+          text: 'canto encima',
+          words: [
+            [9000, 9500, 0.9],
+            [18900, 19000, 0.9],
+          ],
+        },
+      ]),
+      structureSegments: [
+        { label: 'instrumental', startMs: 0, endMs: 10000 },
+        { label: 'verso', startMs: 8000, endMs: 20000 },
+      ],
+    });
+    const [instrumental, verse] = doc.sections;
+    expect(instrumental.type).toBe('instrumental');
+    expect(verse.type).toBe('verse');
+    expect(verse.lines.map((l) => l.text)).toEqual(['canto encima']);
+    expect(instrumental.lines).toEqual([]);
+    expect(instrumental.startMs).toBe(0);
+    expect(instrumental.endMs).toBe(10000);
+  });
+
   it('renglón sin words hereda la sección del renglón anterior, con timing null y vocalization', () => {
     const doc = buildReviewDoc({
       transcription: trans([

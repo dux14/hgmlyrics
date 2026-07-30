@@ -166,27 +166,38 @@ function lyricSectionsFromSegments(structureSegments) {
 
 // Índice de la sección con MAYOR solape temporal con [startMs, endMs]; sin
 // solape (el renglón cae en un tramo instrumental), la lírica más CERCANA.
+// Las secciones 'instrumental' quedan afuera de las dos búsquedas: un
+// renglón cantado nunca puede aterrizar ahí, porque el recálculo de envelope
+// de buildReviewDoc pisaría los tiempos reales del instrumental (Task 3,
+// spec 2026-07-29). Supuesto: si NO queda ninguna sección lírica (canción
+// 100% instrumental), se cae al comportamiento previo sobre TODAS las
+// secciones -- perder el texto es peor que asignarlo a una instrumental.
 function bestSectionIndex(sections, startMs, endMs) {
+  const lyricalIdx = sections.map((sec, i) => i).filter((i) => sections[i].type !== 'instrumental');
+  const candidates = lyricalIdx.length > 0 ? lyricalIdx : sections.map((_, i) => i);
+
   let best = -1;
   let bestOverlap = 0;
-  sections.forEach((sec, i) => {
+  for (const i of candidates) {
+    const sec = sections[i];
     const overlap = Math.min(endMs, sec.endMs) - Math.max(startMs, sec.startMs);
     if (overlap > bestOverlap) {
       bestOverlap = overlap;
       best = i;
     }
-  });
+  }
   if (best !== -1) return best;
   const mid = (startMs + endMs) / 2;
-  let nearest = 0;
+  let nearest = candidates[0];
   let nearestDist = Infinity;
-  sections.forEach((sec, i) => {
+  for (const i of candidates) {
+    const sec = sections[i];
     const dist = mid < sec.startMs ? sec.startMs - mid : mid > sec.endMs ? mid - sec.endMs : 0;
     if (dist < nearestDist) {
       nearestDist = dist;
       nearest = i;
     }
-  });
+  }
   return nearest;
 }
 
@@ -257,7 +268,11 @@ export function buildReviewDoc({ transcription, structureSegments = [], seedSect
   // después por largo/respiración, y recién ahí asignar cada renglón
   // RESULTANTE por solape (H1: antes se asignaba el segmento entero y el
   // split posterior no volvía a repartir).
-  let lastSectionIdx = 0;
+  // lastSectionIdx arranca en la primera sección LÍRICA (nunca instrumental,
+  // mismo motivo que bestSectionIndex): un renglón sin timing que hereda la
+  // sección anterior tampoco puede aterrizar en un instrumental.
+  const firstLyricalIdx = sections.findIndex((s) => s.type !== 'instrumental');
+  let lastSectionIdx = firstLyricalIdx !== -1 ? firstLyricalIdx : 0;
   for (const [transIndex, raw] of rawLines.entries()) {
     const match = seed.length ? (alignment.get(transIndex) ?? null) : null;
     const pieces = splitAtSectionBoundaries(raw, sections).flatMap((boundaryPiece, boundaryIdx) => {

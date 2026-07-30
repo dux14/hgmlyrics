@@ -167,6 +167,39 @@ export async function retryPipelinePhase(songId, phase) {
 }
 
 /**
+ * Dispara el realineado de tiempos de la fase Sincronía ya `done` (S6, Task
+ * 8): recalcula sync/pitch/clips contra el audio, respaldando los tiempos
+ * previos (song_pipeline_lyrics.previous_sections) para poder deshacerlo.
+ * 409 si sync no está en 'done' o no hay letra aprobada; 502 si falla el
+ * dispatch.
+ * @param {string} songId
+ * @returns {Promise<{success:boolean}>}
+ */
+export async function realignPipelineTimings(songId) {
+  const res = await fetch(`/api/songs/${songId}/pipeline/realign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+  });
+  if (!res.ok) throw await readError(res, 'No se pudo realinear los tiempos');
+  return res.json();
+}
+
+/**
+ * Deshace el último realineado, restaurando los tiempos previos. 409 si no
+ * hay un realineado para deshacer (sin respaldo).
+ * @param {string} songId
+ * @returns {Promise<{success:boolean}>}
+ */
+export async function undoPipelineRealign(songId) {
+  const res = await fetch(`/api/songs/${songId}/pipeline/realign?undo=1`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+  });
+  if (!res.ok) throw await readError(res, 'No se pudo deshacer el realineado');
+  return res.json();
+}
+
+/**
  * Cancela el run activo de la canción.
  * @param {string} songId
  * @returns {Promise<{success:boolean}>}

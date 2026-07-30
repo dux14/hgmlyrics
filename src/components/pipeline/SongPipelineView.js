@@ -17,6 +17,8 @@ import {
   getPipelineRun,
   reopenLyrics,
   publishLyricsToSongbook,
+  realignPipelineTimings,
+  undoPipelineRealign,
 } from '../../lib/pipelineApi.js';
 import { showToast } from '../../lib/toast.js';
 import { fetchSongDetail } from '../../lib/store.js';
@@ -145,6 +147,32 @@ export function createPublishToSongbookButton(songId) {
     } catch (err) {
       console.error('SongPipelineView: no se pudo publicar la letra al cancionero', err);
       showToast(err.message || 'No se pudo publicar la letra al cancionero', { type: 'error' });
+    }
+  });
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+/** Botón "Deshacer realineado" (S6, Task 8): visible solo cuando el run trae
+ * respaldo (`tieneRespaldo`, `previous_sections` no nulo). Vive en el slot de
+ * detalle de la fila Sincronía, junto al panel de SyncFineTuning, separado
+ * del botón "Realinear tiempos" (que usa el único `actionLabel`/`onRetry` de
+ * PhaseRow) — mismo patrón que createPublishToSongbookButton. `onDone` deja
+ * que el llamador decida cómo refrescar (closure sobre `unsub`). */
+function createUndoRealignButton(songId, onDone) {
+  const wrap = document.createElement('div');
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'phase__action phase__action--secondary phase__undo-realign';
+  btn.textContent = 'Deshacer realineado';
+  btn.addEventListener('click', async () => {
+    try {
+      await undoPipelineRealign(songId);
+      showToast('Realineado deshecho');
+      onDone?.();
+    } catch (err) {
+      console.error('SongPipelineView: no se pudo deshacer el realineado', err);
+      showToast(err.message || 'No se pudo deshacer el realineado', { type: 'error' });
     }
   });
   wrap.appendChild(btn);
@@ -427,8 +455,11 @@ export function renderSongPipelineView(container, songId) {
   `;
   view.insertBefore(lyricsSyncWarning, rowsEl);
 
-  /** Calcula estado visual + copy + acción de una fase. */
-  function describePhase(key, phase, runStatus, lyricsApproved) {
+  /** Calcula estado visual + copy + acción de una fase. `sinTiempo`/
+   * `ajustesManuales` (conteos reales de song_pipeline_lyrics, S6 Task 8) solo
+   * los usa la fila Sincronía en 'done' para el subtítulo y la confirmación
+   * de "Realinear tiempos". */
+  function describePhase(key, phase, runStatus, lyricsApproved, sinTiempo = 0, ajustesManuales = 0) {
     const status = phase.status;
     const table = SUBTITLES[key];
 
@@ -513,6 +544,39 @@ export function renderSongPipelineView(container, songId) {
           },
         };
       }
+      // Sincronía lista: ofrece "Realinear tiempos" contra el audio (S6,
+      // Task 8) — la única fase 'done' aparte de lyrics_review que trae una
+      // acción propia. El subtítulo suma el conteo real de renglones sin
+      // tiempo cuando corresponde, mismo criterio que SheetStatusStrip.js.
+      if (key === 'sync') {
+        const subtitle =
+          sinTiempo > 0
+            ? `${table.done} · ${sinTiempo} ${sinTiempo === 1 ? 'renglón' : 'renglones'} con tiempo estimado`
+            : table.done;
+        return {
+          state: 'done',
+          subtitle,
+          actionLabel: 'Realinear tiempos',
+          onRetry: async () => {
+            const ok = await confirmDialog({
+              title: 'Realinear tiempos',
+              body: `Se recalculan los tiempos de los ${sinTiempo} renglones con el audio de la canción. Se descartan ${ajustesManuales} ajustes manuales de tiempo. Al terminar se rehacen el tono y los clips.`,
+              confirmLabel: 'Realinear',
+              cancelLabel: 'Cancelar',
+              danger: true,
+            });
+            if (!ok) return;
+            try {
+              await realignPipelineTimings(songId);
+              showToast('Realineado de tiempos en curso');
+              unsub?.refresh?.();
+            } catch (err) {
+              console.error('SongPipelineView: no se pudo realinear los tiempos', err);
+              showToast(err.message || 'No se pudo realinear los tiempos', { type: 'error' });
+            }
+          },
+        };
+      }
       return { state: 'done', subtitle: table.done };
     }
 
@@ -562,6 +626,12 @@ export function renderSongPipelineView(container, songId) {
       ),
       tr: Object.keys(run?.phases?.stems?.tracks ?? {}).sort(),
       stc: (run?.structure?.segments ?? []).length,
+      // S6, Task 8: sinTiempo/tieneRespaldo pueden cambiar con sync ya en
+      // 'done' (el realineado no cambia el status de la fase) — sin esto la
+      // fila quedaría con el subtítulo y el botón "Deshacer realineado"
+      // desactualizados hasta el próximo cambio de estado.
+      st2: run?.sinTiempo ?? 0,
+      tr2: !!run?.tieneRespaldo,
     });
     if (sig === lastSig) return;
     lastSig = sig;
@@ -589,7 +659,14 @@ export function renderSongPipelineView(container, songId) {
 
     ROWS.forEach((r, i) => {
       const phase = phases[r.key] || { status: 'pending' };
-      const info = describePhase(r.key, phase, run?.status, lyricsApproved);
+      const info = describePhase(
+        r.key,
+        phase,
+        run?.status,
+        lyricsApproved,
+        run?.sinTiempo ?? 0,
+        run?.ajustesManuales ?? 0,
+      );
 
       let detail = null;
       if (r.key === 'upload') {
@@ -599,7 +676,17 @@ export function renderSongPipelineView(container, songId) {
       } else if (r.key === 'structure') {
         detail = structureDetail.el;
       } else if (r.key === 'sync') {
-        detail = syncTuning.el;
+        // S6, Task 8: "Deshacer realineado" vive junto al panel de
+        // SyncFineTuning (no reemplaza a "Realinear tiempos", que usa el
+        // único actionLabel/onRetry de PhaseRow), solo con respaldo presente.
+        if (phase.status === 'done' && run?.tieneRespaldo) {
+          const wrap = document.createElement('div');
+          wrap.appendChild(syncTuning.el);
+          wrap.appendChild(createUndoRealignButton(songId, () => unsub?.refresh?.()));
+          detail = wrap;
+        } else {
+          detail = syncTuning.el;
+        }
       } else if (r.key === 'lyrics_review') {
         // Fix review d6741d5, hallazgo 1: capturar el onRetry SOLO cuando
         // lyrics_review está 'done' (única rama de describePhase que arma

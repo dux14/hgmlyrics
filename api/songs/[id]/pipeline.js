@@ -105,7 +105,39 @@ async function getRun(_req, res, songId) {
         lineCount: pipelineLyrics.sections.reduce((sum, s) => sum + s.lines.length, 0),
       }
     : null;
-  res.status(200).json({ run: { ...run, phases, structure, lyricsDiverged, lyricsCounts } });
+  // sinTiempo (acción "Realinear tiempos", fila Sincronía): renglones sin
+  // words, mismo criterio que SheetStatusStrip.js:27-29 para que las dos
+  // pantallas no digan números distintos. ajustesManuales: renglones con
+  // offset manual (manualStartMs), el número real que la confirmación de
+  // "Realinear tiempos" advierte que se descarta. Ambos 0 sin letra de
+  // pipeline (nada que realinear todavía). tieneRespaldo: si hay un
+  // realineado previo para deshacer (previous_sections no nulo).
+  const sinTiempo = pipelineLyrics
+    ? pipelineLyrics.sections.reduce(
+        (sum, s) =>
+          sum + s.lines.filter((l) => !Array.isArray(l.words) || l.words.length === 0).length,
+        0,
+      )
+    : 0;
+  const ajustesManuales = pipelineLyrics
+    ? pipelineLyrics.sections.reduce(
+        (sum, s) => sum + s.lines.filter((l) => l.manualStartMs != null).length,
+        0,
+      )
+    : 0;
+  const tieneRespaldo = pipelineLyrics?.tieneRespaldo === true;
+  res.status(200).json({
+    run: {
+      ...run,
+      phases,
+      structure,
+      lyricsDiverged,
+      lyricsCounts,
+      sinTiempo,
+      ajustesManuales,
+      tieneRespaldo,
+    },
+  });
 }
 
 async function createRun(req, res, songId) {

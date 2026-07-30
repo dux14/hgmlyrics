@@ -39,7 +39,7 @@ export function upsertPipelineLyrics(sql, { songId, runId, sections, hash, langu
 export async function getPipelineLyrics(sql, songId) {
   const rows = await sql`
     SELECT song_id AS "songId", run_id AS "runId", sections, hash, language,
-      approved_at AS "approvedAt"
+      approved_at AS "approvedAt", previous_sections IS NOT NULL AS "tieneRespaldo"
     FROM song_pipeline_lyrics WHERE song_id = ${songId}
   `;
   return rows[0] ?? null;

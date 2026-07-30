@@ -15,6 +15,8 @@ vi.mock('../src/lib/pipelineApi.js', () => ({
   getPipelineRun: vi.fn(() => Promise.resolve(null)),
   reopenLyrics: vi.fn(() => Promise.resolve({ success: true })),
   publishLyricsToSongbook: vi.fn(() => Promise.resolve({ success: true })),
+  realignPipelineTimings: vi.fn(() => Promise.resolve({ success: true })),
+  undoPipelineRealign: vi.fn(() => Promise.resolve({ success: true })),
 }));
 
 vi.mock('../src/components/ConfirmDialog.js', () => ({
@@ -129,6 +131,8 @@ import {
   retryPipelinePhase,
   reopenLyrics,
   publishLyricsToSongbook,
+  realignPipelineTimings,
+  undoPipelineRealign,
 } from '../src/lib/pipelineApi.js';
 import { navigate } from '../src/router.js';
 import { confirmDialog } from '../src/components/ConfirmDialog.js';
@@ -1020,6 +1024,134 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
 
       const row = container.querySelector('[data-phase="pitch"]');
       expect(row.querySelector('.phase__orphan-warning')).toBeFalsy();
+    });
+  });
+
+  describe('fila Sincronía: Realinear tiempos (S6, Task 8)', () => {
+    it('sync done: aparece la acción "Realinear tiempos"', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' }, sync: { status: 'done' } }),
+      });
+
+      const row = container.querySelector('[data-phase="sync"]');
+      const btn = row.querySelector('.phase__action');
+      expect(btn).toBeTruthy();
+      expect(btn.textContent).toBe('Realinear tiempos');
+    });
+
+    it('sync done con sinTiempo > 0: el subtítulo incluye el conteo', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun(
+          { lyrics_review: { status: 'done' }, sync: { status: 'done' } },
+          { sinTiempo: 3 },
+        ),
+      });
+
+      const row = container.querySelector('[data-phase="sync"]');
+      expect(row.textContent).toContain('3 renglones con tiempo estimado');
+    });
+
+    it('sync done con sinTiempo en 0: el subtítulo NO incluye el conteo', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun(
+          { lyrics_review: { status: 'done' }, sync: { status: 'done' } },
+          { sinTiempo: 0 },
+        ),
+      });
+
+      const row = container.querySelector('[data-phase="sync"]');
+      expect(row.textContent).not.toContain('con tiempo estimado');
+    });
+
+    it('sin letra aprobada (sync bloqueada): no hay acción', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({ run: buildRun() }); // sync y lyrics_review pending por defecto
+
+      const row = container.querySelector('[data-phase="sync"]');
+      expect(row.querySelector('.phase__action')).toBeFalsy();
+    });
+
+    it('con respaldo (tieneRespaldo): aparece "Deshacer realineado"', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun(
+          { lyrics_review: { status: 'done' }, sync: { status: 'done' } },
+          { tieneRespaldo: true },
+        ),
+      });
+
+      const row = container.querySelector('[data-phase="sync"]');
+      const undoBtn = row.querySelector('.phase__undo-realign');
+      expect(undoBtn).toBeTruthy();
+      expect(undoBtn.textContent).toBe('Deshacer realineado');
+    });
+
+    it('sin respaldo: no aparece "Deshacer realineado"', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' }, sync: { status: 'done' } }),
+      });
+
+      const row = container.querySelector('[data-phase="sync"]');
+      expect(row.querySelector('.phase__undo-realign')).toBeFalsy();
+    });
+
+    it('click en "Realinear tiempos" confirma con los números reales y llama realignPipelineTimings', async () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun(
+          { lyrics_review: { status: 'done' }, sync: { status: 'done' } },
+          { sinTiempo: 4, ajustesManuales: 2 },
+        ),
+      });
+
+      const row = container.querySelector('[data-phase="sync"]');
+      row.querySelector('.phase__action').click();
+      await flushPromises();
+
+      expect(confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Realinear tiempos',
+          body: expect.stringContaining('4 renglones'),
+        }),
+      );
+      expect(confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ body: expect.stringContaining('2 ajustes manuales') }),
+      );
+      expect(realignPipelineTimings).toHaveBeenCalledWith(SONG_ID);
+    });
+
+    it('confirmDialog cancelado: no llama realignPipelineTimings', async () => {
+      confirmDialog.mockResolvedValueOnce(false);
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' }, sync: { status: 'done' } }),
+      });
+
+      const row = container.querySelector('[data-phase="sync"]');
+      row.querySelector('.phase__action').click();
+      await flushPromises();
+
+      expect(realignPipelineTimings).not.toHaveBeenCalled();
+    });
+
+    it('click en "Deshacer realineado" llama undoPipelineRealign', async () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun(
+          { lyrics_review: { status: 'done' }, sync: { status: 'done' } },
+          { tieneRespaldo: true },
+        ),
+      });
+
+      const row = container.querySelector('[data-phase="sync"]');
+      row.querySelector('.phase__undo-realign').click();
+      await flushPromises();
+
+      expect(undoPipelineRealign).toHaveBeenCalledWith(SONG_ID);
     });
   });
 });

@@ -169,6 +169,26 @@ describe('dispatchAlign', () => {
     expect(body.snapshotHash).toBe('hash123');
   });
 
+  it("con { alreadyClaimedByCaller: true } y song_line_timings ya 'processing' fresco → NO lanza 409, postea a Modal (realign.js ya garantizó la exclusión con el claim transaccional del run)", async () => {
+    sqlResponses.push([{ storageKey: 'song-1/full.mp3' }]); // SELECT song_audio
+    sqlResponses.push([{ status: 'processing', updatedAt: new Date().toISOString() }]); // SELECT song_line_timings
+    sqlResponses.push([{ sections: [] }]); // SELECT songs
+    sqlResponses.push([]); // getPipelineLyrics
+    sqlResponses.push([]); // INSERT ... ON CONFLICT processing
+
+    await dispatchAlign('song-1', undefined, { alreadyClaimedByCaller: true });
+
+    expect(fetchWithTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it("sin la opción, aunque el llamador sea otro, 'processing' fresco sigue lanzando 409 (la guarda no se debilitó para confirm.js/retry.js/_dispatch.js/audio.js)", async () => {
+    sqlResponses.push([{ storageKey: 'song-1/full.mp3' }]); // SELECT song_audio
+    sqlResponses.push([{ status: 'processing', updatedAt: new Date().toISOString() }]); // SELECT song_line_timings
+
+    await expect(dispatchAlign('song-1')).rejects.toMatchObject({ status: 409 });
+    expect(fetchWithTimeout).not.toHaveBeenCalled();
+  });
+
   it('Modal responde non-2xx → marca failed con el error y relanza', async () => {
     sqlResponses.push([{ storageKey: 'song-1/full.mp3' }]); // SELECT song_audio
     sqlResponses.push([]); // SELECT song_line_timings (sin fila -> pending)

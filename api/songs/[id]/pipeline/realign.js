@@ -160,8 +160,20 @@ export default withErrors(async (req, res) => {
       WHERE song_id = ${songId}
     `;
 
+    // Estado previo de la fila, capturado ANTES de pisarlo: si el dispatch de
+    // abajo falla, el catch lo necesita para revertir en vez de dejar la fila
+    // colgada en 'processing' (eso bloqueaba 30 minutos cualquier otro align
+    // de esta canción, incluido el reemplazo manual de audio en audio.js).
+    const previousTimingsRows = await tx`
+      SELECT status, lines, provider, error FROM song_line_timings WHERE song_id = ${songId}
+    `;
+    const previousTimings = previousTimingsRows[0] ?? null;
+
     // Shim song_line_timings: los consumidores del karaoke leen de acá. Queda
-    // en 'processing' hasta que el webhook escriba los tiempos nuevos.
+    // en 'processing' hasta que el webhook escriba los tiempos nuevos. Este
+    // UPDATE, hecho DENTRO del claim transaccional (FOR UPDATE sobre el run),
+    // es la exclusión real -- dispatchAlign no debe re-derivarla leyendo esta
+    // misma fila, o se rechaza a sí mismo (ver alreadyClaimedByCaller abajo).
     await tx`
       INSERT INTO song_line_timings (song_id, status, lines, provider, error)
       VALUES (${songId}, 'processing', ${tx.json(timingLinesFromSections(snapshot.sections))},
@@ -198,7 +210,13 @@ export default withErrors(async (req, res) => {
       WHERE id = ${run.id}
     `;
 
-    return { ok: true, runId: run.id, phases: nextPhases, hash: snapshot.hash };
+    return {
+      ok: true,
+      runId: run.id,
+      phases: nextPhases,
+      hash: snapshot.hash,
+      previousTimings,
+    };
   });
 
   if (!claim.ok) {
@@ -210,7 +228,12 @@ export default withErrors(async (req, res) => {
   // El dispatch es una llamada de red: nunca dentro de la transacción con el
   // run lockeado (mismo criterio que retryPhase/cleanup).
   try {
-    await dispatchAlign(songId, claim.hash);
+    // alreadyClaimedByCaller=true: la exclusión ya la garantizó el claim
+    // transaccional de arriba (FOR UPDATE sobre el run + song_line_timings ya
+    // en 'processing' escrito por este mismo endpoint). Sin esto, dispatchAlign
+    // lee ese 'processing' fresco y se rechaza con 409 -- el bug real: el
+    // request se bloqueaba a sí mismo y "Realinear tiempos" nunca despachaba.
+    await dispatchAlign(songId, claim.hash, { alreadyClaimedByCaller: true });
   } catch (e) {
     const message = String(e?.message ?? e).slice(0, 300);
     const failedPhases = structuredClone(claim.phases);
@@ -221,6 +244,23 @@ export default withErrors(async (req, res) => {
         updated_at = now()
       WHERE id = ${claim.runId}
     `;
+    // Revertir song_line_timings al estado de antes del claim: si el dispatch
+    // no salió, no hay ningún job en camino que la vaya a destrabar, y
+    // dejarla en 'processing' bloquea 30 minutos cualquier otro align de esta
+    // canción (incluido el reemplazo manual de audio en audio.js).
+    if (claim.previousTimings) {
+      const p = claim.previousTimings;
+      await sql`
+        UPDATE song_line_timings
+        SET status = ${p.status}, lines = ${sql.json(p.lines)}, provider = ${p.provider},
+          error = ${p.error}
+        WHERE song_id = ${songId}
+      `;
+    } else {
+      // No había fila antes del claim: el INSERT la creó de cero, así que
+      // revertir es borrarla, no dejarla en ningún estado inventado.
+      await sql`DELETE FROM song_line_timings WHERE song_id = ${songId}`;
+    }
     const err = new Error(`No se pudo despachar el alineamiento: ${message}`);
     err.status = 502;
     throw err;

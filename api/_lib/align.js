@@ -54,9 +54,19 @@ export function projectLineSections(sections) {
  * @param {string} [snapshotHash] Hash de la letra aprobada (fase `sync` del
  *   pipeline unificado, plan C). Opcional: karaoke standalone llama sin este
  *   parametro y el payload viaja igual que antes (snapshotHash ausente/null).
+ * @param {{alreadyClaimedByCaller?: boolean}} [options] `alreadyClaimedByCaller`:
+ *   el llamador ya se garantizó la exclusión por otra vía (p. ej. un claim
+ *   transaccional `FOR UPDATE` sobre el run) y por eso escribió
+ *   `song_line_timings.status = 'processing'` ANTES de llamar a esta función.
+ *   Sin esta opción, ese mismo llamador se autobloquearía: la guarda de abajo
+ *   leería el 'processing' que él mismo acaba de escribir y rechazaría con
+ *   409 (caso real: `realign.js`). Solo `realign.js` debe pasar `true` — el
+ *   resto de los llamadores (`confirm.js`, `retry.js`, `_dispatch.js`,
+ *   `audio.js`) no tienen ese claim previo y necesitan la guarda intacta.
  * @throws {Error & {status:number}} 409 'Sin audio' si no hay song_audio.
  */
-export async function dispatchAlign(songId, snapshotHash) {
+export async function dispatchAlign(songId, snapshotHash, options = {}) {
+  const { alreadyClaimedByCaller = false } = options;
   // Lecturas independientes por songId: en paralelo (menos latencia antes del
   // POST a Modal, que ya es lento de por si).
   const [[audio], [timings]] = await Promise.all([
@@ -82,7 +92,7 @@ export async function dispatchAlign(songId, snapshotHash) {
   // está muerta (el cuelgue heredado de un webhook perdido).
   const stale =
     timings?.updatedAt && Date.now() - new Date(timings.updatedAt).getTime() > 30 * 60 * 1000;
-  if (timings?.status === 'processing' && !stale) {
+  if (timings?.status === 'processing' && !stale && !alreadyClaimedByCaller) {
     const e = new Error('El alineamiento ya está en curso para esta canción');
     e.status = 409;
     throw e;

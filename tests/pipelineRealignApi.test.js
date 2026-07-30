@@ -159,7 +159,7 @@ describe('POST /api/songs/:id/pipeline/realign', () => {
     const written = backup.values.find((v) => Array.isArray(v) && v[0]?.lines?.length);
     expect(written[0].lines.map((l) => l.manualStartMs)).toEqual([null, null]);
 
-    const timings = calls.find((c) => c.text.includes('song_line_timings'));
+    const timings = calls.find((c) => c.text.includes('INSERT INTO song_line_timings'));
     expect(timings.text).toMatch(/'processing'/);
     // Derivados del documento limpio: el manual de 1200 no sobrevive.
     const derived = timings.values.find((v) => Array.isArray(v));
@@ -175,6 +175,11 @@ describe('POST /api/songs/:id/pipeline/realign', () => {
     // Se despacha con el hash del documento limpio, no con el viejo.
     expect(dispatchAlign.mock.calls[0][0]).toBe('s1');
     expect(dispatchAlign.mock.calls[0][1]).not.toBe('hash-viejo');
+    // El claim transaccional (FOR UPDATE sobre el run) ya garantiza la
+    // exclusión: dispatchAlign no puede re-derivarla leyendo el
+    // song_line_timings que este mismo endpoint acaba de dejar en
+    // 'processing', o se rechaza a sí mismo con 409 (el blocker real).
+    expect(dispatchAlign.mock.calls[0][2]).toMatchObject({ alreadyClaimedByCaller: true });
   });
 
   it('el UPDATE del run lleva el approvedHash nuevo, coincidiendo con el hash despachado', async () => {
@@ -198,6 +203,7 @@ describe('POST /api/songs/:id/pipeline/realign', () => {
     const calls = routeSql([
       ['FROM song_pipeline_runs', runRow()],
       ['FROM song_pipeline_lyrics', lyricsRow()],
+      ['FROM song_line_timings', [{ status: 'ready', lines: [], provider: 'pipeline', error: null }]],
     ]);
     dispatchAlign.mockRejectedValueOnce(new Error('Modal caído'));
     const res = makeRes();
@@ -209,6 +215,42 @@ describe('POST /api/songs/:id/pipeline/realign', () => {
     const phases = last.values.find((v) => v && v.sync);
     expect(phases.sync.status).toBe('failed');
     expect(phases.sync.error).toMatch(/Modal caído/);
+  });
+
+  it('dispatch fallido: song_line_timings vuelve al estado previo (no queda colgado en processing)', async () => {
+    const calls = routeSql([
+      ['FROM song_pipeline_runs', runRow()],
+      ['FROM song_pipeline_lyrics', lyricsRow()],
+      // Estado previo a este realineado: ya tenía tiempos 'ready' de un align anterior.
+      ['FROM song_line_timings', [{ status: 'ready', lines: [{ i: 0 }], provider: 'pipeline', error: null }]],
+    ]);
+    dispatchAlign.mockRejectedValueOnce(new Error('Modal caído'));
+    const res = makeRes();
+    await realignHandler(req(), res);
+
+    expect(res.statusCode).toBe(502);
+    const timingsUpdates = calls.filter(
+      (c) => c.text.includes('UPDATE song_line_timings') || c.text.includes('DELETE FROM song_line_timings'),
+    );
+    const revert = timingsUpdates[timingsUpdates.length - 1];
+    expect(revert).toBeDefined();
+    expect(revert.text).toMatch(/status = 'ready'|status = \?/);
+    expect(revert.values.flat()).toContain('ready');
+  });
+
+  it('dispatch fallido y sin fila previa en song_line_timings: la deja borrada, no colgada en processing', async () => {
+    const calls = routeSql([
+      ['FROM song_pipeline_runs', runRow()],
+      ['FROM song_pipeline_lyrics', lyricsRow()],
+      ['FROM song_line_timings', []], // sin fila previa
+    ]);
+    dispatchAlign.mockRejectedValueOnce(new Error('Modal caído'));
+    const res = makeRes();
+    await realignHandler(req(), res);
+
+    expect(res.statusCode).toBe(502);
+    const del = calls.find((c) => c.text.includes('DELETE FROM song_line_timings'));
+    expect(del).toBeDefined();
   });
 });
 

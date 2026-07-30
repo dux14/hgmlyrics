@@ -5,7 +5,12 @@
  * reconstruye el texto, con la puntuación pegada a la última sílaba.
  */
 import { describe, it, expect } from 'vitest';
-import { mapSyllablesToChars, noteForRange, resolveLine } from '../src/lib/pitchSyllableMap.js';
+import {
+  mapSyllablesToChars,
+  noteForRange,
+  resolveLine,
+  canonicalLineIndex,
+} from '../src/lib/pitchSyllableMap.js';
 
 // Línea 3 de 22ac3453… (real). Notas de las 5 primeras sílabas verificadas en
 // la base; la de "pre" se completa como repetición para el fixture.
@@ -215,5 +220,28 @@ describe('resolveLine', () => {
   it('si ninguna línea calza, un análisis sin sílabas en el índice canónico no impide devolver null', () => {
     const lineaSinSilabas = { i: 0, syllables: [] };
     expect(resolveLine(LINEA_DECISION.text, 0, [lineaSinSilabas])).toBeNull();
+  });
+});
+
+describe('canonicalLineIndex', () => {
+  const blocks = [
+    { lines: [{ id: 'a', text: 'uno' }, { id: 'b', text: '(intro)', annotation: true }] },
+    { lines: null },
+    { lines: [{ id: 'c', text: '' }, { id: 'd', text: 'dos' }] },
+  ];
+
+  it('cuenta los renglones en orden de documento', () => {
+    expect(canonicalLineIndex(blocks, 'a')).toBe(0);
+    expect(canonicalLineIndex(blocks, 'c')).toBe(1);
+    expect(canonicalLineIndex(blocks, 'd')).toBe(2);
+  });
+
+  it('salta las anotaciones sin contarlas', () => {
+    expect(canonicalLineIndex(blocks, 'b')).toBe(-1);
+  });
+
+  it('devuelve -1 si el renglón no existe', () => {
+    expect(canonicalLineIndex(blocks, 'zzz')).toBe(-1);
+    expect(canonicalLineIndex(null, 'a')).toBe(-1);
   });
 });

@@ -147,3 +147,24 @@ export function resolveLine(text, canonicalIndex, analysisLines) {
   if (best === null) return null;
   return { mapped: best.mapped, lineIndex: best.lineIndex, exact: false };
 }
+
+/**
+ * Índice de un renglón entre los que no son anotación, en orden de documento.
+ * Replica la regla de `projectCanonicalLines` (api/_lib/align.js) y de
+ * `projectLines` (src/lib/projectLines.js): las anotaciones no cuentan, los
+ * renglones vacíos sí, y una sección sin `lines` no aporta ninguno.
+ * @param {Array<{lines?:Array<{id?:string, annotation?:boolean}>}>} blocks
+ * @param {string} lineId
+ * @returns {number} -1 si el renglón no existe o es una anotación
+ */
+export function canonicalLineIndex(blocks, lineId) {
+  let index = 0;
+  for (const block of Array.isArray(blocks) ? blocks : []) {
+    for (const line of Array.isArray(block?.lines) ? block.lines : []) {
+      if (line.annotation) continue;
+      if (line.id === lineId) return index;
+      index += 1;
+    }
+  }
+  return -1;
+}

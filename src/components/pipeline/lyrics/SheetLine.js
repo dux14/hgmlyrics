@@ -68,7 +68,7 @@ function autogrow(textarea) {
  */
 export function SheetLine(opts) {
   const { sIdx, lIdx, handlers } = opts;
-  let { line, afterWords, suggestion, isDudoso, canMoveUp, canMoveDown } = opts;
+  let { line, afterWords, suggestion, isDudoso, canMoveUp, canMoveDown, interpolated } = opts;
 
   const el = document.createElement('div');
   el.className = 'sheet-line';
@@ -104,7 +104,7 @@ export function SheetLine(opts) {
 
     const confHtml = isVoc
       ? ''
-      : `<span class="sheet-line__conf${hasConfidence(line) ? '' : ' sheet-line__conf--none'}"></span>`;
+      : `<span class="sheet-line__conf${hasConfidence(line) ? '' : ' sheet-line__conf--none'}${interpolated ? ' sheet-line__conf--estimated' : ''}"></span>`;
     // Tercera señal del estado vocalización (junto con la itálica atenuada
     // por CSS y la ausencia de barra de confianza): el estado ya se
     // comunica por texto/clase, la marca es puramente decorativa.
@@ -293,6 +293,11 @@ export function SheetLine(opts) {
     el.querySelector('[data-action="delete"]').addEventListener('click', () =>
       dispatchStructureAction({ type: 'deleteLine', section: sIdx, line: lIdx }).catch(() => {}),
     );
+    // No pasa por dispatchStructureAction: escuchar mientras se corrige es el
+    // caso de uso central del gate, así que la edición se queda abierta.
+    el.querySelector('[data-action="listen"]').addEventListener('click', () =>
+      handlers.listenFrom(sIdx, lIdx),
+    );
   }
 
   function renderEdit() {
@@ -311,6 +316,7 @@ export function SheetLine(opts) {
         <button type="button" class="sheet-line__action" data-action="merge"></button>
         <button type="button" class="sheet-line__action" data-action="duplicate">Duplicar</button>
         <button type="button" class="sheet-line__action${isVoc ? ' is-active' : ''}" data-action="voc">Voc.</button>
+        <button type="button" class="sheet-line__action" data-action="listen">${icon('volume-2', { size: 14 })} Escuchar</button>
         <button type="button" class="sheet-line__action" data-action="delete">Borrar</button>
       </div>
     `;
@@ -345,6 +351,7 @@ export function SheetLine(opts) {
     if ('isDudoso' in next) isDudoso = next.isDudoso;
     if ('canMoveUp' in next) canMoveUp = next.canMoveUp;
     if ('canMoveDown' in next) canMoveDown = next.canMoveDown;
+    if ('interpolated' in next) interpolated = next.interpolated;
     // No pisar una edición en curso: el texto sucio vive en el textarea del
     // closure hasta que flushText() lo persista.
     if (!editing) render();
@@ -352,6 +359,10 @@ export function SheetLine(opts) {
 
   el.openEdit = openEdit;
   el.flushText = flushText;
+  // Conmuta una clase y nada más: el resaltado corre a 20 Hz mientras suena
+  // el audio, y pasar por update()/render() repintaría el renglón 20 veces
+  // por segundo.
+  el.setActive = (on) => el.classList.toggle('is-sounding', on);
 
   return el;
 }

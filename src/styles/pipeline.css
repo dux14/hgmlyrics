@@ -2212,3 +2212,21 @@ body.chrome-hidden .main {
 .struct-edit__btn:hover {
   border-color: var(--color-brand);
 }
+
+/* Renglón activo mientras suena el transporte de "Escuchar" (Task 4, S3b-i). */
+.sheet-line.is-sounding {
+  background: color-mix(in srgb, var(--color-brand) 13%, transparent);
+  border-left: 2px solid var(--color-brand);
+}
+
+/* Barra de confianza cuando el tiempo del renglón es interpolado (estimado),
+   no medido — trama punteada en vez de un color nuevo. */
+.sheet-line__conf--estimated {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--color-brand),
+    var(--color-brand) 2px,
+    transparent 2px,
+    transparent 4px
+  );
+}

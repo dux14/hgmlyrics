@@ -294,4 +294,37 @@ describe('SheetLine — edición', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(hs.persistText).toHaveBeenCalled();
   });
+
+  it('la barra de acciones ofrece Escuchar y salta a ese renglón', () => {
+    const hs = mkHandlers({ listenFrom: vi.fn() });
+    const node = SheetLine(mk('ahí', {}, { sIdx: 1, lIdx: 2, handlers: hs }));
+    node.openEdit({});
+    node.querySelector('[data-action="listen"]').click();
+    expect(hs.listenFrom).toHaveBeenCalledWith(1, 2);
+  });
+
+  it('Escuchar no cierra la edición: se corrige mientras suena', () => {
+    const hs = mkHandlers({ listenFrom: vi.fn() });
+    const node = SheetLine(mk('ahí', {}, { handlers: hs }));
+    node.openEdit({});
+    node.querySelector('[data-action="listen"]').click();
+    expect(node.querySelector('textarea')).not.toBeNull();
+  });
+
+  it('el renglón de tiempo estimado marca su barra de confianza', () => {
+    const node = SheetLine(mk('a', {}, { interpolated: true }));
+    expect(node.querySelector('.sheet-line__conf').className).toContain(
+      'sheet-line__conf--estimated',
+    );
+  });
+
+  it('setActive conmuta el resaltado sin volver a renderizar el renglón', () => {
+    const node = SheetLine(mk('a'));
+    const textNode = node.querySelector('.sheet-line__text');
+    node.setActive(true);
+    expect(node.classList.contains('is-sounding')).toBe(true);
+    expect(node.querySelector('.sheet-line__text')).toBe(textNode);
+    node.setActive(false);
+    expect(node.classList.contains('is-sounding')).toBe(false);
+  });
 });

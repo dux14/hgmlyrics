@@ -78,6 +78,15 @@ export function SheetLine(opts) {
   // valor del textarea difiere de este — guardar vacío está permitido a
   // propósito, no se replica el `if (!text.trim()) return;` del panel viejo.
   let originalText = null;
+  // Última copia conocida del texto sucio. Vive INDEPENDIENTE de `editing`:
+  // el blur y las acciones de estructura compiten por cerrar la edición
+  // primero (en un navegador real el blur llega antes que el click del
+  // botón), así que la suciedad del texto no puede depender de ese flag o
+  // flushText() se vuelve un no-op justo cuando más importa.
+  let dirtyText = null;
+  // Promesa de persistText en vuelo, si hay una — un segundo flushText()
+  // mientras esta corre espera la MISMA promesa en vez de disparar otra.
+  let flushPromise = null;
   // Caret pedido por openEdit({ caret }) para el próximo render de edición;
   // se consume una sola vez.
   let pendingCaret = null;
@@ -96,10 +105,17 @@ export function SheetLine(opts) {
     const confHtml = isVoc
       ? ''
       : `<span class="sheet-line__conf${hasConfidence(line) ? '' : ' sheet-line__conf--none'}"></span>`;
+    // Tercera señal del estado vocalización (junto con la itálica atenuada
+    // por CSS y la ausencia de barra de confianza): el estado ya se
+    // comunica por texto/clase, la marca es puramente decorativa.
+    const micHtml = isVoc
+      ? `<span class="sheet-line__mic" aria-hidden="true">${icon('mic', { size: 12 })}</span>`
+      : '';
 
     el.innerHTML = `
       <span class="sheet-line__grip" aria-hidden="true">${icon('grip-vertical', { size: 12 })}</span>
       <span class="sheet-line__text">${isEmpty ? EMPTY_TEXT : escapeHtml(line.text)}</span>
+      ${micHtml}
       ${confHtml}
     `;
 
@@ -109,40 +125,88 @@ export function SheetLine(opts) {
     }
   }
 
-  /** Dispara una acción de estructura y cierra la edición local sin
-   * repintar: el documento va a cambiar de forma (el renglón puede
-   * desaparecer, partirse o correr de índice), así que el repintado real lo
-   * hace el orquestador cuando la acción resuelve. */
-  function dispatchStructureAction(action) {
+  /** Relee el textarea (si sigue en el DOM) y actualiza `dirtyText` — se
+   * llama al cierre de cada camino de edición para que el valor sobreviva a
+   * `editing` volviéndose false antes de que flushText() corra. */
+  function captureDirty() {
+    const textarea = el.querySelector('.sheet-line__edit-input');
+    if (textarea) dirtyText = textarea.value;
+  }
+
+  /** Persiste el texto sucio si cambió. Idempotente y ajena a `editing`: se
+   * puede llamar después de que la edición ya se cerró (mientras quede
+   * `dirtyText` sin persistir) y una segunda llamada mientras la primera
+   * sigue en vuelo espera la MISMA promesa en lugar de disparar otro PUT —
+   * así el blur (que dispara primero en un navegador real) y el click de un
+   * botón de estructura inmediatamente después quedan serializados en vez
+   * de correr como dos peticiones en paralelo sin orden garantizado. */
+  async function flushText() {
+    if (flushPromise) return flushPromise;
+    captureDirty();
+    if (dirtyText === null || dirtyText === originalText) {
+      dirtyText = null;
+      return undefined;
+    }
+    const text = dirtyText;
+    dirtyText = null;
+    // Nueva base optimista: una llamada posterior a flushText() sin tipeo
+    // nuevo de por medio no debe re-persistir el mismo texto.
+    originalText = text;
+    flushPromise = handlers
+      .persistText(sIdx, lIdx, text)
+      .catch(() => {
+        // El reporte del error al usuario es del orquestador (Task 8); acá
+        // alcanza con no dejar la promesa colgando como unhandled rejection.
+      })
+      .finally(() => {
+        flushPromise = null;
+      });
+    return flushPromise;
+  }
+
+  /** Dispara una acción de estructura: primero flushea el texto sucio (para
+   * no perder tipeo reciente) y solo entonces manda la acción — el
+   * orquestador la serializa y bloquea, así que el orden importa. Cierra la
+   * edición local sin repintar: el documento va a cambiar de forma (el
+   * renglón puede desaparecer, partirse o correr de índice), el repintado
+   * real lo hace el orquestador cuando la acción resuelve. */
+  async function dispatchStructureAction(action) {
     editing = false;
-    handlers.runAction(action, { rowEl: el });
+    await flushText();
+    return handlers.runAction(action, { rowEl: el }).catch(() => {});
+  }
+
+  /** Excepción a dispatchStructureAction: partir ya lleva el texto completo
+   * (con el `\n` insertado) en el payload, así que no hace falta flushear el
+   * borrador viejo antes — se descarta, la acción lo reemplaza. */
+  function dispatchSplitAction(action) {
+    editing = false;
+    dirtyText = null;
+    return handlers.runAction(action, { rowEl: el }).catch(() => {});
   }
 
   function doSplitAtCaret(textarea) {
     const caret = textarea.selectionStart;
     const text = textarea.value;
     const withBreak = `${text.slice(0, caret)}\n${text.slice(caret)}`;
-    dispatchStructureAction({ type: 'setLineText', section: sIdx, line: lIdx, text: withBreak });
+    dispatchSplitAction({ type: 'setLineText', section: sIdx, line: lIdx, text: withBreak });
   }
 
-  /** Persiste el texto sucio si cambió y cierra la edición; no-op si no hay
-   * edición en curso (blur y Cmd/Ctrl+Enter convergen acá). */
-  async function flushText() {
-    if (!editing) return;
-    const textarea = el.querySelector('.sheet-line__edit-input');
-    const text = textarea ? textarea.value : originalText;
-    editing = false;
-    if (text !== originalText) {
-      await handlers.persistText(sIdx, lIdx, text);
-    }
-    render();
+  /** `canMoveUp`/`canMoveDown` se interpretan como «existe vecino
+   * arriba/abajo» — la única señal con la que este componente puede saber
+   * si un destino de mergeLines existe sin arriesgar un índice fuera de
+   * rango (mergeLines con line: -1 revienta el reducer del backend). */
+  function mergeTargetExists(caret) {
+    return caret === 0 ? canMoveUp : canMoveDown;
   }
 
   function updateMergeLabel() {
     const textarea = el.querySelector('.sheet-line__edit-input');
     const mergeBtn = el.querySelector('[data-action="merge"]');
     if (!textarea || !mergeBtn) return;
-    mergeBtn.textContent = textarea.selectionStart === 0 ? 'Unir arriba' : 'Unir abajo';
+    const caret = textarea.selectionStart;
+    mergeBtn.textContent = caret === 0 ? 'Unir arriba' : 'Unir abajo';
+    mergeBtn.disabled = !mergeTargetExists(caret);
   }
 
   function wireEdit() {
@@ -156,8 +220,18 @@ export function SheetLine(opts) {
     pendingCaret = null;
     updateMergeLabel();
 
+    // Cierra la edición y persiste lo tipeado; `flushText()` ya no depende
+    // de `editing`, así que da igual si algo más (una acción de estructura)
+    // ya lo puso en false — la promesa se comparte, no se duplica.
+    function closeAndFlush() {
+      editing = false;
+      flushText()
+        .then(() => render())
+        .catch(() => {});
+    }
+
     textarea.addEventListener('input', () => autogrow(textarea));
-    textarea.addEventListener('blur', () => flushText());
+    textarea.addEventListener('blur', closeAndFlush);
     textarea.addEventListener('keyup', updateMergeLabel);
     textarea.addEventListener('click', updateMergeLabel);
     textarea.addEventListener('select', updateMergeLabel);
@@ -165,10 +239,11 @@ export function SheetLine(opts) {
       if (ev.key === 'Escape') {
         ev.preventDefault();
         editing = false;
+        dirtyText = null;
         render();
       } else if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) {
         ev.preventDefault();
-        flushText();
+        closeAndFlush();
       } else if (ev.key === 'Enter') {
         ev.preventDefault();
         doSplitAtCaret(textarea);
@@ -179,7 +254,9 @@ export function SheetLine(opts) {
         lIdx > 0
       ) {
         ev.preventDefault();
-        dispatchStructureAction({ type: 'mergeLines', section: sIdx, line: lIdx - 1 });
+        dispatchStructureAction({ type: 'mergeLines', section: sIdx, line: lIdx - 1 }).catch(
+          () => {},
+        );
       }
     });
 
@@ -198,20 +275,23 @@ export function SheetLine(opts) {
     );
     el.querySelector('[data-action="merge"]').addEventListener('click', () => {
       const caret = textarea.selectionStart;
+      if (!mergeTargetExists(caret)) return;
       dispatchStructureAction(
         caret === 0
           ? { type: 'mergeLines', section: sIdx, line: lIdx - 1 }
           : { type: 'mergeLines', section: sIdx, line: lIdx },
-      );
+      ).catch(() => {});
     });
     el.querySelector('[data-action="duplicate"]').addEventListener('click', () =>
-      dispatchStructureAction({ type: 'duplicateLine', section: sIdx, line: lIdx }),
+      dispatchStructureAction({ type: 'duplicateLine', section: sIdx, line: lIdx }).catch(() => {}),
     );
     el.querySelector('[data-action="voc"]').addEventListener('click', () =>
-      dispatchStructureAction({ type: 'toggleVocalization', section: sIdx, line: lIdx }),
+      dispatchStructureAction({ type: 'toggleVocalization', section: sIdx, line: lIdx }).catch(
+        () => {},
+      ),
     );
     el.querySelector('[data-action="delete"]').addEventListener('click', () =>
-      dispatchStructureAction({ type: 'deleteLine', section: sIdx, line: lIdx }),
+      dispatchStructureAction({ type: 'deleteLine', section: sIdx, line: lIdx }).catch(() => {}),
     );
   }
 
@@ -246,6 +326,7 @@ export function SheetLine(opts) {
     if (handlers.isBusy() || editing) return;
     editing = true;
     originalText = line.text ?? '';
+    dirtyText = null;
     pendingCaret = caret;
     render();
   }

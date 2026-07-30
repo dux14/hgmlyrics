@@ -59,6 +59,14 @@ describe('SheetLine — reposo', () => {
     expect(node.querySelector('.sheet-line__conf')).toBeNull();
   });
 
+  it('vocalización: pinta la marca de micrófono', () => {
+    const voc = SheetLine(mk('la la la', { vocalization: true }));
+    expect(voc.querySelector('.sheet-line__mic')).not.toBeNull();
+
+    const noVoc = SheetLine(mk('un renglón normal'));
+    expect(noVoc.querySelector('.sheet-line__mic')).toBeNull();
+  });
+
   it('update({ line }) cambia el texto pintado sin recrear el nodo', () => {
     const opts = mk('texto original');
     const node = SheetLine(opts);
@@ -140,7 +148,7 @@ describe('SheetLine — edición', () => {
     await Promise.resolve();
 
     expect(hs.persistText).toHaveBeenCalledWith(0, 0, 'texto guardado');
-    expect(node.querySelector('.sheet-line__edit-input')).toBeNull();
+    await vi.waitFor(() => expect(node.querySelector('.sheet-line__edit-input')).toBeNull());
   });
 
   it('el rótulo de Unir cambia según selectionStart', () => {
@@ -156,7 +164,7 @@ describe('SheetLine — edición', () => {
     expect(mergeBtn.textContent).toBe('Unir abajo');
   });
 
-  it('Backspace en 0 manda mergeLines con el de arriba', () => {
+  it('Backspace en 0 manda mergeLines con el de arriba', async () => {
     const hs = mkHandlers();
     const node = SheetLine(mk('segundo renglón', {}, { lIdx: 1, handlers: hs }));
     node.querySelector('.sheet-line__text').click();
@@ -166,9 +174,11 @@ describe('SheetLine — edición', () => {
       new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }),
     );
 
-    expect(hs.runAction).toHaveBeenCalledWith(
-      { type: 'mergeLines', section: 0, line: 0 },
-      { rowEl: node },
+    await vi.waitFor(() =>
+      expect(hs.runAction).toHaveBeenCalledWith(
+        { type: 'mergeLines', section: 0, line: 0 },
+        { rowEl: node },
+      ),
     );
   });
 
@@ -210,5 +220,78 @@ describe('SheetLine — edición', () => {
 
     expect(textarea.selectionStart).toBe('una'.length + 1 + 'linea'.length);
     expect(hs.runAction).not.toHaveBeenCalled();
+  });
+
+  it('blur seguido de una acción de estructura no compite: persistText corre antes que runAction', async () => {
+    const calls = [];
+    const hs = mkHandlers({
+      persistText: vi.fn(async () => {
+        calls.push('persistText');
+      }),
+      runAction: vi.fn(async () => {
+        calls.push('runAction');
+      }),
+    });
+    const node = SheetLine(mk('texto viejo', {}, { handlers: hs }));
+    node.querySelector('.sheet-line__text').click();
+    const textarea = node.querySelector('.sheet-line__edit-input');
+    textarea.value = 'texto sucio sin guardar';
+
+    // En un navegador real el blur del textarea llega antes que el click del
+    // botón de la barra (el foco se mueve primero). Se reproduce el mismo
+    // orden acá: el blur no debe dejar la persistencia como no-op.
+    textarea.dispatchEvent(new Event('blur'));
+    node.querySelector('[data-action="delete"]').click();
+
+    await vi.waitFor(() => expect(hs.runAction).toHaveBeenCalled());
+    expect(calls).toEqual(['persistText', 'runAction']);
+  });
+
+  it('el botón Unir manda un índice válido: con canMoveUp=false y caret en 0 queda deshabilitado', () => {
+    const hs = mkHandlers();
+    const node = SheetLine(mk('primer renglón', {}, { canMoveUp: false, handlers: hs }));
+    node.querySelector('.sheet-line__text').click();
+    const textarea = node.querySelector('.sheet-line__edit-input');
+    setCaret(textarea, 0);
+
+    const mergeBtn = node.querySelector('[data-action="merge"]');
+    expect(mergeBtn.disabled).toBe(true);
+
+    mergeBtn.click();
+    expect(hs.runAction).not.toHaveBeenCalled();
+  });
+
+  it('el botón Unir manda un índice válido: con canMoveUp=true y caret en 0 manda mergeLines con line: lIdx - 1', async () => {
+    const hs = mkHandlers();
+    const node = SheetLine(mk('segundo renglón', {}, { lIdx: 1, canMoveUp: true, handlers: hs }));
+    node.querySelector('.sheet-line__text').click();
+    const textarea = node.querySelector('.sheet-line__edit-input');
+    setCaret(textarea, 0);
+
+    const mergeBtn = node.querySelector('[data-action="merge"]');
+    expect(mergeBtn.disabled).toBe(false);
+    mergeBtn.click();
+
+    await vi.waitFor(() =>
+      expect(hs.runAction).toHaveBeenCalledWith(
+        { type: 'mergeLines', section: 0, line: 0 },
+        { rowEl: node },
+      ),
+    );
+  });
+
+  it('flushText() sigue rechazable/observable: si handlers.persistText rechaza no queda una promesa flotante sin capturar', async () => {
+    const hs = mkHandlers({ persistText: vi.fn(async () => Promise.reject(new Error('boom'))) });
+    const node = SheetLine(mk('texto viejo', {}, { handlers: hs }));
+    node.querySelector('.sheet-line__text').click();
+    const textarea = node.querySelector('.sheet-line__edit-input');
+    textarea.value = 'texto nuevo';
+    textarea.dispatchEvent(new Event('blur'));
+
+    // Si esto no está bien manejado, vitest/node reporta un
+    // unhandledRejection y el test process falla igual sin necesidad de
+    // asserts adicionales — llegar hasta acá sin throw ya es la prueba.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(hs.persistText).toHaveBeenCalled();
   });
 });

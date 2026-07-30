@@ -614,3 +614,17 @@ export function applyReviewAction(doc, action) {
   }
   return next;
 }
+
+/**
+ * Limpia los ajustes manuales de tiempo de todo el documento. Se usa antes de
+ * realinear: los offsets manuales corrigen un alineamiento viejo, y arrastrarlos
+ * sobre tiempos nuevos los desplaza dos veces.
+ * @param {Array<{lines?: Array<object>}>} sections
+ * @returns {Array<object>} documento nuevo, sin mutar el original
+ */
+export function clearManualOffsets(sections) {
+  return (sections || []).map((section) => ({
+    ...section,
+    lines: (section.lines || []).map((line) => ({ ...line, manualStartMs: null })),
+  }));
+}

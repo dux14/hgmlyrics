@@ -64,7 +64,7 @@ export async function dispatchAlign(songId, snapshotHash) {
       SELECT storage_key AS "storageKey" FROM song_audio WHERE song_id = ${songId}
     `,
     sql`
-      SELECT status FROM song_line_timings WHERE song_id = ${songId}
+      SELECT status, updated_at AS "updatedAt" FROM song_line_timings WHERE song_id = ${songId}
     `,
   ]);
   if (!audio) {
@@ -77,7 +77,12 @@ export async function dispatchAlign(songId, snapshotHash) {
   // como éxito (id undefined) y ningún admin se enteraba de que el dispatch
   // no hizo nada. Un 409 explícito hace visible el conflicto, igual criterio
   // que el resto del pipeline (confirm.js/retry.js ya usan 409 para carreras).
-  if (timings?.status === 'processing') {
+  // Un dispatch que falla no significa que el job no arrancó, pero tampoco
+  // puede bloquear para siempre: si nadie escribió la fila en 30 minutos,
+  // está muerta (el cuelgue heredado de un webhook perdido).
+  const stale =
+    timings?.updatedAt && Date.now() - new Date(timings.updatedAt).getTime() > 30 * 60 * 1000;
+  if (timings?.status === 'processing' && !stale) {
     const e = new Error('El alineamiento ya está en curso para esta canción');
     e.status = 409;
     throw e;

@@ -93,13 +93,13 @@ export default withErrors(async (req, res) => {
   // 1) Fases zombi: running > 30 min sin actividad → failed (timeout).
   // LIMIT 200: el resto lo procesa la próxima corrida horaria (maxDuration=60).
   const staleCandidates = await sql`
-    SELECT id FROM song_pipeline_runs
+    SELECT id, song_id AS "songId" FROM song_pipeline_runs
     WHERE updated_at < now() - interval '30 minutes'
       AND status NOT IN ('done', 'failed', 'cancelled', 'superseded')
     LIMIT 200
   `;
   let timedOut = 0;
-  for (const { id } of staleCandidates) {
+  for (const { id, songId } of staleCandidates) {
     const marked = await sql.begin(async (tx) => {
       const rows = await tx`
         SELECT phases, auto_retries AS "autoRetries" FROM song_pipeline_runs WHERE id = ${id} FOR UPDATE
@@ -120,6 +120,16 @@ export default withErrors(async (req, res) => {
         if (next) {
           phases = next;
           changed = true;
+          // La fase sync deja su propio rastro fuera de `phases`: si el webhook
+          // que se perdió era el de align, song_line_timings queda en
+          // 'processing' para siempre y el auto-retry choca en bucle contra el
+          // 409 de dispatchAlign. Se tumba junto con la fase.
+          if (phase === 'sync') {
+            await tx`
+              UPDATE song_line_timings SET status = 'failed', error = 'El alineamiento no respondió a tiempo'
+              WHERE song_id = ${songId} AND status = 'processing'
+            `;
+          }
           // Diferido siempre: un job colgado 30 min no es un transitorio de
           // segundos (a diferencia del `ok:false` inmediato del webhook).
           if (

@@ -8,6 +8,8 @@
  */
 import { applyPhaseEvent, runStatusFromPhases } from './state.js';
 import { validateBeats } from '../beats.js';
+import { getPipelineLyrics } from './lyricsStore.js';
+import { exportSections } from './songbookExport.js';
 
 // Estados de run donde un evento de fase todavía puede aplicar efectos.
 // Mismo set que el índice único parcial song_pipeline_runs_one_active_per_song
@@ -248,6 +250,33 @@ export async function applyPipelinePhaseEvent(sql, jobId, event) {
       SET phases = ${tx.json(next)}, status = ${status}, lyrics_review = ${tx.json(lyricsReview)}, updated_at = now()
       WHERE id = ${runId}
     `;
+
+    // Único punto donde el pipeline escribe songs.sections. Corre al cerrar el
+    // run porque es el único momento en que la letra, los tiempos, el tono por
+    // sílaba y los clips existen a la vez (§6.4 del spec). Idempotente.
+    if (status === 'done') {
+      try {
+        const stored = await getPipelineLyrics(tx, run.songId);
+        if (stored) {
+          const songRows = await tx`SELECT sections FROM songs WHERE id = ${run.songId}`;
+          const { sections } = exportSections(stored.sections, songRows[0]?.sections ?? []);
+          await tx`UPDATE songs SET sections = ${tx.json(sections)}, updated_at = now() WHERE id = ${run.songId}`;
+        }
+      } catch (err) {
+        // Un fallo de exportación no puede dejar el run sin cerrar: queda la
+        // reexportación manual (publishToSongbook) para repararlo. Esto solo
+        // protege contra errores de JS (p. ej. dentro de exportSections): un
+        // error a nivel SQL en cualquiera de las dos queries de arriba deja la
+        // transacción abortada igual, y el COMMIT de más abajo se degrada a
+        // ROLLBACK — se perdería también el UPDATE song_pipeline_runs de
+        // arriba. Cubrirlo requeriría tx.savepoint(), que este repo no usa en
+        // ningún lado y que los fakes de test no soportan; queda fuera de
+        // alcance de esta tarea.
+        console.error(
+          `pipeline export: falló la exportación al cancionero (${err?.message ?? err})`,
+        );
+      }
+    }
 
     return { status, next, songId: run.songId };
   });

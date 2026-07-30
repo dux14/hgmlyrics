@@ -919,6 +919,71 @@ describe('POST /api/pipeline/webhook — structure (SongFormer)', () => {
   });
 });
 
+describe('applyPipelinePhaseEvent — exportación a songs.sections al cerrar el run (Task 6)', () => {
+  it('run llega a done → exporta la letra aprobada a songs.sections', async () => {
+    const phases = initialPhases();
+    phases.upload.status = 'done';
+    phases.stems.status = 'done';
+    phases.transcription.status = 'done';
+    phases.lyrics_review.status = 'done';
+    phases.sync.status = 'done';
+    phases.pitch.status = 'done';
+    phases.clips.status = 'running';
+    sqlResponses.push([runRow({ phases })]); // SELECT FOR UPDATE
+    sqlResponses.push([]); // insert/upsert song_section_audio clip 0
+    sqlResponses.push([]); // UPDATE song_pipeline_runs
+    sqlResponses.push([
+      { sections: [{ type: 'verse', label: 'Verso', lines: [{ text: 'letra nueva' }] }] },
+    ]); // getPipelineLyrics
+    sqlResponses.push([
+      { sections: [{ type: 'verse', label: 'Verso', lines: [{ text: 'letra vieja' }] }] },
+    ]); // SELECT sections FROM songs
+    sqlResponses.push([]); // UPDATE songs SET sections
+
+    const outcome = await applyPipelinePhaseEvent(sqlMock, 'run-1', {
+      phase: 'clips',
+      ok: true,
+      payload: {
+        clips: [
+          { sectionIndex: 0, voiceScope: null, storageKey: 'song-1/clips/full/section-0.mp3' },
+        ],
+      },
+    });
+
+    expect(outcome.status).toBe('done');
+    const songsSelect = sqlCalls.find((c) => c.text.includes('SELECT sections FROM songs'));
+    expect(songsSelect).toBeDefined();
+    const songsUpdate = sqlCalls.find((c) => c.text.includes('UPDATE songs SET sections'));
+    expect(songsUpdate).toBeDefined();
+    // El merge lo hace exportSections: texto nuevo del gate, no el viejo del cancionero.
+    expect(songsUpdate.values[0]).toEqual([
+      { type: 'verse', label: 'Verso', lines: [{ text: 'letra nueva' }] },
+    ]);
+  });
+
+  it('run se queda en running → NO toca songs', async () => {
+    const phases = initialPhases();
+    phases.upload.status = 'done';
+    phases.stems.status = 'done';
+    phases.transcription.status = 'done';
+    phases.lyrics_review.status = 'done';
+    phases.sync.status = 'running';
+    sqlResponses.push([runRow({ phases })]); // SELECT FOR UPDATE
+    sqlResponses.push([]); // UPDATE song_pipeline_runs
+
+    const outcome = await applyPipelinePhaseEvent(sqlMock, 'run-1', {
+      phase: 'sync',
+      ok: true,
+      partial: true,
+    });
+
+    expect(outcome.status).not.toBe('done');
+    expect(sqlCalls.some((c) => c.text.includes('song_pipeline_lyrics'))).toBe(false);
+    expect(sqlCalls.some((c) => c.text.includes('SELECT sections FROM songs'))).toBe(false);
+    expect(sqlCalls.some((c) => c.text.includes('UPDATE songs SET sections'))).toBe(false);
+  });
+});
+
 describe('applyPipelinePhaseEvent — CAS directo (reuso B7)', () => {
   it('run inexistente → null', async () => {
     sqlResponses.push([]);

@@ -7,6 +7,12 @@
  * Una sección sin renglones se pinta igual, con su encabezado completo — el
  * cuerpo ofrece insertar el primer renglón en vez de esconderse (spec:
  * «instrumental es contenido, no vacío», ver `docs/plans/...notes.md`).
+ *
+ * S3b-ii suma `timingByLine` (mapa lIdx → {startMs, interpolated}, para que
+ * cada `SheetLine` pinte su barra de confianza como estimada) y `readOnly`
+ * (la confirmación previa al approve, ahora la misma hoja sin controles de
+ * edición) más `setLineActive`/`setBandActive`, que el orquestador usa para
+ * mover el resaltado del renglón/banda que suena sin repintar nada.
  */
 import { icon } from '../../../lib/icons.js';
 import { escapeHtml } from '../../../lib/escape.js';
@@ -26,12 +32,15 @@ function typeOptionsHtml(currentType) {
 
 /**
  * @param {{section: object, sIdx: number, isLast: boolean, byLine: Map,
- *   textByLine: Map, dudosoThreshold: number, handlers: object}} opts
+ *   textByLine: Map, dudosoThreshold: number, timingByLine?: Map,
+ *   readOnly?: boolean, handlers: object}} opts
  * @returns {HTMLElement}
  */
 export function SheetSection(opts) {
   const { handlers } = opts;
   let { section, sIdx, isLast, byLine, textByLine, dudosoThreshold } = opts;
+  let timingByLine = opts.timingByLine ?? new Map();
+  let readOnly = opts.readOnly ?? false;
 
   const el = document.createElement('div');
   el.className = 'sheet-section';
@@ -49,6 +58,44 @@ export function SheetSection(opts) {
   let emptyEl = null;
   let instrumentalEl = null;
 
+  // Referencias vivas del menú de sección — al alcance de openMenu/closeMenu
+  // para poder limpiar los listeners de documento aunque renderHeader() haya
+  // reconstruido el encabezado desde el último open().
+  let menuEl = null;
+  let menuToggleEl = null;
+  let menuDocHandlers = null;
+
+  function closeMenu() {
+    menuEl?.classList.remove('is-open');
+    if (menuDocHandlers) {
+      document.removeEventListener('click', menuDocHandlers.onClick, true);
+      document.removeEventListener('keydown', menuDocHandlers.onKeydown, true);
+      menuDocHandlers = null;
+    }
+  }
+
+  /** Click afuera o Escape cierran el menú — sin esto quedaba abierto hasta
+   * el próximo toque en el toggle. Los listeners son de documento (fase de
+   * captura, para adelantarse a cualquier stopPropagation) y se retiran al
+   * cerrar: `update()` reconstruye el encabezado entero con `innerHTML`, así
+   * que dejarlos colgados apuntaría a nodos ya desprendidos del DOM. */
+  function openMenu() {
+    menuEl.classList.add('is-open');
+    const onClick = (ev) => {
+      if (!menuEl.contains(ev.target)) closeMenu();
+    };
+    const onKeydown = (ev) => {
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        closeMenu();
+        menuToggleEl?.focus();
+      }
+    };
+    document.addEventListener('click', onClick, true);
+    document.addEventListener('keydown', onKeydown, true);
+    menuDocHandlers = { onClick, onKeydown };
+  }
+
   function isDudosoFor(line) {
     return (
       typeof dudosoThreshold === 'number' &&
@@ -59,6 +106,7 @@ export function SheetSection(opts) {
 
   function lineProps(lIdx) {
     const key = `${sIdx}:${lIdx}`;
+    const timing = timingByLine.get(lIdx);
     return {
       line: section.lines[lIdx],
       sIdx,
@@ -68,6 +116,8 @@ export function SheetSection(opts) {
       isDudoso: isDudosoFor(section.lines[lIdx]),
       canMoveUp: lIdx > 0,
       canMoveDown: lIdx < section.lines.length - 1,
+      interpolated: Boolean(timing?.interpolated),
+      readOnly,
       handlers,
     };
   }
@@ -87,7 +137,8 @@ export function SheetSection(opts) {
   /** Pinta el cuerpo: reusa nodos existentes por índice, agrega los que
    * faltan y descarta los sobrantes (encoge). La banda instrumental y el
    * "insertar primer renglón" son estados excluyentes con la lista de
-   * renglones, no se superponen. */
+   * renglones, no se superponen. En lectura no se ofrece insertar (sin nada
+   * que editar), la banda instrumental se pinta igual. */
   function syncBody() {
     const lines = section.lines;
 
@@ -99,7 +150,7 @@ export function SheetSection(opts) {
 
       // El tipo manda, no el contenido: una sección tipada 'instrumental'
       // sin renglones pinta la banda; cualquier otro tipo sin renglones
-      // ofrece insertar el primero. Nunca coexisten.
+      // ofrece insertar el primero (salvo en lectura). Nunca coexisten.
       const isInstrumental = normalizeSectionType(section.type) === 'instrumental';
       if (isInstrumental) {
         if (emptyEl) {
@@ -117,7 +168,12 @@ export function SheetSection(opts) {
           instrumentalEl.remove();
           instrumentalEl = null;
         }
-        if (!emptyEl) {
+        if (readOnly) {
+          if (emptyEl) {
+            emptyEl.remove();
+            emptyEl = null;
+          }
+        } else if (!emptyEl) {
           emptyEl = renderEmptyInsert();
           bodyEl.appendChild(emptyEl);
         }
@@ -142,7 +198,8 @@ export function SheetSection(opts) {
         lineNodes[i] = node;
         bodyEl.appendChild(node);
       }
-      if (i < lines.length - 1 && !sepNodes[i]) {
+      // Sin separadores en lectura: no hay nada que insertar ni cortar.
+      if (!readOnly && i < lines.length - 1 && !sepNodes[i]) {
         const sep = SheetSeparator({ sIdx, afterLine: i, handlers });
         sepNodes[i] = sep;
         bodyEl.appendChild(sep);
@@ -151,14 +208,35 @@ export function SheetSection(opts) {
     while (lineNodes.length > lines.length) {
       lineNodes.pop().remove();
     }
-    while (sepNodes.length > lines.length - 1) {
-      const sep = sepNodes.pop();
-      if (sep) sep.remove();
+    if (readOnly) {
+      sepNodes.forEach((sep) => sep?.remove());
+      sepNodes = [];
+    } else {
+      while (sepNodes.length > lines.length - 1) {
+        const sep = sepNodes.pop();
+        if (sep) sep.remove();
+      }
     }
   }
 
   function renderHeader() {
+    // Limpia cualquier menú abierto del encabezado anterior antes de
+    // reemplazarlo por completo — si no, los listeners de documento de
+    // openMenu() quedan referenciando nodos ya desprendidos.
+    closeMenu();
+
     const type = normalizeSectionType(section.type);
+
+    if (readOnly) {
+      headerEl.innerHTML = `
+        <span class="sheet-section__type-badge">${escapeHtml(SECTION_TYPE_LABELS[type] || type)}</span>
+        ${section.label ? `<span class="sheet-section__name-text">${escapeHtml(section.label)}</span>` : ''}
+      `;
+      menuEl = null;
+      menuToggleEl = null;
+      return;
+    }
+
     headerEl.innerHTML = `
       <select class="sheet-section__type" aria-label="Tipo de sección">
         ${typeOptionsHtml(type)}
@@ -177,8 +255,8 @@ export function SheetSection(opts) {
 
     const select = headerEl.querySelector('.sheet-section__type');
     const nameInput = headerEl.querySelector('.sheet-section__name');
-    const menuToggle = headerEl.querySelector('.sheet-section__menu-toggle');
-    const menu = headerEl.querySelector('.sheet-section__menu');
+    menuToggleEl = headerEl.querySelector('.sheet-section__menu-toggle');
+    menuEl = headerEl.querySelector('.sheet-section__menu');
 
     select.addEventListener('change', () => {
       handlers
@@ -199,16 +277,18 @@ export function SheetSection(opts) {
         .catch(() => {});
     });
 
-    menuToggle.addEventListener('click', () => {
-      menu.classList.toggle('is-open');
+    menuToggleEl.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      if (menuEl.classList.contains('is-open')) closeMenu();
+      else openMenu();
     });
 
     headerEl.querySelector('[data-action="rename"]').addEventListener('click', () => {
-      menu.classList.remove('is-open');
+      closeMenu();
       nameInput.focus();
     });
     headerEl.querySelector('[data-action="duplicate"]').addEventListener('click', () => {
-      menu.classList.remove('is-open');
+      closeMenu();
       handlers
         .runAction({ type: 'duplicateSection', section: sIdx }, { rowEl: el })
         .catch(() => {});
@@ -216,12 +296,12 @@ export function SheetSection(opts) {
     const mergeBtn = headerEl.querySelector('[data-action="merge"]');
     if (mergeBtn) {
       mergeBtn.addEventListener('click', () => {
-        menu.classList.remove('is-open');
+        closeMenu();
         handlers.runAction({ type: 'mergeSections', section: sIdx }, { rowEl: el }).catch(() => {});
       });
     }
     headerEl.querySelector('[data-action="delete"]').addEventListener('click', () => {
-      menu.classList.remove('is-open');
+      closeMenu();
       handlers.runAction({ type: 'deleteSection', section: sIdx }, { rowEl: el }).catch(() => {});
     });
   }
@@ -236,6 +316,8 @@ export function SheetSection(opts) {
     if ('byLine' in next) byLine = next.byLine;
     if ('textByLine' in next) textByLine = next.textByLine;
     if ('dudosoThreshold' in next) dudosoThreshold = next.dudosoThreshold;
+    if ('timingByLine' in next) timingByLine = next.timingByLine ?? new Map();
+    if ('readOnly' in next) readOnly = Boolean(next.readOnly);
     // No pisar el encabezado si tiene el foco adentro: el <select> de tipo
     // dispara runAction sin perder el foco y el <input> de nombre puede
     // tener texto sin blur todavía — mismo criterio que SheetLine con su
@@ -247,6 +329,18 @@ export function SheetSection(opts) {
 
   el.focusLine = function focusLine(lIdx, { caret = null } = {}) {
     lineNodes[lIdx]?.openEdit({ caret });
+  };
+
+  /** El orquestador mueve acá el resaltado del renglón que suena — conmuta
+   * una clase y nada más, sin pasar por update()/render(). */
+  el.setLineActive = function setLineActive(lIdx, on) {
+    lineNodes[lIdx]?.setActive(on);
+  };
+
+  /** Igual que setLineActive pero para la banda instrumental (lIdx null en
+   * el timeline: el segmento suena aunque no haya renglón). */
+  el.setBandActive = function setBandActive(on) {
+    instrumentalEl?.setActive(on);
   };
 
   return el;

@@ -117,6 +117,51 @@ describe('SheetSection — encabezado', () => {
   });
 });
 
+describe('SheetSection — menú de acciones (cierre)', () => {
+  it('un clic afuera cierra el menú', () => {
+    const node = SheetSection(mk());
+    document.body.appendChild(node);
+    const menu = node.querySelector('.sheet-section__menu');
+    node.querySelector('.sheet-section__menu-toggle').click();
+    expect(menu.classList.contains('is-open')).toBe(true);
+
+    document.body.click();
+
+    expect(menu.classList.contains('is-open')).toBe(false);
+    node.remove();
+  });
+
+  it('Escape cierra el menú y devuelve el foco al botón que lo abrió', () => {
+    const node = SheetSection(mk());
+    document.body.appendChild(node);
+    const menu = node.querySelector('.sheet-section__menu');
+    const toggle = node.querySelector('.sheet-section__menu-toggle');
+    toggle.click();
+    expect(menu.classList.contains('is-open')).toBe(true);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(menu.classList.contains('is-open')).toBe(false);
+    expect(document.activeElement).toBe(toggle);
+    node.remove();
+  });
+
+  it('reabrir tras un update() con el menú abierto no deja el clic afuera colgado', () => {
+    const node = SheetSection(mk());
+    document.body.appendChild(node);
+    node.querySelector('.sheet-section__menu-toggle').click();
+    node.querySelector('.sheet-section__menu-toggle').blur();
+
+    // update() reconstruye el encabezado por completo (innerHTML): sin
+    // limpiar el listener de documento del menú viejo, este click lanzaría
+    // sobre un nodo ya desprendido.
+    node.update({ section: mkSection({ label: 'Nuevo' }) });
+
+    expect(() => document.body.click()).not.toThrow();
+    node.remove();
+  });
+});
+
 describe('SheetSection — cuerpo', () => {
   it('una sección vacía pinta encabezado completo y ofrece insertar el primer renglón', () => {
     const hs = mkHandlers();

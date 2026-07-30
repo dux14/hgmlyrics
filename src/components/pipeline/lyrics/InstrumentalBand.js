@@ -52,5 +52,10 @@ export function InstrumentalBand({ section }) {
     render();
   };
 
+  // Conmuta una clase y nada más, mismo patrón que SheetLine.setActive: el
+  // resaltado corre a la cadencia del transporte, un update()/render() por
+  // tick sería carísimo.
+  el.setActive = (on) => el.classList.toggle('is-sounding', on);
+
   return el;
 }

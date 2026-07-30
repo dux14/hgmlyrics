@@ -68,9 +68,22 @@ export function renderLyricsSheetView(container, songId) {
   const bodyEl = view.querySelector('.lyrics-sheet-view__body');
 
   let destroyed = false;
+  // La única pieza de este árbol con estado que soltar al salir: el
+  // transporte de audio de LyricsSheet (SheetAudio) monta un
+  // MultiTrackPlayer que hay que destruir explícitamente, no basta con
+  // sacarlo del DOM.
+  let currentSheet = null;
+
+  function clearBody() {
+    currentSheet?.destroy?.();
+    currentSheet = null;
+    bodyEl.innerHTML = '';
+  }
 
   const off = onRouteChange(() => {
     destroyed = true;
+    currentSheet?.destroy?.();
+    currentSheet = null;
     off();
   });
 
@@ -154,11 +167,23 @@ export function renderLyricsSheetView(container, songId) {
     return el;
   }
 
-  async function mountEditableSheet() {
+  /** `run` viene del mismo `getPipelineRun` de `mountSheet()` — un solo
+   * fetch, no dos: la voz aislada ya sale firmada en
+   * `run.phases.stems.tracks.vocals` (signTracks, api/songs/[id]/pipeline.js)
+   * y la duración de `run.inputMeta.durationSec`. */
+  async function mountEditableSheet(run) {
+    const vocalsUrl = run?.phases?.stems?.tracks?.vocals ?? null;
+    const rawDurationSec = run?.inputMeta?.durationSec;
+    const durationMs = Number.isFinite(Number(rawDurationSec))
+      ? Number(rawDurationSec) * 1000
+      : null;
+
     let sheetEl;
     try {
       sheetEl = await LyricsSheet({
         songId,
+        vocalsUrl,
+        durationMs,
         onApproved: () => navigate(`/song/${songId}/procesamiento`),
         onRetry: () => mountSheet(),
       });
@@ -166,8 +191,12 @@ export function renderLyricsSheetView(container, songId) {
       console.error('LyricsSheetView: no se pudo montar la hoja de letra', err);
       sheetEl = renderLoadError();
     }
-    if (destroyed) return;
-    bodyEl.innerHTML = '';
+    if (destroyed) {
+      sheetEl.destroy?.();
+      return;
+    }
+    clearBody();
+    currentSheet = sheetEl;
     bodyEl.appendChild(sheetEl);
   }
 
@@ -178,7 +207,7 @@ export function renderLyricsSheetView(container, songId) {
     } catch (err) {
       console.error('LyricsSheetView: no se pudo cargar el estado del procesamiento', err);
       if (destroyed) return;
-      bodyEl.innerHTML = '';
+      clearBody();
       bodyEl.appendChild(renderLoadError());
       return;
     }
@@ -186,12 +215,12 @@ export function renderLyricsSheetView(container, songId) {
 
     const run = runData?.run ?? null;
     if (run?.phases?.lyrics_review?.status === 'done') {
-      bodyEl.innerHTML = '';
+      clearBody();
       bodyEl.appendChild(run.lyricsDiverged ? renderDiverged() : renderApproved());
       return;
     }
 
-    await mountEditableSheet();
+    await mountEditableSheet(run);
   }
 
   mountSheet();

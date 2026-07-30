@@ -13,6 +13,14 @@
  *
  * Lo nuevo es el repintado por sección vía huella (`sectionFingerprint`) y el
  * caret calculado tras partir/unir, colocado con `SheetSection.focusLine`.
+ *
+ * S3b-ii suma el audio: `SheetAudio` monta la voz aislada (si `vocalsUrl`
+ * llegó) en un contenedor fijo sobre el pie; `buildTimeline`/`activeAt`
+ * (`sheetTiming.js`) traducen el tiempo del transporte al renglón o banda
+ * instrumental que suena, y `handlers.listenFrom` salta ahí desde el botón
+ * «Escuchar» de un renglón. La confirmación previa al approve deja de ser un
+ * panel aparte (`LyricsPreviewStep`, retirado): es la misma hoja en modo
+ * lectura (`state.readOnly`), con el transporte abierto de entrada.
  */
 import '../../../styles/pipeline.css';
 import { escapeHtml } from '../../../lib/escape.js';
@@ -20,10 +28,11 @@ import { icon } from '../../../lib/icons.js';
 import { showToast } from '../../../lib/toast.js';
 import { getLyricsReview, sendLyricsAction, approveLyrics } from '../../../lib/pipelineApi.js';
 import { SCORE_THRESHOLD } from '../ConfidenceSummary.js';
-import { LyricsPreviewStep } from '../LyricsPreviewStep.js';
 import { SheetSection } from './SheetSection.js';
 import { SheetStatusStrip } from './SheetStatusStrip.js';
 import { SheetDrag } from './SheetDrag.js';
+import { SheetAudio } from './SheetAudio.js';
+import { buildTimeline, activeAt } from './sheetTiming.js';
 import { sectionFingerprint } from './fingerprint.js';
 
 const REDUCE_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
@@ -65,48 +74,61 @@ function textSuggestionsByLine(textSuggestions) {
 }
 
 /**
- * @param {{songId: string, onApproved?: () => void, onRetry?: () => void}} opts
+ * @param {{songId: string, vocalsUrl?: string|null, durationMs?: number|null,
+ *   onApproved?: () => void, onRetry?: () => void}} opts
  *   `onRetry` (opcional): si el primer fetch falla, se cuelga de un botón
  *   "Reintentar" en el estado de error — quien monta la hoja (SongPipelineView)
  *   lo usa para soltar su nodo cacheado y volver a invocar la factory.
+ *   `vocalsUrl` (opcional): pista de voz aislada ya firmada
+ *   (`run.phases.stems.tracks.vocals`, quien monta la hoja la trae de un
+ *   `getPipelineRun` que ya hacía por su cuenta). Sin ella no hay chip
+ *   «Escuchar» ni transporte: el run no publicó voz aislada todavía.
  * @returns {Promise<HTMLElement>}
  */
-export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
+export async function LyricsSheet({
+  songId,
+  vocalsUrl = null,
+  durationMs = null,
+  onApproved,
+  onRetry,
+} = {}) {
   const el = document.createElement('div');
   el.className = 'sheet';
 
   let state;
   try {
     const initial = await getLyricsReview(songId);
-    state = { ...initial, busy: false, previewOpen: false, dragging: false };
+    state = { ...initial, busy: false, previewOpen: false, dragging: false, readOnly: false };
   } catch (err) {
     el.innerHTML = `
       <p class="sheet__error">${escapeHtml(err.message || 'No se pudo cargar la revisión de letra')}</p>
       <button type="button" class="btn sheet__error-retry">Reintentar</button>
     `;
     el.querySelector('.sheet__error-retry').addEventListener('click', () => onRetry?.());
+    el.destroy = () => {};
     return el;
   }
 
   el.innerHTML = `
+    <div class="sheet__read-head" hidden>
+      <h2 class="sheet__read-title">Confirmar el reparto de la letra</h2>
+      <p class="sheet__read-hint">Revisa secciones, cortes y tiempos antes de aprobar.</p>
+    </div>
     <div class="sheet__body"></div>
     <button type="button" class="btn2 sheet__add-section">${icon('plus', { size: 14 })}<span>Agregar sección</span></button>
-    <div class="sheet__footer">
-      <select class="sheet__language-select" aria-label="Idioma de la letra">
-        <option value="es">Español</option>
-        <option value="en">Inglés</option>
-      </select>
-      <button type="button" class="btn sheet__approve">Aprobar letra</button>
-    </div>
+    <div class="sheet__transport"></div>
+    <div class="sheet__footer"></div>
   `;
+  const readHeadEl = el.querySelector('.sheet__read-head');
   const bodyEl = el.querySelector('.sheet__body');
   const addSectionBtn = el.querySelector('.sheet__add-section');
-  const languageSelect = el.querySelector('.sheet__language-select');
-  const approveBtn = el.querySelector('.sheet__approve');
+  const transportEl = el.querySelector('.sheet__transport');
+  const footerEl = el.querySelector('.sheet__footer');
 
   // Nodos vivos, alineados 1:1 por índice con state.review.sections — el
   // corazón del repintado por sección: solo se tocan cuando su huella (más
-  // isLast, que también afecta el encabezado) cambió.
+  // isLast e interpolated por renglón, que también afectan lo que se pinta)
+  // cambió.
   const sectionNodes = [];
   const sectionKeys = [];
 
@@ -131,7 +153,96 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
     else unlockControls();
   }
 
+  // Transporte de la voz aislada: SheetAudio ya sabe montar/renovar
+  // MultiTrackPlayer con una sola pista. Sin vocalsUrl no se crea nada — ni
+  // el chip de la tira de estado ni `handlers.listenFrom` se ofrecen
+  // (SheetLine ya trae la guarda `typeof handlers.listenFrom === 'function'`).
+  const audio = vocalsUrl
+    ? SheetAudio({
+        songId,
+        url: vocalsUrl,
+        onError: (msg) => showToast(msg, { type: 'error' }),
+      })
+    : null;
+  if (audio) transportEl.appendChild(audio.el);
+
+  // Timeline derivado de sections+timings (recalculado por sheetTiming.js en
+  // cada respuesta de acción, ver rebuildTimeline) y nodo activo actual —
+  // guardado, no buscado en el DOM en cada tick: onTime corre a 20 Hz.
+  let timeline = buildTimeline(state.review.sections, state.timings, durationMs);
+  let activeKey = null;
+
+  function timingByLineForSection(sIdx) {
+    const map = new Map();
+    for (const e of timeline.entries) {
+      if (e.sIdx === sIdx) map.set(e.lIdx, { startMs: e.startMs, interpolated: e.interpolated });
+    }
+    return map;
+  }
+
+  function timingKeyForSection(sIdx) {
+    return timeline.entries
+      .filter((e) => e.sIdx === sIdx)
+      .map((e) => `${e.lIdx}:${e.interpolated ? 1 : 0}`)
+      .join(',');
+  }
+
+  function sameActiveKey(a, b) {
+    if (!a && !b) return true;
+    if (!a || !b) return false;
+    return a.sIdx === b.sIdx && a.lIdx === b.lIdx;
+  }
+
+  function setActiveNode(key, on) {
+    if (!key) return;
+    const node = sectionNodes[key.sIdx];
+    if (!node) return;
+    if (key.lIdx === null) node.setBandActive(on);
+    else node.setLineActive(key.lIdx, on);
+  }
+
+  /** Conmuta la clase `is-sounding` entre el nodo activo anterior y el
+   * nuevo — nunca repinta secciones, corre a la cadencia del transporte. */
+  function applyActive(next) {
+    if (sameActiveKey(activeKey, next)) return;
+    setActiveNode(activeKey, false);
+    setActiveNode(next, true);
+    activeKey = next;
+  }
+
+  /** `SheetLine.renderReposo()` reconstruye `className` entero, así que
+   * cualquier repintado de contenido (una acción, un remount de modo) borra
+   * el `is-sounding` que `applyActive` había puesto — sin re-aplicar acá, el
+   * resaltado desaparece hasta que el transporte cruce a OTRA ventana. */
+  function reapplyActive() {
+    const key = activeKey;
+    activeKey = null;
+    applyActive(key);
+  }
+
+  const unsubTime = audio?.onTime((sec) => applyActive(activeAt(timeline, sec * 1000)));
+
+  /** El PUT/GET de la letra devuelve `timings` recalculado contra el
+   * documento resultante — sin reconstruir el timeline acá, el resaltado y
+   * `listenFrom` apuntarían a renglones que ya se movieron. */
+  function rebuildTimeline() {
+    timeline = buildTimeline(state.review.sections, state.timings, durationMs);
+  }
+
+  /** `handlers.listenFrom` (barra de acciones de `SheetLine`, S3b-i): abre
+   * el transporte si estaba cerrado y salta al startMs del renglón — real o
+   * interpolado, sin rama aparte. No se detiene al terminar el renglón: se
+   * quiere oír cómo entra el siguiente. */
+  function listenFrom(sIdx, lIdx) {
+    const entry = timeline.entries.find((e) => e.sIdx === sIdx && e.lIdx === lIdx);
+    if (!entry || !audio) return;
+    audio.open();
+    statusStrip.setListening(true);
+    audio.seek(entry.startMs);
+  }
+
   const handlers = { isBusy, runAction, persistText, moveLine, setDragging };
+  if (audio) handlers.listenFrom = listenFrom;
 
   // Una sola instancia para toda la hoja: el grip se descubre por delegación,
   // así que los repintados por sección no exigen re-cablear el gesto.
@@ -141,11 +252,65 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
     doc: state.review,
     dudosoThreshold: SCORE_THRESHOLD,
     onJumpToDudoso: (sIdx, lIdx) => sectionNodes[sIdx]?.focusLine(lIdx),
+    canListen: Boolean(audio),
+    onToggleListen: () => {
+      if (!audio) return;
+      if (audio.isOpen()) {
+        audio.close();
+        statusStrip.setListening(false);
+      } else {
+        audio.open();
+        statusStrip.setListening(true);
+      }
+    },
   });
   bodyEl.before(statusStrip);
 
   function updateApproveButtonState() {
-    approveBtn.disabled = !state.canApprove || isBusy();
+    const approveBtn = footerEl.querySelector('.sheet__approve');
+    if (approveBtn) approveBtn.disabled = !state.canApprove || isBusy();
+  }
+
+  // Marca el modo con el que se renderizó el pie por última vez — solo se
+  // reconstruye entero al cruzar edición/lectura; el resto de los repintados
+  // (cada acción) apenas refresca el idioma y el disabled del botón.
+  let footerMode = null;
+
+  /** Reconstruye el pie completo: edición (idioma + Aprobar letra) o lectura
+   * (Volver a editar + Aprobar letra de verdad). Cambia el marco entero
+   * (más `readHeadEl`/`addSectionBtn`, que son del mismo cruce), no el
+   * contenido de las secciones. */
+  function renderFooter() {
+    footerMode = state.readOnly;
+    readHeadEl.hidden = !state.readOnly;
+    addSectionBtn.hidden = state.readOnly;
+    if (state.readOnly) {
+      footerEl.innerHTML = `
+        <button type="button" class="btn2 sheet__back">${icon('arrow-left', { size: 14 })}<span>Volver a editar</span></button>
+        <button type="button" class="btn sheet__confirm">Aprobar letra</button>
+      `;
+      footerEl.querySelector('.sheet__back').addEventListener('click', () => enterEdit());
+      footerEl
+        .querySelector('.sheet__confirm')
+        .addEventListener('click', () => confirmApprove().catch(() => {}));
+    } else {
+      footerEl.innerHTML = `
+        <select class="sheet__language-select" aria-label="Idioma de la letra">
+          <option value="es">Español</option>
+          <option value="en">Inglés</option>
+        </select>
+        <button type="button" class="btn sheet__approve">Aprobar letra</button>
+      `;
+      const languageSelect = footerEl.querySelector('.sheet__language-select');
+      languageSelect.value = state.review.language ?? 'es';
+      languageSelect.addEventListener('change', () => {
+        runAction({ type: 'setLanguage', language: languageSelect.value }).catch(() => {});
+      });
+      footerEl
+        .querySelector('.sheet__approve')
+        .addEventListener('click', () => enterReadOnly().catch(() => {}));
+    }
+    updateApproveButtonState();
   }
 
   // Controles que `lockControls()` deshabilitó (los que YA estaban
@@ -183,11 +348,11 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
     updateApproveButtonState();
   }
 
-  /** Repinta las secciones: reusa el nodo por índice si la huella (+ isLast,
-   * que cambia el menú del encabezado) no varió, actualiza si varió, agrega
-   * o quita nodos al final si cambió la cantidad. `force` (usado por
-   * resync()) ignora la huella y repinta todo — tras un fallo de acción el
-   * documento pudo cambiar por completo. */
+  /** Repinta las secciones: reusa el nodo por índice si la huella (+ isLast +
+   * el interpolated de sus renglones, que cambia lo que se pinta) no varió,
+   * actualiza si varió, agrega o quita nodos al final si cambió la cantidad.
+   * `force` (usado por resync()) ignora la huella y repinta todo — tras un
+   * fallo de acción el documento pudo cambiar por completo. */
   function syncSections({ force = false } = {}) {
     const sections = state.review.sections;
     const byLine = suggestionsByLine(state.suggestions);
@@ -195,7 +360,7 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
 
     for (let i = 0; i < sections.length; i++) {
       const isLast = i === sections.length - 1;
-      const key = `${sectionFingerprint(sections[i])}|${isLast ? 1 : 0}`;
+      const key = `${sectionFingerprint(sections[i])}|${isLast ? 1 : 0}|${state.readOnly ? 1 : 0}|${timingKeyForSection(i)}`;
       if (sectionNodes[i]) {
         if (force || sectionKeys[i] !== key) {
           sectionNodes[i].update({
@@ -205,6 +370,8 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
             byLine,
             textByLine,
             dudosoThreshold: SCORE_THRESHOLD,
+            timingByLine: timingByLineForSection(i),
+            readOnly: state.readOnly,
           });
         }
       } else {
@@ -215,6 +382,8 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
           byLine,
           textByLine,
           dudosoThreshold: SCORE_THRESHOLD,
+          timingByLine: timingByLineForSection(i),
+          readOnly: state.readOnly,
           handlers,
         });
         sectionNodes[i] = node;
@@ -228,14 +397,21 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
     }
 
     statusStrip.update(state.review);
-    languageSelect.value = state.review.language ?? 'es';
+    if (footerMode !== state.readOnly) {
+      renderFooter();
+    } else if (!state.readOnly) {
+      const languageSelect = footerEl.querySelector('.sheet__language-select');
+      if (languageSelect) languageSelect.value = state.review.language ?? 'es';
+      updateApproveButtonState();
+    }
   }
 
   /** Re-trae el documento del servidor tras un fallo de acción: el admin
    * nunca queda viendo un estado potencialmente viejo (mismo criterio que el
-   * CAS del backend). Repinta TODO (force), no solo lo que cambió de huella. */
+   * CAS del backend). Repinta TODO (force), no solo lo que cambió de huella.
+   * Vuelve siempre a modo edición: un documento potencialmente distinto no
+   * debe quedar mostrado como "reparto confirmado". */
   async function resync() {
-    el.querySelector('.lps')?.remove();
     state.previewOpen = false;
     try {
       const fresh = await getLyricsReview(songId);
@@ -244,14 +420,22 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
       // dispara un PUT que, al fallar, resincroniza por su cuenta). Perder el
       // flag aquí dejaría la hoja desbloqueada con un dedo todavía moviendo un
       // renglón, que es justo la ventana que el lock del arrastre cierra.
-      state = { ...fresh, busy: false, previewOpen: false, dragging: state.dragging };
+      state = {
+        ...fresh,
+        busy: false,
+        previewOpen: false,
+        dragging: state.dragging,
+        readOnly: false,
+      };
     } catch (err) {
       state.busy = false;
       showToast(err.message || 'No se pudo re-sincronizar la revisión. Recarga la página.', {
         type: 'error',
       });
     }
+    rebuildTimeline();
     syncSections({ force: true });
+    reapplyActive();
     unlockControls();
   }
 
@@ -428,7 +612,10 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
       state.busy = false;
       state.review = result.review;
       state.canApprove = result.canApprove;
+      state.timings = result.timings ?? state.timings;
+      rebuildTimeline();
       syncSections();
+      reapplyActive();
       unlockControls();
       applyFocusHint(hint, rowEl);
     } catch (err) {
@@ -458,7 +645,10 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
         });
         state.review = result.review;
         state.canApprove = result.canApprove;
+        state.timings = result.timings ?? state.timings;
+        rebuildTimeline();
         syncSections();
+        reapplyActive();
         updateApproveButtonState();
       } catch (err) {
         showToast(err.message || 'No se pudo guardar el texto', { type: 'error' });
@@ -477,22 +667,23 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
     return runAction(payload, { rowEl: null });
   }
 
-  /** Pausa el `<audio>` del preview antes de quitarlo del DOM: sacarlo del
-   * árbol no detiene la reproducción por sí solo. */
-  function pausePreviewAudio(preview) {
-    preview?.querySelector('.lps__audio')?.pause();
+  /** Reconstruye TODAS las secciones desde cero: la conmutación de
+   * `state.readOnly` no es un cambio de contenido (la huella no lo detecta
+   * por sí sola) y puede dejar un `SheetLine` a mitad de edición — más
+   * simple y robusto remontar entero que perseguir cada textarea abierto. */
+  function remountSections() {
+    bodyEl.innerHTML = '';
+    sectionNodes.length = 0;
+    sectionKeys.length = 0;
+    syncSections();
   }
 
-  /** Abre el paso de confirmación: el approve nunca se dispara directo desde
-   * el botón de la hoja, siempre pasa por el reparto final. Mismo mecanismo
-   * que `runAction` para el mismo riesgo: un click directo en "Aprobar
-   * letra" sin desenfocar antes NO debe construir el preview con
-   * `state.review` desactualizado — se espera `flushAllLines()` primero.
-   * `persistText` (lo que dispara ese flush) ya deja `state.review` al día
-   * cuando resuelve bien, y llama a `resync()` por su cuenta si el PUT
-   * falla — no hace falta un resync propio acá arriba, alcanza con esperar
-   * el flush antes de leer `state.review`. */
-  async function openPreview() {
+  /** Entra al modo lectura ("Aprobar letra" del pie de edición): mismo
+   * mecanismo que runAction para el mismo riesgo — un click directo sin
+   * desenfocar antes no debe mostrar `state.review` desactualizado, se
+   * espera `flushAllLines()` primero. El transporte arranca abierto: es a
+   * lo que se vino a esta pantalla. */
+  async function enterReadOnly() {
     if (!state.canApprove || isBusy()) return;
     state.busy = true;
     lockControls();
@@ -502,29 +693,27 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
       unlockControls();
       return;
     }
-    state.previewOpen = true;
-    const preview = LyricsPreviewStep({
-      doc: state.review,
-      vocalsUrl: state.vocalsUrl ?? null,
-      onConfirm: confirmApprove,
-      onBack: () => {
-        pausePreviewAudio(preview);
-        preview.remove();
-        state.previewOpen = false;
-        unlockControls();
-        approveBtn.focus({ preventScroll: true });
-      },
-    });
-    el.append(preview);
-    preview.scrollIntoView?.({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' });
-    preview.focus?.();
+    state.readOnly = true;
+    remountSections();
+    reapplyActive();
+    unlockControls();
+    if (audio) {
+      audio.open();
+      statusStrip.setListening(true);
+    }
+  }
+
+  /** "Volver a editar": conserva el documento local tal cual está, sin
+   * refetch — solo cambia el marco. */
+  function enterEdit() {
+    if (isBusy()) return;
+    state.readOnly = false;
+    remountSections();
+    reapplyActive();
+    footerEl.querySelector('.sheet__approve')?.focus({ preventScroll: true });
   }
 
   async function confirmApprove() {
-    const preview = el.querySelector('.lps');
-    pausePreviewAudio(preview);
-    preview?.remove();
-    state.previewOpen = false;
     if (state.busy) return;
     state.busy = true;
     lockControls();
@@ -545,17 +734,12 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
     );
   });
 
-  languageSelect.addEventListener('change', () => {
-    runAction({ type: 'setLanguage', language: languageSelect.value }).catch(() => {});
-  });
-
-  approveBtn.addEventListener('click', () => {
-    openPreview().catch(() => {});
-  });
-
-  languageSelect.value = state.review.language ?? 'es';
   syncSections();
-  updateApproveButtonState();
+
+  el.destroy = function destroy() {
+    unsubTime?.();
+    audio?.destroy();
+  };
 
   return el;
 }

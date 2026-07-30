@@ -1,7 +1,7 @@
 /**
  * pipeline.css — Estilos compartidos del pipeline unificado por canción
  * (planes C/D: gate de letra en C3, runs en D). Cada vista escopa sus
- * propias clases (`.sheet`, `.lps`, etc.) para no filtrar `.btn`/`.btn2`/
+ * propias clases (`.sheet`, `.sheet-section`, etc.) para no filtrar `.btn`/`.btn2`/
  * `.card` etc. al resto de la app: este módulo se importa directo desde el
  * componente (chunk lazy, plan D lo monta), no vive dentro de la cascada de
  * capas de app.css.
@@ -485,104 +485,56 @@ body.chrome-hidden .main {
   }
 }
 
-/* ---- Paso de confirmación previo al approve (Task 12) ------------------ */
+/* ---- Transporte de la voz aislada + modo lectura (S3b-ii) -------------- */
 
-.lps {
-  max-width: 480px;
-  margin: 0 auto;
-  padding: var(--space-md);
-  color: var(--color-text);
+/* Contenedor sobre el pie: SheetAudio monta ahí su MultiTrackPlayer de una
+   sola pista, vacío hasta que se abre (chip o "Escuchar" de un renglón). No
+   sticky a propósito: el pie (sticky, abajo del todo) ya es la referencia
+   fija, duplicar el anclaje complicaría el offset sin sumar nada. */
+.sheet__transport:not(:empty) {
+  padding: 0 var(--space-md) var(--space-sm);
 }
 
-.lps__head {
-  margin-bottom: var(--space-md);
+.sheet__read-head {
+  padding: 0 var(--space-md) var(--space-sm);
 }
 
-.lps__title {
+.sheet__read-title {
   font-size: 1.05rem;
   font-weight: 700;
   margin: 0 0 4px;
 }
 
-.lps__hint {
+.sheet__read-hint {
   font-size: 0.82rem;
   color: var(--color-text-secondary);
   margin: 0;
 }
 
-.lps__audio {
-  width: 100%;
-  margin-bottom: var(--space-md);
+.sheet__back {
+  flex: none;
 }
 
-.lps__section {
-  margin-bottom: var(--space-lg);
-}
-
-.lps__section--instrumental {
-  opacity: 0.6;
-}
-
-.lps__section-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-text-secondary);
-  margin: 0 0 var(--space-sm);
-}
-
-.lps__section-meta {
-  font-weight: 400;
-  letter-spacing: normal;
-  text-transform: none;
-}
-
-.lps__instrumental {
-  font-size: 0.82rem;
-  font-style: italic;
-  color: var(--color-text-secondary);
-  margin: 0;
-}
-
-.lps__line {
-  font-size: 0.92rem;
-  padding: 4px 6px;
-  margin: 0 -6px;
-  border-radius: var(--border-radius-sm);
-  transition: background-color var(--motion-micro) var(--ease-out);
-}
-
-.lps__line.is-active {
-  background: var(--color-surface-hover);
-  color: var(--color-accent-2);
-}
-
-/* Sin bottom-nav detrás en las vistas del pipeline: el safe-area inferior
-   lo absorbe la propia barra de acciones. */
-.lps__actions {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-md) 0 var(--safe-bottom);
-  background: var(--color-surface);
-  border-top: 1px solid var(--color-border);
-}
-
-.lps__actions .lps__confirm {
+.sheet__confirm {
   flex: 1;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .lps__line {
-    transition-duration: 0.001ms !important;
-  }
+/* Encabezado de sección en lectura: mismo lugar que el select + input de
+   edición, sin controles. */
+.sheet-section__type-badge {
+  flex: none;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--color-section-neutral);
+}
+
+.sheet-section__name-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  color: var(--color-text);
 }
 
 /* ---- Stepper de procesamiento (Task D3a) ------------------------------ */
@@ -2346,6 +2298,12 @@ body.chrome-hidden .main {
 .sheet-line.is-sounding {
   background: color-mix(in srgb, var(--color-brand) 13%, transparent);
   border-left: 2px solid var(--color-brand);
+}
+
+/* Banda instrumental activa — mismo tratamiento que el renglón, S3b-ii. */
+.sheet-instrumental.is-sounding {
+  border-color: var(--color-brand);
+  color: var(--color-brand);
 }
 
 /* Barra de confianza cuando el tiempo del renglón es interpolado (estimado),

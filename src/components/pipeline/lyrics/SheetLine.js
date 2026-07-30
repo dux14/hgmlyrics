@@ -76,12 +76,17 @@ function autogrow(textarea) {
 /**
  * @param {{line: object, sIdx: number, lIdx: number, afterWords?: number[],
  *   suggestion?: object|null, isDudoso?: boolean, canMoveUp?: boolean,
- *   canMoveDown?: boolean, handlers: object}} opts
+ *   canMoveDown?: boolean, interpolated?: boolean, readOnly?: boolean,
+ *   handlers: object}} opts
+ *   `readOnly` (S3b-ii, confirmación previa al approve): sin barra de
+ *   edición, un toque en el texto salta el audio ahí en vez de abrir el
+ *   textarea — en lectura no hay edición con la que competir.
  * @returns {HTMLElement}
  */
 export function SheetLine(opts) {
   const { sIdx, lIdx, handlers } = opts;
-  let { line, afterWords, suggestion, isDudoso, canMoveUp, canMoveDown, interpolated } = opts;
+  let { line, afterWords, suggestion, isDudoso, canMoveUp, canMoveDown, interpolated, readOnly } =
+    opts;
 
   const el = document.createElement('div');
   el.className = 'sheet-line';
@@ -124,9 +129,14 @@ export function SheetLine(opts) {
     const micHtml = isVoc
       ? `<span class="sheet-line__mic" aria-hidden="true">${icon('mic', { size: 12 })}</span>`
       : '';
+    // Sin grip en lectura: no hay arrastre con el que competir y el gesto de
+    // toque queda libre para saltar el audio.
+    const gripHtml = readOnly
+      ? ''
+      : `<button type="button" class="sheet-line__grip" aria-label="Mover este renglón">${icon('grip-vertical', { size: 12 })}</button>`;
 
     el.innerHTML = `
-      <button type="button" class="sheet-line__grip" aria-label="Mover este renglón">${icon('grip-vertical', { size: 12 })}</button>
+      ${gripHtml}
       <span class="sheet-line__text">${isEmpty ? EMPTY_TEXT : escapeHtml(line.text)}</span>
       ${micHtml}
       ${confHtml}
@@ -367,7 +377,7 @@ export function SheetLine(opts) {
   }
 
   function openEdit({ caret = null } = {}) {
-    if (handlers.isBusy() || editing) return;
+    if (readOnly || handlers.isBusy() || editing) return;
     editing = true;
     originalText = line.text ?? '';
     dirtyText = null;
@@ -378,6 +388,12 @@ export function SheetLine(opts) {
   render();
 
   el.addEventListener('click', (ev) => {
+    if (readOnly) {
+      if (ev.target.closest('.sheet-line__text') && typeof handlers.listenFrom === 'function') {
+        handlers.listenFrom(sIdx, lIdx);
+      }
+      return;
+    }
     if (editing) return;
     if (ev.target.closest('.sheet-line__text')) openEdit({ caret: null });
   });
@@ -390,6 +406,7 @@ export function SheetLine(opts) {
     if ('canMoveUp' in next) canMoveUp = next.canMoveUp;
     if ('canMoveDown' in next) canMoveDown = next.canMoveDown;
     if ('interpolated' in next) interpolated = next.interpolated;
+    if ('readOnly' in next) readOnly = next.readOnly;
     // No pisar una edición en curso: el texto sucio vive en el textarea del
     // closure hasta que flushText() lo persista.
     if (!editing) render();

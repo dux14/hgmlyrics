@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { clearManualOffsets, mergeAlignedLines } from '../api/_lib/pipeline/lyricsReview.js';
+import { upsertPipelineLyrics } from '../api/_lib/pipeline/lyricsStore.js';
 
 const doc = () => [
   {
@@ -100,5 +101,34 @@ describe('mergeAlignedLines', () => {
     ];
     const res = mergeAlignedLines(instrumental, [{ i: 0, startMs: 4200 }]);
     expect(res.sections[1].lines[0].startMs).toBe(4200);
+  });
+});
+
+// Fake minimo del template tag de postgres.js (mismo patron que
+// tests/pipelineLyricsStore.test.js).
+function fakeSql(rows = []) {
+  const calls = [];
+  const tag = (strings, ...values) => {
+    calls.push({ text: strings.join('?'), values });
+    return Promise.resolve(rows);
+  };
+  tag.json = (v) => ({ __json: v });
+  tag.calls = calls;
+  return tag;
+}
+
+describe('respaldo del realineado', () => {
+  it('toda escritura del documento lo invalida', async () => {
+    const sql = fakeSql([]);
+    await upsertPipelineLyrics(sql, {
+      songId: 's1',
+      runId: 'r1',
+      sections: [{ type: 'verse', lines: [] }],
+      hash: 'abc123',
+    });
+    const { text } = sql.calls[0];
+    expect(text).toMatch(/previous_sections = null/i);
+    expect(text).toMatch(/previous_hash = null/i);
+    expect(text).toMatch(/realigned_at = null/i);
   });
 });

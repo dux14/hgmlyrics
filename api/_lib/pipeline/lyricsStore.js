@@ -24,7 +24,9 @@ export function upsertPipelineLyrics(sql, { songId, runId, sections, hash, langu
     VALUES (${songId}, ${runId}, ${sql.json(sections)}, ${hash}, ${language ?? 'es'}, now())
     ON CONFLICT (song_id) DO UPDATE
       SET run_id = EXCLUDED.run_id, sections = EXCLUDED.sections,
-        hash = EXCLUDED.hash, language = EXCLUDED.language, approved_at = EXCLUDED.approved_at
+        hash = EXCLUDED.hash, language = EXCLUDED.language, approved_at = EXCLUDED.approved_at,
+        -- cualquier escritura del documento invalida el respaldo del realineado
+        previous_sections = null, previous_hash = null, realigned_at = null
   `;
 }
 

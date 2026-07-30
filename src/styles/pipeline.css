@@ -1128,6 +1128,41 @@ body.chrome-hidden .main {
   text-decoration-color: currentColor;
 }
 
+/* Avisos de estado de LyricsSheetView (Task 3: aprobada / divergente) — mismo
+   patrón visual que `.lyrics-sync-warning` de SongPipelineView.js (ámbar,
+   sin border-left), montados en vez de la hoja editable cuando el run no
+   está en `awaiting_lyrics`. Padding de 16px alineado al borde, sin margen
+   extra apilado sobre el de `.lyrics-sheet-view__body`. */
+.lyrics-sheet-view__notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background: color-mix(in oklch, var(--color-action) 10%, var(--color-surface));
+  color: var(--color-text);
+}
+
+.lyrics-sheet-view__notice-icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--color-action);
+}
+
+.lyrics-sheet-view__notice-text {
+  margin: 0 0 var(--space-sm);
+  font-size: 0.9rem;
+  flex: 1 1 100%;
+}
+
+.lyrics-sheet-view__notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  width: 100%;
+  margin-left: 26px;
+}
+
 .lyrics-sync-warning {
   display: flex;
   align-items: flex-start;

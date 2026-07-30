@@ -25,8 +25,8 @@ vi.mock('../src/lib/toast.js', () => ({
   showToast: vi.fn(),
 }));
 
-vi.mock('../src/components/pipeline/LyricsReviewPanel.js', () => ({
-  LyricsReviewPanel: vi.fn(async () => document.createElement('div')),
+vi.mock('../src/components/pipeline/lyrics/LyricsSheet.js', () => ({
+  LyricsSheet: vi.fn(async () => document.createElement('div')),
 }));
 
 // D3b (UploadPhaseCard) tiene su propio test dedicado: aquí se mockea como
@@ -133,7 +133,7 @@ import {
   reopenLyrics,
   publishLyricsToSongbook,
 } from '../src/lib/pipelineApi.js';
-import { LyricsReviewPanel } from '../src/components/pipeline/LyricsReviewPanel.js';
+import { LyricsSheet } from '../src/components/pipeline/lyrics/LyricsSheet.js';
 import { confirmDialog } from '../src/components/ConfirmDialog.js';
 import { showToast } from '../src/lib/toast.js';
 import { fetchSongDetail } from '../src/lib/store.js';
@@ -239,12 +239,12 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     expect(row.querySelector('.ph-loader--eq')).toBeTruthy();
   });
 
-  it('run awaiting_lyrics: fila Letra monta LyricsReviewPanel y muestra dot .act', async () => {
+  it('run awaiting_lyrics: fila Letra monta LyricsSheet y muestra dot .act', async () => {
     renderSongPipelineView(container, SONG_ID);
     watchOnChange({ run: buildRun({}, { status: 'awaiting_lyrics' }) });
     await flushPromises();
 
-    expect(LyricsReviewPanel).toHaveBeenCalledWith(expect.objectContaining({ songId: SONG_ID }));
+    expect(LyricsSheet).toHaveBeenCalledWith(expect.objectContaining({ songId: SONG_ID }));
     const row = container.querySelector('[data-phase="lyrics_review"]');
     expect(row.querySelector('.dot.act')).toBeTruthy();
     expect(row.querySelector('.phase__detail').children.length).toBeGreaterThan(0);
@@ -257,11 +257,11 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     watchOnChange({ run: buildRun({}, { status: 'awaiting_lyrics' }) });
     await flushPromises();
 
-    expect(LyricsReviewPanel).toHaveBeenCalledTimes(1);
+    expect(LyricsSheet).toHaveBeenCalledTimes(1);
   });
 
-  it('si LyricsReviewPanel falla al montar, pinta un boton Reintentar que reintenta la factory', async () => {
-    LyricsReviewPanel.mockRejectedValueOnce(new Error('boom'));
+  it('si LyricsSheet falla al montar, pinta un boton Reintentar que reintenta la factory', async () => {
+    LyricsSheet.mockRejectedValueOnce(new Error('boom'));
 
     renderSongPipelineView(container, SONG_ID);
     watchOnChange({ run: buildRun({}, { status: 'awaiting_lyrics' }) });
@@ -272,14 +272,14 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     expect(errorEl).toBeTruthy();
     const retryBtn = row.querySelector('.lrp__error-retry');
     expect(retryBtn).toBeTruthy();
-    expect(LyricsReviewPanel).toHaveBeenCalledTimes(1);
+    expect(LyricsSheet).toHaveBeenCalledTimes(1);
 
     retryBtn.click();
     await flushPromises();
 
     // El segundo intento (ya sin rechazo forzado) reemplaza el sentinel de
     // error por el panel real: el gate de letra no queda muerto.
-    expect(LyricsReviewPanel).toHaveBeenCalledTimes(2);
+    expect(LyricsSheet).toHaveBeenCalledTimes(2);
     expect(container.querySelector('[data-phase="lyrics_review"] .lrp__error')).toBeNull();
   });
 
@@ -575,7 +575,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     watchOnChange({ run: buildRun({}, { status: 'awaiting_lyrics' }) });
     await flushPromises();
 
-    expect(LyricsReviewPanel).toHaveBeenCalledTimes(1);
+    expect(LyricsSheet).toHaveBeenCalledTimes(1);
   });
 
   it('esqueleto inmediato: las 5 filas existen antes de que watchPipelineRun emita nada', () => {

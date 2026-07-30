@@ -429,6 +429,396 @@ body.chrome-hidden .main {
   }
 }
 
+/* ---- Hoja viva de revisión de letra (S3a, Task 8) ----------------------- */
+/* Orquestador `LyricsSheet.js` + `SheetSection`/`SheetLine`/`SheetSeparator`/
+   `InstrumentalBand`/`SheetStatusStrip`. Reemplaza `.lrp` (arriba, sin tocar
+   — la sesión siguiente la borra junto con LyricsReviewPanel.js). Mismo
+   ancho de lectura y padding de borde sin margen apilado que el resto del
+   pipeline. */
+
+.sheet {
+  max-width: 480px;
+  margin: 0 auto;
+  color: var(--color-text);
+}
+
+.sheet__error {
+  padding: var(--space-md);
+  color: var(--color-danger);
+}
+
+.sheet__error-retry {
+  margin: 0 var(--space-md) var(--space-md);
+}
+
+.sheet__body {
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.sheet__add-section {
+  margin: 0 var(--space-md) var(--space-md);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Pie fijo (idioma + aprobar), mismo criterio que `.lrp__footer`: sin
+   bottom-nav en las vistas del pipeline, el safe-area inferior no lo reserva
+   nadie más. */
+.sheet__footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  padding-bottom: calc(var(--space-md) + var(--safe-bottom));
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+}
+.sheet__approve {
+  flex: 1;
+}
+.sheet__language-select {
+  flex: none;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  padding: 7px 10px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+/* -- Tira de estado (SheetStatusStrip) -- */
+.sheet-status-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: 0 var(--space-md);
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+.sheet-status-strip__summary {
+  white-space: nowrap;
+}
+.sheet-status-strip__flags {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.sheet-status-strip__dudosos {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-amber-600);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.sheet-status-strip__sin-tiempo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* -- Sección (SheetSection) -- */
+.sheet-section {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.sheet-section__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 8px var(--space-sm);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-2, var(--color-surface));
+}
+.sheet-section__type {
+  flex: none;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  padding: 4px 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--color-section-neutral);
+  cursor: pointer;
+}
+.sheet-section__name {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: var(--color-text);
+  font-size: 0.85rem;
+  padding: 4px 2px;
+}
+.sheet-section__name:hover,
+.sheet-section__name:focus {
+  outline: none;
+  border-bottom: 1px solid var(--color-border);
+}
+.sheet-section__menu {
+  position: relative;
+  flex: none;
+}
+.sheet-section__menu-toggle {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  padding: 4px;
+  cursor: pointer;
+}
+.sheet-section__menu-list {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 2;
+  min-width: 180px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+  overflow: hidden;
+}
+.sheet-section__menu.is-open .sheet-section__menu-list {
+  display: block;
+}
+.sheet-section__menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 10px var(--space-sm);
+  font-size: 0.85rem;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.sheet-section__menu-item:hover {
+  background: var(--color-surface-2, rgba(255, 255, 255, 0.06));
+}
+.sheet-section__body {
+  display: flex;
+  flex-direction: column;
+}
+.sheet-section__insert-first {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: var(--space-sm);
+  padding: 10px;
+  border: 1px dashed var(--color-border);
+  border-radius: 9px;
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+/* -- Banda instrumental (InstrumentalBand) -- trama diagonal + borde
+   punteado, deliberadamente NO el color de verso (coincidencia neutra ahí,
+   token dedicado acá — ver nota en tokens.css). */
+.sheet-instrumental {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: var(--space-sm);
+  padding: 10px var(--space-sm);
+  border: 1px dashed var(--color-section-neutral);
+  border-radius: 9px;
+  color: var(--color-section-neutral);
+  font-size: 0.82rem;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    color-mix(in oklch, var(--color-section-neutral) 10%, transparent),
+    color-mix(in oklch, var(--color-section-neutral) 10%, transparent) 4px,
+    transparent 4px,
+    transparent 10px
+  );
+}
+.sheet-instrumental__label {
+  font-weight: 600;
+}
+.sheet-instrumental__range {
+  margin-left: auto;
+  color: var(--color-text-secondary);
+}
+
+/* -- Separador entre renglones (SheetSeparator) -- oculto hasta hover/focus,
+   mismo criterio que `.lrp .lrp__merge`. */
+.sheet-separator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 2px var(--space-sm);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.sheet-section__body:hover .sheet-separator,
+.sheet-separator:focus-within {
+  opacity: 1;
+}
+.sheet-separator__add {
+  flex: none;
+  display: inline-flex;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.sheet-separator__split {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-separator {
+    transition-duration: 0.001ms;
+  }
+}
+
+/* -- Renglón (SheetLine) -- */
+/* Grid, no flex, a propósito: SheetLine.js fija `style.width` en %
+   DIRECTAMENTE sobre `.sheet-line__conf` (sin track/fill separados, ver
+   Task 2) — en un flex item ese % resuelve contra el ancho del contenedor
+   flex completo (una barra gigante). Con grid-template-areas la columna
+   `conf` tiene un track de ancho fijo (28px) que actúa como containing
+   block del hijo, así el % del JS sí se lee como "% de 28px". */
+.sheet-line {
+  display: grid;
+  grid-template-columns: auto 1fr auto 28px;
+  grid-template-areas: 'grip text mic conf';
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 8px var(--space-sm);
+  border-top: 1px solid var(--color-border);
+  transition:
+    clip-path 0.2s ease,
+    opacity 0.2s ease;
+}
+.sheet-section__body > .sheet-line:first-child {
+  border-top: none;
+}
+.sheet-line.is-resolving {
+  clip-path: inset(0 0 100% 0);
+  opacity: 0;
+}
+.sheet-line--empty .sheet-line__text {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+.sheet-line--vocalization .sheet-line__text {
+  font-style: italic;
+  color: var(--color-text-secondary);
+}
+.sheet-line__grip {
+  grid-area: grip;
+  color: var(--color-text-secondary);
+  opacity: 0.5;
+}
+.sheet-line__text {
+  grid-area: text;
+  min-width: 0;
+  font-size: 0.9rem;
+  cursor: text;
+}
+.sheet-line__mic {
+  grid-area: mic;
+  color: var(--color-text-secondary);
+}
+/* Track de 28px (la columna `conf` del grid) más el ancho en % que
+   SheetLine.js fija inline — la parte visible es directamente el elemento,
+   sin fill separado, así que el color transmite "cuánta confianza hay". */
+.sheet-line__conf {
+  grid-area: conf;
+  display: block;
+  height: 4px;
+  min-width: 2px;
+  border-radius: 2px;
+  background: var(--color-success, #2ecc71);
+}
+.sheet-line__conf--none {
+  width: 100%;
+  background: var(--color-text-secondary);
+  opacity: 0.25;
+}
+
+.sheet-line--editing {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+}
+.sheet-line__edit-input {
+  width: 100%;
+  resize: none;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+.sheet-line__scissors {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+}
+.sheet-line__scissor {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  padding: 0 2px;
+  cursor: pointer;
+}
+.sheet-line__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sheet-line__action {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  padding: 4px 8px;
+  font-size: 0.76rem;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.sheet-line__action.is-active {
+  border-color: var(--color-accent, var(--color-text));
+  color: var(--color-accent, var(--color-text));
+}
+.sheet-line__action[disabled] {
+  opacity: 0.38;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-line {
+    transition-duration: 0.001ms !important;
+  }
+}
+
 /* ---- Paso de confirmación previo al approve (Task 12) ------------------ */
 
 .lps {

@@ -22,7 +22,7 @@ import { showToast } from '../../lib/toast.js';
 import { fetchSongDetail } from '../../lib/store.js';
 import { getSongStudio } from '../../lib/studioApi.js';
 import { confirmDialog } from '../ConfirmDialog.js';
-import { LyricsReviewPanel } from './LyricsReviewPanel.js';
+import { LyricsSheet } from './lyrics/LyricsSheet.js';
 import { PhaseRow } from './PhaseRow.js';
 import { createUploadPhaseCard } from './UploadPhaseCard.js';
 import { createStemTracksDetail } from './StemTracksDetail.js';
@@ -407,7 +407,7 @@ export function renderSongPipelineView(container, songId) {
       ensureLyricsPanel();
     };
     try {
-      lyricsPanelEl = await LyricsReviewPanel({
+      lyricsPanelEl = await LyricsSheet({
         songId,
         onApproved: () => {
           // El próximo evento del watcher (broadcast o polling) trae

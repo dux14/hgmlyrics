@@ -9,7 +9,7 @@
  * este mismo directorio).
  */
 import { tokenCount } from './lyricsReview.js';
-import { projectCanonicalLines } from '../align.js';
+import { exportSections } from './songbookExport.js';
 
 /**
  * Propaga el texto canónico del cancionero al store del pipeline, solo si el
@@ -45,18 +45,47 @@ export function propagateSongbookText(storeSections, canonicalLines) {
 }
 
 /**
- * true si la letra del cancionero (songs.sections) diverge de la aprobada del
- * pipeline (song_pipeline_lyrics.sections): distinto número de renglones
- * canónicos, o algún texto distinto. Señal de lectura para el GET del run
+ * Compara dos valores por estructura (no por referencia), ignorando el orden
+ * de claves de los objetos: `songSections` viene de Postgres/del editor y
+ * `exportSections` arma sus objetos a mano, así que nada garantiza el mismo
+ * orden de inserción aunque el contenido sea idéntico. `Object.keys` +
+ * `hasOwnProperty` deja la comparación de objetos ciega a ese orden; los
+ * arrays sí comparan posición a posición porque ahí el orden es significado
+ * (orden de secciones/renglones). Privado de este módulo, sin dependencias.
+ */
+function deepEqual(a, b) {
+  if (a === b) return true;
+  if (typeof a !== 'object' || a === null || typeof b !== 'object' || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    return a.every((item, idx) => deepEqual(item, b[idx]));
+  }
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  return keysA.every(
+    (key) => Object.prototype.hasOwnProperty.call(b, key) && deepEqual(a[key], b[key]),
+  );
+}
+
+/**
+ * true si el cancionero (songs.sections) quedaría distinto de lo que
+ * produciría exportar la letra aprobada del pipeline ahora mismo: es decir,
+ * si `songSections` no es igual, estructuralmente, a
+ * `exportSections(storeSections, songSections).sections`. Al pasarle
+ * `songSections` como base a exportSections, el resultado ya incorpora
+ * acordes/groups/anotaciones/speedPreset existentes — por eso una canción sin
+ * cambios reales exporta idéntica a sí misma (exportSections es idempotente,
+ * cubierto en pipelineSongbookExport.test.js) y no diverge por tener
+ * anotaciones o acordes. Señal de lectura para el GET del run
  * (api/songs/[id]/pipeline.js) — el PUT ya sabe si divergió (propagó o no)
  * pero un consumidor que solo lee el run necesita recalcularlo.
  * @param {Array} songSections songs.sections actual
- * @param {Array} storeSections song_pipeline_lyrics.sections
+ * @param {Array} storeSections song_pipeline_lyrics.sections (letra aprobada)
  * @returns {boolean}
  */
 export function songbookDiverged(songSections, storeSections) {
-  const canonical = projectCanonicalLines(songSections);
-  const flat = (storeSections || []).flatMap((section) => section.lines || []);
-  if (canonical.length !== flat.length) return true;
-  return canonical.some((line, idx) => line.text !== (flat[idx]?.text ?? ''));
+  const { sections } = exportSections(storeSections || [], songSections || []);
+  return !deepEqual(sections, songSections || []);
 }

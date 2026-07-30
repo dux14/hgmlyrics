@@ -112,38 +112,70 @@ describe('songbookDiverged', () => {
     mkSection([mkLine('linea tres')]),
   ];
 
+  // storeSections trae label:null en las dos secciones, así que exportSections
+  // cae a la etiqueta del tipo (SECTION_LABELS.verse = 'Verso'); las fixtures
+  // de songSections necesitan type/label reales (no solo `lines`) porque la
+  // comparación nueva es contra la sección completa que devolvería
+  // exportSections, no solo contra el texto de sus renglones.
   it('false cuando el cancionero tiene el mismo numero de lineas y el mismo texto', () => {
     const songSections = [
-      { lines: [{ text: 'hola mundo' }, { text: 'linea dos' }] },
-      { lines: [{ text: 'linea tres' }] },
+      { type: 'verse', label: 'Verso', lines: [{ text: 'hola mundo' }, { text: 'linea dos' }] },
+      { type: 'verse', label: 'Verso', lines: [{ text: 'linea tres' }] },
     ];
     expect(songbookDiverged(songSections, storeSections)).toBe(false);
   });
 
   it('true cuando cambia algun texto, aunque el numero de lineas coincida', () => {
     const songSections = [
-      { lines: [{ text: 'hola mundo cambiado' }, { text: 'linea dos' }] },
-      { lines: [{ text: 'linea tres' }] },
+      {
+        type: 'verse',
+        label: 'Verso',
+        lines: [{ text: 'hola mundo cambiado' }, { text: 'linea dos' }],
+      },
+      { type: 'verse', label: 'Verso', lines: [{ text: 'linea tres' }] },
     ];
     expect(songbookDiverged(songSections, storeSections)).toBe(true);
   });
 
   it('true cuando cambia el numero de lineas canonicas', () => {
-    const songSections = [{ lines: [{ text: 'hola mundo' }] }];
+    const songSections = [{ type: 'verse', label: 'Verso', lines: [{ text: 'hola mundo' }] }];
     expect(songbookDiverged(songSections, storeSections)).toBe(true);
   });
 
-  it('las lineas de anotacion no cuentan (mismo criterio que projectCanonicalLines)', () => {
+  it('las lineas de anotacion no cuentan como divergencia (exportSections las reintercala igual)', () => {
     const songSections = [
       {
+        type: 'verse',
+        label: 'Verso',
         lines: [
           { text: 'hola mundo' },
           { text: '(coro)', annotation: true },
           { text: 'linea dos' },
         ],
       },
-      { lines: [{ text: 'linea tres' }] },
+      { type: 'verse', label: 'Verso', lines: [{ text: 'linea tres' }] },
     ];
     expect(songbookDiverged(songSections, storeSections)).toBe(false);
+  });
+
+  it('los acordes cargados con el mismo texto no cuentan como divergencia', () => {
+    const songSections = [
+      {
+        type: 'verse',
+        label: 'Verso',
+        lines: [{ text: 'hola mundo', chords: [{ pos: 0, ch: 'C' }] }, { text: 'linea dos' }],
+      },
+      { type: 'verse', label: 'Verso', lines: [{ text: 'linea tres' }] },
+    ];
+    expect(songbookDiverged(songSections, storeSections)).toBe(false);
+  });
+
+  it('una seccion de mas en el cancionero SI cuenta como divergencia: exportSections la descarta', () => {
+    const songSections = [
+      { type: 'verse', label: 'Verso', lines: [{ text: 'hola mundo' }, { text: 'linea dos' }] },
+      { type: 'verse', label: 'Verso', lines: [{ text: 'linea tres' }] },
+      { type: 'chorus', label: 'Coro', lines: [{ text: 'estribillo extra' }] },
+    ];
+    expect(songbookDiverged(songSections, storeSections)).toBe(true);
   });
 });

@@ -72,6 +72,22 @@ function requireLine(section, lineIdx) {
   return line;
 }
 
+/** Renglón nuevo: sin words a propósito — un renglón insertado o duplicado no
+ * puede reclamar el instante de audio de otro (ver §5.4 del spec). El tiempo lo
+ * interpola timingLinesFromSections al aprobar. */
+function emptyLine() {
+  return {
+    text: '',
+    startMs: null,
+    endMs: null,
+    words: [],
+    confidence: null,
+    vocalization: false,
+    breath: false,
+    manualStartMs: null,
+  };
+}
+
 // Cuenta de tokens por espacios en blanco (mismo criterio que buildSuggestions
 // y splitLineByText en lyricsSplit.js): usado para detectar si `words` sigue
 // alineado 1:1 con el texto tras una edición (#6).
@@ -461,6 +477,15 @@ export function applyReviewAction(doc, action) {
         endMs: newEnv.endMs,
         lines: remainder,
       });
+      break;
+    }
+    case 'insertLine': {
+      const section = requireSection(next, action.section);
+      const at = requireInt(action.at, 'at');
+      if (at < 0 || at > section.lines.length) {
+        throw new RangeError(`at fuera de rango: ${at}`);
+      }
+      section.lines.splice(at, 0, emptyLine());
       break;
     }
     case 'mergeSections': {

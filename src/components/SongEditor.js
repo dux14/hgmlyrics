@@ -25,6 +25,8 @@ import {
 import { getChordNotation } from '../lib/chordNotation.js';
 import { openChordEditorModal } from './editor/ChordEditorModal.js';
 import { openTonoEditorModal } from './editor/TonoEditorModal.js';
+import { getSongPitchNotes } from '../lib/pitchNotesApi.js';
+import { canonicalLineIndex } from '../lib/pitchSyllableMap.js';
 import { openImportModal } from './editor/ImportModal.js';
 import { createSongAudioSection } from './editor/SongAudioSection.js';
 import { confirmDialog } from './ConfirmDialog.js';
@@ -216,6 +218,11 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
   const voiceRoster = Array.isArray(existingSong?.voiceRoster)
     ? existingSong.voiceRoster.map((v) => ({ ...v }))
     : [];
+
+  // Tono de la IA para el modal de voces: un solo pedido por sesión de edición,
+  // disparado la primera vez que se abre el modal (no al montar el editor: la
+  // mayoría de las ediciones no lo tocan).
+  let pitchNotesPromise = null;
 
   // Portada existente (si la canción ya tiene una) para previsualizar al abrir
   // el editor. Misma resolución que SongView.js:344-348: relativa -> /covers/,
@@ -1093,13 +1100,20 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         renderBlocks();
       }
     } else if (action === 'open-tono') {
-      const found = findLine(btn.dataset.lineId);
+      const lineId = btn.dataset.lineId;
+      const found = findLine(lineId);
       if (found) {
+        const songId = existingSong?.id ?? null;
+        if (songId && pitchNotesPromise === null) {
+          pitchNotesPromise = getSongPitchNotes(songId);
+        }
         // Mismo motivo que open-chords: el modal muta found.line.groups por
         // referencia fuera del árbol delegado, así que se snapshotea aquí.
         const before = JSON.stringify(found.line.groups);
         openTonoEditorModal(found.line, {
           voiceRoster,
+          pitchNotesPromise,
+          canonicalIndex: canonicalLineIndex(blocks, lineId),
           onClose: () => {
             if (JSON.stringify(found.line.groups) !== before) dirty = true;
             renderBlocks();

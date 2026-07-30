@@ -26,7 +26,8 @@ export function LyricsPreviewStep({ doc, vocalsUrl, onConfirm, onBack }) {
 
   const sectionsHtml = (doc?.sections ?? [])
     .map((section, sIdx) => {
-      const instrumental = (section.lines ?? []).length === 0;
+      const instrumental = normalizeSectionType(section.type) === 'instrumental';
+      const hasLines = (section.lines ?? []).length > 0;
       const linesHtml = (section.lines ?? [])
         .map(
           (line, lIdx) =>
@@ -39,7 +40,7 @@ export function LyricsPreviewStep({ doc, vocalsUrl, onConfirm, onBack }) {
             ${escapeHtml(section.label || SECTION_TYPE_LABELS[normalizeSectionType(section.type)] || 'Sección')}
             <span class="lps__section-meta">${secondsLabel(section.startMs, section.endMs)}</span>
           </h3>
-          ${instrumental ? '<p class="lps__instrumental">Sin letra — tramo instrumental</p>' : linesHtml}
+          ${instrumental && !hasLines ? '<p class="lps__instrumental">Sin letra — tramo instrumental</p>' : linesHtml}
         </div>`;
     })
     .join('');

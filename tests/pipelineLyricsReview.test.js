@@ -795,3 +795,26 @@ describe('insertLine', () => {
     );
   });
 });
+
+describe('duplicateLine', () => {
+  it('copia texto y vocalización, nunca los tiempos', () => {
+    const doc = {
+      version: 2,
+      sections: [
+        sec('chorus', null, 0, 9, [
+          ln('coro', 3, 9, { vocalization: true, breath: true, manualStartMs: 5 }),
+        ]),
+      ],
+    };
+    const next = applyReviewAction(doc, { type: 'duplicateLine', section: 0, line: 0 });
+    expect(next.sections[0].lines.map((l) => l.text)).toEqual(['coro', 'coro']);
+    expect(next.sections[0].lines[1]).toMatchObject({
+      startMs: null,
+      endMs: null,
+      words: [],
+      confidence: null,
+      vocalization: true,
+      manualStartMs: null,
+    });
+  });
+});

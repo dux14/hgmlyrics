@@ -488,6 +488,19 @@ export function applyReviewAction(doc, action) {
       section.lines.splice(at, 0, emptyLine());
       break;
     }
+    // La copia hereda SOLO texto y vocalización. Si arrastrara los milisegundos
+    // del original, dos renglones reclamarían el mismo instante del audio y la
+    // partitura por sílaba (modal/pitch, índice plano de renglón) saldría pisada.
+    case 'duplicateLine': {
+      const section = requireSection(next, action.section);
+      const line = requireLine(section, action.line);
+      section.lines.splice(action.line + 1, 0, {
+        ...emptyLine(),
+        text: line.text,
+        vocalization: line.vocalization === true,
+      });
+      break;
+    }
     case 'mergeSections': {
       const section = requireSection(next, action.section);
       const nextSection = requireSection(next, action.section + 1);

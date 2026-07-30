@@ -23,6 +23,7 @@ import { SCORE_THRESHOLD } from '../ConfidenceSummary.js';
 import { LyricsPreviewStep } from '../LyricsPreviewStep.js';
 import { SheetSection } from './SheetSection.js';
 import { SheetStatusStrip } from './SheetStatusStrip.js';
+import { SheetDrag } from './SheetDrag.js';
 import { sectionFingerprint } from './fingerprint.js';
 
 const REDUCE_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
@@ -122,6 +123,10 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
   }
 
   const handlers = { isBusy, runAction, persistText, moveLine };
+
+  // Una sola instancia para toda la hoja: el grip se descubre por delegación,
+  // así que los repintados por sección no exigen re-cablear el gesto.
+  SheetDrag({ root: bodyEl, handlers });
 
   const statusStrip = SheetStatusStrip({
     doc: state.review,

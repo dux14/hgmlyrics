@@ -172,3 +172,23 @@ describe('SheetSection — cuerpo', () => {
     expect(lines[0].querySelector('.sheet-line__edit-input')).toBeNull();
   });
 });
+
+describe('SheetSection — banda instrumental (por tipo, no por contenido)', () => {
+  it('una sección instrumental sin renglones pinta la banda, no el inserte-primero', () => {
+    const node = SheetSection(mk({ section: mkSection({ type: 'instrumental', lines: [] }) }));
+    expect(node.querySelector('.sheet-instrumental')).not.toBeNull();
+    expect(node.querySelector('.sheet-section__insert-first')).toBeNull();
+  });
+
+  it('una sección verse sin renglones NO pinta banda, pinta el inserte-primero', () => {
+    const node = SheetSection(mk({ section: mkSection({ type: 'verse', lines: [] }) }));
+    expect(node.querySelector('.sheet-instrumental')).toBeNull();
+    expect(node.querySelector('.sheet-section__insert-first')).not.toBeNull();
+  });
+
+  it('una sección instrumental con renglones de texto pinta los renglones, no la banda', () => {
+    const node = SheetSection(mk({ section: mkSection({ type: 'instrumental' }) }));
+    expect(node.querySelectorAll('.sheet-line')).toHaveLength(2);
+    expect(node.querySelector('.sheet-instrumental')).toBeNull();
+  });
+});

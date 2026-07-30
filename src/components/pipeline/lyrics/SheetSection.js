@@ -13,6 +13,7 @@ import { escapeHtml } from '../../../lib/escape.js';
 import { SECTION_TYPE_LABELS, normalizeSectionType } from '../../../lib/sectionTypes.js';
 import { SheetLine } from './SheetLine.js';
 import { SheetSeparator } from './SheetSeparator.js';
+import { InstrumentalBand } from './InstrumentalBand.js';
 
 function typeOptionsHtml(currentType) {
   return Object.entries(SECTION_TYPE_LABELS)
@@ -46,6 +47,7 @@ export function SheetSection(opts) {
   let lineNodes = [];
   let sepNodes = [];
   let emptyEl = null;
+  let instrumentalEl = null;
 
   function isDudosoFor(line) {
     return (
@@ -95,9 +97,30 @@ export function SheetSection(opts) {
       lineNodes = [];
       sepNodes = [];
 
-      if (!emptyEl) {
-        emptyEl = renderEmptyInsert();
-        bodyEl.appendChild(emptyEl);
+      // El tipo manda, no el contenido: una sección tipada 'instrumental'
+      // sin renglones pinta la banda; cualquier otro tipo sin renglones
+      // ofrece insertar el primero. Nunca coexisten.
+      const isInstrumental = normalizeSectionType(section.type) === 'instrumental';
+      if (isInstrumental) {
+        if (emptyEl) {
+          emptyEl.remove();
+          emptyEl = null;
+        }
+        if (instrumentalEl) {
+          instrumentalEl.update(section);
+        } else {
+          instrumentalEl = InstrumentalBand({ section });
+          bodyEl.appendChild(instrumentalEl);
+        }
+      } else {
+        if (instrumentalEl) {
+          instrumentalEl.remove();
+          instrumentalEl = null;
+        }
+        if (!emptyEl) {
+          emptyEl = renderEmptyInsert();
+          bodyEl.appendChild(emptyEl);
+        }
       }
       return;
     }
@@ -105,6 +128,10 @@ export function SheetSection(opts) {
     if (emptyEl) {
       emptyEl.remove();
       emptyEl = null;
+    }
+    if (instrumentalEl) {
+      instrumentalEl.remove();
+      instrumentalEl = null;
     }
 
     for (let i = 0; i < lines.length; i++) {

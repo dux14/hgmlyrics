@@ -3,7 +3,7 @@
  * Task 8). Compone `SheetSection`/`SheetStatusStrip` (más `SheetLine` y
  * `SheetSeparator` por dentro de cada sección) y las repinta con `update(...)`
  * en vez de recrearlas — reemplaza el `innerHTML` completo por render de
- * `LyricsReviewPanel.js`, que perdía foco y scroll en cada acción.
+ * el panel de revisión viejo, que perdía foco y scroll en cada acción.
  *
  * Migra sin reinventar tres piezas del panel viejo: la guarda `state.busy`
  * con lock inmediato de controles antes del PUT (el backend tiene CAS por

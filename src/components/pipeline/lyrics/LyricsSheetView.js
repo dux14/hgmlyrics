@@ -80,9 +80,8 @@ export function renderLyricsSheetView(container, songId) {
   });
 
   /** Estado "no se pudo cargar" (fallo de `getPipelineRun`, p. ej. un 500):
-   * namespace `.sheet-view__error` propio, sin depender del CSS del panel
-   * viejo `LyricsReviewPanel.js` (se borra entero en otra tarea de esta
-   * misma sesión). */
+   * namespace `.sheet-view__error` propio, independiente del `.sheet__error`
+   * de `LyricsSheet`. */
   function renderLoadError() {
     const el = document.createElement('div');
     el.innerHTML = `

@@ -368,4 +368,145 @@ describe('LyricsSheet', () => {
 
     expect(document.activeElement).not.toBe(document.body);
   });
+
+  // Auditoría de cobertura tests/lyricsReviewPanel.test.js (Task 5): la
+  // confirmación previa al approve (LyricsPreviewStep) ya tenía su propia
+  // suite (tests/lyricsPreviewStep.test.js) para el marcado y los callbacks
+  // genéricos, pero la orquestación puntual de LyricsSheet (pausar el
+  // audio, mover el foco, no apilar confirmaciones, bloquear el resto de la
+  // hoja) no tenía equivalente tras la reescritura.
+  it('confirmar en el preview llama approveLyrics y onApproved', async () => {
+    getLyricsReview.mockResolvedValue(pendingResult({ canApprove: true }));
+    approveLyrics.mockResolvedValue({ success: true });
+    const onApproved = vi.fn();
+    const el = await LyricsSheet({ songId: 'song-1', onApproved });
+    document.body.appendChild(el);
+
+    el.querySelector('.sheet__approve').click();
+    el.querySelector('.lps__confirm').click();
+    await flush();
+
+    expect(approveLyrics).toHaveBeenCalledWith('song-1');
+    expect(onApproved).toHaveBeenCalled();
+  });
+
+  it('volver a editar desde el preview cierra la confirmación sin aprobar', async () => {
+    getLyricsReview.mockResolvedValue(pendingResult({ canApprove: true }));
+    const el = await LyricsSheet({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    el.querySelector('.sheet__approve').click();
+    el.querySelector('.lps__back').click();
+
+    expect(el.querySelector('.lps')).toBeNull();
+    expect(approveLyrics).not.toHaveBeenCalled();
+  });
+
+  it('clicks repetidos en Aprobar letra no apilan varias confirmaciones', async () => {
+    getLyricsReview.mockResolvedValue(pendingResult({ canApprove: true }));
+    const el = await LyricsSheet({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const approveBtn = el.querySelector('.sheet__approve');
+    approveBtn.click();
+    approveBtn.click();
+
+    expect(el.querySelectorAll('.lps').length).toBe(1);
+  });
+
+  it('con el preview abierto, la hoja queda bloqueada: editar un renglón no despacha nada', async () => {
+    getLyricsReview.mockResolvedValue(pendingResult({ canApprove: true }));
+    const el = await LyricsSheet({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    el.querySelector('.sheet__approve').click();
+    expect(el.querySelector('.lps')).toBeTruthy();
+
+    el.querySelector('.sheet-line__text').click();
+    await flush();
+
+    expect(el.querySelector('.lps')).toBeTruthy();
+    expect(el.querySelector('.sheet-line__edit-input')).toBeNull();
+    expect(sendLyricsAction).not.toHaveBeenCalled();
+  });
+
+  it('abrir la confirmación mueve el foco dentro de ella', async () => {
+    getLyricsReview.mockResolvedValue(pendingResult({ canApprove: true }));
+    const el = await LyricsSheet({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    el.querySelector('.sheet__approve').click();
+
+    expect(document.activeElement).toBe(el.querySelector('.lps'));
+  });
+
+  it('el audio del preview se pausa al volver a editar', async () => {
+    getLyricsReview.mockResolvedValue(
+      pendingResult({ canApprove: true, vocalsUrl: 'https://example.com/vocals.mp3' }),
+    );
+    const el = await LyricsSheet({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    el.querySelector('.sheet__approve').click();
+    const audio = el.querySelector('.lps__audio');
+    const pauseSpy = vi.spyOn(audio, 'pause');
+
+    el.querySelector('.lps__back').click();
+
+    expect(pauseSpy).toHaveBeenCalled();
+  });
+
+  it('el audio del preview se pausa al confirmar el approve', async () => {
+    getLyricsReview.mockResolvedValue(
+      pendingResult({ canApprove: true, vocalsUrl: 'https://example.com/vocals.mp3' }),
+    );
+    approveLyrics.mockResolvedValue({ success: true });
+    const el = await LyricsSheet({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    el.querySelector('.sheet__approve').click();
+    const audio = el.querySelector('.lps__audio');
+    const pauseSpy = vi.spyOn(audio, 'pause');
+
+    el.querySelector('.lps__confirm').click();
+    await flush();
+
+    expect(pauseSpy).toHaveBeenCalled();
+  });
+
+  it('el selector de idioma refleja el valor del documento cargado', async () => {
+    getLyricsReview.mockResolvedValue(
+      pendingResult({ review: { ...baseReview(), language: 'en' } }),
+    );
+    const el = await LyricsSheet({ songId: 'song-2' });
+    document.body.appendChild(el);
+
+    expect(el.querySelector('.sheet__language-select').value).toBe('en');
+  });
+
+  it('muestra un mensaje de error si falla la carga inicial, sin crashear', async () => {
+    getLyricsReview.mockRejectedValueOnce(new Error('No se pudo cargar la revisión de letra'));
+
+    const el = await LyricsSheet({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const errorEl = el.querySelector('.sheet__error');
+    expect(errorEl).not.toBeNull();
+    expect(errorEl.textContent).toBe('No se pudo cargar la revisión de letra');
+    expect(el.querySelector('.sheet__approve')).toBeNull();
+  });
+
+  it('el estado de error trae un botón Reintentar que invoca onRetry', async () => {
+    getLyricsReview.mockRejectedValueOnce(new Error('boom'));
+    const onRetry = vi.fn();
+
+    const el = await LyricsSheet({ songId: 'song-1', onRetry });
+    document.body.appendChild(el);
+
+    const retryBtn = el.querySelector('.sheet__error-retry');
+    expect(retryBtn).not.toBeNull();
+    retryBtn.click();
+
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
 });

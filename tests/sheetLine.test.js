@@ -327,4 +327,36 @@ describe('SheetLine — edición', () => {
     node.setActive(false);
     expect(node.classList.contains('is-sounding')).toBe(false);
   });
+
+  // Auditoría de cobertura tests/lyricsReviewPanel.test.js (Task 5): casos
+  // (f) y (h) del panel viejo no tenían equivalente unitario tras la
+  // reescritura a SheetLine — el botón de vocalización y el de borrar del
+  // toolbar de edición ya despachaban lo correcto, pero nada lo verificaba.
+  it('(f) el botón Voc. del toolbar despacha toggleVocalization', async () => {
+    const hs = mkHandlers();
+    const node = SheetLine(mk('un renglón', {}, { handlers: hs }));
+    node.querySelector('.sheet-line__text').click();
+    node.querySelector('[data-action="voc"]').click();
+
+    await vi.waitFor(() =>
+      expect(hs.runAction).toHaveBeenCalledWith(
+        { type: 'toggleVocalization', section: 0, line: 0 },
+        { rowEl: node },
+      ),
+    );
+  });
+
+  it('(h) el botón Borrar despacha deleteLine directo, sin pedir confirmación', async () => {
+    const hs = mkHandlers();
+    const node = SheetLine(mk('un renglón', {}, { handlers: hs }));
+    node.querySelector('.sheet-line__text').click();
+    node.querySelector('[data-action="delete"]').click();
+
+    await vi.waitFor(() =>
+      expect(hs.runAction).toHaveBeenCalledWith(
+        { type: 'deleteLine', section: 0, line: 0 },
+        { rowEl: node },
+      ),
+    );
+  });
 });

@@ -53,8 +53,8 @@ function scissorsHtml(text, afterWords) {
   return `<div class="sheet-line__scissors">${html}</div>`;
 }
 
-/** Autogrow del textarea de edición — mismo criterio que autogrow() en
- * LyricsReviewPanel.js. */
+/** Autogrow del textarea de edición — mismo criterio que autogrow() del
+ * panel de revisión viejo. */
 function autogrow(textarea) {
   textarea.style.height = 'auto';
   textarea.style.height = `${textarea.scrollHeight}px`;

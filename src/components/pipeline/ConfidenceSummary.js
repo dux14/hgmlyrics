@@ -4,7 +4,7 @@
  * aviso de la única fase que hoy produce un resultado que el admin debería
  * revisar: líneas de sincronía con timing `interpolated` o `score` bajo
  * (persistidos por el webhook de align, api/align/webhook.js). Post-F3 el
- * gate de letra es un editor puro (LyricsReviewPanel), sin conflictos ni
+ * gate de letra es un editor puro (la hoja de revisión), sin conflictos ni
  * discrepancia de estructura que reportar. Cero items -> NO se renderiza
  * nada (ni contenedor vacío): el bloque ámbar solo existe cuando hay algo que
  * revisar. Click en el item hace scroll a la fila del stepper de esa fase

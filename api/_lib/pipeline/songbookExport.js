@@ -43,7 +43,11 @@ function splitAnnotations(lines) {
 
 /**
  * Hace el merge por renglón de la letra aprobada del gate contra la sección
- * correspondiente del cancionero (por posición, no por contenido).
+ * correspondiente del cancionero (por posición, no por contenido). La
+ * cantidad de secciones la manda el gate (spec §7): si el cancionero trae
+ * secciones de más (el admin agregó una a mano que el pipeline no detectó),
+ * esas secciones se descartan sin pasar por `dropped` — es la letra aprobada
+ * la que define el documento final, no un olvido de este merge.
  * @param {Array} approvedSections letra aprobada del pipeline (por sección: type, label, lines[].text/vocalization)
  * @param {Array} songSections songs.sections actual (puede traer chords/groups/annotation/speedPreset)
  * @returns {{sections: Array, dropped: Array<{sectionIndex:number, lineIndex:number, text:string, reason:'chords'|'annotation'}>}}
@@ -93,6 +97,9 @@ export function exportSections(approvedSections, songSections = []) {
 
     return {
       type: section.type,
+      // El 'Verso' final es red de seguridad defensiva: normalizeSectionType
+      // garantiza uno de los 6 tipos conocidos, todos mapeados en
+      // SECTION_LABELS, así que hoy esta rama no debería alcanzarse.
       label: section.label || SECTION_LABELS[section.type] || 'Verso',
       ...(typeof prev?.speedPreset === 'number' ? { speedPreset: prev.speedPreset } : {}),
       lines: out,

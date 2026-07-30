@@ -98,6 +98,16 @@ describe('exportSections', () => {
     ]);
   });
 
+  it('la cantidad de secciones la manda el gate: las secciones extra del cancionero se descartan', () => {
+    const song = [
+      { type: 'verse', label: 'Verso', lines: [{ text: 'uno' }, { text: 'dos' }] },
+      { type: 'chorus', label: 'Coro', lines: [{ text: 'estribillo' }] },
+    ];
+    const { sections, dropped } = exportSections(approved, song);
+    expect(sections).toHaveLength(1);
+    expect(dropped).toEqual([]);
+  });
+
   it('es idempotente', () => {
     const once = exportSections(approved, []).sections;
     const twice = exportSections(approved, once).sections;

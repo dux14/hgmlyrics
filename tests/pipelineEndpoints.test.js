@@ -355,6 +355,53 @@ describe('GET /api/songs/:id/pipeline', () => {
     await pipelineHandler({ method: 'GET', query: { id: 's1' } }, res);
     expect(res.json.mock.calls[0][0].run.lyricsDiverged).toBe(true);
   });
+
+  // run.lyricsCounts (resumen de la fila Letra en el stepper): conteo real de
+  // renglones/secciones de song_pipeline_lyrics, no el aproximado de
+  // structure.segments.
+  it('run.lyricsCounts es null sin letra de pipeline (no confundir con documento vacío)', async () => {
+    const phases = initialPhases();
+    routeSql([
+      [
+        'SELECT id, song_id AS "songId"',
+        [{ id: 'r1', songId: 's1', status: 'processing', phases, inputMeta: {}, lyricsReview: {} }],
+      ],
+      ['FROM song_pipeline_lyrics', []],
+      ['SELECT sections FROM songs', [{ sections: [] }]],
+    ]);
+    const res = makeRes();
+    await pipelineHandler({ method: 'GET', query: { id: 's1' } }, res);
+    expect(res.json.mock.calls[0][0].run.lyricsCounts).toBeNull();
+  });
+
+  it('run.lyricsCounts suma renglones y secciones reales de song_pipeline_lyrics', async () => {
+    const phases = initialPhases();
+    routeSql([
+      [
+        'SELECT id, song_id AS "songId"',
+        [{ id: 'r1', songId: 's1', status: 'processing', phases, inputMeta: {}, lyricsReview: {} }],
+      ],
+      [
+        'FROM song_pipeline_lyrics',
+        [
+          {
+            songId: 's1',
+            runId: 'r1',
+            hash: 'h1',
+            language: 'es',
+            sections: [
+              { type: 'verse', label: null, lines: [{ text: 'a' }, { text: 'b' }] },
+              { type: 'chorus', label: null, lines: [{ text: 'c' }] },
+            ],
+          },
+        ],
+      ],
+      ['SELECT sections FROM songs', [{ sections: [] }]],
+    ]);
+    const res = makeRes();
+    await pipelineHandler({ method: 'GET', query: { id: 's1' } }, res);
+    expect(res.json.mock.calls[0][0].run.lyricsCounts).toEqual({ sectionCount: 2, lineCount: 3 });
+  });
 });
 
 describe('DELETE /api/songs/:id/pipeline (A2: purga)', () => {

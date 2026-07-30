@@ -151,24 +151,35 @@ export function createPublishToSongbookButton(songId) {
   return wrap;
 }
 
-/** Resumen de la fila Letra (S3a-ii, Task 2): reemplaza el panel montado en
- * el propio stepper por un conteo + el botón "Revisar letra" que navega a la
- * ruta propia de la hoja (LyricsSheetView, Task 1). El conteo de secciones
- * sale de `run.structure.segments` (la fase Secciones, ya presente en el
- * `run` que esta vista consume) porque el documento de letra en sí
- * (`song_pipeline_lyrics`) no viaja en el GET del run — traerlo aparte sería
- * un fetch nuevo solo para este número. Supuesto documentado en
- * docs/plans/2026-07-30-revision-letra-s3a-notes.md: sin conteo de
- * renglones disponible sin ese fetch, la fila no lo muestra. */
+/** Resumen de la fila Letra (S3a-ii, Task 2; conteo real Task pipeline.js):
+ * reemplaza el panel montado en el propio stepper por un conteo + el botón
+ * "Revisar letra" que navega a la ruta propia de la hoja (LyricsSheetView,
+ * Task 1). El conteo real de renglones/secciones sale de `run.lyricsCounts`
+ * (agregado sobre `song_pipeline_lyrics`, expuesto por el GET del run sin
+ * traer el documento completo). Si todavía no hay documento aprobado
+ * (`lyricsCounts` null), cae al aproximado `run.structure.segments.length`
+ * (la fase Secciones) — mismo comportamiento que antes de que existiera el
+ * conteo real, sin inventar un 0. */
 function createLyricsRowSummary(songId, run) {
   const wrap = document.createElement('div');
   wrap.className = 'phase__lyrics-summary';
-  const sectionCount = run?.structure?.segments?.length;
-  if (typeof sectionCount === 'number') {
+  const counts = run?.lyricsCounts;
+  if (counts) {
     const text = document.createElement('p');
     text.className = 'phase__lyrics-summary-text';
-    text.textContent = `${sectionCount} ${sectionCount === 1 ? 'sección detectada' : 'secciones detectadas'}`;
+    const { lineCount, sectionCount } = counts;
+    const lineText = `${lineCount} ${lineCount === 1 ? 'renglón' : 'renglones'}`;
+    const sectionText = `${sectionCount} ${sectionCount === 1 ? 'sección' : 'secciones'}`;
+    text.textContent = `${lineText}, ${sectionText}`;
     wrap.appendChild(text);
+  } else {
+    const sectionCount = run?.structure?.segments?.length;
+    if (typeof sectionCount === 'number') {
+      const text = document.createElement('p');
+      text.className = 'phase__lyrics-summary-text';
+      text.textContent = `${sectionCount} ${sectionCount === 1 ? 'sección detectada' : 'secciones detectadas'}`;
+      wrap.appendChild(text);
+    }
   }
   const btn = document.createElement('button');
   btn.type = 'button';

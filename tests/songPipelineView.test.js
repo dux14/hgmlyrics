@@ -237,7 +237,7 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
   });
 
   describe('resumen de letra en la fila (S3a-ii, Task 2)', () => {
-    it('run awaiting_lyrics: la fila muestra el resumen (conteo de secciones) y el boton Revisar letra', () => {
+    it('run awaiting_lyrics sin lyricsCounts: cae al aproximado de structure.segments', () => {
       renderSongPipelineView(container, SONG_ID);
       watchOnChange({
         run: buildRun(
@@ -250,10 +250,42 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
       expect(row.querySelector('.dot.act')).toBeTruthy();
       const summary = row.querySelector('.phase__lyrics-summary');
       expect(summary).toBeTruthy();
-      expect(summary.textContent).toContain('3');
+      expect(summary.textContent).toContain('3 secciones detectadas');
       const btn = row.querySelector('.phase__lyrics-summary .phase__action');
       expect(btn).toBeTruthy();
       expect(btn.textContent).toBe('Revisar letra');
+    });
+
+    it('run con lyricsCounts: usa el conteo real de renglones y secciones, no el aproximado', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun(
+          {},
+          {
+            status: 'awaiting_lyrics',
+            structure: { segments: [{}, {}, {}] },
+            lyricsCounts: { sectionCount: 6, lineCount: 45 },
+          },
+        ),
+      });
+
+      const row = container.querySelector('[data-phase="lyrics_review"]');
+      const summary = row.querySelector('.phase__lyrics-summary-text');
+      expect(summary.textContent).toBe('45 renglones, 6 secciones');
+    });
+
+    it('lyricsCounts con 1 renglón y 1 sección: singular correcto', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun(
+          {},
+          { status: 'awaiting_lyrics', lyricsCounts: { sectionCount: 1, lineCount: 1 } },
+        ),
+      });
+
+      const row = container.querySelector('[data-phase="lyrics_review"]');
+      const summary = row.querySelector('.phase__lyrics-summary-text');
+      expect(summary.textContent).toBe('1 renglón, 1 sección');
     });
 
     it('el boton Revisar letra navega a /song/:id/letra', () => {

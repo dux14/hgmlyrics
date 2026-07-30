@@ -93,7 +93,19 @@ async function getRun(_req, res, songId) {
   const lyricsDiverged = pipelineLyrics
     ? songbookDiverged(song?.sections, pipelineLyrics.sections)
     : false;
-  res.status(200).json({ run: { ...run, phases, structure, lyricsDiverged } });
+  // lyricsCounts (resumen de la fila Letra en el stepper): conteo real de
+  // renglones/secciones de song_pipeline_lyrics, ya traído arriba para
+  // lyricsDiverged — reusarlo evita una query nueva. Solo se envían los dos
+  // números al front, nunca el documento completo (pesa decenas de KB).
+  // null (no {sectionCount:0,...}) cuando todavía no hay documento aprobado:
+  // "sin documento" y "documento vacío" son estados distintos para el front.
+  const lyricsCounts = pipelineLyrics
+    ? {
+        sectionCount: pipelineLyrics.sections.length,
+        lineCount: pipelineLyrics.sections.reduce((sum, s) => sum + s.lines.length, 0),
+      }
+    : null;
+  res.status(200).json({ run: { ...run, phases, structure, lyricsDiverged, lyricsCounts } });
 }
 
 async function createRun(req, res, songId) {

@@ -239,7 +239,12 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
     state.previewOpen = false;
     try {
       const fresh = await getLyricsReview(songId);
-      state = { ...fresh, busy: false, previewOpen: false };
+      // `dragging` se preserva en vez de reiniciarse: el resync puede llegar en
+      // medio de un arrastre vivo (el `flushText()` con el que arranca el gesto
+      // dispara un PUT que, al fallar, resincroniza por su cuenta). Perder el
+      // flag acá dejaría la hoja desbloqueada con un dedo todavía moviendo un
+      // renglón, que es justo la ventana que el lock del arrastre cierra.
+      state = { ...fresh, busy: false, previewOpen: false, dragging: state.dragging };
     } catch (err) {
       state.busy = false;
       showToast(err.message || 'No se pudo re-sincronizar la revisión. Recargá la página.', {

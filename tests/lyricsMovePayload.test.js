@@ -48,8 +48,6 @@ describe('moveLinePayload', () => {
 
   it('un destino nulo o incompleto no produce payload', () => {
     expect(moveLinePayload(null)).toBeNull();
-    expect(
-      moveLinePayload({ fromSection: 0, fromLine: 0, toSection: null, toLine: 0 }),
-    ).toBeNull();
+    expect(moveLinePayload({ fromSection: 0, fromLine: 0, toSection: null, toLine: 0 })).toBeNull();
   });
 });

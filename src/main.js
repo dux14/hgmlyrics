@@ -263,6 +263,13 @@ async function bootBody() {
     renderSongStudioView(mainContent, params.id);
   });
 
+  privateRoute('/song/:id/letra', async ({ params }) => {
+    const { renderLyricsSheetView } = await import(
+      './components/pipeline/lyrics/LyricsSheetView.js'
+    );
+    renderLyricsSheetView(mainContent, params.id);
+  });
+
   privateRoute('/song/:id/partitura', async ({ params }) => {
     const { renderSongPartituraView } = await import('./components/pipeline/SongPartituraView.js');
     renderSongPartituraView(mainContent, params.id);

@@ -38,7 +38,7 @@ import { createConfidenceSummary } from './ConfidenceSummary.js';
 // y queda 'stale' tras editar la letra igual que sync/pitch — sin fila propia
 // el run podía quedar sin llegar a 'done' sin que nada en pantalla lo
 // explicara (la sub-línea de StemTracksDetail solo pinta el caso 'done').
-const ROWS = [
+export const ROWS = [
   { key: 'upload', title: 'Audio' },
   { key: 'stems', title: 'Pistas' },
   { key: 'structure', title: 'Secciones' },

@@ -988,6 +988,23 @@ body.chrome-hidden .main {
   white-space: nowrap;
 }
 
+/* Título + subtítulo apilados (LyricsSheetView, S3a-ii): mismo `min-width: 0`
+   + ellipsis que `.pipeline-view__title` sola, para que el bloque completo
+   ceda antes que el resto del header. */
+.pipeline-view__titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.pipeline-view__subtitle {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .pipeline-view__studio-link,
 .editor__studio-link {
   display: inline-flex;

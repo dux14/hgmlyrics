@@ -25,7 +25,7 @@ export const CHROME_AUTOHIDE = [
   { re: /^\/song\/[^/]+$/, header: true, nav: true }, // no incluye /song/:id/links
   // Vistas de pipeline (Task 2): chrome propio, sin header/bottom-nav/sidebar
   // globales — evita el header duplicado reportado en la auditoría.
-  { re: /^\/song\/[^/]+\/(procesamiento|estudio|partitura)$/, headerless: true, nav: false },
+  { re: /^\/song\/[^/]+\/(procesamiento|estudio|partitura|letra)$/, headerless: true, nav: false },
   { re: /^\/album\/[^/]+$/, nav: true, headerless: true },
   { re: /^\/u\/[^/]+$/, header: true, nav: true },
   { re: /^\/voz\/[^/]+$/, header: true, nav: true },

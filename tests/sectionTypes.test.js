@@ -33,4 +33,10 @@ describe('sectionTypes (módulo compartido SongView/ImmersiveView)', () => {
       expect(SECTION_TYPE_LABELS[slug]).toBeTruthy();
     }
   });
+
+  it('reconoce instrumental como tipo propio, no lo degrada a verse', () => {
+    expect(KNOWN_SECTION_TYPES).toContain('instrumental');
+    expect(normalizeSectionType('instrumental')).toBe('instrumental');
+    expect(SECTION_TYPE_LABELS.instrumental).toBe('INSTRUMENTAL');
+  });
 });

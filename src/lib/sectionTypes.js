@@ -6,8 +6,18 @@
  * necesita importar al otro para usarlo.
  */
 
-/** Slugs de sección con identidad visual fija (spec F1 D1 §3). */
-export const KNOWN_SECTION_TYPES = ['verse', 'chorus', 'bridge', 'prechorus', 'intro', 'outro'];
+/** Slugs de sección con identidad visual fija (spec F1 D1 §3). 'instrumental'
+ * se sumó sin identidad propia (pendiente de pase visual): sin regla CSS
+ * `.lyrics__section--instrumental`, hereda el estilo base del label. */
+export const KNOWN_SECTION_TYPES = [
+  'verse',
+  'chorus',
+  'bridge',
+  'prechorus',
+  'intro',
+  'outro',
+  'instrumental',
+];
 
 /** Sinónimos español/legacy → slug conocido, para datos que no pasaron por guessType(). */
 export const SECTION_TYPE_ALIASES = {
@@ -28,10 +38,11 @@ export const SECTION_TYPE_LABELS = {
   prechorus: 'PRE-CORO',
   intro: 'INTRO',
   outro: 'OUTRO',
+  instrumental: 'INSTRUMENTAL',
 };
 
 /**
- * Normaliza `section.type` a uno de los 6 slugs conocidos, para poder pintar
+ * Normaliza `section.type` a uno de los slugs conocidos, para poder pintar
  * la identidad visual fija por tipo. Tipos desconocidos caen a 'verse'.
  * @param {string} [type]
  * @returns {string}

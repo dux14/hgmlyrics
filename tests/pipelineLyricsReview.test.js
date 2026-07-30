@@ -818,3 +818,58 @@ describe('duplicateLine', () => {
     });
   });
 });
+
+describe('acciones de sección', () => {
+  const base = () => ({
+    version: 2,
+    sections: [
+      sec('verse', null, 0, 10, [ln('uno', 0, 10)]),
+      sec('chorus', 'Estribillo', 10, 20, [ln('dos', 10, 20)]),
+    ],
+  });
+
+  it('insertSection agrega una sección vacía con envelope colapsado', () => {
+    const next = applyReviewAction(base(), { type: 'insertSection', at: 2 });
+    expect(next.sections).toHaveLength(3);
+    expect(next.sections[2]).toMatchObject({
+      type: 'verse',
+      label: null,
+      startMs: 20,
+      endMs: 20,
+      lines: [],
+    });
+  });
+
+  it('duplicateSection copia tipo, nombre y textos, sin tiempos', () => {
+    const next = applyReviewAction(base(), { type: 'duplicateSection', section: 1 });
+    expect(next.sections.map((s) => s.type)).toEqual(['verse', 'chorus', 'chorus']);
+    expect(next.sections[2].label).toBe('Estribillo');
+    expect(next.sections[2].lines[0]).toMatchObject({
+      text: 'dos',
+      words: [],
+      startMs: null,
+      confidence: null,
+    });
+  });
+
+  it('deleteSection reubica sus renglones en la anterior', () => {
+    const next = applyReviewAction(base(), { type: 'deleteSection', section: 1 });
+    expect(next.sections).toHaveLength(1);
+    expect(next.sections[0].lines.map((l) => l.text)).toEqual(['uno', 'dos']);
+    expect(next.sections[0].endMs).toBe(20);
+  });
+
+  it('deleteSection de la primera reubica en la siguiente, al principio', () => {
+    const next = applyReviewAction(base(), { type: 'deleteSection', section: 0 });
+    expect(next.sections).toHaveLength(1);
+    expect(next.sections[0].lines.map((l) => l.text)).toEqual(['uno', 'dos']);
+  });
+
+  it('deleteSection de la única sección lanza RangeError', () => {
+    const doc = {
+      version: 2,
+      sections: [{ type: 'verse', label: null, startMs: 0, endMs: 1, lines: [] }],
+    };
+    expect(() => applyReviewAction(doc, { type: 'deleteSection', section: 0 })).toThrow(RangeError);
+  });
+});

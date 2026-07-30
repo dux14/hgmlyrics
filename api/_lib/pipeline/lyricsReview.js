@@ -515,6 +515,59 @@ export function applyReviewAction(doc, action) {
       next.sections.splice(action.section + 1, 1);
       break;
     }
+    case 'insertSection': {
+      const at = requireInt(action.at, 'at');
+      if (at < 0 || at > next.sections.length) {
+        throw new RangeError(`at fuera de rango: ${at}`);
+      }
+      // Envelope colapsado en el borde de la vecina anterior: null envenenaría
+      // el Math.min/Math.max de mergeSections y sectionEnvelope.
+      const anchor = at === 0 ? 0 : (next.sections[at - 1]?.endMs ?? 0);
+      next.sections.splice(at, 0, {
+        type: normalizeSectionType(action.sectionType ?? 'verse'),
+        label: null,
+        startMs: anchor,
+        endMs: anchor,
+        lines: [],
+      });
+      break;
+    }
+    case 'duplicateSection': {
+      const section = requireSection(next, action.section);
+      next.sections.splice(action.section + 1, 0, {
+        type: section.type,
+        label: section.label,
+        startMs: section.endMs,
+        endMs: section.endMs,
+        lines: section.lines.map((line) => ({
+          ...emptyLine(),
+          text: line.text,
+          vocalization: line.vocalization === true,
+        })),
+      });
+      break;
+    }
+    // Borrar una sección nunca borra texto: sus renglones se reubican en la
+    // vecina (la anterior; la siguiente si era la primera).
+    case 'deleteSection': {
+      const section = requireSection(next, action.section);
+      if (next.sections.length === 1) {
+        throw new RangeError('no se puede borrar la única sección');
+      }
+      const targetIdx = action.section === 0 ? 1 : action.section - 1;
+      const target = next.sections[targetIdx];
+      const fallback = {
+        startMs: Math.min(section.startMs, target.startMs),
+        endMs: Math.max(section.endMs, target.endMs),
+      };
+      if (action.section === 0) target.lines.unshift(...section.lines);
+      else target.lines.push(...section.lines);
+      const env = sectionEnvelope(target.lines, fallback);
+      target.startMs = env.startMs;
+      target.endMs = env.endMs;
+      next.sections.splice(action.section, 1);
+      break;
+    }
     default:
       throw new RangeError(`Acción de revisión desconocida: ${action.type}`);
   }

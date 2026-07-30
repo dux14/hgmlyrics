@@ -142,6 +142,14 @@ describe('songbookDiverged', () => {
     expect(songbookDiverged(songSections, storeSections)).toBe(true);
   });
 
+  it('una seccion legacy sin type ni label, con el mismo texto, no cuenta como divergencia', () => {
+    const songSections = [
+      { lines: [{ text: 'hola mundo' }, { text: 'linea dos' }] },
+      { lines: [{ text: 'linea tres' }] },
+    ];
+    expect(songbookDiverged(songSections, storeSections)).toBe(false);
+  });
+
   it('las lineas de anotacion no cuentan como divergencia (exportSections las reintercala igual)', () => {
     const songSections = [
       {

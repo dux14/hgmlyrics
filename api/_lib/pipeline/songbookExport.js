@@ -12,8 +12,11 @@
 
 // Las primeras cuatro replican el mapa visible de SongEditor.js:76-79; Intro y
 // Final son los nombres para los dos tipos que normalizeSectionType produce
-// pero el editor no ofrece.
-const SECTION_LABELS = {
+// pero el editor no ofrece. Exportado porque songbookSync.js lo necesita para
+// normalizar secciones legacy de songs.sections con el mismo fallback (ver
+// songbookDiverged) — no es un cambio de intención del módulo, es un segundo
+// consumidor legítimo del mismo mapa.
+export const SECTION_LABELS = {
   verse: 'Verso',
   chorus: 'Coro',
   bridge: 'Puente',

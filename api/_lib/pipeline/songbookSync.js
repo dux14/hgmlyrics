@@ -9,7 +9,7 @@
  * este mismo directorio).
  */
 import { tokenCount } from './lyricsReview.js';
-import { exportSections } from './songbookExport.js';
+import { exportSections, SECTION_LABELS } from './songbookExport.js';
 
 /**
  * Propaga el texto canónico del cancionero al store del pipeline, solo si el
@@ -70,22 +70,40 @@ function deepEqual(a, b) {
 }
 
 /**
+ * Completa `type`/`label` de una sección de songs.sections con el mismo
+ * fallback que aplica sectionsToBlocks en SongEditor.js:97-99: hay filas
+ * legacy reales nunca re-guardadas desde que se introdujo blocksToSectionsV3,
+ * que llegan sin esos campos. Sin esta normalización, songbookDiverged las
+ * compara contra la salida de exportSections (que SIEMPRE trae type/label) y
+ * las marca como divergentes por faltarles esquema, no por texto distinto —
+ * un falso positivo que le pide al admin reabrir y realinear letra que está
+ * al día. No muta `section`.
+ */
+function normalizeSection(section) {
+  const type = section.type || 'verse';
+  return { ...section, type, label: section.label || SECTION_LABELS[type] || 'Verso' };
+}
+
+/**
  * true si el cancionero (songs.sections) quedaría distinto de lo que
  * produciría exportar la letra aprobada del pipeline ahora mismo: es decir,
- * si `songSections` no es igual, estructuralmente, a
+ * si `songSections` (con `type`/`label` legacy completados, ver
+ * `normalizeSection`) no es igual, estructuralmente, a
  * `exportSections(storeSections, songSections).sections`. Al pasarle
  * `songSections` como base a exportSections, el resultado ya incorpora
  * acordes/groups/anotaciones/speedPreset existentes — por eso una canción sin
  * cambios reales exporta idéntica a sí misma (exportSections es idempotente,
  * cubierto en pipelineSongbookExport.test.js) y no diverge por tener
- * anotaciones o acordes. Señal de lectura para el GET del run
- * (api/songs/[id]/pipeline.js) — el PUT ya sabe si divergió (propagó o no)
- * pero un consumidor que solo lee el run necesita recalcularlo.
+ * anotaciones, acordes, o esquema legacy sin type/label. Señal de lectura para
+ * el GET del run (api/songs/[id]/pipeline.js) — el PUT ya sabe si divergió
+ * (propagó o no) pero un consumidor que solo lee el run necesita
+ * recalcularlo.
  * @param {Array} songSections songs.sections actual
  * @param {Array} storeSections song_pipeline_lyrics.sections (letra aprobada)
  * @returns {boolean}
  */
 export function songbookDiverged(songSections, storeSections) {
-  const { sections } = exportSections(storeSections || [], songSections || []);
-  return !deepEqual(sections, songSections || []);
+  const normalized = (songSections || []).map(normalizeSection);
+  const { sections } = exportSections(storeSections || [], normalized);
+  return !deepEqual(sections, normalized);
 }

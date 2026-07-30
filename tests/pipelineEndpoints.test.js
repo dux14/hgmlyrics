@@ -318,10 +318,11 @@ describe('GET /api/songs/:id/pipeline', () => {
           },
         ],
       ],
-      [
-        'SELECT sections FROM songs',
-        [{ sections: [{ type: 'verse', label: 'Verso', lines: [{ text: 'linea uno' }] }] }],
-      ],
+      // Sin type/label a propósito: representa una fila legacy real de
+      // songs.sections nunca re-guardada desde blocksToSectionsV3 (regresión
+      // cazada en review: sin este fixture, exigir type/label tapaba un falso
+      // positivo de divergencia sobre canciones al día).
+      ['SELECT sections FROM songs', [{ sections: [{ lines: [{ text: 'linea uno' }] }] }]],
     ]);
     const res = makeRes();
     await pipelineHandler({ method: 'GET', query: { id: 's1' } }, res);
@@ -347,10 +348,8 @@ describe('GET /api/songs/:id/pipeline', () => {
           },
         ],
       ],
-      [
-        'SELECT sections FROM songs',
-        [{ sections: [{ type: 'verse', label: 'Verso', lines: [{ text: 'linea editada' }] }] }],
-      ],
+      // Idem: fixture legacy sin type/label (ver comentario del test anterior).
+      ['SELECT sections FROM songs', [{ sections: [{ lines: [{ text: 'linea editada' }] }] }]],
     ]);
     const res = makeRes();
     await pipelineHandler({ method: 'GET', query: { id: 's1' } }, res);

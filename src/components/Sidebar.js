@@ -94,10 +94,17 @@ export function updateSidebarContent() {
         </div>
         ${albums
           .map((album) => {
-            const coverUrl =
-              album.coverImage.startsWith('/') || album.coverImage.startsWith('http')
+            // Una canción sin portada deja el álbum con coverImage en null
+            // (getAlbums toma la portada de la primera canción del grupo). Sin
+            // esta guarda el .startsWith explota DENTRO del .map que arma el
+            // HTML del shell, y el throw se lleva puesto el render entero de
+            // la app, no solo la miniatura. Mismo patrón que SongView.js. El
+            // src vacío lo resuelve el onerror de abajo, que oculta la imagen.
+            const coverUrl = album.coverImage
+              ? album.coverImage.startsWith('/') || album.coverImage.startsWith('http')
                 ? album.coverImage
-                : `/covers/${album.coverImage}`;
+                : `/covers/${album.coverImage}`
+              : '';
             return `
           <div class="sidebar__album-item ${activeAlbum === album.slug ? 'active' : ''}" data-album="${album.slug}">
             <img

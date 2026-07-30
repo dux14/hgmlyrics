@@ -14,7 +14,8 @@ vi.mock('../src/lib/listDraft.js', () => ({
 vi.mock('../src/router.js', () => ({ navigate: vi.fn() }));
 vi.mock('../src/lib/icons.js', () => ({ icon: vi.fn(() => '') }));
 
-import { listItemHtml, sortListsByExpiry } from '../src/components/Sidebar.js';
+import { listItemHtml, sortListsByExpiry, renderSidebar } from '../src/components/Sidebar.js';
+import { getAlbums } from '../src/lib/store.js';
 import { expiryBand } from '../src/lib/listDraft.js';
 
 describe('listItemHtml', () => {
@@ -126,5 +127,38 @@ describe('sortListsByExpiry', () => {
         .map((l) => l.id)
         .sort(),
     ).toEqual(['inv', 'n']);
+  });
+});
+
+describe('renderSidebar — álbum sin portada', () => {
+  it('no rompe el render cuando el álbum tiene coverImage en null', () => {
+    // Regresión: getAlbums toma la portada de la primera canción del grupo, así
+    // que una canción sin portada deja el álbum con coverImage en null. El
+    // .startsWith sin guarda explotaba dentro del .map que arma el HTML y se
+    // llevaba puesto el render entero de la app, no solo la miniatura.
+    getAlbums.mockReturnValue([{ slug: 'sin-portada', name: 'Sin portada', coverImage: null }]);
+    const container = document.createElement('div');
+
+    expect(() => renderSidebar(container)).not.toThrow();
+
+    const thumb = container.querySelector('.sidebar__album-thumb');
+    expect(thumb).toBeTruthy();
+    // safeUrl absolutiza el src, así que el vacío queda como la base del
+    // documento; lo que importa es que no se cuele el literal "null" ni el
+    // prefijo /covers/ sobre una portada inexistente.
+    expect(thumb.getAttribute('src')).not.toContain('null');
+    expect(thumb.getAttribute('src')).not.toContain('/covers/');
+    expect(container.textContent).toContain('Sin portada');
+  });
+
+  it('conserva la portada cuando el álbum sí la tiene', () => {
+    getAlbums.mockReturnValue([{ slug: 'con-portada', name: 'Con portada', coverImage: 'x.jpg' }]);
+    const container = document.createElement('div');
+
+    renderSidebar(container);
+
+    expect(container.querySelector('.sidebar__album-thumb').getAttribute('src')).toContain(
+      '/covers/x.jpg',
+    );
   });
 });

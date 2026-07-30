@@ -628,3 +628,55 @@ export function clearManualOffsets(sections) {
     lines: (section.lines || []).map((line) => ({ ...line, manualStartMs: null })),
   }));
 }
+
+/**
+ * Escribe el resultado del forced alignment sobre el documento de revisión.
+ *
+ * El índice `i` que devuelve el align es de la proyección canónica, no del
+ * documento: `projectCanonicalLines` (api/_lib/align.js) salta las anotaciones.
+ * Reproducimos ese mismo filtro para volver, y si algo no calza no escribimos
+ * nada: medio documento realineado es peor que ninguno.
+ *
+ * @param {Array<{lines?: Array<object>}>} sections
+ * @param {Array<{i:number, startMs?:number, endMs?:number, words?:Array<object>}>} alignedLines
+ * @returns {{sections: Array<object>}|{error: string}}
+ */
+export function mergeAlignedLines(sections, alignedLines) {
+  const targets = [];
+  (sections || []).forEach((section, si) => {
+    (section.lines || []).forEach((line, li) => {
+      if (line.annotation) return;
+      targets.push([si, li]);
+    });
+  });
+
+  const incoming = Array.isArray(alignedLines) ? alignedLines : [];
+  if (incoming.length !== targets.length) {
+    return {
+      error: `La cantidad de renglones alineados no calza: ${incoming.length} contra ${targets.length}`,
+    };
+  }
+
+  const byIndex = new Map(incoming.map((line) => [line.i, line]));
+  if (byIndex.size !== targets.length) {
+    return { error: 'El alineamiento trae índices repetidos' };
+  }
+
+  const next = sections.map((section) => ({
+    ...section,
+    lines: (section.lines || []).map((line) => ({ ...line })),
+  }));
+
+  for (let i = 0; i < targets.length; i += 1) {
+    const aligned = byIndex.get(i);
+    if (!aligned) return { error: `Falta el renglón ${i} en el alineamiento` };
+    const [si, li] = targets[i];
+    const line = next[si].lines[li];
+    line.startMs = aligned.startMs ?? null;
+    line.endMs = aligned.endMs ?? null;
+    line.words = Array.isArray(aligned.words) ? aligned.words : [];
+    line.manualStartMs = null;
+  }
+
+  return { sections: next };
+}

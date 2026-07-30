@@ -314,11 +314,14 @@ describe('GET /api/songs/:id/pipeline', () => {
             runId: 'r1',
             hash: 'h1',
             language: 'es',
-            sections: [{ lines: [{ text: 'linea uno' }] }],
+            sections: [{ type: 'verse', label: null, lines: [{ text: 'linea uno' }] }],
           },
         ],
       ],
-      ['SELECT sections FROM songs', [{ sections: [{ lines: [{ text: 'linea uno' }] }] }]],
+      [
+        'SELECT sections FROM songs',
+        [{ sections: [{ type: 'verse', label: 'Verso', lines: [{ text: 'linea uno' }] }] }],
+      ],
     ]);
     const res = makeRes();
     await pipelineHandler({ method: 'GET', query: { id: 's1' } }, res);
@@ -340,11 +343,14 @@ describe('GET /api/songs/:id/pipeline', () => {
             runId: 'r1',
             hash: 'h1',
             language: 'es',
-            sections: [{ lines: [{ text: 'linea uno' }] }],
+            sections: [{ type: 'verse', label: null, lines: [{ text: 'linea uno' }] }],
           },
         ],
       ],
-      ['SELECT sections FROM songs', [{ sections: [{ lines: [{ text: 'linea editada' }] }] }]],
+      [
+        'SELECT sections FROM songs',
+        [{ sections: [{ type: 'verse', label: 'Verso', lines: [{ text: 'linea editada' }] }] }],
+      ],
     ]);
     const res = makeRes();
     await pipelineHandler({ method: 'GET', query: { id: 's1' } }, res);

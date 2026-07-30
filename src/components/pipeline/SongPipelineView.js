@@ -10,7 +10,7 @@
 import '../../styles/pipeline.css';
 import { icon } from '../../lib/icons.js';
 import { escapeHtml } from '../../lib/escape.js';
-import { goBack, onRouteChange } from '../../router.js';
+import { goBack, navigate, onRouteChange } from '../../router.js';
 import {
   watchPipelineRun,
   retryPipelinePhase,
@@ -22,7 +22,6 @@ import { showToast } from '../../lib/toast.js';
 import { fetchSongDetail } from '../../lib/store.js';
 import { getSongStudio } from '../../lib/studioApi.js';
 import { confirmDialog } from '../ConfirmDialog.js';
-import { LyricsSheet } from './lyrics/LyricsSheet.js';
 import { PhaseRow } from './PhaseRow.js';
 import { createUploadPhaseCard } from './UploadPhaseCard.js';
 import { createStemTracksDetail } from './StemTracksDetail.js';
@@ -152,6 +151,34 @@ function createPublishToSongbookButton(songId) {
   return wrap;
 }
 
+/** Resumen de la fila Letra (S3a-ii, Task 2): reemplaza el panel montado en
+ * el propio stepper por un conteo + el botón "Revisar letra" que navega a la
+ * ruta propia de la hoja (LyricsSheetView, Task 1). El conteo de secciones
+ * sale de `run.structure.segments` (la fase Secciones, ya presente en el
+ * `run` que esta vista consume) porque el documento de letra en sí
+ * (`song_pipeline_lyrics`) no viaja en el GET del run — traerlo aparte sería
+ * un fetch nuevo solo para este número. Supuesto documentado en
+ * docs/plans/2026-07-30-revision-letra-s3a-notes.md: sin conteo de
+ * renglones disponible sin ese fetch, la fila no lo muestra. */
+function createLyricsRowSummary(songId, run) {
+  const wrap = document.createElement('div');
+  wrap.className = 'phase__lyrics-summary';
+  const sectionCount = run?.structure?.segments?.length;
+  if (typeof sectionCount === 'number') {
+    const text = document.createElement('p');
+    text.className = 'phase__lyrics-summary-text';
+    text.textContent = `${sectionCount} ${sectionCount === 1 ? 'sección detectada' : 'secciones detectadas'}`;
+    wrap.appendChild(text);
+  }
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'phase__action phase__action--secondary';
+  btn.textContent = 'Revisar letra';
+  btn.addEventListener('click', () => navigate(`/song/${songId}/letra`));
+  wrap.appendChild(btn);
+  return wrap;
+}
+
 /** m:ss de un extremo de tramo huérfano (Task 4.3), redondeado al segundo. */
 function formatSpanTime(ms) {
   const totalSec = Math.round((ms ?? 0) / 1000);
@@ -254,12 +281,6 @@ export function renderSongPipelineView(container, songId) {
   });
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
-  // El panel de letra (C3) es una factory async: se monta UNA sola vez
-  // mientras el run esté en awaiting_lyrics y se reubica (sin recrear) en
-  // cada re-render de filas, para no perder su estado interno (documento,
-  // conflictos resueltos, scroll) en cada evento del watcher.
-  let lyricsPanelEl = null;
-  let lyricsPanelLoading = false;
   let lastRun = null;
   let destroyed = false;
   let lastSig = null;
@@ -394,48 +415,6 @@ export function renderSongPipelineView(container, songId) {
     <p class="lyrics-sync-warning__text">La letra del cancionero se editó y ya no coincide con la sincronizada. Reabre la letra para volver a alinearla.</p>
   `;
   view.insertBefore(lyricsSyncWarning, rowsEl);
-
-  async function ensureLyricsPanel() {
-    if (lyricsPanelEl || lyricsPanelLoading) return;
-    lyricsPanelLoading = true;
-    // Compartido por ambos catches de abajo (el interno de LyricsReviewPanel
-    // y el de esta factory): suelta el sentinel cacheado y reintenta el
-    // montaje. Sin esto el gate de letra quedaba muerto tras un fallo del
-    // primer fetch, con recargar la página como única salida.
-    const retry = () => {
-      lyricsPanelEl = null;
-      ensureLyricsPanel();
-    };
-    try {
-      lyricsPanelEl = await LyricsSheet({
-        songId,
-        onApproved: () => {
-          // El próximo evento del watcher (broadcast o polling) trae
-          // lyrics_review en done y renderPhases suelta el panel solo.
-        },
-        onRetry: retry,
-      });
-    } catch (err) {
-      console.error('SongPipelineView: no se pudo montar el panel de letra', err);
-      // Sentinel de error: sin esto, cada poll de 3s reintenta la factory
-      // indefinidamente (retry-storm) porque el catch no dejaba nada montado.
-      const errorEl = document.createElement('div');
-      errorEl.innerHTML = `
-        <p class="lrp__error">No se pudo cargar la revisión de letra</p>
-        <button type="button" class="btn lrp__error-retry">Reintentar</button>
-      `;
-      errorEl.querySelector('.lrp__error-retry').addEventListener('click', retry);
-      lyricsPanelEl = errorEl;
-    } finally {
-      lyricsPanelLoading = false;
-    }
-    if (destroyed) return;
-    // El panel (o su sentinel de error) recién quedó listo: es un cambio real
-    // aunque la firma de status/phases no haya variado, así que forzamos el
-    // rebuild invalidando la firma cacheada.
-    lastSig = null;
-    renderPhases(lastRun);
-  }
 
   /** Calcula estado visual + copy + acción de una fase. */
   function describePhase(key, phase, runStatus, lyricsApproved) {
@@ -620,14 +599,12 @@ export function renderSongPipelineView(container, songId) {
         if (phase.status === 'done' && typeof info.onRetry === 'function') {
           lyricsReopenAction = info.onRetry;
         }
-        if (run?.status === 'awaiting_lyrics' && phase.status !== 'done') {
-          if (!lyricsPanelEl && !lyricsPanelLoading) ensureLyricsPanel();
-          detail = lyricsPanelEl;
-        } else {
-          // Letra aprobada (u otro estado): soltar la referencia del panel.
-          lyricsPanelEl = null;
-          if (phase.status === 'done') detail = createPublishToSongbookButton(songId);
-        }
+        // S3a-ii, Task 2: la hoja viva ya no vive montada acá (ver
+        // LyricsSheetView.js) — la fila resume (conteo) y deriva a su ruta.
+        const wrap = document.createElement('div');
+        wrap.appendChild(createLyricsRowSummary(songId, run));
+        if (phase.status === 'done') wrap.appendChild(createPublishToSongbookButton(songId));
+        detail = wrap;
       } else if (r.key === 'pitch') {
         const validSpans = getValidOrphanSpans(orphanSpans);
         if (validSpans.length > 0) {
@@ -690,7 +667,6 @@ export function renderSongPipelineView(container, songId) {
     destroyed = true;
     unsub();
     offRoute();
-    lyricsPanelEl = null;
     uploadCard.dispose?.();
     uploadCard.el.remove();
     stemTracks.destroy();

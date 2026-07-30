@@ -1299,6 +1299,14 @@ body.chrome-hidden .main {
   margin-top: 8px;
 }
 
+/* Resumen de la fila Letra (S3a-ii, Task 2): reemplaza el panel de revisión
+   que antes vivía en el propio stepper — solo conteo + "Revisar letra". */
+.phase__lyrics-summary-text {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+}
+
 /* Aviso de audio huérfano (Task 4.3): mismo ámbar de "requiere revisión" que
    .confidence-summary, pero contenido en el detail de la fila pitch (sin
    margen propio, .phase__detail ya aporta el espaciado). */

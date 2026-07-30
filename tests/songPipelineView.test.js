@@ -25,10 +25,6 @@ vi.mock('../src/lib/toast.js', () => ({
   showToast: vi.fn(),
 }));
 
-vi.mock('../src/components/pipeline/lyrics/LyricsSheet.js', () => ({
-  LyricsSheet: vi.fn(async () => document.createElement('div')),
-}));
-
 // D3b (UploadPhaseCard) tiene su propio test dedicado: aquí se mockea como
 // una caja negra para no acoplar el esqueleto del stepper a su máquina de
 // estados interna.
@@ -106,6 +102,7 @@ let routeCb = null;
 
 vi.mock('../src/router.js', () => ({
   goBack: vi.fn(),
+  navigate: vi.fn(),
   onRouteChange: vi.fn((cb) => {
     routeCb = cb;
     return vi.fn();
@@ -133,7 +130,7 @@ import {
   reopenLyrics,
   publishLyricsToSongbook,
 } from '../src/lib/pipelineApi.js';
-import { LyricsSheet } from '../src/components/pipeline/lyrics/LyricsSheet.js';
+import { navigate } from '../src/router.js';
 import { confirmDialog } from '../src/components/ConfirmDialog.js';
 import { showToast } from '../src/lib/toast.js';
 import { fetchSongDetail } from '../src/lib/store.js';
@@ -239,48 +236,46 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     expect(row.querySelector('.ph-loader--eq')).toBeTruthy();
   });
 
-  it('run awaiting_lyrics: fila Letra monta LyricsSheet y muestra dot .act', async () => {
-    renderSongPipelineView(container, SONG_ID);
-    watchOnChange({ run: buildRun({}, { status: 'awaiting_lyrics' }) });
-    await flushPromises();
+  describe('resumen de letra en la fila (S3a-ii, Task 2)', () => {
+    it('run awaiting_lyrics: la fila muestra el resumen (conteo de secciones) y el boton Revisar letra', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun(
+          {},
+          { status: 'awaiting_lyrics', structure: { segments: [{}, {}, {}] } },
+        ),
+      });
 
-    expect(LyricsSheet).toHaveBeenCalledWith(expect.objectContaining({ songId: SONG_ID }));
-    const row = container.querySelector('[data-phase="lyrics_review"]');
-    expect(row.querySelector('.dot.act')).toBeTruthy();
-    expect(row.querySelector('.phase__detail').children.length).toBeGreaterThan(0);
-  });
+      const row = container.querySelector('[data-phase="lyrics_review"]');
+      expect(row.querySelector('.dot.act')).toBeTruthy();
+      const summary = row.querySelector('.phase__lyrics-summary');
+      expect(summary).toBeTruthy();
+      expect(summary.textContent).toContain('3');
+      const btn = row.querySelector('.phase__lyrics-summary .phase__action');
+      expect(btn).toBeTruthy();
+      expect(btn.textContent).toBe('Revisar letra');
+    });
 
-  it('no vuelve a montar el panel de letra en re-renders sucesivos', async () => {
-    renderSongPipelineView(container, SONG_ID);
-    watchOnChange({ run: buildRun({}, { status: 'awaiting_lyrics' }) });
-    await flushPromises();
-    watchOnChange({ run: buildRun({}, { status: 'awaiting_lyrics' }) });
-    await flushPromises();
+    it('el boton Revisar letra navega a /song/:id/letra', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({ run: buildRun({}, { status: 'awaiting_lyrics' }) });
 
-    expect(LyricsSheet).toHaveBeenCalledTimes(1);
-  });
+      const row = container.querySelector('[data-phase="lyrics_review"]');
+      row.querySelector('.phase__lyrics-summary .phase__action').click();
 
-  it('si LyricsSheet falla al montar, pinta un boton Reintentar que reintenta la factory', async () => {
-    LyricsSheet.mockRejectedValueOnce(new Error('boom'));
+      expect(navigate).toHaveBeenCalledWith(`/song/${SONG_ID}/letra`);
+    });
 
-    renderSongPipelineView(container, SONG_ID);
-    watchOnChange({ run: buildRun({}, { status: 'awaiting_lyrics' }) });
-    await flushPromises();
+    it('fase done: el resumen y el boton Publicar al cancionero coexisten', () => {
+      renderSongPipelineView(container, SONG_ID);
+      watchOnChange({
+        run: buildRun({ lyrics_review: { status: 'done' } }, { status: 'running' }),
+      });
 
-    const row = container.querySelector('[data-phase="lyrics_review"]');
-    const errorEl = row.querySelector('.lrp__error');
-    expect(errorEl).toBeTruthy();
-    const retryBtn = row.querySelector('.lrp__error-retry');
-    expect(retryBtn).toBeTruthy();
-    expect(LyricsSheet).toHaveBeenCalledTimes(1);
-
-    retryBtn.click();
-    await flushPromises();
-
-    // El segundo intento (ya sin rechazo forzado) reemplaza el sentinel de
-    // error por el panel real: el gate de letra no queda muerto.
-    expect(LyricsSheet).toHaveBeenCalledTimes(2);
-    expect(container.querySelector('[data-phase="lyrics_review"] .lrp__error')).toBeNull();
+      const row = container.querySelector('[data-phase="lyrics_review"]');
+      expect(row.querySelector('.phase__lyrics-summary .phase__action')).toBeTruthy();
+      expect(row.querySelector('.phase__publish-songbook')).toBeTruthy();
+    });
   });
 
   it('fase failed: boton Reintentar fase llama retryPipelinePhase con la fase', () => {
@@ -566,16 +561,6 @@ describe('SongPipelineView — esqueleto stepper (Task D3a)', () => {
     routeCb();
 
     expect(lastStructureDetailDestroy).toHaveBeenCalled();
-  });
-
-  it('mount-once bajo carrera async real: dos eventos sin await entre ellos montan el panel una sola vez', async () => {
-    renderSongPipelineView(container, SONG_ID);
-
-    watchOnChange({ run: buildRun({}, { status: 'awaiting_lyrics' }) });
-    watchOnChange({ run: buildRun({}, { status: 'awaiting_lyrics' }) });
-    await flushPromises();
-
-    expect(LyricsSheet).toHaveBeenCalledTimes(1);
   });
 
   it('esqueleto inmediato: las 5 filas existen antes de que watchPipelineRun emita nada', () => {

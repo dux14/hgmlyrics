@@ -640,10 +640,11 @@ describe('PUT /api/songs/:id/pipeline/lyrics (publishToSongbook, F4)', () => {
     });
   });
 
-  it('con fila: hace UPDATE songs SET sections solo con texto (label omitido si es null, vocalización mapeada a spoken)', async () => {
+  it('con fila y sin cancionero previo: mergea vía exportSections (label cae al tipo, vocalización mapeada a spoken, dropped vacío)', async () => {
     let updatedSections;
     routeSql([
       ['song_pipeline_lyrics', [storedLyricsRow()]],
+      ['SELECT sections FROM songs', [{ sections: [] }]],
       [
         'UPDATE songs',
         (values) => {
@@ -658,10 +659,11 @@ describe('PUT /api/songs/:id/pipeline/lyrics (publishToSongbook, F4)', () => {
       res,
     );
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ success: true });
+    expect(res.json).toHaveBeenCalledWith({ success: true, dropped: [] });
     expect(updatedSections).toEqual([
       {
         type: 'chorus',
+        label: 'Coro',
         lines: [{ text: 'linea normal' }, { text: 'linea oooh', spoken: true }],
       },
       {
@@ -670,6 +672,50 @@ describe('PUT /api/songs/:id/pipeline/lyrics (publishToSongbook, F4)', () => {
         lines: [{ text: 'otra linea' }],
       },
     ]);
+  });
+
+  it('con acordes cargados en el cancionero: los conserva en el renglón de texto idéntico y responde dropped', async () => {
+    let updatedSections;
+    const songSections = [
+      {
+        type: 'chorus',
+        label: 'Coro',
+        lines: [{ text: 'linea normal', chords: [{ pos: 0, ch: 'C' }] }, { text: 'linea oooh' }],
+      },
+      {
+        type: 'verse',
+        label: 'Segunda parte',
+        lines: [{ text: 'otra linea vieja', chords: [{ pos: 2, ch: 'G' }] }],
+      },
+    ];
+    routeSql([
+      ['song_pipeline_lyrics', [storedLyricsRow()]],
+      ['SELECT sections FROM songs', [{ sections: songSections }]],
+      [
+        'UPDATE songs',
+        (values) => {
+          updatedSections = values.find((v) => Array.isArray(v));
+          return { count: 1 };
+        },
+      ],
+    ]);
+    const res = makeRes();
+    await lyricsHandler(
+      { method: 'PUT', query: { id: 's1' }, body: { action: { type: 'publishToSongbook' } } },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    // El renglón 'linea normal' no cambió de texto: el acorde sobrevive en el
+    // payload escrito. 'otra linea' sí cambió (vieja -> nueva): se suelta y se
+    // reporta en dropped, tal como lo devuelve exportSections sin transformar.
+    expect(updatedSections[0].lines[0]).toEqual({
+      text: 'linea normal',
+      chords: [{ pos: 0, ch: 'C' }],
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      dropped: [{ sectionIndex: 1, lineIndex: 0, text: 'otra linea', reason: 'chords' }],
+    });
   });
 
   it('404 si el UPDATE no afecta filas (cancion borrada entre el read y el write)', async () => {
@@ -725,8 +771,8 @@ describe('PUT /api/songs/:id/pipeline/lyrics (publishToSongbook, F4)', () => {
     );
     expect(res1.status).toHaveBeenCalledWith(200);
     expect(res2.status).toHaveBeenCalledWith(200);
-    expect(res1.json).toHaveBeenCalledWith({ success: true });
-    expect(res2.json).toHaveBeenCalledWith({ success: true });
+    expect(res1.json).toHaveBeenCalledWith({ success: true, dropped: [] });
+    expect(res2.json).toHaveBeenCalledWith({ success: true, dropped: [] });
   });
 });
 

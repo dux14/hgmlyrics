@@ -25,6 +25,7 @@ import {
   getPipelineLyrics,
   timingLinesFromSections,
 } from '../../../_lib/pipeline/lyricsStore.js';
+import { exportSections } from '../../../_lib/pipeline/songbookExport.js';
 import {
   applyPhaseEvent,
   phasesAfterLyricsEdit,
@@ -229,25 +230,18 @@ async function reopenLyrics(res, songId) {
   res.status(200).json({ success: true });
 }
 
-/** Copia SOLO el texto de la letra del pipeline al cancionero (one-way,
- * accion explicita del admin, spec §6). No corre alignment: el karaoke ya
- * consume el store directamente. */
+/** Publica la letra del pipeline al cancionero (one-way, accion explicita del
+ * admin, spec §6): mergea por renglón vía exportSections, conservando
+ * chords/groups/annotation/speedPreset del cancionero donde el texto no
+ * cambió. No corre alignment: el karaoke ya consume el store directamente. */
 async function publishToSongbook(res, songId) {
   const stored = await getPipelineLyrics(sql, songId);
   if (!stored) {
     res.status(404).json({ error: 'Esta canción no tiene letra de pipeline aprobada' });
     return;
   }
-  const sections = stored.sections.map((section) => ({
-    type: section.type,
-    ...(section.label ? { label: section.label } : {}),
-    lines: section.lines.map((line) =>
-      // El cancionero no entiende `vocalization`: `annotation` se saltea en el
-      // teleprompter (ocultaria la linea) y `spoken` es la representacion mas
-      // cercana disponible (se renderiza, sin atribucion de voz).
-      line.vocalization ? { text: line.text, spoken: true } : { text: line.text },
-    ),
-  }));
+  const songRows = await sql`SELECT sections FROM songs WHERE id = ${songId}`;
+  const { sections, dropped } = exportSections(stored.sections, songRows[0]?.sections ?? []);
   const result =
     await sql`UPDATE songs SET sections = ${sql.json(sections)}, updated_at = now() WHERE id = ${songId}`;
   // La canción pudo borrarse concurrentemente entre el read del store y este
@@ -257,7 +251,7 @@ async function publishToSongbook(res, songId) {
     res.status(404).json({ error: 'La canción ya no existe' });
     return;
   }
-  res.status(200).json({ success: true });
+  res.status(200).json({ success: true, dropped });
 }
 
 async function putGate(req, res, songId) {

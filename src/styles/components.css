@@ -2014,9 +2014,10 @@ body.floating-tuner-open .autoscroll-fab {
   flex-direction: column;
   gap: var(--space-xs);
 }
+/* El botón «traer» agrega una tercera columna. */
 .voice-note-row {
   display: grid;
-  grid-template-columns: minmax(92px, 38%) 1fr;
+  grid-template-columns: minmax(92px, 34%) 1fr auto;
   gap: var(--space-sm);
   align-items: center;
 }
@@ -2026,6 +2027,44 @@ body.floating-tuner-open .autoscroll-fab {
 }
 .voice-note-row__note {
   min-height: 40px; /* touch target ≥ 40px (mobile-first) */
+}
+
+.tono-editor__pitch-origin {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+/* 1rem mínimo: por debajo, iOS hace zoom al enfocar el control. */
+.tono-editor__pitch-select {
+  font-size: 1rem;
+  width: auto;
+}
+
+.voice-note-row__bring {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.tono-editor__pitch-reason,
+.tono-editor__pitch-warning,
+.tono-editor__pitch-notice {
+  font-size: 0.875rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.tono-editor__pitch-reason {
+  color: var(--color-text-muted);
+}
+
+.tono-editor__pitch-warning,
+.tono-editor__pitch-notice {
+  color: var(--color-warn);
 }
 .group-list {
   display: flex;

@@ -62,6 +62,12 @@ describe('exportSections', () => {
     expect(sections[0].label).toBe('Verso');
   });
 
+  it('sección instrumental sin label propio se exporta como Instrumental, no Verso', () => {
+    const instrumentalApproved = [{ type: 'instrumental', label: null, lines: [{ text: 'uno' }] }];
+    const { sections } = exportSections(instrumentalApproved, []);
+    expect(sections[0].label).toBe('Instrumental');
+  });
+
   it('reancla la anotación después del renglón que la precedía', () => {
     const song = [
       {

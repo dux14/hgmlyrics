@@ -10,12 +10,15 @@
  * la entrada (mismo patrón que songbookSync.js en este mismo directorio).
  */
 
-// Las primeras cuatro replican el mapa visible de SongEditor.js:76-79; Intro y
-// Final son los nombres para los dos tipos que normalizeSectionType produce
-// pero el editor no ofrece. Exportado porque songbookSync.js lo necesita para
-// normalizar secciones legacy de songs.sections con el mismo fallback (ver
-// songbookDiverged) — no es un cambio de intención del módulo, es un segundo
-// consumidor legítimo del mismo mapa.
+// Cubre los siete tipos que normalizeSectionType produce (KNOWN_SECTION_TYPES
+// en lyricsReview.js). Las primeras cuatro replican el mapa visible de
+// SongEditor.js:76-79; Intro, Final e Instrumental son los nombres para los
+// tres tipos que el editor no ofrece, tomados del resto del front
+// (StudioSectionCard.js, StudioPage.js, SongStudioView.js). Exportado porque
+// songbookSync.js lo necesita para normalizar secciones legacy de
+// songs.sections con el mismo fallback (ver songbookDiverged) — no es un
+// cambio de intención del módulo, es un segundo consumidor legítimo del mismo
+// mapa.
 export const SECTION_LABELS = {
   verse: 'Verso',
   chorus: 'Coro',
@@ -23,6 +26,7 @@ export const SECTION_LABELS = {
   prechorus: 'Pre-Coro',
   intro: 'Intro',
   outro: 'Final',
+  instrumental: 'Instrumental',
 };
 
 /**
@@ -101,7 +105,7 @@ export function exportSections(approvedSections, songSections = []) {
     return {
       type: section.type,
       // El 'Verso' final es red de seguridad defensiva: normalizeSectionType
-      // garantiza uno de los 6 tipos conocidos, todos mapeados en
+      // garantiza uno de los 7 tipos conocidos, todos mapeados en
       // SECTION_LABELS, así que hoy esta rama no debería alcanzarse.
       label: section.label || SECTION_LABELS[section.type] || 'Verso',
       ...(typeof prev?.speedPreset === 'number' ? { speedPreset: prev.speedPreset } : {}),

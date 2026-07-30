@@ -359,4 +359,52 @@ describe('SheetLine — edición', () => {
       ),
     );
   });
+
+  // Auditoría de cobertura tests/lyricsReviewPanel.test.js (Task 5): el
+  // panel viejo mostraba una propuesta de texto por renglón con un botón
+  // para adoptarla — el contrato de SheetLine ya recibía `suggestion` pero
+  // nunca la pintaba. La hoja S3a no la elimina por diseño (el spec no la
+  // menciona), sigue el patrón de las tijeras: solo en edición.
+  it('la propuesta de texto solo existe en edición, no en reposo', () => {
+    const node = SheetLine(
+      mk('texto viejo', {}, { suggestion: { section: 0, line: 0, text: 'texto propuesto' } }),
+    );
+    expect(node.querySelector('.sheet-line__suggest')).toBeNull();
+
+    node.querySelector('.sheet-line__text').click();
+    expect(node.querySelector('.sheet-line__suggest')).not.toBeNull();
+    expect(node.querySelector('.sheet-line__suggest-text').textContent).toBe('texto propuesto');
+  });
+
+  it('si la propuesta coincide con el texto actual no se pinta', () => {
+    const node = SheetLine(
+      mk('mismo texto', {}, { suggestion: { section: 0, line: 0, text: 'mismo texto' } }),
+    );
+    node.querySelector('.sheet-line__text').click();
+    expect(node.querySelector('.sheet-line__suggest')).toBeNull();
+  });
+
+  it('aceptar la propuesta despacha editLine con el texto propuesto y descarta el borrador sin guardar', async () => {
+    const hs = mkHandlers();
+    const node = SheetLine(
+      mk(
+        'texto viejo',
+        {},
+        { suggestion: { section: 0, line: 0, text: 'texto propuesto' }, handlers: hs },
+      ),
+    );
+    node.querySelector('.sheet-line__text').click();
+    const textarea = node.querySelector('.sheet-line__edit-input');
+    textarea.value = 'algo que el admin tipeó sin guardar';
+
+    node.querySelector('.sheet-line__suggest-accept').click();
+
+    await vi.waitFor(() =>
+      expect(hs.runAction).toHaveBeenCalledWith(
+        { type: 'editLine', section: 0, line: 0, text: 'texto propuesto' },
+        { rowEl: node },
+      ),
+    );
+    expect(hs.persistText).not.toHaveBeenCalled();
+  });
 });

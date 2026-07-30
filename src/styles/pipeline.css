@@ -404,6 +404,26 @@ body.chrome-hidden .main {
   opacity: 0.38;
   cursor: default;
 }
+.sheet-line__suggest {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+}
+.sheet-line__suggest-text {
+  font-style: italic;
+}
+.sheet-line__suggest-accept {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  padding: 4px 8px;
+  font-size: 0.76rem;
+  color: var(--color-text);
+  cursor: pointer;
+  flex-shrink: 0;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .sheet-line {

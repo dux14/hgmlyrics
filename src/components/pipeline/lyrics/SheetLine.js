@@ -53,6 +53,19 @@ function scissorsHtml(text, afterWords) {
   return `<div class="sheet-line__scissors">${html}</div>`;
 }
 
+/** Bloque de propuesta de texto (semilla) — solo se pinta en edición, igual
+ * que las tijeras, y solo si el texto propuesto difiere del actual: si
+ * coinciden no hay nada que ofrecer. Aceptarla nunca pisa texto sin que el
+ * usuario lo pida: es un botón, no un reemplazo automático. */
+function suggestionHtml(suggestion, currentText) {
+  if (!suggestion || !suggestion.text || suggestion.text === currentText) return '';
+  return `
+    <div class="sheet-line__suggest">
+      <span class="sheet-line__suggest-text">${escapeHtml(suggestion.text)}</span>
+      <button type="button" class="sheet-line__suggest-accept">Usar este texto</button>
+    </div>`;
+}
+
 /** Autogrow del textarea de edición — mismo criterio que autogrow() del
  * panel de revisión viejo. */
 function autogrow(textarea) {
@@ -185,6 +198,17 @@ export function SheetLine(opts) {
     return handlers.runAction(action, { rowEl: el }).catch(() => {});
   }
 
+  /** Adoptar la propuesta de texto: igual que Partir, ya lleva el texto
+   * definitivo en el payload, así que descarta cualquier borrador sin
+   * guardar en vez de flushearlo. */
+  function dispatchSuggestionAction(text) {
+    editing = false;
+    dirtyText = null;
+    return handlers
+      .runAction({ type: 'editLine', section: sIdx, line: lIdx, text }, { rowEl: el })
+      .catch(() => {});
+  }
+
   function doSplitAtCaret(textarea) {
     const caret = textarea.selectionStart;
     const text = textarea.value;
@@ -298,6 +322,11 @@ export function SheetLine(opts) {
     el.querySelector('[data-action="listen"]').addEventListener('click', () =>
       handlers.listenFrom(sIdx, lIdx),
     );
+
+    const acceptSuggestion = el.querySelector('.sheet-line__suggest-accept');
+    if (acceptSuggestion) {
+      acceptSuggestion.addEventListener('click', () => dispatchSuggestionAction(suggestion.text));
+    }
   }
 
   function renderEdit() {
@@ -319,6 +348,7 @@ export function SheetLine(opts) {
         <button type="button" class="sheet-line__action" data-action="listen">${icon('volume-2', { size: 14 })} Escuchar</button>
         <button type="button" class="sheet-line__action" data-action="delete">Borrar</button>
       </div>
+      ${suggestionHtml(suggestion, text)}
     `;
     wireEdit();
   }

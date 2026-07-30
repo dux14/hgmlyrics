@@ -210,6 +210,29 @@ describe('buildReviewDoc v2', () => {
     expect(instrumental.endMs).toBe(10000);
   });
 
+  it('una canción sin secciones líricas no pierde el texto transcrito (fallback aceptado, no ideal)', () => {
+    // Todos los segmentos son instrumental: lyricalIdx queda vacío y
+    // bestSectionIndex cae al fallback documentado (comentario líneas
+    // 172-174) de buscar sobre TODAS las secciones. El renglón cantado
+    // termina en una sección 'instrumental' -- mal menor aceptado a
+    // propósito: perder el texto sería peor.
+    const doc = buildReviewDoc({
+      transcription: trans([
+        {
+          text: 'canto solo',
+          words: [
+            [1000, 1500, 0.9],
+            [1600, 2000, 0.9],
+          ],
+        },
+      ]),
+      structureSegments: [{ label: 'instrumental', startMs: 0, endMs: 10000 }],
+    });
+    expect(doc.sections).toHaveLength(1);
+    expect(doc.sections[0].type).toBe('instrumental');
+    expect(doc.sections[0].lines.map((l) => l.text)).toEqual(['canto solo']);
+  });
+
   it('renglón sin words hereda la sección del renglón anterior, con timing null y vocalization', () => {
     const doc = buildReviewDoc({
       transcription: trans([

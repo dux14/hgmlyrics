@@ -2,9 +2,9 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { SheetDrag } from '../src/components/pipeline/lyrics/SheetDrag.js';
 
 // jsdom no implementa PointerEvent: se emula con MouseEvent + pointerId.
-function pointer(type, { clientY = 0, target } = {}) {
+function pointer(type, { clientY = 0, target, pointerId = 1 } = {}) {
   const ev = new MouseEvent(type, { bubbles: true, cancelable: true });
-  Object.defineProperty(ev, 'pointerId', { value: 1 });
+  Object.defineProperty(ev, 'pointerId', { value: pointerId });
   Object.defineProperty(ev, 'clientY', { value: clientY });
   (target ?? document).dispatchEvent(ev);
   return ev;
@@ -175,5 +175,72 @@ describe('SheetDrag', () => {
 
     expect(scroller.scrollTop).toBeGreaterThan(0);
     vi.unstubAllGlobals();
+  });
+
+  it('un puntero ajeno no confirma ni mueve el arrastre en curso', () => {
+    const root = sheet();
+    const moveLine = vi.fn().mockResolvedValue(undefined);
+    SheetDrag({
+      root,
+      handlers: { isBusy: () => false, moveLine },
+      measure: () => RECTS,
+      scroller: root,
+    });
+
+    const grip = root.querySelectorAll('.sheet-line__grip')[0];
+    pointer('pointerdown', { clientY: 20, target: grip });
+    pointer('pointermove', { clientY: 75, target: grip });
+
+    // Un segundo dedo se apoya y se levanta en otro lugar de la pantalla.
+    pointer('pointermove', { clientY: 10, target: grip, pointerId: 2 });
+    pointer('pointerup', { clientY: 10, target: grip, pointerId: 2 });
+
+    // El arrastre del dedo original sigue vivo: nada se despachó todavía.
+    expect(moveLine).not.toHaveBeenCalled();
+    expect(root.querySelector('.sheet-line--dragging')).toBeTruthy();
+
+    // Y al soltar el dedo que de verdad arrastra, el destino es el que marcó
+    // ese dedo, no el del puntero ajeno.
+    pointer('pointerup', { clientY: 75, target: grip });
+    expect(moveLine).toHaveBeenCalledWith({
+      type: 'moveLine',
+      fromSection: 0,
+      fromLine: 0,
+      toSection: 0,
+      toLine: 1,
+    });
+  });
+
+  it('el lock del arrastre se libera antes de despachar, así el drop no se autobloquea', () => {
+    const root = sheet();
+    let dragging = false;
+    const seen = [];
+    const moveLine = vi.fn(() => {
+      // Lo que importa: cuando el payload se despacha, el lock ya se soltó.
+      seen.push(dragging);
+      return Promise.resolve();
+    });
+    SheetDrag({
+      root,
+      handlers: {
+        isBusy: () => dragging,
+        moveLine,
+        setDragging: (flag) => {
+          dragging = flag;
+        },
+      },
+      measure: () => RECTS,
+      scroller: root,
+    });
+
+    const grip = root.querySelectorAll('.sheet-line__grip')[0];
+    pointer('pointerdown', { clientY: 20, target: grip });
+    expect(dragging).toBe(true);
+    pointer('pointermove', { clientY: 75, target: grip });
+    pointer('pointerup', { clientY: 75, target: grip });
+
+    expect(seen).toEqual([false]);
+    expect(dragging).toBe(false);
+    expect(moveLine).toHaveBeenCalledTimes(1);
   });
 });

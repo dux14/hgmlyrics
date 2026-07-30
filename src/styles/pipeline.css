@@ -342,7 +342,7 @@ body.chrome-hidden .main {
 .sheet-line__grip::before {
   content: '';
   position: absolute;
-  inset: -14px;
+  inset: -16px;
 }
 .sheet-line__grip:active {
   cursor: grabbing;

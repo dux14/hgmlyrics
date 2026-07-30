@@ -34,6 +34,8 @@ export function dropTargetAt(rects, docY) {
 
   let best = rects[0];
   let bestDist = Infinity;
+  // Comparación estricta (`<`, no `<=`): ante un empate exacto de distancia
+  // entre dos secciones, gana la de menor índice (la primera recorrida).
   for (const section of rects) {
     const dist = distanceTo(section, docY);
     if (dist < bestDist) {

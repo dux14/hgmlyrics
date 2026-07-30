@@ -78,7 +78,7 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
   let state;
   try {
     const initial = await getLyricsReview(songId);
-    state = { ...initial, busy: false, previewOpen: false };
+    state = { ...initial, busy: false, previewOpen: false, dragging: false };
   } catch (err) {
     el.innerHTML = `
       <p class="sheet__error">${escapeHtml(err.message || 'No se pudo cargar la revisión de letra')}</p>
@@ -119,10 +119,19 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
   let textQueue = Promise.resolve();
 
   function isBusy() {
-    return state.busy || state.previewOpen;
+    return state.busy || state.previewOpen || state.dragging;
   }
 
-  const handlers = { isBusy, runAction, persistText, moveLine };
+  /** El arrastre toma el mismo lock que las acciones de red: mientras un dedo
+   * mueve un renglón, ningún otro control puede mutar el documento a espaldas
+   * de los índices que el gesto ya midió. */
+  function setDragging(flag) {
+    state.dragging = flag;
+    if (flag) lockControls();
+    else unlockControls();
+  }
+
+  const handlers = { isBusy, runAction, persistText, moveLine, setDragging };
 
   // Una sola instancia para toda la hoja: el grip se descubre por delegación,
   // así que los repintados por sección no exigen re-cablear el gesto.

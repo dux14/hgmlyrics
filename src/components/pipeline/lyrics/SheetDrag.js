@@ -134,14 +134,22 @@ export function SheetDrag(opts) {
       // El puntero ya se liberó solo (pointercancel): no es un error.
     }
 
+    // El lock se libera ANTES de despachar: `moveLine` entra a `runAction`,
+    // que se autobloquea si `isBusy()` sigue viendo el arrastre como vivo. Si
+    // el orden se invierte, el drop se descarta en silencio.
+    handlers.setDragging?.(false);
+
     if (!commit) return;
     const payload = moveLinePayload(target ? { ...from, ...target } : null);
-    if (payload) handlers.moveLine(payload);
+    if (payload) Promise.resolve(handlers.moveLine(payload)).catch(() => {});
   }
 
   function onPointerDown(ev) {
     const grip = ev.target.closest?.('.sheet-line__grip');
     if (!grip || !root.contains(grip)) return;
+    // Solo el botón principal arrastra: un clic derecho sobre el grip tiene que
+    // seguir abriendo el menú contextual del navegador.
+    if (typeof ev.button === 'number' && ev.button !== 0) return;
     if (drag || handlers.isBusy()) return;
 
     const lineEl = grip.closest('.sheet-line');
@@ -178,10 +186,11 @@ export function SheetDrag(opts) {
       target: null,
       grabDy: ev.clientY - box.top,
     };
+    handlers.setDragging?.(true);
   }
 
   function onPointerMove(ev) {
-    if (!drag) return;
+    if (!drag || ev.pointerId !== drag.pointerId) return;
     ev.preventDefault();
     drag.ghost.style.top = `${ev.clientY - drag.grabDy}px`;
     drag.target = dropTargetAt(drag.rects, ev.clientY + window.scrollY);
@@ -191,11 +200,13 @@ export function SheetDrag(opts) {
     if (autoSpeed === 0) stopAutoScroll();
   }
 
-  function onPointerUp() {
+  function onPointerUp(ev) {
+    if (!drag || ev.pointerId !== drag.pointerId) return;
     end({ commit: true });
   }
 
-  function onPointerCancel() {
+  function onPointerCancel(ev) {
+    if (!drag || ev.pointerId !== drag.pointerId) return;
     end({ commit: false });
   }
 

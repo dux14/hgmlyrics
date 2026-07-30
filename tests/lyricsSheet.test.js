@@ -692,7 +692,7 @@ describe('LyricsSheet — audio (S3b-ii)', () => {
     // 15 s cae en la ventana del renglón interpolado (startMs 9000, hasta el
     // siguiente en 32000): sección 0, renglón 1.
     audio.emitTime(15);
-    let sounding = el.querySelectorAll('.sheet-line.is-sounding');
+    const sounding = el.querySelectorAll('.sheet-line.is-sounding');
     expect(sounding).toHaveLength(1);
     expect(sounding[0]).toBe(el.querySelectorAll('.sheet-line')[1]);
 
@@ -812,6 +812,22 @@ describe('LyricsSheet — audio (S3b-ii)', () => {
 
       expect(el.querySelectorAll('.sheet-line').length).toBe(antes);
       expect(el.querySelector('.sheet-section__menu')).not.toBeNull();
+    });
+
+    it('volver a editar cierra el transporte de voz', async () => {
+      const el = await LyricsSheet({ songId: 's1', vocalsUrl: 'https://x/v.mp3' });
+      document.body.appendChild(el);
+
+      el.querySelector('.sheet__approve').click(); // a lectura, el transporte abre
+      await flush();
+      expect(audio.open).toHaveBeenCalled();
+
+      el.querySelector('.sheet__back').click(); // vuelve a editar
+
+      expect(audio.close).toHaveBeenCalled();
+      expect(el.querySelector('.sheet-status-strip__listen')?.getAttribute('aria-pressed')).toBe(
+        'false',
+      );
     });
 
     it('aprobar de verdad sale del modo lectura', async () => {

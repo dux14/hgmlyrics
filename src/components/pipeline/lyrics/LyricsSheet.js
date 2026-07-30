@@ -707,6 +707,12 @@ export async function LyricsSheet({
    * refetch — solo cambia el marco. */
   function enterEdit() {
     if (isBusy()) return;
+    // El transporte se abre solo al entrar a lectura, así que se cierra solo al
+    // salir: si no, la voz sigue sonando sobre la hoja ya editable.
+    if (audio) {
+      audio.close();
+      statusStrip.setListening(false);
+    }
     state.readOnly = false;
     remountSections();
     reapplyActive();

@@ -4,7 +4,7 @@
  * creando «Agregar grupos del rango» (una sola vía de escritura).
  * @vitest-environment jsdom
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { openTonoEditorModal } from '../src/components/editor/TonoEditorModal.js';
 
 const ROSTER = [

@@ -82,14 +82,17 @@ export function openTonoEditorModal(
   }
 
   // Motivo por el que no se puede traer el tono, o '' si se puede.
-  function pitchReason() {
+  // Recibe `resolved` ya calculado para no repetir un resolveLine() completo
+  // (recorre todas las líneas del análisis); si se llama sin argumento lo
+  // calcula igual, para no romper otros posibles llamadores.
+  function pitchReason(resolved = resolvedPitch()) {
     if (pitchNotesPromise === null) return 'Guarda la canción para poder traer el tono.';
     if (pitchError) return 'No se pudo cargar el tono de la canción.';
     if (pitch === null) return 'Buscando el tono…';
     if (!pitch.hasAnalysis || pitchVoiceKeys().length === 0) {
       return 'Esta canción todavía no tiene tono procesado.';
     }
-    if (resolvedPitch() === null) return 'Este renglón cambió desde el análisis.';
+    if (resolved === null) return 'Este renglón cambió desde el análisis.';
     return '';
   }
 
@@ -116,7 +119,7 @@ export function openTonoEditorModal(
 
     const keys = pitchVoiceKeys();
     const resolved = resolvedPitch();
-    const reason = pitchReason();
+    const reason = pitchReason(resolved);
     const canBring = reason === '' && range !== null;
 
     const voiceRows =

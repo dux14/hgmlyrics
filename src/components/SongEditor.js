@@ -1106,13 +1106,26 @@ export async function renderSongEditor(container, editId, { from = null } = {}) 
         const songId = existingSong?.id ?? null;
         if (songId && pitchNotesPromise === null) {
           pitchNotesPromise = getSongPitchNotes(songId);
+          // Un fallo no se cachea: se limpia para que la próxima apertura del
+          // modal vuelva a pedirlo. El modal tiene su propio `.catch` para
+          // mostrar el motivo, así que este solo resetea (y de paso evita un
+          // unhandled rejection si el modal no llegara a suscribirse).
+          pitchNotesPromise.catch(() => {
+            pitchNotesPromise = null;
+          });
         }
+        // Se guarda en una const local porque el `.catch` de arriba puede
+        // poner `pitchNotesPromise` en null antes de que el modal la reciba
+        // (si el rechazo ya ocurrió en este mismo tick); el modal necesita
+        // la promesa ORIGINAL (con el rechazo) para mostrar el error, no una
+        // referencia que ya haya sido limpiada.
+        const currentPitchNotesPromise = pitchNotesPromise;
         // Mismo motivo que open-chords: el modal muta found.line.groups por
         // referencia fuera del árbol delegado, así que se snapshotea aquí.
         const before = JSON.stringify(found.line.groups);
         openTonoEditorModal(found.line, {
           voiceRoster,
-          pitchNotesPromise,
+          pitchNotesPromise: currentPitchNotesPromise,
           canonicalIndex: canonicalLineIndex(blocks, lineId),
           onClose: () => {
             if (JSON.stringify(found.line.groups) !== before) dirty = true;

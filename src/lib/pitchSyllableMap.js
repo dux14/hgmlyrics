@@ -58,6 +58,11 @@ export function mapSyllablesToChars(text, syllables) {
       continue;
     }
 
+    // Se asume que la puntuación del pipeline viaja SIEMPRE pegada al final de
+    // una sílaba, nunca al comienzo; con ese contrato el cursor solo salta
+    // separadores sobrantes hacia adelante y no puede atascarse. Si el
+    // pipeline alguna vez antepusiera puntuación a una sílaba, este es el
+    // punto a revisar.
     while (cursor < src.length && src[cursor] !== piece[0] && SEPARATOR_RE.test(src[cursor])) {
       cursor += 1;
     }
@@ -90,6 +95,11 @@ export function noteForRange(mapped, range) {
 
   const notes = [];
   for (const syl of list) {
+    // El `<=` en ambos extremos para las sílabas de ancho cero (melisma) es
+    // DELIBERADO y está testeado, a diferencia del `<` estricto de las
+    // sílabas normales: un melisma pegado al final de una sílaba enteramente
+    // seleccionada cuenta como continuación de ella. No cambiarlo a `<`
+    // estricto sin revisar esos tests.
     const touches =
       syl.charStart === syl.charEnd
         ? syl.charStart >= start && syl.charStart <= end

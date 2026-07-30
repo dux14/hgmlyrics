@@ -130,6 +130,29 @@ describe('renderSections — Task 7: play visible en label con audio, sin barra 
     expect(withAudio.querySelector('svg[data-icon="play"]')).not.toBeNull();
   });
 
+  it('un tramo instrumental sin letra pinta la banda y su label no cae al color del coro', () => {
+    const sections = [{ type: 'instrumental', label: 'INSTRUMENTAL', lines: [] }];
+    const el = document.createElement('div');
+    el.innerHTML = renderSections(sections);
+
+    expect(el.querySelector('.lyrics__section--instrumental')).not.toBeNull();
+    expect(el.querySelector('.lyrics__instrumental')?.textContent).toContain('tramo instrumental');
+
+    const css = readFileSync(resolve(process.cwd(), 'src/styles/components.css'), 'utf-8');
+    expect(css).toMatch(/\.lyrics__section--instrumental \.lyrics__section-label\s*\{/);
+  });
+
+  it('una sección tipada instrumental con letra real muestra el texto, no la banda', () => {
+    const sections = [
+      { type: 'instrumental', label: 'INSTRUMENTAL', lines: [{ text: 'canta igual' }] },
+    ];
+    const el = document.createElement('div');
+    el.innerHTML = renderSections(sections);
+
+    expect(el.querySelector('.lyrics__instrumental')).toBeNull();
+    expect(el.querySelector('.lyrics__line').textContent).toContain('canta igual');
+  });
+
   it('el bloque de sección ya no lleva border-left (identidad solo en label + divider)', () => {
     const cssPath = resolve(process.cwd(), 'src/styles/components.css');
     const css = readFileSync(cssPath, 'utf-8');

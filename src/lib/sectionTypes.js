@@ -7,8 +7,9 @@
  */
 
 /** Slugs de sección con identidad visual fija (spec F1 D1 §3). 'instrumental'
- * se sumó sin identidad propia (pendiente de pase visual): sin regla CSS
- * `.lyrics__section--instrumental`, hereda el estilo base del label. */
+ * también la tiene: label neutro en el lector (`.lyrics__section--instrumental`,
+ * components.css) y en el escenario (`.imm-v1__section--instrumental`,
+ * immersive.css), más la banda `.lyrics__instrumental` cuando no trae letra. */
 export const KNOWN_SECTION_TYPES = [
   'verse',
   'chorus',

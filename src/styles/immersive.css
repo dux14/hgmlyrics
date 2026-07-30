@@ -145,6 +145,14 @@ body.immersive-active > .floating-tuner {
   opacity: 0.85;
 }
 
+/* El escenario no da identidad por tipo — todos los labels van en marca. El
+   instrumental es la excepción a propósito: no es contenido cantado, y en
+   marca se leía como una sección más del karaoke. */
+.imm-v1__section--instrumental {
+  color: var(--color-section-neutral);
+  opacity: 0.7;
+}
+
 .imm-v1__voice-chips {
   display: flex;
   gap: 0.25rem;

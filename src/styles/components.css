@@ -424,6 +424,32 @@
 .lyrics__section--outro .lyrics__section-label {
   color: var(--color-section-outro);
 }
+/* Instrumental: token dedicado, NO --color-section-verse — ahí el neutro es
+   una coincidencia (ver nota en tokens.css). Sin esta regla el label caía al
+   teal base de .lyrics__section-label y un tramo instrumental se leía igual
+   que un coro. */
+.lyrics__section--instrumental .lyrics__section-label {
+  color: var(--color-section-neutral);
+}
+
+/* Banda del tramo instrumental sin letra — mismo lenguaje que
+   `.sheet-instrumental` en la hoja de revisión: trama diagonal y borde
+   punteado, para que el mismo concepto se lea igual en las dos pantallas. */
+.lyrics__instrumental {
+  margin: 0 0 var(--space-sm);
+  padding: 10px var(--space-md);
+  border: 1px dashed var(--color-section-neutral);
+  border-radius: 9px;
+  color: var(--color-section-neutral);
+  font-size: 0.82rem;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    color-mix(in oklch, var(--color-section-neutral) 10%, transparent),
+    color-mix(in oklch, var(--color-section-neutral) 10%, transparent) 4px,
+    transparent 4px,
+    transparent 10px
+  );
+}
 
 .lyrics__section-label::after {
   content: '';

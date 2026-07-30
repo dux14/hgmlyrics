@@ -1417,9 +1417,16 @@ export function renderSections(sections, opts = {}) {
   const mixColorClass = chordsCategory ? `voice-text--${chordsCategory}` : '';
 
   return (sections || [])
-    .map(
-      (section, sectionIndex) => `
-    <div class="lyrics__section lyrics__section--${normalizeSectionType(section.type)}" data-section-index="${sectionIndex}"${
+    .map((section, sectionIndex) => {
+      const sectionType = normalizeSectionType(section.type);
+      // Un tramo instrumental es contenido, no un hueco: sin renglones que
+      // pintar, la banda ocupa su lugar en la letra en vez de dejar el label
+      // solo. Se condiciona a `lines` vacío a propósito — una sección tipada
+      // `instrumental` puede traer letra real si SongFormer etiquetó todo el
+      // tema así y el ASR igual transcribió, y ahí manda el texto.
+      const isEmptyInstrumental = sectionType === 'instrumental' && !section.lines?.length;
+      return `
+    <div class="lyrics__section lyrics__section--${sectionType}" data-section-index="${sectionIndex}"${
       typeof section.speedPreset === 'number' ? ` data-speed-preset="${section.speedPreset}"` : ''
     }>
       <div class="lyrics__section-label">
@@ -1430,6 +1437,11 @@ export function renderSections(sections, opts = {}) {
         }
         <span class="lyrics__section-label-text">${escapeHtml(section.label)}</span>
       </div>
+      ${
+        isEmptyInstrumental
+          ? '<p class="lyrics__instrumental">Sin letra — tramo instrumental</p>'
+          : ''
+      }
       ${(section.lines || [])
         .map((line) => {
           const text = line.text || '';
@@ -1499,8 +1511,8 @@ export function renderSections(sections, opts = {}) {
         })
         .join('')}
     </div>
-  `,
-    )
+  `;
+    })
     .join('');
 }
 

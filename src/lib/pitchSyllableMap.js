@@ -101,3 +101,49 @@ export function noteForRange(mapped, range) {
 
   return { note: notes[0] ?? null, notes };
 }
+
+/**
+ * A qué línea del análisis corresponde un renglón. El índice canónico es el
+ * candidato preferido, pero no alcanza: hay análisis en producción con el doble
+ * de líneas que renglones (runs viejos en modo transcripción, que agrupaban por
+ * pausa), y ahí el índice apunta a otro renglón. La condición de aceptación
+ * siempre es la misma: que las sílabas reconstruyan el texto en pantalla.
+ *
+ * 1. Si la línea del índice canónico calza, se usa.
+ * 2. Si no, gana la línea que calce más cercana al índice esperado (empate: la
+ *    menor). Resuelve el desalineamiento y también el coro repetido.
+ * 3. Si ninguna calza, null → el botón queda deshabilitado con su motivo.
+ *
+ * @param {string} text Texto del renglón en pantalla
+ * @param {number} canonicalIndex Índice del renglón entre los que no son anotación
+ * @param {Array<{syllables?:Array}>} analysisLines Líneas de la voz elegida
+ * @returns {{mapped:Array, lineIndex:number, exact:boolean}|null}
+ */
+export function resolveLine(text, canonicalIndex, analysisLines) {
+  const lines = Array.isArray(analysisLines) ? analysisLines : [];
+  if (typeof text !== 'string' || text === '' || lines.length === 0) return null;
+
+  const at = (idx) => {
+    const line = lines[idx];
+    if (!line) return null;
+    const mapped = mapSyllablesToChars(text, line.syllables);
+    // Un mapeo vacío (línea del análisis sin sílabas) es truthy pero no calza
+    // con nada: si se aceptara, ganaría el peldaño 1 contra cualquier texto.
+    return mapped && mapped.length > 0 ? mapped : null;
+  };
+
+  const exactMapped = Number.isInteger(canonicalIndex) ? at(canonicalIndex) : null;
+  if (exactMapped) return { mapped: exactMapped, lineIndex: canonicalIndex, exact: true };
+
+  const target = Number.isInteger(canonicalIndex) ? canonicalIndex : 0;
+  let best = null;
+  lines.forEach((_line, idx) => {
+    const mapped = at(idx);
+    if (!mapped) return;
+    const distance = Math.abs(idx - target);
+    if (best === null || distance < best.distance) best = { mapped, lineIndex: idx, distance };
+  });
+
+  if (best === null) return null;
+  return { mapped: best.mapped, lineIndex: best.lineIndex, exact: false };
+}

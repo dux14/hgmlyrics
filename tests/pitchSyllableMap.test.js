@@ -5,7 +5,7 @@
  * reconstruye el texto, con la puntuación pegada a la última sílaba.
  */
 import { describe, it, expect } from 'vitest';
-import { mapSyllablesToChars, noteForRange } from '../src/lib/pitchSyllableMap.js';
+import { mapSyllablesToChars, noteForRange, resolveLine } from '../src/lib/pitchSyllableMap.js';
 
 // Línea 3 de 22ac3453… (real). Notas de las 5 primeras sílabas verificadas en
 // la base; la de "pre" se completa como repetición para el fixture.
@@ -147,5 +147,73 @@ describe('noteForRange', () => {
   it('es tolerante a entradas vacías', () => {
     expect(noteForRange(null, { start: 0, end: 2 })).toEqual({ note: null, notes: [] });
     expect(noteForRange(mapped, null)).toEqual({ note: null, notes: [] });
+  });
+});
+
+describe('resolveLine', () => {
+  const lineaOtra = {
+    i: 0,
+    syllables: [
+      { text: 'Tan', midi: 59, note: 'B3' },
+      { text: 'des', midi: 59, note: null },
+      { text: 'nu', midi: 59, note: null },
+      { text: 'do', midi: 59, note: null },
+    ],
+  };
+  const lineaBuscada = { i: 0, syllables: LINEA_DECISION.syllables };
+
+  it('usa el índice canónico cuando el texto de esa línea calza', () => {
+    const lines = [lineaOtra, lineaOtra, lineaBuscada];
+    const res = resolveLine(LINEA_DECISION.text, 2, lines);
+    expect(res.lineIndex).toBe(2);
+    expect(res.exact).toBe(true);
+    expect(res.mapped).toHaveLength(6);
+  });
+
+  it('cae al texto cuando el índice canónico no calza (análisis desalineado)', () => {
+    const lines = [lineaOtra, lineaBuscada, lineaOtra];
+    const res = resolveLine(LINEA_DECISION.text, 0, lines);
+    expect(res.lineIndex).toBe(1);
+    expect(res.exact).toBe(false);
+  });
+
+  it('con el renglón repetido, resuelve al más cercano al índice esperado', () => {
+    const lines = [lineaBuscada, lineaOtra, lineaOtra, lineaBuscada];
+    expect(resolveLine(LINEA_DECISION.text, 3, lines).lineIndex).toBe(3);
+    expect(resolveLine(LINEA_DECISION.text, 1, lines).lineIndex).toBe(0);
+  });
+
+  it('ante empate de distancia toma el índice menor', () => {
+    const lines = [lineaBuscada, lineaOtra, lineaBuscada];
+    expect(resolveLine(LINEA_DECISION.text, 1, lines).lineIndex).toBe(0);
+  });
+
+  it('devuelve null si ninguna línea del análisis calza', () => {
+    expect(resolveLine('Un renglón que nadie cantó', 0, [lineaOtra])).toBeNull();
+  });
+
+  it('devuelve null con entradas vacías', () => {
+    expect(resolveLine(LINEA_DECISION.text, 0, [])).toBeNull();
+    expect(resolveLine(LINEA_DECISION.text, 0, null)).toBeNull();
+    expect(resolveLine('', 0, [lineaOtra])).toBeNull();
+  });
+
+  it('tolera un índice canónico fuera de rango', () => {
+    const res = resolveLine(LINEA_DECISION.text, 99, [lineaBuscada]);
+    expect(res.lineIndex).toBe(0);
+    expect(res.exact).toBe(false);
+  });
+
+  it('una línea del análisis sin sílabas no gana por índice: mapSyllablesToChars devuelve [] (truthy) pero no calza con ningún texto', () => {
+    const lineaSinSilabas = { i: 0, syllables: [] };
+    const lines = [lineaSinSilabas, lineaBuscada];
+    const res = resolveLine(LINEA_DECISION.text, 0, lines);
+    expect(res.lineIndex).toBe(1);
+    expect(res.exact).toBe(false);
+  });
+
+  it('si ninguna línea calza, un análisis sin sílabas en el índice canónico no impide devolver null', () => {
+    const lineaSinSilabas = { i: 0, syllables: [] };
+    expect(resolveLine(LINEA_DECISION.text, 0, [lineaSinSilabas])).toBeNull();
   });
 });

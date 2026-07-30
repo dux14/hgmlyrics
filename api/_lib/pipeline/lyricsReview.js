@@ -298,9 +298,13 @@ export function buildReviewDoc({ transcription, structureSegments = [], seedSect
   return collapsed;
 }
 
-/** Editor puro: aprobable con al menos un renglón en alguna sección. */
+/** Editor puro: aprobable con al menos un renglón y ninguno vacío (insertLine
+ * permite dejar uno colgado; un renglón vacío aprobado ensucia el cancionero y
+ * la partitura por sílaba). */
 export function canApprove(doc) {
-  return Array.isArray(doc?.sections) && doc.sections.some((s) => (s.lines ?? []).length > 0);
+  if (!Array.isArray(doc?.sections)) return false;
+  const lines = doc.sections.flatMap((s) => s.lines ?? []);
+  return lines.length > 0 && lines.every((l) => typeof l.text === 'string' && l.text.trim() !== '');
 }
 
 /**

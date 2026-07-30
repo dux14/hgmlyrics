@@ -424,6 +424,14 @@ describe('canApprove v2 (editor puro)', () => {
       }),
     ).toBe(false);
   });
+
+  it('rechaza un documento con algún renglón vacío', () => {
+    const doc = {
+      version: 2,
+      sections: [sec('verse', null, 0, 1, [ln('uno', 0, 1), ln('   ', 0, 1)])],
+    };
+    expect(canApprove(doc)).toBe(false);
+  });
 });
 
 describe('approvedSnapshot v2', () => {

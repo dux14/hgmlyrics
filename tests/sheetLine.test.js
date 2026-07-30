@@ -78,6 +78,35 @@ describe('SheetLine — reposo', () => {
     const node = SheetLine(mk('texto', { confidence: 0.42, words: [{ text: 'texto' }] }));
     expect(node.textContent).not.toContain('42');
   });
+
+  it('isDudoso: pinta la clase, el ícono de alerta y una señal accesible por texto', () => {
+    const node = SheetLine(mk('texto dudoso', {}, { isDudoso: true }));
+    expect(node.classList.contains('sheet-line--dudoso')).toBe(true);
+    const flag = node.querySelector('.sheet-line__dudoso-flag');
+    expect(flag).not.toBeNull();
+    expect(flag.querySelector('svg')).not.toBeNull();
+    expect(flag.textContent).toContain('Dudoso');
+  });
+
+  it('sin isDudoso: no pinta la clase ni el ícono de alerta', () => {
+    const node = SheetLine(mk('texto normal', {}, { isDudoso: false }));
+    expect(node.classList.contains('sheet-line--dudoso')).toBe(false);
+    expect(node.querySelector('.sheet-line__dudoso-flag')).toBeNull();
+  });
+
+  it('update({ isDudoso }) prende y apaga la marca sin recrear el nodo', () => {
+    const opts = mk('texto', {}, { isDudoso: false });
+    const node = SheetLine(opts);
+    expect(node.classList.contains('sheet-line--dudoso')).toBe(false);
+
+    node.update({ isDudoso: true });
+    expect(node.classList.contains('sheet-line--dudoso')).toBe(true);
+    expect(node.querySelector('.sheet-line__dudoso-flag')).not.toBeNull();
+
+    node.update({ isDudoso: false });
+    expect(node.classList.contains('sheet-line--dudoso')).toBe(false);
+    expect(node.querySelector('.sheet-line__dudoso-flag')).toBeNull();
+  });
 });
 
 describe('SheetLine — edición', () => {
@@ -406,5 +435,12 @@ describe('SheetLine — edición', () => {
       ),
     );
     expect(hs.persistText).not.toHaveBeenCalled();
+  });
+
+  it('isDudoso también se marca en edición, no solo en reposo', () => {
+    const node = SheetLine(mk('texto dudoso', {}, { isDudoso: true }));
+    node.querySelector('.sheet-line__text').click();
+    expect(node.classList.contains('sheet-line--dudoso')).toBe(true);
+    expect(node.querySelector('.sheet-line__dudoso-flag')).not.toBeNull();
   });
 });

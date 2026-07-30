@@ -337,6 +337,18 @@ body.chrome-hidden .main {
   font-style: italic;
   color: var(--color-text-secondary);
 }
+/* Discreta a propósito: el renglón dudoso se sigue leyendo como texto
+   normal, la única señal de color vive en el ícono (mismo ámbar que
+   SheetStatusStrip), no en el texto ni en el fondo del renglón. */
+.sheet-line__dudoso-flag {
+  grid-area: mic;
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-amber-600);
+}
+.sheet-line--dudoso .sheet-line__conf {
+  background: var(--color-amber-600);
+}
 .sheet-line__grip {
   grid-area: grip;
   color: var(--color-text-secondary);

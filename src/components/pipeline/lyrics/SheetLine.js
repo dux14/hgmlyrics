@@ -112,10 +112,14 @@ export function SheetLine(opts) {
   function renderReposo() {
     const isEmpty = !line.text;
     const isVoc = !!line.vocalization;
+    // Una vocalización nunca es dudosa (mismo criterio que SheetStatusStrip:
+    // sin confianza numérica no hay umbral que comparar), así que las dos
+    // clases nunca coinciden y el slot `mic` del grid puede compartirse.
     el.className = [
       'sheet-line',
       isEmpty ? 'sheet-line--empty' : '',
       isVoc ? 'sheet-line--vocalization' : '',
+      isDudoso ? 'sheet-line--dudoso' : '',
     ]
       .filter(Boolean)
       .join(' ');
@@ -126,9 +130,15 @@ export function SheetLine(opts) {
     // Tercera señal del estado vocalización (junto con la itálica atenuada
     // por CSS y la ausencia de barra de confianza): el estado ya se
     // comunica por texto/clase, la marca es puramente decorativa.
+    // Mismo lenguaje visual que la tira de estado (ámbar + triangle-alert):
+    // esta señal SÍ es informativa (no hay otro indicio del estado dudoso
+    // en reposo), así que además del ícono decorativo lleva texto para
+    // lectores de pantalla.
     const micHtml = isVoc
       ? `<span class="sheet-line__mic" aria-hidden="true">${icon('mic', { size: 12 })}</span>`
-      : '';
+      : isDudoso
+        ? `<span class="sheet-line__dudoso-flag">${icon('triangle-alert', { size: 12 })}<span class="sr-only">Dudoso</span></span>`
+        : '';
     // Sin grip en lectura: no hay arrastre con el que competir y el gesto de
     // toque queda libre para saltar el audio.
     const gripHtml = readOnly
@@ -348,12 +358,23 @@ export function SheetLine(opts) {
   function renderEdit() {
     const isVoc = !!line.vocalization;
     const text = line.text ?? '';
-    el.className = ['sheet-line', 'sheet-line--editing', isVoc ? 'sheet-line--vocalization' : '']
+    el.className = [
+      'sheet-line',
+      'sheet-line--editing',
+      isVoc ? 'sheet-line--vocalization' : '',
+      isDudoso ? 'sheet-line--dudoso' : '',
+    ]
       .filter(Boolean)
       .join(' ');
+    // Misma marca que en reposo (Task 1): la edición no tapa que el renglón
+    // sigue siendo uno de los dudosos de la tira.
+    const dudosoFlagHtml = isDudoso
+      ? `<span class="sheet-line__dudoso-flag">${icon('triangle-alert', { size: 12 })}<span class="sr-only">Dudoso</span></span>`
+      : '';
 
     el.innerHTML = `
       <button type="button" class="sheet-line__grip" aria-label="Mover este renglón">${icon('grip-vertical', { size: 12 })}</button>
+      ${dudosoFlagHtml}
       <textarea class="sheet-line__edit-input" rows="1" aria-label="Texto del renglón">${escapeHtml(text)}</textarea>
       ${scissorsHtml(text, afterWords)}
       <div class="sheet-line__toolbar">

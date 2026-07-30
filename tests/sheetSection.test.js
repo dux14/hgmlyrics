@@ -192,3 +192,65 @@ describe('SheetSection — banda instrumental (por tipo, no por contenido)', () 
     expect(node.querySelector('.sheet-instrumental')).toBeNull();
   });
 });
+
+describe('SheetSection — el encabezado no se pisa mientras tiene el foco', () => {
+  it('con foco en el nombre, update() con un label distinto no pisa lo tipeado ni mueve el foco', () => {
+    const node = SheetSection(mk({ section: mkSection({ label: 'original' }) }));
+    document.body.appendChild(node);
+
+    const nameInput = node.querySelector('.sheet-section__name');
+    nameInput.focus();
+    nameInput.value = 'lo que está tipeando el admin';
+
+    node.update({
+      section: mkSection({ label: 'valor del servidor' }),
+      sIdx: 0,
+      isLast: false,
+      byLine: new Map(),
+      textByLine: new Map(),
+    });
+
+    expect(node.querySelector('.sheet-section__name').value).toBe('lo que está tipeando el admin');
+    expect(document.activeElement).toBe(node.querySelector('.sheet-section__name'));
+
+    node.remove();
+  });
+
+  it('con foco fuera del encabezado, el mismo update() sí repinta', () => {
+    const node = SheetSection(mk({ section: mkSection({ label: 'original' }) }));
+    document.body.appendChild(node);
+
+    document.body.focus();
+    expect(node.contains(document.activeElement)).toBe(false);
+
+    node.update({
+      section: mkSection({ label: 'valor del servidor' }),
+      sIdx: 0,
+      isLast: false,
+      byLine: new Map(),
+      textByLine: new Map(),
+    });
+
+    expect(node.querySelector('.sheet-section__name').value).toBe('valor del servidor');
+
+    node.remove();
+  });
+});
+
+describe('SheetSection — encabezado sin promesas colgando', () => {
+  it('las cinco acciones del encabezado no dejan una unhandledRejection si runAction rechaza', async () => {
+    const hs = mkHandlers({ runAction: vi.fn(async () => Promise.reject(new Error('boom'))) });
+    const node = SheetSection(mk({ handlers: hs, isLast: false }));
+
+    node.querySelector('.sheet-section__type').dispatchEvent(new Event('change'));
+    node.querySelector('.sheet-section__name').dispatchEvent(new Event('blur'));
+    node.querySelector('[data-action="duplicate"]').click();
+    node.querySelector('[data-action="merge"]').click();
+    node.querySelector('[data-action="delete"]').click();
+
+    // Si alguna de las cinco no encadena .catch(), vitest/node reporta un
+    // unhandledRejection y el proceso de test falla igual sin asserts extra.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(hs.runAction).toHaveBeenCalledTimes(5);
+  });
+});

@@ -181,18 +181,22 @@ export function SheetSection(opts) {
     const menu = headerEl.querySelector('.sheet-section__menu');
 
     select.addEventListener('change', () => {
-      handlers.runAction(
-        { type: 'setSectionType', section: sIdx, sectionType: select.value },
-        { rowEl: el },
-      );
+      handlers
+        .runAction(
+          { type: 'setSectionType', section: sIdx, sectionType: select.value },
+          { rowEl: el },
+        )
+        .catch(() => {});
     });
 
     nameInput.addEventListener('blur', () => {
       const trimmed = nameInput.value.trim();
-      handlers.runAction(
-        { type: 'renameSection', section: sIdx, label: trimmed === '' ? null : trimmed },
-        { rowEl: el },
-      );
+      handlers
+        .runAction(
+          { type: 'renameSection', section: sIdx, label: trimmed === '' ? null : trimmed },
+          { rowEl: el },
+        )
+        .catch(() => {});
     });
 
     menuToggle.addEventListener('click', () => {
@@ -205,18 +209,20 @@ export function SheetSection(opts) {
     });
     headerEl.querySelector('[data-action="duplicate"]').addEventListener('click', () => {
       menu.classList.remove('is-open');
-      handlers.runAction({ type: 'duplicateSection', section: sIdx }, { rowEl: el });
+      handlers
+        .runAction({ type: 'duplicateSection', section: sIdx }, { rowEl: el })
+        .catch(() => {});
     });
     const mergeBtn = headerEl.querySelector('[data-action="merge"]');
     if (mergeBtn) {
       mergeBtn.addEventListener('click', () => {
         menu.classList.remove('is-open');
-        handlers.runAction({ type: 'mergeSections', section: sIdx }, { rowEl: el });
+        handlers.runAction({ type: 'mergeSections', section: sIdx }, { rowEl: el }).catch(() => {});
       });
     }
     headerEl.querySelector('[data-action="delete"]').addEventListener('click', () => {
       menu.classList.remove('is-open');
-      handlers.runAction({ type: 'deleteSection', section: sIdx }, { rowEl: el });
+      handlers.runAction({ type: 'deleteSection', section: sIdx }, { rowEl: el }).catch(() => {});
     });
   }
 
@@ -230,7 +236,12 @@ export function SheetSection(opts) {
     if ('byLine' in next) byLine = next.byLine;
     if ('textByLine' in next) textByLine = next.textByLine;
     if ('dudosoThreshold' in next) dudosoThreshold = next.dudosoThreshold;
-    renderHeader();
+    // No pisar el encabezado si tiene el foco adentro: el <select> de tipo
+    // dispara runAction sin perder el foco y el <input> de nombre puede
+    // tener texto sin blur todavía — mismo criterio que SheetLine con su
+    // textarea de edición. El tipo/isLast pueden quedar un instante
+    // atrasados; se resuelven en el próximo update() sin foco.
+    if (!headerEl.contains(document.activeElement)) renderHeader();
     syncBody();
   };
 

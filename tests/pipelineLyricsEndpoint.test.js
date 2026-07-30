@@ -238,6 +238,64 @@ describe('GET /api/songs/:id/pipeline/lyrics', () => {
     expect(body.canApprove).toBe(true);
     expect(updateCalled).toBe(false);
   });
+
+  it('el GET devuelve timings con el renglón sin startMs marcado interpolado', async () => {
+    // Misma seccion de 3 renglones que usa el describe de POST (approvableReviewV2),
+    // con el del medio sin startMs: timingLinesFromSections lo interpola al
+    // punto medio entre las dos vecinas con timing real.
+    const review = {
+      version: 2,
+      sections: [
+        {
+          type: 'chorus',
+          label: null,
+          startMs: 0,
+          endMs: 3000,
+          lines: [
+            {
+              text: 'nadie me ama',
+              startMs: 0,
+              endMs: 900,
+              words: [],
+              confidence: 0.9,
+              vocalization: false,
+              breath: false,
+              manualStartMs: null,
+            },
+            {
+              text: 'como tu me amas',
+              startMs: null,
+              endMs: null,
+              words: [],
+              confidence: null,
+              vocalization: true,
+              breath: false,
+              manualStartMs: null,
+            },
+            {
+              text: 'y en la noche',
+              startMs: 2500,
+              endMs: 3000,
+              words: [],
+              confidence: 0.8,
+              vocalization: false,
+              breath: false,
+              manualStartMs: null,
+            },
+          ],
+        },
+      ],
+    };
+    routeSql([['AS "lyricsReview"', [runRow({ lyricsReview: { review } })]]]);
+    const res = makeRes();
+    await lyricsHandler({ method: 'GET', query: { id: 's1' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    const body = res.json.mock.calls[0][0];
+    expect(body.timings).toHaveLength(3);
+    expect(body.timings[1].interpolated).toBe(true);
+    expect(body.timings[1].startMs).toBeGreaterThan(body.timings[0].startMs);
+    expect(body.timings[1].startMs).toBeLessThan(body.timings[2].startMs);
+  });
 });
 
 describe('PUT /api/songs/:id/pipeline/lyrics', () => {
@@ -486,6 +544,71 @@ describe('PUT /api/songs/:id/pipeline/lyrics', () => {
       res,
     );
     expect(res.status).toHaveBeenCalledWith(422);
+  });
+
+  it('el PUT recalcula timings contra el documento ya modificado', async () => {
+    const threeLineReview = {
+      version: 2,
+      sections: [
+        {
+          type: 'chorus',
+          label: null,
+          startMs: 0,
+          endMs: 900,
+          lines: [
+            {
+              text: 'primero',
+              startMs: 0,
+              endMs: 200,
+              words: [],
+              confidence: 0.9,
+              vocalization: false,
+              breath: false,
+              manualStartMs: null,
+            },
+            {
+              text: 'segundo',
+              startMs: 300,
+              endMs: 500,
+              words: [],
+              confidence: 0.9,
+              vocalization: false,
+              breath: false,
+              manualStartMs: null,
+            },
+            {
+              text: 'tercero',
+              startMs: 600,
+              endMs: 900,
+              words: [],
+              confidence: 0.9,
+              vocalization: false,
+              breath: false,
+              manualStartMs: null,
+            },
+          ],
+        },
+      ],
+    };
+    routeSql([
+      ['AS "lyricsReview"', [runRow({ lyricsReview: { review: threeLineReview } })]],
+      ['UPDATE song_pipeline_runs SET lyrics_review', { count: 1 }],
+    ]);
+    const res = makeRes();
+    await lyricsHandler(
+      {
+        method: 'PUT',
+        query: { id: 's1' },
+        body: { action: { type: 'insertLine', section: 0, at: 1 } },
+      },
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    const body = res.json.mock.calls[0][0];
+    // El renglón insertado (sin timing) nace interpolado y corre el índice de
+    // los que le siguen: el documento pasa de 3 a 4 renglones.
+    expect(body.timings).toHaveLength(4);
+    expect(body.timings[1].interpolated).toBe(true);
   });
 });
 

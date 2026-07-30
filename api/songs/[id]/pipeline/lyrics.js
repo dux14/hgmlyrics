@@ -153,6 +153,7 @@ async function getGate(res, songId) {
   res.status(200).json({
     review: lyricsReview.review,
     canApprove: canApprove(lyricsReview.review),
+    timings: timingLinesFromSections(lyricsReview.review.sections),
     ...buildGateSuggestions(lyricsReview.review, songSections),
   });
 }
@@ -292,6 +293,7 @@ async function putGate(req, res, songId) {
   res.status(200).json({
     review: next,
     canApprove: canApprove(next),
+    timings: timingLinesFromSections(next.sections),
     ...buildGateSuggestions(next, songSections),
   });
 }

@@ -120,6 +120,20 @@ body.chrome-hidden .main {
   align-items: center;
   gap: 4px;
 }
+.sheet-status-strip__listen {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.sheet-status-strip__listen[aria-pressed='true'] {
+  color: var(--color-primary);
+}
 
 /* -- Sección (SheetSection) -- */
 .sheet-section {

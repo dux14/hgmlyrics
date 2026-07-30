@@ -101,6 +101,38 @@ describe('SheetStatusStrip', () => {
     expect(onJumpToDudoso).toHaveBeenCalledWith(1, 1);
   });
 
+  it('el chip Escuchar alterna y avisa su estado', () => {
+    const onToggleListen = vi.fn();
+    const doc = mkDoc([{ type: 'verso', lines: [line('a')] }]);
+    const node = SheetStatusStrip({
+      doc,
+      dudosoThreshold: SCORE_THRESHOLD,
+      onJumpToDudoso: vi.fn(),
+      canListen: true,
+      onToggleListen,
+    });
+    const chip = node.querySelector('.sheet-status-strip__listen');
+    expect(chip.getAttribute('aria-pressed')).toBe('false');
+
+    chip.click();
+    expect(onToggleListen).toHaveBeenCalledTimes(1);
+
+    node.setListening(true);
+    expect(chip.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('sin voz aislada el chip Escuchar no se ofrece', () => {
+    const doc = mkDoc([{ type: 'verso', lines: [line('a')] }]);
+    const node = SheetStatusStrip({
+      doc,
+      dudosoThreshold: SCORE_THRESHOLD,
+      onJumpToDudoso: vi.fn(),
+      canListen: false,
+    });
+
+    expect(node.querySelector('.sheet-status-strip__listen')).toBeNull();
+  });
+
   it('update(doc) recalcula los conteos', () => {
     const doc1 = mkDoc([{ type: 'verso', lines: [line('a')] }]);
     const node = SheetStatusStrip({ doc: doc1, dudosoThreshold: SCORE_THRESHOLD, onJumpToDudoso: vi.fn() });

@@ -116,8 +116,9 @@ function requireInt(value, name) {
 }
 
 // Etiqueta ES normalizada (SongFormer, ver _LABEL_MAP de
-// modal/sections/songformer.py) -> tipo de sección de LETRA. 'instrumental'
-// y 'silencio' no tienen equivalente lírico -- no generan sección de letra.
+// modal/sections/songformer.py) -> tipo de sección de LETRA. 'silencio' no
+// tiene equivalente lírico -- no genera sección. 'instrumental' SÍ: es
+// contenido válido de la canción y ocupa su lugar en los tiempos.
 const STRUCTURE_LABEL_TO_SECTION_TYPE = {
   intro: 'intro',
   verso: 'verse',
@@ -125,6 +126,7 @@ const STRUCTURE_LABEL_TO_SECTION_TYPE = {
   puente: 'bridge',
   'pre-coro': 'prechorus',
   outro: 'outro',
+  instrumental: 'instrumental',
 };
 
 function stableStringify(value) {
@@ -150,8 +152,8 @@ function wordsByTransIndex(transLines, words) {
   return map;
 }
 
-// Secciones líricas desde los segmentos SongFormer: solo labels mapeables
-// (instrumental/silencio no generan sección de letra).
+// Secciones desde los segmentos SongFormer: solo labels mapeables (silencio
+// no genera sección; instrumental sí, con lines: [] y su envelope real).
 function lyricSectionsFromSegments(structureSegments) {
   const sections = [];
   for (const seg of structureSegments ?? []) {

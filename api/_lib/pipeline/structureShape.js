@@ -6,8 +6,9 @@
  * sin sql, sin fetch, sin Date.now.
  */
 
-// Mismo mapa que lyricsReview.js: 'instrumental'/'silencio' no tienen
-// equivalente lírico y por eso no fusionan ni son fusionables.
+// Mismo mapa que lyricsReview.js: 'silencio' no tiene equivalente y por eso
+// no fusiona ni es fusionable. 'instrumental' SÍ es contenido válido de la
+// canción (decisión de producto) y fusiona igual que los tipos líricos.
 const LABEL_TO_TYPE = {
   intro: 'intro',
   verso: 'verse',
@@ -15,6 +16,7 @@ const LABEL_TO_TYPE = {
   puente: 'bridge',
   'pre-coro': 'prechorus',
   outro: 'outro',
+  instrumental: 'instrumental',
 };
 
 /**

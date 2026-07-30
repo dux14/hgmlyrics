@@ -51,9 +51,12 @@ describe('buildReviewDoc v2', () => {
       structureSegments: SEGS,
     });
     expect(doc.version).toBe(2);
-    expect(doc.sections.map((s) => s.type)).toEqual(['verse', 'chorus']); // instrumental NO genera sección
+    // instrumental SÍ genera sección (contenido válido de la canción), con
+    // lines: [] porque no hay renglones cantados en ese tramo.
+    expect(doc.sections.map((s) => s.type)).toEqual(['verse', 'chorus', 'instrumental']);
     expect(doc.sections[0].lines.map((l) => l.text)).toEqual(['hola mundo']);
     expect(doc.sections[1].lines.map((l) => l.text)).toEqual(['canto fuerte']);
+    expect(doc.sections[2].lines).toEqual([]);
     // H1 parte 2: el envelope de la sección ahora se recalcula desde sus
     // renglones reales, no queda en el límite declarado por SongFormer (0).
     expect(doc.sections[0].startMs).toBe(500);
@@ -63,6 +66,44 @@ describe('buildReviewDoc v2', () => {
       vocalization: false,
       breath: false,
       manualStartMs: null,
+    });
+  });
+
+  it('el instrumental conserva su envelope real del segmento con lines: []', () => {
+    const doc = buildReviewDoc({
+      transcription: trans([
+        { text: 'hola mundo', words: [[500, 900, 0.9]] },
+        { text: 'canto fuerte', words: [[21000, 21500, 0.9]] },
+      ]),
+      structureSegments: [
+        { label: 'verso', startMs: 0, endMs: 10000 },
+        { label: 'instrumental', startMs: 10000, endMs: 20000 },
+        { label: 'verso', startMs: 20000, endMs: 30000 },
+      ],
+    });
+    expect(doc.sections).toHaveLength(3);
+    const instrumental = doc.sections[1];
+    expect(instrumental.type).toBe('instrumental');
+    expect(instrumental.lines).toEqual([]);
+    expect(instrumental.startMs).toBe(10000);
+    expect(instrumental.endMs).toBe(20000);
+  });
+
+  it('dos segmentos instrumental adyacentes fusionan en una sola sección', () => {
+    const doc = buildReviewDoc({
+      transcription: trans([{ text: 'hola mundo', words: [[500, 900, 0.9]] }]),
+      structureSegments: [
+        { label: 'verso', startMs: 0, endMs: 10000 },
+        { label: 'instrumental', startMs: 10000, endMs: 15000 },
+        { label: 'instrumental', startMs: 15000, endMs: 20000 },
+      ],
+    });
+    expect(doc.sections).toHaveLength(2);
+    expect(doc.sections[1]).toMatchObject({
+      type: 'instrumental',
+      startMs: 10000,
+      endMs: 20000,
+      lines: [],
     });
   });
 

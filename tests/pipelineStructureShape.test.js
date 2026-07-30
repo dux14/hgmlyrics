@@ -17,13 +17,30 @@ describe('collapseSegments', () => {
     ]);
   });
 
-  it('no fusiona tipos distintos ni segmentos no mapeables entre medio', () => {
+  it('no fusiona tipos distintos aunque uno sea instrumental', () => {
     const out = collapseSegments([
       { label: 'coro', startMs: 0, endMs: 5000 },
       { label: 'instrumental', startMs: 5000, endMs: 8000 },
       { label: 'coro', startMs: 8000, endMs: 12000 },
     ]);
     expect(out).toHaveLength(3);
+  });
+
+  it('no fusiona segmentos no mapeables (silencio) entre medio', () => {
+    const out = collapseSegments([
+      { label: 'coro', startMs: 0, endMs: 5000 },
+      { label: 'silencio', startMs: 5000, endMs: 8000 },
+      { label: 'coro', startMs: 8000, endMs: 12000 },
+    ]);
+    expect(out).toHaveLength(3);
+  });
+
+  it('fusiona instrumentales adyacentes igual que el resto de los tipos', () => {
+    const out = collapseSegments([
+      { label: 'instrumental', startMs: 0, endMs: 5000 },
+      { label: 'instrumental', startMs: 5000, endMs: 9000 },
+    ]);
+    expect(out).toEqual([{ label: 'instrumental', startMs: 0, endMs: 9000 }]);
   });
 
   it('lista vacía o ausente devuelve []', () => {
@@ -39,12 +56,25 @@ describe('collapseBySeed', () => {
   ];
 
   it('fusiona secciones adyacentes cuyos renglones son de la misma sección semilla', () => {
-    const doc = { version: 2, sections: [
-      { type: 'chorus', label: null, startMs: 0, endMs: 5000,
-        lines: [{ text: 'canto uno', seedSectionIdx: 0 }] },
-      { type: 'chorus', label: null, startMs: 5000, endMs: 9000,
-        lines: [{ text: 'canto dos', seedSectionIdx: 0 }] },
-    ] };
+    const doc = {
+      version: 2,
+      sections: [
+        {
+          type: 'chorus',
+          label: null,
+          startMs: 0,
+          endMs: 5000,
+          lines: [{ text: 'canto uno', seedSectionIdx: 0 }],
+        },
+        {
+          type: 'chorus',
+          label: null,
+          startMs: 5000,
+          endMs: 9000,
+          lines: [{ text: 'canto dos', seedSectionIdx: 0 }],
+        },
+      ],
+    };
     const out = collapseBySeed(doc, seed);
     expect(out.sections).toHaveLength(1);
     expect(out.sections[0].lines.map((l) => l.text)).toEqual(['canto uno', 'canto dos']);
@@ -52,20 +82,36 @@ describe('collapseBySeed', () => {
   });
 
   it('no fusiona si los renglones vienen de secciones semilla distintas', () => {
-    const doc = { version: 2, sections: [
-      { type: 'chorus', label: null, startMs: 0, endMs: 5000,
-        lines: [{ text: 'canto uno', seedSectionIdx: 0 }] },
-      { type: 'chorus', label: null, startMs: 5000, endMs: 9000,
-        lines: [{ text: 'otro', seedSectionIdx: 1 }] },
-    ] };
+    const doc = {
+      version: 2,
+      sections: [
+        {
+          type: 'chorus',
+          label: null,
+          startMs: 0,
+          endMs: 5000,
+          lines: [{ text: 'canto uno', seedSectionIdx: 0 }],
+        },
+        {
+          type: 'chorus',
+          label: null,
+          startMs: 5000,
+          endMs: 9000,
+          lines: [{ text: 'otro', seedSectionIdx: 1 }],
+        },
+      ],
+    };
     expect(collapseBySeed(doc, seed).sections).toHaveLength(2);
   });
 
   it('sin semilla no toca nada', () => {
-    const doc = { version: 2, sections: [
-      { type: 'chorus', label: null, startMs: 0, endMs: 5000, lines: [{ text: 'a' }] },
-      { type: 'chorus', label: null, startMs: 5000, endMs: 9000, lines: [{ text: 'b' }] },
-    ] };
+    const doc = {
+      version: 2,
+      sections: [
+        { type: 'chorus', label: null, startMs: 0, endMs: 5000, lines: [{ text: 'a' }] },
+        { type: 'chorus', label: null, startMs: 5000, endMs: 9000, lines: [{ text: 'b' }] },
+      ],
+    };
     expect(collapseBySeed(doc, []).sections).toHaveLength(2);
   });
 });

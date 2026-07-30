@@ -669,6 +669,97 @@ describe('POST /api/align/webhook — contrato del puente sync (spec 2026-07-22 
   });
 });
 
+describe('POST /api/align/webhook — escribe el documento del pipeline (song_pipeline_lyrics)', () => {
+  // Sin annotation: los 3 renglones son el target completo de mergeAlignedLines.
+  const PIPELINE_SECTIONS = [
+    {
+      type: 'verse',
+      lines: [
+        { text: 'Santo, Santo, Santo', startMs: null, endMs: null, words: [] },
+        { text: 'Por eso con los angeles, diciendo:', startMs: null, endMs: null, words: [] },
+      ],
+    },
+    { type: 'chorus', lines: [{ text: 'Es el Senor', startMs: null, endMs: null, words: [] }] },
+  ];
+
+  it('con documento de pipeline, escribe startMs/endMs/words y recalcula el hash', async () => {
+    sqlResponses.push([
+      { sections: null, pipelineSections: PIPELINE_SECTIONS, pipelineHash: 'hash-viejo' },
+    ]); // SELECT songs LEFT JOIN song_pipeline_lyrics
+    sqlResponses.push([]); // UPDATE song_line_timings ... status='ready'
+    sqlResponses.push([]); // UPDATE song_pipeline_lyrics SET sections/hash
+    sqlResponses.push([]); // UPDATE song_pipeline_runs SET lyrics_review (jsonb_set)
+    sqlResponses.push([]); // SELECT run activo (notifyPipelineSync) → ninguno
+    const lines = [
+      { i: 0, startMs: 100, endMs: 900, words: [{ word: 'Santo', startMs: 100, endMs: 300 }] },
+      { i: 1, startMs: 1200, endMs: 1900, words: [] },
+      { i: 2, startMs: 2200, endMs: 2900, words: [] },
+    ];
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ status: 'ready' });
+
+    const docUpdate = sqlCalls.find((c) => c.text.startsWith('UPDATE song_pipeline_lyrics'));
+    expect(docUpdate).toBeTruthy();
+    const [writtenSections, writtenHash] = docUpdate.values;
+    expect(writtenSections[0].lines[0]).toMatchObject({
+      startMs: 100,
+      endMs: 900,
+      words: [{ word: 'Santo', startMs: 100, endMs: 300 }],
+    });
+    expect(writtenSections[1].lines[0]).toMatchObject({ startMs: 2200, endMs: 2900 });
+    expect(writtenHash).not.toBe('hash-viejo');
+
+    const runUpdate = sqlCalls.find((c) => c.text.startsWith('UPDATE song_pipeline_runs'));
+    expect(runUpdate).toBeTruthy();
+    expect(runUpdate.text).toContain('jsonb_set');
+    expect(runUpdate.values).toContain(writtenHash);
+  });
+
+  it('con longitud que no calza, no escribe el documento y la fase queda failed', async () => {
+    sqlResponses.push([
+      { sections: null, pipelineSections: PIPELINE_SECTIONS, pipelineHash: 'hash-viejo' },
+    ]); // SELECT songs LEFT JOIN song_pipeline_lyrics
+    sqlResponses.push([]); // UPDATE song_line_timings ... status='failed'
+    sqlResponses.push([]); // SELECT run activo (notifyPipelineSync) → ninguno
+    // Solo 2 renglones alineados contra 3 targets del documento del pipeline.
+    const lines = [
+      { i: 0, startMs: 100 },
+      { i: 1, startMs: 1200 },
+    ];
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ status: 'failed' });
+    const docUpdate = sqlCalls.find((c) => c.text.startsWith('UPDATE song_pipeline_lyrics'));
+    expect(docUpdate).toBeUndefined();
+    // El shim tampoco queda 'ready': o entran los tiempos en los dos lados, o
+    // en ninguno (si no, el karaoke suena con tiempos que el documento no tiene).
+    const timings = sqlCalls.find((c) => c.text.startsWith('UPDATE song_line_timings'));
+    expect(timings.text).toMatch(/status = 'failed'/);
+    expect(sqlCalls.some((c) => c.text.includes("status = 'ready'"))).toBe(false);
+    expect(applyPipelinePhaseEventMock).not.toHaveBeenCalled();
+  });
+
+  it('sin documento de pipeline (song.pipelineSections ausente), se comporta como hoy', async () => {
+    sqlResponses.push([{ sections: SECTIONS_3_LINES }]); // SELECT songs LEFT JOIN song_pipeline_lyrics
+    sqlResponses.push([]); // UPDATE song_line_timings ... status='ready'
+    const lines = [{ i: 0, startMs: 0 }];
+    const res = makeRes();
+    await webhookHandler(modalAlignReq({ songId: 'song-1', lines, provider: 'whisperx' }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ status: 'ready' });
+    const docUpdate = sqlCalls.find((c) => c.text.startsWith('UPDATE song_pipeline_lyrics'));
+    expect(docUpdate).toBeUndefined();
+    const runsUpdate = sqlCalls.find((c) => c.text.startsWith('UPDATE song_pipeline_runs'));
+    expect(runsUpdate).toBeUndefined();
+  });
+});
+
 // ── PUT /api/songs/[id] — marca stale al cambiar secciones ─────────────────
 describe('PUT /api/songs/[id] — song_line_timings stale al editar secciones', () => {
   const updateHandler = async (...args) => {

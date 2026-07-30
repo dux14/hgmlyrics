@@ -29,6 +29,82 @@ function syncBlocker(status) {
   return 'La canción todavía no tiene tiempos alineados';
 }
 
+// Deshacer: restaura el respaldo de una sola ranura y NO despacha nada — a
+// diferencia del camino feliz de arriba, no hay tiempos nuevos que esperar.
+// Todo en una sola tx: restaurar el documento y dejar el respaldo en null
+// tienen que quedar atómicos, igual que el respaldo original.
+async function handleUndo(res, songId) {
+  const result = await sql.begin(async (tx) => {
+    const rows = await tx`
+      SELECT sections, hash, previous_sections AS "previousSections",
+        previous_hash AS "previousHash"
+      FROM song_pipeline_lyrics
+      WHERE song_id = ${songId}
+      FOR UPDATE
+    `;
+    if (rows.length === 0 || rows[0].previousSections === null) {
+      return { status: 409, error: 'No hay un realineado para deshacer' };
+    }
+    const { previousSections, previousHash } = rows[0];
+
+    // Copia columna a columna (no re-manda previousSections como valor): el
+    // documento restaurado es, por definición, el que ya vive en la columna
+    // de respaldo.
+    await tx`
+      UPDATE song_pipeline_lyrics
+      SET sections = previous_sections, hash = previous_hash,
+        previous_sections = null, previous_hash = null, realigned_at = null
+      WHERE song_id = ${songId}
+    `;
+
+    // Shim song_line_timings: acá sí queda 'ready' de una — no hay webhook que
+    // vaya a completar nada, los tiempos restaurados ya son definitivos.
+    await tx`
+      INSERT INTO song_line_timings (song_id, status, lines, provider, error)
+      VALUES (${songId}, 'ready', ${tx.json(timingLinesFromSections(previousSections))},
+        'pipeline', NULL)
+      ON CONFLICT (song_id)
+      DO UPDATE SET status = 'ready', lines = EXCLUDED.lines, error = NULL
+    `;
+
+    const runs = await tx`
+      SELECT id, phases, lyrics_review AS "lyricsReview"
+      FROM song_pipeline_runs
+      WHERE song_id = ${songId}
+      ORDER BY created_at DESC LIMIT 1
+      FOR UPDATE
+    `;
+    if (runs.length === 0) {
+      return { status: 409, error: 'No hay una ejecución para esta canción' };
+    }
+    const run = runs[0];
+    const nextPhases = structuredClone(run.phases);
+    // sync ya estaba 'done' con el hash viejo: deshacer solo lo devuelve ahí.
+    // pitch/clips derivan del timing que acabamos de pisar -- 'stale' (no
+    // 'pending'), porque no hay ningún dispatch en camino que los reponga.
+    nextPhases.sync = { ...nextPhases.sync, status: 'done', error: null };
+    nextPhases.pitch = { ...nextPhases.pitch, status: 'stale', error: null };
+    nextPhases.clips = { ...nextPhases.clips, status: 'stale', error: null };
+    const nextLyricsReview = { ...run.lyricsReview, approvedHash: previousHash };
+
+    await tx`
+      UPDATE song_pipeline_runs
+      SET phases = ${tx.json(nextPhases)}, status = ${runStatusFromPhases(nextPhases)},
+        lyrics_review = ${tx.json(nextLyricsReview)}, updated_at = now()
+      WHERE id = ${run.id}
+    `;
+
+    return { ok: true };
+  });
+
+  if (!result.ok) {
+    const err = new Error(result.error);
+    err.status = result.status;
+    throw err;
+  }
+  res.status(200).json({ success: true });
+}
+
 export default withErrors(async (req, res) => {
   if (allowMethods(req, res, ['POST'])) return;
   await requireAdmin(req, sql);
@@ -38,12 +114,17 @@ export default withErrors(async (req, res) => {
     return;
   }
 
+  if (req.query.undo === '1') {
+    await handleUndo(res, songId);
+    return;
+  }
+
   // Claim transaccional con FOR UPDATE (mismo criterio que retryPhase): leer el
   // run, validar y dejar `sync` en running quedan atómicos, para que dos
   // realineados concurrentes no despachen dos jobs sobre la misma canción.
   const claim = await sql.begin(async (tx) => {
     const runs = await tx`
-      SELECT id, song_id AS "songId", status, phases
+      SELECT id, song_id AS "songId", status, phases, lyrics_review AS "lyricsReview"
       FROM song_pipeline_runs
       WHERE song_id = ${songId}
       ORDER BY created_at DESC LIMIT 1
@@ -103,9 +184,17 @@ export default withErrors(async (req, res) => {
     nextPhases.clips = { ...nextPhases.clips, status: 'pending', error: null, retries: 0 };
     const runStatus = runStatusFromPhases(nextPhases);
 
+    // El hash aprobado tiene que moverse junto con el documento: dispatchAlign
+    // manda snapshot.hash como snapshotHash, e isStaleSnapshot (process.js)
+    // descarta cualquier webhook cuyo snapshotHash no coincida con
+    // lyrics_review.approvedHash. Sin este UPDATE, el propio webhook del
+    // realineado quedaría "stale" y `sync` no saldría nunca de 'running'.
+    const nextLyricsReview = { ...run.lyricsReview, approvedHash: snapshot.hash };
+
     await tx`
       UPDATE song_pipeline_runs
-      SET phases = ${tx.json(nextPhases)}, status = ${runStatus}, updated_at = now()
+      SET phases = ${tx.json(nextPhases)}, status = ${runStatus},
+        lyrics_review = ${tx.json(nextLyricsReview)}, updated_at = now()
       WHERE id = ${run.id}
     `;
 

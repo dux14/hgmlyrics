@@ -10,6 +10,7 @@ import { allowMethods, withErrors } from '../_lib/http.js';
 import { verifyModalSignature } from '../_lib/modal.js';
 import { projectCanonicalLines } from '../_lib/align.js';
 import { validateBeats } from '../_lib/beats.js';
+import { approvedSnapshot, mergeAlignedLines } from '../_lib/pipeline/lyricsReview.js';
 import { applyPipelinePhaseEvent, isStaleSnapshot } from '../_lib/pipeline/process.js';
 import { ADVANCE_AFTER, advanceNextPhase } from '../_lib/pipeline/advance.js';
 import { maybeAutoRetry } from '../_lib/pipeline/retryPhase.js';
@@ -167,8 +168,17 @@ export default withErrors(async (req, res) => {
     return;
   }
 
-  const [song] = await sql`SELECT sections FROM songs WHERE id = ${songId}`;
-  const canonicalCount = projectCanonicalLines(song?.sections).length;
+  // LEFT JOIN en vez de dos SELECTs: conserva el nombre `sections` para la
+  // columna de songs (fixtures viejos de este archivo no se tocan) y agrega
+  // el documento del pipeline aparte. Mismo criterio que sectionSource en
+  // api/_lib/align.js: el store del pipeline manda cuando existe, porque
+  // songs.sections queda vacío a propósito para canciones de pipeline.
+  const [song] = await sql`
+    SELECT s.sections, l.sections AS "pipelineSections", l.hash AS "pipelineHash"
+    FROM songs s LEFT JOIN song_pipeline_lyrics l ON l.song_id = s.id
+    WHERE s.id = ${songId}
+  `;
+  const canonicalCount = projectCanonicalLines(song?.pipelineSections ?? song?.sections).length;
 
   const validationError = validateLines(lines, canonicalCount);
   if (validationError) {
@@ -226,12 +236,58 @@ export default withErrors(async (req, res) => {
     return;
   }
 
+  // Documento del pipeline: además del shim song_line_timings, este webhook es
+  // quien tiene los tiempos nuevos de cada renglón (startMs/endMs/words) — sin
+  // esto el documento del gate se queda con los tiempos viejos para siempre.
+  // `lines` (el payload crudo, no `linesRow`) trae endMs/words aunque el shape
+  // explícito de linesRow los descarte.
+  //
+  // El merge es puro y se resuelve ANTES de tocar song_line_timings: si el
+  // resultado no calza con el documento, el shim no puede quedar 'ready' con
+  // tiempos que el documento no tiene. O entran los dos, o no entra ninguno.
+  const merged = song?.pipelineSections
+    ? mergeAlignedLines(song.pipelineSections, lines)
+    : null;
+  if (merged?.error) {
+    const message = merged.error.slice(0, 300);
+    await sql`
+      UPDATE song_line_timings
+      SET status = 'failed', error = ${message}
+      WHERE song_id = ${songId} AND status = 'processing'
+    `;
+    await notifyPipelineSync(songId, false, message, snapshotHash);
+    res.status(200).json({ status: 'failed' });
+    return;
+  }
+
   await sql`
     UPDATE song_line_timings
     SET status = 'ready', lines = ${sql.json(linesRow)}, provider = ${provider ?? null}, error = NULL,
         bpm_detected = ${beatsRow ? beatsRow.bpm : null}, beats = ${beatsRow ? sql.json(beatsRow) : null}
     WHERE song_id = ${songId} AND status = 'processing'
   `;
+
+  if (merged?.sections) {
+    const snapshot = approvedSnapshot({ sections: merged.sections });
+    await sql`
+      UPDATE song_pipeline_lyrics
+      SET sections = ${sql.json(snapshot.sections)}, hash = ${snapshot.hash}
+      WHERE song_id = ${songId}
+    `;
+    // El hash aprobado se mueve junto con el documento (mismo motivo que
+    // realign.js): isStaleSnapshot descarta cualquier webhook futuro cuyo
+    // snapshotHash no coincida con lyrics_review.approvedHash. jsonb_set en
+    // vez de leer+escribir: evita un SELECT extra sobre el run activo.
+    await sql`
+      UPDATE song_pipeline_runs
+      SET lyrics_review = jsonb_set(
+        coalesce(lyrics_review, '{}'::jsonb), '{approvedHash}', to_jsonb(${snapshot.hash}::text)
+      )
+      WHERE song_id = ${songId}
+        AND status IN ('created', 'uploading', 'processing', 'awaiting_lyrics', 'running')
+    `;
+  }
+
   await notifyPipelineSync(songId, true, undefined, snapshotHash);
   res.status(200).json({ status: 'ready' });
 });

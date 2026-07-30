@@ -177,6 +177,23 @@ describe('POST /api/songs/:id/pipeline/realign', () => {
     expect(dispatchAlign.mock.calls[0][1]).not.toBe('hash-viejo');
   });
 
+  it('el UPDATE del run lleva el approvedHash nuevo, coincidiendo con el hash despachado', async () => {
+    const calls = routeSql([
+      ['FROM song_pipeline_runs', runRow()],
+      ['FROM song_pipeline_lyrics', lyricsRow()],
+    ]);
+    const res = makeRes();
+    await realignHandler(req(), res);
+
+    expect(res.statusCode).toBe(200);
+    const runUpdate = calls.find((c) => c.text.includes('UPDATE song_pipeline_runs'));
+    const lyricsReview = runUpdate.values.find(
+      (v) => v && typeof v === 'object' && 'approvedHash' in v,
+    );
+    expect(lyricsReview).toBeDefined();
+    expect(lyricsReview.approvedHash).toBe(dispatchAlign.mock.calls[0][1]);
+  });
+
   it('502 y sync en failed si el dispatch falla', async () => {
     const calls = routeSql([
       ['FROM song_pipeline_runs', runRow()],
@@ -192,5 +209,78 @@ describe('POST /api/songs/:id/pipeline/realign', () => {
     const phases = last.values.find((v) => v && v.sync);
     expect(phases.sync.status).toBe('failed');
     expect(phases.sync.error).toMatch(/Modal caído/);
+  });
+});
+
+function undoReq() {
+  return req({ query: { id: 's1', undo: '1' } });
+}
+
+function backupRow(extra = {}) {
+  return [
+    {
+      sections: SECTIONS,
+      hash: 'hash-nuevo',
+      previousSections: SECTIONS,
+      previousHash: 'hash-viejo',
+      ...extra,
+    },
+  ];
+}
+
+describe('POST /api/songs/:id/pipeline/realign?undo=1', () => {
+  it('409 si no hay un realineado para deshacer (sin respaldo)', async () => {
+    routeSql([['FROM song_pipeline_lyrics', backupRow({ previousSections: null, previousHash: null })]]);
+    const res = makeRes();
+    await realignHandler(undoReq(), res);
+    expect(res.statusCode).toBe(409);
+    expect(res.body.error).toMatch(/no hay un realineado para deshacer/i);
+    expect(dispatchAlign).not.toHaveBeenCalled();
+  });
+
+  it('409 si no hay fila en song_pipeline_lyrics', async () => {
+    routeSql([['FROM song_pipeline_lyrics', []]]);
+    const res = makeRes();
+    await realignHandler(undoReq(), res);
+    expect(res.statusCode).toBe(409);
+    expect(dispatchAlign).not.toHaveBeenCalled();
+  });
+
+  it('camino feliz: restaura el respaldo, deja las 3 columnas en null, re-deriva timings y no despacha', async () => {
+    const calls = routeSql([
+      ['FROM song_pipeline_lyrics', backupRow()],
+      ['FROM song_pipeline_runs', runRow()],
+    ]);
+    const res = makeRes();
+    await realignHandler(undoReq(), res);
+
+    expect(res.statusCode).toBe(200);
+
+    const restore = calls.find((c) => c.text.includes('UPDATE song_pipeline_lyrics'));
+    expect(restore).toBeDefined();
+    expect(restore.text).toMatch(/sections = previous_sections/);
+    expect(restore.text).toMatch(/hash = previous_hash/);
+    expect(restore.text).toMatch(/previous_sections = null/);
+    expect(restore.text).toMatch(/previous_hash = null/);
+    expect(restore.text).toMatch(/realigned_at = null/);
+
+    const timings = calls.find((c) => c.text.includes('song_line_timings'));
+    expect(timings.text).toMatch(/'ready'/);
+    const derived = timings.values.find((v) => Array.isArray(v));
+    // El respaldo restaura tal cual (sin limpiar manualStartMs, a diferencia
+    // del camino de realinear): SECTIONS trae manualStartMs=1200 en 'uno'.
+    expect(derived.map((l) => l.startMs)).toEqual([1200, 2000]);
+
+    const runUpdate = calls.find((c) => c.text.includes('UPDATE song_pipeline_runs'));
+    const phases = runUpdate.values.find((v) => v && v.sync);
+    expect(phases.sync.status).toBe('done');
+    expect(phases.pitch.status).toBe('stale');
+    expect(phases.clips.status).toBe('stale');
+    const lyricsReview = runUpdate.values.find(
+      (v) => v && typeof v === 'object' && 'approvedHash' in v,
+    );
+    expect(lyricsReview.approvedHash).toBe('hash-viejo');
+
+    expect(dispatchAlign).not.toHaveBeenCalled();
   });
 });

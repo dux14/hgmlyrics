@@ -21,7 +21,14 @@ export function buildTimeline(sections, timings, durationMs = null) {
     .filter((t) => byIndex.has(t.i))
     .map((t) => {
       const { sIdx, lIdx } = byIndex.get(t.i);
-      return { i: t.i, sIdx, lIdx, startMs: t.startMs, endMs: Infinity, interpolated: Boolean(t.interpolated) };
+      return {
+        i: t.i,
+        sIdx,
+        lIdx,
+        startMs: t.startMs,
+        endMs: Infinity,
+        interpolated: Boolean(t.interpolated),
+      };
     })
     .sort((a, b) => a.startMs - b.startMs);
 
@@ -36,7 +43,10 @@ export function buildTimeline(sections, timings, durationMs = null) {
 
   const bands = sections
     .map((section, sIdx) => ({ section, sIdx }))
-    .filter(({ section }) => section.type === 'instrumental' && section.startMs != null && section.endMs != null)
+    .filter(
+      ({ section }) =>
+        section.type === 'instrumental' && section.startMs != null && section.endMs != null,
+    )
     .map(({ section, sIdx }) => ({ sIdx, startMs: section.startMs, endMs: section.endMs }));
 
   return { entries, bands };

@@ -144,4 +144,36 @@ describe('SheetDrag', () => {
     expect(moveLine).not.toHaveBeenCalled();
     expect(root.querySelector('.sheet-line--dragging')).toBeNull();
   });
+
+  it('arrastrar cerca del borde inferior desplaza el scroller', () => {
+    const root = sheet();
+    const scroller = document.createElement('div');
+    scroller.scrollTop = 0;
+    Object.defineProperty(scroller, 'clientHeight', { value: 400, configurable: true });
+    Object.defineProperty(scroller, 'scrollHeight', { value: 2000, configurable: true });
+    scroller.getBoundingClientRect = () => ({ top: 0, bottom: 400, height: 400 });
+    document.body.appendChild(scroller);
+
+    const frames = [];
+    vi.stubGlobal('requestAnimationFrame', (cb) => {
+      frames.push(cb);
+      return frames.length;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+
+    SheetDrag({
+      root,
+      handlers: { isBusy: () => false, moveLine: vi.fn() },
+      measure: () => RECTS,
+      scroller,
+    });
+
+    const grip = root.querySelectorAll('.sheet-line__grip')[0];
+    pointer('pointerdown', { clientY: 20, target: grip });
+    pointer('pointermove', { clientY: 395, target: grip });
+    frames.shift()?.();
+
+    expect(scroller.scrollTop).toBeGreaterThan(0);
+    vi.unstubAllGlobals();
+  });
 });

@@ -47,6 +47,23 @@ function locate(root, lineEl) {
   return { sIdx, lIdx };
 }
 
+const EDGE_PX = 64;
+const MAX_SPEED_PX = 14;
+
+/** Velocidad de autoscroll según cuánto penetró el puntero en la franja del
+ * borde: 0 fuera de la franja, MAX_SPEED_PX pegado al canto. */
+function edgeSpeed(clientY, box) {
+  if (clientY < box.top + EDGE_PX) {
+    const depth = box.top + EDGE_PX - clientY;
+    return -Math.min(depth / EDGE_PX, 1) * MAX_SPEED_PX;
+  }
+  if (clientY > box.bottom - EDGE_PX) {
+    const depth = clientY - (box.bottom - EDGE_PX);
+    return Math.min(depth / EDGE_PX, 1) * MAX_SPEED_PX;
+  }
+  return 0;
+}
+
 /**
  * @param {{root: HTMLElement, handlers: {isBusy: Function, moveLine: Function},
  *   measure?: Function, scroller?: HTMLElement|null}} opts
@@ -58,6 +75,22 @@ export function SheetDrag(opts) {
 
   let drag = null;
   let dropLine = null;
+  const scroller = opts.scroller ?? document.scrollingElement ?? document.body;
+  let autoRaf = null;
+  let autoSpeed = 0;
+
+  function stopAutoScroll() {
+    if (autoRaf !== null) cancelAnimationFrame(autoRaf);
+    autoRaf = null;
+    autoSpeed = 0;
+  }
+
+  function tickAutoScroll() {
+    autoRaf = null;
+    if (!drag || autoSpeed === 0) return;
+    scroller.scrollTop += autoSpeed;
+    autoRaf = requestAnimationFrame(tickAutoScroll);
+  }
 
   function clearDropIndicator() {
     dropLine?.remove();
@@ -94,6 +127,7 @@ export function SheetDrag(opts) {
     ghost.remove();
     lineEl.classList.remove('sheet-line--dragging');
     clearDropIndicator();
+    stopAutoScroll();
     try {
       grip.releasePointerCapture?.(pointerId);
     } catch {
@@ -152,6 +186,9 @@ export function SheetDrag(opts) {
     drag.ghost.style.top = `${ev.clientY - drag.grabDy}px`;
     drag.target = dropTargetAt(drag.rects, ev.clientY + window.scrollY);
     showDropIndicator(drag.target);
+    autoSpeed = edgeSpeed(ev.clientY, scroller.getBoundingClientRect());
+    if (autoSpeed !== 0 && autoRaf === null) autoRaf = requestAnimationFrame(tickAutoScroll);
+    if (autoSpeed === 0) stopAutoScroll();
   }
 
   function onPointerUp() {

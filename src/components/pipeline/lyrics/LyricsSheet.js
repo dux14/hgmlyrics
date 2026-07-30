@@ -109,6 +109,14 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
   const sectionNodes = [];
   const sectionKeys = [];
 
+  // Cola de un solo elemento en vuelo para `persistText`: NO usa
+  // `state.busy` (a propósito, para no bloquear la hoja mientras se tipea)
+  // pero dos `SheetLine` distintos pueden bluerear casi a la vez —sin esto,
+  // salían dos PUT de texto en paralelo y el backend, con CAS por status,
+  // hacía fallar el segundo en silencio. Cada llamada se encadena a la
+  // anterior en vez de disparar de una.
+  let textQueue = Promise.resolve();
+
   function isBusy() {
     return state.busy || state.previewOpen;
   }
@@ -126,11 +134,23 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
     approveBtn.disabled = !state.canApprove || isBusy();
   }
 
-  /** Lock instantáneo de todos los controles interactivos, sin esperar al
-   * repintado final — mismo motivo que el panel viejo: el backend tiene CAS
-   * por status y una segunda request en paralelo puede fallar en silencio. */
+  // Controles que `lockControls()` deshabilitó (los que YA estaban
+  // deshabilitados antes de bloquear no entran acá) — `unlockControls()`
+  // solo restaura estos. Sin esto, un botón que un `SheetLine` deshabilita
+  // por su cuenta (p. ej. "Unir" cuando no hay vecino de ese lado, según la
+  // posición del caret) quedaba rehabilitado a ciegas tras cualquier acción,
+  // aunque su condición siguiera sin cumplirse.
+  let lockedControls = null;
+
+  /** Lock instantáneo de todos los controles interactivos habilitados, sin
+   * esperar al repintado final — mismo motivo que el panel viejo: el
+   * backend tiene CAS por status y una segunda request en paralelo puede
+   * fallar en silencio. */
   function lockControls() {
+    lockedControls = [];
     el.querySelectorAll('button, select, input, textarea').forEach((ctrl) => {
+      if (ctrl.disabled) return;
+      lockedControls.push(ctrl);
       ctrl.disabled = true;
     });
   }
@@ -138,11 +158,14 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
   /** Contraparte de lockControls tras resolver: el repintado por sección deja
    * intactos (y por lo tanto bloqueados) los nodos de las secciones que no
    * cambiaron, así que hay que desbloquear explícitamente en vez de confiar
-   * en que un render completo los reconstruya sin `disabled`. */
+   * en que un render completo los reconstruya sin `disabled` — pero SOLO los
+   * controles que lockControls() bloqueó, no todos: los que ya estaban
+   * deshabilitados por su propia lógica quedan como estaban. */
   function unlockControls() {
-    el.querySelectorAll('button, select, input, textarea').forEach((ctrl) => {
+    (lockedControls ?? []).forEach((ctrl) => {
       ctrl.disabled = false;
     });
+    lockedControls = null;
     updateApproveButtonState();
   }
 
@@ -216,10 +239,15 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
   /** Todo `.sheet-line` montado, sin distinguir si está en edición — llamar
    * `.flushText()` en cada uno es idempotente (no-op si no hay texto sucio),
    * así que barrer todos es más simple y robusto que rastrear cuál está
-   * editando ahora mismo. */
+   * editando ahora mismo. Secuencial, NO `Promise.all`: cada `flushText()`
+   * que sí tiene texto sucio termina en un PUT (vía `persistText`, en la
+   * misma cola de a uno) y dos en paralelo son exactamente el riesgo que esa
+   * cola evita — barrerlos de a uno los deja ya serializados de entrada. */
   async function flushAllLines() {
     const lines = [...el.querySelectorAll('.sheet-line')];
-    await Promise.all(lines.map((node) => node.flushText?.()));
+    for (const node of lines) {
+      await node.flushText?.();
+    }
   }
 
   /** Ancla de foco tras una acción: el control equivalente al que se acaba
@@ -262,20 +290,39 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
     }
   }
 
-  function applyFocusHint(hint) {
-    if (!hint) return;
-    const sections = state.review.sections;
-    if (sections.length === 0) return;
-    const sIdx = Math.min(Math.max(hint.section, 0), sections.length - 1);
-    if (hint.kind === 'line') {
-      const lineCount = sections[sIdx].lines.length;
-      if (lineCount === 0) return;
-      const lIdx = Math.min(Math.max(hint.line, 0), lineCount - 1);
-      sectionNodes[sIdx]?.focusLine(lIdx, { caret: hint.caret ?? null });
-    } else if (hint.kind === 'section') {
-      sectionNodes[sIdx]
-        ?.querySelector('.sheet-section__name')
-        ?.focus({ preventScroll: true });
+  /**
+   * @param {{kind:string, section:number, line?:number, caret?:number|null}|null} hint
+   * @param {HTMLElement|null} rowEl fila que disparó la acción (si la hubo) —
+   *   fallback para las acciones de renglón sin caret conocido (insertLine,
+   *   duplicateLine, toggleVocalization, deleteLine): `lockControls()`
+   *   deshabilita el control recién clickeado y un elemento deshabilitado no
+   *   retiene foco, así que sin esto el navegador lo manda a `<body>`.
+   */
+  function applyFocusHint(hint, rowEl = null) {
+    if (hint) {
+      const sections = state.review.sections;
+      if (sections.length === 0) return;
+      const sIdx = Math.min(Math.max(hint.section, 0), sections.length - 1);
+      if (hint.kind === 'line') {
+        const lineCount = sections[sIdx].lines.length;
+        if (lineCount === 0) return;
+        const lIdx = Math.min(Math.max(hint.line, 0), lineCount - 1);
+        sectionNodes[sIdx]?.focusLine(lIdx, { caret: hint.caret ?? null });
+      } else if (hint.kind === 'section') {
+        sectionNodes[sIdx]?.querySelector('.sheet-section__name')?.focus({ preventScroll: true });
+      }
+      return;
+    }
+    // Sin hint calculado: si la fila que disparó la acción sigue en el DOM
+    // (el repintado por sección la reusa desplazada, salvo que fuera la
+    // última de su sección) se ancla ahí; si no, en la hoja entera — nunca
+    // se deja caer el foco a `<body>` sin más.
+    if (rowEl?.isConnected) {
+      rowEl.tabIndex = -1;
+      rowEl.focus({ preventScroll: true });
+    } else if (rowEl) {
+      el.tabIndex = -1;
+      el.focus({ preventScroll: true });
     }
   }
 
@@ -306,7 +353,7 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
       state.canApprove = result.canApprove;
       syncSections();
       unlockControls();
-      applyFocusHint(hint);
+      applyFocusHint(hint, rowEl);
     } catch (err) {
       state.busy = false;
       showToast(err.message || 'No se pudo aplicar el cambio', { type: 'error' });
@@ -317,24 +364,32 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
   /** Persistencia de texto de renglón (blur/Cmd+Enter en SheetLine) — mismo
    * action.type que el `setLineText` de partir, pero llamado directo por
    * `SheetLine.flushText()`, sin pasar por runAction ni por el lock de
-   * controles: el propio flushText de la línea deduplica llamadas en
-   * simultáneo, y no bloquea al resto de la hoja mientras tipea. */
-  async function persistText(sIdx, lIdx, text) {
-    try {
-      const result = await sendLyricsAction(songId, {
-        type: 'setLineText',
-        section: sIdx,
-        line: lIdx,
-        text,
-      });
-      state.review = result.review;
-      state.canApprove = result.canApprove;
-      syncSections();
-      updateApproveButtonState();
-    } catch (err) {
-      showToast(err.message || 'No se pudo guardar el texto', { type: 'error' });
-      await resync();
-    }
+   * controles: no bloquea al resto de la hoja mientras se tipea. Encadenada
+   * a `textQueue` en vez de disparar de una: `SheetLine.flushText()` ya
+   * deduplica llamadas en simultáneo DENTRO del mismo renglón, pero nada
+   * impide que dos renglones distintos bluereen casi a la vez — sin la cola,
+   * salían dos PUT de texto en paralelo y el backend, con CAS por status,
+   * fallaba el segundo en silencio. */
+  function persistText(sIdx, lIdx, text) {
+    const run = async () => {
+      try {
+        const result = await sendLyricsAction(songId, {
+          type: 'setLineText',
+          section: sIdx,
+          line: lIdx,
+          text,
+        });
+        state.review = result.review;
+        state.canApprove = result.canApprove;
+        syncSections();
+        updateApproveButtonState();
+      } catch (err) {
+        showToast(err.message || 'No se pudo guardar el texto', { type: 'error' });
+        await resync();
+      }
+    };
+    textQueue = textQueue.then(run);
+    return textQueue;
   }
 
   /** Pausa el `<audio>` del preview antes de quitarlo del DOM: sacarlo del
@@ -386,11 +441,13 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
   }
 
   addSectionBtn.addEventListener('click', () => {
-    runAction({ type: 'insertSection', at: state.review.sections.length }, { rowEl: null });
+    runAction({ type: 'insertSection', at: state.review.sections.length }, { rowEl: null }).catch(
+      () => {},
+    );
   });
 
   languageSelect.addEventListener('change', () => {
-    runAction({ type: 'setLanguage', language: languageSelect.value });
+    runAction({ type: 'setLanguage', language: languageSelect.value }).catch(() => {});
   });
 
   approveBtn.addEventListener('click', openPreview);

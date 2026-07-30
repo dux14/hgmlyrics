@@ -33,10 +33,7 @@ export function SheetSeparator({ sIdx, afterLine, handlers }) {
 
   addBtn.addEventListener('click', () => {
     if (handlers.isBusy()) return;
-    handlers.runAction(
-      { type: 'insertLine', section: sIdx, at: afterLine + 1 },
-      { rowEl: el },
-    );
+    handlers.runAction({ type: 'insertLine', section: sIdx, at: afterLine + 1 }, { rowEl: el });
   });
 
   splitBtn.addEventListener('click', () => {

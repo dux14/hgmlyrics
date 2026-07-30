@@ -264,4 +264,108 @@ describe('LyricsSheet', () => {
 
     expect(el.querySelector('.sheet__approve').disabled).toBe(true);
   });
+
+  it('persistText serializa: nunca dos PUT de texto en vuelo al mismo tiempo', async () => {
+    const el = await LyricsSheet({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const deferreds = [];
+    sendLyricsAction.mockImplementation((_songId, action) => {
+      if (action.type !== 'setLineText') {
+        return Promise.resolve({ review: baseReview(), canApprove: true });
+      }
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      return new Promise((resolve) => {
+        deferreds.push(() => {
+          inFlight -= 1;
+          resolve({ review: baseReview(), canApprove: true });
+        });
+      });
+    });
+
+    const lines = el.querySelectorAll('.sheet-line');
+    lines[0].querySelector('.sheet-line__text').click();
+    const ta0 = lines[0].querySelector('.sheet-line__edit-input');
+    ta0.value = 'primera editada';
+    ta0.dispatchEvent(new Event('blur'));
+
+    // La segunda edición se abre sin esperar a la primera: persistText NO usa
+    // state.busy, así que la hoja sigue editable mientras el primer PUT
+    // sigue en vuelo.
+    lines[1].querySelector('.sheet-line__text').click();
+    const ta1 = lines[1].querySelector('.sheet-line__edit-input');
+    ta1.value = 'segunda editada';
+    ta1.dispatchEvent(new Event('blur'));
+    await flush();
+
+    // El segundo blur no debe haber disparado su PUT todavía: solo el
+    // primero está en vuelo.
+    expect(deferreds.length).toBe(1);
+    expect(maxInFlight).toBe(1);
+
+    deferreds[0]();
+    await flush();
+
+    // Recién ahora, con el primero resuelto, sale el segundo — nunca
+    // solapados.
+    expect(deferreds.length).toBe(2);
+    expect(maxInFlight).toBe(1);
+
+    deferreds[1]();
+    await flush();
+  });
+
+  it('unlockControls no rehabilita un botón "Unir" que seguía sin destino válido', async () => {
+    const el = await LyricsSheet({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    // Primer renglón de la primera sección: sin vecino arriba.
+    const firstLine = el.querySelectorAll('.sheet-line')[0];
+    firstLine.querySelector('.sheet-line__text').click();
+    const textarea = firstLine.querySelector('.sheet-line__edit-input');
+    textarea.setSelectionRange(0, 0);
+    textarea.dispatchEvent(new Event('select'));
+
+    const mergeBtn = firstLine.querySelector('[data-action="merge"]');
+    expect(mergeBtn.disabled).toBe(true);
+
+    // Una acción de estructura AJENA a esa sección (agregar una sección al
+    // final) dispara lock/unlock global sin tocar la huella de la sección 0.
+    sendLyricsAction.mockResolvedValueOnce({
+      review: { ...baseReview(), sections: [...baseReview().sections, baseReview().sections[1]] },
+      canApprove: true,
+    });
+    el.querySelector('.sheet__add-section').click();
+    await flush();
+
+    expect(mergeBtn.disabled).toBe(true);
+  });
+
+  it('tras Borrar, el foco no cae a body', async () => {
+    const el = await LyricsSheet({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    sendLyricsAction.mockResolvedValueOnce({
+      review: {
+        ...baseReview(),
+        sections: [
+          { ...baseReview().sections[0], lines: [line('segunda linea')] },
+          baseReview().sections[1],
+        ],
+      },
+      canApprove: false,
+    });
+
+    // Borra el primer renglón (no el último de su sección), así la fila
+    // sigue en el DOM (reusada para el renglón que quedó en su lugar).
+    const firstLine = el.querySelectorAll('.sheet-line')[0];
+    firstLine.querySelector('.sheet-line__text').click();
+    firstLine.querySelector('[data-action="delete"]').click();
+    await flush();
+
+    expect(document.activeElement).not.toBe(document.body);
+  });
 });

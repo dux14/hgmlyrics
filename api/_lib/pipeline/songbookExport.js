@@ -33,7 +33,7 @@ function splitAnnotations(lines) {
   const anchored = [];
   for (const line of lines) {
     if (line.annotation) {
-      anchored.push({ after: canonical.length - 1, line: { text: line.text, annotation: true } });
+      anchored.push({ after: canonical.length - 1, line });
     } else {
       canonical.push(line);
     }
@@ -94,7 +94,7 @@ export function exportSections(approvedSections, songSections = []) {
     return {
       type: section.type,
       label: section.label || SECTION_LABELS[section.type] || 'Verso',
-      ...(prev?.speedPreset ? { speedPreset: prev.speedPreset } : {}),
+      ...(typeof prev?.speedPreset === 'number' ? { speedPreset: prev.speedPreset } : {}),
       lines: out,
     };
   });

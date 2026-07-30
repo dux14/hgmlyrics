@@ -11,7 +11,7 @@ describe('exportSections', () => {
       {
         type: 'verse',
         label: 'Verso',
-        speedPreset: 'slow',
+        speedPreset: 40,
         lines: [
           {
             text: 'uno',
@@ -25,8 +25,16 @@ describe('exportSections', () => {
     const { sections, dropped } = exportSections(approved, song);
     expect(sections[0].lines[0].chords).toEqual([{ pos: 0, ch: 'C' }]);
     expect(sections[0].lines[0].groups).toHaveLength(1);
-    expect(sections[0].speedPreset).toBe('slow');
+    expect(sections[0].speedPreset).toBe(40);
     expect(dropped).toEqual([]);
+  });
+
+  it('conserva speedPreset: 0 (el valor válido más lento, no un falsy a descartar)', () => {
+    const song = [
+      { type: 'verse', label: 'Verso', speedPreset: 0, lines: [{ text: 'uno' }, { text: 'dos' }] },
+    ];
+    const { sections } = exportSections(approved, song);
+    expect(sections[0].speedPreset).toBe(0);
   });
 
   it('suelta chords y groups cuando el texto cambió, y lo reporta', () => {
@@ -109,12 +117,33 @@ describe('exportSections', () => {
     expect(twice).toEqual(once);
   });
 
+  it('conserva chords/spoken de una anotación al reintercalarla', () => {
+    const song = [
+      {
+        type: 'verse',
+        label: null,
+        lines: [
+          { text: 'uno' },
+          { text: 'a capela', annotation: true, chords: [{ pos: 0, ch: 'Am' }], spoken: true },
+          { text: 'dos' },
+        ],
+      },
+    ];
+    const { sections } = exportSections(approved, song);
+    expect(sections[0].lines[1]).toEqual({
+      text: 'a capela',
+      annotation: true,
+      chords: [{ pos: 0, ch: 'Am' }],
+      spoken: true,
+    });
+  });
+
   it('no muta la entrada', () => {
     const song = [
       {
         type: 'verse',
         label: 'Verso',
-        speedPreset: 'slow',
+        speedPreset: 40,
         lines: [
           { text: 'uno', chords: [{ pos: 0, ch: 'C' }] },
           { text: 'dos', annotation: false },

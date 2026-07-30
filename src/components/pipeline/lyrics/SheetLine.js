@@ -126,7 +126,7 @@ export function SheetLine(opts) {
       : '';
 
     el.innerHTML = `
-      <span class="sheet-line__grip" aria-hidden="true">${icon('grip-vertical', { size: 12 })}</span>
+      <button type="button" class="sheet-line__grip" aria-label="Mover este renglón">${icon('grip-vertical', { size: 12 })}</button>
       <span class="sheet-line__text">${isEmpty ? EMPTY_TEXT : escapeHtml(line.text)}</span>
       ${micHtml}
       ${confHtml}
@@ -314,6 +314,12 @@ export function SheetLine(opts) {
         () => {},
       ),
     );
+    el.querySelector('[data-action="move-up"]').addEventListener('click', () =>
+      dispatchStructureAction({ type: 'moveLineUp', section: sIdx, line: lIdx }).catch(() => {}),
+    );
+    el.querySelector('[data-action="move-down"]').addEventListener('click', () =>
+      dispatchStructureAction({ type: 'moveLineDown', section: sIdx, line: lIdx }).catch(() => {}),
+    );
     el.querySelector('[data-action="delete"]').addEventListener('click', () =>
       dispatchStructureAction({ type: 'deleteLine', section: sIdx, line: lIdx }).catch(() => {}),
     );
@@ -337,7 +343,7 @@ export function SheetLine(opts) {
       .join(' ');
 
     el.innerHTML = `
-      <span class="sheet-line__grip" aria-hidden="true">${icon('grip-vertical', { size: 12 })}</span>
+      <button type="button" class="sheet-line__grip" aria-label="Mover este renglón">${icon('grip-vertical', { size: 12 })}</button>
       <textarea class="sheet-line__edit-input" rows="1" aria-label="Texto del renglón">${escapeHtml(text)}</textarea>
       ${scissorsHtml(text, afterWords)}
       <div class="sheet-line__toolbar">
@@ -346,6 +352,8 @@ export function SheetLine(opts) {
         <button type="button" class="sheet-line__action" data-action="duplicate">Duplicar</button>
         <button type="button" class="sheet-line__action${isVoc ? ' is-active' : ''}" data-action="voc">Voc.</button>
         ${typeof handlers.listenFrom === 'function' ? `<button type="button" class="sheet-line__action" data-action="listen">${icon('volume-2', { size: 14 })} Escuchar</button>` : ''}
+        <button type="button" class="sheet-line__action" data-action="move-up" aria-label="Mover arriba">${icon('chevron-up', { size: 14 })}</button>
+        <button type="button" class="sheet-line__action" data-action="move-down" aria-label="Mover abajo">${icon('chevron-down', { size: 14 })}</button>
         <button type="button" class="sheet-line__action" data-action="delete">Borrar</button>
       </div>
       ${suggestionHtml(suggestion, text)}

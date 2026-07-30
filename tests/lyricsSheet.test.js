@@ -102,10 +102,7 @@ describe('LyricsSheet', () => {
     sendLyricsAction.mockResolvedValueOnce({
       review: {
         ...baseReview(),
-        sections: [
-          { ...baseReview().sections[0], label: 'Coro nuevo' },
-          baseReview().sections[1],
-        ],
+        sections: [{ ...baseReview().sections[0], label: 'Coro nuevo' }, baseReview().sections[1]],
       },
       canApprove: true,
     });
@@ -302,7 +299,10 @@ describe('LyricsSheet', () => {
     select.dispatchEvent(new Event('change'));
     await flush();
 
-    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', { type: 'setLanguage', language: 'en' });
+    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
+      type: 'setLanguage',
+      language: 'en',
+    });
   });
 
   it('con canApprove en falso el botón de aprobar está deshabilitado', async () => {
@@ -567,5 +567,72 @@ describe('LyricsSheet', () => {
     retryBtn.click();
 
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('mover renglones con los chevrones', () => {
+  beforeEach(() => {
+    getLyricsReview.mockResolvedValue(pendingResult());
+  });
+
+  it('mover abajo dentro de la sección manda moveLine con el índice siguiente', async () => {
+    sendLyricsAction.mockResolvedValue({ review: baseReview(), canApprove: false });
+    const el = await LyricsSheet({ songId: 'abc' });
+    document.body.appendChild(el);
+    await flush();
+
+    el.querySelectorAll('.sheet-line__text')[0].click();
+    await flush();
+    el.querySelector('[data-action="move-down"]').click();
+    await flush();
+
+    expect(sendLyricsAction).toHaveBeenCalledWith('abc', {
+      type: 'moveLine',
+      fromSection: 0,
+      fromLine: 0,
+      toSection: 0,
+      toLine: 1,
+    });
+  });
+
+  it('el primer renglón de una sección sube cruzando al final de la anterior', async () => {
+    sendLyricsAction.mockResolvedValue({ review: baseReview(), canApprove: false });
+    const el = await LyricsSheet({ songId: 'abc' });
+    document.body.appendChild(el);
+    await flush();
+
+    el.querySelectorAll('.sheet-section')[1].querySelectorAll('.sheet-line__text')[0].click();
+    await flush();
+    el.querySelectorAll('.sheet-section')[1].querySelector('[data-action="move-up"]').click();
+    await flush();
+
+    const call = sendLyricsAction.mock.calls.at(-1)[1];
+    expect(call.type).toBe('moveLine');
+    expect(call.fromSection).toBe(1);
+    expect(call.fromLine).toBe(0);
+    expect(call.toSection).toBe(0);
+    expect(call.toLine).toBe(baseReview().sections[0].lines.length);
+  });
+
+  it('el grip es un botón accesible por teclado', async () => {
+    const el = await LyricsSheet({ songId: 'abc' });
+    document.body.appendChild(el);
+    await flush();
+
+    const grip = el.querySelector('.sheet-line__grip');
+    expect(grip.tagName).toBe('BUTTON');
+    expect(grip.getAttribute('aria-label')).toBeTruthy();
+    expect(grip.hasAttribute('aria-hidden')).toBe(false);
+  });
+
+  it('tocar el grip no abre la edición del renglón', async () => {
+    const el = await LyricsSheet({ songId: 'abc' });
+    document.body.appendChild(el);
+    await flush();
+
+    el.querySelector('.sheet-line__grip').click();
+    await flush();
+
+    expect(el.querySelector('.sheet-line--editing')).toBeNull();
   });
 });

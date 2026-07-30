@@ -121,7 +121,7 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
     return state.busy || state.previewOpen;
   }
 
-  const handlers = { isBusy, runAction, persistText };
+  const handlers = { isBusy, runAction, persistText, moveLine };
 
   const statusStrip = SheetStatusStrip({
     doc: state.review,
@@ -285,6 +285,11 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
         return { kind: 'section', section: action.section + 1 };
       case 'insertSection':
         return { kind: 'section', section: action.at };
+      // El renglón movido queda en toSection:toLine. Sin caret a propósito: se
+      // ancla el foco sin reabrir la edición, así el chevrón siguiente sigue
+      // operando sobre el mismo renglón.
+      case 'moveLine':
+        return { kind: 'line', section: action.toSection, line: action.toLine, caret: null };
       default:
         return null;
     }
@@ -326,16 +331,69 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
     }
   }
 
+  /** Traduce las dos acciones locales de chevrón al `moveLine` real. Vive acá y
+   * no en SheetLine porque los bordes de sección exigen el documento entero: el
+   * primer renglón de una sección sube al FINAL de la anterior, y el último baja
+   * al PRINCIPIO de la siguiente. Devuelve null cuando no hay a dónde ir (el
+   * primer renglón de la primera sección, el último de la última). */
+  function resolveLocalMove(action) {
+    const sections = state.review.sections;
+    const { section: sIdx, line: lIdx } = action;
+    if (action.type === 'moveLineUp') {
+      if (lIdx > 0) {
+        return {
+          type: 'moveLine',
+          fromSection: sIdx,
+          fromLine: lIdx,
+          toSection: sIdx,
+          toLine: lIdx - 1,
+        };
+      }
+      const prev = sections[sIdx - 1];
+      if (!prev) return null;
+      return {
+        type: 'moveLine',
+        fromSection: sIdx,
+        fromLine: lIdx,
+        toSection: sIdx - 1,
+        toLine: prev.lines.length,
+      };
+    }
+    if (lIdx < sections[sIdx].lines.length - 1) {
+      return {
+        type: 'moveLine',
+        fromSection: sIdx,
+        fromLine: lIdx,
+        toSection: sIdx,
+        toLine: lIdx + 1,
+      };
+    }
+    if (!sections[sIdx + 1]) return null;
+    return {
+      type: 'moveLine',
+      fromSection: sIdx,
+      fromLine: lIdx,
+      toSection: sIdx + 1,
+      toLine: 0,
+    };
+  }
+
   /**
    * Punto de entrada único de toda acción de edición: guarda de concurrencia
    * (`state.busy`/`previewOpen`), lock instantáneo, flush del renglón en
    * edición (excepto partir, que ya lleva el texto en su payload) y, si hay
    * `rowEl`, la animación de colapso antes del PUT.
-   * @param {object} action
+   * @param {object} actionArg
    * @param {{rowEl?: HTMLElement|null}} [opts]
    */
-  async function runAction(action, { rowEl = null } = {}) {
+  async function runAction(actionArg, { rowEl = null } = {}) {
+    let action = actionArg;
     if (isBusy()) return;
+    if (action.type === 'moveLineUp' || action.type === 'moveLineDown') {
+      const resolved = resolveLocalMove(action);
+      if (!resolved) return;
+      action = resolved;
+    }
     state.busy = true;
     const hint = focusHintFor(action);
     lockControls();
@@ -390,6 +448,14 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
     };
     textQueue = textQueue.then(run);
     return textQueue;
+  }
+
+  /** Entrada del arrastre: recibe el payload ya convertido. `rowEl: null` a
+   * propósito — el renglón no desaparece, se mueve, y el usuario ya vio el
+   * gesto, así que la animación de colapso `is-resolving` sobraría. */
+  function moveLine(payload) {
+    if (!payload) return Promise.resolve();
+    return runAction(payload, { rowEl: null });
   }
 
   /** Pausa el `<audio>` del preview antes de quitarlo del DOM: sacarlo del

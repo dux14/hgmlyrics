@@ -235,6 +235,54 @@ describe('LyricsSheet', () => {
     expect(el.querySelector('.lps')).toBeTruthy();
   });
 
+  it('"Aprobar letra" sin blur previo persiste el texto sucio antes de armar el preview', async () => {
+    getLyricsReview.mockResolvedValue(pendingResult({ canApprove: true }));
+    const el = await LyricsSheet({ songId: 'song-1' });
+    document.body.appendChild(el);
+
+    const firstLine = el.querySelectorAll('.sheet-line')[0];
+    firstLine.querySelector('.sheet-line__text').click();
+    const textarea = firstLine.querySelector('.sheet-line__edit-input');
+    textarea.value = 'primera linea recien tecleada';
+    // Sin blur: el textarea sigue enfocado y con texto sucio sin persistir.
+
+    sendLyricsAction.mockResolvedValueOnce({
+      review: {
+        ...baseReview(),
+        sections: [
+          {
+            ...baseReview().sections[0],
+            lines: [line('primera linea recien tecleada'), line('segunda linea')],
+          },
+          baseReview().sections[1],
+        ],
+      },
+      canApprove: true,
+    });
+
+    // Click directo en "Aprobar letra", sin desenfocar el renglón antes.
+    el.querySelector('.sheet__approve').click();
+    await flush();
+
+    // El PUT de texto salió (persistText, vía flushAllLines) antes de que
+    // apareciera cualquier PUT de la acción de aprobar (approveLyrics es una
+    // llamada aparte, todavía no disparada acá — el preview es solo
+    // confirmación).
+    expect(sendLyricsAction).toHaveBeenCalledWith('song-1', {
+      type: 'setLineText',
+      section: 0,
+      line: 0,
+      text: 'primera linea recien tecleada',
+    });
+    expect(approveLyrics).not.toHaveBeenCalled();
+
+    // El documento que arma el preview YA incluye el texto recién tecleado
+    // — no el que había antes del último tecleo.
+    const preview = el.querySelector('.lps');
+    expect(preview).toBeTruthy();
+    expect(preview.textContent).toContain('primera linea recien tecleada');
+  });
+
   it('"Agregar sección" manda insertSection con at igual a la cantidad de secciones', async () => {
     const el = await LyricsSheet({ songId: 'song-1' });
     document.body.appendChild(el);
@@ -382,7 +430,12 @@ describe('LyricsSheet', () => {
     const el = await LyricsSheet({ songId: 'song-1', onApproved });
     document.body.appendChild(el);
 
+    // openPreview() ahora es async (espera flushAllLines() antes de armar el
+    // preview, ver el fix de "Aprobar letra puede confirmar una letra
+    // desactualizada"): un `await flush()` tras el click es necesario para
+    // que `.lps` ya exista en el DOM.
     el.querySelector('.sheet__approve').click();
+    await flush();
     el.querySelector('.lps__confirm').click();
     await flush();
 
@@ -396,6 +449,7 @@ describe('LyricsSheet', () => {
     document.body.appendChild(el);
 
     el.querySelector('.sheet__approve').click();
+    await flush();
     el.querySelector('.lps__back').click();
 
     expect(el.querySelector('.lps')).toBeNull();
@@ -410,6 +464,7 @@ describe('LyricsSheet', () => {
     const approveBtn = el.querySelector('.sheet__approve');
     approveBtn.click();
     approveBtn.click();
+    await flush();
 
     expect(el.querySelectorAll('.lps').length).toBe(1);
   });
@@ -420,6 +475,7 @@ describe('LyricsSheet', () => {
     document.body.appendChild(el);
 
     el.querySelector('.sheet__approve').click();
+    await flush();
     expect(el.querySelector('.lps')).toBeTruthy();
 
     el.querySelector('.sheet-line__text').click();
@@ -436,6 +492,7 @@ describe('LyricsSheet', () => {
     document.body.appendChild(el);
 
     el.querySelector('.sheet__approve').click();
+    await flush();
 
     expect(document.activeElement).toBe(el.querySelector('.lps'));
   });
@@ -448,6 +505,7 @@ describe('LyricsSheet', () => {
     document.body.appendChild(el);
 
     el.querySelector('.sheet__approve').click();
+    await flush();
     const audio = el.querySelector('.lps__audio');
     const pauseSpy = vi.spyOn(audio, 'pause');
 
@@ -465,6 +523,7 @@ describe('LyricsSheet', () => {
     document.body.appendChild(el);
 
     el.querySelector('.sheet__approve').click();
+    await flush();
     const audio = el.querySelector('.lps__audio');
     const pauseSpy = vi.spyOn(audio, 'pause');
 

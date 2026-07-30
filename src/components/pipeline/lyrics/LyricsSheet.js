@@ -399,11 +399,25 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
   }
 
   /** Abre el paso de confirmación: el approve nunca se dispara directo desde
-   * el botón de la hoja, siempre pasa por el reparto final. */
-  function openPreview() {
+   * el botón de la hoja, siempre pasa por el reparto final. Mismo mecanismo
+   * que `runAction` para el mismo riesgo: un click directo en "Aprobar
+   * letra" sin desenfocar antes NO debe construir el preview con
+   * `state.review` desactualizado — se espera `flushAllLines()` primero.
+   * `persistText` (lo que dispara ese flush) ya deja `state.review` al día
+   * cuando resuelve bien, y llama a `resync()` por su cuenta si el PUT
+   * falla — no hace falta un resync propio acá arriba, alcanza con esperar
+   * el flush antes de leer `state.review`. */
+  async function openPreview() {
     if (!state.canApprove || isBusy()) return;
-    state.previewOpen = true;
+    state.busy = true;
     lockControls();
+    await flushAllLines();
+    state.busy = false;
+    if (!state.canApprove) {
+      unlockControls();
+      return;
+    }
+    state.previewOpen = true;
     const preview = LyricsPreviewStep({
       doc: state.review,
       vocalsUrl: state.vocalsUrl ?? null,
@@ -450,7 +464,9 @@ export async function LyricsSheet({ songId, onApproved, onRetry } = {}) {
     runAction({ type: 'setLanguage', language: languageSelect.value }).catch(() => {});
   });
 
-  approveBtn.addEventListener('click', openPreview);
+  approveBtn.addEventListener('click', () => {
+    openPreview().catch(() => {});
+  });
 
   languageSelect.value = state.review.language ?? 'es';
   syncSections();

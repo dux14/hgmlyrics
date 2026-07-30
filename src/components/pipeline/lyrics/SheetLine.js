@@ -319,7 +319,7 @@ export function SheetLine(opts) {
     );
     // No pasa por dispatchStructureAction: escuchar mientras se corrige es el
     // caso de uso central del gate, así que la edición se queda abierta.
-    el.querySelector('[data-action="listen"]').addEventListener('click', () =>
+    el.querySelector('[data-action="listen"]')?.addEventListener('click', () =>
       handlers.listenFrom(sIdx, lIdx),
     );
 
@@ -345,7 +345,7 @@ export function SheetLine(opts) {
         <button type="button" class="sheet-line__action" data-action="merge"></button>
         <button type="button" class="sheet-line__action" data-action="duplicate">Duplicar</button>
         <button type="button" class="sheet-line__action${isVoc ? ' is-active' : ''}" data-action="voc">Voc.</button>
-        <button type="button" class="sheet-line__action" data-action="listen">${icon('volume-2', { size: 14 })} Escuchar</button>
+        ${typeof handlers.listenFrom === 'function' ? `<button type="button" class="sheet-line__action" data-action="listen">${icon('volume-2', { size: 14 })} Escuchar</button>` : ''}
         <button type="button" class="sheet-line__action" data-action="delete">Borrar</button>
       </div>
       ${suggestionHtml(suggestion, text)}

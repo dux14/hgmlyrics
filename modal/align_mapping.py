@@ -117,12 +117,21 @@ def map_words_to_lines(lines: list[dict], words: list[dict]) -> list[dict]:
     (startMs <= la ancla aceptada anterior) se descarta (la linea queda como
     no anclada e interpola igual que cualquier otra).
 
-    Devuelve [{'i':0,'startMs':1200,'score':0.9,'interpolated':False}, ...]
+    Devuelve [{'i':0,'startMs':1200,'endMs':1500,'score':0.9,
+    'interpolated':False,'words':[{'word':'...','startMs':1200,'endMs':1350,
+    'score':0.9}, ...]}, ...]
     SIEMPRE con startMs entero, monotono ESTRICTAMENTE creciente (colisiones
     de redondeo se resuelven empujando +1ms). 'interpolated' es False solo
     para lineas que anclaron una palabra propia (idx en accepted_ms tras la
     monotonicidad); 'score' es el score de esa palabra segun WhisperX (o None
     si no vino), y None siempre que 'interpolated' sea True.
+
+    'words' junta, en orden, TODAS las palabras de WhisperX que ancló esa
+    linea durante el matching greedy (no solo la primera/ancla de startMs);
+    una linea sin ninguna palabra asignada devuelve 'words': [] y
+    'endMs': None -- no se inventan tiempos. 'endMs' de una linea es el 'end'
+    (ms, entero) de la ULTIMA palabra de su lista de 'words', o None si esa
+    palabra no trajo 'end'.
     """
     ordered_lines = list(lines)
     n_lines = len(ordered_lines)
@@ -141,8 +150,10 @@ def map_words_to_lines(lines: list[dict], words: list[dict]) -> list[dict]:
 
     n_tokens = len(flat_tokens)
 
-    # Palabras de WhisperX validas (con 'start'), normalizadas.
-    norm_words: list[tuple[str, float, float | None]] = []
+    # Palabras de WhisperX validas (con 'start'), normalizadas. Se conserva la
+    # palabra cruda y su 'end' (si vino) para poblar 'words'/'endMs' de salida
+    # -- el dato ya lo devuelve WhisperX, antes se tiraba en el aplanado.
+    norm_words: list[tuple[str, float, float | None, str, float | None]] = []
     for w in words:
         start = w.get("start")
         if start is None:
@@ -150,13 +161,19 @@ def map_words_to_lines(lines: list[dict], words: list[dict]) -> list[dict]:
         norm = _normalize_word(w.get("word", ""))
         if norm is None:
             continue
-        norm_words.append((norm, float(start), w.get("score")))
+        end = w.get("end")
+        norm_words.append(
+            (norm, float(start), w.get("score"), w.get("word", ""), float(end) if end is not None else None)
+        )
 
     # Matching greedy secuencial: cursor sobre flat_tokens, nunca retrocede.
     raw_anchor_ms: dict[int, float] = {}
     raw_anchor_score: dict[int, float | None] = {}
+    # Todas las palabras que ancló cada linea, en orden (no solo la primera):
+    # es la base de 'words'/'endMs' en la salida.
+    line_words: dict[int, list[dict]] = {}
     tok_ptr = 0
-    for norm_word, start_sec, score in norm_words:
+    for norm_word, start_sec, score, raw_word, end_sec in norm_words:
         matched_end = None
         matched_line_idx = None
         lookahead_limit = min(n_tokens, tok_ptr + _MAX_LOOKAHEAD)
@@ -174,10 +191,17 @@ def map_words_to_lines(lines: list[dict], words: list[dict]) -> list[dict]:
                 break
         if matched_end is not None:
             tok_ptr = matched_end
-            # Solo la PRIMERA ancla de cada linea cuenta (regla del docstring).
+            # Solo la PRIMERA ancla de cada linea cuenta para startMs (regla
+            # del docstring), pero 'words' junta TODAS las palabras ancladas.
             if matched_line_idx not in raw_anchor_ms:
                 raw_anchor_ms[matched_line_idx] = start_sec * 1000.0
                 raw_anchor_score[matched_line_idx] = score
+            line_words.setdefault(matched_line_idx, []).append({
+                "word": raw_word,
+                "startMs": round(start_sec * 1000.0),
+                "endMs": round(end_sec * 1000.0) if end_sec is not None else None,
+                "score": score if isinstance(score, (int, float)) else None,
+            })
 
     # Forzar monotonicidad: recorrer lineas en orden, descartando anclas que
     # no superen estrictamente la ultima ancla aceptada.
@@ -244,10 +268,20 @@ def map_words_to_lines(lines: list[dict], words: list[dict]) -> list[dict]:
         prev_int = ms_int
         interpolated = idx not in accepted_ms
         score = None if interpolated else raw_anchor_score.get(idx)
+        # Misma regla que 'score': si el ancla de la linea NO se acepto (la
+        # monotonicidad la descarto), su startMs es interpolado y las palabras
+        # crudas lo contradirian -- se emiten vacias en vez de pintar el
+        # renglon con tiempos que no son los suyos.
+        words_for_line = [] if interpolated else line_words.get(idx, [])
+        # endMs = de la ULTIMA palabra asignada a la linea (orden de matching,
+        # que nunca retrocede). Sin palabras, no se inventa tiempo: None.
+        end_ms = words_for_line[-1]["endMs"] if words_for_line else None
         out.append({
             "i": ordered_lines[idx]["i"],
             "startMs": ms_int,
+            "endMs": end_ms,
             "score": score,
             "interpolated": interpolated,
+            "words": words_for_line,
         })
     return out

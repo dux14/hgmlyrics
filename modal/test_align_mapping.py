@@ -50,8 +50,48 @@ def test_tokens_silabicos_anclan_palabra_completa_de_whisperx():
     result = map_words_to_lines(lines, words)
 
     assert result == [
-        {"i": 0, "startMs": 1200, "score": None, "interpolated": False}
+        {
+            "i": 0,
+            "startMs": 1200,
+            "endMs": None,
+            "score": None,
+            "interpolated": False,
+            "words": [{"word": "Santo", "startMs": 1200, "endMs": None, "score": None}],
+        }
     ]
+
+
+def test_words_y_endms_se_conservan_desde_whisperx():
+    """endMs/words son nuevos (Task 9): endMs = 'end' (ms) de la ULTIMA
+    palabra asignada a la linea; words junta todas las palabras ancladas."""
+    lines = [{"i": 0, "text": "gracias por venir"}]
+    words = [
+        {"word": "gracias", "start": 1.0, "end": 1.4, "score": 0.9},
+        {"word": "por", "start": 1.4, "end": 1.5, "score": 0.8},
+        {"word": "venir", "start": 1.5, "end": 1.9, "score": 0.95},
+    ]
+
+    result = map_words_to_lines(lines, words)
+
+    assert result[0]["endMs"] == 1900
+    assert result[0]["words"] == [
+        {"word": "gracias", "startMs": 1000, "endMs": 1400, "score": 0.9},
+        {"word": "por", "startMs": 1400, "endMs": 1500, "score": 0.8},
+        {"word": "venir", "startMs": 1500, "endMs": 1900, "score": 0.95},
+    ]
+
+
+def test_linea_sin_palabras_ancladas_no_inventa_tiempos():
+    lines = [
+        {"i": 0, "text": "hola"},
+        {"i": 1, "text": "linea fantasma que no dice el audio"},
+    ]
+    words = [{"word": "hola", "start": 1.0, "end": 1.3}]
+
+    result = map_words_to_lines(lines, words)
+
+    assert result[1]["words"] == []
+    assert result[1]["endMs"] is None
 
 
 def test_ancla_directa_con_score_propaga_el_score_de_whisperx():
@@ -88,10 +128,20 @@ def test_linea_sin_ancla_interpola_entre_vecinas():
     result = map_words_to_lines(lines, words)
 
     assert result[0] == {
-        "i": 0, "startMs": 1000, "score": None, "interpolated": False
+        "i": 0,
+        "startMs": 1000,
+        "endMs": None,
+        "score": None,
+        "interpolated": False,
+        "words": [{"word": "hola", "startMs": 1000, "endMs": None, "score": None}],
     }
     assert result[2] == {
-        "i": 2, "startMs": 3000, "score": None, "interpolated": False
+        "i": 2,
+        "startMs": 3000,
+        "endMs": None,
+        "score": None,
+        "interpolated": False,
+        "words": [{"word": "mundo", "startMs": 3000, "endMs": None, "score": None}],
     }
     # interpolacion lineal a mitad de camino entre 1000 y 3000
     assert result[1]["startMs"] == 2000
@@ -129,6 +179,10 @@ def test_monotonicidad_forzada_descarta_ancla_fuera_de_orden():
     assert result[0]["interpolated"] is False
     assert result[1]["interpolated"] is True
     assert result[1]["score"] is None
+    # Misma regla para las palabras: la linea quedo con un startMs interpolado,
+    # asi que sus palabras crudas (start=1.0) lo contradicen — no se emiten.
+    assert result[1]["words"] == []
+    assert result[1]["endMs"] is None
 
 
 def test_lineas_spoken_participan_igual_alineadas():
@@ -151,9 +205,35 @@ def test_lineas_spoken_participan_igual_alineadas():
     result = map_words_to_lines(lines, words)
 
     assert result == [
-        {"i": 0, "startMs": 500, "score": None, "interpolated": False},
-        {"i": 1, "startMs": 1000, "score": None, "interpolated": False},
-        {"i": 2, "startMs": 2000, "score": None, "interpolated": False},
+        {
+            "i": 0,
+            "startMs": 500,
+            "endMs": None,
+            "score": None,
+            "interpolated": False,
+            "words": [{"word": "santo", "startMs": 500, "endMs": None, "score": None}],
+        },
+        {
+            "i": 1,
+            "startMs": 1000,
+            "endMs": None,
+            "score": None,
+            "interpolated": False,
+            "words": [
+                {"word": "gracias", "startMs": 1000, "endMs": None, "score": None},
+                {"word": "por", "startMs": 1200, "endMs": None, "score": None},
+                {"word": "venir", "startMs": 1400, "endMs": None, "score": None},
+                {"word": "hoy", "startMs": 1600, "endMs": None, "score": None},
+            ],
+        },
+        {
+            "i": 2,
+            "startMs": 2000,
+            "endMs": None,
+            "score": None,
+            "interpolated": False,
+            "words": [{"word": "aleluya", "startMs": 2000, "endMs": None, "score": None}],
+        },
     ]
 
 

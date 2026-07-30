@@ -13,7 +13,7 @@ Pipeline de una sola funcion GPU:
   4. WhisperX: alinear (NO transcribir) el texto CONOCIDO de las lineas contra
      el audio vocal, con el modelo de alineado en espanol.
   5. align_mapping.map_words_to_lines: mapear las palabras alineadas (con su
-     timestamp) a las lineas de entrada -> [{i, startMs}, ...].
+     timestamp) a las lineas de entrada -> [{i, startMs, endMs, words}, ...].
   6. POST firmado al webhookUrl con el resultado (o el error, en cualquier
      excepcion — nunca silencio).
 
@@ -21,7 +21,7 @@ Contrato de entrada (payload que postea api/_lib/align.js):
   { songId, audioUrl, lines: [{i, text}], webhookUrl, snapshotHash? }
 
 Contrato de salida (webhook, ver api/align/webhook.js):
-  exito: { songId, lines: [{i, startMs}, ...], provider: 'whisperx',
+  exito: { songId, lines: [{i, startMs, endMs, words}, ...], provider: 'whisperx',
            beats: { bpm, beatsMs: [int, ...] } | null, snapshotHash? }
   error: { songId, error: str, snapshotHash? }
 

@@ -602,6 +602,15 @@ describe('applyReviewAction v2', () => {
     expect(next.sections[0].label).toBeNull();
   });
 
+  it('setSectionType conserva instrumental como tipo conocido', () => {
+    const next = applyReviewAction(base(), {
+      type: 'setSectionType',
+      section: 0,
+      sectionType: 'instrumental',
+    });
+    expect(next.sections[0].type).toBe('instrumental');
+  });
+
   it('setBreath y toggleVocalization', () => {
     let next = applyReviewAction(base(), { type: 'setBreath', section: 0, line: 0, breath: true });
     expect(next.sections[0].lines[0].breath).toBe(true);
@@ -838,6 +847,15 @@ describe('acciones de sección', () => {
       endMs: 20,
       lines: [],
     });
+  });
+
+  it('insertSection acepta sectionType instrumental', () => {
+    const next = applyReviewAction(base(), {
+      type: 'insertSection',
+      at: 2,
+      sectionType: 'instrumental',
+    });
+    expect(next.sections[2].type).toBe('instrumental');
   });
 
   it('duplicateSection copia tipo, nombre y textos, sin tiempos', () => {

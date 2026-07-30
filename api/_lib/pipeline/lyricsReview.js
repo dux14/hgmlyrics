@@ -31,7 +31,15 @@ const SUPPORTED_LANGUAGES = ['es', 'en'];
 // ImmersiveView no dependa de SongView; misma razón aplica aquí al revés,
 // api/_lib no debe acoplarse al árbol de src/). Solo lo que este módulo
 // necesita: agrupar por tipo y validar/normalizar el tipo de setSectionType.
-const KNOWN_SECTION_TYPES = ['verse', 'chorus', 'bridge', 'prechorus', 'intro', 'outro'];
+const KNOWN_SECTION_TYPES = [
+  'verse',
+  'chorus',
+  'bridge',
+  'prechorus',
+  'intro',
+  'outro',
+  'instrumental',
+];
 const SECTION_TYPE_ALIASES = {
   verso: 'verse',
   estribillo: 'chorus',

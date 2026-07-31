@@ -115,6 +115,18 @@ function requireInt(value, name) {
   return value;
 }
 
+/** Extremos de un envelope de tiempo a partir de fuentes que pueden faltar:
+ * devuelven `null` solo si ninguna aporta un número. Un renglón sin tiempo no
+ * debe encoger el de al lado. */
+function minMs(values) {
+  const nums = values.filter((v) => typeof v === 'number');
+  return nums.length ? Math.min(...nums) : null;
+}
+function maxMs(values) {
+  const nums = values.filter((v) => typeof v === 'number');
+  return nums.length ? Math.max(...nums) : null;
+}
+
 // Etiqueta ES normalizada (SongFormer, ver _LABEL_MAP de
 // modal/sections/songformer.py) -> tipo de sección de LETRA. 'silencio' no
 // tiene equivalente lírico -- no genera sección. 'instrumental' SÍ: es
@@ -429,10 +441,15 @@ export function applyReviewAction(doc, action) {
       const line = requireLine(section, action.line);
       const nextLine = requireLine(section, action.line + 1);
       const words = [...(line.words ?? []), ...(nextLine.words ?? [])];
+      // El envelope sale de todas las fuentes disponibles, no solo de `words`:
+      // si uno de los dos renglones no tiene desglose por palabra, la lista
+      // cubre nada más la mitad del texto y dejarla mandar recorta el renglón
+      // fusionado (arranca tarde o termina antes de lo que dura). Caso comun:
+      // en un documento recien transcrito casi ningun renglon trae `words`.
       const merged = {
         text: `${line.text} ${nextLine.text}`.trim(),
-        startMs: words.length ? words[0].startMs : (line.startMs ?? nextLine.startMs),
-        endMs: words.length ? words[words.length - 1].endMs : (nextLine.endMs ?? line.endMs),
+        startMs: minMs([line.startMs, nextLine.startMs, words[0]?.startMs]),
+        endMs: maxMs([line.endMs, nextLine.endMs, words[words.length - 1]?.endMs]),
         words,
         confidence: lineConfidence(words),
         vocalization: line.vocalization && nextLine.vocalization,

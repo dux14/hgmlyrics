@@ -1137,3 +1137,58 @@ describe('acciones de sección', () => {
     expect(() => applyReviewAction(doc, { type: 'deleteSection', section: 0 })).toThrow(RangeError);
   });
 });
+
+// H5 del tracker del 31-jul: al unir un renglón que tiene `words` con otro que
+// no las tiene, la lista de palabras queda incompleta y no puede ser la única
+// fuente del envelope. Caso real y frecuente: en un documento recién
+// transcrito casi ningún renglón trae desglose por palabra todavía.
+describe('mergeLines con renglones sin palabras', () => {
+  it('conserva el endMs del segundo renglón cuando este no tiene words', () => {
+    const doc = {
+      version: 2,
+      sections: [
+        sec('verse', null, 0, 4000, [
+          ln('dor', 1000, 1600),
+          ln('No quiero hacer esperar', 2000, 3800, { words: [], confidence: 0.6 }),
+        ]),
+      ],
+    };
+    const merged = applyReviewAction(doc, { type: 'mergeLines', section: 0, line: 0 }).sections[0]
+      .lines[0];
+    expect(merged.text).toBe('dor No quiero hacer esperar');
+    expect(merged.startMs).toBe(1000);
+    expect(merged.endMs).toBe(3800);
+  });
+
+  it('conserva el startMs del primer renglón cuando este no tiene words', () => {
+    const doc = {
+      version: 2,
+      sections: [
+        sec('verse', null, 0, 4000, [
+          ln('Sin desglose', 1000, 1600, { words: [], confidence: 0.6 }),
+          ln('con palabras', 2000, 3800),
+        ]),
+      ],
+    };
+    const merged = applyReviewAction(doc, { type: 'mergeLines', section: 0, line: 0 }).sections[0]
+      .lines[0];
+    expect(merged.startMs).toBe(1000);
+    expect(merged.endMs).toBe(3800);
+  });
+
+  it('no inventa tiempos cuando ninguno de los dos renglones los tiene', () => {
+    const doc = {
+      version: 2,
+      sections: [
+        sec('verse', null, 0, 4000, [
+          ln('uno', null, null, { words: [], confidence: null }),
+          ln('dos', null, null, { words: [], confidence: null }),
+        ]),
+      ],
+    };
+    const merged = applyReviewAction(doc, { type: 'mergeLines', section: 0, line: 0 }).sections[0]
+      .lines[0];
+    expect(merged.startMs).toBeNull();
+    expect(merged.endMs).toBeNull();
+  });
+});

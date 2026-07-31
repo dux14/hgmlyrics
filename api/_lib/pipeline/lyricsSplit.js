@@ -58,8 +58,7 @@ function mkPiece(text, words) {
     // corte cada renglón tiene su propio confidence y puede cruzar el
     // umbral en distinto sentido que el original (spec 2026-07-23).
     vocalization:
-      words.length === 0 ||
-      (confidence !== null && confidence < VOCALIZATION_CONFIDENCE_THRESHOLD),
+      words.length === 0 || (confidence !== null && confidence < VOCALIZATION_CONFIDENCE_THRESHOLD),
     breath: false,
     manualStartMs: null,
   };
@@ -75,8 +74,14 @@ export function splitLineAtWord(line, afterWord) {
     throw new RangeError(`afterWord fuera de rango: ${afterWord}`);
   }
   const aligned = Array.isArray(line.words) && line.words.length === tokens.length;
-  const first = mkPiece(tokens.slice(0, afterWord + 1).join(' '), aligned ? line.words.slice(0, afterWord + 1) : []);
-  const second = mkPiece(tokens.slice(afterWord + 1).join(' '), aligned ? line.words.slice(afterWord + 1) : []);
+  const first = mkPiece(
+    tokens.slice(0, afterWord + 1).join(' '),
+    aligned ? line.words.slice(0, afterWord + 1) : [],
+  );
+  const second = mkPiece(
+    tokens.slice(afterWord + 1).join(' '),
+    aligned ? line.words.slice(afterWord + 1) : [],
+  );
   // El primero conserva el respiro/offset manual del original solo si aplica
   // al inicio (manualStartMs ancla el ARRANQUE del renglón).
   first.manualStartMs = line.manualStartMs;
@@ -106,7 +111,8 @@ export function splitWordAtChar(word, charOffset) {
  * arreglo: sin `\n`, un arreglo de una pieza que equivale a `editLine`
  * (cambia solo `text`, conserva words/timing/confidence/vocalización); con
  * `\n`, tantas piezas como saltos queden tras colapsar saltos consecutivos y
- * espacios (nunca se crea una pieza vacía).
+ * espacios (nunca se crea una pieza vacía). Única excepción: texto que colapsa
+ * a nada devuelve un renglón vacío — vaciar no borra el renglón.
  *
  * El reparto de `words` prueba dos hipótesis de tokenización, en orden:
  * 1) frontera — cada `\n` es un separador más (un `\n` YA es whitespace para
@@ -127,8 +133,16 @@ export function splitWordAtChar(word, charOffset) {
  * @returns {object[]}
  */
 export function splitLineByText(line, text) {
-  if (typeof text !== 'string' || text.trim() === '') {
+  if (typeof text !== 'string') {
     throw new RangeError(`text inválido: ${text}`);
+  }
+  // Texto que colapsa a nada (vacío, espacios o solo saltos): el renglón se
+  // queda VACÍO, no se borra ni se parte. Vaciar es una edición legítima y
+  // debe dejar exactamente un renglón; si se dejara caer al reparto de piezas,
+  // todas colapsarían y `pieces` saldría vacío (el splice del caller borraría
+  // el renglón, y `pieces[0]` reventaría antes con TypeError).
+  if (text.trim() === '') {
+    return [{ ...line, text: '' }];
   }
   if (!text.includes('\n')) {
     return [{ ...line, text }];
@@ -255,9 +269,9 @@ export function splitAtSectionBoundaries(line, sections) {
   let pieces = [line];
   for (const afterWord of [...cuts].reverse()) {
     const last = pieces[pieces.length - 1];
-    const consumedBefore = pieces.slice(0, -1).reduce(
-      (n, p) => n + p.text.split(/\s+/).filter(Boolean).length, 0,
-    );
+    const consumedBefore = pieces
+      .slice(0, -1)
+      .reduce((n, p) => n + p.text.split(/\s+/).filter(Boolean).length, 0);
     const [first, second] = splitLineAtWord(last, afterWord - consumedBefore);
     pieces = [...pieces.slice(0, -1), first, second];
   }
@@ -314,9 +328,9 @@ export function splitBySeed(line, match, seed) {
   let pieces = [line];
   for (const afterWord of [...cuts].reverse()) {
     const last = pieces[pieces.length - 1];
-    const before = pieces.slice(0, -1).reduce(
-      (n, p) => n + p.text.split(/\s+/).filter(Boolean).length, 0,
-    );
+    const before = pieces
+      .slice(0, -1)
+      .reduce((n, p) => n + p.text.split(/\s+/).filter(Boolean).length, 0);
     const [first, second] = splitLineAtWord(last, afterWord - before);
     pieces = [...pieces.slice(0, -1), first, second];
   }

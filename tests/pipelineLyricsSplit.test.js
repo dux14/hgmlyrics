@@ -13,7 +13,10 @@ const line = (text, words) => ({
   startMs: words[0][0],
   endMs: words[words.length - 1][1],
   words: words.map(([startMs, endMs], k) => ({
-    word: text.split(/\s+/)[k], startMs, endMs, score: 0.9,
+    word: text.split(/\s+/)[k],
+    startMs,
+    endMs,
+    score: 0.9,
   })),
   confidence: 0.9,
   vocalization: false,
@@ -30,27 +33,38 @@ const SECTIONS = [
 describe('splitAtSectionBoundaries', () => {
   it('parte el renglón que cruza la frontera, en la palabra exacta', () => {
     const l = line('sé que tú me cuidarás quiero escuchar tu voz', [
-      [39000, 39300], [39400, 39700], [39800, 40000], [40100, 40300], [40400, 41000],
-      [42500, 42900], [43000, 43600], [43700, 43900], [44000, 44400],
+      [39000, 39300],
+      [39400, 39700],
+      [39800, 40000],
+      [40100, 40300],
+      [40400, 41000],
+      [42500, 42900],
+      [43000, 43600],
+      [43700, 43900],
+      [44000, 44400],
     ]);
     const out = splitAtSectionBoundaries(l, SECTIONS);
-    expect(out.map((x) => x.text)).toEqual([
-      'sé que tú me cuidarás',
-      'quiero escuchar tu voz',
-    ]);
+    expect(out.map((x) => x.text)).toEqual(['sé que tú me cuidarás', 'quiero escuchar tu voz']);
     expect(out[0].endMs).toBe(41000);
     expect(out[1].startMs).toBe(42500);
   });
 
   it('no parte un renglón contenido en una sola sección', () => {
     const l = line('el cielo y lo demás', [
-      [31660, 32000], [32100, 32400], [32500, 32700], [32800, 33100], [33200, 33800],
+      [31660, 32000],
+      [32100, 32400],
+      [32500, 32700],
+      [32800, 33100],
+      [33200, 33800],
     ]);
     expect(splitAtSectionBoundaries(l, SECTIONS)).toHaveLength(1);
   });
 
   it('sin words alineadas a los tokens no parte', () => {
-    const l = line('texto editado a mano', [[39000, 39300], [39400, 39700]]);
+    const l = line('texto editado a mano', [
+      [39000, 39300],
+      [39400, 39700],
+    ]);
     l.text = 'texto editado a mano por el admin';
     expect(splitAtSectionBoundaries(l, SECTIONS)).toHaveLength(1);
   });
@@ -65,26 +79,38 @@ describe('splitBySeed', () => {
   it('parte el renglón en la frontera entre dos líneas de la semilla', () => {
     // 9 tokens -> 9 words alineadas (la mismatch words/tokens desactiva el corte).
     const l = line('primero el cielo y lo demás está de mar', [
-      [1000, 1300], [1400, 1600], [1700, 2000], [2100, 2300], [2400, 2600],
-      [2700, 2900], [3000, 3300], [3400, 3900], [4000, 4300],
+      [1000, 1300],
+      [1400, 1600],
+      [1700, 2000],
+      [2100, 2300],
+      [2400, 2600],
+      [2700, 2900],
+      [3000, 3300],
+      [3400, 3900],
+      [4000, 4300],
     ]);
     const out = splitBySeed(l, { dbIndex: 0, score: 0.9 }, seed);
-    expect(out.map((x) => x.text)).toEqual([
-      'primero el cielo',
-      'y lo demás está de mar',
-    ]);
+    expect(out.map((x) => x.text)).toEqual(['primero el cielo', 'y lo demás está de mar']);
   });
 
   it('bajo el umbral de score no hereda nada', () => {
     const l = line('algo que no se parece', [
-      [1000, 1300], [1400, 1600], [1700, 2000], [2100, 2300], [2400, 2600],
+      [1000, 1300],
+      [1400, 1600],
+      [1700, 2000],
+      [2100, 2300],
+      [2400, 2600],
     ]);
     const out = splitBySeed(l, { dbIndex: 0, score: SEED_INHERIT_MIN_SCORE - 0.1 }, seed);
     expect(out).toHaveLength(1);
   });
 
   it('sin semilla devuelve el renglón intacto', () => {
-    const l = line('primero el cielo', [[1000, 1300], [1400, 1600], [1700, 2000]]);
+    const l = line('primero el cielo', [
+      [1000, 1300],
+      [1400, 1600],
+      [1700, 2000],
+    ]);
     expect(splitBySeed(l, null, [])).toHaveLength(1);
   });
 
@@ -98,8 +124,15 @@ describe('splitBySeed', () => {
       { dbIndex: 1, sectionIdx: 1, lineIdx: 0, text: 'y lo demás está de mar' },
     ];
     const l = line('primero el cielo y lo demás está de mar', [
-      [1000, 1300], [1400, 1600], [1700, 2000], [2100, 2300], [2400, 2600],
-      [2700, 2900], [3000, 3300], [3400, 3800], [3900, 4200],
+      [1000, 1300],
+      [1400, 1600],
+      [1700, 2000],
+      [2100, 2300],
+      [2400, 2600],
+      [2700, 2900],
+      [3000, 3300],
+      [3400, 3800],
+      [3900, 4200],
     ]);
     const out = splitBySeed(l, { dbIndex: 0, score: 0.9 }, seedTwoSections);
     expect(out.map((p) => p.text)).toEqual(['primero el cielo', 'y lo demás está de mar']);
@@ -129,21 +162,48 @@ describe('splitWordAtChar', () => {
 
 describe('splitLineByText', () => {
   it('sin \\n equivale a editLine (arreglo de una pieza): cambia solo el texto, conserva lo demás', () => {
-    const l = line('primero el cielo', [[1200, 1450], [1500, 1700], [1800, 2100]]);
+    const l = line('primero el cielo', [
+      [1200, 1450],
+      [1500, 1700],
+      [1800, 2100],
+    ]);
     l.manualStartMs = 900;
     l.breath = true;
     const editLineEquivalent = { ...l, text: 'primero el cielo y lo demás' };
     expect(splitLineByText(l, 'primero el cielo y lo demás')).toEqual([editLineEquivalent]);
   });
 
-  it('sin \\n con texto solo espacios lanza RangeError (setLineText vacío)', () => {
-    const l = line('primero el cielo', [[1200, 1450], [1500, 1700], [1800, 2100]]);
-    expect(() => splitLineByText(l, '   ')).toThrow(RangeError);
+  it('texto que colapsa a nada deja UN renglón vacío, no lo borra ni lo parte', () => {
+    const l = line('primero el cielo', [
+      [1200, 1450],
+      [1500, 1700],
+      [1800, 2100],
+    ]);
+    expect(splitLineByText(l, '   ')).toEqual([{ ...l, text: '' }]);
+    expect(splitLineByText(l, '')).toEqual([{ ...l, text: '' }]);
+    // Con \n incluido: sin este caso, todas las piezas colapsan y el arreglo
+    // sale vacío (el splice del caller borraría el renglón).
+    expect(splitLineByText(l, '\n  \n')).toEqual([{ ...l, text: '' }]);
+  });
+
+  it('texto que no es string sigue lanzando RangeError', () => {
+    const l = line('primero el cielo', [
+      [1200, 1450],
+      [1500, 1700],
+      [1800, 2100],
+    ]);
+    expect(() => splitLineByText(l, null)).toThrow(RangeError);
+    expect(() => splitLineByText(l, 42)).toThrow(RangeError);
   });
 
   describe('un \\n en frontera de palabra es idéntico a splitLineAtWord', () => {
     const l = line('primero el cielo y lo demás', [
-      [1200, 1450], [1500, 1700], [1800, 2100], [2200, 2400], [2500, 2600], [2700, 3000],
+      [1200, 1450],
+      [1500, 1700],
+      [1800, 2100],
+      [2200, 2400],
+      [2500, 2600],
+      [2700, 3000],
     ]);
     const viaWord = splitLineAtWord(l, 2);
 
@@ -180,7 +240,10 @@ describe('splitLineByText', () => {
 
   it('N saltos en una operación producen N+1 piezas', () => {
     const l = line('uno dos tres cuatro', [
-      [1000, 1100], [1200, 1300], [1400, 1500], [1600, 1700],
+      [1000, 1100],
+      [1200, 1300],
+      [1400, 1500],
+      [1600, 1700],
     ]);
     const out = splitLineByText(l, 'uno\ndos\ntres\ncuatro');
     expect(out).toHaveLength(4);
@@ -188,7 +251,11 @@ describe('splitLineByText', () => {
   });
 
   it('conteo de tokens distinto al de words: piezas sin words, confidence null, vocalización derivada', () => {
-    const l = line('primero el cielo', [[1200, 1450], [1500, 1700], [1800, 2100]]);
+    const l = line('primero el cielo', [
+      [1200, 1450],
+      [1500, 1700],
+      [1800, 2100],
+    ]);
     const out = splitLineByText(l, 'primero el gran\ncielo azul');
     expect(out).toHaveLength(2);
     for (const piece of out) {
@@ -199,7 +266,11 @@ describe('splitLineByText', () => {
   });
 
   it('saltos consecutivos y espacios colapsan: nunca se crea una pieza vacía', () => {
-    const l = line('primero el cielo', [[1200, 1450], [1500, 1700], [1800, 2100]]);
+    const l = line('primero el cielo', [
+      [1200, 1450],
+      [1500, 1700],
+      [1800, 2100],
+    ]);
     const out = splitLineByText(l, 'primero\n\n  \nel cielo');
     expect(out).toHaveLength(2);
     expect(out.map((p) => p.text)).toEqual(['primero', 'el cielo']);
@@ -207,7 +278,11 @@ describe('splitLineByText', () => {
   });
 
   it('manualStartMs va a la primera pieza, breath a la última, el resto en false/null', () => {
-    const l = line('uno dos tres', [[1000, 1100], [1200, 1300], [1400, 1500]]);
+    const l = line('uno dos tres', [
+      [1000, 1100],
+      [1200, 1300],
+      [1400, 1500],
+    ]);
     l.manualStartMs = 950;
     l.breath = true;
     const out = splitLineByText(l, 'uno\ndos\ntres');
@@ -220,7 +295,11 @@ describe('splitLineByText', () => {
   });
 
   it('\\n al inicio colapsa a una sola pieza (arreglo de longitud 1)', () => {
-    const l = line('primero el cielo', [[1200, 1450], [1500, 1700], [1800, 2100]]);
+    const l = line('primero el cielo', [
+      [1200, 1450],
+      [1500, 1700],
+      [1800, 2100],
+    ]);
     const out = splitLineByText(l, '\nprimero el cielo');
     expect(out).toHaveLength(1);
     expect(out[0].text).toBe('primero el cielo');
@@ -228,7 +307,11 @@ describe('splitLineByText', () => {
   });
 
   it('\\n al final colapsa a una sola pieza (arreglo de longitud 1)', () => {
-    const l = line('primero el cielo', [[1200, 1450], [1500, 1700], [1800, 2100]]);
+    const l = line('primero el cielo', [
+      [1200, 1450],
+      [1500, 1700],
+      [1800, 2100],
+    ]);
     const out = splitLineByText(l, 'primero el cielo\n');
     expect(out).toHaveLength(1);
     expect(out[0].text).toBe('primero el cielo');

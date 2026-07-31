@@ -386,7 +386,13 @@ export function applyReviewAction(doc, action) {
     case 'setLineText': {
       const section = requireSection(next, action.section);
       const line = requireLine(section, action.line);
-      if (typeof action.text !== 'string' || action.text.trim() === '') {
+      // Texto vacío es LEGÍTIMO acá (a diferencia de editLine): la hoja viva
+      // guarda de forma implícita al cerrar el renglón, así que vaciar el
+      // texto es una edición como cualquier otra y un renglón sin texto ya es
+      // un estado del documento (`insertLine` crea exactamente eso). Rechazarlo
+      // devolvía 422 en cada cierre, y el toast + resync se comían la acción
+      // del botón que el usuario acababa de pulsar (H1b).
+      if (typeof action.text !== 'string') {
         throw new RangeError(`text inválido: ${action.text}`);
       }
       const pieces = splitLineByText(line, action.text);

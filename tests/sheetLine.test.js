@@ -145,6 +145,31 @@ describe('SheetLine — edición', () => {
     expect(hs.persistText).toHaveBeenCalledWith(0, 0, '');
   });
 
+  it('el mousedown sobre la barra, las tijeras y la propuesta no roba el foco (H1c)', () => {
+    const node = SheetLine(
+      mk('un renglón largo', {}, { afterWords: [1], suggestion: { text: 'otro texto' } }),
+    );
+    node.querySelector('.sheet-line__text').click();
+
+    for (const sel of ['.sheet-line__toolbar', '.sheet-line__scissors', '.sheet-line__suggest']) {
+      const zone = node.querySelector(sel);
+      expect(zone, sel).not.toBeNull();
+      const ev = new window.MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      zone.querySelector('button').dispatchEvent(ev);
+      // Sin preventDefault el textarea pierde el foco, el blur repinta el
+      // renglón a reposo y el botón queda desconectado antes del mouseup: el
+      // navegador ya no emite su `click`.
+      expect(ev.defaultPrevented, sel).toBe(true);
+    }
+  });
+
+  it('el mousedown sobre el texto en reposo NO se previene (abrir edición sigue igual)', () => {
+    const node = SheetLine(mk('un renglón'));
+    const ev = new window.MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    node.querySelector('.sheet-line__text').dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+  });
+
   it('Escape descarta lo escrito y cierra sin persistir', () => {
     const hs = mkHandlers();
     const node = SheetLine(mk('texto viejo', {}, { handlers: hs }));

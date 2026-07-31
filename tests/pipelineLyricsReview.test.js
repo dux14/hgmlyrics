@@ -963,9 +963,23 @@ describe('applyReviewAction v2', () => {
     expect(next.sections[0].lines.map((l) => l.text)).toEqual(['uno', 'dos', 'tres cuatro']);
   });
 
-  it('setLineText con texto vacío lanza RangeError, igual criterio que editLine', () => {
+  it('setLineText con texto vacío vacía el renglón (H1b: el servidor cede)', () => {
+    // La hoja viva guarda de forma implícita al cerrar el renglón: vaciar el
+    // texto es una edición legítima, no un error. Rechazarla devolvía 422 y el
+    // toast + resync se comían la acción del botón recién pulsado.
+    const next = applyReviewAction(base(), {
+      type: 'setLineText',
+      section: 0,
+      line: 0,
+      text: '  ',
+    });
+    expect(next.sections[0].lines.map((l) => l.text)).toEqual(['', 'tres cuatro']);
+    expect(next.sections[0].lines[0].words).toEqual([]); // words ya no calzan con el texto
+  });
+
+  it('setLineText con texto que no es string sigue lanzando RangeError', () => {
     expect(() =>
-      applyReviewAction(base(), { type: 'setLineText', section: 0, line: 0, text: '  ' }),
+      applyReviewAction(base(), { type: 'setLineText', section: 0, line: 0, text: null }),
     ).toThrow(RangeError);
   });
 

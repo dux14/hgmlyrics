@@ -274,6 +274,22 @@ export function SheetLine(opts) {
         .catch(() => {});
     }
 
+    // El textarea no puede perder el foco cuando se pulsa un control del
+    // propio renglón: el `blur` cierra la edición y `render()` repinta a
+    // reposo dentro del mismo checkpoint de microtareas, así que el botón
+    // queda DESCONECTADO del DOM entre su `mousedown` y su `mouseup` — y el
+    // navegador solo emite `click` si el nodo del `mousedown` sigue
+    // conectado. Sin esto, ningún botón de la barra responde salvo cuando hay
+    // texto sucio real y la latencia del PUT alcanza a tapar la carrera.
+    // `mousedown` y no `pointerdown` a propósito: en touch, prevenir el
+    // default de `pointerdown` cancela los eventos de compatibilidad,
+    // incluido el `click` que se quiere salvar; el robo de foco en touch
+    // también viaja en el `mousedown` de compatibilidad, así que este
+    // listener cubre mouse y touch por igual.
+    el.querySelectorAll(
+      '.sheet-line__toolbar, .sheet-line__scissors, .sheet-line__suggest',
+    ).forEach((zone) => zone.addEventListener('mousedown', (ev) => ev.preventDefault()));
+
     textarea.addEventListener('input', () => autogrow(textarea));
     textarea.addEventListener('blur', closeAndFlush);
     textarea.addEventListener('keyup', updateMergeLabel);

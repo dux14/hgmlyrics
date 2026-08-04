@@ -6,16 +6,14 @@ import { renderListsBody } from './Home.js';
 import { listMyLists } from '../lib/lists.js';
 import { cached } from '../lib/prefetch.js';
 import { skelRowList } from '../lib/skeleton.js';
+import { todayLocal } from '../lib/listUrgency.js';
 
 /**
  * Renderiza la pantalla de listas del usuario.
  * @param {HTMLElement} container
  * @param {{ today?: string }} [opts]
  */
-export async function renderListsPage(
-  container,
-  { today = new Date().toISOString().slice(0, 10) } = {},
-) {
+export async function renderListsPage(container, { today = todayLocal() } = {}) {
   container.innerHTML = `
     <div class="lists-page fade-in">
       <div class="home__hd">

@@ -1,6 +1,13 @@
 // src/lib/listUrgency.test.js
-import { describe, it, expect } from 'vitest';
-import { daysUntil, urgencyOf, sortByUrgency, countdownLabel } from './listUrgency.js';
+import { describe, it, expect, afterAll, beforeAll, vi } from 'vitest';
+import {
+  daysUntil,
+  urgencyOf,
+  sortByUrgency,
+  countdownLabel,
+  localDay,
+  todayLocal,
+} from './listUrgency.js';
 
 const TODAY = '2026-07-01';
 
@@ -14,7 +21,41 @@ describe('daysUntil', () => {
     expect(daysUntil(undefined, TODAY)).toBeNull();
   });
   it('ignora la parte hora del timestamp', () => {
-    expect(daysUntil('2026-07-03T23:59:00Z', TODAY)).toBe(2);
+    expect(daysUntil('2026-07-03T12:00:00Z', TODAY)).toBe(2);
+  });
+});
+
+describe('zona horaria del usuario (America/Bogota, UTC-5)', () => {
+  const TZ = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = 'America/Bogota';
+  });
+  afterAll(() => {
+    process.env.TZ = TZ;
+  });
+
+  it('un timestamp UTC de madrugada es el día anterior en local', () => {
+    // 03:00Z del 5 = 22:00 del 4 en Bogotá: la lista caduca hoy, no mañana.
+    expect(localDay('2026-08-05T03:00:00Z')).toBe('2026-08-04');
+    expect(daysUntil('2026-08-05T03:00:00Z', '2026-08-04')).toBe(0);
+    expect(countdownLabel(daysUntil('2026-08-05T03:00:00Z', '2026-08-04'))).toBe('hoy');
+  });
+
+  it('un valor sin hora ya es un día calendario y no se desplaza', () => {
+    expect(localDay('2026-08-05')).toBe('2026-08-05');
+  });
+
+  it('todayLocal no adelanta el día en las últimas horas de la tarde local', () => {
+    // 21:00 del 4 en Bogotá = 02:00Z del 5: en UTC ya sería "mañana".
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-05T02:00:00Z'));
+    expect(todayLocal()).toBe('2026-08-04');
+    vi.useRealTimers();
+  });
+
+  it('tolera fechas inválidas sin romper', () => {
+    expect(localDay('no-es-fecha')).toBe('no-es-fech');
+    expect(localDay(null)).toBeNull();
   });
 });
 

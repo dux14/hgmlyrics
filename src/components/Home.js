@@ -7,7 +7,13 @@ import { createSongCard } from './SongList.js';
 import { isAuthenticated } from '../lib/authStore.js';
 import { icon } from '../lib/icons.js';
 import { escapeHtml } from '../lib/escape.js';
-import { urgencyOf, sortByUrgency, countdownLabel } from '../lib/listUrgency.js';
+import {
+  urgencyOf,
+  sortByUrgency,
+  countdownLabel,
+  localDay,
+  todayLocal,
+} from '../lib/listUrgency.js';
 import { resolveCoverUrl } from './songRow.js';
 import { listMyLists, warmList } from '../lib/lists.js';
 import { cached } from '../lib/prefetch.js';
@@ -66,7 +72,7 @@ export function selectRecentlyVisited(songs, visitIds, limit = 6) {
  */
 function formatExpiresShort(isoDate) {
   if (!isoDate) return null;
-  const [y, m, d] = String(isoDate).slice(0, 10).split('-').map(Number);
+  const [y, m, d] = localDay(isoDate).split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('es', { day: 'numeric', month: 'short' });
 }
 
@@ -166,12 +172,9 @@ function vozSkeletonHtml() {
 /**
  * Renderiza la vista principal.
  * @param {HTMLElement} container
- * @param {{ today?: string }} [opts] Inyectable en tests (YYYY-MM-DD). Producción usa Date.now.
+ * @param {{ today?: string }} [opts] Inyectable en tests (YYYY-MM-DD). Producción usa el día local.
  */
-export async function renderHome(
-  container,
-  { today = new Date().toISOString().slice(0, 10) } = {},
-) {
+export async function renderHome(container, { today = todayLocal() } = {}) {
   const { songs } = getState();
   const albums = freshShuffle(getAlbums()).slice(0, 5);
   const recent = selectRecentlyVisited(songs, getRecentVisitIds(), 6);

@@ -383,6 +383,23 @@ describe('renderHome — Listas', () => {
     expect(first.querySelector('.home__list-pill').textContent.trim()).toBe('mañana');
   });
 
+  it('una lista que vence esta noche dice "hoy", no "mañana"', async () => {
+    // expires_at es timestamptz: 22:00 del 4 en Bogotá se guarda como 03:00Z del 5.
+    const TZ = process.env.TZ;
+    process.env.TZ = 'America/Bogota';
+    isAuthenticated.mockReturnValue(true);
+    listMyLists.mockResolvedValue([
+      { id: 'hoy', name: 'HS 4 Aug', song_count: 6, expires_at: '2026-08-05T03:00:00+00:00' },
+    ]);
+    const c = mkContainer();
+    await renderHome(c, { today: '2026-08-04' });
+
+    const row = c.querySelector('[data-list-id="hoy"]');
+    expect(row.querySelector('.home__list-pill').textContent.trim()).toBe('hoy');
+    expect(row.querySelector('.home__list-meta').textContent).toContain('caduca 4 ago');
+    process.env.TZ = TZ;
+  });
+
   it('cabecera Listas tiene enlace Ver todos → /listas', async () => {
     isAuthenticated.mockReturnValue(true);
     listMyLists.mockResolvedValue([

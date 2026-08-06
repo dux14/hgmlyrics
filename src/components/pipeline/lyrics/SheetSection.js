@@ -63,6 +63,7 @@ export function SheetSection(opts) {
   // reconstruido el encabezado desde el último open().
   let menuEl = null;
   let menuToggleEl = null;
+  let menuListEl = null;
   let menuDocHandlers = null;
 
   function closeMenu() {
@@ -70,8 +71,40 @@ export function SheetSection(opts) {
     if (menuDocHandlers) {
       document.removeEventListener('click', menuDocHandlers.onClick, true);
       document.removeEventListener('keydown', menuDocHandlers.onKeydown, true);
+      window.removeEventListener('scroll', menuDocHandlers.onReflow, true);
+      window.removeEventListener('resize', menuDocHandlers.onReflow);
       menuDocHandlers = null;
     }
+  }
+
+  /** La lista es `position: fixed` (ver pipeline.css): la sección tiene
+   * `overflow: hidden` y recortaba el menú a la altura del encabezado. Acá se
+   * ancla al toggle contra el viewport, abriendo hacia arriba cuando abajo no
+   * cabe y acotando la altura al espacio libre — el resto se ve con scroll. */
+  function positionMenu() {
+    if (!menuListEl || !menuToggleEl || !menuEl?.classList.contains('is-open')) return;
+    const MARGIN = 8;
+    const GAP = 4;
+    const anchor = menuToggleEl.getBoundingClientRect();
+    // Sin tope primero: se mide la altura natural para elegir el lado.
+    menuListEl.style.maxHeight = '';
+    const natural = menuListEl.offsetHeight;
+    const width = menuListEl.offsetWidth;
+    const below = window.innerHeight - anchor.bottom - GAP - MARGIN;
+    const above = anchor.top - GAP - MARGIN;
+    const openUp = natural > below && above > below;
+    // Piso chico a propósito: con un piso alto el menú se pasaba del espacio
+    // libre y terminaba tapando el propio toggle.
+    const maxHeight = Math.max(48, openUp ? above : below);
+    menuListEl.style.maxHeight = `${maxHeight}px`;
+    const height = Math.min(natural, maxHeight);
+    const top = openUp ? anchor.top - GAP - height : anchor.bottom + GAP;
+    const left = Math.min(
+      Math.max(MARGIN, anchor.right - width),
+      Math.max(MARGIN, window.innerWidth - width - MARGIN),
+    );
+    menuListEl.style.top = `${Math.max(MARGIN, top)}px`;
+    menuListEl.style.left = `${left}px`;
   }
 
   /** Click afuera o Escape cierran el menú — sin esto quedaba abierto hasta
@@ -81,6 +114,7 @@ export function SheetSection(opts) {
    * que dejarlos colgados apuntaría a nodos ya desprendidos del DOM. */
   function openMenu() {
     menuEl.classList.add('is-open');
+    positionMenu();
     const onClick = (ev) => {
       if (!menuEl.contains(ev.target)) closeMenu();
     };
@@ -91,9 +125,15 @@ export function SheetSection(opts) {
         menuToggleEl?.focus();
       }
     };
+    // El menú es fixed: si la hoja se desplaza debajo, hay que re-anclarlo al
+    // toggle. Captura + passive para enterarse del scroll de cualquier
+    // contenedor, no solo del documento.
+    const onReflow = () => positionMenu();
     document.addEventListener('click', onClick, true);
     document.addEventListener('keydown', onKeydown, true);
-    menuDocHandlers = { onClick, onKeydown };
+    window.addEventListener('scroll', onReflow, { capture: true, passive: true });
+    window.addEventListener('resize', onReflow);
+    menuDocHandlers = { onClick, onKeydown, onReflow };
   }
 
   function isDudosoFor(line) {
@@ -234,6 +274,7 @@ export function SheetSection(opts) {
       `;
       menuEl = null;
       menuToggleEl = null;
+      menuListEl = null;
       return;
     }
 
@@ -257,6 +298,7 @@ export function SheetSection(opts) {
     const nameInput = headerEl.querySelector('.sheet-section__name');
     menuToggleEl = headerEl.querySelector('.sheet-section__menu-toggle');
     menuEl = headerEl.querySelector('.sheet-section__menu');
+    menuListEl = headerEl.querySelector('.sheet-section__menu-list');
 
     select.addEventListener('change', () => {
       handlers

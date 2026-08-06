@@ -187,18 +187,23 @@ body.chrome-hidden .main {
   padding: 4px;
   cursor: pointer;
 }
+/* Fixed, no absolute: `.sheet-section` tiene `overflow: hidden` (recorta el
+   redondeo de sus hijos) y recortaba el menú a la altura del encabezado.
+   La posición la calcula `positionMenu()` en JS contra el viewport, con flip
+   arriba/abajo y `max-height` según el espacio libre. */
 .sheet-section__menu-list {
   display: none;
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 2;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-overlay);
   min-width: 180px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
-  overflow: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .sheet-section__menu.is-open .sheet-section__menu-list {
   display: block;
